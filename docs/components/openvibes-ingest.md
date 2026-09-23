@@ -93,6 +93,11 @@ Strict TOML (unknown keys refused), absolute paths only:
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
 
+## Capacity
+
+About 1,000 req/s (the spec target) holds at p99 under 10 ms on a
+12-core desktop; see [load.md](load.md) for the measured results.
+
 ## Health
 
 On `health_listen` (plain HTTP, loopback): `/health` → 200 while the process
