@@ -70,7 +70,8 @@ an unknown schema version.
 - Agent health: the latest health report per agent.
 - Distribution: rule bundles exactly as signed, plus the public keys trusted
   for each rule set.
-- Audit log: append-only record of every privileged action and login.
+- Audit log: append-only record of every privileged action and login, retained
+  for 365 days by default under an administrator-configurable global policy.
 
 Expected volume with today's agent (every scan re-reports its matches): up to
 1 M findings per hour at 50,000 hosts, about 10 GB/day. Planned mitigation, a
