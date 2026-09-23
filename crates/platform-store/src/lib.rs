@@ -4,11 +4,17 @@
 //! The only crate that touches PostgreSQL: connection pool, schema
 //! migrations, and every query the platform runs.
 
+/// Agent listing, inspection, and revocation.
+pub mod agents;
 /// The append-only audit log.
 pub mod audit;
+/// CA certificates the platform issues under.
+pub mod ca;
 mod maintenance;
 mod migrate;
 mod status;
+/// Enrollment tokens (stored only as hashes).
+pub mod tokens;
 
 use std::{fmt, str::FromStr};
 

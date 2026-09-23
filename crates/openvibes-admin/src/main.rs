@@ -4,6 +4,11 @@
 //! role is break-glass access with full rights; every command is audited
 //! with the invoking OS user, including commands that fail.
 
+mod agent;
+mod ca;
+mod files;
+mod token;
+
 use std::{path::PathBuf, process::ExitCode};
 
 use chrono::{Duration, Utc};
@@ -36,6 +41,21 @@ enum Command {
         #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u32).range(1..=36500))]
         retention_days: u32,
     },
+    /// Built-in CA: root, intermediate, server certificates.
+    Ca {
+        #[command(subcommand)]
+        command: ca::CaCommand,
+    },
+    /// Agents: list, show, revoke.
+    Agent {
+        #[command(subcommand)]
+        command: agent::AgentCommand,
+    },
+    /// Enrollment tokens.
+    Token {
+        #[command(subcommand)]
+        command: token::TokenCommand,
+    },
 }
 
 impl Command {
@@ -44,6 +64,9 @@ impl Command {
             Self::Migrate => "migrate",
             Self::Status => "status",
             Self::Maintenance { .. } => "maintenance",
+            Self::Ca { command } => command.name(),
+            Self::Token { command } => command.name(),
+            Self::Agent { command } => command.name(),
         }
     }
 }
@@ -57,6 +80,22 @@ struct AdminConfig {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    // Offline CA commands run where no platform exists: no config, no
+    // database, no audit row.
+    if let Command::Ca { command } = &cli.command
+        && command.is_offline()
+    {
+        return match ca::run_offline(command) {
+            Ok(output) => {
+                print!("{output}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("openvibes-admin: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let config: AdminConfig = match platform_config::load(&cli.config) {
         Ok(config) => config,
         Err(error) => {
@@ -78,11 +117,31 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let result = run(&cli.command, &mut client).await;
     let actor = actor();
+    let (result, target) = match &cli.command {
+        Command::Ca { command } => match require_current_schema(&client).await {
+            Ok(()) => ca::run_host(command, &client).await,
+            Err(error) => (Err(error), command.target()),
+        },
+        Command::Token { command } => match require_current_schema(&client).await {
+            Ok(()) => token::run(command, &client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Agent { command } => match require_current_schema(&client).await {
+            Ok(()) => agent::run(command, &client).await,
+            Err(error) => (Err(error), None),
+        },
+        other => (run(other, &mut client).await, None),
+    };
     let outcome = if result.is_ok() { "ok" } else { "error" };
-    let audited =
-        platform_store::audit::record(&client, &actor, cli.command.name(), None, outcome).await;
+    let audited = platform_store::audit::record(
+        &client,
+        &actor,
+        cli.command.name(),
+        target.as_deref(),
+        outcome,
+    )
+    .await;
     match (result, audited) {
         (Ok(output), Ok(())) => {
             print!("{output}");
@@ -119,25 +178,39 @@ fn actor() -> String {
     }
 }
 
-/// Runs one command and returns what to print.
-async fn run(command: &Command, client: &mut platform_store::Client) -> Result<String, String> {
-    let fail = |error: StoreError| match error {
+fn store_error(error: StoreError) -> String {
+    match error {
         StoreError::NewerSchema(_) => format!("{error}; upgrade openvibes-admin"),
         other => other.to_string(),
-    };
+    }
+}
+
+/// Refuses to act on a database that is not at this build's schema.
+async fn require_current_schema(client: &platform_store::Client) -> Result<(), String> {
+    match platform_store::schema_version(client)
+        .await
+        .map_err(store_error)?
+    {
+        Some(version) if version == SCHEMA_VERSION => Ok(()),
+        Some(version) if version > SCHEMA_VERSION => {
+            Err(store_error(StoreError::NewerSchema(version)))
+        }
+        _ => Err("schema is not current; run openvibes-admin migrate".into()),
+    }
+}
+
+/// Runs one command and returns what to print.
+async fn run(command: &Command, client: &mut platform_store::Client) -> Result<String, String> {
+    let fail = store_error;
     if let Command::Migrate = command {
         let version = platform_store::migrate(client).await.map_err(fail)?;
         return Ok(format!("schema version {version}\n"));
     }
-    match platform_store::schema_version(client).await.map_err(fail)? {
-        Some(version) if version == SCHEMA_VERSION => {}
-        Some(version) if version > SCHEMA_VERSION => {
-            return Err(fail(StoreError::NewerSchema(version)));
-        }
-        _ => return Err("schema is not current; run openvibes-admin migrate".into()),
-    }
+    require_current_schema(client).await?;
     match command {
-        Command::Migrate => unreachable!("handled above"),
+        Command::Migrate | Command::Ca { .. } | Command::Token { .. } | Command::Agent { .. } => {
+            unreachable!("handled by the caller")
+        }
         Command::Status => {
             let status = platform_store::status(client, Utc::now())
                 .await

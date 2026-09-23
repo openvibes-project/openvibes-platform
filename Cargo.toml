@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/openvibes-ingest", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin"]
+members = ["crates/openvibes-ingest", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin", "crates/platform-pki"]
 
 [workspace.package]
 version = "0.1.0"
@@ -18,6 +18,11 @@ tokio-postgres = { version = "0.7.18", features = ["with-chrono-0_4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 deadpool-postgres = "0.14.2"
 clap = { version = "4.6.7", features = ["derive"] }
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring", "x509-parser"] }
+x509-parser = { version = "0.18", features = ["verify"] }
+time = "0.3"
+ring = "0.17"
+base64 = { version = "0.23.1", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
