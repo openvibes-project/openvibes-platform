@@ -189,7 +189,8 @@ Order:
 3. Rule-set read and pre-signed bundle upload after distribution storage lands.
 4. Asset tags and access bindings.
 5. Service accounts and expiring API tokens.
-6. Analyst triage after its state and re-observation contract is approved.
+6. Analyst triage using the approved Open, Investigating, Mitigated, Accepted
+   Risk, and False Positive state contract and its reopening rules.
 
 Rules:
 
@@ -267,6 +268,6 @@ Only after their contracts exist:
 
 Begin C0/C1 only after approving the core stack and seeded-first boundary.
 Before C2/C3, decide audit retention/export requirements and direct TLS versus
-an approved reverse proxy. Before implementing triage in C4, approve its state
-and re-observation contract. Hostname, manual tags, service accounts, CLI-only
-rule trust-key management, and first-release triage inclusion are approved.
+an approved reverse proxy. Hostname, manual tags, service accounts, CLI-only
+rule trust-key management, and the complete first-release triage contract are
+approved.
