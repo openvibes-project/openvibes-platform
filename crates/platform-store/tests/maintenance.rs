@@ -71,7 +71,7 @@ async fn retention_drops_only_older_partitions() {
 async fn status_of_an_empty_database_is_all_zero() {
     let (db, client) = migrated().await;
     let status = platform_store::status(&client, Utc::now()).await.unwrap();
-    assert_eq!(status.schema_version, Some(1));
+    assert_eq!(status.schema_version, Some(platform_store::SCHEMA_VERSION));
     assert_eq!(
         (
             status.agents_active,

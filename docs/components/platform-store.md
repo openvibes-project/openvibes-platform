@@ -11,7 +11,7 @@ functions, so schema knowledge and SQL live in one place.
   up to 16 connections. `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 1), `schema_version(&client)` (`None` on an
+- `SCHEMA_VERSION` (currently 2), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
   `Query` (a statement failed). Messages never contain SQL, parameters, or
@@ -29,6 +29,21 @@ Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
 `observed_day`), `current_findings`, `audit_log`, and the least-privilege
 role `openvibes_ingest` (which may also read `schema_version`, for its
 readiness check). The migrating role needs `CREATEROLE`.
+
+## Tokens, agents, CA certificates (schema 2)
+
+- `tokens::create(&client, &NewToken) -> token_id`, `tokens::list` (never
+  returns the token or its hash; includes `uses` and `revoked`),
+  `tokens::revoke(&client, id, now) -> bool` (was usable; an unknown id is
+  `false`, a malformed id `StoreError::Query`). Ids are UUIDs, passed as
+  text.
+- `agents::list(&client, Filter::{All, Offline, Revoked}, now)`,
+  `agents::show(&client, id)` (with certificate count),
+  `agents::revoke(&client, id, now) -> Revoke::{Revoked, AlreadyRevoked,
+  Unknown}`.
+- `ca::record(&client, role, fingerprint, pem, not_after)` (idempotent on the
+  fingerprint), `ca::list`. Migration 2 adds `ca_certificates` (readable by
+  `openvibes_ingest`).
 
 ## Audit log
 

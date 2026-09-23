@@ -32,7 +32,47 @@ openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
 
-Later milestones add `ca`, `token`, and `agent` commands (PM2).
+## Agent commands
+
+| Command | Prints |
+|---|---|
+| `agent list [--offline \| --revoked]` | one line per agent: id, status, last seen, version. `--offline` = active with no heartbeat for 15 minutes. |
+| `agent show ID` | id, status, enrolled, revoked, last seen, version, certificate count; `unknown agent` (exit 1) if absent |
+| `agent revoke ID` | `revoked ID`; `agent already revoked` or `unknown agent` are errors. The agent's next request gets `identity_revoked` (PM3). |
+
+`show` and `revoke` are audited with the agent id as target.
+
+## Token commands
+
+| Command | Does |
+|---|---|
+| `token create --expires Nh\|Nd [--uses N] [--label TEXT]` | 32 random bytes, base64url; printed **once** with its id. Only the SHA-256 is stored. `--expires` 1h to 365d, `--uses` 1 to 100000 (default 1); out-of-range values exit 2 before any change. |
+| `token list` | id, state (usable, expired, used up, revoked), uses/max, expiry, label. Never shows tokens. |
+| `token revoke ID` | revokes; an already-revoked or unknown id is an error. |
+
+The audit target is the token id, never the token.
+
+## CA commands
+
+The built-in CA (architecture spec, section 5). Keys are written `0600`,
+certificates `0644`, always with create-new: **nothing is ever
+overwritten**.
+
+| Command | Where | Writes | Audited |
+|---|---|---|---|
+| `ca init-root --out DIR` | offline machine | `root.crt`, `root.key` | no (no database there) |
+| `ca intermediate-request --out DIR` | ingest host | `intermediate.key`, `intermediate.csr` | no |
+| `ca sign-intermediate --root DIR --csr FILE --out FILE` | offline machine | intermediate certificate | no |
+| `ca import-intermediate --cert F --key F --root-cert F` | ingest host | records root + intermediate in `ca_certificates` | yes, target = intermediate SHA-256 |
+| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR` | ingest host | `NAME.crt` (leaf + intermediate), `NAME.key` | yes, target = NAME |
+
+Operator flow: `init-root` offline, then `intermediate-request` on the ingest
+host, carry only the **CSR** to the offline machine, `sign-intermediate`
+there, carry only the **certificate** back, then `import-intermediate`.
+The intermediate key never leaves the ingest host and the root key never
+leaves the offline machine. `import-intermediate` refuses a key that does
+not match the certificate or a certificate the given root did not sign, and
+records nothing then. Offline commands work without any config file.
 
 ## Test
 
