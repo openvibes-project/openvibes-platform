@@ -82,20 +82,21 @@ A copied view therefore shares the query, not a caller-specific position.
 |---|---|---|
 | Sign in and password change | Local username/password first; OIDC, SAML, and MFA are later adapters | Public/session |
 | Overview | Permission-aware fleet and observation summary | Each panel is independently gated |
-| Findings list | Browse latest observed matches and bounded history | `findings.read` |
-| Finding detail | Exact observation, timestamps, evidence keys, rule version, provenance, and enrolled-agent or imported-installation subject | `findings.read` |
+| Findings list | Browse latest observed matches and bounded history; filter by triage state and assignee | `findings.read` |
+| Finding detail | Exact observation, provenance, and first-release analyst triage | `findings.read`; triage uses `findings.triage` |
 | Agents list | Browse Seen recently, Offline, Never seen, and Revoked agents | `agents.read` |
 | Agent detail | Identity, contact, versions, certificate metadata, latest observed matches | `agents.read`; revoke uses `agents.revoke` |
 | Enrollment tokens | List safe metadata; create and revoke tokens | `tokens.read`, `tokens.create`, `tokens.revoke` |
 | Rule sets | Browse signed bundle versions, issuer, validity, and expiry | `rules.read` |
 | Rule upload preview | Verify an already signed envelope before publication | `rules.upload` |
 | Access control | Roles, user/group bindings, scopes, effective access | `rbac.read`, `rbac.manage` |
+| Service accounts | Create/disable API identities and issue/revoke expiring tokens | `service_accounts.read`, `service_accounts.manage` |
 | Audit log | Search authentication and privileged-action events | `audit.read` |
 
 Explicitly excluded from the first release: deployment-package builder,
 correlation/incidents, CMDB, inventory explorer, remediation workflow,
-analyst assignment or acknowledgement, report builder, custom dashboards,
-bulk agent revocation, CA key management, and mobile administration.
+report builder, custom dashboards, bulk agent revocation, web-based rule trust
+key or CA key management, and mobile administration.
 
 A System Status page waits for a reliable service-health contract. A failed
 console database request is not a monitoring system.
@@ -186,8 +187,20 @@ changes and take effect only after the server commits them.
    together.
 
 Tag editing is not ordinary asset metadata editing: it changes who can access
-the agent and its observations. If an accurate impact preview is not ready,
-the first release keeps tag mutation in the local break-glass CLI.
+the agent and its observations. The first release implements this exact-tag
+workflow and its authorisation-impact preview. CMDB integration may automate
+tag sources later without changing the access semantics.
+
+### 5.7 Triage an observed match
+
+Analyst triage is part of the first release. From finding detail, an authorised
+analyst can change workflow state, assign an analyst, and add a bounded note.
+The UI always separates the human workflow state from detector truth: a human
+state never makes an observation "resolved" or proves the condition absent.
+
+Every transition is audited and protected by `If-Match`; a stale page must
+reload before overwriting another analyst's work. The exact states and
+re-observation behaviour are the next product decision in section 13.
 
 ## 6. Page Behaviour and Data Presentation
 
@@ -218,8 +231,8 @@ history to filter locally.
 - Row names are links. Secondary actions live in a keyboard-operable menu.
 - Relative time is paired with an exact, timezone-labelled timestamp.
 - Imported, unauthenticated observations are explicitly marked.
-- Free-text host search waits for indexed operator labels or hostnames rather
-  than falling back to an unbounded scan.
+- Free-text host search uses the indexed, optional OS-reported hostname from
+  authenticated heartbeats and never falls back to an unbounded scan.
 
 ### 6.3 Destructive and trust-changing actions
 
@@ -424,13 +437,13 @@ does not have.
 
 ## 12. Product and Data Gaps
 
-1. A UUID-only agent identity is unusable at 50,000 hosts. Online enrollment
-   and heartbeat currently provide no hostname, operator label, tags, or asset
-   group. Operator labels/tags can be platform metadata; an authentic hostname
-   needs a protocol decision.
-2. `current_findings` records no match end. Assignment, acknowledgement,
-   suppression, remediation, and resolution require a product and data
-   contract before UI controls are added.
+1. A UUID-only agent identity is unusable at 50,000 hosts. The heartbeat
+   protocol now carries an optional OS-reported hostname as a spoofable
+   operator label; PM3 must store/index its latest present value. Manual tags
+   provide first-release asset grouping until CMDB integration exists.
+2. `current_findings` records no match end. Analyst triage is approved for the
+   first release, but its human workflow states must remain explicitly
+   separate from detector truth and need the state contract in section 13.
 3. Asset-group scope is planned but tag/group storage does not exist. Reserve
    the affordance; do not fake it in the browser.
 4. Rule bundles and trusted keys are absent from migration 0001.
@@ -441,15 +454,25 @@ does not have.
 These gaps do not block the shell, seeded workflows, or read-model design.
 They do bound what production wiring may honestly show.
 
-## 13. Decisions Requested
+## 13. Next Decision: Triage State Contract
 
-The following product choices need owner approval before implementation moves
-beyond the seeded vertical slice:
+Triage is approved for the first release. Recommended state model:
 
-1. Is an operator-entered agent label enough initially, or must hostname be
-   added to the online agent protocol first?
-2. Are service accounts/API tokens part of the first UI, API-only, or deferred?
-3. Should rule trust-key management remain break-glass CLI-only at first?
-4. Is manual tagging sufficient until CMDB integration exists?
-5. Does the first release need analyst triage? If yes, its states and
-   re-observation behaviour need a separate design before schema or UI work.
+```text
+Unreviewed → Investigating → Addressed
+                         ├→ Accepted risk (required expiry)
+                         └→ False positive (scoped to the current rule version)
+```
+
+- A new observation after **Addressed** automatically returns to Unreviewed
+  and records that it reopened.
+- **Accepted risk** remains until its required expiry, then returns to
+  Unreviewed on the next observation.
+- **False positive** remains for the same rule version; a newer rule version
+  returns to Unreviewed.
+- Investigating stays assigned across new observations.
+- Addressed, Accepted risk, and False positive require a note. Every transition
+  and assignment change is audited.
+
+These are human workflow states only. None asserts that the underlying
+condition has cleared.

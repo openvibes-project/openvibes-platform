@@ -121,8 +121,9 @@ Work:
 
 1. Resolve the latest-finding read model: extend `current_findings` with the
    complete display snapshot or retain a reliable partition key and fields.
-2. Decide the operator-label/tag source without claiming an authentic
-   hostname the protocol does not provide.
+2. Store and index the latest present optional hostname from authenticated
+   heartbeats as a mutable, spoofable operator label, never as identity or
+   authorisation input.
 3. Add small typed `platform-store` query modules for summaries, agents,
    certificates, latest observations, and history.
 4. Add indexes only from representative query plans.
@@ -187,7 +188,8 @@ Order:
 2. Agent revoke.
 3. Rule-set read and pre-signed bundle upload after distribution storage lands.
 4. Asset tags and access bindings.
-5. Service accounts only if approved for the first release.
+5. Service accounts and expiring API tokens.
+6. Analyst triage after its state and re-observation contract is approved.
 
 Rules:
 
@@ -203,7 +205,9 @@ Rules:
 
 Verification covers duplicate submit/retry, audit failure rollback, permission
 loss between render and submit, stale precondition, secret non-retrievability,
-redaction in logs/errors/audit, and successful/failed accessibility states.
+redaction in logs/errors/audit, service-account disable/expiry, illegal triage
+transitions, triage/observation separation, and successful/failed accessibility
+states.
 
 ## 7. Milestone C5 — Packaging and Hardening
 
@@ -238,7 +242,8 @@ Only after their contracts exist:
 
 - deployment package builder and multi-use deployment tokens;
 - OIDC, SAML, TOTP, and WebAuthn authentication adapters;
-- analyst triage, acknowledgement, suppression, assignment, or resolution;
+- remediation workflow and detector-level suppression semantics beyond the
+  approved first-release analyst triage contract;
 - inventory/package explorer, correlation, and CMDB views;
 - saved views, report/export, and SIEM integration;
 - live updates, charts, or table virtualisation based on measured need;
@@ -252,22 +257,16 @@ Only after their contracts exist:
 - Did the audit helper or schema gain structured fields?
 - Did `platform-config` gain console-relevant shared types?
 - Did workspace members, `Cargo.lock`, CI, component index, or RPM spec change?
-- Did protocol changes add hostname, health, inventory upload, or match-end
-  semantics that alter UI vocabulary?
+- Does PM3 store/index the optional heartbeat hostname contract, and did later
+  protocol changes add health, inventory upload, or match-end semantics that
+  alter UI vocabulary?
 - Are local changes isolated into reviewable commits before conflict
   resolution?
 
 ## 10. Approval Gate
 
 Begin C0/C1 only after approving the core stack and seeded-first boundary.
-Before C2/C3, decide:
-
-- hostname versus operator label;
-- manual tag/asset-scope policy;
-- service-account inclusion;
-- web versus CLI rule trust-key management;
-- audit retention/export requirements;
-- direct TLS versus approved reverse proxy.
-
-Analyst triage is its own later product design and does not block read-only
-investigation.
+Before C2/C3, decide audit retention/export requirements and direct TLS versus
+an approved reverse proxy. Before implementing triage in C4, approve its state
+and re-observation contract. Hostname, manual tags, service accounts, CLI-only
+rule trust-key management, and first-release triage inclusion are approved.
