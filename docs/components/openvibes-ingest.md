@@ -9,6 +9,10 @@ sections 3 and 6.
 `openvibes-ingest [--config /etc/openvibes/ingest.toml]`. Logs are JSON on
 stderr (journald).
 
+On SIGINT (ctrl-c; the unit's `KillSignal`) it stops accepting, closes idle
+connections, lets requests in flight finish (at most
+`request_timeout_seconds`), then exits 0.
+
 ## Configuration
 
 Strict TOML (unknown keys refused), absolute paths only:
@@ -114,3 +118,8 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --locked -p openvibes-ingest
 `tests/support/mod.rs` builds a database, a PKI, and the real server
 in-process; `raw()` sends hand-made HTTPS requests, with or without a
 client certificate.
+
+The `integration_bundle` example (`cargo run -p openvibes-ingest --example
+integration_bundle -- OUT_FILE`) writes a signed two-rule test bundle for
+`scripts/integration-agent.sh` and prints its public key. It is test-only
+(a published seed, the same as the agent's tests) and never shipped.

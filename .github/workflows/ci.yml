@@ -84,3 +84,64 @@ jobs:
 
       - name: Audit dependencies (RustSec)
         run: cargo audit --deny warnings
+
+  fedora:
+    name: RPMs and agent integration (fedora:44)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      # git first, so checkout makes a real repository (submodules need it).
+      - name: Install build and test packages
+        run: >-
+          dnf -q -y install git gcc cargo rust rpm-build systemd-rpm-macros systemd
+          postgresql-server sqlite jq curl procps-ng util-linux
+
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Authenticate git for private dependencies
+        shell: bash
+        env:
+          AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
+          PROTOCOL_TOKEN: ${{ secrets.OPENVIBEPROTOCOL }}
+        run: |
+          if [ -z "$AGENT_TOKEN" ] || [ -z "$PROTOCOL_TOKEN" ]; then
+            echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
+            exit 1
+          fi
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
+          git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
+          git submodule update --init
+
+      - name: Build RPMs
+        run: bash scripts/build-rpm.sh
+
+      - name: Install and check RPMs
+        run: |
+          dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm
+          bash scripts/check-rpm.sh
+
+      # initdb refuses root: build the agent and the bundle tool as root
+      # (which has the git credentials), then run the integration as a
+      # plain user against the installed binaries.
+      - name: Build the pinned agent and the bundle tool
+        shell: bash
+        run: |
+          ROOT=$PWD; source scripts/integration-lib.sh
+          build_agent "$PWD/target/integration/agent" > agent-path
+          cargo build --release --locked -p openvibes-ingest --example integration_bundle
+
+      - name: Integration against the installed binaries
+        shell: bash
+        run: |
+          useradd -m ci
+          chown -R ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin \
+            AGENT_BIN="$(cat agent-path)" \
+            BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
+            INTEGRATION_DIR=/home/ci/run \
+            bash scripts/integration-agent.sh

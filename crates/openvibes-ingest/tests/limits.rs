@@ -147,3 +147,34 @@ async fn connections_beyond_max_connections_wait_for_a_free_slot() {
     );
     world.stop().await;
 }
+
+#[tokio::test]
+async fn shutdown_waits_for_requests_in_flight() {
+    let world = World::start().await;
+    let mut stream = tls(&world).await;
+    // The handler is waiting for the rest of the body when shutdown starts.
+    stream
+        .write_all(b"POST /v1/enroll HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{")
+        .await
+        .unwrap();
+    tokio::time::sleep(StdDuration::from_millis(200)).await;
+    let stopping = tokio::spawn(world.stop());
+    tokio::time::sleep(StdDuration::from_millis(500)).await;
+    assert!(
+        !stopping.is_finished(),
+        "shutdown waits for the request in flight"
+    );
+    stream.write_all(b"}").await.unwrap();
+    let mut response = Vec::new();
+    let _ =
+        tokio::time::timeout(StdDuration::from_secs(5), stream.read_to_end(&mut response)).await;
+    let status = String::from_utf8_lossy(&response)
+        .split_whitespace()
+        .nth(1)
+        .map(str::to_owned);
+    assert_eq!(status.as_deref(), Some("400"), "the request is answered");
+    tokio::time::timeout(StdDuration::from_secs(5), stopping)
+        .await
+        .expect("shutdown finishes once the connection is done")
+        .unwrap();
+}
