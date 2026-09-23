@@ -12,62 +12,9 @@ export CARGO_NET_GIT_FETCH_WITH_CLI=true
 W=${INTEGRATION_DIR:-$ROOT/target/integration/run}
 INGEST_PORT=${INGEST_PORT:-28423}
 HEALTH_PORT=${HEALTH_PORT:-28480}
-PIDS=()
-cleanup() {
-    local status=$?
-    for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-    wait 2>/dev/null || true
-    [[ -d "$W/pg/data" ]] && pg_ctl -D "$W/pg/data" -m immediate stop >/dev/null 2>&1 || true
-    if ((status != 0)); then
-        echo "--- ingest log (tail)"; tail -n 20 "$W/ingest.log" 2>/dev/null || true
-        echo "--- agent log (tail)"; tail -n 20 "$W/agent.log" 2>/dev/null || true
-    fi
-    exit "$status"
-}
-trap cleanup EXIT
-rm -rf "$W"; mkdir -p "$W/pg/run" "$W/ca" "$W/agent/state"; chmod 700 "$W/agent/state"
-
-# Binaries.
-if [[ -z "${OPENVIBES_BIN_DIR:-}" ]]; then
-    cargo build --quiet --release --locked -p openvibes-ingest -p openvibes-admin
-    OPENVIBES_BIN_DIR="$ROOT/target/release"
-fi
 AGENT_BIN=${AGENT_BIN:-$(build_agent "$ROOT/target/integration/agent")}
-admin() { "$OPENVIBES_BIN_DIR/openvibes-admin" --config "$W/admin.toml" "$@"; }
-
-# PostgreSQL (Unix socket only) and the schema.
-initdb -D "$W/pg/data" -U openvibes_admin --auth=trust >/dev/null
-pg_ctl -D "$W/pg/data" -o "-k $W/pg/run -c listen_addresses=''" -l "$W/pg/log" -w start >/dev/null
-createdb -h "$W/pg/run" -U openvibes_admin openvibes
-sql() { psql -h "$W/pg/run" -U openvibes_admin -d openvibes -AtX -c "$1"; }
-echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes_admin\"" > "$W/admin.toml"
-admin migrate >/dev/null
-admin maintenance >/dev/null
-
-# Built-in CA: root, intermediate, server certificate for 127.0.0.1.
-admin ca init-root --out "$W/ca/root" >/dev/null
-admin ca intermediate-request --out "$W/ca/int" >/dev/null
-admin ca sign-intermediate --root "$W/ca/root" --csr "$W/ca/int/intermediate.csr" \
-    --out "$W/ca/int/intermediate.crt" >/dev/null
-admin ca import-intermediate --cert "$W/ca/int/intermediate.crt" \
-    --key "$W/ca/int/intermediate.key" --root-cert "$W/ca/root/root.crt" >/dev/null
-admin ca issue-server localhost --san 127.0.0.1 --issuer-cert "$W/ca/int/intermediate.crt" \
-    --issuer-key "$W/ca/int/intermediate.key" --out "$W/ca/tls" >/dev/null
-
-# Ingest.
-cat > "$W/ingest.toml" <<EOF
-listen = "127.0.0.1:$INGEST_PORT"
-health_listen = "127.0.0.1:$HEALTH_PORT"
-server_certificate_file = "$W/ca/tls/localhost.crt"
-server_key_file = "$W/ca/tls/localhost.key"
-client_ca_file = "$W/ca/int/intermediate.crt"
-issuing_certificate_file = "$W/ca/int/intermediate.crt"
-issuing_key_file = "$W/ca/int/intermediate.key"
-database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_ingest"
-EOF
-"$OPENVIBES_BIN_DIR/openvibes-ingest" --config "$W/ingest.toml" 2> "$W/ingest.log" &
-PIDS+=($!)
-wait_for "ingest ready" 30 curl -fsS "http://127.0.0.1:$HEALTH_PORT/ready"
+start_platform
+mkdir -p "$W/agent/state"; chmod 700 "$W/agent/state"
 
 # Agent config with the signed integration bundle.
 if [[ -n "${BUNDLE_BIN:-}" ]]; then

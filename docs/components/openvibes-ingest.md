@@ -77,6 +77,8 @@ Strict TOML (unknown keys refused), absolute paths only:
 
 ## Load control and logging
 
+- Accepted sockets set `TCP_NODELAY`: without it every request waited about
+  40 ms for the client's delayed ACK (found by the PM5 load test).
 - Bodies over 1 MiB → 400 (never read past the limit).
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the
@@ -90,6 +92,11 @@ Strict TOML (unknown keys refused), absolute paths only:
 - One JSON log line per request on stderr: `endpoint`, `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
+
+## Capacity
+
+About 1,000 req/s (the spec target) holds at p99 under 10 ms on a
+12-core desktop; see [load.md](load.md) for the measured results.
 
 ## Health
 

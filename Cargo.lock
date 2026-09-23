@@ -1113,6 +1113,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvibes-load"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "openvibes-core",
+ "openvibes-transport",
+ "serde_json",
+]
+
+[[package]]
 name = "openvibes-rules"
 version = "0.1.0"
 source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=8dfa7744c23febfda48383cc206d6b2c0f6e1fc9#8dfa7744c23febfda48383cc206d6b2c0f6e1fc9"

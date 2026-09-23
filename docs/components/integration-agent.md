@@ -60,8 +60,10 @@ tails of the ingest and agent logs, and stops every process it started.
 `postgresql-server` (`initdb`, `pg_ctl`, `createdb`, `psql`), `sqlite`,
 `jq`, `curl`, a Rust toolchain, and git access to the private agent
 repository (`CARGO_NET_GIT_FETCH_WITH_CLI=true` is set by the script).
-`scripts/integration-lib.sh` holds the shared helpers (`agent_rev`,
-`build_agent`, `wait_for`).
+`scripts/integration-lib.sh` holds the shared helpers: `agent_rev`,
+`build_agent`, `wait_for`, and `start_platform` (PostgreSQL, schema, CA,
+and ingest until `/ready`, with an `EXIT` trap that stops them and prints
+every log's tail on failure), which the load test reuses.
 
 ## How to test
 
