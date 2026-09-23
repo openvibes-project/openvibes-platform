@@ -66,3 +66,9 @@ The script is the test. Each check was first seen failing: no token file
 (`agent enrolled` fails), a wrong finding count, a wrong key for the bundle,
 renewal not forced, a wrong status for the revocation answer. A run that
 fails early (for example `INGEST_PORT=1`) leaves no process behind.
+
+CI: the `fedora` job installs the RPMs in a `fedora:44` container, builds
+the agent and bundle tool as root (which has the git credentials), and runs
+this script as an unprivileged user `ci` with `OPENVIBES_BIN_DIR=/usr/bin`
+(`initdb` refuses root). This is spec section 1, item 1, on Fedora with
+Fedora's PostgreSQL.

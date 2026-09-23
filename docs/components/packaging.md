@@ -2,9 +2,10 @@
 
 `packaging/rpm/` builds two Fedora packages from one spec,
 `openvibes-platform.spec`: **openvibes-ingest** and **openvibes-admin**.
-`scripts/build-rpm.sh` compiles the release binaries with the pinned
-toolchain and wraps them (`rpmbuild -bb`); the spec only installs files. The
-RPMs are for deployment, not for inclusion in Fedora itself.
+`scripts/build-rpm.sh` compiles the release binaries (with
+`rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
+them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
+deployment, not for inclusion in Fedora itself.
 
 ```sh
 scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,admin}-*.rpm
@@ -86,3 +87,7 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
 three units, graceful stop, and that both binaries run.
+
+CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, installs
+the RPMs, and runs `check-rpm.sh`; the integration test then runs against
+the installed binaries ([integration-agent.md](integration-agent.md)).
