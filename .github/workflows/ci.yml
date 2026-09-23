@@ -40,6 +40,13 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: crates/openvibes-console/web/package-lock.json
+
       # The agent (openvibes-core) and protocol (fixtures) repositories are
       # private. Each has its own fine-grained, read-only token, used only
       # for that repository's URL and verbatim, so GitHub's log masking holds.
@@ -62,6 +69,9 @@ jobs:
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Build and validate console frontend
+        run: bash scripts/build-console.sh
 
       - name: Format
         run: cargo fmt --all --check
