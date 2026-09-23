@@ -166,6 +166,9 @@ Work:
   aggregation, facets, sorting, filtering, and pagination;
 - add access-control and audit read pages, including the effective 365-day
   default retention policy and its globally authorised, audited update flow;
+- add a permission-gated CSV audit export of the exact filtered result set,
+  with a private bounded spool, formula neutralisation, no caching, and an
+  audit record committed before download begins;
 - extend bounded maintenance to delete audit events older than the effective
   cutoff without granting the console unrestricted audit deletion;
 - enforce the final CSP and browser headers.
@@ -249,7 +252,7 @@ Only after their contracts exist:
 - remediation workflow and detector-level suppression semantics beyond the
   approved first-release analyst triage contract;
 - inventory/package explorer, correlation, and CMDB views;
-- saved views, report/export, and SIEM integration;
+- saved views, general report/findings export, and SIEM integration;
 - live updates, charts, or table virtualisation based on measured need;
 - dark theme and mobile-specific adaptations.
 
@@ -270,8 +273,7 @@ Only after their contracts exist:
 ## 10. Approval Gate
 
 Begin C0/C1 only after approving the core stack and seeded-first boundary.
-Before C2/C3, decide audit export requirements and direct TLS versus an
-approved reverse proxy. Hostname, manual tags, service accounts, CLI-only rule
-trust-key management, the complete first-release triage contract, and
-administrator-configurable audit retention defaulting to 365 days are
-approved.
+Before C2/C3, decide direct TLS versus an approved reverse proxy. Hostname,
+manual tags, service accounts, CLI-only rule trust-key management, the complete
+first-release triage contract, administrator-configurable audit retention
+defaulting to 365 days, and bounded CSV audit export are approved.

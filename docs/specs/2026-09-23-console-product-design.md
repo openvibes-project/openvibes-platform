@@ -91,7 +91,7 @@ A copied view therefore shares the query, not a caller-specific position.
 | Rule upload preview | Verify an already signed envelope before publication | `rules.upload` |
 | Access control | Roles, user/group bindings, scopes, effective access | `rbac.read`, `rbac.manage` |
 | Service accounts | Create/disable API identities and issue/revoke expiring tokens | `service_accounts.read`, `service_accounts.manage` |
-| Audit log | Search authentication and privileged-action events; show the effective retention policy | `audit.read`; policy changes use `audit.retention.manage` |
+| Audit log | Search authentication and privileged-action events, export the filtered result as CSV, and show the effective retention policy | `audit.read`; export uses `audit.export`; policy changes use `audit.retention.manage` |
 
 Explicitly excluded from the first release: deployment-package builder,
 correlation/incidents, CMDB, inventory explorer, remediation workflow,
@@ -209,6 +209,15 @@ administrator can change the retention period from the Audit log page. The
 review step shows the current and proposed cutoff and warns when a reduction
 will make older events eligible for deletion. The change uses `If-Match`, is
 itself audited, and does not synchronously delete rows in the web request.
+
+### 5.9 Export audit events
+
+An authorised auditor filters the Audit log, reviews the date range and active
+filters, then exports that exact result set as CSV. Export is a separate
+permission from viewing. The server rejects an over-limit result before
+starting the download and asks the user to narrow the filters; it never falls
+back to an incomplete file. Every export is audited with its filters, row
+count, and file digest, but never with the CSV contents.
 
 ## 6. Page Behaviour and Data Presentation
 
@@ -490,5 +499,5 @@ condition has cleared.
 The default audit retention is 365 days and is administrator-configurable.
 The effective period and calculated cutoff are visible on the Audit log page.
 Retention cleanup runs asynchronously in bounded maintenance batches; events
-at or newer than the cutoff remain immutable. Audit export remains a separate
-first-release decision.
+at or newer than the cutoff remain immutable. The first release also includes
+permission-gated CSV audit export.
