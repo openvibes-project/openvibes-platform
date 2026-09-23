@@ -16,10 +16,16 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved and C0 (the contract and build skeleton) is in
-implementation. Production authentication and data routes remain fail-closed
-until their later milestones provide the required database-backed sessions and
-authorisation.
+The design is approved and the first C0 foundation is implemented: a
+loopback-only Axum process with separate public and health routers, an embedded
+React shell, exact static-asset routing, report-only security headers, locked
+frontend tooling, and CI build validation. Production authentication and data
+routes remain fail-closed until their later milestones provide the required
+database-backed sessions and authorisation.
+
+C0 is not complete yet. OpenAPI/client generation, a release build stamp,
+real-browser CSP and accessible-component proof, the checked offline npm source
+cache, and reviewed transparent production logo derivatives remain required.
 
 ## Interfaces
 
@@ -67,8 +73,9 @@ banner are never included in the production RPM.
 
 ## Failure behaviour
 
-- A release build fails if the generated frontend manifest, build stamp, or a
-  referenced embedded asset is missing.
+- An `embedded-ui` build fails if the generated frontend manifest, SPA entry,
+  exact public-file inventory, or a referenced embedded asset is missing. The
+  planned release build stamp is not implemented yet.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.
@@ -93,7 +100,7 @@ validation, then the Rust `embedded-ui` release build. The build never invokes
 a package manager implicitly, and the eventual RPM build uses a checksummed
 npm source cache with `npm ci --offline`.
 
-As the milestone files land, run:
+For the current C0 foundation, run:
 
 ```sh
 cargo fmt --all --check
@@ -101,13 +108,15 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F
 cargo doc --locked --workspace --all-features --no-deps
 cargo test --locked --workspace --all-features
 scripts/build-console.sh
-scripts/test-console-e2e.sh
 ```
 
-Frontend verification includes strict type checking, linting, unit and
-Testing Library tests, production asset generation, accessibility checks, and
-Playwright journeys in Chromium, Firefox, and WebKit. Contract tests exercise
-the complete Axum router first against deterministic seeded data and later
-against PostgreSQL. Security tests cover route fall-through, cache headers,
-CSP, session/CSRF handling, object scope, audit atomicity, trusted proxies,
-secret redaction, and bounded CSV export.
+The planned `scripts/test-console-e2e.sh` lands with the real-browser C0 proof.
+
+Current frontend verification includes strict type checking, linting, unit
+tests, dependency audit, production asset generation, and Rust-side embedded
+asset tests. C0 still adds Testing Library accessibility checks and Playwright
+journeys in Chromium, Firefox, and WebKit. Later contract tests exercise the
+complete Axum router first against deterministic seeded data and then against
+PostgreSQL. Security coverage expands from the current route fall-through,
+cache-header, and CSP checks to session/CSRF handling, object scope, audit
+atomicity, trusted proxies, secret redaction, and bounded CSV export.
