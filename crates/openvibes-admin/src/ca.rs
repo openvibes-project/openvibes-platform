@@ -6,7 +6,7 @@ use chrono::Utc;
 use clap::Subcommand;
 use platform_pki::Issuer;
 
-use crate::files::{read_pem, write_new};
+use crate::files::{read_pem, write_new, write_pair};
 
 const KEY_MODE: u32 = 0o600;
 const CERT_MODE: u32 = 0o644;
@@ -107,8 +107,11 @@ pub fn run_offline(command: &CaCommand) -> Result<String, String> {
     match command {
         CaCommand::InitRoot { out } => {
             let root = platform_pki::generate_root(Utc::now()).map_err(pki)?;
-            write_new(&out.join("root.key"), &root.key_pem, KEY_MODE)?;
-            write_new(&out.join("root.crt"), &root.cert_pem, CERT_MODE)?;
+            write_pair(
+                (&out.join("root.key"), &root.key_pem),
+                (&out.join("root.crt"), &root.cert_pem, CERT_MODE),
+                KEY_MODE,
+            )?;
             Ok(format!(
                 "root CA written to {}; keep root.key offline\n",
                 out.display()
@@ -116,8 +119,11 @@ pub fn run_offline(command: &CaCommand) -> Result<String, String> {
         }
         CaCommand::IntermediateRequest { out } => {
             let (csr, key) = platform_pki::intermediate_request().map_err(pki)?;
-            write_new(&out.join("intermediate.key"), &key, KEY_MODE)?;
-            write_new(&out.join("intermediate.csr"), &csr, CERT_MODE)?;
+            write_pair(
+                (&out.join("intermediate.key"), &key),
+                (&out.join("intermediate.csr"), &csr, CERT_MODE),
+                KEY_MODE,
+            )?;
             Ok(format!(
                 "intermediate key and CSR written to {}; sign the CSR offline\n",
                 out.display()
@@ -224,10 +230,13 @@ pub async fn run_host(
 }
 
 fn write_server(out: &Path, name: &str, server: &platform_pki::KeyAndCert) -> Result<(), String> {
-    write_new(&out.join(format!("{name}.key")), &server.key_pem, KEY_MODE)?;
-    write_new(
-        &out.join(format!("{name}.crt")),
-        &server.cert_pem,
-        CERT_MODE,
+    write_pair(
+        (&out.join(format!("{name}.key")), &server.key_pem),
+        (
+            &out.join(format!("{name}.crt")),
+            &server.cert_pem,
+            CERT_MODE,
+        ),
+        KEY_MODE,
     )
 }

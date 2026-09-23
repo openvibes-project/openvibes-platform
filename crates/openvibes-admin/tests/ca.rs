@@ -94,6 +94,34 @@ async fn the_offline_chain_imports_and_issues_server_certificates() {
 }
 
 #[test]
+fn an_existing_certificate_leaves_no_orphan_key() {
+    let dir = scratch_dir("orphan");
+    let root = dir.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("root.crt"), "operator's file").unwrap();
+    let again = offline(&["ca", "init-root", "--out", s(&root)]);
+    assert!(!again.status.success());
+    assert!(
+        !root.join("root.key").exists(),
+        "no key without its certificate"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("root.crt")).unwrap(),
+        "operator's file"
+    );
+
+    let host = dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    std::fs::write(host.join("intermediate.csr"), "old").unwrap();
+    assert!(
+        !offline(&["ca", "intermediate-request", "--out", s(&host)])
+            .status
+            .success()
+    );
+    assert!(!host.join("intermediate.key").exists());
+}
+
+#[test]
 fn keys_are_never_overwritten() {
     let dir = scratch_dir("overwrite");
     let root = dir.join("root");

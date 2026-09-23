@@ -56,7 +56,9 @@ The audit target is the token id, never the token.
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,
 certificates `0644`, always with create-new: **nothing is ever
-overwritten**.
+overwritten**. A key and its certificate (or CSR) are written as a pair: if
+either file already exists, neither is written, so no key is left without
+its certificate.
 
 | Command | Where | Writes | Audited |
 |---|---|---|---|
