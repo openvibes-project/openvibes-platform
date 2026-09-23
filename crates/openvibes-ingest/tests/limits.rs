@@ -34,14 +34,27 @@ async fn tls(world: &World) -> tokio_rustls::client::TlsStream<TcpStream> {
 #[tokio::test]
 async fn oversized_bodies_are_400() {
     let world = World::start().await;
-    for size in [1024 * 1024 + 1, 3 * 1024 * 1024] {
-        let body = vec![b' '; size];
-        assert_eq!(
-            world.raw("/v1/enroll", &body, None).await.map(|r| r.0),
-            Some(400),
-            "{size}"
-        );
-    }
+    // Just over the limit, sent in full.
+    let body = vec![b' '; 1024 * 1024 + 1];
+    assert_eq!(
+        world.raw("/v1/enroll", &body, None).await.map(|r| r.0),
+        Some(400)
+    );
+    // Declared far over the limit: refused from the header alone, without the
+    // server waiting for (or reading) the body.
+    let mut stream = tls(&world).await;
+    stream
+        .write_all(b"POST /v1/enroll HTTP/1.1\r\nHost: x\r\nContent-Length: 3145728\r\nConnection: close\r\n\r\n{")
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    let _ =
+        tokio::time::timeout(StdDuration::from_secs(5), stream.read_to_end(&mut response)).await;
+    let status = String::from_utf8_lossy(&response)
+        .split_whitespace()
+        .nth(1)
+        .map(str::to_owned);
+    assert_eq!(status.as_deref(), Some("400"));
     world.stop().await;
 }
 

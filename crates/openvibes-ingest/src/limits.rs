@@ -12,6 +12,15 @@ use crate::{error::ApiError, server::AppState};
 /// Refuses a request with 503 when `max_in_flight` requests are already
 /// being served, and turns an over-limit body (413) into the spec's 400.
 pub(crate) async fn bound(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    // A declared length over the limit is refused before any body is read.
+    let declared = request
+        .headers()
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.parse::<u64>().ok());
+    if declared.is_some_and(|length| length > crate::request::MAX_BODY_BYTES as u64) {
+        return ApiError::BadRequest.into_response();
+    }
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
         return ApiError::Unavailable.into_response();
     };
