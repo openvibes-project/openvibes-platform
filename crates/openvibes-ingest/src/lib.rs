@@ -6,8 +6,10 @@
 
 mod auth;
 mod config;
+mod enroll;
 mod error;
 mod health;
+mod request;
 mod server;
 mod tls;
 

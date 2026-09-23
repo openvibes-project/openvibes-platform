@@ -41,7 +41,8 @@ fn routes(state: AppState) -> Router {
     Router::new()
         .route("/v1/heartbeat", post(not_yet))
         .route("/v1/findings", post(not_yet))
-        .route("/v1/renew", post(not_yet))
+        .route("/v1/enroll", post(crate::enroll::enroll))
+        .route("/v1/renew", post(crate::enroll::renew))
         .with_state(state)
 }
 

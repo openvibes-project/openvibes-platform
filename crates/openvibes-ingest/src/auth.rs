@@ -10,7 +10,6 @@ pub(crate) struct Peer(pub Option<CertificateDer<'static>>);
 
 /// An agent authenticated by a recorded certificate (serial and key hash)
 /// whose status is active.
-#[expect(dead_code, reason = "the agent id is read from PM3 task 4")]
 pub(crate) struct AuthenticatedAgent(pub String);
 
 impl FromRequestParts<AppState> for AuthenticatedAgent {

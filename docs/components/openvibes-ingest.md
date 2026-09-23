@@ -35,6 +35,19 @@ Strict TOML (unknown keys refused), absolute paths only:
   are recorded for an agent: unknown → 401; agent revoked → 403 with
   `PlatformError { identity_revoked }` (the only source of that code).
 
+## Enrollment and renewal
+
+- `POST /v1/enroll` (no client certificate): `EnrollmentRequest`. The token
+  is hashed with `platform_pki::enrollment_token_sha256`; unknown, expired,
+  revoked, malformed, or used-up tokens → 401. The CSR must pass
+  `check_csr` (P-256, empty subject, valid signature) → else 400. A retry
+  with the same token and the same key returns the same identity and chain.
+  Response: `EnrollmentResponse` with `agent.<uuid>`, leaf + intermediate,
+  and the leaf expiry.
+- `POST /v1/renew` (authenticated): `RenewalRequest`; issues a certificate
+  for the requesting agent's own id and records it. Earlier certificates
+  keep working until they expire. A revoked agent gets `identity_revoked`.
+
 ## Health
 
 On `health_listen` (plain HTTP, loopback): `/health` → 200 while the process
@@ -43,9 +56,9 @@ schema version, else 503.
 
 ## Status
 
-TLS, authentication, health, and configuration are built. Endpoints:
-enroll and renew (PM3 task 4), heartbeat and findings (task 5), load
-control and logging (task 6).
+TLS, authentication, health, configuration, enrollment, and renewal are
+built. Heartbeat and findings follow (PM3 task 5), then load control and
+logging (task 6).
 
 ## Protocol fixtures
 

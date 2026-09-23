@@ -36,7 +36,6 @@ impl std::error::Error for IngestError {}
 /// Request outcomes other than success. Bodies are fixed and never echo
 /// the request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-#[expect(dead_code, reason = "BadRequest is used from PM3 task 4")]
 pub(crate) enum ApiError {
     BadRequest,
     Unauthorized,
