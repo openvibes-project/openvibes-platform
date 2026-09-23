@@ -1,8 +1,8 @@
 # OpenVIBES Console Implementation Plan
 
-Status: proposed, 2026-09-23. This plan starts only after the accompanying
-product and technical designs are reviewed. It is structured so console work
-can proceed in the `console` worktree while PM2 continues elsewhere.
+Status: **approved by the project owner, 2026-09-23**. Implementation begins
+after Claude's PM4 merge lands and the `console` worktree integrates the latest
+platform `main`.
 
 Design inputs:
 
@@ -12,9 +12,9 @@ Design inputs:
 
 ## 1. Parallel Ownership
 
-Until PM2 is merged:
+While Claude's platform work continues:
 
-| Area | Console branch | PM2 branch |
+| Area | Console branch | Claude platform branch |
 |---|---|---|
 | Product/technical console specs | owns | reads |
 | `crates/openvibes-console` and its `web/` directory | owns | does not edit |
