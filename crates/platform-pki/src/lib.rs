@@ -6,6 +6,7 @@
 //! network: PEM strings in, PEM strings out.
 
 mod ca;
+mod client;
 
 use std::fmt;
 
@@ -13,6 +14,7 @@ pub use ca::{
     Issuer, KeyAndCert, generate_root, intermediate_request, sha256_fingerprint, sign_intermediate,
     verify_signed_by,
 };
+pub use client::{CheckedCsr, IssuedClient, check_csr, spki_sha256_of_cert};
 
 /// Fixed failure categories; no key or certificate material is included.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

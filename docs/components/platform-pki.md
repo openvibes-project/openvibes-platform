@@ -15,6 +15,20 @@ and ingest do the file and database work.
 All keys are ECDSA P-256; serials are 16 random bytes with the top bit
 cleared. `KeyAndCert`'s `Debug` output redacts the key.
 
+## Agent CSRs and client certificates (used by ingest)
+
+- `check_csr(pem) -> CheckedCsr`: at most 1 MiB; the signature must verify
+  (`InvalidCsr`); the key must be ECDSA P-256 (`UnsupportedKey`); the subject
+  must be empty (`NonEmptySubject`), because the platform assigns identity.
+  Requested extensions are ignored. `CheckedCsr::spki_sha256` is SHA-256 of
+  the key's SubjectPublicKeyInfo DER.
+- `Issuer::issue_client(&csr, agent_id, now, days) -> IssuedClient`: empty
+  subject, SAN URI `openvibes:agent:<agent_id>`, EKU client auth only, not a
+  CA, fresh 16-byte serial, valid `days` from `now` (whole seconds).
+  `chain_pem` is leaf then intermediate.
+- `spki_sha256_of_cert(pem)`: the same hash for a presented certificate, so
+  ingest can match it against `certificates.spki_sha256`.
+
 ## Interface
 
 - `Issuer::load(cert_pem, key_pem)`: refuses a non-CA certificate (`NotCa`)
