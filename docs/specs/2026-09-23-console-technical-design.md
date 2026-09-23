@@ -17,8 +17,7 @@ Trust domains stay physically and logically separate:
 - agents authenticate only with mTLS to ingest/distribution ports 18423 and
   18424;
 - humans authenticate only through console identity providers and sessions;
-- service accounts, if approved for the first release, use console API bearer
-  tokens;
+- service accounts use console API bearer tokens in the first release;
 - none of these credentials is accepted in another domain.
 
 ## 2. Recommended Stack and Deployment Model
@@ -219,6 +218,8 @@ boundaries.
 |---|---|
 | `GET /api/v1/findings/latest` | `findings.read` |
 | `GET /api/v1/findings/latest/{agent_id}/{rule_id}` | `findings.read` |
+| `GET /api/v1/findings/latest/{agent_id}/{rule_id}/triage` | `findings.read` |
+| `PUT /api/v1/findings/latest/{agent_id}/{rule_id}/triage` | `findings.triage` |
 | `GET /api/v1/findings/history` | `findings.read` |
 | `GET /api/v1/findings/history/{observed_day}/{finding_id}` | `findings.read` |
 
@@ -227,9 +228,13 @@ latest snapshot. The composite history URL matches the current partitioned
 primary key. A response subject is a tagged union: an enrolled `agent`, or an
 unauthenticated imported `installation` with `install_id` and optional
 hostname. Imported installations have no agent link and require global
-`findings.read` until a later association contract exists. No triage mutation
-exists until acknowledgement, suppression, assignment,
-re-observation, and resolution semantics are designed.
+`findings.read` until a later association contract exists.
+
+First-release triage is a versioned human workflow record attached to the
+latest subject/rule pair. `PUT` requires `If-Match`, an allowed transition,
+bounded assignee/note fields, and an atomic audit event. Its states never
+change or reinterpret the immutable observation. The exact transition and
+re-observation contract is approved separately before schema implementation.
 
 ### 6.5 Enrollment tokens
 
@@ -259,7 +264,6 @@ constraint; recoverable plaintext is not stored merely to support retries.
 | `GET /api/v1/rule-sets/{id}/versions/{version}` | `rules.read` |
 | `POST /api/v1/rule-sets/{id}/versions/validate` | `rules.upload` |
 | `POST /api/v1/rule-sets/{id}/versions` | `rules.upload` |
-| trust-key routes, if approved for web | `rules.trust.manage` |
 
 The non-mutating validation route accepts an already signed envelope and
 returns verified metadata plus its digest. Final publication sends the exact
@@ -267,6 +271,8 @@ bytes and expected digest, then repeats every verification inside the store
 transaction against current trust keys and version floor. Same
 rule-set/version and same bytes is idempotent; different bytes is 409. The
 console stores the exact signed bytes and never accepts private signing keys.
+Rule trust-key management remains an audited local CLI operation in the first
+release and has no console endpoint.
 
 ### 6.7 Access, audit, and service accounts
 
@@ -274,16 +280,16 @@ console stores the exact signed bytes and never accepts private signing keys.
 |---|---|---|
 | `/api/v1/access/roles` | `rbac.read` | `rbac.manage` |
 | `/api/v1/access/users` | `rbac.read` | none in v1 |
-| `/api/v1/access/idp-groups` | `rbac.read` | provider synchronisation only |
 | `/api/v1/access/bindings` | `rbac.read` | `rbac.manage` |
 | `/api/v1/access/asset-groups` | `rbac.read` | `asset_groups.manage` |
 | `/api/v1/audit-events` | `audit.read` | none |
-| `/api/v1/service-accounts` if approved | `service_accounts.read` | `service_accounts.manage` |
-| `/api/v1/service-accounts/{id}/tokens` if approved | `service_accounts.read` | `service_accounts.manage` |
+| `/api/v1/service-accounts` | `service_accounts.read` | `service_accounts.manage` |
+| `/api/v1/service-accounts/{id}/tokens` | `service_accounts.read` | `service_accounts.manage` |
 
-The entire service-account surface, schema, permissions, and tests are
-conditional on first-release approval. Deployment packages are later. CA
-operations remain local break-glass CLI operations in the first release.
+Service-account tokens are hashed, expiring, shown once, and mutually
+exclusive with browser-cookie authentication. Deployment packages are later.
+Rule trust keys and CA operations remain local break-glass CLI operations in
+the first release.
 
 ## 7. Authentication and Sessions
 
@@ -390,29 +396,30 @@ Permissions:
 
 ```text
 agents.read             agents.revoke
-findings.read
+findings.read           findings.triage
 tokens.read             tokens.create            tokens.revoke
-rules.read              rules.upload              rules.trust.manage
+rules.read              rules.upload
 audit.read
 rbac.read               rbac.manage
 asset_groups.manage
 service_accounts.read   service_accounts.manage
 ```
 
-Reserved for later: `findings.export`, `packages.create`, and `ca.manage`.
+Reserved for later/web-excluded: `findings.export`, `rules.trust.manage`,
+`packages.create`, and `ca.manage`.
 `ca.manage` is not granted through the first web console.
 
 Every permission has a server-defined scope class: agent-bound or global.
 Built-ins:
 
 - Viewer: `agents.read`, `findings.read`, `rules.read`;
-- Analyst: Viewer initially; triage permissions wait for a triage contract;
+- Analyst: Viewer plus `findings.triage`;
 - Operator: Viewer plus agent revocation, token management, and rule upload;
 - Admin: every console permission, except CLI-only CA operations.
 
-A first-release binding joins a role to a local user and is either global or
-scoped to one asset group. Later adapters add stable IdP groups and optional
-service accounts to the same model. Effective access is the union of bindings.
+A first-release binding joins a role to a local user or service account and is
+either global or scoped to one asset group. Later adapters add stable IdP
+groups to the same model. Effective access is the union of bindings.
 
 Asset-group scope applies only to agent-bound data: agents, certificate
 metadata, findings, their facets, and their summaries. Tokens, rules, audit,
@@ -602,7 +609,7 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after PM2 must add or extend:
+Append-only migrations after the current schema 2 must add or extend:
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -610,15 +617,19 @@ Append-only migrations after PM2 must add or extend:
    generation; later migrations add external identities, provider
    configuration, stable IdP groups, assertion replay state, and MFA material;
 3. `agent_tags`, asset groups, and exact-match selectors;
-4. optional service accounts and hashed, expiring API tokens;
-5. rule sets, trusted public keys, and exact signed bundle versions;
-6. structured append-only audit metadata while preserving CLI compatibility;
-7. least-privilege `openvibes_console` role without DDL or audit update/delete;
-8. measured indexes for every stable cursor and filter tuple.
+4. service accounts and hashed, expiring API tokens;
+5. finding-triage state, assignee, version, note/history, and accepted-risk
+   expiry after its transition contract is approved;
+6. rule sets, trusted public keys, and exact signed bundle versions;
+7. structured append-only audit metadata while preserving CLI compatibility;
+8. least-privilege `openvibes_console` role without DDL or audit update/delete;
+9. measured indexes for every stable cursor and filter tuple.
 
 Existing schema gaps:
 
-- agents have no recognisable online hostname, label, tags, OS, or health;
+- schema 2 has no hostname column: PM3 must store and index the latest present
+  optional hostname from authenticated heartbeats; it remains a spoofable
+  label and never identity;
 - `current_findings` lacks confidence, message, evidence, origin,
   authentication, receive time, scan ID, and `observed_day`, so it cannot
   serve a complete latest detail or reliably join a partitioned row;
@@ -657,7 +668,10 @@ At minimum, test:
   effect immediately through per-request resolution/cache invalidation;
 - missing/wrong CSRF, bad Origin, insufficient permission, and stale ETag fail;
 - requests containing both session cookie and bearer token fail;
-- incomplete/stale IdP group resolution fails closed;
+- service-account tokens are shown once, hashed at rest, expire, revoke, and
+  cannot be used after their account is disabled;
+- triage rejects stale or illegal transitions, preserves immutable observation
+  data, and commits each state/assignment/note change atomically with audit;
 - tag mutation requires global authority;
 - forwarded headers are ignored outside trusted proxies;
 - API/auth 404s cannot fall through to the SPA index;
@@ -693,3 +707,13 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 7. CA operations remain CLI-only in the first release.
 8. `platform-store` retains all PostgreSQL ownership and shared domain
    mutations.
+9. **Approved:** authenticated heartbeats carry an optional OS-reported
+   hostname as a mutable, spoofable operator label; PM3 stores/indexes the
+   latest present value, and it is never identity or authorisation input.
+10. **Approved:** service accounts and expiring API tokens are in the
+    first-release UI and API.
+11. **Approved:** rule trust-key management remains CLI-only in the first
+    release.
+12. **Approved:** manual exact tags are sufficient until CMDB integration.
+13. **Approved:** analyst triage is in the first release; its precise state
+    and re-observation contract is the remaining product decision.

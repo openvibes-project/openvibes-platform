@@ -104,7 +104,8 @@ database state change visible to every ingest replica at once; no CRL or OCSP.
 
 Rule-signing keys never reach the platform. Distribution serves envelopes
 signed offline; the admin CLI verifies them against the rule set's trusted
-public keys before storing.
+public keys before storing. Rule trust-key management remains CLI-only in the
+first release.
 
 ## 6. Human Access and RBAC (planned sub-project)
 
@@ -112,8 +113,8 @@ public keys before storing.
   through the audited local CLI, with Argon2id, generic failures, rate limiting,
   and temporary lockout. OIDC (Entra ID, Okta, Keycloak, Authentik, Google
   Workspace, ADFS), SAML 2.0, and TOTP/WebAuthn are later adapters over the
-  same server-side session and RBAC boundary. Service accounts use hashed,
-  expiring API tokens bound to a role when that capability is added.
+  same server-side session and RBAC boundary. First-release service accounts
+  use hashed, expiring API tokens bound to a role.
 - Authorisation: deny by default. Fine-grained permissions (for example
   `agents.read`, `agents.revoke`, `tokens.create`, `rules.upload`,
   `findings.read`, `packages.create`, `ca.manage`, `rbac.manage`); roles are
@@ -121,6 +122,10 @@ public keys before storing.
   bindings attach a role to a user or an identity-provider group, scoped to
   the whole platform or to an asset group of hosts selected by tag. One
   middleware enforces the permission each endpoint declares.
+- Manual exact tags provide first-release asset grouping. CMDB integration may
+  automate the source later without changing the access semantics.
+- Analyst triage is a first-release, audited human workflow kept separate from
+  immutable detector observations and detector truth.
 - Every privileged action and login is written to the audit log.
 - Until the admin API exists, `openvibes-admin` is local break-glass access:
   running it on a platform host grants full rights, and every command is
@@ -128,6 +133,9 @@ public keys before storing.
 
 ## 7. Planned Capabilities with Design Hooks
 
+- **Hostname label.** Authenticated heartbeats carry an optional OS-reported
+  hostname. PM3 stores/indexes the latest present value for operators; it is
+  mutable and spoofable, and never identity or authorisation input.
 - **Agent health reporting.** Heartbeats gain an optional `health` object
   (queue depth and oldest age, dropped counts, local storage errors, last
   scan and collector errors, rule-set versions and expiry). Compatible within
