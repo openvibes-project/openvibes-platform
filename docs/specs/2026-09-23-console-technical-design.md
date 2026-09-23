@@ -167,22 +167,20 @@ Object-scoped resources outside the caller's asset scope return 404, not 403.
 |---|---|
 | `GET /api/v1/session` | Current user, auth/MFA level, effective capabilities/scopes, CSRF value |
 | `POST /api/v1/session/logout` | Revoke the current session |
-| `GET /auth/oidc/{provider}/start` | Begin OIDC Authorization Code + PKCE |
-| `GET /auth/oidc/{provider}/callback` | Validate flow and establish session |
+| `POST /auth/local/login` | First-release username/password login |
+| `POST /api/v1/session/password` | Change the current local user's password after re-authentication |
+| `GET /auth/oidc/{provider}/start` | Later adapter: begin OIDC Authorization Code + PKCE |
+| `GET /auth/oidc/{provider}/callback` | Later adapter: validate OIDC flow |
 | `GET /auth/saml/{provider}/start` | Later adapter: begin SAML flow |
-| `POST /auth/saml/{provider}/acs` | Later adapter: validate assertion and establish session |
-| `POST /auth/local/login` | Optional adapter, disabled when local auth is off |
-| `POST /auth/local/mfa/*` | Optional TOTP/WebAuthn challenge completion |
+| `POST /auth/saml/{provider}/acs` | Later adapter: validate SAML assertion |
+| `POST /auth/local/mfa/*` | Later adapter: TOTP/WebAuthn challenge completion |
 
-OIDC ships first. Other adapters produce the same internal user identity and
-opaque server session.
+Local username/password ships first. OIDC, SAML, TOTP, and WebAuthn come later
+behind the same internal identity, session, and RBAC boundary.
 
-Every login flow uses a one-use, short-lived pre-auth transaction bound to the
-initiating browser, provider, exact callback, and allow-listed return path.
-Local login additionally uses a pre-auth CSRF cookie/token and exact Origin.
-SAML ACS is the narrow cross-site POST exception: `InResponseTo`, RelayState,
-and assertion replay state provide correlation; if a cookie is required it is
-a dedicated short-lived `SameSite=None; Secure` correlation cookie, never the
+Local login uses a one-use, short-lived pre-auth CSRF cookie/token bound to the
+initiating browser, exact Origin, and allow-listed return path. Later OIDC and
+SAML flows add provider/callback/replay correlation without changing the
 authenticated session cookie.
 
 ### 6.2 Overview
@@ -289,28 +287,40 @@ operations remain local break-glass CLI operations in the first release.
 
 ## 7. Authentication and Sessions
 
-### 7.1 OIDC
+### 7.1 Local username and password
 
-Use Authorization Code with PKCE, server-held state and nonce, exact redirect
-URI, and strict issuer/audience validation. Tokens stay server-side and never
-enter browser storage. External identities are keyed by stable provider,
-issuer, and subject—not email. Email and display name are presentation data.
+Local accounts are the first-release authentication method. The first Admin is
+created only by an audited, local break-glass command:
 
-OIDC discovery and any future SAML metadata URL are administrator-configured
-SSRF boundaries; no request may supply an arbitrary issuer or metadata URL.
+```text
+openvibes-admin user create --username USER --role Admin
+```
 
-A first-seen external identity is never linked by email and never receives
-implicit privilege. It may create a zero-permission user record or receive
-only roles from complete, exact stable group-ID mappings. Cross-provider
-identity linking is a separate audited administrator action.
+The CLI reads and confirms the password from a TTY. Passwords are never
+accepted in an argument, environment variable, configuration file, audit
+detail, or log. The same local authority can list, disable, unlock, and reset
+accounts for recovery from forgotten credentials or accidental lockout.
 
-Bootstrap is local and deny-by-default. Provider configuration comes from the
-bounded console configuration/secret source. After a first zero-permission
-login, `openvibes-admin access pending-identities` can show the stable identity
-tuple, and `openvibes-admin access bootstrap-admin --provider ... --issuer
-... --subject ...` (or a stable `--group-id`) creates the first Admin binding.
-The same audited local command is break-glass recovery from accidental
-lockout; the web UI cannot silently make the first Admin.
+Password rules follow the single-factor guidance used for this release:
+
+- minimum 15 Unicode characters and maximum 128; spaces and paste are allowed;
+- no character-class composition rules and no periodic forced rotation;
+- reject a bounded local blocklist of common/compromised choices;
+- normalise Unicode consistently before hashing and never silently truncate;
+- store only a per-password salted Argon2id PHC string, with parameters at or
+  above the project's reviewed floor and upgrade the hash after a later
+  successful login when policy increases;
+- password change requires the current password and revokes other sessions.
+
+Login performs bounded Argon2id work even for an unknown user, returns the same
+status/body for unknown user, wrong password, disabled account, and temporary
+lockout, and applies both per-account and per-source throttling. Temporary
+lockout, unlock, reset, success, and failure are audited without recording the
+password. There is no email recovery flow in the first release.
+
+Local login uses the pre-auth CSRF and exact-Origin checks described above.
+The web UI never creates the first Admin implicitly and never exposes whether
+a username exists.
 
 ### 7.2 Session
 
@@ -326,11 +336,12 @@ or recovery changes. Suggested defaults are 30 minutes idle and eight hours
 absolute, bounded by configuration. Logout, account disablement, provider
 disablement, or credential compromise revoke affected sessions.
 
-Sessions contain identity and an IdP group-assertion revision, never effective
-permissions. Role and binding data is resolved on every request, optionally
-through a per-principal/versioned cache invalidated in the RBAC transaction.
-RBAC edits therefore take effect immediately without logging the user out. Do
-not place authorisation claims in browser JWTs or local storage.
+Sessions contain identity and, for later federated adapters, a group-assertion
+revision—never effective permissions. Role and binding data is resolved on
+every request, optionally through a per-principal/versioned cache invalidated
+in the RBAC transaction. RBAC edits therefore take effect immediately without
+logging the user out. Do not place authorisation claims in browser JWTs or
+local storage.
 
 ### 7.3 CSRF
 
@@ -349,21 +360,29 @@ both the session cookie and `Authorization: Bearer` is rejected. CSRF
 exemption applies only after a valid bearer token is selected with no session
 cookie, and service tokens cannot call browser session/auth endpoints.
 
-### 7.4 Other adapters
+### 7.4 Later OIDC, SAML, and MFA adapters
 
-SAML, when added, validates signed response/assertion policy, exact audience,
-recipient, `InResponseTo`, bounded clock skew, and assertion-ID replay.
+OIDC later uses Authorization Code with PKCE, server-held state and nonce,
+exact redirect URI, and strict issuer/audience validation. Tokens remain
+server-side. External identities are keyed by stable provider, issuer, and
+subject—not email. A first-seen external identity gets no implicit privilege;
+cross-provider linking is a separate audited administrator action.
 
-Local authentication is off by default. If enabled it uses Argon2id, uniform
-failure responses, per-account and per-source throttling, lockout protection,
-and TOTP or WebAuthn according to policy. TOTP seeds and recovery material are
-encrypted or one-way hashed as appropriate.
+SAML later validates signed response/assertion policy, exact audience,
+recipient, `InResponseTo`, bounded clock skew, and assertion-ID replay. SAML
+ACS is the narrow cross-site POST exception; any correlation cookie is a
+dedicated short-lived `SameSite=None; Secure` cookie, never the authenticated
+session cookie.
 
-OIDC/SAML client secrets and application encryption keys live in
-service-readable configuration or a defined external secret provider, never
-beside ciphertext in PostgreSQL. If MFA material is encrypted in the database,
-the format is versioned AEAD under an external key with documented rotation,
-readiness failure, backup, and restore procedures.
+OIDC discovery and SAML metadata URLs are administrator-configured SSRF
+boundaries. Group-derived roles require complete stable group IDs and fail
+closed on missing, partial, stale, or over-limit claims.
+
+TOTP/WebAuthn are later MFA adapters. OIDC/SAML client secrets and application
+encryption keys live in service-readable configuration or a defined external
+secret provider, never beside ciphertext in PostgreSQL. If MFA material is
+encrypted in the database, the format is versioned AEAD under an external key
+with documented rotation, readiness failure, backup, and restore procedures.
 
 ## 8. RBAC and Asset Scope
 
@@ -391,9 +410,9 @@ Built-ins:
 - Operator: Viewer plus agent revocation, token management, and rule upload;
 - Admin: every console permission, except CLI-only CA operations.
 
-A binding joins a role to a user, stable IdP group, or service account and is
-either global or scoped to one asset group. Effective access is the union of
-bindings.
+A first-release binding joins a role to a local user and is either global or
+scoped to one asset group. Later adapters add stable IdP groups and optional
+service accounts to the same model. Effective access is the union of bindings.
 
 Asset-group scope applies only to agent-bound data: agents, certificate
 metadata, findings, their facets, and their summaries. Tokens, rules, audit,
@@ -585,11 +604,11 @@ implementation seam, not a second mock API.
 
 Append-only migrations after PM2 must add or extend:
 
-1. human users, external identities, provider configuration, server sessions,
-   pre-auth transactions, assertion replay state, idempotency records, and
-   optional local/MFA credentials;
-2. permission registry, roles, role permissions, stable IdP groups, bindings,
-   and authorisation generation;
+1. human users, required local Argon2id credentials, server sessions, local
+   pre-auth CSRF state, password-attempt state, and idempotency records;
+2. permission registry, roles, local-user bindings, and authorisation
+   generation; later migrations add external identities, provider
+   configuration, stable IdP groups, assertion replay state, and MFA material;
 3. `agent_tags`, asset groups, and exact-match selectors;
 4. optional service accounts and hashed, expiring API tokens;
 5. rule sets, trusted public keys, and exact signed bundle versions;
@@ -614,8 +633,9 @@ Existing schema gaps:
 - enrollment-token creator is free text, so console issuance needs a nullable
   stable principal reference while retaining CLI history.
 
-All schema and SQL stay in `platform-store`. Migration numbering is assigned
-only after PM2 lands to avoid competing `0002` files.
+All schema and SQL stay in `platform-store`. PM2 owns schema 2 and is now in
+`main`; the console takes the next available migration number only at
+implementation start, after checking Claude's active branch.
 
 ## 15. Security Acceptance Tests
 
@@ -627,9 +647,13 @@ At minimum, test:
 - scope applies to objects, lists, summaries, filter facets, and counts;
 - out-of-scope objects do not leak existence;
 - token values do not enter logs, traces, analytics, errors, or audit detail;
-- OIDC/SAML callbacks reject replay, fixation, issuer/audience mismatch, and
-  arbitrary redirect/metadata sources;
-- sessions revoke on account/provider/credential changes; RBAC mutations take
+- local login does not reveal username existence through body, status, or
+  materially different hash work;
+- password creation/change enforces length, blocklist, no truncation, and the
+  reviewed Argon2id floor; successful login upgrades older hash parameters;
+- login throttling, temporary lockout, audited CLI reset/unlock, and password
+  change session revocation work without storing or logging passwords;
+- sessions revoke on account/credential changes; RBAC mutations take
   effect immediately through per-request resolution/cache invalidation;
 - missing/wrong CSRF, bad Origin, insufficient permission, and stale ETag fail;
 - requests containing both session cookie and bearer token fail;
@@ -641,20 +665,27 @@ At minimum, test:
 - static assets have correct type, cache headers, CSP, and `nosniff`;
 - CSV/export work, when added, neutralises spreadsheet formula injection.
 
+Later OIDC/SAML tests add callback replay, fixation, issuer/audience mismatch,
+arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
+
 ## 16. Primary Implementation References
 
 - [Vite backend integration](https://vite.dev/guide/backend-integration)
 - [TanStack Table server pagination](https://tanstack.com/table/latest/docs/framework/react/guide/pagination)
 - [W3C WAI table guidance](https://www.w3.org/WAI/tutorials/tables/)
 - [OWASP CSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [NIST SP 800-63B password requirements](https://pages.nist.gov/800-63-4/sp800-63b/authenticators/)
+- [OWASP password storage](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- [OWASP authentication guidance](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
 - [MDN Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP)
 
-## 17. Recommended Decisions for Approval
+## 17. Decision Status
 
 1. Same-origin React/TypeScript SPA plus `/api/v1`, embedded in one Rust
    production binary.
 2. Opaque server-side cookie sessions; never browser JWT authorisation.
-3. OIDC first, with SAML/local auth behind one later adapter boundary.
+3. **Approved:** local username/password first; OIDC, SAML, TOTP, and WebAuthn
+   are later adapters over the same session/RBAC boundary.
 4. Keyset pagination, SQL-level authorisation, and native semantic tables.
 5. Exact tag conjunctions for first-version asset groups.
 6. Asset scopes apply only to agent-bound data; control-plane permissions are

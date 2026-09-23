@@ -36,7 +36,7 @@ The product must never imply more certainty than the platform has:
 |---|---|---|
 | Security analyst | Find serious recent matches, narrow the set, inspect evidence and provenance, pivot among observation, agent, and rule | Overview, findings, agent context; no trust-changing access needed |
 | Platform operator | Understand fleet contact state, enroll or revoke agents, publish signed bundles | Agents, enrollment, rule sets, deliberate confirmations |
-| Security administrator | Decide who may see or change what, bind IdP groups, review privileged activity | Access control and audit log |
+| Security administrator | Decide which local users may see or change what, later bind IdP groups, and review privileged activity | Access control and audit log |
 | Read-only auditor | Establish who authenticated or changed trust state and when | Immutable audit presentation and scoped read access |
 
 Built-in Viewer, Analyst, Operator, and Admin roles align with these jobs.
@@ -80,7 +80,7 @@ A copied view therefore shares the query, not a caller-specific position.
 
 | Page | Purpose | Principal permission |
 |---|---|---|
-| Sign in, callback, second factor | OIDC first; other configured methods use the same session boundary | Public/session |
+| Sign in and password change | Local username/password first; OIDC, SAML, and MFA are later adapters | Public/session |
 | Overview | Permission-aware fleet and observation summary | Each panel is independently gated |
 | Findings list | Browse latest observed matches and bounded history | `findings.read` |
 | Finding detail | Exact observation, timestamps, evidence keys, rule version, provenance, and enrolled-agent or imported-installation subject | `findings.read` |
@@ -104,7 +104,7 @@ console database request is not a monitoring system.
 
 ### 5.1 Investigate a serious observation
 
-1. The analyst signs in through the configured identity provider.
+1. The analyst signs in with a locally managed username and password.
 2. Overview shows critical latest observations in the effective scope.
 3. The analyst opens Findings with the relevant filters already applied.
 4. They refine by severity, confidence, last-observed window, rule, agent,
@@ -165,7 +165,8 @@ it." Private signing keys never enter the platform.
 
 ### 5.5 Grant scoped access
 
-1. The administrator chooses a stable IdP group identity.
+1. The administrator chooses a local user. A later OIDC/SAML release may also
+   expose a stable IdP group identity.
 2. They bind a built-in or custom role.
 3. They choose whole-platform or an asset-group scope.
 4. The UI summarises effective permissions and the assets the scope selects.
@@ -267,8 +268,9 @@ Target WCAG 2.2 AA.
 - Auto-refresh never steals focus or floods screen-reader live regions.
 - Session-expiry warning is perceivable and keyboard operable.
 - Any future chart has an equivalent table or textual summary.
-- TOTP, WebAuthn, validation, recovery guidance, and lockout messaging work
-  without mouse, colour, or timing assumptions.
+- Password validation, change, recovery guidance, and lockout messaging work
+  without mouse, colour, or timing assumptions. Later TOTP/WebAuthn flows meet
+  the same requirement.
 
 Automated accessibility checks are necessary but do not replace keyboard and
 screen-reader review.
@@ -444,12 +446,10 @@ They do bound what production wiring may honestly show.
 The following product choices need owner approval before implementation moves
 beyond the seeded vertical slice:
 
-1. Is OIDC-only acceptable for the first usable release, with SAML and local
-   authentication added through the same adapter later?
-2. Is an operator-entered agent label enough initially, or must hostname be
+1. Is an operator-entered agent label enough initially, or must hostname be
    added to the online agent protocol first?
-3. Are service accounts/API tokens part of the first UI, API-only, or deferred?
-4. Should rule trust-key management remain break-glass CLI-only at first?
-5. Is manual tagging sufficient until CMDB integration exists?
-6. Does the first release need analyst triage? If yes, its states and
+2. Are service accounts/API tokens part of the first UI, API-only, or deferred?
+3. Should rule trust-key management remain break-glass CLI-only at first?
+4. Is manual tagging sufficient until CMDB integration exists?
+5. Does the first release need analyst triage? If yes, its states and
    re-observation behaviour need a separate design before schema or UI work.
