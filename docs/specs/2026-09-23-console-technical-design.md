@@ -290,6 +290,7 @@ release and has no console endpoint.
 | `/api/v1/access/bindings` | `rbac.read` | `rbac.manage` |
 | `/api/v1/access/asset-groups` | `rbac.read` | `asset_groups.manage` |
 | `/api/v1/audit-events` | `audit.read` | none |
+| `POST /api/v1/audit-events/export` | none | `audit.export` |
 | `/api/v1/audit-retention` | `audit.read` | `audit.retention.manage` |
 | `/api/v1/service-accounts` | `service_accounts.read` | `service_accounts.manage` |
 | `/api/v1/service-accounts/{id}/tokens` | `service_accounts.read` | `service_accounts.manage` |
@@ -407,7 +408,7 @@ agents.read             agents.revoke
 findings.read           findings.triage
 tokens.read             tokens.create            tokens.revoke
 rules.read              rules.upload
-audit.read              audit.retention.manage
+audit.read              audit.export             audit.retention.manage
 rbac.read               rbac.manage
 asset_groups.manage
 service_accounts.read   service_accounts.manage
@@ -518,6 +519,18 @@ certificate PEM, or raw IdP assertions.
 
 Ordinary scoped list reads need not create a row. Denials, audit access,
 exports, control-plane reads, and every privileged mutation do.
+
+`POST /api/v1/audit-events/export` accepts the same bounded filters and stable
+ordering as the audit list. It renders UTF-8 CSV into a private mode-0600 spool
+while enforcing configured row and byte limits, neutralising spreadsheet
+formulas, and computing a digest. Exceeding either limit deletes the spool and
+returns 422 with guidance to narrow the filters; partial exports are never
+presented as complete. Only after `audit.exported` commits with actor, filters,
+row count, and digest does the response begin. It uses `Cache-Control: no-store`,
+an exact `Content-Length`, and a safe `Content-Disposition` filename. A failed
+audit append deletes the spool and discloses no CSV. The spool is removed after
+the response; startup maintenance removes only stale files from the console's
+dedicated export-spool directory.
 
 Audit events are retained for 365 days by default. A versioned global policy
 allows an administrator with `audit.retention.manage` to change that period.
@@ -698,12 +711,16 @@ At minimum, test:
 - audit retention defaults to 365 days; stale policy updates fail; reductions
   require confirmation; cleanup preserves events at the cutoff and newer and
   cannot bypass the audited policy mutation path;
+- audit export requires `audit.export`, applies the requested filters exactly,
+  rejects over-limit results before download, neutralises spreadsheet formulas,
+  is not cached, records success/failure without logging row contents, and
+  creates/removes only private files inside its dedicated spool directory;
 - tag mutation requires global authority;
 - forwarded headers are ignored outside trusted proxies;
 - API/auth 404s cannot fall through to the SPA index;
 - state mutation and audit append are atomic;
 - static assets have correct type, cache headers, CSP, and `nosniff`;
-- CSV/export work, when added, neutralises spreadsheet formula injection.
+- audit CSV export neutralises spreadsheet formula injection.
 
 Later OIDC/SAML tests add callback replay, fixation, issuer/audience mismatch,
 arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
@@ -748,3 +765,6 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 14. **Approved:** audit events default to 365 days of retention. A global
     administrator can change the versioned policy; reductions are confirmed
     and audited, and maintenance applies the cutoff asynchronously.
+15. **Approved:** the first release includes bounded, filtered CSV audit export
+    behind `audit.export`; every export is audited and spreadsheet formulas are
+    neutralised.
