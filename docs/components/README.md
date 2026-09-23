@@ -14,5 +14,6 @@ behaviour, and how to test. Updated in the same change as the component.
 | `packaging` | RPMs | openvibes-ingest, openvibes-admin, hardened units, maintenance timer (PM4) | [packaging.md](packaging.md) |
 | `load` | test tool | openvibes-load generator and runner (PM5) | [load.md](load.md) |
 
+Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).
 Architecture and design: [`../specs/`](../specs/). Implementation plans:
 [`../plans/`](../plans/).
