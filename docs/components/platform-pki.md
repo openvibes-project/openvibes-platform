@@ -9,7 +9,7 @@ and ingest do the file and database work.
 | Certificate | Lifetime | Constraints | Made by |
 |---|---|---|---|
 | Root (`OpenVIBES Root CA`) | 10 years (3652 days) | CA, path length 1, keyCertSign + cRLSign | `generate_root(now)`, offline |
-| Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` |
+| Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)`, which refuses a root key that is not the root certificate's (`KeyMismatch`) |
 | Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate |
 
 All keys are ECDSA P-256. Serials are 16 bytes whose first two bits are

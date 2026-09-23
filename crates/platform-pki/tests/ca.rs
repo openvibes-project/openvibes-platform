@@ -103,3 +103,19 @@ fn only_a_current_intermediate_of_that_root_imports() {
         Err(PkiError::IssuerExpired)
     );
 }
+
+#[test]
+fn the_root_key_must_match_the_root_certificate() {
+    let now = Utc::now();
+    let root = generate_root(now).unwrap();
+    let other = generate_root(now).unwrap();
+    let mixed = KeyAndCert {
+        cert_pem: root.cert_pem.clone(),
+        key_pem: other.key_pem.clone(),
+    };
+    let (csr, _) = intermediate_request().unwrap();
+    assert_eq!(
+        sign_intermediate(&mixed, &csr, now).map(drop),
+        Err(PkiError::KeyMismatch)
+    );
+}

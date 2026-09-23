@@ -204,6 +204,9 @@ async fn the_root_cannot_be_imported_as_the_intermediate() {
     ]);
     assert!(!refused.status.success());
     assert!(String::from_utf8_lossy(&refused.stderr).contains("not an intermediate"));
-    assert_eq!(fixture.count("SELECT count(*) FROM ca_certificates").await, 0);
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM ca_certificates").await,
+        0
+    );
     fixture.drop().await;
 }
