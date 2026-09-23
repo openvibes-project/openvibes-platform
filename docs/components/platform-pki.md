@@ -34,6 +34,15 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `spki_sha256_of_cert(pem)`: the same hash for a presented certificate, so
   ingest can match it against `certificates.spki_sha256`.
 
+## Tokens and agent ids
+
+- `enrollment_token_sha256(token) -> Option<[u8; 32]>`: the one way tokens
+  are hashed, used by both `openvibes-admin token create` and ingest.
+  Accepts exactly 43 base64url characters (no padding, no whitespace) that
+  decode to 32 bytes, and hashes the bytes.
+- `is_agent_id(id)`: `agent.` + a lowercase hyphenated UUID, matching the
+  database CHECK. `issue_client` refuses anything else (`InvalidAgentId`).
+
 ## Interface
 
 - `Issuer::load(cert_pem, key_pem)`: refuses a non-CA certificate (`NotCa`)
@@ -41,7 +50,8 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
-  `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`.
+  `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,
+  `InvalidValidity`, `IssuerExpired`, `InvalidAgentId`.
   Messages never contain key or certificate material.
 
 ## Test

@@ -7,6 +7,7 @@
 
 mod ca;
 mod client;
+mod token;
 
 use std::fmt;
 
@@ -14,7 +15,10 @@ pub use ca::{
     Issuer, KeyAndCert, generate_root, intermediate_request, not_after, sha256_fingerprint,
     sign_intermediate, verify_signed_by,
 };
-pub use client::{CheckedCsr, IssuedClient, check_csr, spki_sha256_of_cert};
+pub use client::{
+    CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
+};
+pub use token::{enrollment_token_sha256, is_agent_id};
 
 /// Fixed failure categories; no key or certificate material is included.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -39,6 +43,8 @@ pub enum PkiError {
     InvalidValidity,
     /// The issuing CA has expired.
     IssuerExpired,
+    /// Not an agent id the platform assigns (`agent.<lowercase uuid>`).
+    InvalidAgentId,
 }
 
 impl fmt::Display for PkiError {
@@ -54,6 +60,7 @@ impl fmt::Display for PkiError {
             Self::Generation => "key or certificate generation failed",
             Self::InvalidValidity => "certificate validity must be 1 to 365 days",
             Self::IssuerExpired => "the issuing CA has expired",
+            Self::InvalidAgentId => "invalid agent id",
         })
     }
 }

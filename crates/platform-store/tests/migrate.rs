@@ -9,11 +9,11 @@ async fn migration_applies_once_and_is_idempotent() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     assert_eq!(platform_store::schema_version(&client).await.unwrap(), None);
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 2);
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 2);
+    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 3);
+    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 3);
     assert_eq!(
         platform_store::schema_version(&client).await.unwrap(),
-        Some(2)
+        Some(3)
     );
     drop(client);
     db.drop().await;

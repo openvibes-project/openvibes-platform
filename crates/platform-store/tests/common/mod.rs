@@ -28,6 +28,12 @@ fn with_database(url: &str, name: &str) -> String {
 }
 
 impl TestDb {
+    /// This test database's URL.
+    #[allow(dead_code, reason = "used by some test binaries only")]
+    pub fn url(&self) -> String {
+        with_database(&self.admin_url, &self.name)
+    }
+
     pub async fn create() -> Self {
         let admin_url = base_url();
         let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();

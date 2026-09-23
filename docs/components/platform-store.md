@@ -7,11 +7,13 @@ functions, so schema knowledge and SQL live in one place.
 
 - `Client` and `Pool` are re-exported from `deadpool-postgres`, so callers
   need no pool dependency.
-- `connect(url) -> Result<Pool, StoreError>`: a `deadpool-postgres` pool of
-  up to 16 connections. `url` is a libpq URL or key/value string; Unix
+- `connect(url)` / `connect_sized(url, size)`: a `deadpool-postgres` pool
+  (16 by default). Waiting for, creating, and recycling a connection are
+  bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 2), `schema_version(&client)` (`None` on an
+- `SCHEMA_VERSION` (currently 3; a compile-time check ties it to the last
+  migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
   `Query` (a statement failed). Messages never contain SQL, parameters, or
@@ -44,6 +46,31 @@ readiness check). The migrating role needs `CREATEROLE`.
 - `ca::record(&client, role, fingerprint, pem, not_after)` (idempotent on the
   fingerprint), `ca::list`. Migration 2 adds `ca_certificates` (readable by
   `openvibes_ingest`).
+
+## Ingest queries (`ingest::…`)
+
+All run within the `openvibes_ingest` role's grants (the tests use
+`SET ROLE openvibes_ingest`).
+
+- `token_by_hash(&client, sha256) -> Option<TokenRow>`.
+- `enroll(&mut client, token_id, spki_sha256, now, issue) -> Enrolled`: one
+  transaction under `pg_advisory_xact_lock(hashtext(token_id))`, so
+  concurrent enrollments with a single-use token yield exactly one identity.
+  `Existing` when this token already enrolled this key (the protocol's retry
+  rule, same chain returned), `Exhausted` when no uses remain, else `New`
+  after creating the agent (`agent.<uuid>`), its certificate, the token use,
+  and an `enroll` audit row.
+- `add_certificate` (renewal), `authenticate(&client, serial, spki) ->
+  Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
+  hash must match a recorded certificate.
+- `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
+  at most every 5 minutes, or at once when the hostname changes; an absent
+  hostname keeps the stored one (migration 3 adds `agents.hostname`,
+  indexed). Returns whether it wrote.
+- `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
+  transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
+  keeping the newest observation and the first-seen time.
+- Certificate chains are stored as a JSON array in `certificates.chain_pem`.
 
 ## Audit log
 

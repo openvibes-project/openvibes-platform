@@ -10,13 +10,15 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// Queries the ingest service runs.
+pub mod ingest;
 mod maintenance;
 mod migrate;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
 
-use std::{fmt, str::FromStr};
+use std::{fmt, str::FromStr, time::Duration};
 
 use deadpool_postgres::Manager;
 use tokio_postgres::NoTls;
@@ -71,15 +73,36 @@ impl From<deadpool_postgres::PoolError> for StoreError {
     }
 }
 
-/// Maximum connections per process.
+/// Default connections per process.
 const POOL_SIZE: usize = 16;
 
-/// A connection pool for `url` (libpq key/value or URL form). Connections
-/// open lazily, so an unreachable server surfaces on first use.
+/// Longest wait for a pooled connection, a new connection, or a recycle.
+const POOL_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// Longest time one statement may run; a stuck query or lock wait fails
+/// instead of hanging a request.
+const STATEMENT_TIMEOUT_MS: u64 = 10_000;
+
+/// A connection pool of 16 for `url`; see [`connect_sized`].
 pub async fn connect(url: &str) -> Result<Pool, StoreError> {
-    let config = tokio_postgres::Config::from_str(url).map_err(|_| StoreError::Unavailable)?;
+    connect_sized(url, POOL_SIZE).await
+}
+
+/// A connection pool of `size` for `url` (libpq key/value or URL form).
+/// Connections open lazily. Waiting for a connection, connecting, and
+/// recycling are bounded to 5 seconds, and every statement to 10 seconds,
+/// so a hung database yields errors, not hangs.
+pub async fn connect_sized(url: &str, size: usize) -> Result<Pool, StoreError> {
+    let mut config = tokio_postgres::Config::from_str(url).map_err(|_| StoreError::Unavailable)?;
+    config
+        .connect_timeout(POOL_TIMEOUT)
+        .options(format!("-c statement_timeout={STATEMENT_TIMEOUT_MS}"));
     Pool::builder(Manager::new(config, NoTls))
-        .max_size(POOL_SIZE)
+        .max_size(size.max(1))
+        .runtime(deadpool_postgres::Runtime::Tokio1)
+        .wait_timeout(Some(POOL_TIMEOUT))
+        .create_timeout(Some(POOL_TIMEOUT))
+        .recycle_timeout(Some(POOL_TIMEOUT))
         .build()
         .map_err(|_| StoreError::Unavailable)
 }
