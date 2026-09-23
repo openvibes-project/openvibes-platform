@@ -44,6 +44,13 @@ fn routes(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// Disables Nagle: a small response otherwise waits about 40 ms for the
+/// client's delayed ACK of the handshake's last flight.
+fn no_delay(tcp: tokio::net::TcpStream) -> tokio::net::TcpStream {
+    let _ = tcp.set_nodelay(true);
+    tcp
+}
+
 /// Binds `listen` and `health_listen`, then [`run`]s until `shutdown`.
 pub async fn serve(
     config: IngestConfig,
@@ -102,7 +109,7 @@ pub async fn run(
                 let tcp = tokio::select! {
                     () = &mut shutdown => break,
                     accepted = listener.accept() => match accepted {
-                        Ok((tcp, _)) => tcp,
+                        Ok((tcp, _)) => no_delay(tcp),
                         Err(_) => {
                             // For example EMFILE: back off instead of spinning.
                             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -139,4 +146,19 @@ pub async fn run(
     // request deadline), then return. Idle keep-alive connections close now.
     let _ = tokio::time::timeout(timeout, graceful.shutdown()).await;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::net::{TcpListener, TcpStream};
+
+    #[tokio::test]
+    async fn accepted_sockets_disable_nagle() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let _client = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+        let (tcp, _) = listener.accept().await.unwrap();
+        assert!(super::no_delay(tcp).nodelay().unwrap());
+    }
 }

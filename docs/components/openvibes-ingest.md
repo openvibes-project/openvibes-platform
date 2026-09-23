@@ -77,6 +77,8 @@ Strict TOML (unknown keys refused), absolute paths only:
 
 ## Load control and logging
 
+- Accepted sockets set `TCP_NODELAY`: without it every request waited about
+  40 ms for the client's delayed ACK (found by the PM5 load test).
 - Bodies over 1 MiB → 400 (never read past the limit).
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the

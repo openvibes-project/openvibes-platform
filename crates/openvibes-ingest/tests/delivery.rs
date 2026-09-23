@@ -217,3 +217,34 @@ async fn revoked_agents_get_identity_revoked_and_outages_503() {
     assert_eq!(support::health_get(world.health, "/health").await, 200);
     world.stop().await;
 }
+
+/// Small responses must not wait for a delayed ACK (Nagle): without
+/// TCP_NODELAY every request took about 40 ms on loopback. Only a release
+/// build is fast enough to hit the stall; debug runs pass either way, and the
+/// `accepted_sockets_disable_nagle` unit test covers them.
+#[tokio::test]
+async fn requests_are_not_delayed_by_nagle() {
+    let world = World::start().await;
+    let (agent_id, chain, key) = enrolled(&world).await;
+    let transport = world.transport();
+    let mut millis = blocking(move || {
+        let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+        (0..9)
+            .map(|_| {
+                // A fresh client per request, as the agent opens one per tick.
+                let client = PlatformClient::new(&transport, Some(&identity)).unwrap();
+                let started = std::time::Instant::now();
+                client.heartbeat(&heartbeat(&agent_id)).unwrap();
+                started.elapsed().as_millis()
+            })
+            .collect::<Vec<_>>()
+    })
+    .await;
+    millis.sort_unstable();
+    assert!(
+        millis[4] < 20,
+        "median heartbeat {} ms: {millis:?}",
+        millis[4]
+    );
+    world.stop().await;
+}
