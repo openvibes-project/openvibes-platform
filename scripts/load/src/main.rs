@@ -72,6 +72,8 @@ enum Kind {
 struct Sample {
     kind: Kind,
     due: Instant,
+    /// When the response (or error) arrived; throughput counts these.
+    done: Instant,
     micros: u64,
     error: Option<String>,
 }
@@ -154,6 +156,7 @@ fn tick(
             samples.push(Sample {
                 kind: Kind::Heartbeat,
                 due,
+                done: Instant::now(),
                 micros: 0,
                 error: Some(format!("client: {error}")),
             });
@@ -173,6 +176,7 @@ fn tick(
     samples.push(Sample {
         kind: Kind::Heartbeat,
         due,
+        done: Instant::now(),
         micros: u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
         error: result.err().map(|e| format!("heartbeat: {e}")),
     });
@@ -197,6 +201,7 @@ fn tick(
         samples.push(Sample {
             kind: Kind::Findings,
             due,
+            done: Instant::now(),
             micros: u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             error: result.err().map(|e| format!("findings: {e}")),
         });
@@ -392,7 +397,13 @@ fn main() -> ExitCode {
             } else {
                 0.0
             });
-    let achieved_rps = measured.len() as f64 / window;
+    // Completions inside the window, not ticks due in it: a backlog that the
+    // workers only clear after `end` must lower the measured rate.
+    let completed = samples
+        .iter()
+        .filter(|s| s.done >= window_start && s.done <= end)
+        .count();
+    let achieved_rps = completed as f64 / window;
     let cores =
         |i: usize| (after[i].saturating_sub(before[i])) as f64 / args.clk_tck as f64 / window;
     let max_lag_ms = max_lag.as_secs_f64() * 1000.0;

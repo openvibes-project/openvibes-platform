@@ -77,6 +77,11 @@ jobs:
       - name: Tests
         run: cargo test --locked --workspace --all-features
 
+      # The Nagle stall (TCP_NODELAY missing) only shows when the server is
+      # fast enough, i.e. in a release build; debug runs pass either way.
+      - name: Release-mode latency test
+        run: cargo test --release --locked -p openvibes-ingest --test delivery requests_are_not_delayed_by_nagle
+
       - name: Install cargo-audit
         uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
         with:

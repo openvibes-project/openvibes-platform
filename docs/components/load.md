@@ -9,8 +9,9 @@ agents with the agent's own transport (`openvibes-transport`), and
 ## What a tick is
 
 Like the real agent, every tick of every simulated agent opens a **fresh
-client**, so a new TLS 1.3 connection with mTLS. It sends a heartbeat, and on
-that agent's findings ticks it also sends one batch (`--batch`, default 10
+client**, so a new TLS 1.3 connection with mTLS. It sends a heartbeat (which
+pays the handshake), and on that agent's findings ticks it also sends one
+batch over the same connection (`--batch`, default 10
 findings). Findings ticks come once every `--findings-every` ticks (default
 60), staggered so each tick carries 1/60 of the agents rather than bursts.
 
@@ -31,12 +32,15 @@ so it behaves the same.
   `max_lag_ms` is how late the most delayed tick started.
 - **Warm-up:** enrollment and the first interval are excluded. Rate, latency,
   and CPU cover the window after it (`window_s` = `--duration-s`).
-- **Latency:** per request, from sending to the parsed response, including
-  the TLS handshake. Nearest-rank p50, p99, and max, overall and per kind.
+- **Latency:** per request, from sending to the parsed response; the
+  heartbeat's includes the TLS handshake. Queueing before a tick starts is
+  not in it; it shows as lag. Nearest-rank p50, p99, and max, overall and per kind.
 - **CPU:** from `/proc`, in cores (CPU seconds per second): the generator, the
   ingest process, and the postmaster with all its children.
 - **Pass:** no errors (every non-2xx or transport error is counted by kind),
-  lag ≤ 1 s, and an achieved rate ≥ 95 % of the target. Otherwise exit 1.
+  lag ≤ 1 s, and an achieved rate ≥ 95 % of the target. The achieved rate
+  counts responses that **completed** inside the window, so a backlog the
+  generator or server clears only later lowers it. Otherwise exit 1.
 
 ## Run
 
@@ -79,25 +83,28 @@ generator, ingest, and PostgreSQL share this host
 ```
 
 Ingest at its defaults (pool 16, `max_in_flight` 4096, release build of
-`e5283d5`); PostgreSQL a fresh `initdb` cluster with default settings and
+the PM5 branch); PostgreSQL a fresh `initdb` cluster with default settings and
 `fsync` on, Unix socket; 10 findings per batch, one batch per 60 heartbeats.
 Latency columns are p50 / p99 / max in ms; CPU is cores for generator /
 ingest / PostgreSQL.
 
 | Agents | Interval | Window | Target req/s | Achieved req/s | All | Heartbeat | Findings | Max lag ms | Errors | CPU | Pass |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| 2000 | 2 s | 120 s | 1017 | 1017 | 1.5 / 9.8 / 198 | 1.5 / 2.5 / 8 | 10.1 / 13.8 / 198 | 2 | 0 | 0.65 / 0.64 / 0.42 | yes |
-| 4000 | 2 s | 60 s | 2033 | 2033 | 1.6 / 36.4 / 159 | 1.6 / 36.3 / 159 | 10.7 / 61.0 / 133 | 609 | 0 | 1.34 / 1.38 / 0.84 | yes |
+| 2000 | 2 s | 120 s | 1017 | 1017 | 1.5 / 9.7 / 86 | 1.5 / 2.4 / 7 | 10.0 / 14.1 / 86 | 2 | 0 | 0.63 / 0.63 / 0.41 | yes |
+| 4000 | 2 s | 60 s | 2033 | 2051 | 1.7 / 33.1 / 157 | 1.7 / 33.1 / 157 | 10.8 / 55.2 / 157 | 561 | 0 | 1.35 / 1.38 / 0.85 | yes |
 
 **Reading.** The spec target (about 1,000 req/s on one ingest instance)
-holds with a wide margin: p99 9.8 ms, no errors, and under one core each for
-ingest (0.64) and PostgreSQL (0.42). At twice the target it still passes,
-but the tail grows (p99 36 ms, start lag 609 ms against the 1 s limit) while
-no process is near CPU saturation, so something other than CPU (not
-investigated here: candidates are WAL fsync on findings commits and the
-16-connection pool) sets the next limit. Every request is a full TLS 1.3 +
-mTLS handshake, as with real agents. Enrollment of 2,000 agents took 13.6 s
-(147/s, 64 in parallel).
+holds with a wide margin: 1017 req/s completed, p99 9.7 ms, no errors, and
+under one core each for ingest (0.63) and PostgreSQL (0.41). At twice the
+target it still passes, but the tail grows (p99 33 ms, start lag 561 ms
+against the 1 s limit) while no process is near CPU saturation in aggregate.
+The cause is unattributed: it may be the generator (per-tick client setup,
+one scheduler thread) as well as the server (WAL fsync on findings commits,
+the 16-connection pool). Each tick opens one new TLS 1.3 + mTLS connection:
+the heartbeat pays the handshake, and a findings batch reuses that
+connection, as the real agent does. Latency is service time from sending;
+queueing shows as lag. Enrollment of 2,000 agents took 13.2 s (151/s, 64 in
+parallel).
 
 CI: the `fedora` job runs a 10 s smoke run (50 agents, findings every 5
 ticks) against the installed binaries, so the tool keeps working.
