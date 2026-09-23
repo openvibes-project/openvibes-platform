@@ -61,7 +61,7 @@ impl Readiness {
 /// document.
 pub fn public_router() -> Router {
     let router = Router::new()
-        .nest("/api", Router::new().fallback(api_not_found))
+        .nest("/api", api_router())
         .nest("/auth", Router::new().fallback(auth_not_found))
         .nest("/assets", asset_router());
 
@@ -71,6 +71,12 @@ pub fn public_router() -> Router {
     router
         .fallback(browser_not_found)
         .layer(middleware::map_response(public_security_headers))
+}
+
+fn api_router() -> Router {
+    Router::new()
+        .route("/v1/session", get(session))
+        .fallback(api_not_found)
 }
 
 #[cfg(feature = "embedded-ui")]
@@ -117,6 +123,23 @@ async fn api_not_found() -> Response {
         "api_not_found",
         "API resource not found",
     ))
+}
+
+/// Reports the authenticated browser session once C3 authentication exists.
+///
+/// C0 deliberately returns a bounded failure instead of creating a temporary
+/// unauthenticated or implicitly privileged session.
+#[utoipa::path(
+    get,
+    path = "/api/v1/session",
+    tag = "session",
+    responses(
+        (status = 200, description = "Current authenticated browser session", body = crate::SessionResponse),
+        (status = 503, description = "Authentication is not implemented until C3", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn session() -> Response {
+    problem_response(ProblemDetails::authentication_unavailable())
 }
 
 async fn auth_not_found() -> Response {

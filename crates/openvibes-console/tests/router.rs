@@ -57,6 +57,35 @@ async fn unknown_api_route_is_problem_json_and_never_html() {
 }
 
 #[tokio::test]
+async fn session_contract_fails_closed_until_authentication_exists() {
+    let response = public_router()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/session")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_public_security_headers(&response);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/problem+json"
+    );
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let problem: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(problem["code"], "authentication_unavailable");
+    assert_eq!(problem["status"], 503);
+    assert!(problem.get("principal").is_none());
+}
+
+#[tokio::test]
 async fn unknown_asset_is_an_empty_real_404() {
     let response = public_router()
         .oneshot(
