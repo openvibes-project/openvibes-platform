@@ -37,13 +37,15 @@ pub(crate) fn offset(now: DateTime<Utc>, days: i64) -> Result<OffsetDateTime, Pk
         .map_err(|_| PkiError::Generation)
 }
 
-/// 16 random bytes with the top bit cleared, so the serial is positive.
+/// 16 bytes whose DER INTEGER encoding is exactly these 16 bytes: the top
+/// bit is clear (positive) and the next bit set (no leading zero byte that
+/// DER would strip), leaving 126 random bits.
 pub(crate) fn random_serial() -> Result<[u8; 16], PkiError> {
     let mut bytes = [0u8; 16];
     SystemRandom::new()
         .fill(&mut bytes)
         .map_err(|_| PkiError::Generation)?;
-    bytes[0] &= 0x7f;
+    bytes[0] = (bytes[0] & 0x7f) | 0x40;
     Ok(bytes)
 }
 
@@ -128,6 +130,7 @@ pub(crate) fn parse(der: &[u8]) -> Result<X509Certificate<'_>, PkiError> {
 pub struct Issuer {
     pub(crate) issuer: rcgen::Issuer<'static, KeyPair>,
     cert_pem: String,
+    pub(crate) not_after: DateTime<Utc>,
 }
 
 impl Issuer {
@@ -148,11 +151,14 @@ impl Issuer {
         if key.subject_public_key_info() != cert.tbs_certificate.subject_pki.raw {
             return Err(PkiError::KeyMismatch);
         }
+        let not_after = DateTime::from_timestamp(cert.validity().not_after.timestamp(), 0)
+            .ok_or(PkiError::InvalidPem)?;
         let issuer =
             rcgen::Issuer::from_ca_cert_pem(cert_pem, key).map_err(|_| PkiError::InvalidPem)?;
         Ok(Self {
             issuer,
             cert_pem: cert_pem.to_owned(),
+            not_after,
         })
     }
 

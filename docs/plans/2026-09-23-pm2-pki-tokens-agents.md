@@ -14,8 +14,8 @@
 
 - Everything in the PM0/PM1 plan's Global Constraints still applies (toolchain, lints, `--locked`, commit trailer, component docs in `docs/components/` in the same change, `CARGO_NET_GIT_FETCH_WITH_CLI=true`, tests via `scripts/test-db.sh`).
 - All keys ECDSA P-256. Root: 10 years, path length 1. Intermediate: 2 years, path length 0. Server: 90 days. Client: `client_certificate_days` (default 30).
-- Client certificates: empty subject, SAN URI `openvibes:agent:<agent_id>`, EKU client auth, not a CA, serial = 16 random bytes with the top bit cleared.
-- CSR checks: valid signature, P-256 key, empty subject, at most 1 MiB; requested extensions ignored.
+- Client certificates: empty subject, SAN URI `openvibes:agent:<agent_id>`, EKU client auth, not a CA, serial = 16 bytes with the first two bits `01` (corrected after review: a cleared top bit alone lets DER strip a leading zero byte).
+- CSR checks: valid signature, P-256 key, empty subject, at most 1 MiB; requested extensions ignored. (Corrected after review: parse and verify with x509-parser and take the key from the SPKI; rcgen's CSR parser derives the key algorithm from the signature algorithm.)
 - Private key files are written `0600` with `create_new` (never overwritten); certificates `0644`.
 - Tokens: 32 random bytes, base64url without padding, printed **once**; only the SHA-256 is stored.
 - New workspace dependency for tokens: `base64 = { version = "0.23.1", default-features = false, features = ["std"] }` (the agent's pin).

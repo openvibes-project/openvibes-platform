@@ -35,6 +35,10 @@ pub enum PkiError {
     NotSignedBy,
     /// Key or certificate generation failed.
     Generation,
+    /// Requested validity is outside 1 to 365 days.
+    InvalidValidity,
+    /// The issuing CA has expired.
+    IssuerExpired,
 }
 
 impl fmt::Display for PkiError {
@@ -48,6 +52,8 @@ impl fmt::Display for PkiError {
             Self::NotCa => "certificate is not a CA",
             Self::NotSignedBy => "certificate is not signed by the given issuer",
             Self::Generation => "key or certificate generation failed",
+            Self::InvalidValidity => "certificate validity must be 1 to 365 days",
+            Self::IssuerExpired => "the issuing CA has expired",
         })
     }
 }

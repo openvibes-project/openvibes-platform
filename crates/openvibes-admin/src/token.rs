@@ -40,19 +40,21 @@ impl TokenCommand {
 }
 
 fn parse_expiry(value: &str) -> Result<Duration, String> {
-    let (number, unit) = value.split_at(value.len().saturating_sub(1));
-    let number: i64 = number
-        .parse()
-        .map_err(|_| "use Nh or Nd, e.g. 12h or 7d".to_owned())?;
-    let duration = match unit {
-        "h" => Duration::hours(number),
-        "d" => Duration::days(number),
-        _ => return Err("use Nh or Nd, e.g. 12h or 7d".into()),
+    const HINT: &str = "use Nh or Nd, e.g. 12h or 7d";
+    let (number, per_unit) = match (value.strip_suffix('h'), value.strip_suffix('d')) {
+        (Some(number), _) => (number, 1),
+        (_, Some(number)) => (number, 24),
+        _ => return Err(HINT.into()),
     };
-    if duration < Duration::hours(1) || duration > Duration::days(365) {
+    // Bounded before building a duration, so no input can overflow.
+    let number: u32 = number.parse().map_err(|_| HINT.to_owned())?;
+    let hours = u64::from(number) * per_unit;
+    if !(1..=365 * 24).contains(&hours) {
         return Err("must be between 1h and 365d".into());
     }
-    Ok(duration)
+    Ok(Duration::hours(
+        i64::try_from(hours).map_err(|_| HINT.to_owned())?,
+    ))
 }
 
 /// Runs a token command; returns the output and the audit target (the

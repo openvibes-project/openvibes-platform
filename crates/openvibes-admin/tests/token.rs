@@ -67,6 +67,8 @@ async fn a_token_is_shown_once_and_stored_only_as_its_hash() {
         &["token", "create", "--expires", "366d"],
         &["token", "create", "--expires", "7x"],
         &["token", "create", "--expires", "7d", "--uses", "0"],
+        &["token", "create", "--expires", "7é"],
+        &["token", "create", "--expires", "99999999999999999h"],
     ] {
         assert_eq!(fixture.run(bad).status.code(), Some(2), "{bad:?}");
     }

@@ -113,3 +113,106 @@ fn client_certificates_follow_the_profile() {
     let again = issuer.issue_client(&checked, AGENT, now, 30).unwrap();
     assert_ne!(again.serial, issued.serial);
 }
+
+#[test]
+fn issued_serials_always_match_the_certificate() {
+    let issuer = intermediate();
+    let checked = check_csr(&csr(&KeyPair::generate().unwrap(), None)).unwrap();
+    for _ in 0..2000 {
+        let issued = issuer
+            .issue_client(&checked, AGENT, Utc::now(), 30)
+            .unwrap();
+        let der = x509_parser::pem::parse_x509_pem(issued.chain_pem[0].as_bytes())
+            .unwrap()
+            .1
+            .contents;
+        let (_, cert) = x509_parser::parse_x509_certificate(&der).unwrap();
+        assert_eq!(
+            cert.raw_serial(),
+            issued.serial,
+            "stored serial must match the certificate"
+        );
+    }
+}
+
+/// A P-256 key whose CSR is signed with ecdsa-with-SHA384, which rcgen
+/// cannot produce; built with the openssl CLI (test-only).
+#[allow(clippy::disallowed_types)]
+fn p256_csr_signed_with_sha384() -> String {
+    let dir = std::env::temp_dir().join(format!("ov-pki-sha384-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let key = dir.join("key.pem");
+    let run = |args: &[&str]| {
+        let status = std::process::Command::new("openssl")
+            .args(args)
+            .status()
+            .unwrap();
+        assert!(status.success(), "openssl {args:?}");
+    };
+    run(&[
+        "ecparam",
+        "-name",
+        "prime256v1",
+        "-genkey",
+        "-noout",
+        "-out",
+        key.to_str().unwrap(),
+    ]);
+    let csr = dir.join("csr.pem");
+    run(&[
+        "req",
+        "-new",
+        "-key",
+        key.to_str().unwrap(),
+        "-sha384",
+        "-subj",
+        "/",
+        "-out",
+        csr.to_str().unwrap(),
+    ]);
+    let pem = std::fs::read_to_string(&csr).unwrap();
+    std::fs::remove_dir_all(&dir).unwrap();
+    pem
+}
+
+#[test]
+fn the_certified_key_comes_from_the_csr_key_not_its_signature_algorithm() {
+    let issuer = intermediate();
+    let checked = check_csr(&p256_csr_signed_with_sha384()).unwrap();
+    let issued = issuer
+        .issue_client(&checked, AGENT, Utc::now(), 30)
+        .unwrap();
+    assert_eq!(
+        spki_sha256_of_cert(&issued.chain_pem[0]).unwrap(),
+        checked.spki_sha256
+    );
+}
+
+#[test]
+fn validity_is_bounded_and_never_outlives_the_issuer() {
+    let issuer = intermediate();
+    let checked = check_csr(&csr(&KeyPair::generate().unwrap(), None)).unwrap();
+    let now = Utc::now();
+    for days in [0, 366, u32::MAX] {
+        assert_eq!(
+            issuer.issue_client(&checked, AGENT, now, days).err(),
+            Some(PkiError::InvalidValidity),
+            "{days}"
+        );
+    }
+    // An intermediate signed 729 days ago expires in about a day.
+    let root = generate_root(now - Duration::days(729)).unwrap();
+    let (request, key) = intermediate_request().unwrap();
+    let old = Issuer::load(
+        &sign_intermediate(&root, &request, now - Duration::days(729)).unwrap(),
+        &key,
+    )
+    .unwrap();
+    let issued = old.issue_client(&checked, AGENT, now, 30).unwrap();
+    assert!(
+        issued.not_after <= now + Duration::days(2),
+        "clamped to the issuer's expiry"
+    );
+    let expired = old.issue_client(&checked, AGENT, now + Duration::days(3), 30);
+    assert_eq!(expired.err(), Some(PkiError::IssuerExpired));
+}

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Utc};
 use rcgen::{
-    CertificateParams, CertificateSigningRequestParams, DistinguishedName, ExtendedKeyUsagePurpose,
-    IsCa, KeyUsagePurpose, SanType, SerialNumber,
+    CertificateParams, DistinguishedName, ExtendedKeyUsagePurpose, IsCa, KeyUsagePurpose, SanType,
+    SerialNumber,
 };
 use x509_parser::{
     certification_request::X509CertificationRequest,
@@ -19,9 +19,14 @@ use crate::{
 /// Largest CSR accepted, matching the V1 document limit.
 const MAX_CSR_BYTES: usize = 1024 * 1024;
 
+/// Longest client certificate validity.
+const MAX_CLIENT_DAYS: u32 = 365;
+
 /// A CSR that passed [`check_csr`]: signature verified, P-256, empty subject.
 pub struct CheckedCsr {
-    csr: CertificateSigningRequestParams,
+    /// The requested key exactly as the CSR's key info states it (algorithm
+    /// included); nothing else from the CSR reaches the certificate.
+    public_key: rcgen::SubjectPublicKeyInfo,
     /// SHA-256 of the requested key's SubjectPublicKeyInfo DER.
     pub spki_sha256: [u8; 32],
 }
@@ -29,7 +34,7 @@ pub struct CheckedCsr {
 /// An issued agent client certificate.
 #[derive(Clone, Debug)]
 pub struct IssuedClient {
-    /// Certificate serial: 16 bytes, top bit clear.
+    /// Certificate serial: exactly the 16 bytes encoded in the certificate.
     pub serial: [u8; 16],
     /// SHA-256 of the certified key's SubjectPublicKeyInfo DER.
     pub spki_sha256: [u8; 32],
@@ -64,11 +69,12 @@ pub fn check_csr(csr_pem: &str) -> Result<CheckedCsr, PkiError> {
     if csr_pem.len() > MAX_CSR_BYTES {
         return Err(PkiError::InvalidCsr);
     }
-    let csr =
-        CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
     let (_, pem) = parse_x509_pem(csr_pem.as_bytes()).map_err(|_| PkiError::InvalidCsr)?;
     let (_, request) =
         X509CertificationRequest::from_der(&pem.contents).map_err(|_| PkiError::InvalidCsr)?;
+    request
+        .verify_signature()
+        .map_err(|_| PkiError::InvalidCsr)?;
     let info = &request.certification_request_info;
     if !is_p256(&info.subject_pki) {
         return Err(PkiError::UnsupportedKey);
@@ -76,9 +82,13 @@ pub fn check_csr(csr_pem: &str) -> Result<CheckedCsr, PkiError> {
     if info.subject.iter().count() != 0 {
         return Err(PkiError::NonEmptySubject);
     }
+    // The certified key's algorithm comes from the key info itself, never
+    // from the CSR's signature algorithm.
+    let public_key = rcgen::SubjectPublicKeyInfo::from_der(info.subject_pki.raw)
+        .map_err(|_| PkiError::UnsupportedKey)?;
     Ok(CheckedCsr {
         spki_sha256: spki_sha256(&info.subject_pki)?,
-        csr,
+        public_key,
     })
 }
 
@@ -92,8 +102,10 @@ pub fn spki_sha256_of_cert(cert_pem: &str) -> Result<[u8; 32], PkiError> {
 impl Issuer {
     /// Issues an agent client certificate for a checked CSR: empty subject,
     /// SAN URI `openvibes:agent:<agent_id>`, client auth only, not a CA,
-    /// valid `days` from `now`. Every extension is set here; nothing is
-    /// copied from the CSR except its public key.
+    /// valid `days` (1 to 365) from `now`, never beyond the issuer's own
+    /// expiry. Every extension is set here; nothing is copied from the CSR
+    /// except its public key, and the result is refused if the certified key
+    /// differs from the CSR's.
     pub fn issue_client(
         &self,
         csr: &CheckedCsr,
@@ -101,6 +113,12 @@ impl Issuer {
         now: DateTime<Utc>,
         days: u32,
     ) -> Result<IssuedClient, PkiError> {
+        if !(1..=MAX_CLIENT_DAYS).contains(&days) {
+            return Err(PkiError::InvalidValidity);
+        }
+        if now >= self.not_after {
+            return Err(PkiError::IssuerExpired);
+        }
         let serial = random_serial()?;
         let uri = format!("openvibes:agent:{agent_id}")
             .try_into()
@@ -114,18 +132,22 @@ impl Issuer {
         params.serial_number = Some(SerialNumber::from(serial.to_vec()));
         let not_before =
             DateTime::from_timestamp(now.timestamp(), 0).ok_or(PkiError::Generation)?;
-        let not_after = not_before + Duration::days(i64::from(days));
+        let not_after = (not_before + Duration::days(i64::from(days))).min(self.not_after);
         params.not_before = offset(not_before, 0)?;
         params.not_after = offset(not_after, 0)?;
         let leaf = params
-            .signed_by(&csr.csr.public_key, &self.issuer)
-            .map_err(|_| PkiError::Generation)?;
+            .signed_by(&csr.public_key, &self.issuer)
+            .map_err(|_| PkiError::Generation)?
+            .pem();
+        if spki_sha256_of_cert(&leaf)? != csr.spki_sha256 {
+            return Err(PkiError::Generation);
+        }
         Ok(IssuedClient {
             serial,
             spki_sha256: csr.spki_sha256,
             not_before,
             not_after,
-            chain_pem: vec![leaf.pem(), self.cert_pem().to_owned()],
+            chain_pem: vec![leaf, self.cert_pem().to_owned()],
         })
     }
 }

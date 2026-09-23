@@ -12,19 +12,24 @@ and ingest do the file and database work.
 | Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` |
 | Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate |
 
-All keys are ECDSA P-256; serials are 16 random bytes with the top bit
-cleared. `KeyAndCert`'s `Debug` output redacts the key.
+All keys are ECDSA P-256. Serials are 16 bytes whose first two bits are
+`01` (126 random bits), so the DER encoding is always exactly those 16
+bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redacts the key.
 
 ## Agent CSRs and client certificates (used by ingest)
 
-- `check_csr(pem) -> CheckedCsr`: at most 1 MiB; the signature must verify
-  (`InvalidCsr`); the key must be ECDSA P-256 (`UnsupportedKey`); the subject
-  must be empty (`NonEmptySubject`), because the platform assigns identity.
-  Requested extensions are ignored. `CheckedCsr::spki_sha256` is SHA-256 of
+- `check_csr(pem) -> CheckedCsr`: at most 1 MiB; parsed and verified with
+  x509-parser (`InvalidCsr`); the key must be ECDSA P-256 (`UnsupportedKey`);
+  the subject must be empty (`NonEmptySubject`), because the platform assigns
+  identity. Requested extensions are ignored. The certified key is taken from
+  the CSR's key info, never inferred from its signature algorithm. `CheckedCsr::spki_sha256` is SHA-256 of
   the key's SubjectPublicKeyInfo DER.
 - `Issuer::issue_client(&csr, agent_id, now, days) -> IssuedClient`: empty
   subject, SAN URI `openvibes:agent:<agent_id>`, EKU client auth only, not a
-  CA, fresh 16-byte serial, valid `days` from `now` (whole seconds).
+  CA, fresh 16-byte serial, valid `days` from `now` (whole seconds). `days`
+  must be 1 to 365 (`InvalidValidity`); validity is clamped to the issuer's
+  own expiry, and an expired issuer is refused (`IssuerExpired`). Issuing
+  fails closed if the certificate's key hash differs from the CSR's.
   `chain_pem` is leaf then intermediate.
 - `spki_sha256_of_cert(pem)`: the same hash for a presented certificate, so
   ingest can match it against `certificates.spki_sha256`.
