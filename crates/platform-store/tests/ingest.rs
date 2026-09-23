@@ -103,6 +103,38 @@ async fn enrollment_is_new_then_existing_then_exhausted() {
 }
 
 #[tokio::test]
+async fn a_token_revoked_or_expired_before_the_transaction_enrolls_nothing() {
+    let (db, single, multi) = setup().await;
+    let admin = db.pool.get().await.unwrap();
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    // The handler checked the token a moment earlier; then it was revoked.
+    tokens::revoke(&admin, &single, now).await.unwrap();
+    assert!(matches!(
+        ingest::enroll(&mut client, &single, [4; 32], now, issued(4, 4))
+            .await
+            .unwrap(),
+        Enrolled::TokenInvalid
+    ));
+    // Or it expired in between: `multi` expires in a day.
+    let later = now + Duration::days(2);
+    assert!(matches!(
+        ingest::enroll(&mut client, &multi, [5; 32], later, issued(5, 5))
+            .await
+            .unwrap(),
+        Enrolled::TokenInvalid
+    ));
+    let agents: i64 = admin
+        .query_one("SELECT count(*) FROM agents", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(agents, 0);
+    drop((client, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn concurrent_enrollments_with_a_single_use_token_yield_one_identity() {
     let (db, single, _) = setup().await;
     let (mut a, mut b) = (as_ingest(&db).await, as_ingest(&db).await);
