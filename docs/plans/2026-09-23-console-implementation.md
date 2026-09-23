@@ -40,8 +40,10 @@ Deliverables:
 - add the crate to the root workspace on the console branch immediately and
   accept the expected `Cargo.toml`/`Cargo.lock` rebase conflict;
 - add web workspace with locked package dependencies and strict TypeScript;
-- add the app shell, local design tokens, skip link, navigation landmarks,
-  safe fallback route, and seeded-data banner primitive;
+- add the app shell, complete light/dark semantic design tokens and System/
+  Light/Dark theme control; prepare/review transparent local brand assets from
+  the supplied logo references; add the skip link, navigation landmarks, safe
+  fallback route, and seeded-data banner primitive;
 - establish `/api/v1/session` DTO, Problem Details error DTO, pagination DTO,
   OpenAPI generation/snapshot, and TypeScript client generation using an
   OpenAPI-export build that does not require embedded frontend assets;
@@ -64,6 +66,8 @@ Verification:
 - `cargo fmt --check`, clippy with warnings denied, docs, and Rust tests;
 - `npm ci`, strict typecheck, lint, unit tests, production build;
 - binary serves the shell and exact assets with correct types/cache headers;
+- System/Light/Dark selection, persistence, and first-paint behaviour work
+  without weakening CSP or coupling theme state to authentication;
 - API, auth, and unknown asset routes return JSON/real 404, never index HTML;
 - release build fails clearly if generated assets/build stamp are missing;
 - build scripts never invoke a package manager implicitly or access network.
@@ -104,6 +108,8 @@ Verification:
 - 50,000 seeded agents never become 50,000 browser rows or DOM nodes;
 - scoped summaries, facets, lists, and item lookups contain no hidden assets;
 - manual 200% zoom, forced-colour, reduced-motion, tablet-width checks;
+- light and dark contrast/state review plus brand placement at expanded,
+  collapsed, sign-in, and favicon sizes;
 - NVDA/Firefox and VoiceOver/Safari review before release, not necessarily
   before early C1 iterations.
 
@@ -254,7 +260,7 @@ Only after their contracts exist:
 - inventory/package explorer, correlation, and CMDB views;
 - saved views, general report/findings export, and SIEM integration;
 - live updates, charts, or table virtualisation based on measured need;
-- dark theme and mobile-specific adaptations.
+- mobile-specific adaptations.
 
 ## 9. Collision Checklist Before Each Rebase
 

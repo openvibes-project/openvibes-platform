@@ -311,8 +311,8 @@ The intended tone is a **quiet command centre**:
 
 - neutral slate/charcoal structure, warm off-white surfaces, one restrained
   brand accent, and semantic colours reserved for meaning;
-- no neon "cybersecurity" styling, gradients, decorative threat maps, or
-  oversized vanity metrics;
+- no neon "cybersecurity" styling, decorative gradients outside the approved
+  logo artwork, threat maps, or oversized vanity metrics;
 - dense but breathable tables on an 8 px spacing grid;
 - system sans-serif for content; monospace only for IDs, versions, hashes,
   certificate serials, and other machine identifiers;
@@ -330,10 +330,30 @@ Suggested severity treatment, always paired with text and an icon:
 | Low | blue | down marker |
 | Informational | neutral grey | information circle |
 
-Light presentation is sufficient for the first release. Design tokens should
-make an accessible dark theme possible later without delaying behaviour.
-Fonts, icons, scripts, and styles are served locally; there are no runtime CDN
-dependencies.
+Light and dark presentation are both first-release requirements. The theme
+control offers **System**, **Light**, and **Dark**, defaults to System, and
+persists the operator's non-sensitive preference. Both themes use the same
+information hierarchy, density, status vocabulary, and semantic meaning; dark
+mode is not a separate visual design.
+
+The supplied brand references define two approved logo arrangements:
+
+- the full OpenVIBES wordmark for sign-in, expanded navigation, and product
+  identity surfaces;
+- the V-with-signal mark for collapsed navigation, favicon/app icon, loading,
+  and compact contexts.
+
+Production assets must have transparent backgrounds. The light theme uses the
+dark `open` wordmark and blue/teal VIBES artwork shown in the reference. The
+dark theme uses a light `open` wordmark while retaining an accessible version
+of the blue/teal mark. The logo gradient is brand artwork, not a reusable UI
+gradient. Each placement has an accessible OpenVIBES name; decorative duplicate
+marks are hidden from assistive technology.
+
+Every component, state, focus ring, logo variant, and semantic colour must meet
+the stated contrast criteria in both themes and in forced-colour mode. Fonts,
+icons, scripts, styles, and brand assets are served locally; there are no
+runtime CDN dependencies.
 
 ## 10. Low-Fidelity Wireframes
 
