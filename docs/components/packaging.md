@@ -132,7 +132,9 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
-three units, graceful stop, and that both binaries run.
+three units, that the ingest unit stops with SIGINT (the signal ingest
+drains on; an actual stop is not exercised here), and that both binaries
+run.
 
 CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, installs
 the RPMs, and runs `check-rpm.sh`; the integration test then runs against
