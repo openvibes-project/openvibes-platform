@@ -154,3 +154,13 @@ impl Issuer {
         })
     }
 }
+
+/// The serial (as encoded) and SPKI SHA-256 of a presented DER certificate,
+/// the pair ingest matches against `certificates`.
+pub fn leaf_identity(der: &[u8]) -> Result<(Vec<u8>, [u8; 32]), PkiError> {
+    let cert = parse(der)?;
+    Ok((
+        cert.raw_serial().to_vec(),
+        spki_sha256(&cert.tbs_certificate.subject_pki)?,
+    ))
+}
