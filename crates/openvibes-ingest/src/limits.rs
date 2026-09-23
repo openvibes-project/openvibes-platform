@@ -22,7 +22,7 @@ pub(crate) async fn bound(State(state): State<AppState>, request: Request, next:
         return ApiError::BadRequest.into_response();
     }
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
-        return ApiError::Unavailable.into_response();
+        return ApiError::Busy.into_response();
     };
     // The whole request, body included, must finish within the deadline,
     // so a slow client cannot keep its permit.
