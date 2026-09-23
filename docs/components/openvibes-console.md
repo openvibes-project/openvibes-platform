@@ -19,14 +19,15 @@ to `openvibes-admin tui`.
 The design is approved and the first C0 foundation is implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
-frontend tooling, and CI build validation. Production authentication and data
-routes remain fail-closed until their later milestones provide the required
-database-backed sessions and authorisation.
+frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
+Production authentication and data routes remain fail-closed until their
+later milestones provide the required database-backed sessions and
+authorisation.
 
-C0 is not complete yet. OpenAPI/client generation, a release build stamp,
+C0 is not complete yet. TypeScript client generation, a release build stamp,
 real-browser CSP/accessibility proof for the selected interaction primitives,
-the checked offline npm source cache, and reviewed transparent production logo
-derivatives remain required.
+the checked offline npm source cache, and reviewed transparent production
+logo derivatives remain required.
 
 ## Interfaces
 
@@ -41,7 +42,20 @@ The JSON API uses closed request validation, bounded bodies, RFC Problem
 Details-style errors with stable codes and request IDs, opaque keyset cursors,
 and `Cache-Control: no-store`. Mutations use idempotency keys or
 ETag/`If-Match` where replay or stale edits matter. Rust DTOs generate the
-checked OpenAPI snapshot, which generates the browser TypeScript client.
+checked OpenAPI snapshot, which is the source for the planned browser
+TypeScript client.
+
+`GET /api/v1/session` defines the current-human-session contract: principal,
+authentication method and level, effective permission/scope pairs, CSRF value,
+and idle/absolute expiry. Until C3 supplies authenticated sessions, the route
+returns `503 authentication_unavailable`; it never manufactures an anonymous
+or implicitly privileged session. Service-account bearer tokens cannot use
+this browser-session route.
+
+Collection DTOs use opaque cursors with a default limit of 50, maximum limit
+of 100, and a 2,048-byte cursor bound. Response envelopes contain typed items,
+an optional next cursor, and an RFC 3339 generation time. Concrete collection
+schemas enter OpenAPI when their owning routes are implemented.
 
 The first-release UI covers overview, agents, findings and analyst triage,
 enrollment tokens, pre-signed rule bundles, access control and exact agent
@@ -86,6 +100,9 @@ banner are never included in the production RPM.
 - Production auth and data routes remain unavailable until their owning
   milestones are complete. There is no permissive temporary authentication
   mode.
+- `GET /api/v1/session` therefore returns a no-store, bounded 503 Problem
+  Details response until C3; its eventual 200 schema is already versioned in
+  the checked API contract.
 - API failures are bounded Problem Details responses and never expose SQL,
   credentials, tokens, certificates, IdP payloads, or authorisation detail.
 - Authorisation is applied in database queries before aggregation, filtering,
@@ -110,7 +127,12 @@ cargo doc --locked --workspace --all-features --no-deps
 cargo test --locked --workspace --all-features
 scripts/build-console.sh
 scripts/test-console-e2e.sh
+cargo run --locked -p openvibes-console --bin export_openapi -- \
+  --check docs/api/console-v1.openapi.json
 ```
+
+`export_openapi` has no `embedded-ui` dependency. With no arguments it writes
+deterministic pretty JSON to stdout; `--check PATH` fails on snapshot drift.
 
 Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded

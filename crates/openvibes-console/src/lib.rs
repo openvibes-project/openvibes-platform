@@ -9,18 +9,26 @@
 //! implementation milestones. Production frontend assets are included only
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
+mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;
 mod config;
 mod error;
+mod openapi;
 mod problem;
 #[cfg(feature = "embedded-ui")]
 mod public_assets;
 mod router;
 mod server;
 
+pub use api::{
+    AuthenticationLevel, AuthenticationMethod, CursorPage, CursorPagination, DEFAULT_PAGE_SIZE,
+    EffectiveCapability, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission,
+    PermissionScope, SessionPrincipal, SessionResponse,
+};
 pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;
-pub use problem::ProblemDetails;
+pub use openapi::{document as console_openapi, json as openapi_json};
+pub use problem::{FieldError, ProblemDetails};
 pub use router::{Readiness, health_router, public_router};
 pub use server::{run, serve};

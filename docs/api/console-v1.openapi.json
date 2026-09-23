@@ -1,0 +1,319 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenVIBES Console API",
+    "description": "Versioned human and service-account API for the OpenVIBES console.",
+    "license": {
+      "name": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/session": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Reports the authenticated browser session once C3 authentication exists.",
+        "description": "C0 deliberately returns a bounded failure instead of creating a temporary\nunauthenticated or implicitly privileged session.",
+        "operationId": "session",
+        "responses": {
+          "200": {
+            "description": "Current authenticated browser session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication is not implemented until C3",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AuthenticationLevel": {
+        "type": "string",
+        "description": "Authentication assurance reached by the current browser session.",
+        "enum": [
+          "single_factor",
+          "multi_factor"
+        ]
+      },
+      "AuthenticationMethod": {
+        "type": "string",
+        "description": "Authentication mechanism that established a browser session.",
+        "enum": [
+          "local_password",
+          "oidc",
+          "saml"
+        ]
+      },
+      "CursorPagination": {
+        "type": "object",
+        "description": "Validated cursor and limit accepted by cursor-paginated collection routes.",
+        "required": [
+          "limit"
+        ],
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1
+          }
+        }
+      },
+      "EffectiveCapability": {
+        "type": "object",
+        "description": "One effective capability returned to the browser.",
+        "required": [
+          "permission",
+          "scope"
+        ],
+        "properties": {
+          "permission": {
+            "$ref": "#/components/schemas/Permission",
+            "description": "Permission granted to the current principal."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/PermissionScope",
+            "description": "Effective global or asset-group scope for the permission."
+          }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "description": "Safe validation detail for one request field.",
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable validation code."
+          },
+          "field": {
+            "type": "string",
+            "description": "Stable JSON field name or dotted field path."
+          },
+          "message": {
+            "type": "string",
+            "description": "Bounded operator-facing explanation."
+          }
+        }
+      },
+      "Permission": {
+        "type": "string",
+        "description": "Stable console permission identifiers.",
+        "enum": [
+          "agents.read",
+          "agents.revoke",
+          "findings.read",
+          "findings.triage",
+          "tokens.read",
+          "tokens.create",
+          "tokens.revoke",
+          "rules.read",
+          "rules.upload",
+          "audit.read",
+          "audit.export",
+          "audit.retention.manage",
+          "rbac.read",
+          "rbac.manage",
+          "asset_groups.manage",
+          "service_accounts.read",
+          "service_accounts.manage"
+        ]
+      },
+      "PermissionScope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The permission applies globally.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "global"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The permission applies only to the listed asset groups.",
+            "required": [
+              "asset_group_ids",
+              "kind"
+            ],
+            "properties": {
+              "asset_group_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Stable asset-group identifiers selected by the binding resolver."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "asset_groups"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Effective object scope attached to one permission."
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "description": "Stable RFC Problem Details-style error response used by the console API.",
+        "required": [
+          "code",
+          "title",
+          "status",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable error code."
+          },
+          "field_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "description": "Bounded request-field errors when validation can safely identify them.",
+            "maxItems": 32
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Process-local correlation identifier."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "HTTP status code.",
+            "maximum": 599,
+            "minimum": 400
+          },
+          "title": {
+            "type": "string",
+            "description": "Short human-readable error title."
+          }
+        }
+      },
+      "SessionPrincipal": {
+        "type": "object",
+        "description": "Human principal represented by an authenticated browser session.",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing display label."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable local or federated user identifier."
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local username when the identity has one."
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "description": "Successful response from `GET /api/v1/session` once C3 authentication is available.",
+        "required": [
+          "principal",
+          "authentication_method",
+          "authentication_level",
+          "capabilities",
+          "csrf_token",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "absolute_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 absolute session expiry instant."
+          },
+          "authentication_level": {
+            "$ref": "#/components/schemas/AuthenticationLevel",
+            "description": "Assurance reached by the current session."
+          },
+          "authentication_method": {
+            "$ref": "#/components/schemas/AuthenticationMethod",
+            "description": "Mechanism that established the session."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveCapability"
+            },
+            "description": "Effective permissions and their scopes, resolved for this request."
+          },
+          "csrf_token": {
+            "type": "string",
+            "description": "Per-session value required in `X-CSRF-Token` on unsafe browser requests.",
+            "maxLength": 256,
+            "minLength": 32
+          },
+          "idle_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 instant when idle expiry occurs if the session is not used."
+          },
+          "principal": {
+            "$ref": "#/components/schemas/SessionPrincipal",
+            "description": "Current human principal. Service-account tokens cannot call this route."
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "session",
+      "description": "Current browser session"
+    }
+  ]
+}
