@@ -45,6 +45,29 @@ readiness check). The migrating role needs `CREATEROLE`.
   fingerprint), `ca::list`. Migration 2 adds `ca_certificates` (readable by
   `openvibes_ingest`).
 
+## Ingest queries (`ingest::…`)
+
+All run within the `openvibes_ingest` role's grants (the tests use
+`SET ROLE openvibes_ingest`).
+
+- `token_by_hash(&client, sha256) -> Option<TokenRow>`.
+- `enroll(&mut client, token_id, spki_sha256, now, issue) -> Enrolled`: one
+  transaction under `pg_advisory_xact_lock(hashtext(token_id))`, so
+  concurrent enrollments with a single-use token yield exactly one identity.
+  `Existing` when this token already enrolled this key (the protocol's retry
+  rule, same chain returned), `Exhausted` when no uses remain, else `New`
+  after creating the agent (`agent.<uuid>`), its certificate, the token use,
+  and an `enroll` audit row.
+- `add_certificate` (renewal), `authenticate(&client, serial, spki) ->
+  Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
+  hash must match a recorded certificate.
+- `heartbeat` writes `last_seen_at`, version, and capabilities at most every
+  5 minutes; returns whether it wrote.
+- `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
+  transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
+  keeping the newest observation and the first-seen time.
+- Certificate chains are stored as a JSON array in `certificates.chain_pem`.
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.

@@ -10,6 +10,8 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// Queries the ingest service runs.
+pub mod ingest;
 mod maintenance;
 mod migrate;
 mod status;

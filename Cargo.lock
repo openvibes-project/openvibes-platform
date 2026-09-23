@@ -827,6 +827,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "deadpool-postgres",
+ "serde_json",
  "tokio",
  "tokio-postgres",
 ]
