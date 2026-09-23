@@ -1,0 +1,17 @@
+{
+  "name": "OpenVIBES Console",
+  "short_name": "OpenVIBES",
+  "description": "OpenVIBES security operations console",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f5f4f0",
+  "theme_color": "#f5f4f0",
+  "icons": [
+    {
+      "src": "/brand/openvibes-mark-placeholder.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
