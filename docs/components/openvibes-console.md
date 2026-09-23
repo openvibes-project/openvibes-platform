@@ -24,10 +24,10 @@ Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
 authorisation.
 
-C0 is not complete yet. TypeScript client generation, a release build stamp,
-real-browser CSP/accessibility proof for the selected interaction primitives,
-the checked offline npm source cache, and reviewed transparent production
-logo derivatives remain required.
+C0 is not complete yet. A release build stamp, real-browser
+CSP/accessibility proof for the selected interaction primitives, the checked
+offline npm source cache, and reviewed transparent production logo derivatives
+remain required.
 
 ## Interfaces
 
@@ -42,8 +42,9 @@ The JSON API uses closed request validation, bounded bodies, RFC Problem
 Details-style errors with stable codes and request IDs, opaque keyset cursors,
 and `Cache-Control: no-store`. Mutations use idempotency keys or
 ETag/`If-Match` where replay or stale edits matter. Rust DTOs generate the
-checked OpenAPI snapshot, which is the source for the planned browser
-TypeScript client.
+checked OpenAPI snapshot, which generates the committed browser TypeScript
+contract. The production build checks both snapshot and generated-client drift
+before Vite runs.
 
 `GET /api/v1/session` defines the current-human-session contract: principal,
 authentication method and level, effective permission/scope pairs, CSRF value,
@@ -133,6 +134,9 @@ cargo run --locked -p openvibes-console --bin export_openapi -- \
 
 `export_openapi` has no `embedded-ui` dependency. With no arguments it writes
 deterministic pretty JSON to stdout; `--check PATH` fails on snapshot drift.
+Run `npm --prefix crates/openvibes-console/web run generate:api` after an
+intentional API change; `scripts/build-console.sh` fails if the generated
+browser contract does not match the snapshot.
 
 Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded
