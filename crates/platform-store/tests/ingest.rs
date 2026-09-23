@@ -210,21 +210,32 @@ async fn heartbeats_are_throttled_and_findings_stored_once() {
         panic!();
     };
     let id = identity.agent_id.as_str();
-    assert!(
-        ingest::heartbeat(&client, id, "0.1.0", &["scan".into()], now)
+    let beat = |version: &'static str, hostname: Option<&'static str>, minutes: i64| {
+        let client = &client;
+        async move {
+            ingest::heartbeat(
+                client,
+                id,
+                version,
+                hostname,
+                &[],
+                now + Duration::minutes(minutes),
+            )
             .await
             .unwrap()
+        }
+    };
+    assert!(beat("0.1.0", Some("host-a"), 0).await);
+    assert!(!beat("0.1.1", None, 1).await, "throttled");
+    assert!(
+        beat("0.1.1", Some("host-b"), 2).await,
+        "a new hostname is written at once"
     );
     assert!(
-        !ingest::heartbeat(&client, id, "0.1.1", &[], now + Duration::minutes(1))
-            .await
-            .unwrap()
+        !beat("0.1.1", Some("host-b"), 3).await,
+        "the same hostname stays throttled"
     );
-    assert!(
-        ingest::heartbeat(&client, id, "0.1.2", &[], now + Duration::minutes(6))
-            .await
-            .unwrap()
-    );
+    assert!(beat("0.1.2", None, 8).await);
 
     let batch = [
         finding("f.1", "r.a", now - Duration::hours(2)),
@@ -259,12 +270,47 @@ async fn heartbeats_are_throttled_and_findings_stored_once() {
         .unwrap()
         .get(0);
     assert_eq!(latest, "f.2");
-    let version: String = admin
-        .query_one("SELECT scanner_version FROM agents", &[])
+    let row = admin
+        .query_one("SELECT scanner_version, hostname FROM agents", &[])
+        .await
+        .unwrap();
+    assert_eq!(row.get::<_, String>(0), "0.1.2");
+    assert_eq!(
+        row.get::<_, Option<String>>(1).as_deref(),
+        Some("host-b"),
+        "an absent hostname keeps the stored one"
+    );
+    let indexed: bool = admin
+        .query_one(
+            "SELECT EXISTS (SELECT 1 FROM pg_indexes
+             WHERE tablename = 'agents' AND indexdef LIKE '%hostname%')",
+            &[],
+        )
         .await
         .unwrap()
         .get(0);
-    assert_eq!(version, "0.1.2");
+    assert!(indexed);
     drop((client, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn waits_and_statements_are_bounded() {
+    let db = TestDb::create().await;
+    let pool = platform_store::connect_sized(&db.url(), 1).await.unwrap();
+    let held = pool.get().await.unwrap();
+    let timeout: String = held
+        .query_one("SHOW statement_timeout", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(timeout, "10s");
+    let started = std::time::Instant::now();
+    assert!(pool.get().await.is_err(), "no connection is free");
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(7),
+        "the wait is bounded"
+    );
+    drop(held);
     db.drop().await;
 }

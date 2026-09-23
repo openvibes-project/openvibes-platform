@@ -23,6 +23,9 @@ impl FromRequestParts<AppState> for AuthenticatedAgent {
             platform_pki::leaf_identity(&leaf).map_err(|_| ApiError::Unauthorized)?;
         let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
         match ingest::authenticate(&client, &serial, spki).await? {
+            // The handshake tolerates expiry so revoked agents still hear it;
+            // an expired certificate of an active agent is refused here.
+            Authenticated::Active(_) if !currently_valid(&leaf) => Err(ApiError::Unauthorized),
             Authenticated::Active(agent_id) => {
                 tracing::Span::current().record("agent_id", agent_id.as_str());
                 Ok(Self(agent_id))
@@ -31,4 +34,10 @@ impl FromRequestParts<AppState> for AuthenticatedAgent {
             Authenticated::Unknown => Err(ApiError::Unauthorized),
         }
     }
+}
+
+fn currently_valid(leaf: &CertificateDer<'_>) -> bool {
+    let now = chrono::Utc::now();
+    platform_pki::leaf_validity(leaf)
+        .is_ok_and(|(not_before, not_after)| not_before <= now && now < not_after)
 }

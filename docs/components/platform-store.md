@@ -7,11 +7,13 @@ functions, so schema knowledge and SQL live in one place.
 
 - `Client` and `Pool` are re-exported from `deadpool-postgres`, so callers
   need no pool dependency.
-- `connect(url) -> Result<Pool, StoreError>`: a `deadpool-postgres` pool of
-  up to 16 connections. `url` is a libpq URL or key/value string; Unix
+- `connect(url)` / `connect_sized(url, size)`: a `deadpool-postgres` pool
+  (16 by default). Waiting for, creating, and recycling a connection are
+  bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 2), `schema_version(&client)` (`None` on an
+- `SCHEMA_VERSION` (currently 3; a compile-time check ties it to the last
+  migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
   `Query` (a statement failed). Messages never contain SQL, parameters, or
@@ -61,8 +63,10 @@ All run within the `openvibes_ingest` role's grants (the tests use
 - `add_certificate` (renewal), `authenticate(&client, serial, spki) ->
   Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
   hash must match a recorded certificate.
-- `heartbeat` writes `last_seen_at`, version, and capabilities at most every
-  5 minutes; returns whether it wrote.
+- `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
+  at most every 5 minutes, or at once when the hostname changes; an absent
+  hostname keeps the stored one (migration 3 adds `agents.hostname`,
+  indexed). Returns whether it wrote.
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
   transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
   keeping the newest observation and the first-seen time.

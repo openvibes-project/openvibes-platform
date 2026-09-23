@@ -30,6 +30,7 @@ pub(crate) async fn heartbeat(
         &client,
         &agent_id,
         &heartbeat.scanner_version,
+        heartbeat.hostname.as_deref(),
         &capabilities,
         Utc::now(),
     )

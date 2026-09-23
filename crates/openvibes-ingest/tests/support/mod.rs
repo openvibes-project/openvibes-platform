@@ -96,6 +96,8 @@ impl World {
             max_in_flight: 64,
             finding_retention_days: 90,
             request_timeout_seconds: 10,
+            max_connections: 256,
+            database_pool_size: 16,
         };
         tune(&mut config);
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();

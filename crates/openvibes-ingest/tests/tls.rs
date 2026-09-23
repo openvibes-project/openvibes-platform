@@ -109,3 +109,66 @@ database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_inge
     }
     std::fs::remove_dir_all(&dir).unwrap();
 }
+
+#[tokio::test]
+async fn expired_certificates_get_an_http_answer() {
+    use chrono::{Duration, Utc};
+    let world = World::start().await;
+    let expired = |agent: &str| {
+        let key = rcgen::KeyPair::generate().unwrap();
+        let mut params = rcgen::CertificateParams::default();
+        params.distinguished_name = rcgen::DistinguishedName::new();
+        let csr = params.serialize_request(&key).unwrap().pem().unwrap();
+        let checked = platform_pki::check_csr(&csr).unwrap();
+        let issued = world
+            .issuer
+            .issue_client(&checked, agent, Utc::now() - Duration::days(3), 1)
+            .unwrap();
+        (issued, key.serialize_pem())
+    };
+    // Unrecorded and expired: 401, not a failed handshake.
+    let (issued, key) = expired(AGENT);
+    let chain = issued.chain_pem.concat();
+    assert_eq!(
+        world
+            .raw("/v1/heartbeat", b"{}", Some((&chain, &key)))
+            .await
+            .map(|r| r.0),
+        Some(401)
+    );
+
+    // Recorded, expired, and revoked: the agent still learns it is revoked.
+    let revoked = "agent.00000000-0000-4000-8000-000000000002";
+    let (issued, key) = expired(revoked);
+    let db = world.db().await;
+    db.execute(
+        "INSERT INTO agents (agent_id, status, enrolled_at, revoked_at) VALUES ($1, 'revoked', now(), now())",
+        &[&revoked],
+    )
+    .await
+    .unwrap();
+    platform_store::ingest::add_certificate(
+        &db,
+        revoked,
+        &platform_store::ingest::IssuedCert {
+            serial: issued.serial,
+            spki_sha256: issued.spki_sha256,
+            not_before: issued.not_before,
+            not_after: issued.not_after,
+            chain_pem: issued.chain_pem.clone(),
+        },
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    let response = world
+        .raw(
+            "/v1/heartbeat",
+            b"{}",
+            Some((&issued.chain_pem.concat(), &key)),
+        )
+        .await;
+    assert_eq!(response.as_ref().map(|r| r.0), Some(403));
+    assert!(response.unwrap().1.contains("identity_revoked"));
+    world.stop().await;
+}

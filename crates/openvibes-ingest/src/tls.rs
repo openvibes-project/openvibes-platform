@@ -1,9 +1,14 @@
 use std::{fs::File, io::Read, path::Path, sync::Arc};
 
 use rustls::{
-    RootCertStore, ServerConfig, SupportedCipherSuite,
-    pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject},
-    server::WebPkiClientVerifier,
+    CertificateError, DigitallySignedStruct, DistinguishedName, RootCertStore, ServerConfig,
+    SignatureScheme, SupportedCipherSuite,
+    client::danger::HandshakeSignatureValid,
+    pki_types::{CertificateDer, PrivateKeyDer, UnixTime, pem::PemObject},
+    server::{
+        WebPkiClientVerifier,
+        danger::{ClientCertVerified, ClientCertVerifier},
+    },
 };
 
 use crate::{IngestConfig, IngestError};
@@ -45,10 +50,11 @@ pub(crate) fn server_config(config: &IngestConfig) -> Result<Arc<ServerConfig>, 
     for cert in certificates(&config.client_ca_file)? {
         roots.add(cert).map_err(|_| IngestError::Tls)?;
     }
-    let verifier = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider.clone())
+    let inner = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider.clone())
         .allow_unauthenticated()
         .build()
         .map_err(|_| IngestError::Tls)?;
+    let verifier = Arc::new(ExpiryTolerant { inner });
     let key = PrivateKeyDer::from_pem_slice(read_pem(&config.server_key_file)?.as_bytes())
         .map_err(|_| IngestError::Tls)?;
     let mut server = ServerConfig::builder_with_provider(provider)
@@ -59,4 +65,83 @@ pub(crate) fn server_config(config: &IngestConfig) -> Result<Arc<ServerConfig>, 
         .map_err(|_| IngestError::Tls)?;
     server.alpn_protocols = vec![b"http/1.1".to_vec()];
     Ok(Arc::new(server))
+}
+
+/// Accepts a client certificate outside its validity period if the chain
+/// otherwise verifies to the client CA, so the platform can answer at the
+/// HTTP level as the protocol requires (401 when expired, 403
+/// `identity_revoked` when the agent is revoked). Every other failure still
+/// fails the handshake. Authentication rejects expired certificates.
+#[derive(Debug)]
+struct ExpiryTolerant {
+    inner: Arc<dyn ClientCertVerifier>,
+}
+
+impl ClientCertVerifier for ExpiryTolerant {
+    fn offer_client_auth(&self) -> bool {
+        self.inner.offer_client_auth()
+    }
+
+    fn client_auth_mandatory(&self) -> bool {
+        self.inner.client_auth_mandatory()
+    }
+
+    fn root_hint_subjects(&self) -> &[DistinguishedName] {
+        self.inner.root_hint_subjects()
+    }
+
+    fn verify_client_cert(
+        &self,
+        end_entity: &CertificateDer<'_>,
+        intermediates: &[CertificateDer<'_>],
+        now: UnixTime,
+    ) -> Result<ClientCertVerified, rustls::Error> {
+        match self
+            .inner
+            .verify_client_cert(end_entity, intermediates, now)
+        {
+            Err(rustls::Error::InvalidCertificate(
+                CertificateError::Expired
+                | CertificateError::ExpiredContext { .. }
+                | CertificateError::NotValidYet
+                | CertificateError::NotValidYetContext { .. },
+            )) => {
+                // Re-verify the chain at a moment inside the leaf's validity.
+                let Ok((not_before, _)) = platform_pki::leaf_validity(end_entity) else {
+                    return Err(rustls::Error::InvalidCertificate(
+                        CertificateError::BadEncoding,
+                    ));
+                };
+                let at = UnixTime::since_unix_epoch(std::time::Duration::from_secs(
+                    u64::try_from(not_before.timestamp())
+                        .unwrap_or(0)
+                        .saturating_add(1),
+                ));
+                self.inner.verify_client_cert(end_entity, intermediates, at)
+            }
+            other => other,
+        }
+    }
+
+    fn verify_tls12_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.inner.verify_tls12_signature(message, cert, dss)
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        message: &[u8],
+        cert: &CertificateDer<'_>,
+        dss: &DigitallySignedStruct,
+    ) -> Result<HandshakeSignatureValid, rustls::Error> {
+        self.inner.verify_tls13_signature(message, cert, dss)
+    }
+
+    fn supported_verify_schemes(&self) -> Vec<SignatureScheme> {
+        self.inner.supported_verify_schemes()
+    }
 }

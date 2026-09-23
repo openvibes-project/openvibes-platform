@@ -15,7 +15,12 @@ pub(crate) async fn bound(State(state): State<AppState>, request: Request, next:
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
         return ApiError::Unavailable.into_response();
     };
-    let response = next.run(request).await;
+    // The whole request, body included, must finish within the deadline,
+    // so a slow client cannot keep its permit.
+    let response = match tokio::time::timeout(state.request_timeout, next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => ApiError::Timeout.into_response(),
+    };
     drop(permit);
     if response.status() == StatusCode::PAYLOAD_TOO_LARGE {
         return ApiError::BadRequest.into_response();

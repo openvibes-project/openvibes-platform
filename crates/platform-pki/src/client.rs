@@ -164,3 +164,15 @@ pub fn leaf_identity(der: &[u8]) -> Result<(Vec<u8>, [u8; 32]), PkiError> {
         spki_sha256(&cert.tbs_certificate.subject_pki)?,
     ))
 }
+
+/// Validity period of a presented DER certificate.
+pub fn leaf_validity(der: &[u8]) -> Result<(DateTime<Utc>, DateTime<Utc>), PkiError> {
+    let cert = parse(der)?;
+    let at = |time: x509_parser::time::ASN1Time| {
+        DateTime::from_timestamp(time.timestamp(), 0).ok_or(PkiError::InvalidPem)
+    };
+    Ok((
+        at(cert.validity().not_before)?,
+        at(cert.validity().not_after)?,
+    ))
+}

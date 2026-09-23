@@ -41,6 +41,7 @@ pub(crate) enum ApiError {
     Unauthorized,
     Revoked,
     Unavailable,
+    Timeout,
 }
 
 impl IntoResponse for ApiError {
@@ -57,6 +58,7 @@ impl IntoResponse for ApiError {
             Self::BadRequest => (StatusCode::BAD_REQUEST, "bad request").into_response(),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized").into_response(),
             Self::Unavailable => (StatusCode::SERVICE_UNAVAILABLE, "unavailable").into_response(),
+            Self::Timeout => (StatusCode::REQUEST_TIMEOUT, "request timeout").into_response(),
         }
     }
 }

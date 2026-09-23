@@ -25,6 +25,7 @@ pub(crate) struct AppState {
     pub client_certificate_days: u32,
     pub finding_retention_days: u32,
     pub in_flight: Arc<Semaphore>,
+    pub request_timeout: Duration,
 }
 
 fn routes(state: AppState) -> Router {
@@ -64,7 +65,7 @@ pub async fn run(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), IngestError> {
     config.validate()?;
-    let pool = platform_store::connect(&config.database_url)
+    let pool = platform_store::connect_sized(&config.database_url, config.database_pool_size)
         .await
         .map_err(|_| IngestError::Database)?;
     let issuer = Issuer::load(
@@ -79,7 +80,9 @@ pub async fn run(
         client_certificate_days: config.client_certificate_days,
         finding_retention_days: config.finding_retention_days,
         in_flight: Arc::new(Semaphore::new(config.max_in_flight)),
+        request_timeout: Duration::from_secs(config.request_timeout_seconds),
     };
+    let connections = Arc::new(Semaphore::new(config.max_connections));
     let router = routes(state);
     let health = tokio::spawn(async move {
         let _ = axum::serve(health_listener, health::router(pool)).await;
@@ -89,11 +92,25 @@ pub async fn run(
     loop {
         tokio::select! {
             () = &mut shutdown => break,
-            accepted = listener.accept() => {
-                let Ok((tcp, _)) = accepted else { continue };
+            // Accept only while a connection slot is free; the rest wait in
+            // the kernel backlog instead of consuming descriptors and tasks.
+            permit = connections.clone().acquire_owned() => {
+                let Ok(permit) = permit else { break };
+                let tcp = tokio::select! {
+                    () = &mut shutdown => break,
+                    accepted = listener.accept() => match accepted {
+                        Ok((tcp, _)) => tcp,
+                        Err(_) => {
+                            // For example EMFILE: back off instead of spinning.
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            continue;
+                        }
+                    },
+                };
                 let acceptor = acceptor.clone();
                 let router = router.clone();
                 tokio::spawn(async move {
+                    let _permit = permit;
                     let Ok(Ok(tls)) = tokio::time::timeout(timeout, acceptor.accept(tcp)).await else {
                         return;
                     };

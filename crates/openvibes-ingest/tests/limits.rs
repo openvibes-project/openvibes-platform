@@ -87,3 +87,50 @@ async fn requests_beyond_max_in_flight_get_503() {
     );
     world.stop().await;
 }
+
+#[tokio::test]
+async fn slow_bodies_do_not_hold_permits() {
+    let world = World::start_with(|config| {
+        config.max_in_flight = 1;
+        config.request_timeout_seconds = 1;
+    })
+    .await;
+    let mut slow = tls(&world).await;
+    slow.write_all(b"POST /v1/enroll HTTP/1.1\r\nHost: x\r\nContent-Length: 10\r\n\r\n{")
+        .await
+        .unwrap();
+    slow.flush().await.unwrap();
+    tokio::time::sleep(StdDuration::from_millis(2500)).await;
+    assert_eq!(
+        world.raw("/v1/enroll", b"{}", None).await.map(|r| r.0),
+        Some(400),
+        "the slow request was cut off at the request deadline"
+    );
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn connections_beyond_max_connections_wait_for_a_free_slot() {
+    let world = World::start_with(|config| {
+        config.max_connections = 1;
+        config.request_timeout_seconds = 5;
+    })
+    .await;
+    let held = TcpStream::connect(world.addr).await.unwrap();
+    tokio::time::sleep(StdDuration::from_millis(200)).await;
+    let blocked = tokio::time::timeout(
+        StdDuration::from_millis(1500),
+        world.raw("/v1/enroll", b"{}", None),
+    )
+    .await;
+    assert!(
+        blocked.is_err(),
+        "a second connection is not served while the only slot is taken"
+    );
+    drop(held);
+    assert_eq!(
+        world.raw("/v1/enroll", b"{}", None).await.map(|r| r.0),
+        Some(400)
+    );
+    world.stop().await;
+}

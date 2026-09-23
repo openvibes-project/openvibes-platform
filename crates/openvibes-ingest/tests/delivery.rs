@@ -125,6 +125,21 @@ async fn heartbeats_and_findings_are_idempotent_and_bounded() {
         .unwrap()
         .get(0);
     assert!(seen.is_some());
+    let hostname: Option<String> = world
+        .db()
+        .await
+        .query_one(
+            "SELECT hostname FROM agents WHERE agent_id = $1",
+            &[&agent_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(
+        hostname.as_deref(),
+        Some("metabox-lnx"),
+        "the heartbeat hostname is stored"
+    );
 
     let transport = world.transport();
     let (future, old) = blocking(move || {

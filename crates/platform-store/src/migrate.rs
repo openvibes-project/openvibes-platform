@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 2;
+pub const SCHEMA_VERSION: i32 = 3;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -12,7 +12,15 @@ const MIGRATIONS: &[(i32, &str)] = &[
         2,
         include_str!("../../../migrations/0002_ca_tokens_agents.sql"),
     ),
+    (
+        3,
+        include_str!("../../../migrations/0003_agent_hostname.sql"),
+    ),
 ];
+
+// The build fails if a migration is added without bumping SCHEMA_VERSION or
+// the reverse, so the two can never drift apart.
+const _: () = assert!(MIGRATIONS[MIGRATIONS.len() - 1].0 == SCHEMA_VERSION);
 
 const VERSION_TABLE: &str = "CREATE TABLE IF NOT EXISTS schema_version (version integer NOT NULL)";
 

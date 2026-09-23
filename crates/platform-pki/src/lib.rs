@@ -15,7 +15,9 @@ pub use ca::{
     Issuer, KeyAndCert, generate_root, intermediate_request, not_after, sha256_fingerprint,
     sign_intermediate, verify_signed_by,
 };
-pub use client::{CheckedCsr, IssuedClient, check_csr, leaf_identity, spki_sha256_of_cert};
+pub use client::{
+    CheckedCsr, IssuedClient, check_csr, leaf_identity, leaf_validity, spki_sha256_of_cert,
+};
 pub use token::{enrollment_token_sha256, is_agent_id};
 
 /// Fixed failure categories; no key or certificate material is included.

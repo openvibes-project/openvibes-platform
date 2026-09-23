@@ -272,21 +272,33 @@ pub async fn authenticate(
     })
 }
 
-/// Records a heartbeat, writing at most once per 5 minutes per agent.
-/// Returns whether a write happened.
+/// Records a heartbeat, writing at most once per 5 minutes per agent unless
+/// the hostname changed. A present hostname replaces the stored one; an
+/// absent one keeps it. Returns whether a write happened.
 pub async fn heartbeat(
     client: &Client,
     agent_id: &str,
     version: &str,
+    hostname: Option<&str>,
     capabilities: &[String],
     now: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
     let stale_before = now - Duration::minutes(HEARTBEAT_WRITE_MINUTES);
     let changed = client
         .execute(
-            "UPDATE agents SET last_seen_at = $2, scanner_version = $3, capabilities = $4
-             WHERE agent_id = $1 AND (last_seen_at IS NULL OR last_seen_at < $5)",
-            &[&agent_id, &now, &version, &capabilities, &stale_before],
+            "UPDATE agents SET last_seen_at = $2, scanner_version = $3, capabilities = $4,
+                 hostname = COALESCE($6, hostname)
+             WHERE agent_id = $1
+               AND (last_seen_at IS NULL OR last_seen_at < $5
+                    OR hostname IS DISTINCT FROM COALESCE($6, hostname))",
+            &[
+                &agent_id,
+                &now,
+                &version,
+                &capabilities,
+                &stale_before,
+                &hostname,
+            ],
         )
         .await?;
     Ok(changed == 1)

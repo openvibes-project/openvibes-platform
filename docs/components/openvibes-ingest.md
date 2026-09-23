@@ -24,13 +24,18 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `client_certificate_days` | 30 | 1 to 365 |
 | `max_in_flight` | 4096 | at least 1 |
 | `finding_retention_days` | 90 | 1 to 36500; match `openvibes-admin maintenance` |
-| `request_timeout_seconds` | 10 | 1 to 300; TLS handshake and request headers |
+| `request_timeout_seconds` | 10 | 1 to 300; TLS handshake, request headers, and each whole request |
+| `max_connections` | 1024 | 1 to 65536; keep below the process's file limit (`LimitNOFILE`) |
+| `database_pool_size` | 16 | 1 to 1024 |
 
 ## TLS and authentication
 
 - TLS 1.3 only (ring). ALPN `http/1.1`. No redirects anywhere.
 - A client certificate is optional at the handshake (enrollment has none),
-  but one that does not chain to `client_ca_file` fails the handshake.
+  but one that does not chain to `client_ca_file` fails the handshake. An
+  **expired** (or not yet valid) certificate that otherwise chains is let
+  through, so the platform can answer at the HTTP level as the protocol
+  requires: 401, or 403 `identity_revoked` if its agent is revoked.
 - Authenticated endpoints need a certificate whose **serial and key hash**
   are recorded for an agent: unknown → 401; agent revoked → 403 with
   `PlatformError { identity_revoked }` (the only source of that code).
@@ -51,8 +56,10 @@ Strict TOML (unknown keys refused), absolute paths only:
 ## Heartbeats and findings
 
 - `POST /v1/heartbeat` (authenticated): `Heartbeat`; its `agent_id` must be
-  the authenticated agent's (else 400). Stores version and capabilities,
-  writing `last_seen_at` at most every 5 minutes. 204.
+  the authenticated agent's (else 400). Stores version, capabilities, and the
+  optional `hostname` (a spoofable operator label, never identity), writing
+  at most every 5 minutes unless the hostname changed; an absent hostname
+  keeps the stored one. 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. A finding observed more than 5 minutes in the future
   fails the whole batch (400, nothing stored). Findings older than
@@ -67,9 +74,15 @@ Strict TOML (unknown keys refused), absolute paths only:
 ## Load control and logging
 
 - Bodies over 1 MiB → 400 (never read past the limit).
-- TLS handshake and request headers must arrive within
-  `request_timeout_seconds`; silent clients are dropped.
+- The TLS handshake, the request headers, and each whole request (body
+  included) must finish within `request_timeout_seconds`; otherwise the
+  connection is dropped or the request gets 408, and its slot is freed.
 - More than `max_in_flight` concurrent requests → 503 for the extra ones.
+- At most `max_connections` connections are accepted at once; the rest wait
+  in the kernel backlog. Accept errors (e.g. out of file descriptors) back
+  off instead of spinning.
+- Database waits, connects, and recycles are bounded to 5 s and every
+  statement to 10 s, so a hung database yields 503, not hangs.
 - One JSON log line per request on stderr: `endpoint`, `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
