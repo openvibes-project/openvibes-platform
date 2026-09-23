@@ -5,13 +5,22 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 
+[features]
+default = []
+embedded-ui = ["dep:include_dir", "dep:serde_json"]
+
 [dependencies]
 axum.workspace = true
+include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
 serde.workspace = true
+serde_json = { workspace = true, optional = true }
 tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
