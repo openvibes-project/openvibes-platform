@@ -7,6 +7,7 @@ readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"
 readonly dist_root="${web_root}/dist"
+readonly openapi_snapshot="${repository_root}/docs/api/console-v1.openapi.json"
 
 for required_command in node npm cargo; do
     if ! command -v "${required_command}" >/dev/null 2>&1; then
@@ -27,8 +28,13 @@ if [[ ! -f "${web_root}/package-lock.json" ]]; then
     exit 1
 fi
 
+cd -- "${repository_root}"
+cargo run --quiet --locked -p openvibes-console --bin export_openapi -- \
+    --check "${openapi_snapshot}"
+
 cd -- "${web_root}"
 npm ci --no-audit --no-fund
+npm run check:api
 npm run lint
 npm run typecheck
 npm test
