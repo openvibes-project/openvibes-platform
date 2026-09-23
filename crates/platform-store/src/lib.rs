@@ -39,6 +39,8 @@ pub enum StoreError {
     NewerSchema(i32),
     /// A statement failed.
     Query,
+    /// The configured database URL does not parse.
+    InvalidUrl,
 }
 
 impl fmt::Display for StoreError {
@@ -49,6 +51,7 @@ impl fmt::Display for StoreError {
                 write!(f, "database schema {version} is newer than this platform")
             }
             Self::Query => f.write_str("database query failed"),
+            Self::InvalidUrl => f.write_str("invalid database_url"),
         }
     }
 }
@@ -93,7 +96,7 @@ pub async fn connect(url: &str) -> Result<Pool, StoreError> {
 /// recycling are bounded to 5 seconds, and every statement to 10 seconds,
 /// so a hung database yields errors, not hangs.
 pub async fn connect_sized(url: &str, size: usize) -> Result<Pool, StoreError> {
-    let mut config = tokio_postgres::Config::from_str(url).map_err(|_| StoreError::Unavailable)?;
+    let mut config = tokio_postgres::Config::from_str(url).map_err(|_| StoreError::InvalidUrl)?;
     config
         .connect_timeout(POOL_TIMEOUT)
         .options(format!("-c statement_timeout={STATEMENT_TIMEOUT_MS}"));

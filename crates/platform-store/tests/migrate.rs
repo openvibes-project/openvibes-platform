@@ -76,3 +76,13 @@ async fn concurrent_migrate_and_maintenance_both_succeed() {
         db.drop().await;
     }
 }
+
+#[tokio::test]
+async fn an_invalid_database_url_is_a_configuration_error() {
+    let error = platform_store::connect("postgresql://[not-a-url")
+        .await
+        .map(drop)
+        .unwrap_err();
+    assert_eq!(error, platform_store::StoreError::InvalidUrl);
+    assert_eq!(error.to_string(), "invalid database_url");
+}

@@ -16,7 +16,8 @@ functions, so schema knowledge and SQL live in one place.
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
-  `Query` (a statement failed). Messages never contain SQL, parameters, or
+  `Query` (a statement failed), `InvalidUrl` (the configured URL does not
+  parse: a configuration error, not an outage). Messages never contain SQL, parameters, or
   connection strings.
 
 ## Migrations
