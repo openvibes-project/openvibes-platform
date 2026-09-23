@@ -54,7 +54,7 @@ Why this shape:
 - the admin API remains useful to service accounts and future integrations;
 - mature accessible interaction, browser testing, and data-table ecosystems;
 - frontend work can use the real Axum routes with a seeded repository before
-  ingest and PM2 domain mutations are complete.
+  the console's PostgreSQL adapter and mutation schema are complete.
 
 Alternatives considered:
 
@@ -674,7 +674,7 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 2 must add or extend:
+Append-only migrations after the current schema 3 must add or extend:
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -694,10 +694,11 @@ Append-only migrations after the current schema 2 must add or extend:
    update/delete; cleanup uses a narrowly scoped store operation;
 10. measured indexes for every stable cursor and filter tuple.
 
-Existing schema gaps:
+Existing schema facts and gaps:
 
-- schema 2 has no hostname column: PM3 must store and index the latest present
-  optional hostname from authenticated heartbeats; it remains a spoofable
+- migration 3 adds the indexed optional `agents.hostname` column, and ingest
+  stores the latest present authenticated-heartbeat value while retaining the
+  stored value when a heartbeat omits it; the hostname remains a spoofable
   label and never identity;
 - `current_findings` lacks confidence, message, evidence, origin,
   authentication, receive time, scan ID, and `observed_day`, so it cannot
@@ -713,17 +714,18 @@ Existing schema gaps:
 - enrollment-token creator is free text, so console issuance needs a nullable
   stable principal reference while retaining CLI history.
 
-All schema and SQL stay in `platform-store`. PM2 owns schema 2 and is now in
-`main`; the console takes the next available migration number only at
-implementation start, after checking Claude's active branch.
+All schema and SQL stay in `platform-store`. PM4 and schema 3 are integrated
+in the console branch; the console takes the next available migration number
+only at implementation start, after checking the current shared base and any
+active platform branch.
 
 ## 15. Security Acceptance Tests
 
 At minimum, test:
 
 - the console TLS/auth stack never treats an agent certificate as a human
-  session; the reverse-direction proof is a joint platform integration test
-  once ingest/distribution are available;
+  session; the reverse-direction proof is a joint test with the available
+  ingest service and later extends to distribution when it exists;
 - scope applies to objects, lists, summaries, filter facets, and counts;
 - out-of-scope objects do not leak existence;
 - token values do not enter logs, traces, analytics, errors, or audit detail;
@@ -786,8 +788,9 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 8. `platform-store` retains all PostgreSQL ownership and shared domain
    mutations.
 9. **Approved:** authenticated heartbeats carry an optional OS-reported
-   hostname as a mutable, spoofable operator label; PM3 stores/indexes the
-   latest present value, and it is never identity or authorisation input.
+   hostname as a mutable, spoofable operator label; ingest stores/indexes the
+   latest present value through schema 3, and it is never identity or
+   authorisation input.
 10. **Approved:** service accounts and expiring API tokens are in the
     first-release UI and API.
 11. **Approved:** rule trust-key management remains CLI-only in the first

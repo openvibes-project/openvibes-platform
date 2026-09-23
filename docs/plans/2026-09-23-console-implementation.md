@@ -1,8 +1,7 @@
 # OpenVIBES Console Implementation Plan
 
-Status: **approved by the project owner, 2026-09-23**. Implementation begins
-after Claude's PM4 merge lands and the `console` worktree integrates the latest
-platform `main`.
+Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
+3 are integrated in the `console` worktree; C0 implementation may proceed.
 
 Design inputs:
 
@@ -117,7 +116,8 @@ No shared migration is required.
 
 ## 4. Milestone C2 — PostgreSQL Read Adapter
 
-Prerequisite: PM2 store/schema work is merged and the console branch rebased.
+Prerequisite satisfied: PM4 and platform schema 3 are integrated in the
+console branch.
 
 Goal: prove agents and findings read models against PostgreSQL with measured
 query plans. Public production data routes remain disabled until C3 supplies
@@ -127,9 +127,9 @@ Work:
 
 1. Resolve the latest-finding read model: extend `current_findings` with the
    complete display snapshot or retain a reliable partition key and fields.
-2. Store and index the latest present optional hostname from authenticated
-   heartbeats as a mutable, spoofable operator label, never as identity or
-   authorisation input.
+2. Use the existing indexed `agents.hostname` read model. Ingest already
+   stores the latest present authenticated-heartbeat value through migration
+   3; the console treats it only as a mutable, spoofable operator label.
 3. Add small typed `platform-store` query modules for summaries, agents,
    certificates, latest observations, and history.
 4. Add indexes only from representative query plans.
@@ -153,7 +153,7 @@ permissions.
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add the next available append-only migration after schema 2: local users,
+- add the next available append-only migration after schema 3: local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;
@@ -272,9 +272,9 @@ Only after their contracts exist:
 - Did the audit helper or schema gain structured fields?
 - Did `platform-config` gain console-relevant shared types?
 - Did workspace members, `Cargo.lock`, CI, component index, or RPM spec change?
-- Does PM3 store/index the optional heartbeat hostname contract, and did later
-  protocol changes add health, inventory upload, or match-end semantics that
-  alter UI vocabulary?
+- Does the schema 3 ingest implementation still match the optional heartbeat
+  hostname contract, and did later protocol changes add health, inventory
+  upload, or match-end semantics that alter UI vocabulary?
 - Are local changes isolated into reviewable commits before conflict
   resolution?
 

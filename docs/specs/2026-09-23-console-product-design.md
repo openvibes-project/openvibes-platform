@@ -480,14 +480,16 @@ does not have.
 
 1. A UUID-only agent identity is unusable at 50,000 hosts. The heartbeat
    protocol now carries an optional OS-reported hostname as a spoofable
-   operator label; PM3 must store/index its latest present value. Manual tags
-   provide first-release asset grouping until CMDB integration exists.
+   operator label. Migration 3 adds its index, and ingest stores the latest
+   present value while retaining the stored value when a heartbeat omits it.
+   Manual tags provide first-release asset grouping until CMDB integration
+   exists.
 2. `current_findings` records no match end. Analyst triage is approved for the
    first release; its approved human workflow states remain explicitly
    separate from detector truth and are defined in section 13.
 3. Asset-group scope is planned but tag/group storage does not exist. Reserve
    the affordance; do not fake it in the browser.
-4. Rule bundles and trusted keys are absent from migration 0001.
+4. Rule bundles and trusted keys are absent from the current schema 3.
 5. The existing `current_findings` row lacks the full observation fields
    needed by a useful detail view.
 6. Evidence contains identifiers of supporting fact keys, not their values.

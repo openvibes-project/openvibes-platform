@@ -164,8 +164,8 @@ pretend to be systemd.
 ## 7. Planned Capabilities with Design Hooks
 
 - **Hostname label.** Authenticated heartbeats carry an optional OS-reported
-  hostname. PM3 stores/indexes the latest present value for operators; it is
-  mutable and spoofable, and never identity or authorisation input.
+  hostname. Ingest stores/indexes the latest present value through migration
+  3; it is mutable and spoofable, and never identity or authorisation input.
 - **Agent health reporting.** Heartbeats gain an optional `health` object
   (queue depth and oldest age, dropped counts, local storage errors, last
   scan and collector errors, rule-set versions and expiry). Compatible within
