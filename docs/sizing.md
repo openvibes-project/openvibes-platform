@@ -80,7 +80,7 @@ data rotates out. That is not measured yet.
 |---|---|---|
 | CPU | 2 vCPU | 4 vCPU |
 | RAM | 2 GB | 8 GB |
-| Disk | SSD, see retention table (≈ 25 GB) | NVMe/SSD with fast fsync, see retention table (≈ 1.1–1.4 TB) |
+| Disk | SSD, ≈ 30 GB for 90 days (retention table) | NVMe/SSD with fast fsync, ≈ 0.15–1.4 TB for 90 days by match rate (retention table) |
 
 - **CPU:** the measured need at 50,000 agents is about 1 core for ingest plus
   0.5 for PostgreSQL. 4 vCPU doubles that, which leaves room for:
