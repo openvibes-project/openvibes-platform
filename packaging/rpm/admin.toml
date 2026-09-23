@@ -1,0 +1,1 @@
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_admin"
