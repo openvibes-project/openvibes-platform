@@ -1,0 +1,664 @@
+# OpenVIBES Console Technical Design
+
+Status: draft for review, 2026-09-23. Product companion:
+[`2026-09-23-console-product-design.md`](2026-09-23-console-product-design.md).
+
+## 1. Goal and Boundaries
+
+`openvibes-console` is the human-facing administration service on port 443.
+It owns the browser application, versioned human API, authentication sessions,
+RBAC enforcement, browser security headers, and static assets.
+
+It does not own agent protocol endpoints, database SQL, rule signing, CA
+private-key operations, correlation, CMDB sync, or deployment-package logic.
+
+Trust domains stay physically and logically separate:
+
+- agents authenticate only with mTLS to ingest/distribution ports 18423 and
+  18424;
+- humans authenticate only through console identity providers and sessions;
+- service accounts, if approved for the first release, use console API bearer
+  tokens;
+- none of these credentials is accepted in another domain.
+
+## 2. Recommended Stack and Deployment Model
+
+Use a client-rendered React + TypeScript application built by Vite and served
+same-origin from an Axum `openvibes-console` binary.
+
+Browser capabilities:
+
+- React with TypeScript strict mode;
+- Vite at build time only;
+- client-side routing;
+- TanStack Query for bounded server state;
+- TanStack Table for headless table state with native HTML table rendering;
+- reviewed accessible primitives only where native HTML is insufficient, such
+  as focus-managed dialogs, menus, and comboboxes; C0 must prove that the
+  selected primitives work under the target CSP before the library is fixed;
+- extracted plain CSS/CSS Modules and design tokens; no runtime CSS-in-JS;
+- a generated TypeScript client from the checked Rust OpenAPI snapshot.
+
+Exact dependency versions are pinned when implementation starts. The design
+fixes capabilities and boundaries, not today's patch releases.
+
+Why this shape:
+
+- one Rust process and one RPM-installable service in production;
+- Node.js is only a reproducible build dependency;
+- no SSR, React Server Components, or Node production runtime;
+- the admin API remains useful to service accounts and future integrations;
+- mature accessible interaction, browser testing, and data-table ecosystems;
+- frontend work can use the real Axum routes with a seeded repository before
+  ingest and PM2 domain mutations are complete.
+
+Alternatives considered:
+
+| Approach | Advantage | Reason not selected |
+|---|---|---|
+| Svelte/Vite | Concise components and small output | Smaller accessibility/component/testing ecosystem; no benefit from a second server framework |
+| Axum templates plus htmx | Minimal JavaScript and simple CSP | Rich URL-addressable filters and asynchronous workflows would duplicate HTML and required JSON API representations |
+| Rust/WASM UI | One implementation language | Extra WASM/toolchain complexity and weaker accessible-component/browser-testing ecosystem |
+
+## 3. Repository Layout
+
+```text
+crates/openvibes-console/
+  Cargo.toml
+  build.rs                    # validates assets; never runs a package manager
+  src/
+    main.rs
+    lib.rs                    # router construction for tests/dev harness
+    api/v1/
+    auth/
+    rbac.rs
+    assets.rs
+    export_openapi.rs         # builds without embedded frontend output
+    errors.rs
+    config.rs
+  tests/
+  examples/seeded_server.rs   # dev-seed feature only; never packaged
+  web/
+    package.json
+    package-lock.json
+    tsconfig.json
+    vite.config.ts
+    index.html
+    src/
+      app/
+      api/
+      routes/
+      features/
+      components/
+      styles/
+      test/
+    e2e/
+    dist/                     # generated; not hand-edited
+
+docs/api/console-v1.openapi.json
+scripts/build-console.sh
+scripts/test-console-e2e.sh
+```
+
+The web source lives inside the console crate because it has one owner,
+release cadence, and deployable artefact.
+
+## 4. Dependency Boundaries
+
+- `platform-store` remains the only crate that accesses PostgreSQL. It exposes
+  bounded typed query and mutation functions, never raw SQL to the console.
+- Store records are domain data, not HTTP response types.
+- `openvibes-console` maps store results to versioned API DTOs and owns HTTP,
+  auth, session, CSRF, RBAC, errors, and asset serving.
+- Browser code knows only `/api/v1`, never Rust internals or database schema.
+- The human API is a platform contract and does not belong in
+  `openvibes-protocol`, which remains the agent/platform wire contract.
+- Enrollment-token creation and agent revocation reuse the same transactional
+  store functions as `openvibes-admin`; the console does not duplicate SQL or
+  domain rules.
+- Rust DTOs generate an OpenAPI document. CI checks the snapshot for drift,
+  then generates TypeScript types/client code from that snapshot.
+
+## 5. HTTP Surface
+
+```text
+/api/v1/*    JSON human/service-account API
+/auth/*      login starts and provider callbacks
+/assets/*    exact content-hashed embedded assets
+/            SPA index
+/<route>     SPA index only for known browser routes
+```
+
+Unknown API, auth, and asset paths return a real 404 and never fall through to
+the SPA index.
+
+Conventions:
+
+- closed JSON request validation; response objects may gain additive fields;
+- breaking changes require `/api/v2`;
+- RFC Problem Details-style errors use `application/problem+json` with stable
+  `code`, `title`, `status`, and `request_id` plus bounded field errors;
+- errors never expose SQL, IdP payloads, tokens, certificates, or internal
+  authorisation detail;
+- API and auth responses use `Cache-Control: no-store`;
+- state-changing routes accept `Idempotency-Key` where retries could duplicate
+  effects;
+- mutable resources use ETag/`If-Match` where concurrent stale edits matter;
+- signed-envelope bodies retain the platform 1 MiB bound; every other request
+  has a smaller route-specific bound.
+
+Page responses have a common bounded form:
+
+```json
+{
+  "items": [],
+  "next_cursor": "opaque",
+  "generated_at": "2026-09-23T14:00:00Z"
+}
+```
+
+Object-scoped resources outside the caller's asset scope return 404, not 403.
+
+## 6. First-Release API
+
+### 6.1 Session and authentication
+
+| Method and path | Purpose |
+|---|---|
+| `GET /api/v1/session` | Current user, auth/MFA level, effective capabilities/scopes, CSRF value |
+| `POST /api/v1/session/logout` | Revoke the current session |
+| `GET /auth/oidc/{provider}/start` | Begin OIDC Authorization Code + PKCE |
+| `GET /auth/oidc/{provider}/callback` | Validate flow and establish session |
+| `GET /auth/saml/{provider}/start` | Later adapter: begin SAML flow |
+| `POST /auth/saml/{provider}/acs` | Later adapter: validate assertion and establish session |
+| `POST /auth/local/login` | Optional adapter, disabled when local auth is off |
+| `POST /auth/local/mfa/*` | Optional TOTP/WebAuthn challenge completion |
+
+OIDC ships first. Other adapters produce the same internal user identity and
+opaque server session.
+
+Every login flow uses a one-use, short-lived pre-auth transaction bound to the
+initiating browser, provider, exact callback, and allow-listed return path.
+Local login additionally uses a pre-auth CSRF cookie/token and exact Origin.
+SAML ACS is the narrow cross-site POST exception: `InResponseTo`, RelayState,
+and assertion replay state provide correlation; if a cookie is required it is
+a dedicated short-lived `SameSite=None; Secure` correlation cookie, never the
+authenticated session cookie.
+
+### 6.2 Overview
+
+Use permission-specific summary routes so a broad dashboard query cannot
+bypass scope checks:
+
+| Path | Permission |
+|---|---|
+| `GET /api/v1/agents/summary` | `agents.read` |
+| `GET /api/v1/findings/summary` | `findings.read` |
+
+Service-health state remains outside the public console API until an
+authoritative persisted health contract exists. Process `/health` and
+`/ready` are served only on a separate loopback listener and are absent from
+the public TLS router.
+
+### 6.3 Agents
+
+| Method and path | Permission |
+|---|---|
+| `GET /api/v1/agents` | `agents.read` |
+| `GET /api/v1/agents/{agent_id}` | `agents.read` |
+| `GET /api/v1/agents/{agent_id}/certificates` | `agents.read` |
+| `POST /api/v1/agents/{agent_id}/revoke` | `agents.revoke` |
+| `PUT /api/v1/agents/{agent_id}/tags/{key}` | global `asset_groups.manage` |
+| `DELETE /api/v1/agents/{agent_id}/tags/{key}` | global `asset_groups.manage` |
+
+Certificate responses expose metadata only, never PEM chains. Tag mutation is
+global-only because changing a tag can move an agent across authorisation
+boundaries.
+
+### 6.4 Findings
+
+| Method and path | Permission |
+|---|---|
+| `GET /api/v1/findings/latest` | `findings.read` |
+| `GET /api/v1/findings/latest/{agent_id}/{rule_id}` | `findings.read` |
+| `GET /api/v1/findings/history` | `findings.read` |
+| `GET /api/v1/findings/history/{observed_day}/{finding_id}` | `findings.read` |
+
+The latest-detail resource requires `current_findings` to retain a complete
+latest snapshot. The composite history URL matches the current partitioned
+primary key. A response subject is a tagged union: an enrolled `agent`, or an
+unauthenticated imported `installation` with `install_id` and optional
+hostname. Imported installations have no agent link and require global
+`findings.read` until a later association contract exists. No triage mutation
+exists until acknowledgement, suppression, assignment,
+re-observation, and resolution semantics are designed.
+
+### 6.5 Enrollment tokens
+
+| Method and path | Permission |
+|---|---|
+| `GET /api/v1/enrollment-tokens` | `tokens.read` |
+| `POST /api/v1/enrollment-tokens` | `tokens.create` |
+| `GET /api/v1/enrollment-tokens/{token_id}` | `tokens.read` |
+| `POST /api/v1/enrollment-tokens/{token_id}/revoke` | `tokens.revoke` |
+
+Plaintext is returned only in the first successful creation response. The
+idempotency record is keyed by authenticated principal, route, and key; it
+stores the request hash and token ID in the same transaction, never the
+secret. Same key and same body returns metadata with `replayed: true`,
+`secret: null`, and `secret_available: false`; a different body returns 409.
+If the first response was lost, the operator revokes the unusable token and
+creates another. Records have a bounded retention period and uniqueness
+constraint; recoverable plaintext is not stored merely to support retries.
+
+### 6.6 Rule sets
+
+| Method and path | Permission |
+|---|---|
+| `GET /api/v1/rule-sets` | `rules.read` |
+| `GET /api/v1/rule-sets/{id}` | `rules.read` |
+| `GET /api/v1/rule-sets/{id}/versions` | `rules.read` |
+| `GET /api/v1/rule-sets/{id}/versions/{version}` | `rules.read` |
+| `POST /api/v1/rule-sets/{id}/versions/validate` | `rules.upload` |
+| `POST /api/v1/rule-sets/{id}/versions` | `rules.upload` |
+| trust-key routes, if approved for web | `rules.trust.manage` |
+
+The non-mutating validation route accepts an already signed envelope and
+returns verified metadata plus its digest. Final publication sends the exact
+bytes and expected digest, then repeats every verification inside the store
+transaction against current trust keys and version floor. Same
+rule-set/version and same bytes is idempotent; different bytes is 409. The
+console stores the exact signed bytes and never accepts private signing keys.
+
+### 6.7 Access, audit, and service accounts
+
+| Route family | Read permission | Mutation permission |
+|---|---|---|
+| `/api/v1/access/roles` | `rbac.read` | `rbac.manage` |
+| `/api/v1/access/users` | `rbac.read` | none in v1 |
+| `/api/v1/access/idp-groups` | `rbac.read` | provider synchronisation only |
+| `/api/v1/access/bindings` | `rbac.read` | `rbac.manage` |
+| `/api/v1/access/asset-groups` | `rbac.read` | `asset_groups.manage` |
+| `/api/v1/audit-events` | `audit.read` | none |
+| `/api/v1/service-accounts` if approved | `service_accounts.read` | `service_accounts.manage` |
+| `/api/v1/service-accounts/{id}/tokens` if approved | `service_accounts.read` | `service_accounts.manage` |
+
+The entire service-account surface, schema, permissions, and tests are
+conditional on first-release approval. Deployment packages are later. CA
+operations remain local break-glass CLI operations in the first release.
+
+## 7. Authentication and Sessions
+
+### 7.1 OIDC
+
+Use Authorization Code with PKCE, server-held state and nonce, exact redirect
+URI, and strict issuer/audience validation. Tokens stay server-side and never
+enter browser storage. External identities are keyed by stable provider,
+issuer, and subject—not email. Email and display name are presentation data.
+
+OIDC discovery and any future SAML metadata URL are administrator-configured
+SSRF boundaries; no request may supply an arbitrary issuer or metadata URL.
+
+A first-seen external identity is never linked by email and never receives
+implicit privilege. It may create a zero-permission user record or receive
+only roles from complete, exact stable group-ID mappings. Cross-provider
+identity linking is a separate audited administrator action.
+
+Bootstrap is local and deny-by-default. Provider configuration comes from the
+bounded console configuration/secret source. After a first zero-permission
+login, `openvibes-admin access pending-identities` can show the stable identity
+tuple, and `openvibes-admin access bootstrap-admin --provider ... --issuer
+... --subject ...` (or a stable `--group-id`) creates the first Admin binding.
+The same audited local command is break-glass recovery from accidental
+lockout; the web UI cannot silently make the first Admin.
+
+### 7.2 Session
+
+The browser receives only an opaque random session token:
+
+```text
+__Host-openvibes-session=<opaque>
+Secure; HttpOnly; SameSite=Lax; Path=/
+```
+
+Only a cryptographic hash is stored. Rotate on login, MFA/elevation, password
+or recovery changes. Suggested defaults are 30 minutes idle and eight hours
+absolute, bounded by configuration. Logout, account disablement, provider
+disablement, or credential compromise revoke affected sessions.
+
+Sessions contain identity and an IdP group-assertion revision, never effective
+permissions. Role and binding data is resolved on every request, optionally
+through a per-principal/versioned cache invalidated in the RBAC transaction.
+RBAC edits therefore take effect immediately without logging the user out. Do
+not place authorisation claims in browser JWTs or local storage.
+
+### 7.3 CSRF
+
+Every cookie-authenticated unsafe method requires:
+
+- an unpredictable per-session value from `/api/v1/session` in
+  `X-CSRF-Token`;
+- exact configured `Origin` validation;
+- cross-site Fetch Metadata rejection where supplied;
+- no permissive CORS.
+
+SameSite is defence in depth, not the only control. Bearer-token service
+accounts do not use cookies and are not subject to browser CSRF handling.
+Cookie and bearer mechanisms are mutually exclusive: a request containing
+both the session cookie and `Authorization: Bearer` is rejected. CSRF
+exemption applies only after a valid bearer token is selected with no session
+cookie, and service tokens cannot call browser session/auth endpoints.
+
+### 7.4 Other adapters
+
+SAML, when added, validates signed response/assertion policy, exact audience,
+recipient, `InResponseTo`, bounded clock skew, and assertion-ID replay.
+
+Local authentication is off by default. If enabled it uses Argon2id, uniform
+failure responses, per-account and per-source throttling, lockout protection,
+and TOTP or WebAuthn according to policy. TOTP seeds and recovery material are
+encrypted or one-way hashed as appropriate.
+
+OIDC/SAML client secrets and application encryption keys live in
+service-readable configuration or a defined external secret provider, never
+beside ciphertext in PostgreSQL. If MFA material is encrypted in the database,
+the format is versioned AEAD under an external key with documented rotation,
+readiness failure, backup, and restore procedures.
+
+## 8. RBAC and Asset Scope
+
+Permissions:
+
+```text
+agents.read             agents.revoke
+findings.read
+tokens.read             tokens.create            tokens.revoke
+rules.read              rules.upload              rules.trust.manage
+audit.read
+rbac.read               rbac.manage
+asset_groups.manage
+service_accounts.read   service_accounts.manage
+```
+
+Reserved for later: `findings.export`, `packages.create`, and `ca.manage`.
+`ca.manage` is not granted through the first web console.
+
+Every permission has a server-defined scope class: agent-bound or global.
+Built-ins:
+
+- Viewer: `agents.read`, `findings.read`, `rules.read`;
+- Analyst: Viewer initially; triage permissions wait for a triage contract;
+- Operator: Viewer plus agent revocation, token management, and rule upload;
+- Admin: every console permission, except CLI-only CA operations.
+
+A binding joins a role to a user, stable IdP group, or service account and is
+either global or scoped to one asset group. Effective access is the union of
+bindings.
+
+Asset-group scope applies only to agent-bound data: agents, certificate
+metadata, findings, their facets, and their summaries. Tokens, rules, audit,
+RBAC, service accounts, and system administration require global permission.
+A scoped binding contributes only the role's agent-bound permissions; its
+global permissions are inert. For example, a scoped Operator may read/revoke
+matching agents but may not create tokens or upload rules. The binding review
+shows this effective subset, and every mixed-role case has an authorisation
+test.
+
+Version 1 asset groups are conjunctions of exact tag `key=value` selectors.
+No CEL, regex, or negation. A group has at least one selector, with a bounded
+selector count and bounded key/value lengths. Canonical `(group,key,value)`
+rows are unique and case sensitivity is fixed by the tag contract. Membership
+requires every selector to match. Tag changes and their membership-impact
+audit event commit atomically. Untagged agents require a global binding. SQL
+enforces scope before filtering, sorting, pagination, aggregation, or facet
+counts; the application never loads global rows and filters afterward.
+
+IdP adapters must produce complete stable group IDs. Missing, partial,
+over-limit, or failed group resolution fails closed for group-derived
+bindings; a previous group set is never silently retained beyond a configured
+maximum claim age. If a provider cannot refresh complete groups during a
+session, the session expires no later than that maximum age.
+
+## 9. Pagination and Query Rules
+
+Use opaque keyset cursors bound to the normalised filters, stable sort, and
+authorisation context. Default page size is 50; maximum 100. Large lists do
+not compute exact totals on each request; summary routes provide deliberate
+counts.
+
+Agent/latest-finding lists are live views, not repeatable database snapshots;
+the UI preserves rows during refresh and offers an explicit restart when a
+cursor expires. Cursor tests guarantee stable traversal when sort keys do not
+change and bounded, non-crashing behaviour during concurrent updates rather
+than claiming impossible snapshot semantics. Audit pagination is different:
+the first page fixes an `as_of_id` carried in every later cursor, so the
+`audit.viewed` insert cannot shift that traversal.
+
+Stable sorts:
+
+- agents: `last_seen_at DESC NULLS LAST, agent_id ASC`;
+- latest findings: `last_observed_at DESC, agent_id ASC, rule_id ASC`;
+- history: `observed_at DESC, observed_day DESC, finding_id ASC`;
+- tokens: `created_at DESC, token_id ASC`;
+- rule versions: version descending;
+- audit: `at DESC, id DESC`.
+
+Filters are allow-listed and bounded. History has a required/default recent
+window capped by retention. Free text waits for indexed labels/hostnames.
+
+## 10. Audit Contract
+
+Authentication events, privileged mutations, secret issuance, denials, and
+sensitive administrative reads/exports append an audit event. A successful
+state change and its successful audit event share one database transaction;
+failure to audit rolls the change back.
+
+Denied authentication/authorisation stays denied if persistent audit storage
+is unavailable; it also emits a redacted operational error/metric rather than
+turning audit failure into an authentication bypass or retry amplification.
+Repeated denials are rate-limited or aggregated. Shared store mutation
+functions receive a transaction so a domain change and its audit event cannot
+accidentally use different pooled connections.
+
+Event families include:
+
+```text
+auth.login.succeeded       auth.login.failed       auth.logout
+auth.mfa.failed            auth.session.revoked    authorization.denied
+agent.revoked              agent.tag.set           agent.tag.removed
+enrollment_token.created   enrollment_token.revoked
+rule_bundle.uploaded       rule_bundle.rejected
+rbac.role.*                rbac.binding.*           asset_group.*
+service_account.*          service_account_token.*
+audit.viewed               audit.exported
+```
+
+Each event has a stable ID, timestamp, request ID, actor kind/ID and display
+snapshot, auth/MFA method, action, target kind/ID, result, reason code,
+trusted source address, user agent, and bounded detail.
+
+Audit detail never contains credentials, sessions, CSRF values, bearer or
+enrollment tokens, password/TOTP/WebAuthn secrets, signed envelope bodies,
+certificate PEM, or raw IdP assertions.
+
+Ordinary scoped list reads need not create a row. Denials, audit access,
+exports, control-plane reads, and every privileged mutation do.
+
+## 11. Browser and Asset Security
+
+The target is no inline script/style, `eval`, external resources, runtime
+style injection, or remote fonts. This is a restrictive same-origin CSP, not
+a nonce/hash "strict CSP." C0 must exercise the actual dialog, menu,
+combobox, and overlay primitives in browsers before claiming compatibility.
+A target policy is:
+
+```text
+default-src 'none';
+script-src 'self';
+script-src-attr 'none';
+style-src 'self';
+style-src-attr 'none';
+img-src 'self';
+font-src 'none';
+connect-src 'self';
+form-action 'self';
+base-uri 'none';
+object-src 'none';
+frame-ancestors 'none';
+worker-src 'none';
+manifest-src 'self'
+```
+
+Also send HSTS, `Referrer-Policy: no-referrer`, `X-Content-Type-Options:
+nosniff`, and a restrictive Permissions Policy. Begin report-only during
+development; enforce before release. Configure Vite with
+`build.assetsInlineLimit = 0` so images are not silently converted to `data:`
+URLs. If a chosen overlay primitive requires inline positioning, either
+replace it or document and test the narrow `style-src-attr` exception; never
+feed an operator-controlled value into a style attribute.
+
+React policy:
+
+- no `dangerouslySetInnerHTML`;
+- render finding text, evidence, labels, rule metadata, audit content, and IdP
+  claims as text;
+- no remote images unless a later reviewed proxy policy exists;
+- ignore forwarded headers unless the connection is from an explicitly
+  configured trusted proxy.
+
+Hashed assets use a one-year immutable cache policy. `index.html` is no-store.
+The production binary verifies its entry document and referenced assets before
+binding. Vite sets `build.manifest = true`; validation covers every
+manifest-referenced file. Browser routes have one shared declaration, or a
+test-generated equivalent, proving that known routes receive the index while
+`/api`, `/auth`, `/assets`, `/health`, and `/ready` never do.
+
+## 12. Build Model
+
+Production build:
+
+1. build/run the Rust OpenAPI exporter without the `embedded-ui` feature;
+2. compare the OpenAPI snapshot and generate/check the TypeScript client;
+3. run `npm ci` from the committed lock file, typecheck, frontend tests, and
+   `vite build`;
+4. verify the manifest, build stamp, and every referenced entry;
+5. build `openvibes-console --release --features embedded-ui`; the asset
+   module/macro—not `build.rs`—embeds the generated files;
+6. package the binary, config, unit, and documentation in the RPM.
+
+The feature split breaks the Rust DTO → OpenAPI → TypeScript → Vite → embedded
+Rust dependency cycle. `build.rs` validates the manifest/build stamp only when
+`embedded-ui` is enabled; it never invokes npm or the network. A normal source
+checkout retains `web/dist/.gitkeep`, while the asset module is compiled only
+with `embedded-ui`.
+
+RPM construction is network-free. Before packaging is accepted, the project
+must define a lockfile-derived, checksummed npm source cache included as a
+separate source artefact; the RPM build uses `npm ci --offline` against that
+cache. A networked CI build is not evidence of a reproducible RPM. Node/npm
+remain build dependencies only.
+
+The public TLS listener serves only UI/API/auth routes. `health_listen` is a
+separate loopback-only listener for `/health` and `/ready` and refuses a
+non-loopback configuration.
+
+During development, Vite proxies `/api` and `/auth` to the loopback seeded
+Axum server. Production serves the same API DTOs and handlers.
+
+## 13. Seeded Repository
+
+Introduce a narrow console repository interface with PostgreSQL and
+deterministic in-memory implementations. The dev implementation:
+
+- is available only through a `dev-seed` feature and
+  `examples/seeded_server.rs`;
+- binds loopback only;
+- has an unmistakable seeded-data banner;
+- offers fixed Viewer, Analyst, Operator, scoped Operator, and Admin sessions;
+- is never built into the RPM or production binary.
+
+Handlers and contract tests use this implementation first. The same behavioural
+cases later run through `platform-store` against PostgreSQL. This is an
+implementation seam, not a second mock API.
+
+## 14. Required Schema Work
+
+Append-only migrations after PM2 must add or extend:
+
+1. human users, external identities, provider configuration, server sessions,
+   pre-auth transactions, assertion replay state, idempotency records, and
+   optional local/MFA credentials;
+2. permission registry, roles, role permissions, stable IdP groups, bindings,
+   and authorisation generation;
+3. `agent_tags`, asset groups, and exact-match selectors;
+4. optional service accounts and hashed, expiring API tokens;
+5. rule sets, trusted public keys, and exact signed bundle versions;
+6. structured append-only audit metadata while preserving CLI compatibility;
+7. least-privilege `openvibes_console` role without DDL or audit update/delete;
+8. measured indexes for every stable cursor and filter tuple.
+
+Existing schema gaps:
+
+- agents have no recognisable online hostname, label, tags, OS, or health;
+- `current_findings` lacks confidence, message, evidence, origin,
+  authentication, receive time, scan ID, and `observed_day`, so it cannot
+  serve a complete latest detail or reliably join a partitioned row;
+- the partitioned finding primary key includes `observed_day`, although the
+  online contract treats `finding_id` as idempotent; global dedup needs an
+  unpartitioned receipt table or another mechanism;
+- imported files may have no `agent_id`, while current findings require one;
+  import idempotency needs `install_id`, also absent;
+- rule storage and asset scopes do not exist;
+- the current audit helper cannot transactionally record structured human
+  actor/request metadata;
+- enrollment-token creator is free text, so console issuance needs a nullable
+  stable principal reference while retaining CLI history.
+
+All schema and SQL stay in `platform-store`. Migration numbering is assigned
+only after PM2 lands to avoid competing `0002` files.
+
+## 15. Security Acceptance Tests
+
+At minimum, test:
+
+- the console TLS/auth stack never treats an agent certificate as a human
+  session; the reverse-direction proof is a joint platform integration test
+  once ingest/distribution are available;
+- scope applies to objects, lists, summaries, filter facets, and counts;
+- out-of-scope objects do not leak existence;
+- token values do not enter logs, traces, analytics, errors, or audit detail;
+- OIDC/SAML callbacks reject replay, fixation, issuer/audience mismatch, and
+  arbitrary redirect/metadata sources;
+- sessions revoke on account/provider/credential changes; RBAC mutations take
+  effect immediately through per-request resolution/cache invalidation;
+- missing/wrong CSRF, bad Origin, insufficient permission, and stale ETag fail;
+- requests containing both session cookie and bearer token fail;
+- incomplete/stale IdP group resolution fails closed;
+- tag mutation requires global authority;
+- forwarded headers are ignored outside trusted proxies;
+- API/auth 404s cannot fall through to the SPA index;
+- state mutation and audit append are atomic;
+- static assets have correct type, cache headers, CSP, and `nosniff`;
+- CSV/export work, when added, neutralises spreadsheet formula injection.
+
+## 16. Primary Implementation References
+
+- [Vite backend integration](https://vite.dev/guide/backend-integration)
+- [TanStack Table server pagination](https://tanstack.com/table/latest/docs/framework/react/guide/pagination)
+- [W3C WAI table guidance](https://www.w3.org/WAI/tutorials/tables/)
+- [OWASP CSRF prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [MDN Content Security Policy](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP)
+
+## 17. Recommended Decisions for Approval
+
+1. Same-origin React/TypeScript SPA plus `/api/v1`, embedded in one Rust
+   production binary.
+2. Opaque server-side cookie sessions; never browser JWT authorisation.
+3. OIDC first, with SAML/local auth behind one later adapter boundary.
+4. Keyset pagination, SQL-level authorisation, and native semantic tables.
+5. Exact tag conjunctions for first-version asset groups.
+6. Asset scopes apply only to agent-bound data; control-plane permissions are
+   global.
+7. CA operations remain CLI-only in the first release.
+8. `platform-store` retains all PostgreSQL ownership and shared domain
+   mutations.
