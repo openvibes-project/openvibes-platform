@@ -32,6 +32,16 @@ openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
 
+## Agent commands
+
+| Command | Prints |
+|---|---|
+| `agent list [--offline \| --revoked]` | one line per agent: id, status, last seen, version. `--offline` = active with no heartbeat for 15 minutes. |
+| `agent show ID` | id, status, enrolled, revoked, last seen, version, certificate count; `unknown agent` (exit 1) if absent |
+| `agent revoke ID` | `revoked ID`; `agent already revoked` or `unknown agent` are errors. The agent's next request gets `identity_revoked` (PM3). |
+
+`show` and `revoke` are audited with the agent id as target.
+
 ## Token commands
 
 | Command | Does |

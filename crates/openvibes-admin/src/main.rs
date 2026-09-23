@@ -4,6 +4,7 @@
 //! role is break-glass access with full rights; every command is audited
 //! with the invoking OS user, including commands that fail.
 
+mod agent;
 mod ca;
 mod files;
 mod token;
@@ -45,6 +46,11 @@ enum Command {
         #[command(subcommand)]
         command: ca::CaCommand,
     },
+    /// Agents: list, show, revoke.
+    Agent {
+        #[command(subcommand)]
+        command: agent::AgentCommand,
+    },
     /// Enrollment tokens.
     Token {
         #[command(subcommand)]
@@ -60,6 +66,7 @@ impl Command {
             Self::Maintenance { .. } => "maintenance",
             Self::Ca { command } => command.name(),
             Self::Token { command } => command.name(),
+            Self::Agent { command } => command.name(),
         }
     }
 }
@@ -118,6 +125,10 @@ async fn main() -> ExitCode {
         },
         Command::Token { command } => match require_current_schema(&client).await {
             Ok(()) => token::run(command, &client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Agent { command } => match require_current_schema(&client).await {
+            Ok(()) => agent::run(command, &client).await,
             Err(error) => (Err(error), None),
         },
         other => (run(other, &mut client).await, None),
@@ -197,7 +208,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
     }
     require_current_schema(client).await?;
     match command {
-        Command::Migrate | Command::Ca { .. } | Command::Token { .. } => {
+        Command::Migrate | Command::Ca { .. } | Command::Token { .. } | Command::Agent { .. } => {
             unreachable!("handled by the caller")
         }
         Command::Status => {
