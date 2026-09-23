@@ -33,3 +33,72 @@ wait_for() {
     echo "FAIL: $desc (after ${seconds}s)" >&2
     return 1
 }
+
+# Stops everything start_platform (and callers, via PIDS) started; on failure
+# prints the tail of every log under $W.
+cleanup() {
+    local status=$?
+    for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
+    wait 2>/dev/null || true
+    [[ -d "$W/pg/data" ]] && pg_ctl -D "$W/pg/data" -m immediate stop >/dev/null 2>&1 || true
+    if ((status != 0)); then
+        for log in "$W"/*.log; do
+            [[ -f "$log" ]] && { echo "--- $(basename "$log") (tail)"; tail -n 20 "$log"; }
+        done
+    fi
+    exit "$status"
+}
+
+# Fresh local platform under $W: PostgreSQL (Unix socket only), schema,
+# built-in CA, and openvibes-ingest on 127.0.0.1:$INGEST_PORT until /ready.
+# Uses ROOT, W, INGEST_PORT, HEALTH_PORT, OPENVIBES_BIN_DIR (built if unset)
+# and INGEST_EXTRA (extra ingest.toml lines). Defines admin, sql, PIDS,
+# INGEST_PID, and the EXIT trap.
+start_platform() {
+    PIDS=()
+    trap cleanup EXIT
+    rm -rf "$W"; mkdir -p "$W/pg/run" "$W/ca"
+
+    # Binaries.
+    if [[ -z "${OPENVIBES_BIN_DIR:-}" ]]; then
+        cargo build --quiet --release --locked -p openvibes-ingest -p openvibes-admin
+        OPENVIBES_BIN_DIR="$ROOT/target/release"
+    fi
+    admin() { "$OPENVIBES_BIN_DIR/openvibes-admin" --config "$W/admin.toml" "$@"; }
+
+    # PostgreSQL (Unix socket only) and the schema.
+    initdb -D "$W/pg/data" -U openvibes_admin --auth=trust >/dev/null
+    pg_ctl -D "$W/pg/data" -o "-k $W/pg/run -c listen_addresses=''" -l "$W/pg/log" -w start >/dev/null
+    createdb -h "$W/pg/run" -U openvibes_admin openvibes
+    sql() { psql -h "$W/pg/run" -U openvibes_admin -d openvibes -AtX -c "$1"; }
+    echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes_admin\"" > "$W/admin.toml"
+    admin migrate >/dev/null
+    admin maintenance >/dev/null
+
+    # Built-in CA: root, intermediate, server certificate for 127.0.0.1.
+    admin ca init-root --out "$W/ca/root" >/dev/null
+    admin ca intermediate-request --out "$W/ca/int" >/dev/null
+    admin ca sign-intermediate --root "$W/ca/root" --csr "$W/ca/int/intermediate.csr" \
+        --out "$W/ca/int/intermediate.crt" >/dev/null
+    admin ca import-intermediate --cert "$W/ca/int/intermediate.crt" \
+        --key "$W/ca/int/intermediate.key" --root-cert "$W/ca/root/root.crt" >/dev/null
+    admin ca issue-server localhost --san 127.0.0.1 --issuer-cert "$W/ca/int/intermediate.crt" \
+        --issuer-key "$W/ca/int/intermediate.key" --out "$W/ca/tls" >/dev/null
+
+    # Ingest.
+    cat > "$W/ingest.toml" <<EOF
+listen = "127.0.0.1:$INGEST_PORT"
+health_listen = "127.0.0.1:$HEALTH_PORT"
+server_certificate_file = "$W/ca/tls/localhost.crt"
+server_key_file = "$W/ca/tls/localhost.key"
+client_ca_file = "$W/ca/int/intermediate.crt"
+issuing_certificate_file = "$W/ca/int/intermediate.crt"
+issuing_key_file = "$W/ca/int/intermediate.key"
+database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_ingest"
+EOF
+    [[ -n "${INGEST_EXTRA:-}" ]] && printf '%s\n' "$INGEST_EXTRA" >> "$W/ingest.toml"
+    "$OPENVIBES_BIN_DIR/openvibes-ingest" --config "$W/ingest.toml" 2> "$W/ingest.log" &
+    INGEST_PID=$!
+    PIDS+=("$INGEST_PID")
+    wait_for "ingest ready" 30 curl -fsS "http://127.0.0.1:$HEALTH_PORT/ready"
+}
