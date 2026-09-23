@@ -22,8 +22,9 @@ functions, so schema knowledge and SQL live in one place.
 ## Migrations
 
 Numbered SQL files in `/migrations`, embedded at build time. `migrate` runs
-in one transaction with `schema_version` locked exclusively, so concurrent
-runs serialize; already-applied migrations are skipped. A database at a
+in one transaction that first takes an advisory lock (before even creating
+`schema_version`), so concurrent runs serialize and both succeed;
+already-applied migrations are skipped. A database at a
 **newer** version is refused with `NewerSchema`, never rolled back.
 
 Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
@@ -83,7 +84,10 @@ The `detail` column is never given secrets.
 
 - `ensure_partitions(&client, today, days_ahead)`: creates `findings_YYYYMMDD`
   partitions for today and the next `days_ahead` days that are missing;
-  returns how many it created. Safe to run repeatedly.
+  returns how many it created. Safe to run repeatedly, and concurrently:
+  both this and `drop_partitions_before` hold a session advisory lock
+  (always released, errors included), so a second run waits and then finds
+  nothing to do.
 - `drop_partitions_before(&client, cutoff)`: drops partitions for days before
   `cutoff`, **never today's**, even if `cutoff` is later.
 - Partition names come only from dates, never from input.
