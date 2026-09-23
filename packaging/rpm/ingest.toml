@@ -1,0 +1,12 @@
+# Edit before starting openvibes-ingest; see docs/components/packaging.md.
+listen = "0.0.0.0:18423"
+health_listen = "127.0.0.1:18480"          # /health, /ready; loopback only
+server_certificate_file = "/etc/openvibes/tls/ingest.crt"   # chain, leaf first
+server_key_file = "/etc/openvibes/tls/ingest.key"
+client_ca_file = "/etc/openvibes/pki/intermediate.crt"      # accepted client issuers
+issuing_certificate_file = "/etc/openvibes/pki/intermediate.crt"
+issuing_key_file = "/var/lib/openvibes-ingest/intermediate.key"   # 0600, ingest user
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_ingest"
+client_certificate_days = 30
+max_in_flight = 4096                        # above this: 503
+finding_retention_days = 90

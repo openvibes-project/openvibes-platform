@@ -113,6 +113,9 @@ impl Issuer {
         now: DateTime<Utc>,
         days: u32,
     ) -> Result<IssuedClient, PkiError> {
+        if !crate::is_agent_id(agent_id) {
+            return Err(PkiError::InvalidAgentId);
+        }
         if !(1..=MAX_CLIENT_DAYS).contains(&days) {
             return Err(PkiError::InvalidValidity);
         }
@@ -150,4 +153,26 @@ impl Issuer {
             chain_pem: vec![leaf, self.cert_pem().to_owned()],
         })
     }
+}
+
+/// The serial (as encoded) and SPKI SHA-256 of a presented DER certificate,
+/// the pair ingest matches against `certificates`.
+pub fn leaf_identity(der: &[u8]) -> Result<(Vec<u8>, [u8; 32]), PkiError> {
+    let cert = parse(der)?;
+    Ok((
+        cert.raw_serial().to_vec(),
+        spki_sha256(&cert.tbs_certificate.subject_pki)?,
+    ))
+}
+
+/// Validity period of a presented DER certificate.
+pub fn leaf_validity(der: &[u8]) -> Result<(DateTime<Utc>, DateTime<Utc>), PkiError> {
+    let cert = parse(der)?;
+    let at = |time: x509_parser::time::ASN1Time| {
+        DateTime::from_timestamp(time.timestamp(), 0).ok_or(PkiError::InvalidPem)
+    };
+    Ok((
+        at(cert.validity().not_before)?,
+        at(cert.validity().not_after)?,
+    ))
 }
