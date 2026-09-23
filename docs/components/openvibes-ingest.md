@@ -64,6 +64,16 @@ Strict TOML (unknown keys refused), absolute paths only:
   `findings not stored` log line; `openvibes-admin maintenance` keeps the
   window covered. Ingest never creates partitions.
 
+## Load control and logging
+
+- Bodies over 1 MiB → 400 (never read past the limit).
+- TLS handshake and request headers must arrive within
+  `request_timeout_seconds`; silent clients are dropped.
+- More than `max_in_flight` concurrent requests → 503 for the extra ones.
+- One JSON log line per request on stderr: `endpoint`, `status`,
+  `latency_ms`, and (inside the request span) `agent_id` once
+  authenticated. Bodies, tokens, CSRs, and certificates are never logged.
+
 ## Health
 
 On `health_listen` (plain HTTP, loopback): `/health` → 200 while the process
@@ -72,13 +82,14 @@ schema version, else 503.
 
 ## Status
 
-All four endpoints are built. Load control and logging follow (PM3 task
-6).
+All four endpoints, load control, and logging are built (PM3). PM4 adds
+RPM packaging and the cross-repository test with the real agent binary.
 
 ## Protocol fixtures
 
 `tests/protocol_fixtures.rs` runs every fixture in the pinned `protocol/`
-submodule through the `openvibes-core` types.
+submodule through the `openvibes-core` types, and `tests/contract.rs` runs
+the request fixtures through ingest's own parsing and validation layer.
 
 ## Test
 

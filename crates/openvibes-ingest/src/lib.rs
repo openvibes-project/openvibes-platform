@@ -10,6 +10,7 @@ mod delivery;
 mod enroll;
 mod error;
 mod health;
+mod limits;
 mod request;
 mod server;
 mod tls;
@@ -17,3 +18,10 @@ mod tls;
 pub use config::{IngestConfig, load_config};
 pub use error::IngestError;
 pub use server::{run, serve};
+
+/// Whether `body` parses as `T` and passes V1 validation: the check every
+/// endpoint applies before anything else. Exposed for contract tests.
+#[doc(hidden)]
+pub fn accepts<T: serde::de::DeserializeOwned + openvibes_core::Validate>(body: &[u8]) -> bool {
+    request::parse::<T>(body).is_ok()
+}

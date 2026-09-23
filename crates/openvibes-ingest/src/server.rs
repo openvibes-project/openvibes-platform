@@ -1,6 +1,6 @@
 use std::{future::Future, sync::Arc, time::Duration};
 
-use axum::{Extension, Router, routing::post};
+use axum::{Extension, Router, extract::DefaultBodyLimit, middleware, routing::post};
 use hyper_util::{
     rt::{TokioIo, TokioTimer},
     service::TowerToHyperService,
@@ -19,10 +19,6 @@ use crate::{
 
 /// Shared per-process state.
 #[derive(Clone)]
-#[expect(
-    dead_code,
-    reason = "issuer, limits, and semaphore are used by PM3 tasks 4 to 6"
-)]
 pub(crate) struct AppState {
     pub pool: Pool,
     pub issuer: Arc<Issuer>,
@@ -37,6 +33,12 @@ fn routes(state: AppState) -> Router {
         .route("/v1/findings", post(crate::delivery::findings))
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))
+        .layer(DefaultBodyLimit::max(crate::request::MAX_BODY_BYTES))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            crate::limits::bound,
+        ))
+        .layer(middleware::from_fn(crate::limits::log))
         .with_state(state)
 }
 

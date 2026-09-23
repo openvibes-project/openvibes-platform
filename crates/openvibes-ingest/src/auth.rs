@@ -23,7 +23,10 @@ impl FromRequestParts<AppState> for AuthenticatedAgent {
             platform_pki::leaf_identity(&leaf).map_err(|_| ApiError::Unauthorized)?;
         let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
         match ingest::authenticate(&client, &serial, spki).await? {
-            Authenticated::Active(agent_id) => Ok(Self(agent_id)),
+            Authenticated::Active(agent_id) => {
+                tracing::Span::current().record("agent_id", agent_id.as_str());
+                Ok(Self(agent_id))
+            }
             Authenticated::Revoked => Err(ApiError::Revoked),
             Authenticated::Unknown => Err(ApiError::Unauthorized),
         }
