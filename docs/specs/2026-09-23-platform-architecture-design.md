@@ -108,11 +108,12 @@ public keys before storing.
 
 ## 6. Human Access and RBAC (planned sub-project)
 
-- Authentication: OIDC first (Entra ID, Okta, Keycloak, Authentik, Google
-  Workspace, ADFS), a SAML 2.0 adapter, and local username and password for
-  small deployments: off by default, argon2id, rate limiting and lockout,
-  TOTP or WebAuthn second factor that can be made mandatory. Service accounts
-  use hashed, expiring API tokens bound to a role.
+- Authentication: local username and password first, provisioned and recovered
+  through the audited local CLI, with Argon2id, generic failures, rate limiting,
+  and temporary lockout. OIDC (Entra ID, Okta, Keycloak, Authentik, Google
+  Workspace, ADFS), SAML 2.0, and TOTP/WebAuthn are later adapters over the
+  same server-side session and RBAC boundary. Service accounts use hashed,
+  expiring API tokens bound to a role when that capability is added.
 - Authorisation: deny by default. Fine-grained permissions (for example
   `agents.read`, `agents.revoke`, `tokens.create`, `rules.upload`,
   `findings.read`, `packages.create`, `ca.manage`, `rbac.manage`); roles are

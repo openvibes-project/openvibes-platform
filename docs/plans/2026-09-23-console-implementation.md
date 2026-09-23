@@ -133,24 +133,30 @@ Verification:
 
 - real PostgreSQL integration tests fail, never skip, if the test database is
   unavailable;
-- pagination is stable under insertion and has no duplicate/missing rows in a
-  traversed snapshot contract;
+- pagination is stable when sort keys do not change and behaves safely when a
+  live sort key changes; it does not claim repeatable-snapshot semantics;
 - query plans and latency are recorded for representative 50,000-agent data;
 - an unknown/newer schema keeps readiness false and prevents serving data.
 
 ## 5. Milestone C3 — Authentication, Sessions, and RBAC
 
-Goal: production OIDC login and server-enforced, auditable permissions.
+Goal: production local username/password login and server-enforced, auditable
+permissions.
 
 Work:
 
-- finalise provider/config contract and trusted-proxy rules;
-- add append-only user, external identity, session, RBAC, asset-group, and
-  structured audit migration after PM2's migration number;
+- finalise local-account/password policy and trusted-proxy rules;
+- add the next available append-only migration after schema 2: local users,
+  Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
+  and structured audit;
 - add least-privilege `openvibes_console` database role;
-- implement OIDC Authorization Code + PKCE, state, nonce, and exact callback;
-- add one-use pre-auth transactions and fail-closed complete IdP group
-  resolution with a bounded maximum claim age;
+- add audited, interactive `openvibes-admin user` commands for create, list,
+  disable, unlock, and reset-password; this is first-Admin bootstrap and
+  lockout recovery;
+- implement local login with generic failures, reviewed Argon2id parameters,
+  common-password blocklist, per-account and per-source throttling, and
+  temporary lockout;
+- add one-use local pre-auth CSRF state and exact-Origin enforcement;
 - implement hashed opaque sessions, rotation, idle/absolute expiry, and
   revocation generation;
 - implement synchroniser CSRF value, exact Origin, Fetch Metadata, and no CORS;
@@ -158,19 +164,18 @@ Work:
 - extend the C2 store queries so asset scope is enforced inside SQL before
   aggregation, facets, sorting, filtering, and pagination;
 - add access-control and audit read pages;
-- add audited local `openvibes-admin access pending-identities` and
-  `bootstrap-admin` commands for first binding and lockout recovery;
 - enforce the final CSP and browser headers.
 
-SAML/local authentication are separate adapters after OIDC proves the common
-identity/session boundary unless the owner promotes either into the first
-release.
+OIDC, SAML, TOTP, and WebAuthn are later adapters over this identity/session
+boundary.
 
-Verification includes no session, expired/revoked session, fixation, replay,
-bad issuer/audience/redirect, missing/wrong CSRF, bad Origin, insufficient
-permission, hidden object, disabled provider/account, and mid-session RBAC
-change. Login, denial, logout, and audit access events are audited without
-secrets. Scope-leak tests cover item, list, summary, count, and facet paths.
+Verification includes unknown/wrong/disabled/locked account
+indistinguishability, Argon2id floor and hash upgrade, password bounds and
+blocklist, throttling, CLI reset/unlock, no session, expired/revoked session,
+fixation, missing/wrong CSRF, bad Origin, insufficient permission, hidden
+object, and mid-session RBAC change. Login, denial, logout, password change,
+and audit access events are audited without secrets. Scope-leak tests cover
+item, list, summary, count, and facet paths.
 
 ## 6. Milestone C4 — Safe Mutations
 
@@ -213,15 +218,15 @@ Work:
 - hardened systemd unit and dedicated service/database roles;
 - final CSP enforcement, HSTS, no-referrer, nosniff, Permissions Policy;
 - structured safe logs with request IDs and no finding/token body content;
-- readiness for database/schema/provider/key state;
+- readiness for database/schema and local-auth state;
 - upgrade, rollback-safety, backup/restore notes, and operator documentation;
 - final `docs/components/openvibes-console.md` and component index update.
 
 Verification:
 
 - clean RPM build installs without Node runtime;
-- service starts, redirects to OIDC, serves assets/API over HTTPS, and has
-  expected headers;
+- service starts, serves local login and assets/API over HTTPS, and has expected
+  headers;
 - upgrade preserves sessions/data according to migration policy;
 - browser matrix and accessibility review pass;
 - Cargo and npm dependency audits pass;
@@ -232,7 +237,7 @@ Verification:
 Only after their contracts exist:
 
 - deployment package builder and multi-use deployment tokens;
-- SAML/local auth if not promoted earlier;
+- OIDC, SAML, TOTP, and WebAuthn authentication adapters;
 - analyst triage, acknowledgement, suppression, assignment, or resolution;
 - inventory/package explorer, correlation, and CMDB views;
 - saved views, report/export, and SIEM integration;
@@ -241,7 +246,7 @@ Only after their contracts exist:
 
 ## 9. Collision Checklist Before Each Rebase
 
-- Did PM2 add or renumber a migration?
+- Did Claude's active platform work add or renumber a migration?
 - Did `SCHEMA_VERSION` or the embedded migration list change?
 - Did token creation/revocation or agent revocation semantics change?
 - Did the audit helper or schema gain structured fields?
@@ -258,7 +263,6 @@ Begin C0/C1 only after approving the core stack and seeded-first boundary.
 Before C2/C3, decide:
 
 - hostname versus operator label;
-- first-release auth adapters;
 - manual tag/asset-scope policy;
 - service-account inclusion;
 - web versus CLI rule trust-key management;
