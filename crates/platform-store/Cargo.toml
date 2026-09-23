@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+chrono.workspace = true
 deadpool-postgres.workspace = true
 tokio-postgres.workspace = true
 

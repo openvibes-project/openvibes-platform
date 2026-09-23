@@ -27,6 +27,23 @@ Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
 `observed_day`), `current_findings`, `audit_log`, and the least-privilege
 role `openvibes_ingest`. The migrating role needs `CREATEROLE`.
 
+## Partitions and retention
+
+- `ensure_partitions(&client, today, days_ahead)`: creates `findings_YYYYMMDD`
+  partitions for today and the next `days_ahead` days that are missing;
+  returns how many it created. Safe to run repeatedly.
+- `drop_partitions_before(&client, cutoff)`: drops partitions for days before
+  `cutoff`, **never today's**, even if `cutoff` is later.
+- Partition names come only from dates, never from input.
+
+## Status
+
+`status(&client, now) -> Status`: schema version; active, offline (no
+heartbeat for `OFFLINE_AFTER_MINUTES` = 15, well above the 5-minute
+`last_seen_at` write throttle), and revoked agents; usable tokens (not
+revoked, not expired, uses left); oldest and newest partition. All zeros and
+`None` on an empty database.
+
 ## Test
 
 ```sh

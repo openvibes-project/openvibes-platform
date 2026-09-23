@@ -4,14 +4,18 @@
 //! The only crate that touches PostgreSQL: connection pool, schema
 //! migrations, and every query the platform runs.
 
+mod maintenance;
 mod migrate;
+mod status;
 
 use std::{fmt, str::FromStr};
 
 use deadpool_postgres::{Manager, Pool};
 use tokio_postgres::NoTls;
 
+pub use maintenance::{drop_partitions_before, ensure_partitions};
 pub use migrate::{SCHEMA_VERSION, migrate, schema_version};
+pub use status::{OFFLINE_AFTER_MINUTES, Status, status};
 
 /// Fixed failure categories; no SQL, parameters, or connection strings are
 /// ever included.
