@@ -93,7 +93,8 @@ Strict TOML (unknown keys refused), absolute paths only:
   off instead of spinning.
 - Database waits, connects, and recycles are bounded to 5 s and every
   statement to 10 s, so a hung database yields 503, not hangs.
-- One JSON log line per request on stderr: `endpoint`, `status`,
+- One JSON log line per request on stderr: `endpoint` (the route, or
+  `other` for any unknown path, which is never copied), `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
 
