@@ -125,7 +125,9 @@ first release.
 - Manual exact tags provide first-release asset grouping. CMDB integration may
   automate the source later without changing the access semantics.
 - Analyst triage is a first-release, audited human workflow kept separate from
-  immutable detector observations and detector truth.
+  immutable detector observations and detector truth. Its states are Open,
+  Investigating, Mitigated, Accepted Risk, and False Positive; re-observation
+  reopens completed states according to the version/expiry contract.
 - Every privileged action and login is written to the audit log.
 - Until the admin API exists, `openvibes-admin` is local break-glass access:
   running it on a platform host grants full rights, and every command is

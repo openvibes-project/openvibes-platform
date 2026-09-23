@@ -233,8 +233,15 @@ hostname. Imported installations have no agent link and require global
 First-release triage is a versioned human workflow record attached to the
 latest subject/rule pair. `PUT` requires `If-Match`, an allowed transition,
 bounded assignee/note fields, and an atomic audit event. Its states never
-change or reinterpret the immutable observation. The exact transition and
-re-observation contract is approved separately before schema implementation.
+change or reinterpret the immutable observation. The states are `Open`,
+`Investigating`, `Mitigated`, `Accepted Risk`, and `False Positive`.
+The API and database use stable values `open`, `investigating`, `mitigated`,
+`accepted_risk`, and `false_positive`; the UI renders the approved labels.
+`Investigating` may transition to any of the latter three states. A new
+observation reopens `Mitigated`; it reopens expired `Accepted Risk`, and a new
+rule version reopens `False Positive`. Reopening sets the state to `Open` and
+is recorded in triage history and audit. New observations leave an active
+`Investigating` assignment intact.
 
 ### 6.5 Enrollment tokens
 
@@ -618,8 +625,9 @@ Append-only migrations after the current schema 2 must add or extend:
    configuration, stable IdP groups, assertion replay state, and MFA material;
 3. `agent_tags`, asset groups, and exact-match selectors;
 4. service accounts and hashed, expiring API tokens;
-5. finding-triage state, assignee, version, note/history, and accepted-risk
-   expiry after its transition contract is approved;
+5. finding-triage state (`open`, `investigating`, `mitigated`, `accepted_risk`,
+   or `false_positive`), assignee, version, required terminal note, history,
+   rule version, and accepted-risk expiry;
 6. rule sets, trusted public keys, and exact signed bundle versions;
 7. structured append-only audit metadata while preserving CLI compatibility;
 8. least-privilege `openvibes_console` role without DDL or audit update/delete;
@@ -715,5 +723,7 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 11. **Approved:** rule trust-key management remains CLI-only in the first
     release.
 12. **Approved:** manual exact tags are sufficient until CMDB integration.
-13. **Approved:** analyst triage is in the first release; its precise state
-    and re-observation contract is the remaining product decision.
+13. **Approved:** first-release triage states are Open, Investigating,
+    Mitigated, Accepted Risk, and False Positive. Re-observation reopens
+    Mitigated, expired Accepted Risk, and False Positive after a rule-version
+    change; an active Investigating assignment remains intact.

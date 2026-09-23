@@ -199,8 +199,8 @@ The UI always separates the human workflow state from detector truth: a human
 state never makes an observation "resolved" or proves the condition absent.
 
 Every transition is audited and protected by `If-Match`; a stale page must
-reload before overwriting another analyst's work. The exact states and
-re-observation behaviour are the next product decision in section 13.
+reload before overwriting another analyst's work. Section 13 defines the
+approved states and re-observation behaviour.
 
 ## 6. Page Behaviour and Data Presentation
 
@@ -442,8 +442,8 @@ does not have.
    operator label; PM3 must store/index its latest present value. Manual tags
    provide first-release asset grouping until CMDB integration exists.
 2. `current_findings` records no match end. Analyst triage is approved for the
-   first release, but its human workflow states must remain explicitly
-   separate from detector truth and need the state contract in section 13.
+   first release; its approved human workflow states remain explicitly
+   separate from detector truth and are defined in section 13.
 3. Asset-group scope is planned but tag/group storage does not exist. Reserve
    the affordance; do not fake it in the browser.
 4. Rule bundles and trusted keys are absent from migration 0001.
@@ -454,24 +454,24 @@ does not have.
 These gaps do not block the shell, seeded workflows, or read-model design.
 They do bound what production wiring may honestly show.
 
-## 13. Next Decision: Triage State Contract
+## 13. Approved Triage State Contract
 
-Triage is approved for the first release. Recommended state model:
+The first-release state model is:
 
 ```text
-Unreviewed → Investigating → Addressed
-                         ├→ Accepted risk (required expiry)
-                         └→ False positive (scoped to the current rule version)
+Open → Investigating → Mitigated
+                    ├→ Accepted Risk (required expiry)
+                    └→ False Positive (scoped to the current rule version)
 ```
 
-- A new observation after **Addressed** automatically returns to Unreviewed
+- A new observation after **Mitigated** automatically returns to Open
   and records that it reopened.
-- **Accepted risk** remains until its required expiry, then returns to
-  Unreviewed on the next observation.
-- **False positive** remains for the same rule version; a newer rule version
-  returns to Unreviewed.
+- **Accepted Risk** remains until its required expiry, then returns to Open on
+  the next observation.
+- **False Positive** remains for the same rule version; a newer rule version
+  returns to Open.
 - Investigating stays assigned across new observations.
-- Addressed, Accepted risk, and False positive require a note. Every transition
+- Mitigated, Accepted Risk, and False Positive require a note. Every transition
   and assignment change is audited.
 
 These are human workflow states only. None asserts that the underlying
