@@ -113,6 +113,9 @@ impl Issuer {
         now: DateTime<Utc>,
         days: u32,
     ) -> Result<IssuedClient, PkiError> {
+        if !crate::is_agent_id(agent_id) {
+            return Err(PkiError::InvalidAgentId);
+        }
         if !(1..=MAX_CLIENT_DAYS).contains(&days) {
             return Err(PkiError::InvalidValidity);
         }

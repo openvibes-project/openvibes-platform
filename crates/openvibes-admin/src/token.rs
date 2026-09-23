@@ -75,12 +75,9 @@ pub async fn run(
                 return (Err("no randomness available".into()), None);
             }
             let token = URL_SAFE_NO_PAD.encode(secret);
-            let hash: [u8; 32] = match ring::digest::digest(&ring::digest::SHA256, &secret)
-                .as_ref()
-                .try_into()
-            {
-                Ok(hash) => hash,
-                Err(_) => return (Err("hashing failed".into()), None),
+            // The same helper ingest uses, so the stored hash always matches.
+            let Some(hash) = platform_pki::enrollment_token_sha256(&token) else {
+                return (Err("token encoding failed".into()), None);
             };
             let new = NewToken {
                 token_sha256: hash,
