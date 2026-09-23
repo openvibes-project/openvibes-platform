@@ -1,6 +1,6 @@
 # OpenVIBES Console Product Design
 
-Status: draft for review, 2026-09-23. Technical companion:
+Status: **approved by the project owner, 2026-09-23**. Technical companion:
 [`2026-09-23-console-technical-design.md`](2026-09-23-console-technical-design.md).
 
 ## 1. Product Position
