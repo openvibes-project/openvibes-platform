@@ -40,8 +40,18 @@ trusted_keys = [{ issuer_key_id = "integration.test", public_key = "$KEY" }]
 EOF
 
 AGENT_PID=
+# Stops the agent and forgets its PID, so cleanup never signals a PID the
+# kernel may since have given to another process.
+stop_agent() {
+    [[ -n "$AGENT_PID" ]] || return 0
+    kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true
+    local kept=() pid
+    for pid in "${PIDS[@]}"; do [[ "$pid" == "$AGENT_PID" ]] || kept+=("$pid"); done
+    PIDS=("${kept[@]}")
+    AGENT_PID=
+}
 restart_agent() {
-    if [[ -n "$AGENT_PID" ]]; then kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; fi
+    stop_agent
     "$AGENT_BIN" "$W/agent/agent.toml" 2>> "$W/agent.log" &
     AGENT_PID=$!
     PIDS+=("$AGENT_PID")
@@ -82,7 +92,7 @@ wait_for "no finding delivered twice after restart" 10 acked_equals_stored
 
 # Renewal is due at obtained + 2/3 of the lifetime; obtained = 0 makes it due
 # now without faking the clock (which would future-date findings).
-kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+stop_agent
 sqlite3 "$W/agent/state/identity.sqlite" "UPDATE identity SET obtained_at_ms = 0"
 restart_agent
 certificates() { [[ "$(sql "SELECT count(*) FROM certificates WHERE agent_id = '$FIRST_AGENT'")" == "$1" ]]; }
@@ -93,7 +103,7 @@ wait_for "renewed certificate authenticates" 75 more_heartbeats_than "$BEFORE"
 # Revoke while the agent is stopped; on restart it scans (interval now 60 s,
 # so findings are queued) and then learns of the revocation, so those
 # findings must survive until it re-enrolls.
-kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+stop_agent
 sed -i 's/^scan_interval_seconds = .*/scan_interval_seconds = 60/' "$W/agent/agent.toml"
 admin agent revoke "$FIRST_AGENT" >/dev/null
 new_token   # the agent reads it only once its identity is gone
@@ -120,4 +130,5 @@ for id in $REVOKED_IDS; do
         { echo "FAIL: finding $id queued while revoked was not delivered under the new identity"; exit 1; }
 done
 echo "ok: findings queued while revoked delivered under the new identity"
+((${#PIDS[@]} == 2)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest and the live agent"; exit 1; }
 echo "integration: all checks passed"
