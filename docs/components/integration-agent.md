@@ -17,6 +17,21 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    enrolls, sends an accepted heartbeat, and delivers its findings **exactly
    once**: its queue is empty and the ids it recorded as acknowledged equal
    the ids in `findings`.
+3. **Restart:** the agent is stopped and started; it reconnects (a new
+   accepted heartbeat) and nothing is delivered twice.
+4. **Renewal:** with the agent stopped, `obtained_at_ms` in its
+   `identity.sqlite` is set to 0, which makes renewal due at once (it is due
+   at two thirds of the lifetime). This avoids faking the clock, which would
+   future-date findings that ingest then refuses. The agent gets a second
+   certificate, and that certificate authenticates the next heartbeat.
+5. **Revocation and re-enrollment:** with the agent stopped, it is revoked
+   and its scan interval set to 60 s. On restart it queues findings, gets
+   403 `identity_revoked`, forgets its identity, and keeps the findings
+   queued. With a new token it re-enrolls as a new `agent_id` (the old one
+   stays `revoked`) and delivers the findings it queued while revoked, again
+   exactly once.
+
+A full run takes 2 to 3 minutes, because the agent ticks every 60 s.
 
 Checks read only real state: PostgreSQL rows, the agent's `queue.sqlite`,
 and ingest's JSON request log.
@@ -48,4 +63,6 @@ repository (`CARGO_NET_GIT_FETCH_WITH_CLI=true` is set by the script).
 ## How to test
 
 The script is the test. Each check was first seen failing: no token file
-(`agent enrolled` fails), a wrong finding count, a wrong key for the bundle.
+(`agent enrolled` fails), a wrong finding count, a wrong key for the bundle,
+renewal not forced, a wrong status for the revocation answer. A run that
+fails early (for example `INGEST_PORT=1`) leaves no process behind.

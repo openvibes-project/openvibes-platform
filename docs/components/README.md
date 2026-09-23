@@ -10,7 +10,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-store` | library | schema 3, partitions, status, tokens, agents, CA certificates (PM1, PM2) | [platform-store.md](platform-store.md) |
 | `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
-| `integration-agent` | test script | real agent against ingest: enrollment, exactly-once delivery (PM4) | [integration-agent.md](integration-agent.md) |
+| `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4) | [integration-agent.md](integration-agent.md) |
 
 Architecture and design: [`../specs/`](../specs/). Implementation plans:
 [`../plans/`](../plans/).

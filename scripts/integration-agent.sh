@@ -120,3 +120,44 @@ acked_equals_stored() {
 }
 wait_for "findings delivered exactly once" 20 acked_equals_stored
 [[ "$(sql "SELECT count(*) FROM findings")" == 2 ]] || { echo "FAIL: expected 2 findings"; exit 1; }
+
+BEFORE=$(heartbeats_ok)
+restart_agent
+wait_for "agent reconnected after restart" 20 more_heartbeats_than "$BEFORE"
+wait_for "no finding delivered twice after restart" 10 acked_equals_stored
+
+# Renewal is due at obtained + 2/3 of the lifetime; obtained = 0 makes it due
+# now without faking the clock (which would future-date findings).
+kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+sqlite3 "$W/agent/state/identity.sqlite" "UPDATE identity SET obtained_at_ms = 0"
+restart_agent
+certificates() { [[ "$(sql "SELECT count(*) FROM certificates WHERE agent_id = '$FIRST_AGENT'")" == "$1" ]]; }
+wait_for "certificate renewed" 15 certificates 2
+BEFORE=$(heartbeats_ok)
+wait_for "renewed certificate authenticates" 75 more_heartbeats_than "$BEFORE"
+
+# Revoke while the agent is stopped; on restart it scans (interval now 60 s,
+# so findings are queued) and then learns of the revocation, so those
+# findings must survive until it re-enrolls.
+kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+sed -i 's/^scan_interval_seconds = .*/scan_interval_seconds = 60/' "$W/agent/agent.toml"
+admin agent revoke "$FIRST_AGENT" >/dev/null
+new_token   # the agent reads it only once its identity is gone
+restart_agent
+revoked_answer() {
+    # A command substitution, not a pipe into grep -q: under pipefail an early
+    # grep exit can SIGPIPE jq and fail the check even on a match.
+    [[ -n "$(jq -r 'select(.fields.status == 403) | 1' "$W/ingest.log")" ]]
+}
+wait_for "revoked agent told identity_revoked" 75 revoked_answer
+queued() { (($(sqlite3 "$W/agent/state/queue.sqlite" "SELECT count(*) FROM pending") > 0)); }
+wait_for "findings stay queued while revoked" 5 queued
+reenrolled() {
+    [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active' AND agent_id <> '$FIRST_AGENT'")" == 1 ]]
+}
+wait_for "agent re-enrolled with a new token" 75 reenrolled
+[[ "$(sql "SELECT status FROM agents WHERE agent_id = '$FIRST_AGENT'")" == revoked ]]
+wait_for "no finding lost or duplicated across re-enrollment" 75 acked_equals_stored
+(($(sql "SELECT count(*) FROM findings WHERE agent_id <> '$FIRST_AGENT'") >= 2)) ||
+    { echo "FAIL: findings queued while revoked were not delivered under the new identity"; exit 1; }
+echo "integration: all checks passed"
