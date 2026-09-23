@@ -1077,6 +1077,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvibes-console"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "platform-config",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tower",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "openvibes-core"
 version = "0.1.0"
 source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=8dfa7744c23febfda48383cc206d6b2c0f6e1fc9#8dfa7744c23febfda48383cc206d6b2c0f6e1fc9"
