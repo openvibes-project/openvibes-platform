@@ -48,6 +48,22 @@ Strict TOML (unknown keys refused), absolute paths only:
   for the requesting agent's own id and records it. Earlier certificates
   keep working until they expire. A revoked agent gets `identity_revoked`.
 
+## Heartbeats and findings
+
+- `POST /v1/heartbeat` (authenticated): `Heartbeat`; its `agent_id` must be
+  the authenticated agent's (else 400). Stores version and capabilities,
+  writing `last_seen_at` at most every 5 minutes. 204.
+- `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
+  authenticated agent. A finding observed more than 5 minutes in the future
+  fails the whole batch (400, nothing stored). Findings older than
+  `finding_retention_days` are acknowledged but not stored. The rest are
+  stored in one transaction (duplicates skipped) and every finding in the
+  batch is acknowledged, including ones stored before.
+- Any database error, on any endpoint, is 503 and acknowledges nothing. A
+  finding whose day has no partition also ends as 503 and a
+  `findings not stored` log line; `openvibes-admin maintenance` keeps the
+  window covered. Ingest never creates partitions.
+
 ## Health
 
 On `health_listen` (plain HTTP, loopback): `/health` → 200 while the process
@@ -56,9 +72,8 @@ schema version, else 503.
 
 ## Status
 
-TLS, authentication, health, configuration, enrollment, and renewal are
-built. Heartbeat and findings follow (PM3 task 5), then load control and
-logging (task 6).
+All four endpoints are built. Load control and logging follow (PM3 task
+6).
 
 ## Protocol fixtures
 

@@ -6,6 +6,7 @@
 
 mod auth;
 mod config;
+mod delivery;
 mod enroll;
 mod error;
 mod health;
