@@ -3,6 +3,7 @@ use std::{future::Future, sync::Arc, time::Duration};
 use axum::{Extension, Router, extract::DefaultBodyLimit, middleware, routing::post};
 use hyper_util::{
     rt::{TokioIo, TokioTimer},
+    server::graceful::GracefulShutdown,
     service::TowerToHyperService,
 };
 use platform_pki::Issuer;
@@ -88,6 +89,8 @@ pub async fn run(
         let _ = axum::serve(health_listener, health::router(pool)).await;
     });
     let timeout = Duration::from_secs(config.request_timeout_seconds);
+    // Tracks every accepted connection so shutdown can drain them.
+    let graceful = GracefulShutdown::new();
     tokio::pin!(shutdown);
     loop {
         tokio::select! {
@@ -109,6 +112,7 @@ pub async fn run(
                 };
                 let acceptor = acceptor.clone();
                 let router = router.clone();
+                let watcher = graceful.watcher();
                 tokio::spawn(async move {
                     let _permit = permit;
                     let Ok(Ok(tls)) = tokio::time::timeout(timeout, acceptor.accept(tcp)).await else {
@@ -121,15 +125,18 @@ pub async fn run(
                         .and_then(|chain| chain.first().cloned())
                         .map(|leaf| leaf.into_owned());
                     let service = TowerToHyperService::new(router.layer(Extension(Peer(peer))));
-                    let _ = hyper::server::conn::http1::Builder::new()
+                    let connection = hyper::server::conn::http1::Builder::new()
                         .timer(TokioTimer::new())
                         .header_read_timeout(timeout)
-                        .serve_connection(TokioIo::new(tls), service)
-                        .await;
+                        .serve_connection(TokioIo::new(tls), service);
+                    let _ = watcher.watch(connection).await;
                 });
             }
         }
     }
     health.abort();
+    // Stop accepting, let requests in flight finish (each is bounded by the
+    // request deadline), then return. Idle keep-alive connections close now.
+    let _ = tokio::time::timeout(timeout, graceful.shutdown()).await;
     Ok(())
 }

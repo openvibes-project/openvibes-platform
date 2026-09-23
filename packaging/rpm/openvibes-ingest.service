@@ -9,7 +9,8 @@ Type=exec
 User=openvibes_ingest
 Group=openvibes_ingest
 ExecStart=/usr/bin/openvibes-ingest --config /etc/openvibes/ingest.toml
-# The binary shuts down gracefully on SIGINT (ctrl-c).
+# On SIGINT ingest stops accepting and drains requests in flight
+# (bounded by request_timeout_seconds) before exiting.
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=5s

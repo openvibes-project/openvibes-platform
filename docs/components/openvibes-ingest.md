@@ -9,6 +9,10 @@ sections 3 and 6.
 `openvibes-ingest [--config /etc/openvibes/ingest.toml]`. Logs are JSON on
 stderr (journald).
 
+On SIGINT (ctrl-c; the unit's `KillSignal`) it stops accepting, closes idle
+connections, lets requests in flight finish (at most
+`request_timeout_seconds`), then exits 0.
+
 ## Configuration
 
 Strict TOML (unknown keys refused), absolute paths only:

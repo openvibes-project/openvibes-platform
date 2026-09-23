@@ -29,7 +29,9 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    403 `identity_revoked`, forgets its identity, and keeps the findings
    queued. With a new token it re-enrolls as a new `agent_id` (the old one
    stays `revoked`) and delivers the findings it queued while revoked, again
-   exactly once.
+   exactly once. The ids queued while revoked are recorded and each must
+   be stored under the new `agent_id`, so a dropped batch cannot hide behind
+   a later scan.
 
 A full run takes 2 to 3 minutes, because the agent ticks every 60 s.
 
@@ -51,6 +53,7 @@ tails of the ingest and agent logs, and stops every process it started.
 | `AGENT_BIN` | builds into `target/integration/agent` | a prebuilt agent at the pinned revision |
 | `BUNDLE_BIN` | `cargo run` of the example | a prebuilt `integration_bundle` |
 | `INGEST_PORT`, `HEALTH_PORT` | 28423, 28480 | loopback ports |
+| `INTEGRATION_DIR` | `target/integration/run` | working directory; every ancestor must be owned by root or the current user (the agent refuses its state directory otherwise) |
 
 ## Requirements
 
@@ -69,6 +72,6 @@ fails early (for example `INGEST_PORT=1`) leaves no process behind.
 
 CI: the `fedora` job installs the RPMs in a `fedora:44` container, builds
 the agent and bundle tool as root (which has the git credentials), and runs
-this script as an unprivileged user `ci` with `OPENVIBES_BIN_DIR=/usr/bin`
+this script as an unprivileged user `ci` with `OPENVIBES_BIN_DIR=/usr/bin` and `INTEGRATION_DIR=/home/ci/run`
 (`initdb` refuses root). This is spec section 1, item 1, on Fedora with
 Fedora's PostgreSQL.

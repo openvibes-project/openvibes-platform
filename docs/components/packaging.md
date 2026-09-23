@@ -35,7 +35,8 @@ directory itself, so no tmpfiles.d entry is needed.
 
 - `openvibes-ingest.service`: runs as `openvibes_ingest`, `Restart=on-failure`,
   `LimitNOFILE=65536` (keep `max_connections` below it), `KillSignal=SIGINT`
-  (the binary shuts down gracefully on ctrl-c). Hardening: `NoNewPrivileges`,
+  (on SIGINT ingest stops accepting, lets requests in flight finish, bounded
+  by `request_timeout_seconds`, then exits). Hardening: `NoNewPrivileges`,
   `ProtectSystem=strict` (no writable paths: ingest writes only to
   PostgreSQL), `ProtectHome`, `PrivateTmp`, `PrivateDevices`, kernel and
   cgroup protection, `RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX`,
@@ -48,26 +49,71 @@ directory itself, so no tmpfiles.d entry is needed.
 
 ## First install on Fedora
 
+Run as root. `openvibes-admin` connects as the OS user `openvibes_admin`
+(peer authentication), so every database command runs through
+`sudo -u openvibes_admin`; CA material is staged in a directory that user
+owns and installed by root afterwards.
+
 1. PostgreSQL: `dnf install postgresql-server`, `postgresql-setup --initdb`,
    `systemctl enable --now postgresql`.
-2. Database and admin role:
-   `sudo -u postgres createuser --createrole openvibes_admin` and
-   `sudo -u postgres createdb -O openvibes_admin openvibes`.
-3. `dnf install openvibes-ingest-*.rpm openvibes-admin-*.rpm`, then
-   `sudo -u openvibes_admin openvibes-admin migrate` (creates the
-   `openvibes_ingest` role) and `sudo -u openvibes_admin openvibes-admin maintenance`.
-4. CA (see [openvibes-admin.md](openvibes-admin.md)): `ca init-root` on an
-   offline machine; `ca intermediate-request` on this host; `ca
-   sign-intermediate` offline; then `ca import-intermediate` here. Install
-   `intermediate.crt` to `/etc/openvibes/pki/` (0644) and `intermediate.key`
-   to `/var/lib/openvibes-ingest/` (0600, owner `openvibes_ingest`).
-5. `ca issue-server <dns-name> [--san IP] --out /etc/openvibes/tls`, rename to
-   `ingest.crt`/`ingest.key` (or edit `ingest.toml`), and
-   `chown openvibes_ingest /etc/openvibes/tls/ingest.key`.
-6. Edit `/etc/openvibes/ingest.toml`, then
-   `systemctl enable --now openvibes-ingest openvibes-maintenance.timer` and
-   `firewall-cmd --permanent --add-port=18423/tcp && firewall-cmd --reload`.
-7. Check: `curl http://127.0.0.1:18480/ready` → 200.
+2. `dnf install openvibes-ingest-*.rpm openvibes-admin-*.rpm` (creates the
+   users), then the database and schema:
+
+   ```sh
+   sudo -u postgres createuser --createrole openvibes_admin
+   sudo -u postgres createdb -O openvibes_admin openvibes
+   sudo -u openvibes_admin openvibes-admin migrate       # creates the openvibes_ingest role
+   sudo -u openvibes_admin openvibes-admin maintenance
+   ```
+
+3. CA ([openvibes-admin.md](openvibes-admin.md)). The root lives on an
+   offline machine (`openvibes-admin ca init-root --out root`). On this host:
+
+   ```sh
+   S=/var/tmp/openvibes-ca
+   install -d -o openvibes_admin -g openvibes_admin -m 0700 $S
+   sudo -u openvibes_admin openvibes-admin ca intermediate-request --out $S/int
+   # offline: ca sign-intermediate --root root --csr intermediate.csr --out intermediate.crt
+   # bring intermediate.crt and root/root.crt back into $S/int (owner openvibes_admin)
+   sudo -u openvibes_admin openvibes-admin ca import-intermediate \
+       --cert $S/int/intermediate.crt --key $S/int/intermediate.key --root-cert $S/int/root.crt
+   sudo -u openvibes_admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
+       --issuer-cert $S/int/intermediate.crt --issuer-key $S/int/intermediate.key --out $S/tls
+   ```
+
+4. Install the files where ingest reads them, then remove the staging copies:
+
+   ```sh
+   install -m 0644 $S/int/intermediate.crt /etc/openvibes/pki/intermediate.crt
+   install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
+   install -m 0644 $S/tls/ingest.example.com.crt /etc/openvibes/tls/ingest.crt
+   install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
+   shred -u $S/int/intermediate.key $S/tls/ingest.example.com.key && rm -r $S
+   ```
+
+5. Review `/etc/openvibes/ingest.toml` (the defaults match the paths above),
+   then `systemctl enable --now openvibes-ingest openvibes-maintenance.timer`
+   and `firewall-cmd --permanent --add-port=18423/tcp && firewall-cmd --reload`.
+6. Check: `curl http://127.0.0.1:18480/ready` → 200.
+
+Agents trust `root.crt` (their `platform_ca_file`).
+
+## Renewing the server certificate
+
+It lasts 90 days. Before it expires, stage a copy of the intermediate key for
+the admin user, issue, install, and restart:
+
+```sh
+S=/var/tmp/openvibes-ca
+install -d -o openvibes_admin -g openvibes_admin -m 0700 $S
+install -o openvibes_admin -m 0600 /var/lib/openvibes-ingest/intermediate.key $S/intermediate.key
+sudo -u openvibes_admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
+    --issuer-cert /etc/openvibes/pki/intermediate.crt --issuer-key $S/intermediate.key --out $S/tls
+install -m 0644 $S/tls/ingest.example.com.crt /etc/openvibes/tls/ingest.crt
+install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
+shred -u $S/intermediate.key $S/tls/ingest.example.com.key && rm -r $S
+systemctl restart openvibes-ingest   # drains requests in flight first
+```
 
 ## Known gaps
 

@@ -7,7 +7,9 @@ ROOT=$(cd "$(dirname "$0")/.." && pwd)
 source "$ROOT/scripts/integration-lib.sh"
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
 
-W="$ROOT/target/integration/run"
+# The agent refuses a state directory with an untrusted ancestor (owned by
+# neither root nor the current user), so CI points this at the user's home.
+W=${INTEGRATION_DIR:-$ROOT/target/integration/run}
 INGEST_PORT=${INGEST_PORT:-28423}
 HEALTH_PORT=${HEALTH_PORT:-28480}
 PIDS=()
@@ -152,12 +154,18 @@ revoked_answer() {
 wait_for "revoked agent told identity_revoked" 75 revoked_answer
 queued() { (($(sqlite3 "$W/agent/state/queue.sqlite" "SELECT count(*) FROM pending") > 0)); }
 wait_for "findings stay queued while revoked" 5 queued
+REVOKED_IDS=$(sqlite3 "$W/agent/state/queue.sqlite" "SELECT finding_id FROM pending ORDER BY 1")
 reenrolled() {
     [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active' AND agent_id <> '$FIRST_AGENT'")" == 1 ]]
 }
 wait_for "agent re-enrolled with a new token" 75 reenrolled
 [[ "$(sql "SELECT status FROM agents WHERE agent_id = '$FIRST_AGENT'")" == revoked ]]
 wait_for "no finding lost or duplicated across re-enrollment" 75 acked_equals_stored
-(($(sql "SELECT count(*) FROM findings WHERE agent_id <> '$FIRST_AGENT'") >= 2)) ||
-    { echo "FAIL: findings queued while revoked were not delivered under the new identity"; exit 1; }
+# Exactly the findings queued while revoked (not just any later scan) must
+# arrive under the new identity.
+for id in $REVOKED_IDS; do
+    [[ "$(sql "SELECT count(*) FROM findings WHERE finding_id = '$id' AND agent_id <> '$FIRST_AGENT'")" == 1 ]] ||
+        { echo "FAIL: finding $id queued while revoked was not delivered under the new identity"; exit 1; }
+done
+echo "ok: findings queued while revoked delivered under the new identity"
 echo "integration: all checks passed"

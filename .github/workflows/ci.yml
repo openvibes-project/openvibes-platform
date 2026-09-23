@@ -143,4 +143,5 @@ jobs:
           runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin \
             AGENT_BIN="$(cat agent-path)" \
             BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
+            INTEGRATION_DIR=/home/ci/run \
             bash scripts/integration-agent.sh
