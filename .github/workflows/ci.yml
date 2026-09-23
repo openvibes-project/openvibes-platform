@@ -80,6 +80,14 @@ jobs:
       - name: Build and validate console frontend
         run: bash scripts/build-console.sh
 
+      - name: Install pinned console browsers
+        run: >-
+          npm --prefix crates/openvibes-console/web exec --
+          playwright install --with-deps chromium firefox webkit
+
+      - name: Test console in real browsers
+        run: bash scripts/test-console-e2e.sh
+
       - name: Format
         run: cargo fmt --all --check
 

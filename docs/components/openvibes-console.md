@@ -24,8 +24,9 @@ routes remain fail-closed until their later milestones provide the required
 database-backed sessions and authorisation.
 
 C0 is not complete yet. OpenAPI/client generation, a release build stamp,
-real-browser CSP and accessible-component proof, the checked offline npm source
-cache, and reviewed transparent production logo derivatives remain required.
+real-browser CSP/accessibility proof for the selected interaction primitives,
+the checked offline npm source cache, and reviewed transparent production logo
+derivatives remain required.
 
 ## Interfaces
 
@@ -108,15 +109,18 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F
 cargo doc --locked --workspace --all-features --no-deps
 cargo test --locked --workspace --all-features
 scripts/build-console.sh
+scripts/test-console-e2e.sh
 ```
-
-The planned `scripts/test-console-e2e.sh` lands with the real-browser C0 proof.
 
 Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded
-asset tests. C0 still adds Testing Library accessibility checks and Playwright
-journeys in Chromium, Firefox, and WebKit. Later contract tests exercise the
-complete Axum router first against deterministic seeded data and then against
-PostgreSQL. Security coverage expands from the current route fall-through,
-cache-header, and CSP checks to session/CSRF handling, object scope, audit
-atomicity, trusted proxies, secret redaction, and bounded CSV export.
+asset tests. Playwright journeys run the embedded binary in Chromium, Firefox,
+and WebKit and cover axe accessibility analysis, target CSP headers and browser
+violations, first-paint theme persistence, keyboard entry, and reserved-route
+fall-through. C0 still needs the selected dialog/menu/combobox primitives
+exercised in those browsers before a component dependency is fixed. Later
+contract tests exercise the complete Axum router first against deterministic
+seeded data and then against PostgreSQL. Security coverage expands from the
+current route fall-through, cache-header, and CSP checks to session/CSRF
+handling, object scope, audit atomicity, trusted proxies, secret redaction, and
+bounded CSV export.
