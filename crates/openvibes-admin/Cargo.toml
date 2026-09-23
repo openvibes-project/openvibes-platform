@@ -10,6 +10,8 @@ chrono.workspace = true
 clap.workspace = true
 platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
+ring.workspace = true
+base64.workspace = true
 platform-store = { path = "../platform-store" }
 serde.workspace = true
 tokio.workspace = true

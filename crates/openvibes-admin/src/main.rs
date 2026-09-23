@@ -6,6 +6,7 @@
 
 mod ca;
 mod files;
+mod token;
 
 use std::{path::PathBuf, process::ExitCode};
 
@@ -44,6 +45,11 @@ enum Command {
         #[command(subcommand)]
         command: ca::CaCommand,
     },
+    /// Enrollment tokens.
+    Token {
+        #[command(subcommand)]
+        command: token::TokenCommand,
+    },
 }
 
 impl Command {
@@ -53,6 +59,7 @@ impl Command {
             Self::Status => "status",
             Self::Maintenance { .. } => "maintenance",
             Self::Ca { command } => command.name(),
+            Self::Token { command } => command.name(),
         }
     }
 }
@@ -103,14 +110,18 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let actor = actor();
     let (result, target) = match &cli.command {
         Command::Ca { command } => match require_current_schema(&client).await {
             Ok(()) => ca::run_host(command, &client).await,
             Err(error) => (Err(error), command.target()),
         },
+        Command::Token { command } => match require_current_schema(&client).await {
+            Ok(()) => token::run(command, &client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
         other => (run(other, &mut client).await, None),
     };
-    let actor = actor();
     let outcome = if result.is_ok() { "ok" } else { "error" };
     let audited = platform_store::audit::record(
         &client,
@@ -186,7 +197,9 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
     }
     require_current_schema(client).await?;
     match command {
-        Command::Migrate | Command::Ca { .. } => unreachable!("handled by the caller"),
+        Command::Migrate | Command::Ca { .. } | Command::Token { .. } => {
+            unreachable!("handled by the caller")
+        }
         Command::Status => {
             let status = platform_store::status(client, Utc::now())
                 .await

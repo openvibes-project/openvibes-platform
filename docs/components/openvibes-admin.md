@@ -32,6 +32,16 @@ openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
 
+## Token commands
+
+| Command | Does |
+|---|---|
+| `token create --expires Nh\|Nd [--uses N] [--label TEXT]` | 32 random bytes, base64url; printed **once** with its id. Only the SHA-256 is stored. `--expires` 1h to 365d, `--uses` 1 to 100000 (default 1); out-of-range values exit 2 before any change. |
+| `token list` | id, state (usable, expired, used up, revoked), uses/max, expiry, label. Never shows tokens. |
+| `token revoke ID` | revokes; an already-revoked or unknown id is an error. |
+
+The audit target is the token id, never the token.
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,
