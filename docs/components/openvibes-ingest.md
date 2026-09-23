@@ -114,3 +114,8 @@ CARGO_NET_GIT_FETCH_WITH_CLI=true cargo test --locked -p openvibes-ingest
 `tests/support/mod.rs` builds a database, a PKI, and the real server
 in-process; `raw()` sends hand-made HTTPS requests, with or without a
 client certificate.
+
+The `integration_bundle` example (`cargo run -p openvibes-ingest --example
+integration_bundle -- OUT_FILE`) writes a signed two-rule test bundle for
+`scripts/integration-agent.sh` and prints its public key. It is test-only
+(a published seed, the same as the agent's tests) and never shipped.
