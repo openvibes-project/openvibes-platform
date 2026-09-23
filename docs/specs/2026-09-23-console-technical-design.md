@@ -591,6 +591,26 @@ manifest-referenced file. Browser routes have one shared declaration, or a
 test-generated equivalent, proving that known routes receive the index while
 `/api`, `/auth`, `/assets`, `/health`, and `/ready` never do.
 
+### 11.1 Brand assets and themes
+
+The supplied full-wordmark (2172×724) and compact-mark (1254×1254) PNGs are
+opaque RGB visual references, not production-ready transparent assets. Before
+C0 completes, prepare and review an asset set that preserves their geometry:
+transparent light- and dark-surface SVG variants plus required PNG/favicon
+derivatives. SVG sources have no scripts, animation, external references,
+fonts, or embedded raster/network content; reproducible builds generate the
+derivatives. Preserve aspect ratio and never recolour the logo from
+severity/status tokens.
+
+All UI colours are semantic CSS custom properties with complete light and dark
+token sets. `color-scheme` and `prefers-color-scheme` implement the default
+System choice. A `system|light|dark` override is a non-sensitive, same-site
+preference; the server may reflect it as the root `data-theme` value in the
+no-store entry document so refresh does not flash the wrong theme. The value is
+strictly allow-listed and never participates in authentication, authorisation,
+CSRF, or session handling. The theme control has a text label, keyboard access,
+and an announced selected value.
+
 ## 12. Build Model
 
 Production build:
@@ -768,3 +788,6 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 15. **Approved:** the first release includes bounded, filtered CSV audit export
     behind `audit.export`; every export is audited and spreadsheet formulas are
     neutralised.
+16. **Approved:** the first release supports System, Light, and Dark themes and
+    uses the supplied full wordmark plus compact V-with-signal mark. Production
+    logo assets are transparent, local, and have reviewed light/dark variants.
