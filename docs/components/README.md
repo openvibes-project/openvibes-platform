@@ -12,6 +12,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4) | [integration-agent.md](integration-agent.md) |
 | `packaging` | RPMs | openvibes-ingest, openvibes-admin, hardened units, maintenance timer (PM4) | [packaging.md](packaging.md) |
+| `load` | test tool | openvibes-load generator and runner (PM5) | [load.md](load.md) |
 
 Architecture and design: [`../specs/`](../specs/). Implementation plans:
 [`../plans/`](../plans/).
