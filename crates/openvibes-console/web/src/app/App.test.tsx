@@ -10,6 +10,8 @@ describe("console shell", () => {
     expect(markup).toContain("Skip to main content");
     expect(markup).toContain('aria-label="Primary navigation"');
     expect(markup).toContain('aria-current="page"');
+    expect(markup).toContain('aria-pressed="false"');
+    expect(markup).not.toContain("aria-expanded");
     expect(markup).toContain("Seeded environment");
     expect(markup).toContain("latest observed matches");
   });

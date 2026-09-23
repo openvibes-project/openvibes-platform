@@ -34,8 +34,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
           <button
             className="sidebar__collapse"
             type="button"
-            aria-expanded={!navigationCollapsed}
-            aria-controls="primary-navigation"
+            aria-pressed={navigationCollapsed}
             onClick={() => setNavigationCollapsed((current) => !current)}
           >
             <span aria-hidden="true">{navigationCollapsed ? "›" : "‹"}</span>

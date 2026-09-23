@@ -21,10 +21,19 @@ function initialPreference(): ThemePreference {
   }
 }
 
+function updateThemeColor(preference: ThemePreference): void {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const dark = preference === "dark" || (preference === "system" && prefersDark);
+  document
+    .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+    ?.setAttribute("content", dark ? "#11171d" : "#f5f4f0");
+}
+
 export function ThemeControl() {
   const [preference, setPreference] = useState<ThemePreference>(initialPreference);
 
   useEffect(() => {
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
     const handleStorage = (event: StorageEvent) => {
       if (event.key !== themeStorageKey) {
         return;
@@ -33,11 +42,18 @@ export function ThemeControl() {
       const nextPreference = parseThemePreference(event.newValue);
       setPreference(nextPreference);
       applyThemePreference(document.documentElement, nextPreference);
+      updateThemeColor(nextPreference);
     };
 
+    const handleColorScheme = () => updateThemeColor(preference);
+
     window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
+    colorScheme.addEventListener("change", handleColorScheme);
+    return () => {
+      window.removeEventListener("storage", handleStorage);
+      colorScheme.removeEventListener("change", handleColorScheme);
+    };
+  }, [preference]);
 
   const handleChange = (event: ChangeEvent<HTMLSelectElement>) => {
     const nextPreference = parseThemePreference(event.currentTarget.value);
@@ -50,6 +66,7 @@ export function ThemeControl() {
     }
 
     applyThemePreference(document.documentElement, nextPreference);
+    updateThemeColor(nextPreference);
   };
 
   return (
