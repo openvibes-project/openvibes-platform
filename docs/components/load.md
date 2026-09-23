@@ -42,6 +42,14 @@ so it behaves the same.
   counts responses that **completed** inside the window, so a backlog the
   generator or server clears only later lowers it. Otherwise exit 1.
 
+- **Memory:** at the end of the window: ingest RSS and peak RSS
+  (`/proc/PID/status`), and PostgreSQL PSS summed over the postmaster and
+  its children (`smaps_rollup`, so shared buffers count once).
+- **Storage:** `run.sh` records the findings count and on-disk size (all
+  partitions with indexes) before and after, in `$LOAD_DIR/storage.json`:
+  `bytes_per_new_finding`, and with a pre-fill `prefilled_bytes_per_finding`.
+  Generated findings match real agent finding sizes.
+
 ## Run
 
 ```sh
@@ -59,6 +67,7 @@ then the JSON summary; it is also kept in `$LOAD_DIR/summary.json`.
 | `OPENVIBES_BIN_DIR` | builds `target/release` | ingest and admin binaries |
 | `LOAD_ARGS` | none | extra generator flags, e.g. `--workers 64` |
 | `INGEST_EXTRA` | none | extra `ingest.toml` lines |
+| `PREFILL_FINDINGS` | 0 | first store N synthetic findings over the last 89 days (20 M ≈ 9.6 GB, about 5 min) |
 | `INGEST_PORT`, `HEALTH_PORT` | 28523, 28580 | loopback ports |
 
 ## How to test
@@ -72,6 +81,9 @@ The first smoke run found a real defect: a 42 ms p50 heartbeat from Nagle's
 algorithm, fixed by `TCP_NODELAY` in ingest.
 
 ## Results (2026-09-23)
+
+Memory and storage results (2026-09-24), including a run on a 20 M-finding
+database, are in [`../sizing.md`](../sizing.md).
 
 ```
 cpu: AMD Ryzen 9 3900X 12-Core Processor, 24 threads
