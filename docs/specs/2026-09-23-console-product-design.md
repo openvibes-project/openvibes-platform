@@ -91,7 +91,7 @@ A copied view therefore shares the query, not a caller-specific position.
 | Rule upload preview | Verify an already signed envelope before publication | `rules.upload` |
 | Access control | Roles, user/group bindings, scopes, effective access | `rbac.read`, `rbac.manage` |
 | Service accounts | Create/disable API identities and issue/revoke expiring tokens | `service_accounts.read`, `service_accounts.manage` |
-| Audit log | Search authentication and privileged-action events | `audit.read` |
+| Audit log | Search authentication and privileged-action events; show the effective retention policy | `audit.read`; policy changes use `audit.retention.manage` |
 
 Explicitly excluded from the first release: deployment-package builder,
 correlation/incidents, CMDB, inventory explorer, remediation workflow,
@@ -201,6 +201,14 @@ state never makes an observation "resolved" or proves the condition absent.
 Every transition is audited and protected by `If-Match`; a stale page must
 reload before overwriting another analyst's work. Section 13 defines the
 approved states and re-observation behaviour.
+
+### 5.8 Change audit retention
+
+Audit events are retained for 365 days by default. A globally authorised
+administrator can change the retention period from the Audit log page. The
+review step shows the current and proposed cutoff and warns when a reduction
+will make older events eligible for deletion. The change uses `If-Match`, is
+itself audited, and does not synchronously delete rows in the web request.
 
 ## 6. Page Behaviour and Data Presentation
 
@@ -476,3 +484,11 @@ Open → Investigating → Mitigated
 
 These are human workflow states only. None asserts that the underlying
 condition has cleared.
+
+## 14. Approved Audit Retention
+
+The default audit retention is 365 days and is administrator-configurable.
+The effective period and calculated cutoff are visible on the Audit log page.
+Retention cleanup runs asynchronously in bounded maintenance batches; events
+at or newer than the cutoff remain immutable. Audit export remains a separate
+first-release decision.

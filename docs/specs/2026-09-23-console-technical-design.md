@@ -290,6 +290,7 @@ release and has no console endpoint.
 | `/api/v1/access/bindings` | `rbac.read` | `rbac.manage` |
 | `/api/v1/access/asset-groups` | `rbac.read` | `asset_groups.manage` |
 | `/api/v1/audit-events` | `audit.read` | none |
+| `/api/v1/audit-retention` | `audit.read` | `audit.retention.manage` |
 | `/api/v1/service-accounts` | `service_accounts.read` | `service_accounts.manage` |
 | `/api/v1/service-accounts/{id}/tokens` | `service_accounts.read` | `service_accounts.manage` |
 
@@ -406,7 +407,7 @@ agents.read             agents.revoke
 findings.read           findings.triage
 tokens.read             tokens.create            tokens.revoke
 rules.read              rules.upload
-audit.read
+audit.read              audit.retention.manage
 rbac.read               rbac.manage
 asset_groups.manage
 service_accounts.read   service_accounts.manage
@@ -430,7 +431,8 @@ groups to the same model. Effective access is the union of bindings.
 
 Asset-group scope applies only to agent-bound data: agents, certificate
 metadata, findings, their facets, and their summaries. Tokens, rules, audit,
-RBAC, service accounts, and system administration require global permission.
+RBAC, service accounts, audit retention, and system administration require
+global permission.
 A scoped binding contributes only the role's agent-bound permissions; its
 global permissions are inert. For example, a scoped Operator may read/revoke
 matching agents but may not create tokens or upload rules. The binding review
@@ -516,6 +518,16 @@ certificate PEM, or raw IdP assertions.
 
 Ordinary scoped list reads need not create a row. Denials, audit access,
 exports, control-plane reads, and every privileged mutation do.
+
+Audit events are retained for 365 days by default. A versioned global policy
+allows an administrator with `audit.retention.manage` to change that period.
+`PUT /api/v1/audit-retention` requires `If-Match`; reductions require an
+explicit confirmation field and return the resulting UTC cutoff in the review
+and committed response. The policy change and its audit event commit together.
+Cleanup is an asynchronous `openvibes-admin maintenance` operation that
+deletes only events older than the effective cutoff in bounded batches; the
+web request never performs the purge. The effective policy and cutoff remain
+readable with `audit.read`.
 
 ## 11. Browser and Asset Security
 
@@ -630,8 +642,11 @@ Append-only migrations after the current schema 2 must add or extend:
    rule version, and accepted-risk expiry;
 6. rule sets, trusted public keys, and exact signed bundle versions;
 7. structured append-only audit metadata while preserving CLI compatibility;
-8. least-privilege `openvibes_console` role without DDL or audit update/delete;
-9. measured indexes for every stable cursor and filter tuple.
+8. a versioned singleton audit-retention policy, defaulting to 365 days, plus
+   a timestamp index for bounded maintenance cleanup;
+9. least-privilege `openvibes_console` role without DDL or unrestricted audit
+   update/delete; cleanup uses a narrowly scoped store operation;
+10. measured indexes for every stable cursor and filter tuple.
 
 Existing schema gaps:
 
@@ -680,6 +695,9 @@ At minimum, test:
   cannot be used after their account is disabled;
 - triage rejects stale or illegal transitions, preserves immutable observation
   data, and commits each state/assignment/note change atomically with audit;
+- audit retention defaults to 365 days; stale policy updates fail; reductions
+  require confirmation; cleanup preserves events at the cutoff and newer and
+  cannot bypass the audited policy mutation path;
 - tag mutation requires global authority;
 - forwarded headers are ignored outside trusted proxies;
 - API/auth 404s cannot fall through to the SPA index;
@@ -727,3 +745,6 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
     Mitigated, Accepted Risk, and False Positive. Re-observation reopens
     Mitigated, expired Accepted Risk, and False Positive after a rule-version
     change; an active Investigating assignment remains intact.
+14. **Approved:** audit events default to 365 days of retention. A global
+    administrator can change the versioned policy; reductions are confirmed
+    and audited, and maintenance applies the cutoff asynchronously.

@@ -164,7 +164,10 @@ Work:
 - implement permission middleware plus handler-level object scope;
 - extend the C2 store queries so asset scope is enforced inside SQL before
   aggregation, facets, sorting, filtering, and pagination;
-- add access-control and audit read pages;
+- add access-control and audit read pages, including the effective 365-day
+  default retention policy and its globally authorised, audited update flow;
+- extend bounded maintenance to delete audit events older than the effective
+  cutoff without granting the console unrestricted audit deletion;
 - enforce the final CSP and browser headers.
 
 OIDC, SAML, TOTP, and WebAuthn are later adapters over this identity/session
@@ -267,7 +270,8 @@ Only after their contracts exist:
 ## 10. Approval Gate
 
 Begin C0/C1 only after approving the core stack and seeded-first boundary.
-Before C2/C3, decide audit retention/export requirements and direct TLS versus
-an approved reverse proxy. Hostname, manual tags, service accounts, CLI-only
-rule trust-key management, and the complete first-release triage contract are
+Before C2/C3, decide audit export requirements and direct TLS versus an
+approved reverse proxy. Hostname, manual tags, service accounts, CLI-only rule
+trust-key management, the complete first-release triage contract, and
+administrator-configurable audit retention defaulting to 365 days are
 approved.
