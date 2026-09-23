@@ -9,3 +9,34 @@ receive-only ingest service (agents connect on port 18423), a rule
 distribution service, correlation, third-party/CMDB sync, and a web interface
 on 443. Everything exchanged with agents is specified in the
 `openvibes-protocol` repository; build against its schemas and fixtures.
+
+## Parallel work (Claude Code and Codex)
+
+Two AI tools work in this repository at the same time, each in its own git
+worktree and branch. Never work in the other tool's directory.
+
+| Tool | Worktree | Branch | Owns |
+|---|---|---|---|
+| Claude Code | `../openvibes-platform` | `pm0-pm1`, then per milestone | `openvibes-ingest`, `openvibes-admin`, `platform-pki`, `platform-config` |
+| Codex | `../openvibes-platform-console` | `console` | `openvibes-console` (admin API, RBAC, login, web UI) and its spec |
+
+Rules:
+
+- **Specs before code.** The console is designed in
+  `docs/specs/<date>-console-design.md` and approved by the user before any
+  implementation, like every sub-project (see the architecture spec).
+- **Shared crates** (`platform-store`, `platform-config`): change them in
+  small, separate commits that merge to `main` first; the other branch then
+  rebases. Never change another tool's crate.
+- **Migrations are append-only.** Never edit a migration that has reached
+  `main`. If both branches add the same number, whoever merges second
+  renumbers theirs.
+- **Expected small conflicts**: workspace `members` in `Cargo.toml`,
+  `Cargo.lock` (regenerate), `docs/components/README.md`. Resolve on rebase.
+- **Component docs**: every crate or module gets its page in
+  `docs/components/` in the same change.
+- **Shared notes** (`../status.md`, `../decisions.md`, one directory with no
+  branches): edit only your own tool's section of `status.md`, only append to
+  `decisions.md`, and commit immediately after editing.
+- Tests use `scripts/test-db.sh`, which keeps its cluster under the
+  worktree's own `target/`, so worktrees never share a database.

@@ -1,0 +1,86 @@
+# Every action is pinned to a full commit SHA with its version in a comment.
+name: CI
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  OPENVIBES_TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/postgres
+
+jobs:
+  test:
+    name: Lint, audit, and tests (ubuntu-latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The agent (openvibes-core) and protocol (fixtures) repositories are
+      # private. Each has its own fine-grained, read-only token, used only
+      # for that repository's URL and verbatim, so GitHub's log masking holds.
+      - name: Authenticate git for private dependencies
+        shell: bash
+        env:
+          AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
+          PROTOCOL_TOKEN: ${{ secrets.OPENVIBEPROTOCOL }}
+        run: |
+          if [ -z "$AGENT_TOKEN" ] || [ -z "$PROTOCOL_TOKEN" ]; then
+            echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
+            exit 1
+          fi
+          git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
+          git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
+          git submodule update --init
+
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Clippy
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F unsafe-code
+
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc --locked --workspace --all-features --no-deps
+
+      - name: Tests
+        run: cargo test --locked --workspace --all-features
+
+      - name: Install cargo-audit
+        uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
+        with:
+          tool: cargo-audit@0.22.2
+
+      - name: Audit dependencies (RustSec)
+        run: cargo audit --deny warnings
