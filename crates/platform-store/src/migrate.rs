@@ -3,10 +3,16 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// Every migration, in order, embedded at build time.
-const MIGRATIONS: &[(i32, &str)] = &[(1, include_str!("../../../migrations/0001_initial.sql"))];
+const MIGRATIONS: &[(i32, &str)] = &[
+    (1, include_str!("../../../migrations/0001_initial.sql")),
+    (
+        2,
+        include_str!("../../../migrations/0002_ca_tokens_agents.sql"),
+    ),
+];
 
 const VERSION_TABLE: &str = "CREATE TABLE IF NOT EXISTS schema_version (version integer NOT NULL)";
 

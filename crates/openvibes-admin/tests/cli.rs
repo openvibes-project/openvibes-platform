@@ -111,7 +111,7 @@ fn row(action: &str, result: &str) -> (String, String, String) {
 #[tokio::test]
 async fn migrate_status_and_maintenance_are_audited() {
     let fixture = Fixture::create().await;
-    assert!(stdout(&fixture.run(&["migrate"])).contains("schema version 1"));
+    assert!(stdout(&fixture.run(&["migrate"])).contains("schema version 2"));
     let status = stdout(&fixture.run(&["status"]));
     for line in [
         "agents active 0",
