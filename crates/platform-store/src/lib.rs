@@ -4,15 +4,19 @@
 //! The only crate that touches PostgreSQL: connection pool, schema
 //! migrations, and every query the platform runs.
 
+/// The append-only audit log.
+pub mod audit;
 mod maintenance;
 mod migrate;
 mod status;
 
 use std::{fmt, str::FromStr};
 
-use deadpool_postgres::{Manager, Pool};
+use deadpool_postgres::Manager;
 use tokio_postgres::NoTls;
 
+/// Pooled connection and pool types, so callers need no pool dependency.
+pub use deadpool_postgres::{Client, Pool};
 pub use maintenance::{drop_partitions_before, ensure_partitions};
 pub use migrate::{SCHEMA_VERSION, migrate, schema_version};
 pub use status::{OFFLINE_AFTER_MINUTES, Status, status};

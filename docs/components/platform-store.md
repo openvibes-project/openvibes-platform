@@ -5,6 +5,8 @@ functions, so schema knowledge and SQL live in one place.
 
 ## Interface
 
+- `Client` and `Pool` are re-exported from `deadpool-postgres`, so callers
+  need no pool dependency.
 - `connect(url) -> Result<Pool, StoreError>`: a `deadpool-postgres` pool of
   up to 16 connections. `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
@@ -26,6 +28,11 @@ Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
 `enrollment_tokens`, `token_uses`, `findings` (partitioned by
 `observed_day`), `current_findings`, `audit_log`, and the least-privilege
 role `openvibes_ingest`. The migrating role needs `CREATEROLE`.
+
+## Audit log
+
+`audit::record(&client, actor, action, target, result)` appends one row.
+The `detail` column is never given secrets.
 
 ## Partitions and retention
 

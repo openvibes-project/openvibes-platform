@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/openvibes-ingest", "crates/platform-config", "crates/platform-store"]
+members = ["crates/openvibes-ingest", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin"]
 
 [workspace.package]
 version = "0.1.0"
