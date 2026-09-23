@@ -20,7 +20,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | Key | Default | Range |
 |---|---|---|
 | `listen` | required | agent-facing TLS address |
-| `health_listen` | required | loopback address for `/health`, `/ready` |
+| `health_listen` | required | loopback address for `/health`, `/ready`; any other address is refused |
 | `server_certificate_file`, `server_key_file` | required | server chain (leaf first) and key |
 | `client_ca_file` | required | CA whose client certificates are accepted |
 | `issuing_certificate_file`, `issuing_key_file` | required | intermediate that signs agent certificates |

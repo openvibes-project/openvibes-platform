@@ -77,7 +77,9 @@ impl IngestConfig {
             &self.issuing_key_file,
         ])
         .map_err(|_| IngestError::Config)?;
-        let valid = (1..=365).contains(&self.client_certificate_days)
+        // Health and readiness are unauthenticated: loopback only.
+        let valid = self.health_listen.ip().is_loopback()
+            && (1..=365).contains(&self.client_certificate_days)
             && self.max_in_flight >= 1
             && (1..=36_500).contains(&self.finding_retention_days)
             && (1..=300).contains(&self.request_timeout_seconds)
