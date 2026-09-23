@@ -73,8 +73,9 @@ host, carry only the **CSR** to the offline machine, `sign-intermediate`
 there, carry only the **certificate** back, then `import-intermediate`.
 The intermediate key never leaves the ingest host and the root key never
 leaves the offline machine. `import-intermediate` refuses a key that does
-not match the certificate or a certificate the given root did not sign, and
-records nothing then. Offline commands work without any config file.
+not match the certificate, a certificate the given root did not sign, one
+that is not an intermediate (the root itself, a leaf, or a CA without path
+length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
 
 ## Test
 

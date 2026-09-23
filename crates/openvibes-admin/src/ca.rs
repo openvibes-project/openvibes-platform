@@ -177,7 +177,7 @@ pub async fn run_host(
                 let cert = read_pem(cert)?;
                 let root = read_pem(root_cert)?;
                 Issuer::load(&cert, &read_pem(key)?).map_err(pki)?;
-                platform_pki::verify_signed_by(&cert, &root).map_err(pki)?;
+                platform_pki::check_intermediate(&cert, &root, Utc::now()).map_err(pki)?;
                 platform_pki::verify_signed_by(&root, &root).map_err(pki)?;
                 let fingerprint = platform_pki::sha256_fingerprint(&cert).map_err(pki)?;
                 Ok::<_, String>((cert, root, fingerprint))

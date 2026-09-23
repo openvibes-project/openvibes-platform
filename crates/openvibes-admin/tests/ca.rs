@@ -185,3 +185,25 @@ async fn a_bad_import_records_nothing_and_is_audited() {
     assert_eq!(results, ["ok", "error", "error"]);
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn the_root_cannot_be_imported_as_the_intermediate() {
+    let dir = scratch_dir("root-as-intermediate");
+    offline_chain(&dir);
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let refused = fixture.run(&[
+        "ca",
+        "import-intermediate",
+        "--cert",
+        s(&dir.join("root/root.crt")),
+        "--key",
+        s(&dir.join("root/root.key")),
+        "--root-cert",
+        s(&dir.join("root/root.crt")),
+    ]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("not an intermediate"));
+    assert_eq!(fixture.count("SELECT count(*) FROM ca_certificates").await, 0);
+    fixture.drop().await;
+}

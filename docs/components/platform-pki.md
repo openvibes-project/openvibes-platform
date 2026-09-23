@@ -48,6 +48,9 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `Issuer::load(cert_pem, key_pem)`: refuses a non-CA certificate (`NotCa`)
   and a key that does not belong to it (`KeyMismatch`).
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
+- `check_intermediate(cert, root_cert, now)`: a CA with path length 0 that
+  is not self-signed (`NotIntermediate`), signed by the root (`NotSignedBy`),
+  and valid at `now` (`IssuerExpired`).
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,

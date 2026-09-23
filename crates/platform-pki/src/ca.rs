@@ -206,6 +206,33 @@ pub fn verify_signed_by(cert_pem: &str, issuer_cert_pem: &str) -> Result<(), Pki
         .map_err(|_| PkiError::NotSignedBy)
 }
 
+/// Whether `cert_pem` is a usable intermediate of `root_cert_pem` at `now`:
+/// a CA with path length 0 (so not a leaf and not the root itself), signed
+/// by the root, and currently valid.
+pub fn check_intermediate(
+    cert_pem: &str,
+    root_cert_pem: &str,
+    now: DateTime<Utc>,
+) -> Result<(), PkiError> {
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    let constraints = cert
+        .basic_constraints()
+        .map_err(|_| PkiError::InvalidPem)?
+        .map(|extension| (extension.value.ca, extension.value.path_len_constraint));
+    let self_signed = cert.subject() == cert.issuer();
+    if constraints != Some((true, Some(0))) || self_signed {
+        return Err(PkiError::NotIntermediate);
+    }
+    verify_signed_by(cert_pem, root_cert_pem)?;
+    let validity = cert.validity();
+    let now = now.timestamp();
+    if now < validity.not_before.timestamp() || now > validity.not_after.timestamp() {
+        return Err(PkiError::IssuerExpired);
+    }
+    Ok(())
+}
+
 /// SHA-256 of the first certificate's DER encoding.
 pub fn sha256_fingerprint(cert_pem: &str) -> Result<[u8; 32], PkiError> {
     let der = der_of(cert_pem)?;
