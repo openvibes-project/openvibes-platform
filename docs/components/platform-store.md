@@ -27,7 +27,8 @@ runs serialize; already-applied migrations are skipped. A database at a
 Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
 `enrollment_tokens`, `token_uses`, `findings` (partitioned by
 `observed_day`), `current_findings`, `audit_log`, and the least-privilege
-role `openvibes_ingest`. The migrating role needs `CREATEROLE`.
+role `openvibes_ingest` (which may also read `schema_version`, for its
+readiness check). The migrating role needs `CREATEROLE`.
 
 ## Audit log
 

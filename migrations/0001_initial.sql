@@ -82,5 +82,7 @@ END $$;
 GRANT SELECT, INSERT, UPDATE ON agents, certificates, token_uses, findings, current_findings
     TO openvibes_ingest;
 GRANT SELECT ON enrollment_tokens TO openvibes_ingest;
+-- migrate() creates schema_version before this file runs; /ready reads it.
+GRANT SELECT ON schema_version TO openvibes_ingest;
 GRANT INSERT ON audit_log TO openvibes_ingest;
 GRANT USAGE ON SEQUENCE audit_log_id_seq TO openvibes_ingest;

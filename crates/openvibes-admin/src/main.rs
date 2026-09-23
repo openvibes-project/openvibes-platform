@@ -32,8 +32,8 @@ enum Command {
     Status,
     /// Create upcoming finding partitions and drop expired ones.
     Maintenance {
-        /// Keep findings for this many days.
-        #[arg(long, default_value_t = 90)]
+        /// Keep findings for this many days (1 to 36500).
+        #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u32).range(1..=36500))]
         retention_days: u32,
     },
 }
@@ -79,7 +79,7 @@ async fn main() -> ExitCode {
         }
     };
     let result = run(&cli.command, &mut client).await;
-    let actor = std::env::var("USER").unwrap_or_else(|_| "unknown".into());
+    let actor = actor();
     let outcome = if result.is_ok() { "ok" } else { "error" };
     let audited =
         platform_store::audit::record(&client, &actor, cli.command.name(), None, outcome).await;
@@ -100,6 +100,22 @@ async fn main() -> ExitCode {
             }
             ExitCode::FAILURE
         }
+    }
+}
+
+/// The invoking OS user for the audit log: the real uid, which the caller
+/// cannot choose, with `$USER` (which it can) only as a readable hint.
+fn actor() -> String {
+    #[cfg(unix)]
+    let uid = {
+        use std::os::unix::fs::MetadataExt;
+        std::fs::metadata("/proc/self").map_or_else(|_| "unknown".into(), |m| m.uid().to_string())
+    };
+    #[cfg(not(unix))]
+    let uid = String::from("unknown");
+    match std::env::var("USER") {
+        Ok(user) if !user.is_empty() => format!("{user} (uid {uid})"),
+        _ => format!("uid {uid}"),
     }
 }
 
@@ -142,10 +158,18 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         }
         Command::Maintenance { retention_days } => {
             let today = Utc::now().date_naive();
-            let created = platform_store::ensure_partitions(client, today, PARTITIONS_AHEAD)
-                .await
-                .map_err(fail)?;
-            let cutoff = today - Duration::days(i64::from(*retention_days));
+            let cutoff = today
+                .checked_sub_signed(Duration::days(i64::from(*retention_days)))
+                .ok_or("retention window out of range")?;
+            // Every day in the retention window gets a partition, so a late
+            // or backlogged finding always has somewhere to go.
+            let created = platform_store::ensure_partitions(
+                client,
+                cutoff,
+                retention_days + PARTITIONS_AHEAD,
+            )
+            .await
+            .map_err(fail)?;
             let dropped = platform_store::drop_partitions_before(client, cutoff)
                 .await
                 .map_err(fail)?;
