@@ -212,22 +212,11 @@ fn tick(
     samples
 }
 
-/// utime + stime of `pid` in clock ticks, from /proc/PID/stat.
-fn cpu_ticks(pid: u32) -> u64 {
-    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
-        return 0;
-    };
-    // Fields after the parenthesised command name; utime and stime are the
-    // 14th and 15th fields overall, so the 12th and 13th after it.
-    let rest = stat.rsplit_once(')').map_or("", |(_, rest)| rest);
-    let fields: Vec<&str> = rest.split_whitespace().collect();
-    let field = |n: usize| {
-        fields
-            .get(n)
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0)
-    };
-    field(11) + field(12)
+/// utime + stime of `pid` in clock ticks, from /proc/PID/stat; with
+/// `with_children`, plus the CPU of children it has reaped.
+fn cpu_ticks(pid: u32, with_children: bool) -> u64 {
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_or(0, |stat| plan::stat_ticks(&stat, with_children))
 }
 
 /// The postmaster and all its children (backends, workers).
@@ -258,8 +247,13 @@ fn postgres_pids(postmaster: u32) -> Vec<u32> {
     pids
 }
 
+/// The live backends plus the postmaster, whose reaped-children time holds
+/// backends that exited during the window.
 fn postgres_ticks(postmaster: u32) -> u64 {
-    postgres_pids(postmaster).into_iter().map(cpu_ticks).sum()
+    postgres_pids(postmaster)
+        .into_iter()
+        .map(|pid| cpu_ticks(pid, pid == postmaster))
+        .sum()
 }
 
 fn proc_mib(pid: u32, file: &str, key: &str) -> f64 {
@@ -289,8 +283,8 @@ fn memory(args: &Args) -> serde_json::Value {
 
 fn snapshot(args: &Args) -> [u64; 3] {
     [
-        cpu_ticks(std::process::id()),
-        args.ingest_pid.map_or(0, cpu_ticks),
+        cpu_ticks(std::process::id(), false),
+        args.ingest_pid.map_or(0, |pid| cpu_ticks(pid, false)),
         args.postmaster_pid.map_or(0, postgres_ticks),
     ]
 }
@@ -400,10 +394,16 @@ fn main() -> ExitCode {
     let _ = scheduler.join();
     let mut samples = Vec::new();
     let mut max_lag = Duration::ZERO;
+    // A worker that panicked lost its samples: that is an error, never a
+    // silently smaller run.
+    let mut panicked = 0_u64;
     for worker in workers {
-        if let Ok((worker_samples, lag)) = worker.join() {
-            samples.extend(worker_samples);
-            max_lag = max_lag.max(lag);
+        match worker.join() {
+            Ok((worker_samples, lag)) => {
+                samples.extend(worker_samples);
+                max_lag = max_lag.max(lag);
+            }
+            Err(_) => panicked += 1,
         }
     }
 
@@ -414,6 +414,9 @@ fn main() -> ExitCode {
         if let Some(error) = &sample.error {
             *errors.entry(error.clone()).or_default() += 1;
         }
+    }
+    if panicked > 0 {
+        errors.insert("worker panicked".into(), panicked);
     }
     let latencies = |kind: Option<Kind>| {
         measured

@@ -36,9 +36,12 @@ so it behaves the same.
   heartbeat's includes the TLS handshake. Queueing before a tick starts is
   not in it; it shows as lag. Nearest-rank p50, p99, and max, overall and per kind.
 - **CPU:** from `/proc`, in cores (CPU seconds per second): the generator, the
-  ingest process, and the postmaster with all its children.
+  ingest process, and the postmaster with all its children. The postmaster's
+  reaped-children time is included, so a backend that exits during the
+  window still counts.
 - **Pass:** no errors (every non-2xx or transport error is counted by kind),
-  lag ≤ 1 s, and an achieved rate ≥ 95 % of the target. The achieved rate
+  lag ≤ 1 s, and an achieved rate ≥ 95 % of the target. A worker thread that
+  panics counts as an error (`worker panicked`). The achieved rate
   counts responses that **completed** inside the window, so a backlog the
   generator or server clears only later lowers it. Otherwise exit 1.
 

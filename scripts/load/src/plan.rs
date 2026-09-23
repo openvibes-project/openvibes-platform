@@ -43,6 +43,28 @@ pub fn finding_id(agent: usize, tick: u64, n: usize) -> String {
     )
 }
 
+/// CPU clock ticks from a /proc/PID/stat line: utime + stime, plus cutime +
+/// cstime (reaped children) when `with_children`.
+pub fn stat_ticks(stat: &str, with_children: bool) -> u64 {
+    // The command name may contain anything, so fields count from its
+    // closing parenthesis: utime is the 12th field after it.
+    let Some((_, rest)) = stat.rsplit_once(')') else {
+        return 0;
+    };
+    let fields: Vec<u64> = rest
+        .split_whitespace()
+        .skip(11)
+        .take(4)
+        .filter_map(|field| field.parse().ok())
+        .collect();
+    let own = fields.iter().take(2).sum::<u64>();
+    if with_children {
+        own + fields.iter().skip(2).sum::<u64>()
+    } else {
+        own
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,5 +130,15 @@ mod tests {
         );
         assert_ne!(finding_id(1, 2, 3), finding_id(1, 3, 2));
         assert_ne!(finding_id(0, 0, 0), finding_id(0, 0, 1));
+    }
+
+    #[test]
+    fn stat_ticks_skip_the_command_name() {
+        // pid (comm, which may hold spaces and parens) state ppid ... utime
+        // stime cutime cstime at fields 14 to 17.
+        let stat = "123 (postgres: io (w) 1) S 1 2 3 4 5 6 7 8 9 10 700 30 5000 60 20 0";
+        assert_eq!(stat_ticks(stat, false), 730);
+        assert_eq!(stat_ticks(stat, true), 5790);
+        assert_eq!(stat_ticks("garbage", true), 0);
     }
 }
