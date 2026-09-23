@@ -96,7 +96,11 @@ A copied view therefore shares the query, not a caller-specific position.
 Explicitly excluded from the first release: deployment-package builder,
 correlation/incidents, CMDB, inventory explorer, remediation workflow,
 report builder, custom dashboards, bulk agent revocation, web-based rule trust
-key or CA key management, and mobile administration.
+key or CA key management, platform configuration-file editing, service
+start/stop/restart, host diagnostics, and mobile administration. Local host
+administration belongs to the separate `openvibes-admin tui`, not the web
+console or `/api/v1`. Host configuration and service lifecycle remain TUI-only
+beyond v1 unless a separate security design explicitly changes that boundary.
 
 A System Status page waits for a reliable service-health contract. A failed
 console database request is not a monitoring system.

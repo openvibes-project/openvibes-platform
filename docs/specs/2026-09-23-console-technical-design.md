@@ -25,6 +25,11 @@ Trust domains stay physically and logically separate:
 Use a client-rendered React + TypeScript application built by Vite and served
 same-origin from an Axum `openvibes-console` binary.
 
+The console is the remote web GUI and human/service-account API. It never
+starts, stops, or restarts platform services and does not edit host TOML files.
+Those local operating-system concerns belong to `openvibes-admin tui`, which
+has no network listener and is outside the console trust boundary.
+
 Browser capabilities:
 
 - React with TypeScript strict mode;
@@ -432,8 +437,8 @@ groups to the same model. Effective access is the union of bindings.
 
 Asset-group scope applies only to agent-bound data: agents, certificate
 metadata, findings, their facets, and their summaries. Tokens, rules, audit,
-RBAC, service accounts, audit retention, and system administration require
-global permission.
+RBAC, service accounts, audit retention, and other console control-plane
+administration require global permission.
 A scoped binding contributes only the role's agent-bound permissions; its
 global permissions are inert. For example, a scoped Operator may read/revoke
 matching agents but may not create tokens or upload rules. The binding review
@@ -640,6 +645,14 @@ The public TLS listener serves only UI/API/auth routes. `health_listen` is a
 separate loopback-only listener for `/health` and `/ready` and refuses a
 non-loopback configuration.
 
+Direct TLS 1.3 termination in `openvibes-console` is the secure default. An
+explicit reverse-proxy mode is allowed only with a configured canonical
+external HTTPS origin and an allow-list of trusted proxy addresses. Plain HTTP
+may bind only to loopback or a Unix socket; a non-loopback upstream remains
+TLS-protected. Forwarded headers are ignored unless the immediate peer is
+trusted, and Host/Origin validation uses the configured external origin rather
+than untrusted forwarding data. Wildcard plaintext proxy binds are refused.
+
 During development, Vite proxies `/api` and `/auth` to the loopback seeded
 Axum server. Production serves the same API DTOs and handlers.
 
@@ -736,7 +749,9 @@ At minimum, test:
   is not cached, records success/failure without logging row contents, and
   creates/removes only private files inside its dedicated spool directory;
 - tag mutation requires global authority;
-- forwarded headers are ignored outside trusted proxies;
+- forwarded headers are ignored outside trusted proxies; proxy mode refuses
+  wildcard plaintext binds and rejects requests outside the canonical external
+  HTTPS origin;
 - API/auth 404s cannot fall through to the SPA index;
 - state mutation and audit append are atomic;
 - static assets have correct type, cache headers, CSP, and `nosniff`;
@@ -791,3 +806,6 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 16. **Approved:** the first release supports System, Light, and Dark themes and
     uses the supplied full wordmark plus compact V-with-signal mark. Production
     logo assets are transparent, local, and have reviewed light/dark variants.
+17. **Approved:** `openvibes-console` terminates TLS 1.3 directly by default.
+    Reverse-proxy mode is explicit, trusts only configured proxy peers, and
+    never permits a wildcard plaintext upstream listener.

@@ -229,7 +229,9 @@ Goal: production-ready RPM and systemd service.
 Work:
 
 - bounded console TOML configuration and absolute-path checks;
-- TLS 1.3 server configuration or an explicitly approved proxy topology;
+- direct TLS 1.3 server configuration by default; explicit proxy mode requires
+  a canonical external HTTPS origin, trusted proxy allow-list, and loopback/
+  Unix-socket plaintext or TLS-protected non-loopback upstream;
 - RPM build order including deterministic frontend assets;
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
@@ -279,7 +281,8 @@ Only after their contracts exist:
 ## 10. Approval Gate
 
 Begin C0/C1 only after approving the core stack and seeded-first boundary.
-Before C2/C3, decide direct TLS versus an approved reverse proxy. Hostname,
-manual tags, service accounts, CLI-only rule trust-key management, the complete
-first-release triage contract, administrator-configurable audit retention
-defaulting to 365 days, and bounded CSV audit export are approved.
+The core design gate is approved: direct TLS is the default with a constrained
+trusted-proxy mode; hostname, manual tags, service accounts, CLI-only rule
+trust-key management, the complete first-release triage contract,
+administrator-configurable audit retention defaulting to 365 days, and bounded
+CSV audit export are also approved.

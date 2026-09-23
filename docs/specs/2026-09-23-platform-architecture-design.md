@@ -40,7 +40,7 @@ whole platform. Each module is then designed and built as its own sub-project.
 | Module | Binary | Port | Role | Sub-project |
 |---|---|---|---|---|
 | Ingest | `openvibes-ingest` | 18423 | Enrollment, renewal, heartbeats and health, finding delivery; later file import | 1 |
-| Admin CLI | `openvibes-admin` | none | Local operator tool: CA, tokens, agents, rules, migrations, maintenance | 1 |
+| Admin CLI/TUI | `openvibes-admin` | none | Local operator tool: CA, tokens, agents, rules, configuration, service lifecycle, diagnostics, migrations, maintenance | 1 |
 | Distribution | `openvibes-distribution` | 18424 | Serves offline-signed rule bundles (`/v1/rule-bundle`) | 2 |
 | Admin API and web UI | `openvibes-console` | 443 | Human access, RBAC, deployment packages | later |
 | Correlation | `openvibes-correlation` | none | Works from stored findings and inventory | later |
@@ -131,9 +131,35 @@ first release.
   Investigating, Mitigated, Accepted Risk, and False Positive; re-observation
   reopens completed states according to the version/expiry contract.
 - Every privileged action and login is written to the audit log.
-- Until the admin API exists, `openvibes-admin` is local break-glass access:
-  running it on a platform host grants full rights, and every command is
-  audited with the OS user that ran it.
+- Alongside the web console, `openvibes-admin` remains local break-glass
+  access: running it on a platform host uses OS privilege rather than web RBAC,
+  and every command is audited with the OS user that ran it.
+
+### 6.1 Local administration TUI
+
+`openvibes-admin tui` is the local interface for operating the underlying
+platform host. It is distinct from `openvibes-console`: it opens no port and
+does not authenticate through browser sessions or console RBAC.
+
+The systemd-first TUI may:
+
+- show the status and recent bounded journal output of known OpenVIBES units;
+- start, stop, restart, and reload only allow-listed OpenVIBES services;
+- inspect and edit supported configuration through typed forms, validate the
+  complete candidate configuration, show a redacted diff, and write atomically
+  with a recoverable backup before offering a reload/restart;
+- run the existing migration, maintenance, certificate-status, and diagnostic
+  operations through shared Rust functions rather than shelling out or parsing
+  CLI text.
+
+It never provides an arbitrary shell, arbitrary unit name, raw SQL editor, or
+general filesystem editor. OS privilege remains with sudo/polkit and systemd;
+the TUI does not become a privileged daemon. Actions record the real uid,
+target, and result in the system journal and in the platform audit log when the
+database is available. Database unavailability must not prevent a local
+break-glass service restart, but the TUI makes the journal-only audit state
+explicit. Container and Kubernetes lifecycle adapters are later and do not
+pretend to be systemd.
 
 ## 7. Planned Capabilities with Design Hooks
 
