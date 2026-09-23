@@ -712,6 +712,7 @@ dependencies = [
  "chrono",
  "clap",
  "platform-config",
+ "platform-pki",
  "platform-store",
  "serde",
  "tokio",

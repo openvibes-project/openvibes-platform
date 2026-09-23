@@ -32,7 +32,27 @@ openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
 
-Later milestones add `ca`, `token`, and `agent` commands (PM2).
+## CA commands
+
+The built-in CA (architecture spec, section 5). Keys are written `0600`,
+certificates `0644`, always with create-new: **nothing is ever
+overwritten**.
+
+| Command | Where | Writes | Audited |
+|---|---|---|---|
+| `ca init-root --out DIR` | offline machine | `root.crt`, `root.key` | no (no database there) |
+| `ca intermediate-request --out DIR` | ingest host | `intermediate.key`, `intermediate.csr` | no |
+| `ca sign-intermediate --root DIR --csr FILE --out FILE` | offline machine | intermediate certificate | no |
+| `ca import-intermediate --cert F --key F --root-cert F` | ingest host | records root + intermediate in `ca_certificates` | yes, target = intermediate SHA-256 |
+| `ca issue-server NAME [--san X]... --issuer-cert F --issuer-key F --out DIR` | ingest host | `NAME.crt` (leaf + intermediate), `NAME.key` | yes, target = NAME |
+
+Operator flow: `init-root` offline, then `intermediate-request` on the ingest
+host, carry only the **CSR** to the offline machine, `sign-intermediate`
+there, carry only the **certificate** back, then `import-intermediate`.
+The intermediate key never leaves the ingest host and the root key never
+leaves the offline machine. `import-intermediate` refuses a key that does
+not match the certificate or a certificate the given root did not sign, and
+records nothing then. Offline commands work without any config file.
 
 ## Test
 

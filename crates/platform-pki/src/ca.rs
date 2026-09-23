@@ -207,3 +207,10 @@ pub fn sha256_fingerprint(cert_pem: &str) -> Result<[u8; 32], PkiError> {
     let digest = ring::digest::digest(&ring::digest::SHA256, &der);
     digest.as_ref().try_into().map_err(|_| PkiError::Generation)
 }
+
+/// End of validity of the first certificate.
+pub fn not_after(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
+    let der = der_of(cert_pem)?;
+    let seconds = parse(&der)?.validity().not_after.timestamp();
+    DateTime::from_timestamp(seconds, 0).ok_or(PkiError::InvalidPem)
+}

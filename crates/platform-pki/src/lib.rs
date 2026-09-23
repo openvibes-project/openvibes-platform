@@ -11,8 +11,8 @@ mod client;
 use std::fmt;
 
 pub use ca::{
-    Issuer, KeyAndCert, generate_root, intermediate_request, sha256_fingerprint, sign_intermediate,
-    verify_signed_by,
+    Issuer, KeyAndCert, generate_root, intermediate_request, not_after, sha256_fingerprint,
+    sign_intermediate, verify_signed_by,
 };
 pub use client::{CheckedCsr, IssuedClient, check_csr, spki_sha256_of_cert};
 
