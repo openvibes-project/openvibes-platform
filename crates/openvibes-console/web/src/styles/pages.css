@@ -138,6 +138,107 @@ h2 {
   text-decoration: none;
 }
 
+.auth-page {
+  min-height: 100vh;
+  padding: var(--space-5);
+  background: var(--color-canvas);
+}
+
+.auth-page__topbar {
+  display: flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: 84rem;
+  margin: 0 auto;
+}
+
+.auth-card {
+  width: min(100%, 29rem);
+  margin: clamp(3rem, 12vh, 8rem) auto 4rem;
+  padding: clamp(var(--space-5), 6vw, var(--space-7));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-large);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+.auth-card h1 {
+  font-size: clamp(2rem, 5vw, 2.5rem);
+}
+
+.auth-card__intro,
+.auth-card > p[role="status"] {
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.auth-form {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+.auth-form label {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 2.875rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.auth-form input:disabled,
+.auth-form__submit:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.auth-form__submit,
+.topbar__logout {
+  min-height: 2.75rem;
+  padding: var(--space-2) var(--space-4);
+  border: 0;
+  border-radius: var(--radius-small);
+  background: var(--color-brand-strong);
+  color: var(--color-surface);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.auth-form__submit {
+  margin-top: var(--space-2);
+}
+
+.auth-form__error,
+.auth-inline-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-weight: 650;
+}
+
+.auth-inline-error {
+  padding: var(--space-3) var(--space-6);
+}
+
+@media (max-width: 34rem) {
+  .auth-page {
+    padding: var(--space-3);
+  }
+
+  .auth-card {
+    margin-top: 10vh;
+  }
+}
+
 .read-dashboard {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

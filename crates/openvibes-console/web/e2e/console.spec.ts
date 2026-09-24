@@ -29,6 +29,22 @@ async function selectDemoOption(page: Page, label: string, value: string): Promi
   ]);
 }
 
+async function mockAuthenticatedSession(page: Page): Promise<void> {
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      principal: { id: "test-user", display_name: "Test Operator" },
+      authentication_method: "local_password",
+      authentication_level: "single_factor",
+      capabilities: [],
+      csrf_token: "c".repeat(43),
+      idle_expires_at: "2026-09-24T23:59:00Z",
+      absolute_expires_at: "2026-09-25T07:29:00Z",
+    }),
+  }));
+}
+
 const targetCsp = [
   "default-src 'none'",
   "script-src 'self'",
@@ -46,6 +62,7 @@ const targetCsp = [
 
 test("serves the accessible shell with the target security boundary", async ({ page }) => {
   const cspViolations = await recordCspViolations(page);
+  await mockAuthenticatedSession(page);
 
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
@@ -76,7 +93,43 @@ test("serves the accessible shell with the target security boundary", async ({ p
   expect(await cspViolations()).toEqual([]);
 });
 
+test("serves the local sign-in page and obtains one-use pre-auth state", async ({ page }) => {
+  await page.route("**/auth/v1/preauth", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ csrf_token: "p".repeat(43), expires_at: "2026-09-24T23:59:00Z" }),
+  }));
+
+  const response = await page.goto("/login");
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  await expect(page.getByLabel("Username")).toBeEnabled();
+  await expect(page.getByLabel("Password")).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
+test("gates the workspace when there is no authenticated session", async ({ page }) => {
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 401,
+    contentType: "application/problem+json",
+    body: JSON.stringify({
+      type: "about:blank",
+      title: "Authentication required",
+      status: 401,
+      code: "authentication_required",
+      request_id: "test-request",
+    }),
+  }));
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Your session" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+});
+
 test("applies and persists an explicit theme before application startup", async ({ page }) => {
+  await mockAuthenticatedSession(page);
   await page.addInitScript(() => {
     if (localStorage.getItem("openvibes.theme") === null) {
       localStorage.setItem("openvibes.theme", "dark");
@@ -114,7 +167,9 @@ test("keeps reserved route families out of SPA fallback", async ({ request }) =>
 });
 
 test("supports keyboard entry and the compact-navigation control", async ({ page }) => {
+  await mockAuthenticatedSession(page);
   await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
   await page.keyboard.press("Enter");
@@ -135,6 +190,7 @@ test("supports keyboard entry and the compact-navigation control", async ({ page
 test("keeps native menu, dialog, and combobox primitives keyboard accessible", async ({ page }) => {
   const cspViolations = await recordCspViolations(page);
 
+  await mockAuthenticatedSession(page);
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
 

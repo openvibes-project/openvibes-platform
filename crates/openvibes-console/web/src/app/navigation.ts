@@ -45,6 +45,11 @@ export const navigationGroups: readonly NavigationGroup[] = [
 ] as const;
 
 const pages: Readonly<Record<string, ConsolePage>> = {
+  "/login": {
+    title: "Sign in",
+    group: "Account",
+    description: "Authenticate with a local console account.",
+  },
   "/": {
     title: "Overview",
     group: "Workspace",

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { LoginPage, SessionGate, type BrowserSession } from "./AuthPages";
 import { Brand } from "../components/Brand";
 import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
@@ -19,10 +20,62 @@ function browserPath(): string {
 export function App({ path = browserPath(), seeded = false }: AppProps) {
   const [navigationCollapsed, setNavigationCollapsed] = useState(false);
   const page = resolvePage(path);
+  const [session, setSession] = useState<BrowserSession>();
+  const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated" | "unavailable">(
+    seeded ? "authenticated" : "checking",
+  );
+  const [logoutError, setLogoutError] = useState(false);
 
   useEffect(() => {
-    document.title = page === undefined ? "Page not found · OpenVIBES" : `${page.title} · OpenVIBES`;
-  }, [page]);
+    document.title = path === "/login"
+      ? "Sign in · OpenVIBES"
+      : page === undefined ? "Page not found · OpenVIBES" : `${page.title} · OpenVIBES`;
+  }, [page, path]);
+
+  useEffect(() => {
+    if (seeded || path === "/login" || page === undefined) return;
+    const controller = new AbortController();
+    void fetch("/api/v1/session", {
+      cache: "no-store",
+      credentials: "same-origin",
+      signal: controller.signal,
+    }).then(async (response) => {
+      if (response.status === 401) {
+        setSession(undefined);
+        setAuthState("unauthenticated");
+        return;
+      }
+      if (!response.ok) throw new Error("session unavailable");
+      const current = await response.json() as BrowserSession;
+      setSession(current);
+      setAuthState("authenticated");
+    }).catch(() => {
+      if (!controller.signal.aborted) setAuthState("unavailable");
+    });
+    return () => controller.abort();
+  }, [page, path, seeded]);
+
+  async function logout() {
+    if (session === undefined) return;
+    setLogoutError(false);
+    try {
+      const response = await fetch("/auth/v1/logout", {
+        method: "POST",
+        cache: "no-store",
+        credentials: "same-origin",
+        headers: { "x-csrf-token": session.csrf_token },
+      });
+      if (response.status !== 204) throw new Error("logout failed");
+      window.location.assign("/login");
+    } catch {
+      setLogoutError(true);
+    }
+  }
+
+  if (path === "/login") return <LoginPage />;
+  if (!seeded && page !== undefined && authState !== "authenticated") {
+    return <SessionGate state={authState} />;
+  }
 
   return (
     <div className={navigationCollapsed ? "app-shell app-shell--collapsed" : "app-shell"}>
@@ -89,9 +142,11 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
           <div className="topbar__actions">
             <ThemeControl />
             <HelpMenu />
+            {!seeded && session !== undefined && <button className="topbar__logout" type="button" onClick={() => void logout()}>Sign out</button>}
           </div>
         </header>
 
+        {logoutError && <p className="auth-inline-error" role="alert">Sign out could not be completed. Try again.</p>}
         {seeded && <SeededBanner />}
 
         <main id="main-content" className="main-content" tabIndex={-1}>

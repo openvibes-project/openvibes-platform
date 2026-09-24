@@ -4,8 +4,9 @@ Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
 3 are integrated. C0, C1, and the C2 read-store foundation are implemented;
 C3 local browser authentication is implemented through runtime wiring. The
 remaining C3 work is account bootstrap CLI, authenticated SQL-scoped C2
-handlers, authorization/audit pages and operations, browser login/session UI,
-and the remaining C3 hardening and end-to-end coverage.
+handlers, authorization/audit pages and operations, and the remaining C3
+hardening and end-to-end coverage. The embedded login page, session gate, and
+logout action are implemented with the local-auth API.
 
 Design inputs:
 
@@ -160,7 +161,9 @@ for schema 8 at startup, and otherwise stays in C0 fail-closed mode. Login
 uses generic failures, bounded Argon2id work, hashed account/source throttles,
 exact-Origin and CSRF checks, Fetch Metadata, session rotation, and audit
 events. Production TLS/proxy transport is not wired; this auth runtime remains
-restricted to loopback HTTP development.
+restricted to loopback HTTP development. The embedded UI requests one-use
+pre-auth state, submits local credentials, gates the workspace on session
+validation, and revokes the session on sign out.
 
 Work:
 

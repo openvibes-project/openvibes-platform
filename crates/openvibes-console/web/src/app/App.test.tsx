@@ -25,4 +25,15 @@ describe("console shell", () => {
     expect(markup).toContain("Page not found");
     expect(markup).toContain("Return to Overview");
   });
+
+  it("renders a local sign-in form on the login route", () => {
+    const markup = renderToStaticMarkup(<App path="/login" />);
+
+    expect(markup).toContain("Sign in");
+    expect(markup).toContain('name="username"');
+    expect(markup).toContain('name="password"');
+    expect(markup).toContain('autoComplete="current-password"');
+    expect(markup).toContain("disabled");
+    expect(markup).not.toContain("Seeded environment");
+  });
 });

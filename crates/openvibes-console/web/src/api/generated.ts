@@ -13,10 +13,58 @@ export interface paths {
         };
         /**
          * Reports the current authenticated browser session.
-         * @description C0 deliberately returns a bounded failure instead of creating a temporary
-         *     unauthenticated or implicitly privileged session.
+         * @description The C0 router deliberately returns a bounded failure instead of creating a
+         *     temporary unauthenticated or implicitly privileged session.
          */
         get: operations["session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/v1/preauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["preauth"];
         put?: never;
         post?: never;
         delete?: never;
@@ -279,6 +327,21 @@ export interface components {
             /** @description Latest observed severity. */
             severity: components["schemas"]["Severity"];
         };
+        /** @description One-use local login request. The password is never echoed by the API. */
+        LoginRequest: {
+            /**
+             * Format: password
+             * @description Password supplied over the configured secure transport.
+             */
+            password: string;
+            /** @description Canonical local username (case is normalized by the server). */
+            username: string;
+        };
+        /** @description Acknowledgement returned after a local password login succeeds. */
+        LoginResponse: {
+            /** @description Always true for the successful response; the session cookie is set separately. */
+            authenticated: boolean;
+        };
         /**
          * @description Stable console permission identifiers.
          * @enum {string}
@@ -293,6 +356,11 @@ export interface components {
             asset_group_ids: string[];
             /** @enum {string} */
             kind: "asset_groups";
+        };
+        /** @description CSRF challenge returned before local password login. */
+        PreauthResponse: {
+            /** @description One-use value required in `X-CSRF-Token` on the login request. */
+            csrf_token: string;
         };
         /** @description Stable RFC Problem Details-style error response used by the console API. */
         ProblemDetails: {
@@ -375,6 +443,154 @@ export interface operations {
                 };
             };
             /** @description Authentication is not implemented until C3 */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    login: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin */
+                Origin: string;
+                /** @description One-use token returned by pre-authentication */
+                "X-CSRF-Token": string;
+                /** @description Pre-auth and browser-binding cookies */
+                Cookie: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Authenticated; sets an opaque session cookie */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LoginResponse"];
+                };
+            };
+            /** @description Malformed authentication request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Generic invalid credentials response */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin or CSRF check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication unavailable or busy */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    logout: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match the configured public origin */
+                Origin: string;
+                /** @description Synchronizer token returned by the session route */
+                "X-CSRF-Token": string;
+                /** @description Opaque browser session cookie */
+                Cookie: string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Session revoked and cookie cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin or CSRF check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    preauth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One-use login challenge */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PreauthResponse"];
+                };
+            };
+            /** @description Authentication unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

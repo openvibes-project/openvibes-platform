@@ -22,7 +22,8 @@ password hash upgrade. When both `database_url` and `public_origin` are set,
 the executable connects to PostgreSQL, requires schema version 8, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. C2 data routes, SQL-enforced
-asset scopes, account bootstrap CLI, and browser login UI are still pending.
+asset scopes and account bootstrap CLI are still pending. The embedded UI
+now has a login form, session gate, and sign-out action.
 The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
@@ -66,10 +67,11 @@ before Vite runs.
 
 `GET /api/v1/session` defines the current-human-session contract: principal,
 authentication method and level, effective permission/scope pairs, CSRF value,
-and idle/absolute expiry. Until C3 supplies authenticated sessions, the route
-returns `503 authentication_unavailable`; it never manufactures an anonymous
-or implicitly privileged session. Service-account bearer tokens cannot use
-this browser-session route.
+and idle/absolute expiry. In C0 mode it returns
+`503 authentication_unavailable`; the authenticated C3 router returns a
+database-validated session or generic `401`. It never manufactures an
+anonymous or implicitly privileged session. Service-account bearer tokens
+cannot use this browser-session route.
 
 Collection DTOs use opaque cursors with a default limit of 50, maximum limit
 of 100, and a 2,048-byte cursor bound. Response envelopes contain typed items,
@@ -82,7 +84,7 @@ scan ID, receive time, and authenticated origin. Operation paths are added
 when their database-backed routes are implemented, with production data
 remaining unavailable until authentication and SQL-enforced scope are ready.
 
-The first-release UI covers overview, agents, findings and analyst triage,
+The first-release UI covers sign-in, overview, agents, findings and analyst triage,
 enrollment tokens, pre-signed rule bundles, access control and exact agent
 tags, service accounts, and the audit log, retention policy, and bounded CSV
 export. CA and rule-trust-key administration remain CLI-only.
@@ -163,6 +165,10 @@ banner are never included in the production RPM.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist
   through `platform-store` transactions. Login failures have a generic shape;
   password work has a four-operation concurrency bound.
+- The embedded UI requests the current session without caching, gates
+  application routes unless that request succeeds, obtains one-use pre-auth
+  state before enabling local login, and sends logout with the synchronizer
+  CSRF token. It never reads the opaque session cookie.
 - Framing is refused: `Content-Security-Policy: frame-ancestors 'none'` is
   enforced (with `X-Frame-Options: DENY`) while the full policy is still
   report-only.
@@ -188,9 +194,9 @@ banner are never included in the production RPM.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.
-- `/ready` returns 503 while PostgreSQL is unreachable, its schema is older or
-  newer than the supported version, or required local-auth state is not ready;
-  `/health` remains a process-liveness check.
+- `/ready` currently reflects process readiness. Ongoing PostgreSQL health and
+  schema drift after startup are not yet reflected there; `/health` remains a
+  process-liveness check.
 - Production data routes remain unavailable until their owning milestones
   are complete. The loopback seeded API is synthetic and cannot access
   production state. There is no permissive production authentication mode.
