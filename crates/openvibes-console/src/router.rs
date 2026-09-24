@@ -64,7 +64,41 @@ pub fn public_router() -> Router {
 fn api_router() -> Router {
     Router::new()
         .route("/v1/session", get(session))
+        .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
+}
+
+/// The public router as served on the loopback development listener: it
+/// also refuses any `Host` that is not a loopback name, so a hostile web
+/// page whose name resolves to 127.0.0.1 (DNS rebinding) cannot read it.
+/// Requests without `Host` pass; browsers always send one.
+pub fn development_router() -> Router {
+    public_router().layer(middleware::from_fn(loopback_host_only))
+}
+
+async fn loopback_host_only(request: axum::extract::Request, next: middleware::Next) -> Response {
+    let allowed = request
+        .headers()
+        .get(header::HOST)
+        .is_none_or(|host| host.to_str().is_ok_and(is_loopback_host));
+    if allowed {
+        next.run(request).await
+    } else {
+        let mut response = StatusCode::MISDIRECTED_REQUEST.into_response();
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        response
+    }
+}
+
+/// `localhost`, `127.0.0.1`, or `[::1]`, with or without a port.
+fn is_loopback_host(host: &str) -> bool {
+    let name = match host.strip_prefix('[') {
+        Some(rest) => rest.split_once(']').map_or("", |(name, _)| name),
+        None => host.rsplit_once(':').map_or(host, |(name, _)| name),
+    };
+    name.eq_ignore_ascii_case("localhost") || name == "127.0.0.1" || name == "::1"
 }
 
 #[cfg(feature = "embedded-ui")]
@@ -130,6 +164,14 @@ pub(crate) async fn session() -> Response {
     problem_response(ProblemDetails::authentication_unavailable())
 }
 
+async fn api_method_not_allowed() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::METHOD_NOT_ALLOWED,
+        "method_not_allowed",
+        "Method not allowed for this API resource",
+    ))
+}
+
 async fn auth_not_found() -> Response {
     problem_response(ProblemDetails::not_found(
         "auth_not_found",
@@ -178,6 +220,18 @@ async fn public_security_headers(mut response: Response) -> Response {
         HeaderName::from_static("content-security-policy-report-only");
     const REFERRER_POLICY: HeaderName = HeaderName::from_static("referrer-policy");
     const PERMISSIONS_POLICY: HeaderName = HeaderName::from_static("permissions-policy");
+    const FRAME_OPTIONS: HeaderName = HeaderName::from_static("x-frame-options");
+
+    // Framing is refused now: the full policy below is report-only until C5,
+    // and report-only does not block, so frame-ancestors is also enforced on
+    // its own (with X-Frame-Options for older browsers).
+    response.headers_mut().insert(
+        header::CONTENT_SECURITY_POLICY,
+        HeaderValue::from_static("frame-ancestors 'none'"),
+    );
+    response
+        .headers_mut()
+        .insert(FRAME_OPTIONS, HeaderValue::from_static("DENY"));
 
     response.headers_mut().insert(
         CSP_REPORT_ONLY,

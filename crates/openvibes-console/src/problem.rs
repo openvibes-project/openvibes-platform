@@ -40,6 +40,17 @@ pub struct FieldError {
 }
 
 impl ProblemDetails {
+    pub(crate) fn new(status: StatusCode, code: &'static str, title: &'static str) -> Self {
+        let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+        Self {
+            code: code.to_owned(),
+            title: title.to_owned(),
+            status: status.as_u16(),
+            request_id: format!("c0-{sequence:016x}"),
+            field_errors: None,
+        }
+    }
+
     pub(crate) fn not_found(code: &'static str, title: &'static str) -> Self {
         let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         Self {

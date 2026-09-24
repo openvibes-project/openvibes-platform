@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const consoleOrigin = "http://127.0.0.1:18480";
+const consoleOrigin = "http://127.0.0.1:18490";
 
 export default defineConfig({
   testDir: "./e2e",

@@ -30,5 +30,5 @@ pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
-pub use router::{Readiness, health_router, public_router};
+pub use router::{Readiness, development_router, health_router, public_router};
 pub use server::{run, serve};
