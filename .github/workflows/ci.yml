@@ -80,7 +80,7 @@ jobs:
       - name: Install console brand renderer
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends imagemagick
+          sudo apt-get install --no-install-recommends imagemagick librsvg2-bin
 
       - name: Build and validate console frontend
         run: bash scripts/build-console.sh
