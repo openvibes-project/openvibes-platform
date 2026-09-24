@@ -1,13 +1,13 @@
 # Sub-project 2: Distribution Service
 
-**Status: draft, not approved.** Written overnight on 2026-09-24 at the
-user's request, without their input. Every choice they have not made yet is
-listed under section 11, **Open questions**, with options and a
-recommendation. The sections before it state the recommended option and
-point to the question by number (Q1…). Nothing here is decided until the user
-approves this spec.
+**Status: questions resolved 2026-09-24; awaiting final approval.** Drafted
+overnight on 2026-09-24. On the same day the user chose the recommended
+option for every question in section 11, so the body below states the
+decided design. What remains is the user's approval of the spec as a
+whole, and then an implementation plan. That plan waits until the review
+fixes are done (see `decisions.md`).
 
-- Architecture context:
+Architecture context:
   [`2026-09-23-platform-architecture-design.md`](2026-09-23-platform-architecture-design.md),
   sections 3, 4, 5 and 9 (item 2).
 - Protocol: `openvibes-protocol/spec/contracts-v1.md` ("Rule Distribution")
@@ -219,12 +219,12 @@ version, and the envelope digest as target.
 Protocol housekeeping: tick P4 "Distribution service" in `PLAN.md` at the end
 of DM3.
 
-## 11. Open Questions
+## 11. Questions (resolved 2026-09-24)
 
-Each question has options and a recommendation. **R** marks the recommended
-option.
+Each question lists the options with the recommendation, marked **R**. The
+user chose **R** for every question, and each carries a **Resolved** line.
 
-**Q1. Share the agent-facing server code with ingest?**
+**Q1. Share the agent-facing server code with ingest?** **Resolved: R.**
 - (a) **R** Extract it into a `platform-agent-server` crate first (DM0).
   Distribution then gets ingest's TLS, authentication, limits, drain and
   Nagle fixes for free, and a fix in one place fixes both services.
@@ -233,7 +233,7 @@ option.
 - (c) Serve distribution from the ingest binary on a second port. That
   contradicts the architecture's "one binary per module".
 
-**Q2. Who owns the rule schema: this sub-project or the console?**
+**Q2. Who owns the rule schema: this sub-project or the console?** **Resolved: R.**
 Codex's console technical design (branch `console`, section 14, item 6)
 plans "rule sets, trusted public keys, and exact signed bundle versions" as a
 later migration.
@@ -244,7 +244,7 @@ later migration.
   sub-project 2 on the console.
 - (c) Each defines its own. Duplicated truth.
 
-**Q3. Expired and nearly expired envelopes.**
+**Q3. Expired and nearly expired envelopes.** **Resolved: R.**
 - (a) **R** `publish` refuses an expired envelope and warns when it expires
   within 7 days. The service serves the current bundle regardless (agents
   refuse expired ones themselves). `rules list` shows each set's expiry.
@@ -252,7 +252,7 @@ later migration.
   problem the agent already handles, and changes the contract meaning of
   404.
 
-**Q4. What removing a trust key does.**
+**Q4. What removing a trust key does.** **Resolved: R.**
 - (a) **R** It blocks future publishes signed by that key. A bundle already
   published keeps being served and is flagged in `rules list`. The
   authoritative trust is each agent's own configured keys; the platform's
@@ -260,20 +260,20 @@ later migration.
 - (b) Removing the key also withdraws its bundles. That surprises operators
   mid-rotation and still leaves agents on their last accepted bundle.
 
-**Q5. Record which agent fetched which version?**
+**Q5. Record which agent fetched which version?** **Resolved: R.**
 - (a) **R** Not in this sub-project: the service stays read-only.
   Sub-project 4's heartbeat `health` carries rule-set versions, which is the
   agent's own truth.
 - (b) Write a last-fetch row per agent and rule set: a write on every read,
   and a second, weaker source of truth.
 
-**Q6. Cache envelopes in memory?**
+**Q6. Cache envelopes in memory?** **Resolved: R.**
 - (a) **R** No cache at first. The query is one index lookup; measure in DM4
   and add a cache only if the burst target needs it.
 - (b) An in-memory cache invalidated by `LISTEN/NOTIFY`: faster, with more
   moving parts.
 
-**Q7. Retiring a rule set.**
+**Q7. Retiring a rule set.** **Resolved: R.**
 - (a) **R** `rules retire` stops serving the set (404, audited) and keeps
   every stored byte. Agents keep their last accepted bundle and retry each
   scan.
@@ -281,17 +281,17 @@ later migration.
   newer".
 - (c) No retirement in this sub-project.
 
-**Q8. Where publishing happens in the first release.**
+**Q8. Where publishing happens in the first release.** **Resolved: R.**
 - (a) **R** CLI only (`openvibes-admin rules publish`). The console adds its
   upload route later on the same store functions.
 - (b) Wait for the console. That leaves no way to publish until sub-project 5.
 
-**Q9. Distribution load target.**
+**Q9. Distribution load target.** **Resolved: R.**
 - (a) **R** 1,000 req/s with 200 KB envelopes on one instance: every agent
   of a 50,000-host fleet scanning within about a minute after a publish.
 - (b) Only the average (about 42 req/s). It hides the burst.
 
-**Q10. Server certificate: shared with ingest, or its own?**
+**Q10. Server certificate: shared with ingest, or its own?** **Resolved: R.**
 - (a) **R** Its own (`distribution.crt`). The services may sit on different
   hosts or names, and each key is readable only by its own service user.
 - (b) One certificate with both names. One file, but two service users need
