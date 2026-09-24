@@ -23,12 +23,15 @@ frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
 One checked frontend contract now supplies the browser-route and public-asset
 inventory to both Rust and TypeScript, and the production output carries a
 SHA-256 build stamp over the exact source inputs and generated files.
+The shell uses native platform interaction primitives: a Popover API help menu
+with arrow-key navigation, a modal `<dialog>` with focus return, and the native
+theme `<select>`. They pass the target CSP and axe checks in the real-browser
+suite without adding a component dependency.
 Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
 authorisation.
 
-C0 is not complete yet. Real-browser CSP/accessibility proof for the selected
-interaction primitives, the checked offline npm source cache, and reviewed
+C0 is not complete yet. The checked offline npm source cache and reviewed
 transparent production logo derivatives remain required.
 
 ## Interfaces
@@ -147,11 +150,10 @@ Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded
 asset tests. Playwright journeys run the embedded binary in Chromium, Firefox,
 and WebKit and cover axe accessibility analysis, target CSP headers and browser
-violations, first-paint theme persistence, keyboard entry, and reserved-route
-fall-through. C0 still needs the selected dialog/menu/combobox primitives
-exercised in those browsers before a component dependency is fixed. Later
-contract tests exercise the complete Axum router first against deterministic
-seeded data and then against PostgreSQL. Security coverage expands from the
-current route fall-through, cache-header, and CSP checks to session/CSRF
-handling, object scope, audit atomicity, trusted proxies, secret redaction, and
-bounded CSV export.
+violations, first-paint theme persistence, keyboard entry, native menu/dialog/
+combobox focus behaviour, and reserved-route fall-through. Later contract tests
+exercise the complete Axum router first against deterministic seeded data and
+then against PostgreSQL. Security coverage expands from the current route
+fall-through, cache-header, and CSP checks to session/CSRF handling, object
+scope, audit atomicity, trusted proxies, secret redaction, and bounded CSV
+export.

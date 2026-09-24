@@ -96,3 +96,39 @@ test("supports keyboard entry and the compact-navigation control", async ({ page
     "true",
   );
 });
+
+test("keeps native menu, dialog, and combobox primitives keyboard accessible", async ({ page }) => {
+  const cspMessages: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().toLowerCase().includes("content security policy")) {
+      cspMessages.push(message.text());
+    }
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
+
+  const help = page.getByRole("button", { name: "Help" });
+  await help.click();
+  const menu = page.getByRole("menu", { name: "Help" });
+  await expect(menu).toBeVisible();
+
+  const about = page.getByRole("menuitem", { name: "About this console" });
+  const findings = page.getByRole("menuitem", { name: "Open findings" });
+  await expect(about).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(findings).toBeFocused();
+  await page.keyboard.press("Home");
+  await expect(about).toBeFocused();
+  await about.click();
+
+  const dialog = page.getByRole("dialog", { name: "About this console" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByRole("button", { name: "Close about this console dialog" })).toBeFocused();
+  expect((await new AxeBuilder({ page }).include("dialog").analyze()).violations).toEqual([]);
+
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(help).toBeFocused();
+  expect(cspMessages).toEqual([]);
+});

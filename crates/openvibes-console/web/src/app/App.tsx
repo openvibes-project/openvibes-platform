@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { Brand } from "../components/Brand";
+import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
 import { navigationGroups, resolvePage } from "./navigation";
@@ -84,7 +85,10 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
             <span className="topbar__separator" aria-hidden="true">/</span>
             <span>Console</span>
           </div>
-          <ThemeControl />
+          <div className="topbar__actions">
+            <ThemeControl />
+            <HelpMenu />
+          </div>
         </header>
 
         {seeded && <SeededBanner />}
