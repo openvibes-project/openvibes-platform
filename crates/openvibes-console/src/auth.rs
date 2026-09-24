@@ -17,6 +17,8 @@ use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroize;
 
 const SESSION_SECRET_BYTES: usize = 32;
+const SESSION_IDLE_TIMEOUT_MS: u64 = 30 * 60 * 1_000;
+const SESSION_ABSOLUTE_TIMEOUT_MS: u64 = 8 * 60 * 60 * 1_000;
 // ponytail: normalization accepts at most 4,096 raw code points to bound CPU and allocation.
 const MAX_RAW_PASSWORD_CODE_POINTS: usize = 4_096;
 const MIN_PASSWORD_CODE_POINTS: usize = 15;
@@ -56,6 +58,61 @@ const ARGON2_MAX_MEMORY_KIB: u32 = 65_536;
 const ARGON2_MAX_ITERATIONS: u32 = 5;
 const ARGON2_MAX_PARALLELISM: u32 = 4;
 const MAX_PASSWORD_HASH_LENGTH: usize = 512;
+
+/// Persisted timestamps used to enforce session idle and absolute expiry.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionLifetime {
+    created_at_ms: u64,
+    last_seen_at_ms: u64,
+}
+
+impl SessionLifetime {
+    /// Starts a session with the approved 30-minute idle and eight-hour absolute defaults.
+    pub fn start(now_ms: u64) -> Self {
+        Self {
+            created_at_ms: now_ms,
+            last_seen_at_ms: now_ms,
+        }
+    }
+
+    /// Restores persisted timestamps, rejecting an impossible ordering.
+    pub fn restore(created_at_ms: u64, last_seen_at_ms: u64) -> Option<Self> {
+        (created_at_ms <= last_seen_at_ms).then_some(Self {
+            created_at_ms,
+            last_seen_at_ms,
+        })
+    }
+
+    /// Returns the idle deadline, or `None` if adding the timeout overflows.
+    pub fn idle_expires_at_ms(self) -> Option<u64> {
+        self.last_seen_at_ms.checked_add(SESSION_IDLE_TIMEOUT_MS)
+    }
+
+    /// Returns the absolute deadline, or `None` if adding the timeout overflows.
+    pub fn absolute_expires_at_ms(self) -> Option<u64> {
+        self.created_at_ms.checked_add(SESSION_ABSOLUTE_TIMEOUT_MS)
+    }
+
+    /// Returns whether the session is active at `now_ms`.
+    pub fn is_active_at(self, now_ms: u64) -> bool {
+        now_ms >= self.last_seen_at_ms
+            && self
+                .idle_expires_at_ms()
+                .is_some_and(|expires_at| now_ms < expires_at)
+            && self
+                .absolute_expires_at_ms()
+                .is_some_and(|expires_at| now_ms < expires_at)
+    }
+
+    /// Refreshes activity for a currently active session.
+    pub fn touch(&mut self, now_ms: u64) -> bool {
+        if !self.is_active_at(now_ms) {
+            return false;
+        }
+        self.last_seen_at_ms = now_ms;
+        true
+    }
+}
 
 /// An NFC-normalized password that is cleared when dropped.
 pub struct NormalizedPassword(String);
@@ -121,6 +178,112 @@ impl PasswordHash {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+/// Credentials presented by one request, selected before authentication.
+#[derive(Debug)]
+pub enum PresentedCredentials {
+    /// No browser cookie or bearer token was provided.
+    Anonymous,
+    /// One syntactically valid browser session cookie was provided.
+    Session(PresentedSecret),
+    /// One bearer credential was provided without a session cookie.
+    Bearer(PresentedSecret),
+}
+
+/// Secret credential bytes parsed from one request header.
+pub struct PresentedSecret(String);
+
+impl PresentedSecret {
+    /// Returns the secret value for authentication against its stored digest.
+    pub fn expose_secret(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Drop for PresentedSecret {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for PresentedSecret {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PresentedSecret([REDACTED])")
+    }
+}
+
+/// Invalid or conflicting credentials in request headers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CredentialParseError {
+    /// A credential header is malformed, repeated, or contains an invalid session token.
+    Invalid,
+    /// The request supplied both a browser session cookie and a bearer token.
+    Conflicting,
+}
+
+/// Parses one session cookie or one bearer token and rejects ambiguous input.
+pub fn presented_credentials(
+    headers: &HeaderMap,
+) -> Result<PresentedCredentials, CredentialParseError> {
+    let session = session_cookie_from_headers(headers)?;
+    let mut authorization = headers.get_all(header::AUTHORIZATION).iter();
+    let bearer = if let Some(value) = authorization.next() {
+        if authorization.next().is_some() {
+            return Err(CredentialParseError::Invalid);
+        }
+        let value = value.to_str().map_err(|_| CredentialParseError::Invalid)?;
+        let (scheme, token) = value.split_once(' ').ok_or(CredentialParseError::Invalid)?;
+        if !scheme.eq_ignore_ascii_case("bearer")
+            || token.is_empty()
+            || token.bytes().any(|byte| byte.is_ascii_whitespace())
+        {
+            return Err(CredentialParseError::Invalid);
+        }
+        Some(PresentedSecret(token.to_owned()))
+    } else {
+        None
+    };
+
+    match (session, bearer) {
+        (Some(_), Some(_)) => Err(CredentialParseError::Conflicting),
+        (Some(secret), None) => Ok(PresentedCredentials::Session(secret)),
+        (None, Some(secret)) => Ok(PresentedCredentials::Bearer(secret)),
+        (None, None) => Ok(PresentedCredentials::Anonymous),
+    }
+}
+
+fn session_cookie_from_headers(
+    headers: &HeaderMap,
+) -> Result<Option<PresentedSecret>, CredentialParseError> {
+    let mut secret = None;
+    for cookie_header in headers.get_all(header::COOKIE).iter() {
+        let cookie_header = cookie_header
+            .to_str()
+            .map_err(|_| CredentialParseError::Invalid)?;
+        for pair in cookie_header.split(';') {
+            let Some((name, value)) = pair.trim().split_once('=') else {
+                continue;
+            };
+            if name.trim() != "__Host-openvibes-session" {
+                continue;
+            }
+            if secret.is_some() || !valid_session_token(value.trim()) {
+                return Err(CredentialParseError::Invalid);
+            }
+            secret = Some(PresentedSecret(value.trim().to_owned()));
+        }
+    }
+    Ok(secret)
+}
+
+fn valid_session_token(value: &str) -> bool {
+    if value.len() != 43 {
+        return false;
+    }
+    URL_SAFE_NO_PAD.decode(value).is_ok_and(|bytes| {
+        bytes.len() == SESSION_SECRET_BYTES && URL_SAFE_NO_PAD.encode(bytes) == value
+    })
 }
 
 impl fmt::Debug for PasswordHash {
@@ -288,8 +451,10 @@ mod tests {
     use axum::http::{HeaderMap, HeaderValue, header};
 
     use super::{
-        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed,
-        csrf_token_matches, hash_password, session_cookie, verify_password,
+        CredentialParseError, NormalizedPassword, PasswordError, PresentedCredentials,
+        SESSION_ABSOLUTE_TIMEOUT_MS, SESSION_IDLE_TIMEOUT_MS, SessionLifetime, SessionSecret,
+        browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
+        session_cookie, verify_password,
     };
 
     #[test]
@@ -337,6 +502,87 @@ mod tests {
         assert!(csrf_token_matches(&headers, &expected));
         headers.append("x-csrf-token", HeaderValue::from_str(&expected).unwrap());
         assert!(!csrf_token_matches(&headers, &expected));
+    }
+
+    #[test]
+    fn credential_selection_rejects_mixed_duplicate_and_malformed_credentials() {
+        let secret = SessionSecret::generate().unwrap();
+        let mut headers = HeaderMap::new();
+        assert!(matches!(
+            presented_credentials(&headers).unwrap(),
+            PresentedCredentials::Anonymous
+        ));
+
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_str(&format!(
+                "theme=dark; __Host-openvibes-session={}",
+                secret.cookie_value()
+            ))
+            .unwrap(),
+        );
+        let parsed = presented_credentials(&headers).unwrap();
+        let PresentedCredentials::Session(parsed_secret) = parsed else {
+            panic!("session cookie must be selected");
+        };
+        assert_eq!(parsed_secret.expose_secret(), secret.cookie_value());
+        assert!(!format!("{parsed_secret:?}").contains(secret.cookie_value()));
+
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("bEaReR service-token"),
+        );
+        assert_eq!(
+            presented_credentials(&headers).unwrap_err(),
+            CredentialParseError::Conflicting
+        );
+
+        headers.remove(header::COOKIE);
+        assert!(matches!(
+            presented_credentials(&headers).unwrap(),
+            PresentedCredentials::Bearer(_)
+        ));
+        headers.append(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer another-token"),
+        );
+        assert_eq!(
+            presented_credentials(&headers).unwrap_err(),
+            CredentialParseError::Invalid
+        );
+
+        headers.remove(header::AUTHORIZATION);
+        headers.insert(
+            header::COOKIE,
+            HeaderValue::from_static("__Host-openvibes-session=not-a-valid-token"),
+        );
+        assert_eq!(
+            presented_credentials(&headers).unwrap_err(),
+            CredentialParseError::Invalid
+        );
+    }
+
+    #[test]
+    fn sessions_expire_on_idle_or_absolute_deadline_and_cannot_be_revived() {
+        let now = 1_000_000;
+        let mut idle = SessionLifetime::start(now);
+        let idle_deadline = now + SESSION_IDLE_TIMEOUT_MS;
+        assert!(idle.is_active_at(idle_deadline - 1));
+        assert!(!idle.touch(idle_deadline));
+        assert!(!idle.is_active_at(idle_deadline));
+
+        let mut active = SessionLifetime::start(now);
+        let absolute_deadline = now + SESSION_ABSOLUTE_TIMEOUT_MS;
+        let mut last_seen = now;
+        while last_seen + SESSION_IDLE_TIMEOUT_MS < absolute_deadline {
+            last_seen += SESSION_IDLE_TIMEOUT_MS - 1;
+            assert!(active.touch(last_seen));
+        }
+        assert!(active.is_active_at(absolute_deadline - 1));
+        assert!(active.touch(absolute_deadline - 1));
+        assert!(!active.is_active_at(absolute_deadline));
+        assert!(!active.touch(absolute_deadline));
+        assert!(SessionLifetime::restore(now + 1, now).is_none());
     }
 
     #[test]

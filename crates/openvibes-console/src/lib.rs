@@ -33,9 +33,10 @@ pub use api::{
     Permission, PermissionScope, SessionPrincipal, SessionResponse, Severity,
 };
 pub use auth::{
-    NormalizedPassword, PasswordError, PasswordHash, PasswordHashError, PasswordVerification,
-    SessionSecret, browser_origin_allowed, csrf_token_matches, hash_password, session_cookie,
-    verify_password,
+    CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
+    PasswordVerification, PresentedCredentials, PresentedSecret, SessionLifetime, SessionSecret,
+    browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
+    session_cookie, verify_password,
 };
 pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;
