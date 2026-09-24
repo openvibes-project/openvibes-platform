@@ -18,7 +18,8 @@ desktop-first, responsive to tablet width, and intentionally read-heavy.
 
 The product must never imply more certainty than the platform has:
 
-- `current_findings` means the latest observation for an agent/rule pair. It
+- `current_findings` means the latest observation for an agent, rule set, and
+  rule (rule IDs are unique only within a rule set). It
   does not prove that the condition is still present. The UI says **Latest
   observed matches**, never "open," "active," "resolved," or "remediated."
 - `last_seen_at` supports **Seen recently**, **Offline**, **Never seen**, and
@@ -489,7 +490,8 @@ does not have.
    separate from detector truth and are defined in section 13.
 3. Asset-group scope is planned but tag/group storage does not exist. Reserve
    the affordance; do not fake it in the browser.
-4. Rule bundles and trusted keys are absent from the current schema 3.
+4. Rule bundles and trusted keys come from sub-project 2 (migration 0006);
+   the console reuses them.
 5. The existing `current_findings` row lacks the full observation fields
    needed by a useful detail view.
 6. Evidence contains identifiers of supporting fact keys, not their values.

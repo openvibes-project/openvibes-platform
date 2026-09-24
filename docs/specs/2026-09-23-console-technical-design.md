@@ -1,5 +1,11 @@
 # OpenVIBES Console Technical Design
 
+
+> **Updated 2026-09-24 (Claude, at the user's request):** aligned with main's
+> migrations 4 and 5 and sub-project 2 (see `decisions.md`): findings keyed
+> by rule set, console migrations from 0007, rule tables reused from SP2.
+> The design is otherwise unchanged.
+
 Status: **approved by the project owner, 2026-09-23**. Product companion:
 [`2026-09-23-console-product-design.md`](2026-09-23-console-product-design.md).
 
@@ -222,9 +228,16 @@ boundaries.
 | Method and path | Permission |
 |---|---|
 | `GET /api/v1/findings/latest` | `findings.read` |
-| `GET /api/v1/findings/latest/{agent_id}/{rule_id}` | `findings.read` |
-| `GET /api/v1/findings/latest/{agent_id}/{rule_id}/triage` | `findings.read` |
-| `PUT /api/v1/findings/latest/{agent_id}/{rule_id}/triage` | `findings.triage` |
+| `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}` | `findings.read` |
+| `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.read` |
+| `PUT /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.triage` |
+
+A latest finding is identified by agent, rule set, and rule (migration 5,
+protocol P6): rule IDs are unique only within a rule set. Findings stored
+before P6 carry an empty rule set; their path segment is the reserved
+`~unknown` (`~` is not an identifier character, so it cannot collide). When
+an agent upgrades, its old `''` row stays beside the new one; the UI labels
+it "rule set unknown (earlier agent)", and it ages out with retention.
 | `GET /api/v1/findings/history` | `findings.read` |
 | `GET /api/v1/findings/history/{observed_day}/{finding_id}` | `findings.read` |
 
@@ -478,7 +491,7 @@ the first page fixes an `as_of_id` carried in every later cursor, so the
 Stable sorts:
 
 - agents: `last_seen_at DESC NULLS LAST, agent_id ASC`;
-- latest findings: `last_observed_at DESC, agent_id ASC, rule_id ASC`;
+- latest findings: `last_observed_at DESC, agent_id ASC, rule_set_id ASC, rule_id ASC`;
 - history: `observed_at DESC, observed_day DESC, finding_id ASC`;
 - tokens: `created_at DESC, token_id ASC`;
 - rule versions: version descending;
@@ -674,7 +687,11 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 3 must add or extend:
+Append-only migrations after the current schema 5 must add or extend. Main
+now has migration 4 (the ingest role keeps only the rights it uses) and 5
+(`rule_set_id` on `findings` and `current_findings`, current state keyed by
+agent, rule set, and rule); 0006 is reserved for sub-project 2's rule tables.
+**Console migrations are numbered 0007 or later**, rechecked at merge time.
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -684,14 +701,19 @@ Append-only migrations after the current schema 3 must add or extend:
 3. `agent_tags`, asset groups, and exact-match selectors;
 4. service accounts and hashed, expiring API tokens;
 5. finding-triage state (`open`, `investigating`, `mitigated`, `accepted_risk`,
-   or `false_positive`), assignee, version, required terminal note, history,
-   rule version, and accepted-risk expiry;
-6. rule sets, trusted public keys, and exact signed bundle versions;
+   or `false_positive`), keyed by agent, rule set, and rule, with assignee,
+   version, required terminal note, history, rule version, and
+   accepted-risk expiry; False Positive is scoped to the rule set and rule
+   version;
+6. no rule tables of its own: sub-project 2 defines rule sets, trusted
+   public keys, and exact signed bundle versions (migration 0006) with their
+   store operations, and the console reuses them for its rule-set pages;
 7. structured append-only audit metadata while preserving CLI compatibility;
 8. a versioned singleton audit-retention policy, defaulting to 365 days, plus
    a timestamp index for bounded maintenance cleanup;
 9. least-privilege `openvibes_console` role without DDL or unrestricted audit
-   update/delete; cleanup uses a narrowly scoped store operation;
+   update/delete, granted only the rights its queries use (as migration 4
+   does for ingest); cleanup uses a narrowly scoped store operation;
 10. measured indexes for every stable cursor and filter tuple.
 
 Existing schema facts and gaps:
@@ -700,6 +722,9 @@ Existing schema facts and gaps:
   stores the latest present authenticated-heartbeat value while retaining the
   stored value when a heartbeat omits it; the hostname remains a spoofable
   label and never identity;
+- `current_findings` is keyed by (agent_id, rule_set_id, rule_id) since
+  migration 5; extending it with the full latest snapshot means changing
+  ingest's upsert, a shared-store change agreed with the ingest side first;
 - `current_findings` lacks confidence, message, evidence, origin,
   authentication, receive time, scan ID, and `observed_day`, so it cannot
   serve a complete latest detail or reliably join a partitioned row;
@@ -708,14 +733,14 @@ Existing schema facts and gaps:
   unpartitioned receipt table or another mechanism;
 - imported files may have no `agent_id`, while current findings require one;
   import idempotency needs `install_id`, also absent;
-- rule storage and asset scopes do not exist;
+- asset scopes do not exist; rule storage comes from sub-project 2;
 - the current audit helper cannot transactionally record structured human
   actor/request metadata;
 - enrollment-token creator is free text, so console issuance needs a nullable
   stable principal reference while retaining CLI history.
 
-All schema and SQL stay in `platform-store`. PM4 and schema 3 are integrated
-in the console branch; the console takes the next available migration number
+All schema and SQL stay in `platform-store`. Schema 5 is integrated in the
+console branch (via `console-fixes`, 2026-09-24); the console takes the next available migration number
 only at implementation start, after checking the current shared base and any
 active platform branch.
 
