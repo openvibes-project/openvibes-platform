@@ -1167,7 +1167,7 @@ dependencies = [
 [[package]]
 name = "openvibes-core"
 version = "0.1.0"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=94974bfbc8d2c649c737d1ecaf868ed15560172c#94974bfbc8d2c649c737d1ecaf868ed15560172c"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=93fb41811ff5e81bec093c1083d3cfc0ffd8d400#93fb41811ff5e81bec093c1083d3cfc0ffd8d400"
 dependencies = [
  "serde",
 ]
@@ -1232,7 +1232,7 @@ dependencies = [
 [[package]]
 name = "openvibes-rules"
 version = "0.1.0"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=94974bfbc8d2c649c737d1ecaf868ed15560172c#94974bfbc8d2c649c737d1ecaf868ed15560172c"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=93fb41811ff5e81bec093c1083d3cfc0ffd8d400#93fb41811ff5e81bec093c1083d3cfc0ffd8d400"
 dependencies = [
  "base64 0.23.1",
  "cel",
@@ -1247,7 +1247,7 @@ dependencies = [
 [[package]]
 name = "openvibes-transport"
 version = "0.1.0"
-source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=94974bfbc8d2c649c737d1ecaf868ed15560172c#94974bfbc8d2c649c737d1ecaf868ed15560172c"
+source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=93fb41811ff5e81bec093c1083d3cfc0ffd8d400#93fb41811ff5e81bec093c1083d3cfc0ffd8d400"
 dependencies = [
  "openvibes-core",
  "rcgen",

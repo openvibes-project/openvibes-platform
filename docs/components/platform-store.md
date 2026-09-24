@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 6; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 8; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -141,11 +141,45 @@ heartbeat for `OFFLINE_AFTER_MINUTES` = 15, well above the 5-minute
 revoked, not expired, uses left); oldest and newest partition. All zeros and
 `None` on an empty database.
 
+## Console read models (schema 7)
+
+Migration 7 stores a full latest-observation display snapshot plus the
+partition day in `current_findings`. It backfills from retained events and
+removes current-state rows whose latest event has already aged out. Future
+ingest upserts replace that snapshot only when the observation time advances.
+It adds ordering indexes for agents, latest observations, and history pages.
+
+`console_read` is the typed query boundary for the console. It provides
+summary counts, bounded keyset pages for agents, certificates, latest findings,
+and history, plus exact agent/latest/history lookups. Certificate queries
+select metadata only. History queries require a time floor so PostgreSQL can
+prune partitions. `PageLimit` enforces the 100-row maximum. Cursor payloads
+belong to the console API, which binds them to filters and the current
+authorization context. These are global primitives and must only be exposed
+through C3 handlers that enforce scope in SQL.
+
+`console_read::schema_is_current` returns true only when the database schema
+matches this binary exactly; empty, old, and newer schemas remain unready.
+
+## Console identity and access schema (schema 8)
+
+Migration 8 adds the persistent local identity boundary used by C3: users and
+Argon2id credential slots, hash-only pre-auth and session state, bounded login
+throttle buckets, idempotency records, role/permission bindings, exact-tag
+asset groups, service accounts and hashed tokens, finding-triage state/history,
+structured audit columns, and a versioned 365-day audit-retention policy.
+Built-in Viewer, Analyst, Operator, and Admin role permissions are seeded by
+the migration. The `openvibes_console` database role can read platform data
+and update console-owned state; it cannot update agent/finding source data or
+modify/delete audit rows. This migration establishes tables and grants;
+bounded transactional store operations follow in C3 work.
+
 ## Test
 
 ```sh
 eval "$(scripts/test-db.sh)"     # throwaway cluster under target/pg
 cargo test --locked -p platform-store
+cargo test --locked -p platform-store --test console_read -- --nocapture
 ```
 
 Each test creates and drops its own database. Tests fail, never skip,
