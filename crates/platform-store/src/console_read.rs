@@ -327,17 +327,42 @@ pub async fn agent_summary(
     client: &Client,
     now: DateTime<Utc>,
 ) -> Result<AgentSummary, StoreError> {
+    agent_summary_in_scope(client, now, &AgentScope::Global).await
+}
+
+/// Counts only agents visible through the supplied SQL-enforced scope.
+pub async fn agent_summary_in_scope(
+    client: &Client,
+    now: DateTime<Utc>,
+    scope: &AgentScope,
+) -> Result<AgentSummary, StoreError> {
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
+    let groups = scope.group_ids();
+    let global = scope.is_global();
     let row = client
         .query_one(
             "SELECT count(*),
-                    count(*) FILTER (WHERE status = 'active'
-                        AND last_seen_at IS NOT NULL AND last_seen_at >= $1),
-                    count(*) FILTER (WHERE status = 'active'
-                        AND (last_seen_at IS NULL OR last_seen_at < $1)),
-                    count(*) FILTER (WHERE status = 'revoked')
-             FROM agents",
-            &[&threshold],
+                    count(*) FILTER (WHERE a.status = 'active'
+                        AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= $1),
+                    count(*) FILTER (WHERE a.status = 'active'
+                        AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)),
+                    count(*) FILTER (WHERE a.status = 'revoked')
+             FROM agents a
+             WHERE ($2::boolean OR EXISTS (
+                    SELECT 1 FROM console_asset_group_selectors s
+                    WHERE s.asset_group_id::text = ANY($3::text[])
+                      AND NOT EXISTS (
+                        SELECT 1 FROM console_asset_group_selectors required
+                        WHERE required.asset_group_id = s.asset_group_id
+                          AND NOT EXISTS (
+                            SELECT 1 FROM console_agent_tags t
+                            WHERE t.agent_id = a.agent_id
+                              AND t.tag_key = required.tag_key
+                              AND t.tag_value = required.tag_value
+                          )
+                      )
+             ))",
+            &[&threshold, &global, &groups],
         )
         .await?;
     Ok(AgentSummary {
@@ -487,21 +512,56 @@ pub async fn certificates(
     after: Option<&CertificateCursor>,
     limit: PageLimit,
 ) -> Result<Page<Certificate, CertificateCursor>, StoreError> {
+    certificates_in_scope(client, agent_id, after, limit, &AgentScope::Global).await
+}
+
+/// Pages certificate metadata only when the owning agent is visible in SQL.
+/// Out-of-scope agents return an empty page, matching an agent with no
+/// certificates and avoiding an object-existence side channel.
+pub async fn certificates_in_scope(
+    client: &Client,
+    agent_id: &str,
+    after: Option<&CertificateCursor>,
+    limit: PageLimit,
+    scope: &AgentScope,
+) -> Result<Page<Certificate, CertificateCursor>, StoreError> {
     let issued = after.map(|cursor| cursor.issued_at);
     let serial = after.map(|cursor| cursor.serial.as_slice());
+    let groups = scope.group_ids();
+    let global = scope.is_global();
     let rows = client
         .query(
-            "SELECT serial, not_before, not_after, issued_at FROM certificates
-             WHERE agent_id = $1
-               AND ($4::boolean = false OR issued_at < $2
-                    OR (issued_at = $2 AND serial > $3))
-             ORDER BY issued_at DESC, serial ASC LIMIT $5",
+            "SELECT c.serial, c.not_before, c.not_after, c.issued_at FROM certificates c
+             WHERE c.agent_id = $1
+               AND EXISTS (
+                   SELECT 1 FROM agents a
+                   WHERE a.agent_id = c.agent_id
+                     AND ($6::boolean OR EXISTS (
+                        SELECT 1 FROM console_asset_group_selectors s
+                        WHERE s.asset_group_id::text = ANY($7::text[])
+                          AND NOT EXISTS (
+                            SELECT 1 FROM console_asset_group_selectors required
+                            WHERE required.asset_group_id = s.asset_group_id
+                              AND NOT EXISTS (
+                                SELECT 1 FROM console_agent_tags t
+                                WHERE t.agent_id = a.agent_id
+                                  AND t.tag_key = required.tag_key
+                                  AND t.tag_value = required.tag_value
+                              )
+                          )
+                     ))
+               )
+               AND ($4::boolean = false OR c.issued_at < $2
+                    OR (c.issued_at = $2 AND c.serial > $3))
+             ORDER BY c.issued_at DESC, c.serial ASC LIMIT $5",
             &[
                 &agent_id,
                 &issued,
                 &serial,
                 &after.is_some(),
                 &(limit.value() + 1),
+                &global,
+                &groups,
             ],
         )
         .await?;

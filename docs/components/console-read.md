@@ -17,10 +17,13 @@ agent visibility in SQL for the supplied global or asset-group scope.
   computed against the supplied time.
 - `AgentScope::AssetGroups` matches an agent when every exact tag selector in
   any authorized asset group matches. Empty group sets match no agents.
-  `agents_in_scope` applies that predicate before status filtering, cursor
-  traversal, ordering, and limiting; `agent_in_scope` hides out-of-scope IDs
-  as absent. Other read models remain global-only until scoped variants are
-  added; the authenticated console does not expose them yet.
+  `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
+  predicate before aggregation, status filtering, cursor traversal, ordering,
+  and limiting. `agent_in_scope` hides out-of-scope IDs as absent.
+- `certificates_in_scope` verifies the owning agent's scope in the same SQL
+  query before paging certificate metadata. Out-of-scope agents return an
+  empty page. Findings still need scoped variants; the authenticated console
+  does not expose production data routes yet.
 - `agent` reads one agent. `certificates` pages certificate serial and
   validity metadata and never selects the stored PEM chain.
 - `latest_findings` and `latest_finding` read the complete snapshot in

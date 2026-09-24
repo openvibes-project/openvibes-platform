@@ -266,6 +266,23 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
             .await
             .unwrap();
     }
+    for (serial, agent_id) in [(1_u8, ids[0]), (2_u8, ids[2])] {
+        client
+            .execute(
+                "INSERT INTO certificates (serial, agent_id, spki_sha256, not_before,
+                    not_after, issued_at, chain_pem)
+                 VALUES ($1, $2, $3, $4, $5, $4, 'never returned')",
+                &[
+                    &&[serial; 16][..],
+                    &agent_id,
+                    &&[serial; 32][..],
+                    &now,
+                    &(now + Duration::days(90)),
+                ],
+            )
+            .await
+            .unwrap();
+    }
     let scope = platform_store::console_read::AgentScope::AssetGroups(vec![
         "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
     ]);
@@ -305,6 +322,30 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
             .collect::<Vec<_>>(),
         [ids[1]]
     );
+    let summary = platform_store::console_read::agent_summary_in_scope(&client, now, &scope)
+        .await
+        .unwrap();
+    assert_eq!(summary.total, 2);
+    let visible_certs = platform_store::console_read::certificates_in_scope(
+        &client,
+        ids[0],
+        None,
+        PageLimit::new(10).unwrap(),
+        &scope,
+    )
+    .await
+    .unwrap();
+    assert_eq!(visible_certs.items.len(), 1);
+    let hidden_certs = platform_store::console_read::certificates_in_scope(
+        &client,
+        ids[2],
+        None,
+        PageLimit::new(10).unwrap(),
+        &scope,
+    )
+    .await
+    .unwrap();
+    assert!(hidden_certs.items.is_empty());
     for hidden in [ids[2], ids[3]] {
         assert!(
             platform_store::console_read::agent_in_scope(&client, hidden, now, &scope)
