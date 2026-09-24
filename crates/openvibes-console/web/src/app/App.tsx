@@ -4,6 +4,7 @@ import { Brand } from "../components/Brand";
 import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
+import { AgentsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
 import { navigationGroups, resolvePage } from "./navigation";
 
 type AppProps = {
@@ -111,7 +112,10 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
                 </div>
               </header>
 
-              <div className="shell-panel">
+              {seeded && path === "/" ? <OverviewReadPage /> : null}
+              {seeded && path === "/agents" ? <AgentsReadPage /> : null}
+              {seeded && path === "/findings" ? <FindingsReadPage /> : null}
+              {!seeded || !["/", "/agents", "/findings"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
                   <p className="eyebrow">Interface foundation</p>
@@ -121,7 +125,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
                     landmarks. Operational values appear only after their API contracts are connected.
                   </p>
                 </div>
-              </div>
+              </div> : null}
             </section>
           )}
         </main>

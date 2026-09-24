@@ -73,7 +73,10 @@ fn api_router() -> Router {
 /// page whose name resolves to 127.0.0.1 (DNS rebinding) cannot read it.
 /// Requests without `Host` pass; browsers always send one.
 pub fn development_router() -> Router {
-    public_router().layer(middleware::from_fn(loopback_host_only))
+    let router = public_router();
+    #[cfg(feature = "dev-seed")]
+    let router = router.merge(crate::seeded::router());
+    router.layer(middleware::from_fn(loopback_host_only))
 }
 
 async fn loopback_host_only(request: axum::extract::Request, next: middleware::Next) -> Response {

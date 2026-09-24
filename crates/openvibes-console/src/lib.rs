@@ -19,6 +19,8 @@ mod frontend_contract;
 mod openapi;
 mod problem;
 mod router;
+#[cfg(feature = "dev-seed")]
+mod seeded;
 mod server;
 
 pub use api::{

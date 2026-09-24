@@ -34,7 +34,9 @@ and application manifest use the mark. ImageMagick deterministically renders
 the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
 Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
-authorisation.
+authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
+only on the loopback development router; it is not part of the production
+OpenAPI snapshot or package.
 
 ## Interfaces
 
@@ -88,7 +90,19 @@ startup ("invalid console configuration"), and `run` refuses a listener that
 is not loopback even if bound elsewhere. The e2e fixture uses 18490/18491,
 clear of ingest's 18480 and distribution's 18481.
 
-### Planned (C1 to C5)
+### Development seed (C1)
+
+Run the API with `cargo run -p openvibes-console --example seeded_server
+--features dev-seed` (defaults to loopback ports 18490/18491), then run
+`npm run dev` from `crates/openvibes-console/web` for the Vite UI. The Vite
+server proxies API requests to the seeded API. API requests accept the
+demo-only `x-openvibes-dev-persona` and `x-openvibes-dev-mode` headers; the UI
+controls persist those values in local storage. Data is deterministic and
+synthetic; the 50,000-agent mode returns bounded pages and never loads all
+rows into the browser. These temporary routes are intentionally absent from
+the production OpenAPI contract until the database-backed C2/C3 routes exist.
+
+### Planned (C2 to C5)
 
 The final service configuration is strict, bounded TOML with unknown keys and
 relative key/certificate paths refused. Its approved deployment constraints
@@ -132,7 +146,7 @@ banner are never included in the production RPM.
 - Frontend tests refuse brand SVGs with scripts, animation, embedded raster,
   external references, text/fonts, or background rectangles, and verify the
   PNG signatures, alpha channel, and declared dimensions.
-**Planned (C1 to C5), not implemented yet:**
+**Still planned (C2 to C5):**
 
 - Request limits (body size, request deadline, in-flight and connection
   caps, as in ingest) land before any non-loopback or TLS listener.
@@ -142,9 +156,9 @@ banner are never included in the production RPM.
 - `/ready` returns 503 while PostgreSQL is unreachable, its schema is older or
   newer than the supported version, or required local-auth state is not ready;
   `/health` remains a process-liveness check.
-- Production auth and data routes remain unavailable until their owning
-  milestones are complete. There is no permissive temporary authentication
-  mode.
+- Production data routes remain unavailable until their owning milestones
+  are complete. The loopback seeded API is synthetic and cannot access
+  production state. There is no permissive production authentication mode.
 - `GET /api/v1/session` therefore returns a no-store, bounded 503 Problem
   Details response until C3; its eventual 200 schema is already versioned in
   the checked API contract.

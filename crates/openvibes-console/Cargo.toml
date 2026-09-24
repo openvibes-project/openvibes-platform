@@ -8,9 +8,11 @@ license.workspace = true
 [features]
 default = []
 embedded-ui = ["dep:include_dir"]
+dev-seed = []
 
 [dependencies]
-axum.workspace = true
+axum = { workspace = true, features = ["query"] }
+base64.workspace = true
 include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
 serde.workspace = true
@@ -29,3 +31,7 @@ tower.workspace = true
 
 [lints]
 workspace = true
+
+[[example]]
+name = "seeded_server"
+required-features = ["dev-seed"]
