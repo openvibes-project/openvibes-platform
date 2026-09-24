@@ -8,8 +8,64 @@ use ring::{
     digest,
     rand::{SecureRandom, SystemRandom},
 };
+use unicode_normalization::UnicodeNormalization;
+use zeroize::Zeroize;
 
 const SESSION_SECRET_BYTES: usize = 32;
+// ponytail: normalization accepts at most 4,096 raw code points to bound CPU and allocation.
+const MAX_RAW_PASSWORD_CODE_POINTS: usize = 4_096;
+const MIN_PASSWORD_CODE_POINTS: usize = 15;
+const MAX_PASSWORD_CODE_POINTS: usize = 128;
+
+/// An NFC-normalized password that is cleared when dropped.
+pub struct NormalizedPassword(String);
+
+impl NormalizedPassword {
+    /// Normalizes and validates a password without trimming or truncating it.
+    pub fn new(password: &str) -> Result<Self, PasswordError> {
+        if password.chars().count() > MAX_RAW_PASSWORD_CODE_POINTS {
+            return Err(PasswordError::TooLong);
+        }
+
+        let mut normalized: String = password.nfc().collect();
+        let length = normalized.chars().count();
+        if length < MIN_PASSWORD_CODE_POINTS {
+            normalized.zeroize();
+            return Err(PasswordError::TooShort);
+        }
+        if length > MAX_PASSWORD_CODE_POINTS {
+            normalized.zeroize();
+            return Err(PasswordError::TooLong);
+        }
+        Ok(Self(normalized))
+    }
+
+    /// Returns normalized UTF-8 bytes for a password-hashing operation.
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+}
+
+impl Drop for NormalizedPassword {
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
+impl fmt::Debug for NormalizedPassword {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("NormalizedPassword([REDACTED])")
+    }
+}
+
+/// Rejection reason from local password length validation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasswordError {
+    /// Fewer than 15 Unicode code points after NFC normalization.
+    TooShort,
+    /// More than 128 normalized code points, or more than 4,096 raw code points.
+    TooLong,
+}
 
 /// Newly generated opaque session secret and its database-safe SHA-256 digest.
 ///
@@ -87,7 +143,9 @@ fn hex(bytes: &[u8]) -> String {
 mod tests {
     use axum::http::{HeaderMap, HeaderValue, header};
 
-    use super::{SessionSecret, browser_origin_allowed, session_cookie};
+    use super::{
+        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed, session_cookie,
+    };
 
     #[test]
     fn session_cookie_is_opaque_and_only_the_digest_is_persistable() {
@@ -121,5 +179,22 @@ mod tests {
             HeaderValue::from_static("https://console.example"),
         );
         assert!(!browser_origin_allowed(&headers, "https://console.example"));
+    }
+
+    #[test]
+    fn password_validation_normalizes_and_enforces_code_point_bounds() {
+        let composed = NormalizedPassword::new("é".repeat(15).as_str()).unwrap();
+        let decomposed = NormalizedPassword::new("e\u{301}".repeat(15).as_str()).unwrap();
+        assert_eq!(composed.as_bytes(), decomposed.as_bytes());
+        assert!(NormalizedPassword::new("short").is_err());
+        assert!(NormalizedPassword::new(&"x".repeat(129)).is_err());
+        assert!(NormalizedPassword::new(&"x".repeat(4_097)).is_err());
+        let spaced = NormalizedPassword::new(&format!(" {} ", "x".repeat(13))).unwrap();
+        assert_eq!(spaced.as_bytes().first(), Some(&b' '));
+        assert!(!format!("{composed:?}").contains("é"));
+        assert!(matches!(
+            NormalizedPassword::new("short"),
+            Err(PasswordError::TooShort)
+        ));
     }
 }
