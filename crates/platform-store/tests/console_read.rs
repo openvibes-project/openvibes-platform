@@ -209,6 +209,126 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
 }
 
 #[tokio::test]
+async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    let ids = [
+        "agent.00000000-0000-4000-8000-000000000011",
+        "agent.00000000-0000-4000-8000-000000000012",
+        "agent.00000000-0000-4000-8000-000000000013",
+        "agent.00000000-0000-4000-8000-000000000014",
+    ];
+    for id in ids {
+        client
+            .execute(
+                "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at)
+                 VALUES ($1, 'active', $2, $2)",
+                &[&id, &now],
+            )
+            .await
+            .unwrap();
+    }
+    client
+        .execute(
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
+             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'production', $1, 'test')",
+            &[&now],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_asset_group_selectors
+                 (asset_group_id, tag_key, tag_value, created_at)
+             VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'env', 'prod', $1),
+                    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'team', 'blue', $1)",
+            &[&now],
+        )
+        .await
+        .unwrap();
+    for (id, key, value) in [
+        (ids[0], "env", "prod"),
+        (ids[0], "team", "blue"),
+        (ids[1], "env", "prod"),
+        (ids[1], "team", "blue"),
+        (ids[2], "env", "dev"),
+        (ids[2], "team", "blue"),
+        (ids[3], "team", "blue"),
+    ] {
+        client
+            .execute(
+                "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
+                 VALUES ($1, $2, $3, $4, 'test')",
+                &[&id, &key, &value, &now],
+            )
+            .await
+            .unwrap();
+    }
+    let scope = platform_store::console_read::AgentScope::AssetGroups(vec![
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
+    ]);
+    let query = AgentQuery {
+        state: None,
+        after: None,
+        limit: PageLimit::new(1).unwrap(),
+    };
+    let first = platform_store::console_read::agents_in_scope(&client, &query, now, &scope)
+        .await
+        .unwrap();
+    assert_eq!(
+        first
+            .items
+            .iter()
+            .map(|a| a.agent_id.as_str())
+            .collect::<Vec<_>>(),
+        [ids[0]]
+    );
+    let second = platform_store::console_read::agents_in_scope(
+        &client,
+        &AgentQuery {
+            state: None,
+            after: first.next,
+            limit: PageLimit::new(10).unwrap(),
+        },
+        now,
+        &scope,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        second
+            .items
+            .iter()
+            .map(|a| a.agent_id.as_str())
+            .collect::<Vec<_>>(),
+        [ids[1]]
+    );
+    for hidden in [ids[2], ids[3]] {
+        assert!(
+            platform_store::console_read::agent_in_scope(&client, hidden, now, &scope)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
+    assert!(
+        platform_store::console_read::agent_in_scope(
+            &client,
+            ids[0],
+            now,
+            &platform_store::console_read::AgentScope::AssetGroups(Vec::new()),
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn records_console_query_plan_and_latency_at_fifty_thousand_agents() {
     const HOSTS: i32 = 50_000;
     const RUNS: usize = 30;

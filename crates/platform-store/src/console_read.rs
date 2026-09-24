@@ -8,6 +8,29 @@ use crate::{Client, StoreError, status::OFFLINE_AFTER_MINUTES};
 /// Maximum rows returned by one page.
 pub const MAX_PAGE_SIZE: u16 = 100;
 
+/// SQL visibility for agent-bound console reads. Scoped groups use the
+/// version-one exact-tag conjunction selectors stored in schema 8.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum AgentScope {
+    /// Every agent is visible to the caller.
+    Global,
+    /// Agents matching at least one listed asset group are visible.
+    AssetGroups(Vec<String>),
+}
+
+impl AgentScope {
+    fn is_global(&self) -> bool {
+        matches!(self, Self::Global)
+    }
+
+    fn group_ids(&self) -> Vec<String> {
+        match self {
+            Self::Global => Vec::new(),
+            Self::AssetGroups(ids) => ids.clone(),
+        }
+    }
+}
+
 /// A validated bounded page size.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PageLimit(u16);
@@ -331,10 +354,24 @@ pub async fn agents(
     query: &AgentQuery,
     now: DateTime<Utc>,
 ) -> Result<Page<Agent, AgentCursor>, StoreError> {
+    agents_in_scope(client, query, now, &AgentScope::Global).await
+}
+
+/// Returns only agents visible through the supplied global or asset-group
+/// scope. Selector membership is applied in SQL before status filters,
+/// keyset pagination, and ordering.
+pub async fn agents_in_scope(
+    client: &Client,
+    query: &AgentQuery,
+    now: DateTime<Utc>,
+    scope: &AgentScope,
+) -> Result<Page<Agent, AgentCursor>, StoreError> {
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
     let state = query.state.map(AgentState::as_db_filter);
     let cursor_seen = query.after.as_ref().and_then(|cursor| cursor.last_seen_at);
     let cursor_id = query.after.as_ref().map(|cursor| cursor.agent_id.as_str());
+    let groups = scope.group_ids();
+    let global = scope.is_global();
     let rows = client
         .query(
             "SELECT a.agent_id, a.hostname,
@@ -349,6 +386,20 @@ pub async fn agents(
                     ($2 = 'stale' AND a.status = 'active'
                         AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)) OR
                     ($2 = 'revoked' AND a.status = 'revoked'))
+               AND ($7::boolean OR EXISTS (
+                    SELECT 1 FROM console_asset_group_selectors s
+                    WHERE s.asset_group_id::text = ANY($8::text[])
+                      AND NOT EXISTS (
+                        SELECT 1 FROM console_asset_group_selectors required
+                        WHERE required.asset_group_id = s.asset_group_id
+                          AND NOT EXISTS (
+                            SELECT 1 FROM console_agent_tags t
+                            WHERE t.agent_id = a.agent_id
+                              AND t.tag_key = required.tag_key
+                              AND t.tag_value = required.tag_value
+                          )
+                      )
+               ))
                AND ($5::boolean = false OR
                     ($3::timestamptz IS NOT NULL AND
                         (a.last_seen_at < $3 OR (a.last_seen_at = $3 AND a.agent_id > $4)
@@ -363,6 +414,8 @@ pub async fn agents(
                 &cursor_id,
                 &query.after.is_some(),
                 &(query.limit.value() + 1),
+                &global,
+                &groups,
             ],
         )
         .await?;
@@ -385,7 +438,20 @@ pub async fn agent(
     agent_id: &str,
     now: DateTime<Utc>,
 ) -> Result<Option<Agent>, StoreError> {
+    agent_in_scope(client, agent_id, now, &AgentScope::Global).await
+}
+
+/// Returns an agent only when it belongs to the supplied SQL-enforced scope.
+/// An out-of-scope id is indistinguishable from an absent id.
+pub async fn agent_in_scope(
+    client: &Client,
+    agent_id: &str,
+    now: DateTime<Utc>,
+    scope: &AgentScope,
+) -> Result<Option<Agent>, StoreError> {
     let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
+    let groups = scope.group_ids();
+    let global = scope.is_global();
     let row = client
         .query_opt(
             "SELECT a.agent_id, a.hostname,
@@ -393,8 +459,22 @@ pub async fn agent(
                          WHEN a.last_seen_at IS NULL OR a.last_seen_at < $2 THEN 'stale'
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
-             FROM agents a WHERE a.agent_id = $1",
-            &[&agent_id, &threshold],
+             FROM agents a WHERE a.agent_id = $1
+               AND ($3::boolean OR EXISTS (
+                    SELECT 1 FROM console_asset_group_selectors s
+                    WHERE s.asset_group_id::text = ANY($4::text[])
+                      AND NOT EXISTS (
+                        SELECT 1 FROM console_asset_group_selectors required
+                        WHERE required.asset_group_id = s.asset_group_id
+                          AND NOT EXISTS (
+                            SELECT 1 FROM console_agent_tags t
+                            WHERE t.agent_id = a.agent_id
+                              AND t.tag_key = required.tag_key
+                              AND t.tag_value = required.tag_value
+                          )
+                      )
+               ))",
+            &[&agent_id, &threshold, &global, &groups],
         )
         .await?;
     Ok(row.as_ref().map(agent_from_row))

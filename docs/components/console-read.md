@@ -1,12 +1,12 @@
 # Console read models
 
-`platform_store::console_read` supplies bounded, typed global read queries for
+`platform_store::console_read` supplies bounded, typed read queries for
 the OpenVIBES web console. It contains all SQL for agent summaries and pages,
 certificate metadata, latest findings, finding summaries, and retained finding
 history. The console crate converts these records to its HTTP DTOs and applies
-authentication and scope rules before calling them. These functions are global
-read primitives; they must not be exposed until the console's C3 authorization
-layer is active.
+authentication and scope rules before calling them. The unscoped functions
+are global read primitives. `agents_in_scope` and `agent_in_scope` enforce
+agent visibility in SQL for the supplied global or asset-group scope.
 
 ## Interfaces
 
@@ -15,6 +15,12 @@ layer is active.
 - `agents` uses a stable cursor over last-seen time descending, nulls last, and
   agent ID ascending. The state filter is allow-listed and stale state is
   computed against the supplied time.
+- `AgentScope::AssetGroups` matches an agent when every exact tag selector in
+  any authorized asset group matches. Empty group sets match no agents.
+  `agents_in_scope` applies that predicate before status filtering, cursor
+  traversal, ordering, and limiting; `agent_in_scope` hides out-of-scope IDs
+  as absent. Other read models remain global-only until scoped variants are
+  added; the authenticated console does not expose them yet.
 - `agent` reads one agent. `certificates` pages certificate serial and
   validity metadata and never selects the stored PEM chain.
 - `latest_findings` and `latest_finding` read the complete snapshot in
