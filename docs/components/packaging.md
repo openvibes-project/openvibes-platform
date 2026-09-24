@@ -1,14 +1,15 @@
 # packaging (RPM)
 
-`packaging/rpm/` builds two Fedora packages from one spec,
-`openvibes-platform.spec`: **openvibes-ingest** and **openvibes-admin**.
+`packaging/rpm/` builds three Fedora packages from one spec,
+`openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
+and **openvibes-admin**.
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
 deployment, not for inclusion in Fedora itself.
 
 ```sh
-scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,admin}-*.rpm
+scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,admin}-*.rpm
 ```
 
 ## Contents
@@ -21,6 +22,10 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,admin}-*
 | `/etc/openvibes/ingest.toml` | 0640 root:openvibes_ingest, `%config(noreplace)` | ingest |
 | `/etc/openvibes/{tls,pki}/` | 0755 root | ingest |
 | `/var/lib/openvibes-ingest/` | 0700 openvibes_ingest (intermediate key) | ingest |
+| `/usr/bin/openvibes-distribution` | 0755 root | distribution |
+| `/usr/lib/systemd/system/openvibes-distribution.service` | 0644 root | distribution |
+| `/usr/lib/sysusers.d/openvibes-distribution.conf` | user `openvibes_distribution` | distribution |
+| `/etc/openvibes/distribution.toml` | 0640 root:openvibes_distribution, `%config(noreplace)` | distribution |
 | `/usr/bin/openvibes-admin` | 0755 root | admin |
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
@@ -43,6 +48,9 @@ directory itself, so no tmpfiles.d entry is needed.
   `RestrictNamespaces`, `MemoryDenyWriteExecute`, the `@system-service`
   syscall filter without `@privileged @resources`, no capabilities,
   `UMask=0077`.
+- `openvibes-distribution.service`: the same unit and hardening as ingest,
+  as `openvibes_distribution`; it writes nothing, so it has no state
+  directory.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
@@ -97,6 +105,21 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    then `systemctl enable --now openvibes-ingest openvibes-maintenance.timer`
    and `firewall-cmd --permanent --add-port=18423/tcp && firewall-cmd --reload`.
 6. Check: `curl http://127.0.0.1:18480/ready` → 200.
+7. Distribution (optional, `dnf install openvibes-distribution`): give it
+   its own server certificate, issued like ingest's in step 3 (for example
+   `ca issue-server rules.example.com … --out $S/tls`), and install it:
+
+   ```sh
+   install -m 0644 $S/tls/rules.example.com.crt /etc/openvibes/tls/distribution.crt
+   install -o openvibes_distribution -g openvibes_distribution -m 0600 $S/tls/rules.example.com.key /etc/openvibes/tls/distribution.key
+   ```
+
+   `openvibes-admin migrate` (schema 6) already created its database role.
+   Then `systemctl enable --now openvibes-distribution`,
+   `firewall-cmd --permanent --add-port=18424/tcp && firewall-cmd --reload`,
+   and check `curl http://127.0.0.1:18481/ready` → 200. Trust keys and
+   publish bundles with `openvibes-admin rules` ([openvibes-admin.md](openvibes-admin.md));
+   agents set `distribution_url` and leave out `bundle_file`.
 
 Agents trust `root.crt` (their `platform_ca_file`).
 
@@ -167,9 +190,9 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
-three units, that the ingest unit stops with SIGINT (the signal ingest
-drains on; an actual stop is not exercised here), and that both binaries
-run.
+four units, that the ingest and distribution units stop with SIGINT (the
+signal they drain on; an actual stop is not exercised here), and that the
+binaries run and refuse a missing configuration.
 
 CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, installs
 the RPMs, and runs `check-rpm.sh`; the integration test then runs against
