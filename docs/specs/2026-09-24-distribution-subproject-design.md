@@ -74,7 +74,7 @@ crates/platform-agent-server/   NEW (Q1): TLS config, expiry-tolerant client ver
                                 authenticated-agent extractor, limits, logging,
                                 accept loop with drain, health, extracted from ingest
 crates/openvibes-distribution/  NEW: the service (lib + thin binary)
-crates/platform-store/          + rules module, migration 0005
+crates/platform-store/          + rules module, migration 0006
 crates/openvibes-admin/         + `rules` commands
 packaging/rpm/                  + openvibes-distribution subpackage, unit, sysusers
 scripts/integration-agent.sh    + distribution steps
@@ -105,7 +105,7 @@ database_pool_size = 16
 
 The service holds no issuing key and no rule-signing key.
 
-## 5. Data Model (migration 0005)
+## 5. Data Model (migration 0006)
 
 ```
 rule_sets        rule_set_id text PK (Identifier), created_at, retired_at
@@ -211,7 +211,7 @@ version, and the envelope digest as target.
 | # | Milestone | Exit |
 |---|---|---|
 | DM0 | Extract `platform-agent-server` from ingest (Q1) | ingest suite, integration, and load unchanged and green |
-| DM1 | Migration 0005, store rules module, `admin rules` | publish tests pass; exact bytes stored |
+| DM1 | Migration 0006, store rules module, `admin rules` | publish tests pass; exact bytes stored |
 | DM2 | `openvibes-distribution` with all failure-path tests | section 8 service and fixture tests pass |
 | DM3 | RPM subpackage; integration with the real agent | section 1 items 1 to 3 hold |
 | DM4 | Distribution load run | section 1 item 4 recorded |
@@ -237,7 +237,7 @@ user chose **R** for every question, and each carries a **Resolved** line.
 Codex's console technical design (branch `console`, section 14, item 6)
 plans "rule sets, trusted public keys, and exact signed bundle versions" as a
 later migration.
-- (a) **R** Distribution defines them here in migration 0005. The console
+- (a) **R** Distribution defines them here in migration 0006. The console
   reuses the tables and the store functions when it implements its
   rule-set pages. Record this in `decisions.md` so Codex sees it.
 - (b) The console defines them and distribution waits. That blocks
