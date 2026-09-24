@@ -22,6 +22,49 @@ pub fn percentile(sorted: &[u64], p: f64) -> u64 {
     sorted[rank.clamp(1, sorted.len()) - 1]
 }
 
+/// The value in kB of `key` (e.g. `VmRSS`, `Pss`) in a /proc status or
+/// smaps_rollup text, whose lines read `Key:   1234 kB`.
+pub fn proc_kb(text: &str, key: &str) -> Option<u64> {
+    text.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        (name == key)
+            .then(|| value.split_whitespace().next()?.parse().ok())
+            .flatten()
+    })
+}
+
+/// A finding id shaped like the agent's (`finding.` + 64 hex digits), unique
+/// per agent, tick, and position in the batch.
+pub fn finding_id(agent: usize, tick: u64, n: usize) -> String {
+    // A fixed tag fills the last 16 digits so ids stay 64 digits long.
+    format!(
+        "finding.{agent:016x}{tick:016x}{n:016x}{:016x}",
+        0x6f76_6c6f_6164_u64
+    )
+}
+
+/// CPU clock ticks from a /proc/PID/stat line: utime + stime, plus cutime +
+/// cstime (reaped children) when `with_children`.
+pub fn stat_ticks(stat: &str, with_children: bool) -> u64 {
+    // The command name may contain anything, so fields count from its
+    // closing parenthesis: utime is the 12th field after it.
+    let Some((_, rest)) = stat.rsplit_once(')') else {
+        return 0;
+    };
+    let fields: Vec<u64> = rest
+        .split_whitespace()
+        .skip(11)
+        .take(4)
+        .filter_map(|field| field.parse().ok())
+        .collect();
+    let own = fields.iter().take(2).sum::<u64>();
+    if with_children {
+        own + fields.iter().skip(2).sum::<u64>()
+    } else {
+        own
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -63,5 +106,39 @@ mod tests {
         assert_eq!(percentile(&samples, 100.0), 100);
         assert_eq!(percentile(&[7], 99.0), 7);
         assert_eq!(percentile(&[], 99.0), 0);
+    }
+
+    #[test]
+    fn reads_proc_memory_fields() {
+        let status = "Name:\tpostgres\nVmHWM:\t   20480 kB\nVmRSS:\t   16384 kB\n";
+        assert_eq!(proc_kb(status, "VmRSS"), Some(16384));
+        assert_eq!(proc_kb(status, "VmHWM"), Some(20480));
+        let smaps = "55d0-7ffd ---p 00000000 00:00 0 [rollup]\nRss:  9000 kB\nPss:  4096 kB\nPss_Anon:  100 kB\n";
+        assert_eq!(proc_kb(smaps, "Pss"), Some(4096), "exact key, not Pss_Anon");
+        assert_eq!(proc_kb(status, "Pss"), None);
+    }
+
+    #[test]
+    fn finding_ids_look_like_the_agents() {
+        let id = finding_id(1999, 59, 9);
+        assert_eq!(id.len(), "finding.".len() + 64);
+        assert!(id.starts_with("finding."));
+        assert!(
+            id["finding.".len()..]
+                .chars()
+                .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase())
+        );
+        assert_ne!(finding_id(1, 2, 3), finding_id(1, 3, 2));
+        assert_ne!(finding_id(0, 0, 0), finding_id(0, 0, 1));
+    }
+
+    #[test]
+    fn stat_ticks_skip_the_command_name() {
+        // pid (comm, which may hold spaces and parens) state ppid ... utime
+        // stime cutime cstime at fields 14 to 17.
+        let stat = "123 (postgres: io (w) 1) S 1 2 3 4 5 6 7 8 9 10 700 30 5000 60 20 0";
+        assert_eq!(stat_ticks(stat, false), 730);
+        assert_eq!(stat_ticks(stat, true), 5790);
+        assert_eq!(stat_ticks("garbage", true), 0);
     }
 }

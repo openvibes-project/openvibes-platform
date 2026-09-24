@@ -185,15 +185,18 @@ fn tick(
         let findings: Vec<Finding> = (0..args.batch)
             .map(|n| Finding {
                 schema_version: SchemaVersion::V1,
-                finding_id: id(format!("finding.load.{index}.{tick}.{n}")),
-                scan_id: id(format!("scan.load.{index}.{tick}")),
-                rule_id: id("load.rule".into()),
+                // Shaped like real agent findings (sizes from a Fedora host's
+                // queue): 64-hex id, `scan.<ms>`, ~17-char rule id, ~65-char
+                // message, one evidence key.
+                finding_id: id(plan::finding_id(index, tick, n)),
+                scan_id: id(format!("scan.{observed}")),
+                rule_id: id(format!("baseline.rule.{n:03}")),
                 rule_version: 1,
                 observed_at_unix_ms: observed,
                 severity: Severity::Info,
                 confidence: Confidence::new(100).expect("valid confidence"),
-                message: "Load test finding".into(),
-                evidence: Vec::new(),
+                message: "Load test finding: a synthetic observation of typical size".into(),
+                evidence: vec![id("process.names".into())],
             })
             .collect();
         let started = Instant::now();
@@ -209,29 +212,18 @@ fn tick(
     samples
 }
 
-/// utime + stime of `pid` in clock ticks, from /proc/PID/stat.
-fn cpu_ticks(pid: u32) -> u64 {
-    let Ok(stat) = std::fs::read_to_string(format!("/proc/{pid}/stat")) else {
-        return 0;
-    };
-    // Fields after the parenthesised command name; utime and stime are the
-    // 14th and 15th fields overall, so the 12th and 13th after it.
-    let rest = stat.rsplit_once(')').map_or("", |(_, rest)| rest);
-    let fields: Vec<&str> = rest.split_whitespace().collect();
-    let field = |n: usize| {
-        fields
-            .get(n)
-            .and_then(|v| v.parse::<u64>().ok())
-            .unwrap_or(0)
-    };
-    field(11) + field(12)
+/// utime + stime of `pid` in clock ticks, from /proc/PID/stat; with
+/// `with_children`, plus the CPU of children it has reaped.
+fn cpu_ticks(pid: u32, with_children: bool) -> u64 {
+    std::fs::read_to_string(format!("/proc/{pid}/stat"))
+        .map_or(0, |stat| plan::stat_ticks(&stat, with_children))
 }
 
 /// The postmaster and all its children (backends, workers).
-fn postgres_ticks(postmaster: u32) -> u64 {
-    let mut total = cpu_ticks(postmaster);
+fn postgres_pids(postmaster: u32) -> Vec<u32> {
+    let mut pids = vec![postmaster];
     let Ok(entries) = std::fs::read_dir("/proc") else {
-        return total;
+        return pids;
     };
     for entry in entries.flatten() {
         let Some(pid) = entry
@@ -249,16 +241,50 @@ fn postgres_ticks(postmaster: u32) -> u64 {
             .and_then(|(_, rest)| rest.split_whitespace().nth(1))
             .and_then(|v| v.parse::<u32>().ok());
         if parent == Some(postmaster) {
-            total += cpu_ticks(pid);
+            pids.push(pid);
         }
     }
-    total
+    pids
+}
+
+/// The live backends plus the postmaster, whose reaped-children time holds
+/// backends that exited during the window.
+fn postgres_ticks(postmaster: u32) -> u64 {
+    postgres_pids(postmaster)
+        .into_iter()
+        .map(|pid| cpu_ticks(pid, pid == postmaster))
+        .sum()
+}
+
+fn proc_mib(pid: u32, file: &str, key: &str) -> f64 {
+    std::fs::read_to_string(format!("/proc/{pid}/{file}"))
+        .ok()
+        .and_then(|text| plan::proc_kb(&text, key))
+        .map_or(0.0, |kb| kb as f64 / 1024.0)
+}
+
+/// Memory at the end of the window, in MiB: ingest's resident and peak
+/// resident size, and PostgreSQL's proportional set size summed over the
+/// postmaster and its children (shared buffers counted once, not once per
+/// backend).
+fn memory(args: &Args) -> serde_json::Value {
+    let ingest = args.ingest_pid;
+    serde_json::json!({
+        "ingest_rss": ingest.map_or(0.0, |pid| proc_mib(pid, "status", "VmRSS")),
+        "ingest_peak_rss": ingest.map_or(0.0, |pid| proc_mib(pid, "status", "VmHWM")),
+        "postgres_pss": args.postmaster_pid.map_or(0.0, |postmaster| {
+            postgres_pids(postmaster)
+                .into_iter()
+                .map(|pid| proc_mib(pid, "smaps_rollup", "Pss"))
+                .sum()
+        }),
+    })
 }
 
 fn snapshot(args: &Args) -> [u64; 3] {
     [
-        cpu_ticks(std::process::id()),
-        args.ingest_pid.map_or(0, cpu_ticks),
+        cpu_ticks(std::process::id(), false),
+        args.ingest_pid.map_or(0, |pid| cpu_ticks(pid, false)),
         args.postmaster_pid.map_or(0, postgres_ticks),
     ]
 }
@@ -364,13 +390,20 @@ fn main() -> ExitCode {
         thread::sleep(wait);
     }
     let after = snapshot(&args);
+    let memory_mib = memory(&args);
     let _ = scheduler.join();
     let mut samples = Vec::new();
     let mut max_lag = Duration::ZERO;
+    // A worker that panicked lost its samples: that is an error, never a
+    // silently smaller run.
+    let mut panicked = 0_u64;
     for worker in workers {
-        if let Ok((worker_samples, lag)) = worker.join() {
-            samples.extend(worker_samples);
-            max_lag = max_lag.max(lag);
+        match worker.join() {
+            Ok((worker_samples, lag)) => {
+                samples.extend(worker_samples);
+                max_lag = max_lag.max(lag);
+            }
+            Err(_) => panicked += 1,
         }
     }
 
@@ -381,6 +414,9 @@ fn main() -> ExitCode {
         if let Some(error) = &sample.error {
             *errors.entry(error.clone()).or_default() += 1;
         }
+    }
+    if panicked > 0 {
+        errors.insert("worker panicked".into(), panicked);
     }
     let latencies = |kind: Option<Kind>| {
         measured
@@ -421,6 +457,7 @@ fn main() -> ExitCode {
             "findings": stats(latencies(Some(Kind::Findings))),
         },
         "cpu_cores": { "generator": cores(0), "ingest": cores(1), "postgres": cores(2) },
+        "memory_mib": memory_mib,
         "enroll": { "agents": count, "seconds": enroll_seconds },
         "pass": pass,
     });
