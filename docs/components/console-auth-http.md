@@ -51,8 +51,10 @@ list, detail, and certificate queries. Agent and certificate cursors are
 bounded and rejected when their filters or scope differ from the current
 request. Detail responses include up to 100 certificate metadata rows; the
 separate certificate route provides full cursor pagination. Finding and
-control-plane data routes remain unavailable until their handlers and scope
-checks are implemented.
+latest-summary routes require `findings.read` and use the same active SQL
+scope; latest-finding cursors are bounded and tied to severity and scope.
+Finding history and control-plane data routes remain unavailable until their
+handlers and scope checks are implemented.
 
 ## Failure behaviour
 

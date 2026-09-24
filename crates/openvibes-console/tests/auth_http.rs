@@ -13,6 +13,7 @@ use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, h
 use platform_store::{
     self,
     console_auth::{NewLocalUser, create_local_user},
+    ingest::{self, StoredFinding},
 };
 use serde_json::Value;
 use tower::ServiceExt;
@@ -148,6 +149,31 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             )
             .await
             .unwrap();
+    }
+    platform_store::ensure_partitions(&client, enrolled_at.date_naive(), 1)
+        .await
+        .unwrap();
+    for (index, severity) in [(101, "critical"), (102, "high")] {
+        let agent_id = format!("agent.00000000-0000-4000-8000-000000000{index}");
+        ingest::store_findings(
+            &mut client,
+            &agent_id,
+            &[StoredFinding {
+                finding_id: format!("finding-{index}"),
+                scan_id: format!("scan-{index}"),
+                rule_set_id: "base".into(),
+                rule_id: "credential".into(),
+                rule_version: 1,
+                observed_at: enrolled_at,
+                severity: severity.into(),
+                confidence: 95,
+                message: format!("fixture finding {index}"),
+                evidence: vec!["package=fixture".into()],
+            }],
+            enrolled_at,
+        )
+        .await
+        .unwrap();
     }
     let password = "violet-satellite-mountain-otter-2026";
     let normalized = NormalizedPassword::new(password).unwrap();
@@ -381,6 +407,71 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(wrong_agent_cursor.status(), StatusCode::BAD_REQUEST);
+    let findings_summary = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/summary")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(findings_summary.status(), StatusCode::OK);
+    let findings_summary: Value =
+        serde_json::from_slice(&to_bytes(findings_summary.into_body(), 4096).await.unwrap())
+            .unwrap();
+    assert_eq!(findings_summary["total"], 2);
+    assert_eq!(findings_summary["critical"], 1);
+    let first_findings = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/latest?limit=1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_findings.status(), StatusCode::OK);
+    let first_findings: Value =
+        serde_json::from_slice(&to_bytes(first_findings.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(first_findings["items"].as_array().unwrap().len(), 1);
+    let findings_cursor = first_findings["next_cursor"].as_str().unwrap();
+    let second_findings = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/findings/latest?limit=1&cursor={findings_cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_findings.status(), StatusCode::OK);
+    let second_findings: Value =
+        serde_json::from_slice(&to_bytes(second_findings.into_body(), 8192).await.unwrap())
+            .unwrap();
+    assert_eq!(second_findings["items"].as_array().unwrap().len(), 1);
+    let severity_mismatch = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/findings/latest?severity=critical&cursor={findings_cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(severity_mismatch.status(), StatusCode::BAD_REQUEST);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

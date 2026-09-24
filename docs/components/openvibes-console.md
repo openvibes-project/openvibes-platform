@@ -23,8 +23,9 @@ the executable connects to PostgreSQL, requires schema version 8, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
-certificate routes; finding and control-plane routes and access-control/audit
-pages remain pending. The
+certificate routes, plus finding summary and latest observations. Finding
+history, control-plane routes, and access-control/audit pages remain pending.
+The
 first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI now has a login form, session gate,
 and sign-out action.
