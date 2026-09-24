@@ -68,7 +68,7 @@ about 150 agents/s, so 50,000 agents enroll in roughly 6 minutes.
 |---|---|---|
 | CPU | any x86_64 core | same |
 | RAM | 32 MB free | 64 MB free |
-| Disk | 50 MB (binary + state) | 200 MB, for queue room during long platform outages |
+| Disk | 50 MB (binary + state) | 400 MB: the queue alone may reach 256 MiB during long platform outages |
 | OS | Linux (tested: Fedora 44) | same |
 
 The agent's disk use depends on how much the local queue holds before old
