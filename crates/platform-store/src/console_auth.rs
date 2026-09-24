@@ -48,6 +48,8 @@ pub struct NewLocalUser<'a> {
 pub struct NewSession<'a> {
     /// SHA-256 digest of the browser's random session token.
     pub session_sha256: &'a [u8],
+    /// Existing browser session to revoke atomically when rotating after login.
+    pub previous_session_sha256: Option<&'a [u8]>,
     /// SHA-256 digest of its synchroniser CSRF value.
     pub csrf_sha256: &'a [u8],
     /// User UUID.
@@ -247,6 +249,14 @@ pub async fn create_session(
         )
         .await?;
     if inserted == 1 {
+        if let Some(previous_session_sha256) = session.previous_session_sha256 {
+            tx.execute(
+                "UPDATE console_sessions SET revoked_at = $2
+                 WHERE session_sha256 = $1 AND revoked_at IS NULL",
+                &[&previous_session_sha256, &session.now],
+            )
+            .await?;
+        }
         let row = tx
             .query_one(
                 "SELECT display_name FROM console_users WHERE user_id = $1::text::uuid",
@@ -323,18 +333,45 @@ pub async fn touch_session(
 
 /// Revokes one session if it exists and has not already been revoked.
 pub async fn revoke_session(
-    client: &Client,
+    client: &mut Client,
     session_sha256: &[u8],
     now: DateTime<Utc>,
+    audit: &AuditContext<'_>,
 ) -> Result<bool, StoreError> {
-    let updated = client
-        .execute(
+    let tx = client.transaction().await?;
+    let row = tx
+        .query_opt(
             "UPDATE console_sessions SET revoked_at = $2
-             WHERE session_sha256 = $1 AND revoked_at IS NULL",
+             WHERE session_sha256 = $1 AND revoked_at IS NULL
+             RETURNING user_id::text",
             &[&session_sha256, &now],
         )
         .await?;
-    Ok(updated == 1)
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let user_id: String = row.get(0);
+    append_auth_event(
+        &tx,
+        audit,
+        AuthAuditEvent {
+            actor: &user_id,
+            action: "auth.logout.succeeded",
+            target: Some(&user_id),
+            result: "success",
+            actor_kind: Some("user"),
+            actor_id: Some(&user_id),
+            actor_display: None,
+            authentication_method: Some("local_password"),
+            target_kind: Some("user"),
+            target_id: Some(&user_id),
+            reason_code: None,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
 }
 
 /// Invalidates every existing session by advancing the account generation.
@@ -433,6 +470,52 @@ pub async fn replace_password(
             actor_id: Some(actor_id),
             actor_display: None,
             authentication_method: None,
+            target_kind: Some("user"),
+            target_id: Some(user_id),
+            reason_code: None,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Upgrades an Argon2id work factor without invalidating a verified session.
+/// The auth generation check prevents replacing a password changed concurrently.
+pub async fn rehash_password(
+    client: &mut Client,
+    user_id: &str,
+    expected_generation: i64,
+    password_phc: &str,
+    now: DateTime<Utc>,
+    audit: &AuditContext<'_>,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let updated = tx
+        .execute(
+            "UPDATE console_credentials c SET password_phc = $3, changed_at = $4
+             FROM console_users u
+             WHERE c.user_id = u.user_id AND u.user_id = $1::text::uuid
+               AND u.enabled AND u.auth_generation = $2",
+            &[&user_id, &expected_generation, &password_phc, &now],
+        )
+        .await?;
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    append_auth_event(
+        &tx,
+        audit,
+        AuthAuditEvent {
+            actor: user_id,
+            action: "auth.password.rehashed",
+            target: Some(user_id),
+            result: "success",
+            actor_kind: Some("user"),
+            actor_id: Some(user_id),
+            actor_display: None,
+            authentication_method: Some("local_password"),
             target_kind: Some("user"),
             target_id: Some(user_id),
             reason_code: None,

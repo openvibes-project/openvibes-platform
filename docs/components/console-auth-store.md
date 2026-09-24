@@ -15,13 +15,17 @@ tokens, and CSRF values stay in the console process.
 - `user_role_bindings` returns active bindings for per-request capability
   resolution. It does not cache effective permission state.
 - `create_session` accepts only a currently enabled account at the generation
-  observed after password verification. Session lookups require matching
+  observed after password verification and can revoke the prior session in the
+  same transaction during login rotation. Session lookups require matching
   account generation, no revocation, and both idle and absolute expiry in the
   future. `touch_session` never extends absolute expiry; `revoke_user_sessions`
   advances the account generation, revokes its sessions, and writes one audit
-  event atomically.
+  event atomically. `revoke_session` revokes only one session and writes the
+  logout event in the same transaction.
 - `replace_password` replaces the PHC credential, advances auth generation,
   revokes all sessions, and appends its audit event in one transaction.
+  `rehash_password` upgrades an existing hash only at the generation just
+  verified and records the upgrade without invalidating the new login.
   `disable_local_user` disables an account and revokes its sessions with the
   same atomic audit guarantee.
 - `create_preauth` / `consume_preauth` store and consume state only when the

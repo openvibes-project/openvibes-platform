@@ -7,8 +7,8 @@ use common::TestDb;
 use platform_store::console_auth::{
     NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth, create_local_user,
     create_preauth, create_session, credential_by_username, disable_local_user, login_is_throttled,
-    record_login_failure, replace_password, revoke_user_sessions, session, touch_session,
-    user_role_bindings,
+    record_login_failure, rehash_password, replace_password, revoke_user_sessions, session,
+    touch_session, user_role_bindings,
 };
 
 const USER_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -92,6 +92,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
             &mut client,
             &NewSession {
                 session_sha256: &session_hash,
+                previous_session_sha256: None,
                 csrf_sha256: &csrf_hash,
                 user_id: USER_ID,
                 auth_generation: 0,
@@ -145,6 +146,24 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
     );
     assert_eq!(login_audit.get::<_, String>(5), "{}");
     assert!(
+        rehash_password(
+            &mut client,
+            USER_ID,
+            0,
+            "$argon2id$v=19$m=19456,t=2,p=1$upgraded-salt$upgraded-hash",
+            now + Duration::seconds(1),
+            &platform_store::console_auth::AuditContext::default(),
+        )
+        .await
+        .unwrap()
+    );
+    assert!(
+        session(&client, &session_hash, now + Duration::seconds(2))
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
         touch_session(
             &client,
             &session_hash,
@@ -162,6 +181,37 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
     assert_eq!(
         idle_expires_at.timestamp_micros(),
         (now + Duration::minutes(32)).timestamp_micros()
+    );
+    let rotated_session_hash = [6_u8; 32];
+    assert!(
+        create_session(
+            &mut client,
+            &NewSession {
+                session_sha256: &rotated_session_hash,
+                previous_session_sha256: Some(&session_hash),
+                csrf_sha256: &csrf_hash,
+                user_id: USER_ID,
+                auth_generation: 0,
+                now: now + Duration::minutes(2) + Duration::seconds(1),
+                idle_expires_at: now + Duration::minutes(32),
+                absolute_expires_at: now + Duration::hours(8),
+                audit: platform_store::console_auth::AuditContext::default(),
+            },
+        )
+        .await
+        .unwrap()
+    );
+    assert!(
+        session(&client, &session_hash, now + Duration::minutes(3))
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        session(&client, &rotated_session_hash, now + Duration::minutes(3))
+            .await
+            .unwrap()
+            .is_some()
     );
     assert!(
         replace_password(
@@ -204,6 +254,7 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
             &mut client,
             &NewSession {
                 session_sha256: &next_session_hash,
+                previous_session_sha256: None,
                 csrf_sha256: &csrf_hash,
                 user_id: USER_ID,
                 auth_generation: 1,
