@@ -8,6 +8,23 @@ readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"
 readonly dist_root="${web_root}/dist"
 readonly openapi_snapshot="${repository_root}/docs/api/console-v1.openapi.json"
+offline_cache_dir=
+npm_network_namespace=()
+
+if [[ $# -eq 2 && "$1" == "--offline-cache-dir" ]]; then
+    offline_cache_dir="$2"
+elif [[ $# -ne 0 ]]; then
+    printf 'usage: %s [--offline-cache-dir EXTRACTED_NPM_CACHE]\n' "$0" >&2
+    exit 2
+fi
+
+if [[ -n "${offline_cache_dir}" ]]; then
+    if [[ ! -d "${offline_cache_dir}" || -L "${offline_cache_dir}" ]]; then
+        printf 'error: offline npm cache must be a regular directory\n' >&2
+        exit 1
+    fi
+    offline_cache_dir="$(cd -- "${offline_cache_dir}" && pwd -P)"
+fi
 
 for required_command in node npm cargo; do
     if ! command -v "${required_command}" >/dev/null 2>&1; then
@@ -31,16 +48,46 @@ if [[ ! -f "${web_root}/package-lock.json" ]]; then
 fi
 
 cd -- "${repository_root}"
-cargo run --quiet --locked -p openvibes-console --bin export_openapi -- \
+offline_cargo_args=()
+if [[ -n "${offline_cache_dir}" ]]; then
+    offline_cargo_args=(--offline)
+fi
+cargo run --quiet --locked "${offline_cargo_args[@]}" \
+    -p openvibes-console --bin export_openapi -- \
     --check "${openapi_snapshot}"
 
 cd -- "${web_root}"
-npm ci --no-audit --no-fund
-npm run check:api
-npm run lint
-npm run typecheck
-npm test
-npm run build
+if [[ -n "${offline_cache_dir}" ]]; then
+    for metadata_file in .lockfile-sha256 .platform; do
+        if [[ ! -f "${offline_cache_dir}/${metadata_file}" || -L "${offline_cache_dir}/${metadata_file}" ]]; then
+            printf 'error: offline npm cache is missing %s\n' "${metadata_file}" >&2
+            exit 1
+        fi
+    done
+    expected_lock_digest="$(sha256sum "${web_root}/package-lock.json" | cut -d' ' -f1)"
+    expected_platform="$(node --print 'process.platform + "-" + process.arch')"
+    if [[ "$(<"${offline_cache_dir}/.lockfile-sha256")" != "${expected_lock_digest}" \
+        || "$(<"${offline_cache_dir}/.platform")" != "${expected_platform}" \
+        || -n "$(find "${offline_cache_dir}" -mindepth 1 ! -type f ! -type d -print -quit)" ]]; then
+        printf 'error: offline npm cache does not match the lock file/platform\n' >&2
+        printf 'or contains special paths\n' >&2
+        exit 1
+    fi
+    if ! command -v unshare >/dev/null 2>&1 || ! unshare -rn true 2>/dev/null; then
+        printf 'error: offline build requires unshare -rn to block network access\n' >&2
+        exit 1
+    fi
+    npm_network_namespace=(unshare -rn)
+    "${npm_network_namespace[@]}" npm cache verify --cache "${offline_cache_dir}"
+    "${npm_network_namespace[@]}" npm ci --offline --no-audit --no-fund --cache "${offline_cache_dir}"
+else
+    npm ci --no-audit --no-fund
+fi
+"${npm_network_namespace[@]}" npm run check:api
+"${npm_network_namespace[@]}" npm run lint
+"${npm_network_namespace[@]}" npm run typecheck
+"${npm_network_namespace[@]}" npm test
+"${npm_network_namespace[@]}" npm run build
 
 node --input-type=module - "${web_root}" "${dist_root}" <<'NODE'
 import { createHash } from "node:crypto";

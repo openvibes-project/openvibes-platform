@@ -195,11 +195,25 @@ packaging has no hidden artwork input.
 checksum sidecar. It contains npm's content-addressed cache, the lock digest,
 and the target platform, but no `node_modules`. The networked cache-preparation
 stage is separate from packaging. `scripts/check-console-npm-cache.sh ARCHIVE`
-checks the sidecar, allow-lists archive paths, refuses special files, confirms
-the current lock digest and platform, then runs `npm ci --offline` and the Vite
-build. CI runs both scripts. The eventual RPM build consumes the same artefact;
-the first package target is Fedora Linux x86_64, so caches for other platforms
-are deliberately distinct.
+checks the sidecar, allow-lists archive paths, refuses links and special files,
+confirms the current lock digest and platform, then runs `npm ci --offline`
+and a Vite build in a scratch directory. Pass a second path to persist the
+validated extraction for packaging. `scripts/build-console.sh
+--offline-cache-dir CACHE_DIR` then checks the lock digest/platform again,
+verifies npm's cache, and runs every npm command with networking disabled by
+`unshare -rn`. The first package target is Fedora Linux x86_64, so caches for
+other platforms are deliberately distinct. The eventual RPM source metadata
+must pin the expected archive digest independently of the archive and its
+sidecar.
+
+For a network-isolated package build, persist the validated cache and pass it
+to the frontend build:
+
+```sh
+archive=$(scripts/build-console-npm-cache.sh target/console-npm-cache)
+scripts/check-console-npm-cache.sh "$archive" target/console-npm-cache/extracted
+scripts/build-console.sh --offline-cache-dir target/console-npm-cache/extracted
+```
 
 For the current C0 foundation, run:
 

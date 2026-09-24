@@ -7,8 +7,8 @@ readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"
 
-if [[ $# -ne 1 ]]; then
-    printf 'usage: %s CACHE.tar.gz\n' "$0" >&2
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+    printf 'usage: %s CACHE.tar.gz [EXTRACTED_CACHE_DIR]\n' "$0" >&2
     exit 2
 fi
 
@@ -26,6 +26,16 @@ fi
 
 readonly archive="$(cd -- "$(dirname -- "$1")" && pwd -P)/$(basename -- "$1")"
 readonly checksum="${archive}.sha256"
+persisted_cache=
+if [[ $# -eq 2 ]]; then
+    cache_parent="$(dirname -- "$2")"
+    mkdir -p -- "${cache_parent}"
+    persisted_cache="$(cd -- "${cache_parent}" && pwd -P)/$(basename -- "$2")"
+    if [[ -e "${persisted_cache}" || -L "${persisted_cache}" ]]; then
+        printf 'error: extracted cache destination already exists\n' >&2
+        exit 1
+    fi
+fi
 if [[ ! -f "${archive}" || -L "${archive}" || ! -f "${checksum}" || -L "${checksum}" ]]; then
     printf 'error: cache artefact and checksum must be regular files\n' >&2
     exit 1
@@ -63,6 +73,15 @@ while IFS= read -r entry; do
             ;;
     esac
 done < <(tar -tzf "${archive}")
+while IFS= read -r entry; do
+    case "${entry:0:1}" in
+        -|d) ;;
+        *)
+            printf 'error: cache archive contains a non-file path: %s\n' "${entry}" >&2
+            exit 1
+            ;;
+    esac
+done < <(tar -tvzf "${archive}")
 
 work_dir="$(mktemp -d)"
 cleanup() {
@@ -105,3 +124,8 @@ cd -- "${web_root}"
 # Build into a scratch directory: the real dist/ (and its build stamp, which
 # embedded-ui builds need) is left untouched.
 "${isolate[@]}" npm run build -- --outDir "${work_dir}/dist" --emptyOutDir
+
+if [[ -n "${persisted_cache}" ]]; then
+    cp -a -- "${cache_dir}" "${persisted_cache}"
+    printf '%s\n' "${persisted_cache}"
+fi
