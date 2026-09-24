@@ -442,6 +442,8 @@ pub struct FindingPage {
 pub struct FindingHistoryEntry {
     /// Finding identifier from the partitioned event table.
     pub id: String,
+    /// UTC partition day used for stable event lookup.
+    pub observed_day: String,
     /// Agent associated with this event.
     pub agent_id: String,
     /// Rule set that produced the event, or `~unknown` for legacy data.

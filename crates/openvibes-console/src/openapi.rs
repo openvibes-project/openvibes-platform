@@ -31,7 +31,10 @@ use crate::{
         crate::router::authenticated_agent_detail,
         crate::router::authenticated_agent_certificates,
         crate::router::authenticated_finding_summary,
-        crate::router::authenticated_latest_findings
+        crate::router::authenticated_latest_findings,
+        crate::router::authenticated_latest_finding,
+        crate::router::authenticated_finding_history,
+        crate::router::authenticated_finding_event
     ),
     components(schemas(
         AuthenticationLevel,

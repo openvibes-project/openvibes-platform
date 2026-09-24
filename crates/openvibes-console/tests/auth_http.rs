@@ -472,6 +472,85 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(severity_mismatch.status(), StatusCode::BAD_REQUEST);
+    let latest_detail = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(
+                    "/api/v1/findings/latest/agent.00000000-0000-4000-8000-000000000101/base/credential",
+                )
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(latest_detail.status(), StatusCode::OK);
+    let latest_detail: Value =
+        serde_json::from_slice(&to_bytes(latest_detail.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(latest_detail["severity"], "critical");
+    assert_eq!(latest_detail["rule_set_id"], "base");
+    let since = enrolled_at.to_rfc3339_opts(chrono::SecondsFormat::Micros, true);
+    let first_history = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/findings/history?since={since}&limit=1"))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_history.status(), StatusCode::OK);
+    let first_history: Value =
+        serde_json::from_slice(&to_bytes(first_history.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(first_history["items"][0]["id"], "finding-101");
+    let history_cursor = first_history["next_cursor"].as_str().unwrap();
+    let second_history = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/findings/history?since={since}&limit=1&cursor={history_cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_history.status(), StatusCode::OK);
+    let second_history: Value =
+        serde_json::from_slice(&to_bytes(second_history.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(second_history["items"][0]["id"], "finding-102");
+    let first_event_day = first_history["items"][0]["observed_day"].as_str().unwrap();
+    let history_detail = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/findings/history/{first_event_day}/finding-101"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(history_detail.status(), StatusCode::OK);
+    let history_without_bound = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/history")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(history_without_bound.status(), StatusCode::BAD_REQUEST);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

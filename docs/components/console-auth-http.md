@@ -52,9 +52,10 @@ bounded and rejected when their filters or scope differ from the current
 request. Detail responses include up to 100 certificate metadata rows; the
 separate certificate route provides full cursor pagination. Finding and
 latest-summary routes require `findings.read` and use the same active SQL
-scope; latest-finding cursors are bounded and tied to severity and scope.
-Finding history and control-plane data routes remain unavailable until their
-handlers and scope checks are implemented.
+scope; latest-finding list/detail and history list/event routes use that scope
+in SQL. Their bounded cursors are tied to the active filters and scope, and
+history requires a lower time bound for partition pruning. Control-plane data
+routes remain unavailable until their handlers and checks are implemented.
 
 ## Failure behaviour
 
