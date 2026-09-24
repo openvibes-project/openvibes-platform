@@ -340,3 +340,28 @@ async fn every_rules_command_is_audited() {
     assert!(actions.contains(&("rules list".into(), None, "ok".into())));
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn publish_refuses_every_invalid_protocol_fixture() {
+    let (fixture, _dir) = ready("fixtures").await;
+    // The fixtures' issuer is trusted, so each is refused for its own defect.
+    stdout(&fixture.run(&["rules", "trust", "add", "baseline", "org.rules", &public(7)]));
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../protocol/fixtures/v1/signed-rule-envelope");
+    let mut checked = 0;
+    for entry in std::fs::read_dir(&dir).expect("protocol fixtures; git submodule update --init") {
+        let path = entry.unwrap().path();
+        let name = path.file_name().unwrap().to_str().unwrap().to_owned();
+        if !name.starts_with("invalid") {
+            continue;
+        }
+        let output = publish(&fixture, &path);
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        assert!(!output.status.success(), "{name} was published");
+        assert!(!stderr.contains("untrusted issuer"), "{name}: {stderr}");
+        checked += 1;
+    }
+    assert!(checked >= 3, "only {checked} invalid fixtures");
+    assert_eq!(stored(&fixture).await, 0);
+    fixture.drop().await;
+}

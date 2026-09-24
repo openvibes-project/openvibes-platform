@@ -108,6 +108,5 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 
 %changelog
 * Thu Sep 24 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1
-- Add openvibes-distribution (rule bundles for agents, port 18424).
-* Wed Sep 23 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1
-- First package: openvibes-ingest and openvibes-admin.
+- First package: openvibes-ingest, openvibes-distribution (rule bundles for
+  agents, port 18424), and openvibes-admin.

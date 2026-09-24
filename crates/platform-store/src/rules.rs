@@ -137,20 +137,23 @@ fn key32(bytes: &[u8]) -> Result<[u8; 32], StoreError> {
 
 /// Trusts `key` as `issuer` for `set`, creating the set if needed.
 pub async fn add_trust_key(
-    client: &Client,
+    client: &mut Client,
     set: &str,
     issuer: &str,
     key: [u8; 32],
 ) -> Result<TrustAdded, StoreError> {
-    client
+    let transaction = client.transaction().await?;
+    transaction
         .execute(
             "INSERT INTO rule_sets (rule_set_id) VALUES ($1) ON CONFLICT DO NOTHING",
             &[&set],
         )
         .await?;
-    let retired: bool = client
+    // FOR SHARE: a concurrent retire waits for this commit, so a key never
+    // lands on a set retired between this check and the insert.
+    let retired: bool = transaction
         .query_one(
-            "SELECT retired_at IS NOT NULL FROM rule_sets WHERE rule_set_id = $1",
+            "SELECT retired_at IS NOT NULL FROM rule_sets WHERE rule_set_id = $1 FOR SHARE",
             &[&set],
         )
         .await?
@@ -158,29 +161,32 @@ pub async fn add_trust_key(
     if retired {
         return Ok(TrustAdded::Retired);
     }
-    let inserted = client
+    let inserted = transaction
         .execute(
             "INSERT INTO rule_trust_keys (rule_set_id, issuer_key_id, public_key) \
              VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
             &[&set, &issuer, &key.as_slice()],
         )
         .await?;
-    if inserted == 1 {
-        return Ok(TrustAdded::Added);
-    }
-    let row = client
-        .query_one(
-            "SELECT public_key, removed_at IS NULL FROM rule_trust_keys \
-             WHERE rule_set_id = $1 AND issuer_key_id = $2",
-            &[&set, &issuer],
-        )
-        .await?;
-    let (stored, active): (Vec<u8>, bool) = (row.get(0), row.get(1));
-    Ok(if active && stored == key {
-        TrustAdded::AlreadyTrusted
+    let outcome = if inserted == 1 {
+        TrustAdded::Added
     } else {
-        TrustAdded::Conflict
-    })
+        let row = transaction
+            .query_one(
+                "SELECT public_key, removed_at IS NULL FROM rule_trust_keys \
+                 WHERE rule_set_id = $1 AND issuer_key_id = $2",
+                &[&set, &issuer],
+            )
+            .await?;
+        let (stored, active): (Vec<u8>, bool) = (row.get(0), row.get(1));
+        if active && stored == key {
+            TrustAdded::AlreadyTrusted
+        } else {
+            TrustAdded::Conflict
+        }
+    };
+    transaction.commit().await?;
+    Ok(outcome)
 }
 
 /// Every trust key, or those of one set, removed ones included.

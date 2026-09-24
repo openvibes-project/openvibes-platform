@@ -10,7 +10,10 @@ use platform_store::Pool;
 use tokio::{net::TcpListener, sync::Semaphore};
 use tokio_rustls::TlsAcceptor;
 
-use crate::{MAX_BODY_BYTES, ServerError, auth::Peer, health, limits::Limits, tls::server_config};
+use crate::{
+    MAX_BODY_BYTES, ServerError, auth::Peer, health, limits::Limits, stall::WriteDeadline,
+    tls::server_config,
+};
 
 /// The settings every agent-facing service shares; each service maps its
 /// own configuration file onto them.
@@ -83,17 +86,19 @@ pub async fn run(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ServerError> {
     settings.validate()?;
+    // Local files first, then the database: a broken install reports the
+    // same first error in every service.
+    let acceptor = TlsAcceptor::from(server_config(
+        &settings.server_certificate_file,
+        &settings.server_key_file,
+        &settings.client_ca_file,
+    )?);
     let pool = platform_store::connect_sized(&settings.database_url, settings.database_pool_size)
         .await
         .map_err(|error| match error {
             platform_store::StoreError::InvalidUrl => ServerError::Config,
             _ => ServerError::Database,
         })?;
-    let acceptor = TlsAcceptor::from(server_config(
-        &settings.server_certificate_file,
-        &settings.server_key_file,
-        &settings.client_ca_file,
-    )?);
     let limits = Limits {
         in_flight: Arc::new(Semaphore::new(settings.max_in_flight)),
         request_timeout: Duration::from_secs(settings.request_timeout_seconds),
@@ -146,7 +151,7 @@ pub async fn run(
                     let connection = hyper::server::conn::http1::Builder::new()
                         .timer(TokioTimer::new())
                         .header_read_timeout(timeout)
-                        .serve_connection(TokioIo::new(tls), service);
+                        .serve_connection(TokioIo::new(WriteDeadline::new(tls, timeout)), service);
                     let _ = watcher.watch(connection).await;
                 });
             }

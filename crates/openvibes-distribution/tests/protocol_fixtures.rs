@@ -5,7 +5,7 @@ mod support;
 
 use std::{fs, path::PathBuf};
 
-use support::{World, request};
+use support::World;
 
 fn fixtures(message: &str) -> Vec<(String, Vec<u8>)> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -50,5 +50,4 @@ async fn valid_envelopes_are_served_byte_for_byte() {
         assert_eq!(served.as_deref(), Some(bytes.as_slice()), "{name}");
     }
     world.stop().await;
-    let _ = request;
 }

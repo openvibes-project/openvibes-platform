@@ -11,6 +11,7 @@ mod health;
 mod limits;
 mod request;
 mod serve;
+mod stall;
 mod tls;
 
 pub use auth::AuthenticatedAgent;

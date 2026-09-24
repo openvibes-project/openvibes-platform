@@ -99,7 +99,9 @@ mutable pointer.
 
 - `add_trust_key(set, issuer, key)` creates the set if needed →
   `Added`, `AlreadyTrusted` (same key), `Conflict` (different key, or the id
-  was removed: ids are never re-used), `Retired`.
+  was removed: ids are never re-used), `Retired`. It runs in one transaction
+  holding the set row `FOR SHARE`, so a concurrent `retire` waits and no key
+  lands on a set retired mid-add.
 - `trust_keys(set?)`, `active_trust_keys(set)`, `remove_trust_key(set, issuer)`.
 - `publish(&mut client, &NewBundle)` takes a per-set advisory lock, so
   concurrent publishers serialize → `Stored`, `Unchanged` (same version and

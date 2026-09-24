@@ -141,7 +141,7 @@ pub async fn run(
 
 async fn trust(
     command: &TrustCommand,
-    client: &platform_store::Client,
+    client: &mut platform_store::Client,
 ) -> (Result<String, String>, Option<String>) {
     match command {
         TrustCommand::Add {

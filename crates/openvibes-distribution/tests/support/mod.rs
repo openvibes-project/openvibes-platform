@@ -223,7 +223,7 @@ impl World {
     /// the store does not verify signatures, `openvibes-admin` does.
     pub async fn publish(&self, set: &str, version: i64, envelope: &[u8]) {
         let mut db = self.db().await;
-        platform_store::rules::add_trust_key(&db, set, "org.rules", [9; 32])
+        platform_store::rules::add_trust_key(&mut db, set, "org.rules", [9; 32])
             .await
             .unwrap();
         let published = platform_store::rules::publish(

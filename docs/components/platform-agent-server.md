@@ -49,6 +49,8 @@ requires absolute certificate and key paths, a loopback `health_listen`,
 | Database unreachable or query failed | 503, one warning log line |
 | Request (body included) past `request_timeout_seconds` | 408 |
 | `ApiError::NotFound` from a handler | 404 |
+| Peer accepts no response bytes for `request_timeout_seconds` | connection closed (a slow reader that keeps draining is served) |
+| At startup: bad certificate/key file and bad database URL | the TLS error first: local files are checked before the database |
 
 - Handshake and header reads share the request deadline; at most
   `max_connections` connections are open, the rest wait in the backlog;

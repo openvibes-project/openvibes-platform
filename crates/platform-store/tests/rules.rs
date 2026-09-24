@@ -39,18 +39,27 @@ fn bundle(version: i64, envelope: &[u8]) -> NewBundle<'_> {
     }
 }
 
-async fn trusted(client: &Client) {
+async fn trusted(client: &mut Client) {
     let added = rules::add_trust_key(client, "baseline", "org.rules", [1; 32]).await;
     assert_eq!(added.unwrap(), TrustAdded::Added);
 }
 
 #[tokio::test]
 async fn trust_keys_are_added_once_and_conflicts_refused() {
-    let (db, client) = setup().await;
-    trusted(&client).await;
-    let add = |key| rules::add_trust_key(&client, "baseline", "org.rules", key);
-    assert_eq!(add([1; 32]).await.unwrap(), TrustAdded::AlreadyTrusted);
-    assert_eq!(add([2; 32]).await.unwrap(), TrustAdded::Conflict);
+    let (db, mut client) = setup().await;
+    trusted(&mut client).await;
+    assert_eq!(
+        rules::add_trust_key(&mut client, "baseline", "org.rules", [1; 32])
+            .await
+            .unwrap(),
+        TrustAdded::AlreadyTrusted
+    );
+    assert_eq!(
+        rules::add_trust_key(&mut client, "baseline", "org.rules", [2; 32])
+            .await
+            .unwrap(),
+        TrustAdded::Conflict
+    );
     assert!(
         rules::remove_trust_key(&client, "baseline", "org.rules")
             .await
@@ -71,14 +80,19 @@ async fn trust_keys_are_added_once_and_conflicts_refused() {
     assert_eq!(listed.len(), 1);
     assert!(listed[0].removed_at.is_some());
     // A removed id is never re-used, not even for the same key.
-    assert_eq!(add([1; 32]).await.unwrap(), TrustAdded::Conflict);
+    assert_eq!(
+        rules::add_trust_key(&mut client, "baseline", "org.rules", [1; 32])
+            .await
+            .unwrap(),
+        TrustAdded::Conflict
+    );
     db.drop().await;
 }
 
 #[tokio::test]
 async fn publish_stores_exact_bytes_and_serves_by_version() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     let v1 = br#"{"exact":"bytes",  "v":1}"#;
     let stored = rules::publish(&mut client, &bundle(1, v1)).await.unwrap();
     assert_eq!(stored, Published::Stored);
@@ -96,8 +110,8 @@ async fn publish_stores_exact_bytes_and_serves_by_version() {
 
 #[tokio::test]
 async fn a_set_without_bundles_is_unknown() {
-    let (db, client) = setup().await;
-    trusted(&client).await;
+    let (db, mut client) = setup().await;
+    trusted(&mut client).await;
     let dist = as_role(&db, "openvibes_distribution").await;
     assert_eq!(
         rules::serve(&dist, "baseline", None).await.unwrap(),
@@ -109,7 +123,7 @@ async fn a_set_without_bundles_is_unknown() {
 #[tokio::test]
 async fn publish_is_idempotent_and_refuses_conflicts_and_old_versions() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     rules::publish(&mut client, &bundle(2, b"two"))
         .await
         .unwrap();
@@ -128,8 +142,8 @@ async fn publish_is_idempotent_and_refuses_conflicts_and_old_versions() {
 
 #[tokio::test]
 async fn concurrent_identical_publishes_store_one_row() {
-    let (db, client) = setup().await;
-    trusted(&client).await;
+    let (db, mut client) = setup().await;
+    trusted(&mut client).await;
     let (mut a, mut b) = (db.pool.get().await.unwrap(), db.pool.get().await.unwrap());
     let (first, second) = (bundle(1, b"same"), bundle(1, b"same"));
     let (ra, rb) = tokio::join!(
@@ -146,7 +160,7 @@ async fn concurrent_identical_publishes_store_one_row() {
 #[tokio::test]
 async fn a_retired_set_is_unknown_and_refuses_publishing() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     rules::publish(&mut client, &bundle(1, b"one"))
         .await
         .unwrap();
@@ -161,7 +175,7 @@ async fn a_retired_set_is_unknown_and_refuses_publishing() {
         .await
         .unwrap();
     assert_eq!(published, Published::Retired);
-    let added = rules::add_trust_key(&client, "baseline", "k2", [3; 32]).await;
+    let added = rules::add_trust_key(&mut client, "baseline", "k2", [3; 32]).await;
     assert_eq!(added.unwrap(), TrustAdded::Retired);
     assert_eq!(
         rules::bundles(&client, "baseline").await.unwrap().len(),
@@ -174,7 +188,7 @@ async fn a_retired_set_is_unknown_and_refuses_publishing() {
 #[tokio::test]
 async fn list_and_bundles_describe_sets() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     rules::publish(&mut client, &bundle(1, b"one"))
         .await
         .unwrap();
@@ -246,7 +260,7 @@ async fn the_distribution_role_has_only_the_rights_it_uses() {
 #[tokio::test]
 async fn publish_refuses_an_issuer_not_trusted_at_commit() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     rules::publish(&mut client, &bundle(1, b"one"))
         .await
         .unwrap();
@@ -271,7 +285,7 @@ async fn publish_refuses_an_issuer_not_trusted_at_commit() {
 #[tokio::test]
 async fn list_flags_a_current_bundle_whose_signer_was_removed() {
     let (db, mut client) = setup().await;
-    trusted(&client).await;
+    trusted(&mut client).await;
     rules::publish(&mut client, &bundle(1, b"one"))
         .await
         .unwrap();
@@ -282,5 +296,61 @@ async fn list_flags_a_current_bundle_whose_signer_was_removed() {
         .await
         .unwrap();
     assert!(rules::list(&client).await.unwrap()[0].current_signer_removed);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_trust_add_racing_a_retire_sees_the_retirement() {
+    let (db, mut client) = setup().await;
+    trusted(&mut client).await;
+    // Another operator is retiring the set and has not committed yet.
+    let mut retiring = db.pool.get().await.unwrap();
+    let transaction = retiring.transaction().await.unwrap();
+    transaction
+        .execute(
+            "UPDATE rule_sets SET retired_at = now() WHERE rule_set_id = 'baseline'",
+            &[],
+        )
+        .await
+        .unwrap();
+    let mut adding = db.pool.get().await.unwrap();
+    let add =
+        tokio::spawn(
+            async move { rules::add_trust_key(&mut adding, "baseline", "k2", [3; 32]).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    transaction.commit().await.unwrap();
+    assert_eq!(add.await.unwrap().unwrap(), TrustAdded::Retired);
+    let keys = rules::trust_keys(&client, Some("baseline")).await.unwrap();
+    assert_eq!(keys.len(), 1, "no key lands on a retired set");
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_retire_waits_for_a_trust_add_in_flight() {
+    let (db, mut client) = setup().await;
+    trusted(&mut client).await;
+    // Stall the add at its key insert, after it has checked the set.
+    let mut locker = db.pool.get().await.unwrap();
+    let lock = locker.transaction().await.unwrap();
+    lock.batch_execute("LOCK TABLE rule_trust_keys IN EXCLUSIVE MODE")
+        .await
+        .unwrap();
+    let mut adding = db.pool.get().await.unwrap();
+    let add =
+        tokio::spawn(
+            async move { rules::add_trust_key(&mut adding, "baseline", "k2", [3; 32]).await },
+        );
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    let retiring = db.pool.get().await.unwrap();
+    let retire = tokio::spawn(async move { rules::retire(&retiring, "baseline").await });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    assert!(
+        !retire.is_finished(),
+        "a retire must not slip between the add's check and its insert"
+    );
+    lock.commit().await.unwrap();
+    assert_eq!(add.await.unwrap().unwrap(), TrustAdded::Added);
+    assert!(retire.await.unwrap().unwrap());
     db.drop().await;
 }

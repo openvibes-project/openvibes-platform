@@ -86,8 +86,8 @@ async fn an_unknown_set_is_not_found() {
 #[tokio::test]
 async fn a_set_without_bundles_is_not_found() {
     let world = World::start().await;
-    let db = world.db().await;
-    platform_store::rules::add_trust_key(&db, "baseline", "org.rules", [9; 32])
+    let mut db = world.db().await;
+    platform_store::rules::add_trust_key(&mut db, "baseline", "org.rules", [9; 32])
         .await
         .unwrap();
     let agent = world.agent(1).await;

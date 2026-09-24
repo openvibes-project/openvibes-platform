@@ -109,3 +109,27 @@ fn configuration_is_strict() {
     }
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[tokio::test]
+async fn local_files_are_checked_before_the_database() {
+    // Both broken: the certificate file is missing and the database URL does
+    // not parse. Local files are reported first, as ingest does.
+    let config = DistributionConfig {
+        listen: "127.0.0.1:0".parse().unwrap(),
+        health_listen: "127.0.0.1:0".parse().unwrap(),
+        server_certificate_file: "/nonexistent/distribution.crt".into(),
+        server_key_file: "/nonexistent/distribution.key".into(),
+        client_ca_file: "/nonexistent/intermediate.crt".into(),
+        database_url: "not a database url ::".into(),
+        max_in_flight: 64,
+        request_timeout_seconds: 10,
+        max_connections: 256,
+        database_pool_size: 16,
+    };
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let error = openvibes_distribution::run(config, listener, health, async {})
+        .await
+        .unwrap_err();
+    assert_eq!(error, openvibes_distribution::DistributionError::Tls);
+}
