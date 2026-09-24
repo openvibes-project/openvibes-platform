@@ -5,7 +5,7 @@ use std::sync::{
 
 use axum::{
     Router,
-    extract::{ConnectInfo, DefaultBodyLimit, State},
+    extract::{ConnectInfo, DefaultBodyLimit, Query, State, rejection::QueryRejection},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -13,6 +13,7 @@ use axum::{
 };
 use chrono::{Duration, SecondsFormat, Utc};
 use platform_store::{Pool, console_auth};
+use serde::Deserialize;
 use subtle::ConstantTimeEq;
 use tokio::{sync::Semaphore, time::timeout};
 use zeroize::{Zeroize, Zeroizing};
@@ -46,6 +47,23 @@ pub(crate) struct AuthHttpState {
     public_origin_valid: bool,
     dummy_password_phc: Option<String>,
     password_slots: Arc<Semaphore>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct AgentListParams {
+    state: Option<String>,
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct AgentCursorToken {
+    state: Option<String>,
+    scope: platform_store::console_read::AgentScope,
+    last_seen_at: Option<String>,
+    agent_id: String,
 }
 
 impl Readiness {
@@ -187,6 +205,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(authenticated_session))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
+        .route("/v1/agents", get(authenticated_agents))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
@@ -482,6 +501,156 @@ pub(crate) async fn authenticated_agent_summary(
             .into_response(),
         Err(_) => unavailable_auth(),
     }
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents",
+    tag = "agents",
+    params(
+        ("state" = Option<String>, Query, description = "active, stale, or revoked"),
+        ("cursor" = Option<String>, Query, description = "Opaque continuation cursor"),
+        ("limit" = Option<u16>, Query, description = "Page size from 1 to 100")
+    ),
+    responses(
+        (status = 200, description = "Scope-filtered agent page", body = crate::AgentPage),
+        (status = 400, description = "Invalid query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn authenticated_agents(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    query: Result<Query<AgentListParams>, QueryRejection>,
+) -> Response {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::console_read::{
+        AgentCursor, AgentQuery, AgentState, PageLimit, agents_in_scope,
+    };
+
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let Query(params) = match query {
+        Ok(query) => query,
+        Err(_) => return invalid_agent_query(),
+    };
+    let limit = params.limit.unwrap_or(crate::DEFAULT_PAGE_SIZE);
+    let Some(limit) = PageLimit::new(limit) else {
+        return invalid_agent_query();
+    };
+    let agent_state = match params.state.as_deref() {
+        None => None,
+        Some("active") => Some(AgentState::Active),
+        Some("stale") => Some(AgentState::Stale),
+        Some("revoked") => Some(AgentState::Revoked),
+        Some(_) => return invalid_agent_query(),
+    };
+    let after = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let decoded = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(decoded) => decoded,
+                Err(_) => return invalid_agent_query(),
+            };
+            let token: AgentCursorToken = match serde_json::from_slice::<AgentCursorToken>(&decoded)
+            {
+                Ok(token) if token.state == params.state && token.scope == scope => token,
+                _ => return invalid_agent_query(),
+            };
+            let last_seen_at = match token.last_seen_at.as_deref() {
+                Some(value) => match chrono::DateTime::parse_from_rfc3339(value) {
+                    Ok(value) => Some(value.with_timezone(&Utc)),
+                    Err(_) => return invalid_agent_query(),
+                },
+                None => None,
+            };
+            Some(AgentCursor {
+                last_seen_at,
+                agent_id: token.agent_id,
+            })
+        }
+        Some(_) => return invalid_agent_query(),
+    };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let page = match agents_in_scope(
+        &client,
+        &AgentQuery {
+            state: agent_state,
+            after,
+            limit,
+        },
+        Utc::now(),
+        &scope,
+    )
+    .await
+    {
+        Ok(page) => page,
+        Err(_) => return unavailable_auth(),
+    };
+    let items = page
+        .items
+        .into_iter()
+        .map(|agent| crate::AgentView {
+            id: agent.agent_id,
+            hostname: agent.hostname,
+            status: match agent.state {
+                AgentState::Active => crate::AgentStatus::Active,
+                AgentState::Stale => crate::AgentStatus::Stale,
+                AgentState::Revoked => crate::AgentStatus::Revoked,
+            },
+            enrolled_at: agent.enrolled_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+            revoked_at: agent
+                .revoked_at
+                .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+            last_seen_at: agent
+                .last_seen_at
+                .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+            scanner_version: agent.scanner_version,
+            capabilities: agent.capabilities,
+        })
+        .collect();
+    let next_cursor = match page.next {
+        None => None,
+        Some(cursor) => {
+            let token = AgentCursorToken {
+                state: params.state,
+                scope,
+                last_seen_at: cursor
+                    .last_seen_at
+                    .map(|value| value.to_rfc3339_opts(SecondsFormat::Micros, true)),
+                agent_id: cursor.agent_id,
+            };
+            match serde_json::to_vec(&token) {
+                Ok(token) => Some(URL_SAFE_NO_PAD.encode(token)),
+                Err(_) => return unavailable_auth(),
+            }
+        }
+    };
+    (
+        StatusCode::OK,
+        axum::Json(crate::AgentPage {
+            items,
+            next_cursor,
+            generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        }),
+    )
+        .into_response()
+}
+
+fn invalid_agent_query() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::BAD_REQUEST,
+        "invalid_query",
+        "Agent query parameters are invalid",
+    ))
 }
 
 async fn authenticated_agent_scope(

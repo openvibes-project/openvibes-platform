@@ -46,9 +46,10 @@ origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
 are ignored. When auth settings are absent, the executable serves the C0
 fail-closed router. `GET /api/v1/agents/summary` now requires a live human
 session with `agents.read`, resolves role bindings on each request, and passes
-the effective global or asset-group scope to its SQL aggregate query. Other
-production data routes remain unavailable until their handler and scope checks
-are implemented.
+the effective global or asset-group scope to its SQL aggregate and paginated
+list queries. The agent cursor is bounded and rejected when its filter or
+scope differs from the current request. Other production data routes remain
+unavailable until their handler and scope checks are implemented.
 
 ## Failure behaviour
 

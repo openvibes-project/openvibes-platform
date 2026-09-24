@@ -118,6 +118,20 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
+    let enrolled_at = Utc::now();
+    for id in [
+        "agent.00000000-0000-4000-8000-000000000101",
+        "agent.00000000-0000-4000-8000-000000000102",
+    ] {
+        client
+            .execute(
+                "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at)
+                 VALUES ($1, 'active', $2, $2)",
+                &[&id, &enrolled_at],
+            )
+            .await
+            .unwrap();
+    }
     let password = "violet-satellite-mountain-otter-2026";
     let normalized = NormalizedPassword::new(password).unwrap();
     let phc = hash_password(&normalized).unwrap();
@@ -229,7 +243,58 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     assert_eq!(summary.status(), StatusCode::OK);
     let summary: Value =
         serde_json::from_slice(&to_bytes(summary.into_body(), 4096).await.unwrap()).unwrap();
-    assert_eq!(summary["total"], 0);
+    assert_eq!(summary["total"], 2);
+    let first_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents?limit=1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(first_page.status(), StatusCode::OK);
+    let first_page: Value =
+        serde_json::from_slice(&to_bytes(first_page.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(
+        first_page["items"][0]["id"],
+        "agent.00000000-0000-4000-8000-000000000101"
+    );
+    let cursor = first_page["next_cursor"].as_str().unwrap();
+    let second_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/agents?limit=1&cursor={cursor}"))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(second_page.status(), StatusCode::OK);
+    let second_page: Value =
+        serde_json::from_slice(&to_bytes(second_page.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(
+        second_page["items"][0]["id"],
+        "agent.00000000-0000-4000-8000-000000000102"
+    );
+    let mismatched_cursor = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents?state=active&limit=1&cursor={cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mismatched_cursor.status(), StatusCode::BAD_REQUEST);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

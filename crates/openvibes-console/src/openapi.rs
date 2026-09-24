@@ -26,7 +26,8 @@ use crate::{
         crate::router::preauth,
         crate::router::login,
         crate::router::logout,
-        crate::router::authenticated_agent_summary
+        crate::router::authenticated_agent_summary,
+        crate::router::authenticated_agents
     ),
     components(schemas(
         AuthenticationLevel,

@@ -10,7 +10,7 @@ pub const MAX_PAGE_SIZE: u16 = 100;
 
 /// SQL visibility for agent-bound console reads. Scoped groups use the
 /// version-one exact-tag conjunction selectors stored in schema 8.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum AgentScope {
     /// Every agent is visible to the caller.
     Global,

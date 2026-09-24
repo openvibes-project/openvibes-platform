@@ -8,7 +8,7 @@ account administration. Remaining C3 work is authenticated SQL-scoped C2
 handlers, authorization/audit pages and operations, and C3 hardening and
 end-to-end coverage. The C2 store now has SQL-scoped agent and finding read
 variants; the authenticated router has started wiring them with
-`GET /api/v1/agents/summary`. The embedded login page, session gate, and
+`GET /api/v1/agents/summary` and `GET /api/v1/agents`. The embedded login page, session gate, and
 logout action are implemented with the local-auth API.
 
 Design inputs:
