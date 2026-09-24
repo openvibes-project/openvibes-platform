@@ -72,6 +72,24 @@ export. CA and rule-trust-key administration remain CLI-only.
 
 ## Configuration
 
+### Current (C0)
+
+`openvibes-console [--config PATH]` reads `/etc/openvibes/console.toml` by
+default: strict TOML (unknown keys refused) with two keys, both loopback
+only and different:
+
+```toml
+development_listen = "127.0.0.1:8443"   # the development web listener
+health_listen = "127.0.0.1:18482"       # /health and /ready
+```
+
+A non-loopback address, equal addresses, or a malformed file is refused at
+startup ("invalid console configuration"), and `run` refuses a listener that
+is not loopback even if bound elsewhere. The e2e fixture uses 18490/18491,
+clear of ingest's 18480 and distribution's 18481.
+
+### Planned (C1 to C5)
+
 The final service configuration is strict, bounded TOML with unknown keys and
 relative key/certificate paths refused. Its approved deployment constraints
 are:
@@ -96,6 +114,16 @@ banner are never included in the production RPM.
 
 ## Failure behaviour
 
+**Now (C0):**
+
+- The development listener answers only loopback `Host` names (`localhost`,
+  `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
+  DNS-rebinding page cannot read it. Requests without `Host` pass.
+- Framing is refused: `Content-Security-Policy: frame-ancestors 'none'` is
+  enforced (with `X-Frame-Options: DENY`) while the full policy is still
+  report-only.
+- A wrong method on an API route is a 405 Problem Details response with
+  `Cache-Control: no-store`, like every API error.
 - An `embedded-ui` build fails if the shared route/public-asset contract,
   generated frontend manifest, SPA entry, exact public-file inventory, or a
   referenced embedded asset is missing or inconsistent. It also refuses a
@@ -104,6 +132,10 @@ banner are never included in the production RPM.
 - Frontend tests refuse brand SVGs with scripts, animation, embedded raster,
   external references, text/fonts, or background rectangles, and verify the
   PNG signatures, alpha channel, and declared dimensions.
+**Planned (C1 to C5), not implemented yet:**
+
+- Request limits (body size, request deadline, in-flight and connection
+  caps, as in ingest) land before any non-loopback or TLS listener.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.

@@ -27,6 +27,11 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    tracing::info!(
+        development_listen = %config.development_listen,
+        health_listen = %config.health_listen,
+        "openvibes-console starting"
+    );
     let shutdown = async {
         let _ = tokio::signal::ctrl_c().await;
     };

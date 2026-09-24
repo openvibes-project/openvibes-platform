@@ -1,6 +1,6 @@
 # OpenVIBES Console Design Plan
 
-Status: first design pass complete; awaiting owner review, 2026-09-23.
+Status: approved by the owner on 2026-09-23; superseded in detail by `docs/specs/2026-09-23-console-product-design.md` and `-technical-design.md`. Moved here from the repository root.
 
 ## Goal
 
