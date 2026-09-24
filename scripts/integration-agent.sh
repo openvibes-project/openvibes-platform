@@ -152,10 +152,6 @@ wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_eq
 # fetching from openvibes-distribution. v1 is the exact file it already
 # accepted (a re-signed v1 would differ and be refused as a conflict).
 start_distribution
-bundle() {
-    if [[ -n "${BUNDLE_BIN:-}" ]]; then "$BUNDLE_BIN" "$@"
-    else (cd "$ROOT" && cargo run -q --locked -p openvibes-ingest --example integration_bundle -- "$@"); fi
-}
 [[ "$(bundle "$W/v2.json" 2)" == "$KEY" ]] || { echo "FAIL: v2 signed with another key"; exit 1; }
 admin rules trust add integration integration.test "$KEY" >/dev/null
 admin rules publish "$W/agent/rules.json" >/dev/null

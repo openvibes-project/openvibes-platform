@@ -185,3 +185,11 @@ jobs:
           runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load \
             LOAD_BIN="$PWD/target/release/openvibes-load" LOAD_ARGS="--findings-every 5" \
             bash scripts/load/run.sh 50 1000 10
+
+      - name: Distribution load smoke against the installed binaries
+        shell: bash
+        run: |
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load-dist MODE=distribution \
+            LOAD_BIN="$PWD/target/release/openvibes-load" \
+            BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
+            bash scripts/load/run.sh 50 1000 10

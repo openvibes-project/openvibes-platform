@@ -19,6 +19,13 @@ build_agent() {
     echo "$dir/bin/openvibes-agent"
 }
 
+# Writes a signed integration bundle and prints its public key:
+# bundle OUT_FILE [VERSION [PAD_RULES]], with BUNDLE_BIN if set.
+bundle() {
+    if [[ -n "${BUNDLE_BIN:-}" ]]; then "$BUNDLE_BIN" "$@"
+    else (cd "$ROOT" && cargo run -q --locked -p openvibes-ingest --example integration_bundle -- "$@"); fi
+}
+
 # wait_for DESC SECONDS CMD...: poll CMD once a second until it succeeds.
 wait_for() {
     local desc=$1 seconds=$2
