@@ -15,6 +15,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), hardened units, maintenance timer | [packaging.md](packaging.md) |
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
 | `openvibes-console` | web application and `/api/v1` | seeded C1 read slice; request limits; offline build path | [openvibes-console.md](openvibes-console.md) |
+| `console-auth` | console module | opaque session-secret generation and secure cookie formatting | [console-auth.md](console-auth.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).

@@ -12,6 +12,7 @@
 mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;
+mod auth;
 mod config;
 mod error;
 #[cfg(feature = "embedded-ui")]
@@ -30,6 +31,7 @@ pub use api::{
     FindingPage, FindingSummary, FindingView, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
     Permission, PermissionScope, SessionPrincipal, SessionResponse, Severity,
 };
+pub use auth::{SessionSecret, session_cookie};
 pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
