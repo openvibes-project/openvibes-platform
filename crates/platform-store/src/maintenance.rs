@@ -11,7 +11,7 @@ fn partition_name(day: NaiveDate) -> String {
 }
 
 /// The days that have a `findings` partition.
-pub(crate) async fn partition_days(client: &Client) -> Result<BTreeSet<NaiveDate>, StoreError> {
+pub async fn partition_days(client: &Client) -> Result<BTreeSet<NaiveDate>, StoreError> {
     let rows = client
         .query(
             "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid

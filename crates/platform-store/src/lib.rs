@@ -25,7 +25,7 @@ use tokio_postgres::NoTls;
 
 /// Pooled connection and pool types, so callers need no pool dependency.
 pub use deadpool_postgres::{Client, Pool};
-pub use maintenance::{drop_partitions_before, ensure_partitions};
+pub use maintenance::{drop_partitions_before, ensure_partitions, partition_days};
 pub use migrate::{SCHEMA_VERSION, migrate, schema_version};
 pub use status::{OFFLINE_AFTER_MINUTES, Status, status};
 
