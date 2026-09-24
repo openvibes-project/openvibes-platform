@@ -60,6 +60,9 @@ printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd
 # scripts/systemd-test.sh).
 "$PODMAN" run -d --systemd=always --privileged --name "$C" -v "$W:/test:Z" "$IMAGE" /sbin/init >/dev/null
 wait_for "systemd is up" 30 'systemctl is-system-running | grep -qE "running|degraded"'
+[[ "$(in_c 'systemd-run --wait -q -p ProtectSystem=strict --pipe bash -c "touch /usr/.probe 2>/dev/null && echo writable || echo blocked"')" == blocked ]] ||
+    fail "this container does not enforce systemd sandboxing"
+ok "systemd enforces unit sandboxes in this container"
 
 # 1-2. PostgreSQL, the platform RPMs, database and schema.
 in_c 'postgresql-setup --initdb && systemctl enable --now postgresql' >/dev/null 2>&1 || fail "postgresql"
@@ -122,7 +125,7 @@ in_c "install -m 0644 /root/ca-root/root.crt /etc/openvibes-agent/platform-ca.cr
     fail "token file is not 0600 openvibes_agent"
 in_c "cat > /etc/openvibes-agent/agent.toml <<TOML
 state_dir = \"/var/lib/openvibes-agent\"
-platform_url = \"https://127.0.0.1\"
+platform_url = \"https://localhost\"
 platform_ca_file = \"/etc/openvibes-agent/platform-ca.crt\"
 enrollment_token_file = \"/etc/openvibes-agent/token\"
 distribution_url = \"https://127.0.0.1\"
@@ -132,6 +135,14 @@ trusted_keys = [{ issuer_key_id = \"org.rules\", public_key = \"$KEY\" }]
 TOML
 systemctl enable --now openvibes-agent" >/dev/null 2>&1 || fail "start agent"
 
+# Every service runs sandboxed: seccomp filter and no_new_privs in force.
+for unit in openvibes-ingest openvibes-distribution openvibes-agent; do
+    in_c "pid=\$(systemctl show -p MainPID --value $unit);
+          grep -q '^Seccomp:[[:space:]]*2\$' /proc/\$pid/status &&
+          grep -q '^NoNewPrivs:[[:space:]]*1\$' /proc/\$pid/status" ||
+        fail "$unit: seccomp filter or no_new_privs not in force"
+done
+ok "ingest, distribution, and agent run with seccomp and no_new_privs"
 SQL='runuser -u openvibes_admin -- psql -d openvibes -AtX -c'
 wait_for "agent enrolled" 60 "[[ \$($SQL \"SELECT count(*) FROM agents WHERE status = 'active'\") == 1 ]]"
 wait_for "agent fetched its rules from distribution (200)" 120 \

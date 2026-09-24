@@ -156,8 +156,9 @@ can share the machine, as below; normally the agent runs on the endpoints.
    ```
 
    and in `/etc/openvibes-agent/agent.toml` set `platform_url` and
-   `distribution_url` (e.g. `https://ingest.example.com`; default ports
-   18423 and 18424) and the rule set, with no `bundle_file`:
+   `distribution_url` (e.g. `https://ingest.example.com` and
+   `https://rules.example.com`, the names on their server certificates;
+   default ports 18423 and 18424) and the rule set, with no `bundle_file`:
 
    ```toml
    [[rule_sets]]
