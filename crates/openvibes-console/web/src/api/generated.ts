@@ -4,6 +4,22 @@
  */
 
 export interface paths {
+    "/api/v1/access-control": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_access_inventory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -253,6 +269,56 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Manual asset group and exact selectors. */
+        AccessAssetGroup: {
+            /** @description Stable group identifier. */
+            asset_group_id: string;
+            /** @description Operator-facing group name. */
+            name: string;
+            /** @description Exact `key=value` selectors, all of which must match. */
+            selectors: string[];
+        };
+        /** @description Active local-user role assignment. */
+        AccessBinding: {
+            /** @description Asset group id; null denotes global scope. */
+            asset_group_id?: string | null;
+            /** @description Asset group name, when scoped. */
+            asset_group_name?: string | null;
+            /** @description Stable binding identifier. */
+            binding_id: string;
+            /** @description RFC 3339 creation time. */
+            created_at: string;
+            /** @description Actor who created the binding. */
+            created_by: string;
+            /** @description Display label. */
+            display_name: string;
+            /** @description Role identifier. */
+            role_id: string;
+            /** @description Stable local user identifier. */
+            user_id: string;
+            /** @description Local username. */
+            username: string;
+        };
+        /** @description Read-only review of roles, bindings, and asset groups. */
+        AccessInventory: {
+            /** @description Manual asset groups and their exact tag selectors. */
+            asset_groups: components["schemas"]["AccessAssetGroup"][];
+            /** @description Active local-user role bindings. */
+            bindings: components["schemas"]["AccessBinding"][];
+            /** @description All available roles and granted permission identifiers. */
+            roles: components["schemas"]["AccessRole"][];
+        };
+        /** @description Role and permission mapping. */
+        AccessRole: {
+            /** @description Whether this is a built-in role. */
+            builtin: boolean;
+            /** @description Operator-facing name. */
+            display_name: string;
+            /** @description Permission identifiers. */
+            permissions: string[];
+            /** @description Stable role identifier. */
+            role_id: string;
+        };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
             /** @description Certificate metadata for the agent. */
@@ -663,6 +729,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    authenticated_access_inventory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Roles, active bindings, and asset groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessInventory"];
+                };
+            };
+        };
+    };
     authenticated_agents: {
         parameters: {
             query?: {

@@ -9,6 +9,26 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/access-control": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "operationId": "authenticated_access_inventory",
+        "responses": {
+          "200": {
+            "description": "Roles, active bindings, and asset groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInventory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents": {
       "get": {
         "tags": [
@@ -1251,6 +1271,152 @@
   },
   "components": {
     "schemas": {
+      "AccessAssetGroup": {
+        "type": "object",
+        "description": "Manual asset group and exact selectors.",
+        "required": [
+          "asset_group_id",
+          "name",
+          "selectors"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "Stable group identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-facing group name."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exact `key=value` selectors, all of which must match."
+          }
+        }
+      },
+      "AccessBinding": {
+        "type": "object",
+        "description": "Active local-user role assignment.",
+        "required": [
+          "binding_id",
+          "user_id",
+          "username",
+          "display_name",
+          "role_id",
+          "created_at",
+          "created_by"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset group id; null denotes global scope."
+          },
+          "asset_group_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset group name, when scoped."
+          },
+          "binding_id": {
+            "type": "string",
+            "description": "Stable binding identifier."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339 creation time."
+          },
+          "created_by": {
+            "type": "string",
+            "description": "Actor who created the binding."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Display label."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role identifier."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local user identifier."
+          },
+          "username": {
+            "type": "string",
+            "description": "Local username."
+          }
+        }
+      },
+      "AccessInventory": {
+        "type": "object",
+        "description": "Read-only review of roles, bindings, and asset groups.",
+        "required": [
+          "roles",
+          "bindings",
+          "asset_groups"
+        ],
+        "properties": {
+          "asset_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessAssetGroup"
+            },
+            "description": "Manual asset groups and their exact tag selectors."
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessBinding"
+            },
+            "description": "Active local-user role bindings."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessRole"
+            },
+            "description": "All available roles and granted permission identifiers."
+          }
+        }
+      },
+      "AccessRole": {
+        "type": "object",
+        "description": "Role and permission mapping.",
+        "required": [
+          "role_id",
+          "display_name",
+          "builtin",
+          "permissions"
+        ],
+        "properties": {
+          "builtin": {
+            "type": "boolean",
+            "description": "Whether this is a built-in role."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing name."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permission identifiers."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Stable role identifier."
+          }
+        }
+      },
       "AgentDetail": {
         "allOf": [
           {

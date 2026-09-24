@@ -4,12 +4,13 @@ use utoipa::OpenApi;
 
 use crate::{
     api::{
-        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuditEventPage,
-        AuditEventView, AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod,
-        CertificatePage, CertificateView, CursorPagination, EffectiveCapability,
-        FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
-        FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
-        SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
+        AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AgentDetail, AgentPage,
+        AgentStatus, AgentSummary, AgentView, AuditEventPage, AuditEventView, AuditRetentionPolicy,
+        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
+        CursorPagination, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage,
+        FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest, LoginResponse,
+        Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse, Severity,
+        UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -23,6 +24,7 @@ use crate::{
         license(name = "MIT")
     ),
     paths(
+        crate::router::authenticated_access_inventory,
         crate::router::session,
         crate::router::preauth,
         crate::router::login,
@@ -41,6 +43,10 @@ use crate::{
         crate::router::update_authenticated_audit_retention
     ),
     components(schemas(
+        AccessAssetGroup,
+        AccessBinding,
+        AccessInventory,
+        AccessRole,
         AuthenticationLevel,
         AuthenticationMethod,
         AuditRetentionPolicy,

@@ -8,9 +8,10 @@ control-plane permissions; a global grant for a permission dominates any
 scoped grants. Group IDs are deduplicated and sorted for stable output.
 
 The resolver is pure and has no configuration or database access. Persisted
-bindings must be loaded by the future auth/store integration, which must pass
-only the current principal's complete binding set. SQL must still enforce the
-resolved asset scope before any filtering, aggregation, pagination, or facet
-calculation.
+bindings are loaded from PostgreSQL for each authenticated request. The
+global-permission `GET /api/v1/access-control` view returns role permissions,
+active local-user bindings, and exact asset-group selectors. Viewing it emits
+`access_control.viewed`. SQL still enforces resolved asset scope before any
+filtering, aggregation, pagination, or facet calculation.
 
 Run `cargo test -p openvibes-console rbac::tests`.

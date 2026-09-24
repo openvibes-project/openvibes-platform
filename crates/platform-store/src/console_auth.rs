@@ -140,6 +140,129 @@ pub struct LocalUserSummary {
     pub last_seen_at: Option<DateTime<Utc>>,
 }
 
+/// A built-in or custom role and its permission identifiers.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RoleSummary {
+    /// Stable role key.
+    pub role_id: String,
+    /// Display name.
+    pub display_name: String,
+    /// Whether the role is managed by the platform.
+    pub builtin: bool,
+    /// Permission identifiers granted by this role.
+    pub permissions: Vec<String>,
+}
+
+/// Active user role binding with its resolved asset-group label.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BindingSummary {
+    /// Stable binding UUID.
+    pub binding_id: String,
+    /// User id.
+    pub user_id: String,
+    /// Username.
+    pub username: String,
+    /// User display name.
+    pub display_name: String,
+    /// Bound role identifier.
+    pub role_id: String,
+    /// Asset group id; absent means global access.
+    pub asset_group_id: Option<String>,
+    /// Asset group label.
+    pub asset_group_name: Option<String>,
+    /// Creation instant.
+    pub created_at: DateTime<Utc>,
+    /// Actor who created the binding.
+    pub created_by: String,
+}
+
+/// Manual asset group and its exact tag selectors.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AssetGroupSummary {
+    /// Stable group UUID.
+    pub asset_group_id: String,
+    /// Operator-facing group name.
+    pub name: String,
+    /// Exact `key=value` selectors.
+    pub selectors: Vec<String>,
+}
+
+/// Read-only access-control inventory for the administration page.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AccessInventory {
+    /// Roles and permission identifiers.
+    pub roles: Vec<RoleSummary>,
+    /// Active local-user role bindings.
+    pub bindings: Vec<BindingSummary>,
+    /// Manual asset groups and selectors.
+    pub asset_groups: Vec<AssetGroupSummary>,
+}
+
+/// Lists the current roles, active user bindings, and asset group selectors.
+pub async fn access_inventory(client: &Client) -> Result<AccessInventory, StoreError> {
+    let role_rows = client
+        .query(
+            "SELECT r.role_id, r.display_name, r.builtin,
+                COALESCE(array_agg(rp.permission_id ORDER BY rp.permission_id)
+                    FILTER (WHERE rp.permission_id IS NOT NULL), ARRAY[]::text[])
+         FROM console_roles r LEFT JOIN console_role_permissions rp USING (role_id)
+         GROUP BY r.role_id ORDER BY r.role_id",
+            &[],
+        )
+        .await?;
+    let binding_rows = client
+        .query(
+            "SELECT b.binding_id::text, u.user_id::text, u.username, u.display_name,
+                b.role_id, b.asset_group_id::text, g.name, b.created_at, b.created_by
+         FROM console_role_bindings b JOIN console_users u USING (user_id)
+         LEFT JOIN console_asset_groups g USING (asset_group_id)
+         WHERE b.user_id IS NOT NULL AND b.revoked_at IS NULL
+         ORDER BY u.username, b.role_id, g.name NULLS FIRST, b.binding_id",
+            &[],
+        )
+        .await?;
+    let group_rows = client.query(
+        "SELECT g.asset_group_id::text, g.name,
+                COALESCE(array_agg(s.tag_key || '=' || s.tag_value ORDER BY s.tag_key)
+                    FILTER (WHERE s.tag_key IS NOT NULL), ARRAY[]::text[])
+         FROM console_asset_groups g LEFT JOIN console_asset_group_selectors s USING (asset_group_id)
+         GROUP BY g.asset_group_id ORDER BY g.name", &[],
+    ).await?;
+    Ok(AccessInventory {
+        roles: role_rows
+            .iter()
+            .map(|row| RoleSummary {
+                role_id: row.get(0),
+                display_name: row.get(1),
+                builtin: row.get(2),
+                permissions: row.get(3),
+            })
+            .collect(),
+        bindings: binding_rows
+            .iter()
+            .map(|row| BindingSummary {
+                binding_id: row.get(0),
+                user_id: row.get(1),
+                username: row.get(2),
+                display_name: row.get(3),
+                role_id: row.get(4),
+                asset_group_id: row.get(5),
+                asset_group_name: row.get(6),
+                created_at: row.get(7),
+                created_by: row.get(8),
+            })
+            .collect(),
+        asset_groups: group_rows
+            .iter()
+            .map(|row| AssetGroupSummary {
+                asset_group_id: row.get(0),
+                name: row.get(1),
+                selectors: row.get(2),
+            })
+            .collect(),
+    })
+}
+
 /// Lists local users without credentials, session secrets, or throttle hashes.
 pub async fn list_local_users(client: &Client) -> Result<Vec<LocalUserSummary>, StoreError> {
     let rows = client

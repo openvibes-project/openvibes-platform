@@ -199,6 +199,64 @@ pub struct AuditEventPage {
     pub next_cursor: Option<String>,
 }
 
+/// Read-only review of roles, bindings, and asset groups.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccessInventory {
+    /// All available roles and granted permission identifiers.
+    pub roles: Vec<AccessRole>,
+    /// Active local-user role bindings.
+    pub bindings: Vec<AccessBinding>,
+    /// Manual asset groups and their exact tag selectors.
+    pub asset_groups: Vec<AccessAssetGroup>,
+}
+
+/// Role and permission mapping.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccessRole {
+    /// Stable role identifier.
+    pub role_id: String,
+    /// Operator-facing name.
+    pub display_name: String,
+    /// Whether this is a built-in role.
+    pub builtin: bool,
+    /// Permission identifiers.
+    pub permissions: Vec<String>,
+}
+
+/// Active local-user role assignment.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccessBinding {
+    /// Stable binding identifier.
+    pub binding_id: String,
+    /// Stable local user identifier.
+    pub user_id: String,
+    /// Local username.
+    pub username: String,
+    /// Display label.
+    pub display_name: String,
+    /// Role identifier.
+    pub role_id: String,
+    /// Asset group id; null denotes global scope.
+    pub asset_group_id: Option<String>,
+    /// Asset group name, when scoped.
+    pub asset_group_name: Option<String>,
+    /// RFC 3339 creation time.
+    pub created_at: String,
+    /// Actor who created the binding.
+    pub created_by: String,
+}
+
+/// Manual asset group and exact selectors.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccessAssetGroup {
+    /// Stable group identifier.
+    pub asset_group_id: String,
+    /// Operator-facing group name.
+    pub name: String,
+    /// Exact `key=value` selectors, all of which must match.
+    pub selectors: Vec<String>,
+}
+
 /// Request body for changing audit retention.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

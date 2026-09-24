@@ -23,14 +23,16 @@ the executable connects to PostgreSQL, requires schema version 8, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
-certificate routes, plus finding summary, latest, and history reads. Control-
-plane reads remain pending. Global audit event search and retention-policy
+certificate routes, plus finding summary, latest, and history reads. Access
+control has a global read inventory for roles, bindings, and asset groups;
+editing those records and enrollment, rule, and service-account reads remain
+pending. Global audit event search and retention-policy
 reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
-sign-out action, and its production Overview, Agents, and Findings pages use
-the authenticated read routes; its Audit page uses the global audit API.
+sign-out action, and its production Overview, Agents, Findings, Audit, and
+Access control pages use authenticated APIs.
 The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded

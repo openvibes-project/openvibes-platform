@@ -21,7 +21,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
 | `console-auth-http` | console module | pre-auth, local login/logout, database-backed browser sessions, and per-request capability resolution (C3) | [console-auth-http.md](console-auth-http.md) |
 | `console-auth-ui` | web module | local login page, session gate, and logout action (C3) | [console-auth-ui.md](console-auth-ui.md) |
-| `console-rbac` | console module | built-in role permissions and asset-scope resolution | [console-rbac.md](console-rbac.md) |
+| `console-rbac` | console module | role permission resolution and access-control read API | [console-rbac.md](console-rbac.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).

@@ -8,6 +8,7 @@ type Finding = components["schemas"]["FindingView"];
 type FindingPage = components["schemas"]["FindingPage"];
 type FindingSummary = components["schemas"]["FindingSummary"];
 type AuditEventPage = components["schemas"]["AuditEventPage"];
+type AccessInventory = components["schemas"]["AccessInventory"];
 
 type ReadState<T> =
   | { status: "loading" }
@@ -289,6 +290,25 @@ export function AuditEventsReadPage({ seeded = false }: { seeded?: boolean }) {
       </table></div>}
       {events.next_cursor && <a className="button-link" href={`/audit?${new URLSearchParams({ ...Object.fromEntries(params), cursor: events.next_cursor }).toString()}`}>Next page</a>}
       <p className="read-state">Showing events from <time dateTime={since}>{dateLabel(since)}</time>. Event details and request source data are restricted.</p>
+    </>}</ReadStatus>
+  </section>;
+}
+
+export function AccessControlReadPage({ seeded = false }: { seeded?: boolean }) {
+  const inventory = useRead<AccessInventory>("/api/v1/access-control", seeded);
+  return <section className="read-card" aria-labelledby="access-control-title">
+    <div className="read-card__heading"><div><p className="eyebrow">Authorization</p><h2 id="access-control-title">Roles and access bindings</h2></div></div>
+    <ReadStatus state={inventory}>{(access) => <>
+      <h3>Roles</h3>
+      <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">Role</th><th scope="col">Type</th><th scope="col">Permissions</th></tr></thead>
+        <tbody>{access.roles.map((role) => <tr key={role.role_id}><th scope="row">{role.display_name}<span className="table-subtext">{role.role_id}</span></th><td>{role.builtin ? "Built in" : "Custom"}</td><td>{role.permissions.join(", ") || "None"}</td></tr>)}</tbody>
+      </table></div>
+      <h3>Active bindings</h3>
+      {access.bindings.length === 0 ? <p className="read-state">No active local-user bindings.</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col">Added by</th></tr></thead>
+        <tbody>{access.bindings.map((binding) => <tr key={binding.binding_id}><th scope="row">{binding.display_name}<span className="table-subtext">{binding.username}</span></th><td>{binding.role_id}</td><td>{binding.asset_group_name ?? "Global"}</td><td>{binding.created_by}</td></tr>)}</tbody>
+      </table></div>}
+      <h3>Asset groups</h3>
+      {access.asset_groups.length === 0 ? <p className="read-state">No manual asset groups are configured.</p> : <ul>{access.asset_groups.map((group) => <li key={group.asset_group_id}><strong>{group.name}</strong>: {group.selectors.join(" AND ")}</li>)}</ul>}
     </>}</ReadStatus>
   </section>;
 }

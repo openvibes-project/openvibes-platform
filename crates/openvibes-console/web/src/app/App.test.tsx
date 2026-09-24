@@ -45,4 +45,11 @@ describe("console shell", () => {
     expect(markup).toContain('name="action"');
     expect(markup).toContain("Apply filters");
   });
+
+  it("renders the access-control inventory screen", () => {
+    const markup = renderToStaticMarkup(<App path="/access" seeded />);
+    expect(markup).toContain("Roles and access bindings");
+    expect(markup).toContain("Loading current data");
+    expect(markup).not.toContain("Workspace ready for bounded console data");
+  });
 });

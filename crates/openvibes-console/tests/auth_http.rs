@@ -261,6 +261,31 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 capability["permission"] == "rbac.manage" && capability["scope"]["kind"] == "global"
             })
     );
+    let access = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/access-control")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(access.status(), StatusCode::OK);
+    let access: Value =
+        serde_json::from_slice(&to_bytes(access.into_body(), 16_384).await.unwrap()).unwrap();
+    assert!(
+        access["roles"]
+            .as_array()
+            .is_some_and(|roles| !roles.is_empty())
+    );
+    assert!(
+        access["bindings"]
+            .as_array()
+            .is_some_and(|bindings| !bindings.is_empty())
+    );
+    assert!(access.get("credentials").is_none());
     let unauthenticated_summary = router
         .clone()
         .oneshot(
