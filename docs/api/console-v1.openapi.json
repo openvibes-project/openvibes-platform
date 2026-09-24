@@ -40,6 +40,207 @@
           }
         }
       }
+    },
+    "/auth/v1/login": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match the configured public origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "One-use token returned by pre-authentication",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cookie",
+            "in": "header",
+            "description": "Pre-auth and browser-binding cookies",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated; sets an opaque session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed authentication request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Generic invalid credentials response",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin or CSRF check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable or busy",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/v1/logout": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "logout",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match the configured public origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Synchronizer token returned by the session route",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cookie",
+            "in": "header",
+            "description": "Opaque browser session cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked and cookie cleared"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin or CSRF check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/v1/preauth": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "preauth",
+        "responses": {
+          "200": {
+            "description": "One-use login challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreauthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -635,6 +836,42 @@
           }
         }
       },
+      "LoginRequest": {
+        "type": "object",
+        "description": "One-use local login request. The password is never echoed by the API.",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Password supplied over the configured secure transport.",
+            "writeOnly": true,
+            "maxLength": 4096
+          },
+          "username": {
+            "type": "string",
+            "description": "Canonical local username (case is normalized by the server).",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "description": "Acknowledgement returned after a local password login succeeds.",
+        "required": [
+          "authenticated"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "description": "Always true for the successful response; the session cookie is set separately."
+          }
+        }
+      },
       "Permission": {
         "type": "string",
         "description": "Stable console permission identifiers.",
@@ -700,6 +937,19 @@
           }
         ],
         "description": "Effective object scope attached to one permission."
+      },
+      "PreauthResponse": {
+        "type": "object",
+        "description": "CSRF challenge returned before local password login.",
+        "required": [
+          "csrf_token"
+        ],
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "description": "One-use value required in `X-CSRF-Token` on the login request."
+          }
+        }
       },
       "ProblemDetails": {
         "type": "object",
@@ -834,6 +1084,10 @@
     {
       "name": "session",
       "description": "Current browser session"
+    },
+    {
+      "name": "authentication",
+      "description": "Local browser authentication"
     }
   ]
 }

@@ -145,6 +145,15 @@ impl NormalizedPassword {
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+
+    /// NFC-normalizes a bounded password for verification without applying
+    /// registration policy to existing credentials.
+    pub(crate) fn for_verification(password: &str) -> Result<Self, PasswordError> {
+        if password.chars().count() > MAX_RAW_PASSWORD_CODE_POINTS {
+            return Err(PasswordError::TooLong);
+        }
+        Ok(Self(password.nfc().collect()))
+    }
 }
 
 impl Drop for NormalizedPassword {
@@ -216,8 +225,35 @@ pub(crate) fn session_csrf(secret: &str) -> (String, [u8; 32]) {
     let mut input = b"openvibes-console-csrf-v1\0".to_vec();
     input.extend_from_slice(secret.as_bytes());
     let token = URL_SAFE_NO_PAD.encode(digest::digest(&digest::SHA256, &input).as_ref());
+    let token_digest = session_digest(&token);
     input.zeroize();
-    (token.clone(), session_digest(&token))
+    (token, token_digest)
+}
+
+pub(crate) fn named_cookie(
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<Option<PresentedSecret>, CredentialParseError> {
+    let mut secret = None;
+    for cookie_header in headers.get_all(header::COOKIE).iter() {
+        let cookie_header = cookie_header
+            .to_str()
+            .map_err(|_| CredentialParseError::Invalid)?;
+        for pair in cookie_header.split(';') {
+            let Some((cookie_name, value)) = pair.trim().split_once('=') else {
+                continue;
+            };
+            if cookie_name.trim() != name {
+                continue;
+            }
+            let value = value.trim();
+            if secret.is_some() || !valid_session_token(value) {
+                return Err(CredentialParseError::Invalid);
+            }
+            secret = Some(PresentedSecret(value.to_owned()));
+        }
+    }
+    Ok(secret)
 }
 
 impl Drop for PresentedSecret {
@@ -275,25 +311,7 @@ pub fn presented_credentials(
 fn session_cookie_from_headers(
     headers: &HeaderMap,
 ) -> Result<Option<PresentedSecret>, CredentialParseError> {
-    let mut secret = None;
-    for cookie_header in headers.get_all(header::COOKIE).iter() {
-        let cookie_header = cookie_header
-            .to_str()
-            .map_err(|_| CredentialParseError::Invalid)?;
-        for pair in cookie_header.split(';') {
-            let Some((name, value)) = pair.trim().split_once('=') else {
-                continue;
-            };
-            if name.trim() != "__Host-openvibes-session" {
-                continue;
-            }
-            if secret.is_some() || !valid_session_token(value.trim()) {
-                return Err(CredentialParseError::Invalid);
-            }
-            secret = Some(PresentedSecret(value.trim().to_owned()));
-        }
-    }
-    Ok(secret)
+    named_cookie(headers, "__Host-openvibes-session")
 }
 
 fn valid_session_token(value: &str) -> bool {

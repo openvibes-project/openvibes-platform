@@ -146,6 +146,47 @@ pub struct SessionResponse {
     pub absolute_expires_at: String,
 }
 
+/// One-use local login request. The password is never echoed by the API.
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct LoginRequest {
+    /// Canonical local username (case is normalized by the server).
+    #[schema(max_length = 64)]
+    pub username: String,
+    /// Password supplied over the configured secure transport.
+    #[schema(format = Password, write_only = true, max_length = 4096)]
+    pub password: String,
+}
+
+impl Drop for LoginRequest {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.password.zeroize();
+        self.username.zeroize();
+    }
+}
+
+/// CSRF challenge returned before local password login.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct PreauthResponse {
+    /// One-use value required in `X-CSRF-Token` on the login request.
+    pub csrf_token: String,
+}
+
+impl Drop for PreauthResponse {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.csrf_token.zeroize();
+    }
+}
+
+/// Acknowledgement returned after a local password login succeeds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct LoginResponse {
+    /// Always true for the successful response; the session cookie is set separately.
+    pub authenticated: bool,
+}
+
 /// Validated cursor and limit accepted by cursor-paginated collection routes.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct CursorPagination {

@@ -7,8 +7,9 @@ queries enforce the caller's asset-group scope.
 
 ## Interface
 
-- `authenticated_router(pool)` builds a router with database-backed session
-  validation. `public_router()` remains the C0 fail-closed router.
+- `authenticated_router(pool, public_origin)` builds a router with database-
+  backed authentication. `public_origin` is the canonical configured browser
+  origin; `public_router()` remains the C0 fail-closed router.
 - `GET /api/v1/session` accepts exactly one valid `__Host-openvibes-session`
   cookie, rejects bearer or conflicting credentials, checks session and CSRF
   digests in constant time, touches the bounded idle expiry, and resolves active
@@ -17,6 +18,17 @@ queries enforce the caller's asset-group scope.
   returns its CSRF token with separate HttpOnly pre-auth and browser-binding
   cookies. It sets no cookies if persistence fails. The in-memory secret
   wrappers clear their owned buffers when dropped.
+- `POST /auth/v1/login` requires that pre-auth challenge, matching CSRF header,
+  exact Origin, and a socket peer address supplied through `ConnectInfo`.
+  Account and source throttles are hashed and domain-separated. Password
+  verification runs in a blocking worker behind a four-slot bound, with a
+  cached dummy Argon2id credential for missing, disabled, invalid, and locked
+  accounts. Failures use a generic response and are audited; success creates a
+  fresh opaque session and clears the one-use pre-auth cookies. Older valid
+  Argon2 hashes are upgraded without changing the auth generation.
+- `POST /auth/v1/logout` enforces the same Origin and synchronizer-token checks,
+  revokes only the presented session, records the logout in the audit log, and
+  clears the session cookie. Repeating logout remains safe.
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -25,9 +37,13 @@ queries enforce the caller's asset-group scope.
 
 ## Configuration
 
-The caller supplies a `platform_store::Pool`; pool sizing and the PostgreSQL
-connection string stay with process configuration. The router does not trust
-proxy headers and does not enable any production data route.
+The caller supplies a `platform_store::Pool` and canonical public origin; pool
+sizing and the PostgreSQL connection string stay with process configuration.
+Login throttling requires trusted socket `ConnectInfo`; forwarded headers are
+not interpreted. Public origins must be canonical HTTPS origins; HTTP is
+accepted only for loopback development. The current C0 executable still serves
+`public_router()`; its config and listener do not yet construct this router.
+No production data route is enabled here.
 
 ## Failure behaviour
 
@@ -40,7 +56,8 @@ agent or finding records.
 ## How to test
 
 Run `cargo test --offline -p openvibes-console` for API contract and router
-checks, including fail-closed pre-auth issuance when PostgreSQL is unavailable.
-Positive database-backed auth-flow coverage uses the isolated PostgreSQL target in
-the platform-store test harness: `OPENVIBES_TEST_DATABASE_URL=… cargo test
---offline -p platform-store --test console_auth`.
+checks. The PostgreSQL-backed HTTP journey covers login, account-enumeration
+failure shape, session rotation, and logout:
+`OPENVIBES_TEST_DATABASE_URL=… cargo test --offline -p openvibes-console
+--test auth_http`. Store transaction coverage uses the same isolated test
+cluster with `cargo test --offline -p platform-store --test console_auth`.

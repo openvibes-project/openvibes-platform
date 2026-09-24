@@ -7,8 +7,8 @@ use crate::{
         AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuthenticationLevel,
         AuthenticationMethod, CertificatePage, CertificateView, CursorPagination,
         EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
-        FindingSummary, FindingView, Permission, PermissionScope, SessionPrincipal,
-        SessionResponse, Severity,
+        FindingSummary, FindingView, LoginRequest, LoginResponse, Permission, PermissionScope,
+        PreauthResponse, SessionPrincipal, SessionResponse, Severity,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -21,7 +21,12 @@ use crate::{
         description = "Versioned human and service-account API for the OpenVIBES console.",
         license(name = "MIT")
     ),
-    paths(crate::router::session),
+    paths(
+        crate::router::session,
+        crate::router::preauth,
+        crate::router::login,
+        crate::router::logout
+    ),
     components(schemas(
         AuthenticationLevel,
         AuthenticationMethod,
@@ -30,6 +35,8 @@ use crate::{
         AgentStatus,
         AgentSummary,
         AgentView,
+        LoginRequest,
+        LoginResponse,
         CertificatePage,
         CertificateView,
         CursorPagination,
@@ -43,12 +50,16 @@ use crate::{
         FindingView,
         Permission,
         PermissionScope,
+        PreauthResponse,
         ProblemDetails,
         SessionPrincipal,
         SessionResponse,
         Severity
     )),
-    tags((name = "session", description = "Current browser session"))
+    tags(
+        (name = "session", description = "Current browser session"),
+        (name = "authentication", description = "Local browser authentication")
+    )
 )]
 struct ConsoleApi;
 

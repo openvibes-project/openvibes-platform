@@ -1,7 +1,8 @@
 use openvibes_console::{
     AgentPage, AgentStatus, AgentView, AuthenticationLevel, AuthenticationMethod, CursorPage,
-    CursorPagination, EffectiveCapability, FindingOrigin, FindingPage, FindingView, Permission,
-    PermissionScope, SessionPrincipal, SessionResponse, Severity, openapi_json,
+    CursorPagination, EffectiveCapability, FindingOrigin, FindingPage, FindingView, LoginRequest,
+    LoginResponse, Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse,
+    Severity, openapi_json,
 };
 
 const SNAPSHOT: &str = include_str!("../../../docs/api/console-v1.openapi.json");
@@ -17,6 +18,29 @@ fn pagination_query_is_closed_and_bounded() {
     assert_eq!(default.limit(), 50);
     assert!(serde_json::from_str::<CursorPagination>(r#"{"extra":true}"#).is_err());
     assert!(serde_json::from_str::<CursorPagination>(r#"{"limit":101}"#).is_err());
+}
+
+#[test]
+fn local_auth_contract_is_closed_and_never_serializes_login_credentials() {
+    let request: LoginRequest =
+        serde_json::from_str(r#"{"username":"alice","password":"not echoed"}"#).unwrap();
+    assert_eq!(request.username, "alice");
+    assert!(
+        serde_json::from_str::<LoginRequest>(r#"{"username":"alice","password":"x","admin":true}"#)
+            .is_err()
+    );
+    let preauth = serde_json::to_value(PreauthResponse {
+        csrf_token: "opaque-token".to_owned(),
+    })
+    .unwrap();
+    assert_eq!(preauth, serde_json::json!({"csrf_token":"opaque-token"}));
+    assert_eq!(
+        serde_json::to_value(LoginResponse {
+            authenticated: true
+        })
+        .unwrap(),
+        serde_json::json!({"authenticated":true})
+    );
 }
 
 #[test]
