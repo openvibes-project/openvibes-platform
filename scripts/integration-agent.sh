@@ -130,5 +130,18 @@ for id in $REVOKED_IDS; do
         { echo "FAIL: finding $id queued while revoked was not delivered under the new identity"; exit 1; }
 done
 echo "ok: findings queued while revoked delivered under the new identity"
+# An expired certificate (a laptop off past its renewal window) cannot renew;
+# the agent drops it, keeps its queue, and enrolls again with its token file.
+SECOND_AGENT=$(sql "SELECT agent_id FROM agents WHERE status = 'active'")
+stop_agent
+sqlite3 "$W/agent/state/identity.sqlite" "UPDATE identity SET obtained_at_ms = 0, expires_at_ms = 1"
+new_token   # the used single-use token is refused (401); a token with a use left works
+restart_agent
+third_agent() {
+    [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'
+                AND agent_id NOT IN ('$FIRST_AGENT', '$SECOND_AGENT')")" == 1 ]]
+}
+wait_for "expired certificate: agent re-enrolled from its token file" 30 third_agent
+wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_equals_stored
 ((${#PIDS[@]} == 2)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest and the live agent"; exit 1; }
 echo "integration: all checks passed"

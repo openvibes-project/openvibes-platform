@@ -59,7 +59,8 @@ All run within the `openvibes_ingest` role's grants (the tests use
   transaction under `pg_advisory_xact_lock(hashtext(token_id))`, so
   concurrent enrollments with a single-use token yield exactly one identity.
   `Existing` when this token already enrolled this key (the protocol's retry
-  rule, same chain returned), `TokenInvalid` when the token is revoked or
+  rule, same chain returned), `AgentRevoked` when that same-key retry belongs to an agent revoked since
+  (a revoked identity is never handed out again), `TokenInvalid` when the token is revoked or
   expired at `now` (checked under the lock, so a revocation racing the
   request cannot slip through), `Exhausted` when no uses remain, else `New`
   after creating the agent (`agent.<uuid>`), its certificate, the token use,

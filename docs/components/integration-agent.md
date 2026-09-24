@@ -35,6 +35,12 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    be stored under the new `agent_id`, so a dropped batch cannot hide behind
    a later scan.
 
+6. **Expired certificate:** with the agent stopped, its stored certificate
+   is marked expired; given a token with a use left, it re-enrolls on its
+   own as a new `agent_id` and keeps delivering exactly once (protocol P5).
+   With only its used single-use token it would stay refused (401), which
+   the run checked before adding the token.
+
 A full run takes 2 to 3 minutes, because the agent ticks every 60 s.
 
 Checks read only real state: PostgreSQL rows, the agent's `queue.sqlite`,

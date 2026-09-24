@@ -50,7 +50,8 @@ Strict TOML (unknown keys refused), absolute paths only:
   is hashed with `platform_pki::enrollment_token_sha256`; unknown, expired,
   revoked, malformed, or used-up tokens → 401. The CSR must pass
   `check_csr` (P-256, empty subject, valid signature) → else 400. A retry
-  with the same token and the same key returns the same identity and chain.
+  with the same token and the same key returns the same identity and chain,
+  unless that agent was revoked since (401).
   Response: `EnrollmentResponse` with `agent.<uuid>`, leaf + intermediate,
   and the leaf expiry.
 - `POST /v1/renew` (authenticated): `RenewalRequest`; issues a certificate
@@ -65,18 +66,23 @@ Strict TOML (unknown keys refused), absolute paths only:
   at most every 5 minutes unless the hostname changed; an absent hostname
   keeps the stored one. 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
-  authenticated agent. A finding observed more than 5 minutes in the future
-  fails the whole batch (400, nothing stored). Findings older than
-  `finding_retention_days` are acknowledged but not stored. The rest are
-  stored in one transaction (duplicates skipped) and every finding in the
-  batch is acknowledged, including ones stored before.
+  authenticated agent. **One bad finding never fails its batch**: each finding
+  is stored or refused on its own. Refused findings are acknowledged too (so
+  the agent drops them) and listed in `rejected_findings` with a reason:
+  `future_observation` (more than 1 hour ahead of the platform clock),
+  `retention_expired` (older than `finding_retention_days`), `out_of_range`
+  (for example a `rule_version` above 2^63 − 1), `unstorable` (no partition
+  for its day: fix `openvibes-admin maintenance`). The rest are stored in one
+  transaction (duplicates skipped); every finding in the batch is
+  acknowledged, including ones stored before. Only a malformed or invalid
+  batch is 400 as a whole.
 - Any database error, on any endpoint, is 503 (`unavailable`) and
   acknowledges nothing; it is logged as a warning inside the request span
   (endpoint, and `agent_id` once authenticated), never with SQL or the
   connection string. A
-  finding whose day has no partition also ends as 503 and a
-  `findings not stored` log line; `openvibes-admin maintenance` keeps the
-  window covered. Ingest never creates partitions.
+  finding whose day has no partition is refused as `unstorable` (see above);
+  `openvibes-admin maintenance` keeps the window covered. Ingest never
+  creates partitions.
 
 ## Load control and logging
 
