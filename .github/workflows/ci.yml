@@ -50,7 +50,7 @@ jobs:
       - name: Install console brand renderer
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends imagemagick
+          sudo apt-get install --no-install-recommends imagemagick librsvg2-bin
 
       - name: Install pinned toolchain from rust-toolchain.toml
         run: rustup toolchain install
