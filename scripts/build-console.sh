@@ -16,6 +16,8 @@ for required_command in node npm cargo; do
     fi
 done
 
+"${script_dir}/build-console-brand-assets.sh"
+
 actual_node_version="$(node --version)"
 if [[ "${actual_node_version}" != "v${required_node_version}" ]]; then
     printf 'error: Node.js v%s is required (found %s)\n' \

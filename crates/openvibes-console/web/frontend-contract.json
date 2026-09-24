@@ -19,8 +19,28 @@
       "file": "theme-bootstrap.js"
     },
     {
-      "route": "/brand/openvibes-mark-placeholder.svg",
-      "file": "brand/openvibes-mark-placeholder.svg"
+      "route": "/brand/openvibes-mark.svg",
+      "file": "brand/openvibes-mark.svg"
+    },
+    {
+      "route": "/brand/openvibes-wordmark-light.svg",
+      "file": "brand/openvibes-wordmark-light.svg"
+    },
+    {
+      "route": "/brand/openvibes-wordmark-dark.svg",
+      "file": "brand/openvibes-wordmark-dark.svg"
+    },
+    {
+      "route": "/brand/openvibes-favicon-32.png",
+      "file": "brand/openvibes-favicon-32.png"
+    },
+    {
+      "route": "/brand/openvibes-mark-192.png",
+      "file": "brand/openvibes-mark-192.png"
+    },
+    {
+      "route": "/brand/openvibes-mark-512.png",
+      "file": "brand/openvibes-mark-512.png"
     }
   ]
 }

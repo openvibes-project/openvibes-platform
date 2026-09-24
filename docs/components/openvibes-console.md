@@ -16,7 +16,7 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved and the first C0 foundation is implemented: a
+The design is approved and C0 is complete: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
 frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
@@ -27,12 +27,14 @@ The shell uses native platform interaction primitives: a Popover API help menu
 with arrow-key navigation, a modal `<dialog>` with focus return, and the native
 theme `<select>`. They pass the target CSP and axe checks in the real-browser
 suite without adding a component dependency.
+The supplied logo references are represented by reviewed, self-contained
+transparent SVG paths: a compact mark and light- and dark-surface wordmarks.
+The expanded shell follows the active theme while the compact shell, favicon,
+and application manifest use the mark. ImageMagick deterministically renders
+the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
 Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
 authorisation.
-
-C0 is not complete yet. Reviewed transparent production logo derivatives
-remain required.
 
 ## Interfaces
 
@@ -99,6 +101,9 @@ banner are never included in the production RPM.
   referenced embedded asset is missing or inconsistent. It also refuses a
   stale build stamp whose sorted input/output inventory or SHA-256 digest does
   not match the files being embedded.
+- Frontend tests refuse brand SVGs with scripts, animation, embedded raster,
+  external references, text/fonts, or background rectangles, and verify the
+  PNG signatures, alpha channel, and declared dimensions.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.
@@ -120,11 +125,18 @@ banner are never included in the production RPM.
 
 ## Build and test
 
-The reproducible production sequence is Rust OpenAPI export, snapshot/client
-drift checking, locked frontend install and checks, Vite build, generation of
-the content-derived build stamp, embedded-asset validation, then the Rust
-`embedded-ui` release build. The Rust build script reads the checked frontend
-contract and verifies the stamp but never invokes a package manager.
+The reproducible production sequence renders the PNG brand derivatives with
+ImageMagick, exports Rust OpenAPI, checks snapshot/client drift, performs the
+locked frontend install and checks, runs Vite, generates the content-derived
+build stamp, validates embedded assets, then builds the Rust `embedded-ui`
+release. The Rust build script reads the checked frontend contract and verifies
+the stamp but never invokes a package manager.
+
+Run `scripts/build-console-brand-assets.sh` alone after an intentional change
+to `web/public/brand/openvibes-mark.svg`. It accepts ImageMagick 7 (`magick`) or
+ImageMagick 6 (`convert`); CI installs ImageMagick explicitly. The SVG files are
+the reviewed sources and the generated PNG files are committed so offline
+packaging has no hidden artwork input.
 
 `scripts/build-console-npm-cache.sh OUTPUT_DIR` creates a separate
 `linux-x64` cache artefact named by the SHA-256 of `package-lock.json`, plus a

@@ -4,15 +4,21 @@ type BrandProps = {
 
 export function Brand({ compact }: BrandProps) {
   return (
-    <a className="brand" href="/" aria-label="OpenVIBES Console home" data-brand-status="placeholder">
-      <span className="brand__mark" aria-hidden="true">
-        <span className="brand__v">V</span>
-        <span className="brand__signal">)))</span>
-      </span>
-      {!compact && (
-        <span className="brand__wordmark" aria-hidden="true">
-          <span className="brand__open">open</span>
-          <span className="brand__vibes">VIBES</span>
+    <a className="brand" href="/" aria-label="OpenVIBES Console home">
+      {compact ? (
+        <img className="brand__mark" src="/brand/openvibes-mark.svg" alt="" />
+      ) : (
+        <span className="brand__wordmark">
+          <img
+            className="brand__wordmark-light"
+            src="/brand/openvibes-wordmark-light.svg"
+            alt=""
+          />
+          <img
+            className="brand__wordmark-dark"
+            src="/brand/openvibes-wordmark-dark.svg"
+            alt=""
+          />
         </span>
       )}
     </a>

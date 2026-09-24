@@ -14,6 +14,9 @@ describe("console shell", () => {
     expect(markup).not.toContain("aria-expanded");
     expect(markup).toContain("Seeded environment");
     expect(markup).toContain("latest observed matches");
+    expect(markup).toContain('/brand/openvibes-wordmark-light.svg');
+    expect(markup).toContain('/brand/openvibes-wordmark-dark.svg');
+    expect(markup).not.toContain("placeholder");
   });
 
   it("renders a bounded fallback for unknown browser routes", () => {

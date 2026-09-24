@@ -39,6 +39,14 @@ test("serves the accessible shell with the target security boundary", async ({ p
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Console" })).toBeVisible();
   await expect(page.getByLabel("Theme")).toHaveValue("system");
+  const brandImages = page.getByRole("link", { name: "OpenVIBES Console home" }).locator("img");
+  expect(await brandImages.count()).toBe(2);
+  for (let index = 0; index < (await brandImages.count()); index += 1) {
+    await expect(brandImages.nth(index)).toHaveJSProperty("complete", true);
+    expect(
+      await brandImages.nth(index).evaluate((image) => (image as HTMLImageElement).naturalWidth),
+    ).toBeGreaterThan(0);
+  }
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
@@ -94,6 +102,10 @@ test("supports keyboard entry and the compact-navigation control", async ({ page
   await expect(page.getByRole("button", { name: "Expand primary navigation" })).toHaveAttribute(
     "aria-pressed",
     "true",
+  );
+  await expect(page.getByRole("link", { name: "OpenVIBES Console home" }).locator("img")).toHaveAttribute(
+    "src",
+    "/brand/openvibes-mark.svg",
   );
 });
 
