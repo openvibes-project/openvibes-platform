@@ -14,10 +14,11 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
 
 use crate::{
-    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, CertificateView, CursorPage,
-    CursorPagination, FindingOrigin, FindingPage, FindingSummary, FindingView, Permission,
-    Severity,
+    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, BuiltInRole, CertificateView,
+    CursorPage, CursorPagination, FindingOrigin, FindingPage, FindingSummary, FindingView,
+    Permission, RoleBinding, Severity,
     problem::{ProblemDetails, problem_response},
+    resolve_capabilities,
 };
 
 const GENERATED_AT: &str = "2026-09-24T12:00:00Z";
@@ -103,35 +104,28 @@ impl Persona {
         if matches!(mode, SeedMode::PermissionRemoved) && permission == Permission::AgentsRead {
             return false;
         }
-        match self {
-            Self::Viewer => matches!(
-                permission,
-                Permission::AgentsRead | Permission::FindingsRead
-            ),
-            Self::Analyst => matches!(
-                permission,
-                Permission::AgentsRead | Permission::FindingsRead | Permission::FindingsTriage
-            ),
-            Self::Operator => matches!(
-                permission,
-                Permission::AgentsRead
-                    | Permission::AgentsRevoke
-                    | Permission::FindingsRead
-                    | Permission::FindingsTriage
-                    | Permission::TokensRead
-                    | Permission::TokensCreate
-                    | Permission::TokensRevoke
-            ),
-            Self::ScopedOperator => matches!(
-                permission,
-                Permission::AgentsRead | Permission::FindingsRead | Permission::FindingsTriage
-            ),
-            Self::Admin => true,
-        }
+        resolve_capabilities(&[self.binding()])
+            .iter()
+            .any(|capability| capability.permission == permission)
     }
 
     fn global_scope(self) -> bool {
         !matches!(self, Self::ScopedOperator)
+    }
+
+    fn binding(self) -> RoleBinding {
+        let role = match self {
+            Self::Viewer => BuiltInRole::Viewer,
+            Self::Analyst => BuiltInRole::Analyst,
+            Self::Operator | Self::ScopedOperator => BuiltInRole::Operator,
+            Self::Admin => BuiltInRole::Admin,
+        };
+        if self.global_scope() {
+            RoleBinding::global(role)
+        } else {
+            RoleBinding::scoped(role, ["seeded-asset-group".to_owned()])
+                .expect("the seeded asset-group ID is nonempty")
+        }
     }
 }
 
@@ -748,4 +742,21 @@ async fn no_store(mut response: Response) -> Response {
         axum::http::HeaderValue::from_static("no-store"),
     );
     response
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Persona, SeedMode};
+    use crate::Permission;
+
+    #[test]
+    fn seeded_personas_use_the_approved_builtin_role_permissions() {
+        assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));
+        assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
+        assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(!Persona::ScopedOperator.permits(Permission::FindingsTriage, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::AuditRetentionManage, SeedMode::Mixed));
+    }
 }

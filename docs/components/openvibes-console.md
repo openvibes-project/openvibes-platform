@@ -104,10 +104,12 @@ Run the API with `cargo run -p openvibes-console --example seeded_server
 `npm run dev` from `crates/openvibes-console/web` for the Vite UI. The Vite
 server proxies API requests to the seeded API. API requests accept the
 demo-only `x-openvibes-dev-persona` and `x-openvibes-dev-mode` headers; the UI
-controls persist those values in local storage. Data is deterministic and
-synthetic; the 50,000-agent mode returns bounded pages and never loads all
-rows into the browser. These temporary routes are intentionally absent from
-the production OpenAPI contract until the database-backed C2/C3 routes exist.
+controls persist those values in local storage. The persona names use the
+same built-in role resolver as C3, with a fixed demo asset-group binding for
+`scoped_operator`. Data is deterministic and synthetic; the 50,000-agent mode
+returns bounded pages and never loads all rows into the browser. These
+temporary routes are intentionally absent from the production OpenAPI
+contract until the database-backed C2/C3 routes exist.
 
 ### Planned (C2 to C5)
 

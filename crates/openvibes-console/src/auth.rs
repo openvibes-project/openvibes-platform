@@ -12,6 +12,7 @@ use ring::{
     digest,
     rand::{SecureRandom, SystemRandom},
 };
+use subtle::ConstantTimeEq;
 use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroize;
 
@@ -260,6 +261,18 @@ pub fn browser_origin_allowed(headers: &HeaderMap, configured_origin: &str) -> b
         .any(|value| value.as_bytes().eq_ignore_ascii_case(b"cross-site"))
 }
 
+/// Checks for exactly one matching synchronizer token in `X-CSRF-Token`.
+pub fn csrf_token_matches(headers: &HeaderMap, expected: &str) -> bool {
+    let mut values = headers.get_all("x-csrf-token").iter();
+    let Some(provided) = values.next().map(axum::http::HeaderValue::as_bytes) else {
+        return false;
+    };
+    if values.next().is_some() || provided.len() != expected.len() {
+        return false;
+    }
+    bool::from(expected.as_bytes().ct_eq(provided))
+}
+
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -275,8 +288,8 @@ mod tests {
     use axum::http::{HeaderMap, HeaderValue, header};
 
     use super::{
-        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed, hash_password,
-        session_cookie, verify_password,
+        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed,
+        csrf_token_matches, hash_password, session_cookie, verify_password,
     };
 
     #[test]
@@ -311,6 +324,19 @@ mod tests {
             HeaderValue::from_static("https://console.example"),
         );
         assert!(!browser_origin_allowed(&headers, "https://console.example"));
+    }
+
+    #[test]
+    fn csrf_token_requires_one_exact_constant_time_comparable_value() {
+        let expected = "x".repeat(43);
+        let mut headers = HeaderMap::new();
+        assert!(!csrf_token_matches(&headers, &expected));
+        headers.insert("x-csrf-token", HeaderValue::from_static("wrong"));
+        assert!(!csrf_token_matches(&headers, &expected));
+        headers.insert("x-csrf-token", HeaderValue::from_str(&expected).unwrap());
+        assert!(csrf_token_matches(&headers, &expected));
+        headers.append("x-csrf-token", HeaderValue::from_str(&expected).unwrap());
+        assert!(!csrf_token_matches(&headers, &expected));
     }
 
     #[test]

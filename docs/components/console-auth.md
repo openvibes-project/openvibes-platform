@@ -7,6 +7,9 @@ output redacts both values. The cookie helper emits the approved `__Host-`
 cookie with `Secure`, `HttpOnly`, `SameSite=Lax`, and `Path=/` attributes.
 It also checks an exact, single `Origin` header against the canonical
 configured origin and rejects `Sec-Fetch-Site: cross-site` when supplied.
+`csrf_token_matches` requires exactly one `X-CSRF-Token` value and compares
+equal-length tokens with `subtle::ConstantTimeEq`; the caller supplies the
+current session's expected token.
 `NormalizedPassword` converts input to NFC, enforces 15–128 Unicode code
 points without trimming or truncating, redacts `Debug`, and clears its owned
 buffer on drop. Inputs above 4,096 raw code points are rejected before

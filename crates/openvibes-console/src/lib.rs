@@ -19,6 +19,7 @@ mod error;
 mod frontend_contract;
 mod openapi;
 mod problem;
+mod rbac;
 mod router;
 #[cfg(feature = "dev-seed")]
 mod seeded;
@@ -33,11 +34,13 @@ pub use api::{
 };
 pub use auth::{
     NormalizedPassword, PasswordError, PasswordHash, PasswordHashError, PasswordVerification,
-    SessionSecret, browser_origin_allowed, hash_password, session_cookie, verify_password,
+    SessionSecret, browser_origin_allowed, csrf_token_matches, hash_password, session_cookie,
+    verify_password,
 };
 pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
+pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
 pub use router::{Readiness, development_router, health_router, public_router};
 pub use server::{run, serve};
