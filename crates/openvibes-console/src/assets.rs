@@ -9,7 +9,7 @@ use axum::{
 };
 use include_dir::{Dir, include_dir};
 
-use crate::public_assets::PUBLIC_ASSETS;
+use crate::frontend_contract::PUBLIC_ASSETS;
 
 static FRONTEND: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/web/dist");
 static MANIFEST_ASSETS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {

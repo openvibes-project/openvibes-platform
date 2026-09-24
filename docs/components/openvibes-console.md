@@ -20,14 +20,16 @@ The design is approved and the first C0 foundation is implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
 frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
+One checked frontend contract now supplies the browser-route and public-asset
+inventory to both Rust and TypeScript, and the production output carries a
+SHA-256 build stamp over the exact source inputs and generated files.
 Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
 authorisation.
 
-C0 is not complete yet. A release build stamp, real-browser
-CSP/accessibility proof for the selected interaction primitives, the checked
-offline npm source cache, and reviewed transparent production logo derivatives
-remain required.
+C0 is not complete yet. Real-browser CSP/accessibility proof for the selected
+interaction primitives, the checked offline npm source cache, and reviewed
+transparent production logo derivatives remain required.
 
 ## Interfaces
 
@@ -89,9 +91,11 @@ banner are never included in the production RPM.
 
 ## Failure behaviour
 
-- An `embedded-ui` build fails if the generated frontend manifest, SPA entry,
-  exact public-file inventory, or a referenced embedded asset is missing. The
-  planned release build stamp is not implemented yet.
+- An `embedded-ui` build fails if the shared route/public-asset contract,
+  generated frontend manifest, SPA entry, exact public-file inventory, or a
+  referenced embedded asset is missing or inconsistent. It also refuses a
+  stale build stamp whose sorted input/output inventory or SHA-256 digest does
+  not match the files being embedded.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.
@@ -114,10 +118,11 @@ banner are never included in the production RPM.
 ## Build and test
 
 The reproducible production sequence is Rust OpenAPI export, snapshot/client
-drift checking, locked frontend install and checks, Vite build, embedded-asset
-validation, then the Rust `embedded-ui` release build. The build never invokes
-a package manager implicitly, and the eventual RPM build uses a checksummed
-npm source cache with `npm ci --offline`.
+drift checking, locked frontend install and checks, Vite build, generation of
+the content-derived build stamp, embedded-asset validation, then the Rust
+`embedded-ui` release build. The Rust build script reads the checked frontend
+contract and verifies the stamp but never invokes a package manager. The
+eventual RPM build uses a checksummed npm source cache with `npm ci --offline`.
 
 For the current C0 foundation, run:
 

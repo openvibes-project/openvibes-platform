@@ -42,10 +42,12 @@ npm audit --audit-level=low
 npm run build
 
 node --input-type=module - "${web_root}" "${dist_root}" <<'NODE'
-import { lstat, readFile, readdir } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { lstat, readFile, readdir, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
-const publicRoot = resolve(process.argv[2], "public");
+const webRoot = resolve(process.argv[2]);
+const publicRoot = resolve(webRoot, "public");
 const distRoot = resolve(process.argv[3]);
 const manifestPath = resolve(distRoot, ".vite/manifest.json");
 
@@ -147,6 +149,71 @@ for (const entry of entries) {
     }
   }
 }
+
+async function collectFiles(root, ignoredTopDirectories = new Set(), ignoredFiles = new Set()) {
+  const files = [];
+  async function visit(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = resolve(directory, entry.name);
+      const metadata = await lstat(path);
+      const relativePath = relative(root, path).split(sep).join("/");
+      if (metadata.isSymbolicLink()) {
+        throw new Error(`frontend build input must not be a symbolic link: ${path}`);
+      }
+      if (metadata.isDirectory()) {
+        if (!relativePath.includes("/") && ignoredTopDirectories.has(relativePath)) {
+          continue;
+        }
+        await visit(path);
+      } else if (metadata.isFile()) {
+        if (!ignoredFiles.has(relativePath)) {
+          files.push(relativePath);
+        }
+      } else {
+        throw new Error(`frontend build input must be a regular file: ${path}`);
+      }
+    }
+  }
+  await visit(root);
+  return files.sort();
+}
+
+async function digestFiles(root, files) {
+  const digest = createHash("sha256");
+  for (const relativePath of files) {
+    const bytes = await readFile(resolve(root, relativePath));
+    const length = Buffer.alloc(8);
+    length.writeBigUInt64BE(BigInt(bytes.length));
+    digest.update(relativePath, "utf8");
+    digest.update(Buffer.from([0]));
+    digest.update(length);
+    digest.update(bytes);
+  }
+  return digest.digest("hex");
+}
+
+const inputFiles = await collectFiles(
+  webRoot,
+  new Set(["coverage", "dist", "node_modules", "playwright-report", "test-results"]),
+);
+const outputFiles = await collectFiles(
+  distRoot,
+  new Set(),
+  new Set([".gitkeep", "build-stamp.json"]),
+);
+const buildStamp = {
+  version: 1,
+  algorithm: "sha256",
+  inputDigest: await digestFiles(webRoot, inputFiles),
+  inputFiles,
+  outputDigest: await digestFiles(distRoot, outputFiles),
+  outputFiles,
+};
+await writeFile(resolve(distRoot, "build-stamp.json"), `${JSON.stringify(buildStamp, null, 2)}\n`, {
+  encoding: "utf8",
+  flag: "w",
+});
+await writeFile(resolve(distRoot, ".gitkeep"), "\n", { flag: "w" });
 NODE
 
 cd -- "${repository_root}"

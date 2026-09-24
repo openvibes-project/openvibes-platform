@@ -1,0 +1,26 @@
+{
+  "browserRoutes": [
+    "/",
+    "/findings",
+    "/agents",
+    "/enrollment",
+    "/rule-sets",
+    "/access",
+    "/service-accounts",
+    "/audit"
+  ],
+  "publicAssets": [
+    {
+      "route": "/app.webmanifest",
+      "file": "app.webmanifest"
+    },
+    {
+      "route": "/theme-bootstrap.js",
+      "file": "theme-bootstrap.js"
+    },
+    {
+      "route": "/brand/openvibes-mark-placeholder.svg",
+      "file": "brand/openvibes-mark-placeholder.svg"
+    }
+  ]
+}

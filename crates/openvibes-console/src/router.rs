@@ -19,19 +19,7 @@ use axum::extract::Path;
 #[cfg(feature = "embedded-ui")]
 use crate::assets::{self, CachePolicy};
 #[cfg(feature = "embedded-ui")]
-use crate::public_assets::PUBLIC_ASSETS;
-
-#[cfg(feature = "embedded-ui")]
-const BROWSER_ROUTES: &[&str] = &[
-    "/",
-    "/findings",
-    "/agents",
-    "/enrollment",
-    "/rule-sets",
-    "/access",
-    "/service-accounts",
-    "/audit",
-];
+use crate::frontend_contract::{BROWSER_ROUTES, PUBLIC_ASSETS};
 
 /// Process-readiness state shared with the loopback-only health router.
 #[derive(Clone, Debug, Default)]
