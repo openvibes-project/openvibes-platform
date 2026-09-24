@@ -41,10 +41,26 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    With only its used single-use token it would stay refused (401), which
    the run checked before adding the token.
 
-A full run takes 2 to 3 minutes, because the agent ticks every 60 s.
+7. **Rule distribution (SP2):** `openvibes-distribution` starts with the
+   least-privilege `openvibes_distribution` role. The operator trusts the
+   integration key and publishes, through `openvibes-admin rules`, the exact
+   v1 file the agent already accepted (a re-signed v1 would differ and the
+   agent would refuse it as a conflict). The agent switches to
+   `distribution_url` without a `bundle_file`:
+   - it polls and gets 204 for its current v1;
+   - after v2 is published it gets 200, and findings from v2's new rule
+     `integration.v2` arrive;
+   - with distribution stopped it keeps scanning on v2 (more `integration.v2`
+     findings) and does not exit;
+   - distribution then serves a v3 signed by a key only the platform
+     trusts (`integration.seed8`): the agent refuses it, keeps scanning on
+     v2, and no `integration.v3` finding is stored;
+   - revoked, it is told 403 `identity_revoked` by distribution.
+
+A full run takes 4 to 5 minutes, because the agent ticks every 60 s.
 
 Checks read only real state: PostgreSQL rows, the agent's `queue.sqlite`,
-and ingest's JSON request log.
+and the JSON request logs of ingest and distribution.
 
 ## Run
 
@@ -53,14 +69,15 @@ scripts/integration-agent.sh
 ```
 
 Exit 0 with one `ok:` line per check. On failure it prints `FAIL: ...`, the
-tails of the ingest and agent logs, and stops every process it started.
+tails of the ingest, distribution, and agent logs, and stops every process it started.
 
 | Variable | Default | Use |
 |---|---|---|
-| `OPENVIBES_BIN_DIR` | builds `target/release` | where `openvibes-ingest` and `openvibes-admin` are (e.g. `/usr/bin` after installing the RPMs) |
+| `OPENVIBES_BIN_DIR` | builds `target/release` | where `openvibes-ingest`, `openvibes-distribution`, and `openvibes-admin` are (e.g. `/usr/bin` after installing the RPMs) |
 | `AGENT_BIN` | builds into `target/integration/agent` | a prebuilt agent at the pinned revision |
 | `BUNDLE_BIN` | `cargo run` of the example | a prebuilt `integration_bundle` |
 | `INGEST_PORT`, `HEALTH_PORT` | 28423, 28480 | loopback ports |
+| `DIST_PORT`, `DIST_HEALTH_PORT` | 28424, 28481 | distribution's loopback ports |
 | `INTEGRATION_DIR` | `target/integration/run` | working directory; every ancestor must be owned by root or the current user (the agent refuses its state directory otherwise) |
 
 ## Requirements

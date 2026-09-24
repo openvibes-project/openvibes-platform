@@ -20,6 +20,13 @@ Summary:        OpenVIBES agent-facing ingest service
 %description -n openvibes-ingest
 Receives enrollments, renewals, heartbeats, and findings from OpenVIBES agents over mTLS.
 
+%package -n openvibes-distribution
+Summary:        OpenVIBES rule distribution service
+%{?systemd_requires}
+
+%description -n openvibes-distribution
+Serves operator-published, offline-signed rule bundles to enrolled OpenVIBES agents over mTLS.
+
 %package -n openvibes-admin
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
@@ -31,6 +38,11 @@ Schema migration, built-in CA, tokens, agents, and daily partition maintenance.
 S=%{_sourcedir}
 install -D -m 0755 $S/target/release/openvibes-ingest %{buildroot}%{_bindir}/openvibes-ingest
 install -D -m 0755 $S/target/release/openvibes-admin %{buildroot}%{_bindir}/openvibes-admin
+install -D -m 0755 $S/target/release/openvibes-distribution %{buildroot}%{_bindir}/openvibes-distribution
+install -D -m 0644 $S/packaging/rpm/openvibes-distribution.service %{buildroot}%{_unitdir}/openvibes-distribution.service
+install -D -m 0644 $S/packaging/rpm/openvibes-distribution.sysusers %{buildroot}%{_sysusersdir}/openvibes-distribution.conf
+install -D -m 0640 $S/packaging/rpm/distribution.toml %{buildroot}%{_sysconfdir}/openvibes/distribution.toml
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-distribution/LICENSE
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unitdir}/openvibes-ingest.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
@@ -50,6 +62,13 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %postun -n openvibes-ingest
 %systemd_postun_with_restart openvibes-ingest.service
 
+%post -n openvibes-distribution
+%systemd_post openvibes-distribution.service
+%preun -n openvibes-distribution
+%systemd_preun openvibes-distribution.service
+%postun -n openvibes-distribution
+%systemd_postun_with_restart openvibes-distribution.service
+
 %post -n openvibes-admin
 %systemd_post openvibes-maintenance.timer
 %preun -n openvibes-admin
@@ -68,6 +87,16 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %config(noreplace) %attr(0640, root, openvibes_ingest) %{_sysconfdir}/openvibes/ingest.toml
 %dir %attr(0700, openvibes_ingest, openvibes_ingest) %{_sharedstatedir}/openvibes-ingest
 
+%files -n openvibes-distribution
+%license %{_licensedir}/openvibes-distribution/LICENSE
+%{_bindir}/openvibes-distribution
+%{_unitdir}/openvibes-distribution.service
+%{_sysusersdir}/openvibes-distribution.conf
+%dir %{_sysconfdir}/openvibes
+%dir %{_sysconfdir}/openvibes/tls
+%dir %{_sysconfdir}/openvibes/pki
+%config(noreplace) %attr(0640, root, openvibes_distribution) %{_sysconfdir}/openvibes/distribution.toml
+
 %files -n openvibes-admin
 %license %{_licensedir}/openvibes-admin/LICENSE
 %{_bindir}/openvibes-admin
@@ -78,5 +107,6 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %config(noreplace) %attr(0640, root, openvibes_admin) %{_sysconfdir}/openvibes/admin.toml
 
 %changelog
-* Wed Sep 23 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1
-- First package: openvibes-ingest and openvibes-admin.
+* Thu Sep 24 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1
+- First package: openvibes-ingest, openvibes-distribution (rule bundles for
+  agents, port 18424), and openvibes-admin.

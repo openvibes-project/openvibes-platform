@@ -15,6 +15,18 @@ batch over the same connection (`--batch`, default 10
 findings). Findings ticks come once every `--findings-every` ticks (default
 60), staggered so each tick carries 1/60 of the agents rather than bursts.
 
+## Distribution mode
+
+With `--distribution-url` (`MODE=distribution` in `run.sh`), agents still
+enroll through ingest, but every tick is one `POST /v1/rule-bundle` to
+openvibes-distribution with no `current_version`: the full envelope every
+time, the burst after a publish when every agent scans at once (SP2 spec
+Q9). A 204 counts as an error, since this mode must measure full
+responses. `run.sh` publishes a signed ~220 KB bundle
+(`integration_bundle … 1 100`) through `openvibes-admin rules` first. The
+summary adds `latency_ms.bundle`, `bundle_bytes`, and
+`cpu_cores.distribution`.
+
 ## Request mix
 
 The spec's cadence is one heartbeat a minute and one batch an hour: 60
@@ -57,6 +69,7 @@ so it behaves the same.
 
 ```sh
 scripts/load/run.sh [AGENTS] [INTERVAL_MS] [DURATION_S]   # defaults 2000 2000 120
+MODE=distribution scripts/load/run.sh 2000 2000 120        # rule bundles
 ```
 
 It prints a hardware block (CPU, threads, memory, kernel, PostgreSQL,
@@ -72,6 +85,9 @@ then the JSON summary; it is also kept in `$LOAD_DIR/summary.json`.
 | `INGEST_EXTRA` | none | extra `ingest.toml` lines |
 | `PREFILL_FINDINGS` | 0 | first store N synthetic findings over the last 89 days (20 M ≈ 9.6 GB, about 5 min) |
 | `INGEST_PORT`, `HEALTH_PORT` | 28523, 28580 | loopback ports |
+| `MODE` | `ingest` | `distribution` for the rule-bundle run |
+| `DIST_PORT`, `DIST_HEALTH_PORT` | 28524, 28581 | distribution's loopback ports |
+| `BUNDLE_BIN` | `cargo run` of the example | prebuilt `integration_bundle` |
 
 ## How to test
 
@@ -123,3 +139,24 @@ parallel).
 
 CI: the `fedora` job runs a 10 s smoke run (50 agents, findings every 5
 ticks) against the installed binaries, so the tool keeps working.
+
+## Distribution results (2026-09-24)
+
+`MODE=distribution scripts/load/run.sh 2000 2000 120`: 2,000 agents, one
+full-bundle fetch every 2 s each, a new mTLS connection per fetch.
+
+- **Host:** AMD Ryzen 9 3900X (12 cores, 24 threads), 31.2 GiB, kernel
+  7.2.6-200.fc44, PostgreSQL 18.6; generator, distribution, ingest, and
+  PostgreSQL on the same host; `tcp_tw_reuse` 2.
+- **Envelope:** 219,892 bytes, signed, published with `openvibes-admin rules`.
+- **Rate:** target 1,000 req/s, achieved 999.99 req/s (120,000 requests in
+  the 120 s window, about 220 MB/s of envelopes), 0 errors, max schedule
+  lag 0.7 ms. Pass.
+- **Latency (whole request, handshake included):** p50 1.86 ms, p99
+  2.49 ms, max 16.9 ms.
+- **CPU (cores, averaged over the window):** distribution 0.77, PostgreSQL
+  0.55, generator 0.85.
+
+The spec's Q9 target holds with most of the host idle; one instance serves
+the post-publish burst of 2,000 agents a second. The ingest mode smoke and
+this mode both run in CI at 50 agents.

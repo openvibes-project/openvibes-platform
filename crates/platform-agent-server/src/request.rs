@@ -1,14 +1,14 @@
 use openvibes_core::{ResourceLimits, Validate};
 use serde::de::DeserializeOwned;
 
-use crate::error::ApiError;
+use crate::ApiError;
 
 /// Largest request body, the V1 document limit.
-pub(crate) const MAX_BODY_BYTES: usize = 1024 * 1024;
+pub const MAX_BODY_BYTES: usize = 1024 * 1024;
 
 /// Parses a request body into its protocol type and validates it against
 /// the V1 limits. Anything else is 400; the input is never echoed.
-pub(crate) fn parse<T: DeserializeOwned + Validate>(body: &[u8]) -> Result<T, ApiError> {
+pub fn parse<T: DeserializeOwned + Validate>(body: &[u8]) -> Result<T, ApiError> {
     if body.len() > MAX_BODY_BYTES {
         return Err(ApiError::BadRequest);
     }

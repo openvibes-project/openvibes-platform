@@ -9,7 +9,9 @@ use platform_store::{
     ingest::{self, Enrolled, Identity, IssuedCert},
 };
 
-use crate::{auth::AuthenticatedAgent, error::ApiError, request::parse, server::AppState};
+use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
+
+use crate::server::AppState;
 
 fn to_store(issued: IssuedClient) -> IssuedCert {
     IssuedCert {

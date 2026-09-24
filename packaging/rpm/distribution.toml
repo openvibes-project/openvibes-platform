@@ -1,0 +1,8 @@
+# Edit before starting openvibes-distribution; see docs/components/packaging.md.
+listen = "0.0.0.0:18424"
+health_listen = "127.0.0.1:18481"          # /health, /ready; loopback only
+server_certificate_file = "/etc/openvibes/tls/distribution.crt"   # chain, leaf first
+server_key_file = "/etc/openvibes/tls/distribution.key"
+client_ca_file = "/etc/openvibes/pki/intermediate.crt"            # accepted client issuers
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_distribution"
+max_in_flight = 4096                        # above this: 503

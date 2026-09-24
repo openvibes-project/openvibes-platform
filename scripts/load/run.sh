@@ -2,6 +2,8 @@
 # Load test (spec section 8): openvibes-load simulates AGENTS agents, one tick
 # every INTERVAL_MS each, against a local openvibes-ingest and PostgreSQL.
 # Usage: scripts/load/run.sh [AGENTS] [INTERVAL_MS] [DURATION_S]
+# MODE=distribution: each tick fetches a ~220 KB signed bundle from a local
+# openvibes-distribution instead (agents still enroll through ingest).
 # PREFILL_FINDINGS=N first stores N synthetic findings spread over the last
 # 89 days (a database well into its 90-day retention).
 set -euo pipefail
@@ -14,6 +16,9 @@ DURATION_S=${3:-120}
 W=${LOAD_DIR:-$ROOT/target/load/run}
 INGEST_PORT=${INGEST_PORT:-28523}
 HEALTH_PORT=${HEALTH_PORT:-28580}
+DIST_PORT=${DIST_PORT:-28524}
+DIST_HEALTH_PORT=${DIST_HEALTH_PORT:-28581}
+MODE=${MODE:-ingest}
 if [[ -z "${LOAD_BIN:-}" ]]; then
     (cd "$ROOT" && cargo build --quiet --release --locked -p openvibes-load)
     LOAD_BIN="$ROOT/target/release/openvibes-load"
@@ -56,6 +61,13 @@ fi
 admin token create --expires 1h --uses "$AGENTS" --label load |
     sed -n 's/^token \([A-Za-z0-9_-]\{43\}\)$/\1/p' > "$W/token"
 [[ -s "$W/token" ]] || { echo "FAIL: no token" >&2; exit 1; }
+if [[ "$MODE" == distribution ]]; then
+    start_distribution
+    KEY=$(bundle "$W/bundle.json" 1 100)
+    admin rules trust add integration integration.test "$KEY" >/dev/null
+    admin rules publish "$W/bundle.json" >/dev/null 2>&1
+    LOAD_ARGS="--distribution-url https://127.0.0.1:$DIST_PORT --distribution-pid $DIST_PID ${LOAD_ARGS:-}"
+fi
 
 echo "--- hardware"
 echo "cpu: $(lscpu | sed -n 's/^Model name: *//p'), $(nproc) threads"
@@ -63,8 +75,8 @@ echo "memory: $(awk '/MemTotal/ {printf "%.1f GiB", $2 / 1048576}' /proc/meminfo
 echo "kernel: $(uname -r)"
 echo "postgresql: $(postgres --version)"
 echo "tcp_tw_reuse: $(cat /proc/sys/net/ipv4/tcp_tw_reuse), ports: $(tr '\t' '-' < /proc/sys/net/ipv4/ip_local_port_range)"
-echo "generator, ingest, and PostgreSQL share this host"
-echo "--- load: $AGENTS agents, one tick every ${INTERVAL_MS} ms, ${DURATION_S} s measured"
+echo "generator, ingest, distribution (if used), and PostgreSQL share this host"
+echo "--- load ($MODE): $AGENTS agents, one tick every ${INTERVAL_MS} ms, ${DURATION_S} s measured"
 BEFORE=$(storage)
 status=0
 # shellcheck disable=SC2086  # LOAD_ARGS is a list of extra flags

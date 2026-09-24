@@ -2,16 +2,10 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use serde::Deserialize;
 
-use crate::IngestError;
+use crate::DistributionError;
 
-fn default_days() -> u32 {
-    30
-}
 fn default_in_flight() -> usize {
     4096
-}
-fn default_retention() -> u32 {
-    90
 }
 fn default_timeout() -> u64 {
     10
@@ -23,11 +17,11 @@ fn default_pool() -> usize {
     16
 }
 
-/// `/etc/openvibes/ingest.toml` (spec section 3).
+/// `/etc/openvibes/distribution.toml` (SP2 spec section 4).
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct IngestConfig {
-    /// Agent-facing TLS listener.
+pub struct DistributionConfig {
+    /// Agent-facing TLS listener (default port 18424).
     pub listen: SocketAddr,
     /// Loopback health listener (`/health`, `/ready`).
     pub health_listen: SocketAddr,
@@ -37,28 +31,16 @@ pub struct IngestConfig {
     pub server_key_file: PathBuf,
     /// CA that issued accepted client certificates.
     pub client_ca_file: PathBuf,
-    /// Intermediate that signs agent certificates.
-    pub issuing_certificate_file: PathBuf,
-    /// Its private key (0600, ingest user only).
-    pub issuing_key_file: PathBuf,
-    /// PostgreSQL connection for the `openvibes_ingest` role.
+    /// PostgreSQL connection for the `openvibes_distribution` role.
     pub database_url: String,
-    /// Agent certificate lifetime, 1 to 365 days.
-    #[serde(default = "default_days")]
-    pub client_certificate_days: u32,
     /// Requests served at once; above this, 503.
     #[serde(default = "default_in_flight")]
     pub max_in_flight: usize,
-    /// Findings older than this are acknowledged without storing (1 to
-    /// 36500; must match `openvibes-admin maintenance --retention-days`).
-    #[serde(default = "default_retention")]
-    pub finding_retention_days: u32,
     /// Deadline for the TLS handshake, the request headers, and each whole
     /// request, 1 to 300 seconds.
     #[serde(default = "default_timeout")]
     pub request_timeout_seconds: u64,
-    /// Open client connections at once, 1 to 65536; further connections
-    /// wait in the kernel backlog. Keep below the process's file limit.
+    /// Open client connections at once, 1 to 65536.
     #[serde(default = "default_connections")]
     pub max_connections: usize,
     /// Database connections, 1 to 1024.
@@ -66,28 +48,7 @@ pub struct IngestConfig {
     pub database_pool_size: usize,
 }
 
-impl IngestConfig {
-    /// Rejects relative paths and out-of-range values.
-    pub fn validate(&self) -> Result<(), IngestError> {
-        self.settings()
-            .validate()
-            .map_err(|_| IngestError::Config)?;
-        platform_config::require_absolute(&[
-            &self.issuing_certificate_file,
-            &self.issuing_key_file,
-        ])
-        .map_err(|_| IngestError::Config)?;
-        let valid = (1..=365).contains(&self.client_certificate_days)
-            && (1..=36_500).contains(&self.finding_retention_days);
-        if valid {
-            Ok(())
-        } else {
-            Err(IngestError::Config)
-        }
-    }
-}
-
-impl IngestConfig {
+impl DistributionConfig {
     /// The fields the shared agent server needs.
     pub fn settings(&self) -> platform_agent_server::Settings {
         platform_agent_server::Settings {
@@ -103,11 +64,20 @@ impl IngestConfig {
             database_pool_size: self.database_pool_size,
         }
     }
+
+    /// Rejects relative paths, a non-loopback health listener, and
+    /// out-of-range values.
+    pub fn validate(&self) -> Result<(), DistributionError> {
+        self.settings()
+            .validate()
+            .map_err(|_| DistributionError::Config)
+    }
 }
 
 /// Loads and validates the configuration file.
-pub fn load_config(path: &std::path::Path) -> Result<IngestConfig, IngestError> {
-    let config: IngestConfig = platform_config::load(path).map_err(|_| IngestError::Config)?;
+pub fn load_config(path: &std::path::Path) -> Result<DistributionConfig, DistributionError> {
+    let config: DistributionConfig =
+        platform_config::load(path).map_err(|_| DistributionError::Config)?;
     config.validate()?;
     Ok(config)
 }
