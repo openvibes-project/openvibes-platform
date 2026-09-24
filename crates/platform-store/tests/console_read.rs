@@ -220,6 +220,9 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
         "agent.00000000-0000-4000-8000-000000000013",
         "agent.00000000-0000-4000-8000-000000000014",
     ];
+    platform_store::ensure_partitions(&client, now.date_naive() - Duration::days(1), 2)
+        .await
+        .unwrap();
     for id in ids {
         client
             .execute(
@@ -282,6 +285,27 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
             )
             .await
             .unwrap();
+    }
+    for (agent_id, finding_id) in [(ids[0], "visible-finding"), (ids[2], "hidden-finding")] {
+        ingest::store_findings(
+            &mut client,
+            agent_id,
+            &[StoredFinding {
+                finding_id: finding_id.into(),
+                scan_id: format!("scan-{finding_id}"),
+                rule_set_id: "base".into(),
+                rule_id: "credential".into(),
+                rule_version: 1,
+                observed_at: now,
+                severity: "high".into(),
+                confidence: 90,
+                message: format!("{finding_id} message"),
+                evidence: vec!["safe evidence".into()],
+            }],
+            now,
+        )
+        .await
+        .unwrap();
     }
     let scope = platform_store::console_read::AgentScope::AssetGroups(vec![
         "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa".into(),
@@ -346,6 +370,59 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
     .await
     .unwrap();
     assert!(hidden_certs.items.is_empty());
+    let findings_summary = platform_store::console_read::finding_summary_in_scope(&client, &scope)
+        .await
+        .unwrap();
+    assert_eq!(findings_summary.total, 1);
+    assert_eq!(findings_summary.impacted_agents, 1);
+    let latest_query = LatestQuery {
+        severity: None,
+        after: None,
+        limit: PageLimit::new(10).unwrap(),
+    };
+    let latest =
+        platform_store::console_read::latest_findings_in_scope(&client, &latest_query, &scope)
+            .await
+            .unwrap();
+    assert_eq!(latest.items.len(), 1);
+    assert_eq!(latest.items[0].agent_id, ids[0]);
+    assert!(
+        platform_store::console_read::latest_finding_in_scope(
+            &client,
+            ids[2],
+            "base",
+            "credential",
+            &scope,
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
+    let history_query = HistoryQuery {
+        since: now - Duration::hours(1),
+        agent_id: None,
+        rule_set_id: None,
+        rule_id: None,
+        after: None,
+        limit: PageLimit::new(10).unwrap(),
+    };
+    let history =
+        platform_store::console_read::finding_history_in_scope(&client, &history_query, &scope)
+            .await
+            .unwrap();
+    assert_eq!(history.items.len(), 1);
+    assert_eq!(history.items[0].finding_id, "visible-finding");
+    assert!(
+        platform_store::console_read::finding_event_in_scope(
+            &client,
+            now.date_naive(),
+            "hidden-finding",
+            &scope,
+        )
+        .await
+        .unwrap()
+        .is_none()
+    );
     for hidden in [ids[2], ids[3]] {
         assert!(
             platform_store::console_read::agent_in_scope(&client, hidden, now, &scope)

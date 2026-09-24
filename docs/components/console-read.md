@@ -22,8 +22,14 @@ agent visibility in SQL for the supplied global or asset-group scope.
   and limiting. `agent_in_scope` hides out-of-scope IDs as absent.
 - `certificates_in_scope` verifies the owning agent's scope in the same SQL
   query before paging certificate metadata. Out-of-scope agents return an
-  empty page. Findings still need scoped variants; the authenticated console
-  does not expose production data routes yet.
+  empty page.
+- `finding_summary_in_scope`, `latest_findings_in_scope`,
+  `latest_finding_in_scope`, `finding_history_in_scope`, and
+  `finding_event_in_scope` enforce the same selector conjunction directly in
+  SQL before aggregate, filter, cursor, and detail operations. Hidden detail
+  rows are returned as absent. The authenticated console does not expose
+  production data routes until these store functions are wired to permission
+  checks.
 - `agent` reads one agent. `certificates` pages certificate serial and
   validity metadata and never selects the stored PEM chain.
 - `latest_findings` and `latest_finding` read the complete snapshot in

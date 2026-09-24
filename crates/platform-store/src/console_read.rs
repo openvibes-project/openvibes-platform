@@ -31,6 +31,27 @@ impl AgentScope {
     }
 }
 
+/// Builds the SQL predicate shared by finding reads; its only interpolated
+/// values are internal aliases and positional parameter numbers.
+fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
+    format!(
+        "({global}::boolean OR EXISTS (
+            SELECT 1 FROM console_asset_group_selectors s
+            WHERE s.asset_group_id::text = ANY({groups}::text[])
+              AND NOT EXISTS (
+                SELECT 1 FROM console_asset_group_selectors required
+                WHERE required.asset_group_id = s.asset_group_id
+                  AND NOT EXISTS (
+                    SELECT 1 FROM console_agent_tags t
+                    WHERE t.agent_id = {agent_id}
+                      AND t.tag_key = required.tag_key
+                      AND t.tag_value = required.tag_value
+                  )
+              )
+        ))"
+    )
+}
+
 /// A validated bounded page size.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PageLimit(u16);
@@ -580,15 +601,29 @@ pub async fn certificates_in_scope(
 
 /// Counts current observations and severities in one aggregate query.
 pub async fn finding_summary(client: &Client) -> Result<FindingSummary, StoreError> {
+    finding_summary_in_scope(client, &AgentScope::Global).await
+}
+
+/// Counts current observations and severities for agents visible in SQL.
+pub async fn finding_summary_in_scope(
+    client: &Client,
+    scope: &AgentScope,
+) -> Result<FindingSummary, StoreError> {
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("a.agent_id", "$1", "$2");
     let row = client
         .query_one(
-            "SELECT count(*), count(DISTINCT agent_id),
-                    count(*) FILTER (WHERE severity = 'critical'),
-                    count(*) FILTER (WHERE severity = 'high'),
-                    count(*) FILTER (WHERE severity = 'medium'),
-                    count(*) FILTER (WHERE severity = 'low')
-             FROM current_findings",
-            &[],
+            &format!(
+                "SELECT count(*), count(DISTINCT c.agent_id),
+                        count(*) FILTER (WHERE c.severity = 'critical'),
+                        count(*) FILTER (WHERE c.severity = 'high'),
+                        count(*) FILTER (WHERE c.severity = 'medium'),
+                        count(*) FILTER (WHERE c.severity = 'low')
+                 FROM current_findings c JOIN agents a USING (agent_id)
+                 WHERE {visible_agent}"
+            ),
+            &[&global, &groups],
         )
         .await?;
     Ok(FindingSummary {
@@ -606,23 +641,39 @@ pub async fn latest_findings(
     client: &Client,
     query: &LatestQuery,
 ) -> Result<Page<LatestFinding, LatestCursor>, StoreError> {
+    latest_findings_in_scope(client, query, &AgentScope::Global).await
+}
+
+/// Returns latest observations only for agents visible through the supplied
+/// SQL-enforced scope, before filters, ordering, or cursor pagination.
+pub async fn latest_findings_in_scope(
+    client: &Client,
+    query: &LatestQuery,
+    scope: &AgentScope,
+) -> Result<Page<LatestFinding, LatestCursor>, StoreError> {
     let severity = query.severity.map(Severity::as_str);
     let cursor = query.after.as_ref();
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("a.agent_id", "$8", "$9");
     let rows = client
         .query(
-            "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
+            &format!(
+                "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
                     c.rule_version, c.severity, c.confidence, c.message, c.evidence,
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
                     c.last_observed_at, c.received_at
              FROM current_findings c JOIN agents a USING (agent_id)
-             WHERE ($1::text IS NULL OR c.severity = $1)
+             WHERE {visible_agent}
+               AND ($1::text IS NULL OR c.severity = $1)
                AND ($6::boolean = false OR
                     c.last_observed_at < $2 OR
                     (c.last_observed_at = $2 AND
                         (c.agent_id, c.rule_set_id, c.rule_id) > ($3, $4, $5)))
              ORDER BY c.last_observed_at DESC, c.agent_id ASC,
                       c.rule_set_id ASC, c.rule_id ASC
-             LIMIT $7",
+             LIMIT $7"
+            ),
             &[
                 &severity,
                 &cursor.map(|value| value.last_observed_at),
@@ -631,6 +682,8 @@ pub async fn latest_findings(
                 &cursor.map(|value| value.rule_id.as_str()),
                 &cursor.is_some(),
                 &(query.limit.value() + 1),
+                &global,
+                &groups,
             ],
         )
         .await?;
@@ -656,15 +709,32 @@ pub async fn latest_finding(
     rule_set_id: &str,
     rule_id: &str,
 ) -> Result<Option<LatestFinding>, StoreError> {
+    latest_finding_in_scope(client, agent_id, rule_set_id, rule_id, &AgentScope::Global).await
+}
+
+/// Finds one latest observation only when its agent is visible in SQL.
+pub async fn latest_finding_in_scope(
+    client: &Client,
+    agent_id: &str,
+    rule_set_id: &str,
+    rule_id: &str,
+    scope: &AgentScope,
+) -> Result<Option<LatestFinding>, StoreError> {
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("a.agent_id", "$4", "$5");
     let row = client
         .query_opt(
-            "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
+            &format!(
+                "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
                     c.rule_version, c.severity, c.confidence, c.message, c.evidence,
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
                     c.last_observed_at, c.received_at
              FROM current_findings c JOIN agents a USING (agent_id)
-             WHERE c.agent_id = $1 AND c.rule_set_id = $2 AND c.rule_id = $3",
-            &[&agent_id, &rule_set_id, &rule_id],
+             WHERE c.agent_id = $1 AND c.rule_set_id = $2 AND c.rule_id = $3
+               AND {visible_agent}"
+            ),
+            &[&agent_id, &rule_set_id, &rule_id, &global, &groups],
         )
         .await?;
     Ok(row.as_ref().map(latest_from_row))
@@ -675,22 +745,37 @@ pub async fn finding_history(
     client: &Client,
     query: &HistoryQuery,
 ) -> Result<Page<FindingEvent, HistoryCursor>, StoreError> {
+    finding_history_in_scope(client, query, &AgentScope::Global).await
+}
+
+/// Returns retained history only for agents visible in SQL, while preserving
+/// the required lower time bound for partition pruning.
+pub async fn finding_history_in_scope(
+    client: &Client,
+    query: &HistoryQuery,
+    scope: &AgentScope,
+) -> Result<Page<FindingEvent, HistoryCursor>, StoreError> {
     let cursor = query.after.as_ref();
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("f.agent_id", "$11", "$12");
     let rows = client
         .query(
-            "SELECT finding_id, observed_day, agent_id, rule_set_id, rule_id, rule_version,
+            &format!(
+            "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings
-             WHERE observed_day >= $1 AND observed_at >= $2
-               AND ($3::text IS NULL OR agent_id = $3)
-               AND ($4::text IS NULL OR rule_set_id = $4)
-               AND ($5::text IS NULL OR rule_id = $5)
-               AND ($9::boolean = false OR observed_at < $6
-                    OR (observed_at = $6 AND observed_day < $7)
-                    OR (observed_at = $6 AND observed_day = $7 AND finding_id > $8))
-             ORDER BY observed_at DESC, observed_day DESC, finding_id ASC
-             LIMIT $10",
+             FROM findings f
+             WHERE f.observed_day >= $1 AND f.observed_at >= $2
+               AND {visible_agent}
+               AND ($3::text IS NULL OR f.agent_id = $3)
+               AND ($4::text IS NULL OR f.rule_set_id = $4)
+               AND ($5::text IS NULL OR f.rule_id = $5)
+               AND ($9::boolean = false OR f.observed_at < $6
+                    OR (f.observed_at = $6 AND f.observed_day < $7)
+                    OR (f.observed_at = $6 AND f.observed_day = $7 AND f.finding_id > $8))
+             ORDER BY f.observed_at DESC, f.observed_day DESC, f.finding_id ASC
+             LIMIT $10"),
             &[
                 &query.since.date_naive(),
                 &query.since,
@@ -702,6 +787,8 @@ pub async fn finding_history(
                 &cursor.map(|value| value.finding_id.as_str()),
                 &cursor.is_some(),
                 &(query.limit.value() + 1),
+                &global,
+                &groups,
             ],
         )
         .await?;
@@ -725,13 +812,29 @@ pub async fn finding_event(
     observed_day: NaiveDate,
     finding_id: &str,
 ) -> Result<Option<FindingEvent>, StoreError> {
+    finding_event_in_scope(client, observed_day, finding_id, &AgentScope::Global).await
+}
+
+/// Returns a retained event only when its agent is visible through the
+/// supplied scope; hidden events are indistinguishable from absent events.
+pub async fn finding_event_in_scope(
+    client: &Client,
+    observed_day: NaiveDate,
+    finding_id: &str,
+    scope: &AgentScope,
+) -> Result<Option<FindingEvent>, StoreError> {
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("f.agent_id", "$3", "$4");
     let row = client
         .query_opt(
-            "SELECT finding_id, observed_day, agent_id, rule_set_id, rule_id, rule_version,
+            &format!(
+            "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings WHERE observed_day = $1 AND finding_id = $2",
-            &[&observed_day, &finding_id],
+             FROM findings f WHERE f.observed_day = $1 AND f.finding_id = $2
+               AND {visible_agent}"),
+            &[&observed_day, &finding_id, &global, &groups],
         )
         .await?;
     Ok(row.as_ref().map(history_from_row))
