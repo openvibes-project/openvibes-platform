@@ -73,6 +73,8 @@ pub enum Published {
     Retired,
     /// No such rule set (it has never had a trusted key).
     UnknownSet,
+    /// The issuer is not (or no longer) trusted for the set when storing.
+    UntrustedIssuer,
 }
 
 /// A rule set as listed.
@@ -88,6 +90,11 @@ pub struct RuleSetRow {
     pub current_version: Option<i64>,
     /// Signed expiry of that version.
     pub current_expires_at_ms: Option<i64>,
+    /// Issuer that signed that version.
+    pub current_issuer_key_id: Option<String>,
+    /// That issuer's key has since been removed: the bundle is still served,
+    /// but agents that dropped the key will refuse it.
+    pub current_signer_removed: bool,
     /// Keys currently trusted.
     pub trusted_keys: i64,
 }
@@ -278,6 +285,19 @@ pub async fn publish(client: &mut Client, bundle: &NewBundle<'_>) -> Result<Publ
     if let Some(current) = current.filter(|current| *current >= bundle.version) {
         return Ok(Published::NotAboveCurrent(current));
     }
+    // The caller verified the signature against the keys it read; the key
+    // must still be trusted now. FOR SHARE makes a concurrent removal wait
+    // for this commit, so a bundle is stored only while its signer is trusted.
+    let trusted = transaction
+        .query_opt(
+            "SELECT 1 FROM rule_trust_keys WHERE rule_set_id = $1 AND issuer_key_id = $2 \
+             AND removed_at IS NULL FOR SHARE",
+            &[&bundle.rule_set_id, &bundle.issuer_key_id],
+        )
+        .await?;
+    if trusted.is_none() {
+        return Ok(Published::UntrustedIssuer);
+    }
     transaction
         .execute(
             "INSERT INTO rule_bundles (rule_set_id, version, envelope, envelope_sha256, \
@@ -305,8 +325,11 @@ pub async fn list(client: &Client) -> Result<Vec<RuleSetRow>, StoreError> {
         .query(
             "SELECT s.rule_set_id, s.created_at, s.retired_at, b.version, b.expires_at_ms, \
              (SELECT count(*) FROM rule_trust_keys k \
-              WHERE k.rule_set_id = s.rule_set_id AND k.removed_at IS NULL) \
-             FROM rule_sets s LEFT JOIN LATERAL (SELECT version, expires_at_ms \
+              WHERE k.rule_set_id = s.rule_set_id AND k.removed_at IS NULL), \
+             b.issuer_key_id, EXISTS (SELECT 1 FROM rule_trust_keys k \
+              WHERE k.rule_set_id = s.rule_set_id AND k.issuer_key_id = b.issuer_key_id \
+              AND k.removed_at IS NOT NULL) \
+             FROM rule_sets s LEFT JOIN LATERAL (SELECT version, expires_at_ms, issuer_key_id \
               FROM rule_bundles WHERE rule_set_id = s.rule_set_id \
               ORDER BY version DESC LIMIT 1) b ON true \
              ORDER BY s.rule_set_id",
@@ -322,6 +345,8 @@ pub async fn list(client: &Client) -> Result<Vec<RuleSetRow>, StoreError> {
             current_version: row.get(3),
             current_expires_at_ms: row.get(4),
             trusted_keys: row.get(5),
+            current_issuer_key_id: row.get(6),
+            current_signer_removed: row.get(7),
         })
         .collect())
 }

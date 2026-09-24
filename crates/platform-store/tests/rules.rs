@@ -242,3 +242,45 @@ async fn the_distribution_role_has_only_the_rights_it_uses() {
     }
     db.drop().await;
 }
+
+#[tokio::test]
+async fn publish_refuses_an_issuer_not_trusted_at_commit() {
+    let (db, mut client) = setup().await;
+    trusted(&client).await;
+    rules::publish(&mut client, &bundle(1, b"one"))
+        .await
+        .unwrap();
+    // Removed after the caller verified the signature: the store re-checks.
+    assert!(
+        rules::remove_trust_key(&client, "baseline", "org.rules")
+            .await
+            .unwrap()
+    );
+    let published = rules::publish(&mut client, &bundle(2, b"two"))
+        .await
+        .unwrap();
+    assert_eq!(published, Published::UntrustedIssuer);
+    let mut stranger = bundle(2, b"two");
+    stranger.issuer_key_id = "someone.else";
+    let published = rules::publish(&mut client, &stranger).await.unwrap();
+    assert_eq!(published, Published::UntrustedIssuer);
+    assert_eq!(rules::bundles(&client, "baseline").await.unwrap().len(), 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn list_flags_a_current_bundle_whose_signer_was_removed() {
+    let (db, mut client) = setup().await;
+    trusted(&client).await;
+    rules::publish(&mut client, &bundle(1, b"one"))
+        .await
+        .unwrap();
+    let sets = rules::list(&client).await.unwrap();
+    assert_eq!(sets[0].current_issuer_key_id.as_deref(), Some("org.rules"));
+    assert!(!sets[0].current_signer_removed);
+    rules::remove_trust_key(&client, "baseline", "org.rules")
+        .await
+        .unwrap();
+    assert!(rules::list(&client).await.unwrap()[0].current_signer_removed);
+    db.drop().await;
+}

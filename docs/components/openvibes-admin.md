@@ -65,7 +65,7 @@ offline; the platform never holds a rule-signing key.
 | `rules trust list [RULE_SET]` | `SET ISSUER KEY added TIME [removed TIME]` per key |
 | `rules trust remove RULE_SET ISSUER_KEY_ID` | stops trusting the key for future publishing; served bundles are unchanged (agents trust keys themselves) |
 | `rules publish FILE` | verifies the envelope with the agent's own `openvibes-rules` loader against the set's currently trusted keys, then stores its exact bytes. Prints `published SET vN`, or `unchanged: …` for the same version with the same bytes. |
-| `rules list` | `SET vN\|none keys K expires TIME\|- [retired]` |
+| `rules list` | `SET vN\|none keys K expires TIME\|- [signer-removed] [retired]`. `signer-removed`: the current bundle's key was removed; it is still served, but agents that dropped the key refuse it, so publish one signed by a trusted key. |
 | `rules show RULE_SET` | per bundle, newest first: version, SHA-256, issuer, size, when and by whom published, expiry |
 | `rules retire RULE_SET` | stops serving the set (404 to agents) and refuses further publishing; bundles are kept |
 

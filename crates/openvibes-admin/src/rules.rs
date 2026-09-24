@@ -299,8 +299,11 @@ async fn verify_and_store(
             ));
         }
         Published::Retired => return Err("rule set is retired".into()),
-        // No keys means the loader already refused it.
-        Published::UnknownSet => return Err("untrusted issuer".into()),
+        // No keys means the loader already refused it; UntrustedIssuer means
+        // the key was removed after verification.
+        Published::UnknownSet | Published::UntrustedIssuer => {
+            return Err("untrusted issuer".into());
+        }
     };
     if envelope.expires_at_unix_ms - now < WARN_MS {
         eprintln!("openvibes-admin: warning: bundle expires in less than 7 days");
@@ -324,8 +327,14 @@ async fn list(client: &platform_store::Client) -> Result<String, String> {
             } else {
                 ""
             };
+            // Still served, but agents that dropped the key will refuse it.
+            let removed = if set.current_signer_removed {
+                " signer-removed"
+            } else {
+                ""
+            };
             format!(
-                "{} {version} keys {} expires {expires}{retired}\n",
+                "{} {version} keys {} expires {expires}{removed}{retired}\n",
                 set.rule_set_id, set.trusted_keys
             )
         })

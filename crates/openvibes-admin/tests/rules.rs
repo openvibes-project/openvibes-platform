@@ -219,6 +219,8 @@ async fn publish_refuses_a_removed_key() {
         &write(&dir, "v1.json", &sign(1, 7, 30 * DAY_MS)),
     ));
     stdout(&fixture.run(&["rules", "trust", "remove", "baseline", "org.rules"]));
+    let listed = stdout(&fixture.run(&["rules", "list"]));
+    assert!(listed.contains(" signer-removed"), "{listed}");
     failed(
         &publish(&fixture, &write(&dir, "v2.json", &sign(2, 7, 30 * DAY_MS))),
         "untrusted issuer",

@@ -103,9 +103,13 @@ mutable pointer.
 - `trust_keys(set?)`, `active_trust_keys(set)`, `remove_trust_key(set, issuer)`.
 - `publish(&mut client, &NewBundle)` takes a per-set advisory lock, so
   concurrent publishers serialize → `Stored`, `Unchanged` (same version and
-  bytes), `VersionConflict`, `NotAboveCurrent(v)`, `Retired`, `UnknownSet`.
-  The caller verifies the signature first (`openvibes-admin rules publish`).
-- `list()`, `bundles(set)` (newest first), `retire(set)` (bundles are kept).
+  bytes), `VersionConflict`, `NotAboveCurrent(v)`, `Retired`, `UnknownSet`,
+  `UntrustedIssuer`. The caller verifies the signature first
+  (`openvibes-admin rules publish`); the store then re-checks, under
+  `FOR SHARE`, that the issuer is still trusted, so a key removed between
+  verification and commit cannot get a bundle stored.
+- `list()` (with the current bundle's issuer and whether that key has since
+  been removed), `bundles(set)` (newest first), `retire(set)` (bundles are kept).
 - `serve(set, current_version?)` → `Unknown` (unknown, retired, or nothing
   published), `UpToDate`, or `Envelope(bytes)`. One primary-key query, read
   backwards; the bytes are fetched only when the agent's version is older.
