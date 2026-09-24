@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the real embedded console in Chromium, Firefox, and WebKit.
+# Run the embedded seeded console in Chromium, Firefox, and WebKit.
 set -euo pipefail
 
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -15,7 +15,7 @@ done
 
 cd -- "${repository_root}"
 scripts/build-console.sh
-cargo build --locked -p openvibes-console --features embedded-ui
+cargo build --locked -p openvibes-console --features embedded-ui,dev-seed --example seeded_server
 
 cd -- "${web_root}"
 npm run test:e2e -- "$@"

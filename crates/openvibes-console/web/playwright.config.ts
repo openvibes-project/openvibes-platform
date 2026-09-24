@@ -16,7 +16,7 @@ export default defineConfig({
   },
   webServer: {
     command:
-      "../../../target/debug/openvibes-console --config ../tests/fixtures/e2e.toml",
+      "../../../target/debug/examples/seeded_server --config ../tests/fixtures/e2e.toml",
     url: consoleOrigin,
     reuseExistingServer: false,
     timeout: 30_000,

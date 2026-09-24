@@ -155,3 +155,29 @@ test("keeps native menu, dialog, and combobox primitives keyboard accessible", a
   await expect(help).toBeFocused();
   expect(await cspViolations()).toEqual([]);
 });
+
+test("keeps the 50,000-agent scenario bounded to one page", async ({ page }) => {
+  await page.goto("/?seeded=1");
+  await page.getByLabel("Data scenario").selectOption("large");
+  await page.goto("/agents");
+
+  await expect(page.getByRole("heading", { name: "50 agents on this page" })).toBeVisible();
+  await expect(page.locator("tbody tr")).toHaveCount(50);
+  await expect(page.getByRole("link", { name: "Next page" })).toBeVisible();
+});
+
+test("hides an out-of-scope agent and shows empty and unavailable states", async ({ page }) => {
+  await page.goto("/?seeded=1");
+  await page.getByLabel("Persona").selectOption("scoped_operator");
+  await page.goto("/agents?agent=agent-00001");
+  await expect(page.getByRole("heading", { name: "Data unavailable" })).toBeVisible();
+  await expect(page.getByText("host-00001.example.test")).toHaveCount(0);
+
+  await page.goto("/agents");
+  await page.getByLabel("Data scenario").selectOption("empty");
+  await expect(page.getByText("No agents match these filters.")).toBeVisible();
+
+  await page.goto("/findings");
+  await page.getByLabel("Data scenario").selectOption("partial_failure");
+  await expect(page.getByRole("heading", { name: "Data unavailable" })).toBeVisible();
+});

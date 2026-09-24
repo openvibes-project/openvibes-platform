@@ -239,10 +239,12 @@ browser contract does not match the snapshot.
 
 Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded
-asset tests. Playwright journeys run the embedded binary in Chromium, Firefox,
-and WebKit and cover axe accessibility analysis, target CSP headers and browser
-violations, first-paint theme persistence, keyboard entry, native menu/dialog/
-combobox focus behaviour, and reserved-route fall-through. Later contract tests
+asset tests. Playwright starts the embedded `dev-seed` example on loopback in
+Chromium, Firefox, and WebKit. It covers axe accessibility analysis, target
+CSP headers and browser violations, first-paint theme persistence, keyboard
+entry, native menu/dialog/combobox focus behaviour, reserved-route fall-through,
+bounded 50,000-agent rendering, and seeded permission/error states. The seeded
+server is test-only and is not the production binary. Later contract tests
 exercise the complete Axum router first against deterministic seeded data and
 then against PostgreSQL. Security coverage expands from the current route
 fall-through, cache-header, and CSP checks to session/CSRF handling, object
