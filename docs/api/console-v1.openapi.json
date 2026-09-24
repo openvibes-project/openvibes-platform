@@ -9,6 +9,56 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/agents/summary": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "authenticated_agent_summary",
+        "responses": {
+          "200": {
+            "description": "Agent counts visible to the current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/session": {
       "get": {
         "tags": [
@@ -1088,6 +1138,10 @@
     {
       "name": "authentication",
       "description": "Local browser authentication"
+    },
+    {
+      "name": "agents",
+      "description": "Scope-filtered agent reads"
     }
   ]
 }

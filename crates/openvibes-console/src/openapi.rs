@@ -25,7 +25,8 @@ use crate::{
         crate::router::session,
         crate::router::preauth,
         crate::router::login,
-        crate::router::logout
+        crate::router::logout,
+        crate::router::authenticated_agent_summary
     ),
     components(schemas(
         AuthenticationLevel,
@@ -58,7 +59,8 @@ use crate::{
     )),
     tags(
         (name = "session", description = "Current browser session"),
-        (name = "authentication", description = "Local browser authentication")
+        (name = "authentication", description = "Local browser authentication"),
+        (name = "agents", description = "Scope-filtered agent reads")
     )
 )]
 struct ConsoleApi;

@@ -204,6 +204,32 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 capability["permission"] == "rbac.manage" && capability["scope"]["kind"] == "global"
             })
     );
+    let unauthenticated_summary = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(unauthenticated_summary.status(), StatusCode::UNAUTHORIZED);
+    let summary = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(summary.status(), StatusCode::OK);
+    let summary: Value =
+        serde_json::from_slice(&to_bytes(summary.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(summary["total"], 0);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

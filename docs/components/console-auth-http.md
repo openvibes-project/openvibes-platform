@@ -44,7 +44,11 @@ advanced the database to schema 8. Startup never runs migrations. The current
 listener is loopback-only and config accepts only canonical HTTP loopback
 origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
 are ignored. When auth settings are absent, the executable serves the C0
-fail-closed router. No production data route is enabled here.
+fail-closed router. `GET /api/v1/agents/summary` now requires a live human
+session with `agents.read`, resolves role bindings on each request, and passes
+the effective global or asset-group scope to its SQL aggregate query. Other
+production data routes remain unavailable until their handler and scope checks
+are implemented.
 
 ## Failure behaviour
 

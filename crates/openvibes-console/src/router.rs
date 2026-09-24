@@ -40,7 +40,7 @@ use crate::frontend_contract::{BROWSER_ROUTES, PUBLIC_ASSETS};
 pub struct Readiness(Arc<AtomicBool>);
 
 #[derive(Clone)]
-struct AuthHttpState {
+pub(crate) struct AuthHttpState {
     pool: Pool,
     public_origin: Arc<str>,
     public_origin_valid: bool,
@@ -186,6 +186,7 @@ fn api_router() -> Router {
 fn authenticated_api_router() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(authenticated_session))
+        .route("/v1/agents/summary", get(authenticated_agent_summary))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
@@ -440,6 +441,135 @@ async fn authenticated_session(
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     response
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents/summary",
+    tag = "agents",
+    responses(
+        (status = 200, description = "Agent counts visible to the current user", body = crate::AgentSummary),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn authenticated_agent_summary(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    use platform_store::console_read::agent_summary_in_scope;
+
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    match agent_summary_in_scope(&client, Utc::now(), &scope).await {
+        Ok(summary) => (
+            StatusCode::OK,
+            axum::Json(crate::AgentSummary {
+                total: summary.total.try_into().unwrap_or_default(),
+                active: summary.active.try_into().unwrap_or_default(),
+                stale: summary.stale.try_into().unwrap_or_default(),
+                revoked: summary.revoked.try_into().unwrap_or_default(),
+            }),
+        )
+            .into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+async fn authenticated_agent_scope(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    permission: crate::Permission,
+) -> Result<platform_store::console_read::AgentScope, Response> {
+    use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
+    use platform_store::console_read::AgentScope;
+
+    let secret = match presented_credentials(headers) {
+        Ok(PresentedCredentials::Session(secret)) => secret,
+        _ => return Err(authentication_required()),
+    };
+    let digest = session_digest(secret.expose_secret());
+    let csrf = session_csrf(secret.expose_secret()).0;
+    let now = Utc::now();
+    let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
+    let active = console_auth::session(&client, &digest, now)
+        .await
+        .map_err(|_| unavailable_auth())?
+        .ok_or_else(authentication_required)?;
+    let expected_csrf_hash = session_digest(&csrf);
+    if active.csrf_sha256.len() != expected_csrf_hash.len()
+        || !bool::from(
+            active
+                .csrf_sha256
+                .as_slice()
+                .ct_eq(expected_csrf_hash.as_slice()),
+        )
+    {
+        return Err(authentication_required());
+    }
+    if !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
+        .await
+        .unwrap_or(false)
+    {
+        return Err(authentication_required());
+    }
+    let bindings = console_auth::user_role_bindings(&client, &active.user_id)
+        .await
+        .map_err(|_| unavailable_auth())?;
+    let mut resolved = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        let Some(role) = built_in_role(&binding.role_id) else {
+            continue;
+        };
+        let resolved_binding = match binding.asset_group_id {
+            Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
+            None => Ok(crate::RoleBinding::global(role)),
+        };
+        if let Ok(binding) = resolved_binding {
+            resolved.push(binding);
+        }
+    }
+    let capabilities = crate::resolve_capabilities(&resolved);
+    match capabilities
+        .iter()
+        .find(|capability| capability.permission == permission)
+    {
+        Some(capability) => match &capability.scope {
+            crate::PermissionScope::Global => Ok(AgentScope::Global),
+            crate::PermissionScope::AssetGroups { asset_group_ids } => {
+                Ok(AgentScope::AssetGroups(asset_group_ids.clone()))
+            }
+        },
+        None => Err(problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ))),
+    }
+}
+
+fn authentication_required() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::UNAUTHORIZED,
+        "authentication_required",
+        "Authentication required",
+    ))
+}
+
+fn unavailable_auth() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::SERVICE_UNAVAILABLE,
+        "authentication_unavailable",
+        "Authentication is temporarily unavailable",
+    ))
 }
 
 #[utoipa::path(

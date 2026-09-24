@@ -21,8 +21,9 @@ implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
 the executable connects to PostgreSQL, requires schema version 8, and serves
 the authenticated router. Otherwise it serves the C0 development router,
-where `/api/v1/session` remains fail-closed. Database-backed C2 data routes,
-SQL-enforced asset scopes, and access-control/audit pages remain pending. The
+where `/api/v1/session` remains fail-closed. The authenticated router now
+serves the permission-checked, SQL-scoped agent summary; the remaining
+database-backed C2 routes and access-control/audit pages remain pending. The
 first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI now has a login form, session gate,
 and sign-out action.
@@ -84,7 +85,8 @@ match the stored schema, including optional hostname/heartbeat data and
 multiple certificate records. Finding fields include confidence, evidence,
 scan ID, receive time, and authenticated origin. Operation paths are added
 when their database-backed routes are implemented, with production data
-remaining unavailable until authentication and SQL-enforced scope are ready.
+remaining unavailable until each route has authentication and SQL-enforced
+scope. The agent summary route is now the first production data read.
 
 The first-release UI covers sign-in, overview, agents, findings and analyst triage,
 enrollment tokens, pre-signed rule bundles, access control and exact agent
