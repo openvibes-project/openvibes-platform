@@ -109,6 +109,15 @@ pub struct Session {
     pub absolute_expires_at: DateTime<Utc>,
 }
 
+/// Active role binding for a local console user.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UserRoleBinding {
+    /// Bound built-in role identifier.
+    pub role_id: String,
+    /// Asset group id for a scoped binding; `None` means global.
+    pub asset_group_id: Option<String>,
+}
+
 /// Creates a user, credential, initial global role binding, and audit event
 /// atomically. Password plaintext must already have been zeroized by caller.
 pub async fn create_local_user(
@@ -179,6 +188,29 @@ pub async fn credential_by_username(
         )
         .await?;
     Ok(row.as_ref().map(credential_from_row))
+}
+
+/// Returns the currently active role bindings for a user. The console resolves
+/// these on every request so binding changes take effect immediately.
+pub async fn user_role_bindings(
+    client: &Client,
+    user_id: &str,
+) -> Result<Vec<UserRoleBinding>, StoreError> {
+    let rows = client
+        .query(
+            "SELECT role_id, asset_group_id::text FROM console_role_bindings
+             WHERE user_id = $1::text::uuid AND revoked_at IS NULL
+             ORDER BY role_id, asset_group_id NULLS FIRST",
+            &[&user_id],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| UserRoleBinding {
+            role_id: row.get(0),
+            asset_group_id: row.get(1),
+        })
+        .collect())
 }
 
 /// Creates a session only if the enabled account still has the generation
@@ -348,6 +380,112 @@ pub async fn revoke_user_sessions(
             target_kind: Some("user"),
             target_id: Some(user_id),
             reason_code: Some(reason_code),
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Replaces an Argon2id credential and invalidates every session atomically.
+pub async fn replace_password(
+    client: &mut Client,
+    user_id: &str,
+    password_phc: &str,
+    now: DateTime<Utc>,
+    audit: &AuditContext<'_>,
+    actor_id: &str,
+    actor_kind: &str,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let updated = tx
+        .execute(
+            "UPDATE console_credentials SET password_phc = $2, changed_at = $3, must_change = false
+             WHERE user_id = $1::text::uuid",
+            &[&user_id, &password_phc, &now],
+        )
+        .await?;
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    tx.execute(
+        "UPDATE console_users SET auth_generation = auth_generation + 1
+         WHERE user_id = $1::text::uuid",
+        &[&user_id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE console_sessions SET revoked_at = COALESCE(revoked_at, $2)
+         WHERE user_id = $1::text::uuid",
+        &[&user_id, &now],
+    )
+    .await?;
+    append_auth_event(
+        &tx,
+        audit,
+        AuthAuditEvent {
+            actor: actor_id,
+            action: "auth.password.changed",
+            target: Some(user_id),
+            result: "success",
+            actor_kind: Some(actor_kind),
+            actor_id: Some(actor_id),
+            actor_display: None,
+            authentication_method: None,
+            target_kind: Some("user"),
+            target_id: Some(user_id),
+            reason_code: None,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Disables an enabled user and revokes all sessions in one audited transaction.
+pub async fn disable_local_user(
+    client: &mut Client,
+    user_id: &str,
+    now: DateTime<Utc>,
+    audit: &AuditContext<'_>,
+    actor_id: &str,
+    actor_kind: &str,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let updated = tx
+        .execute(
+            "UPDATE console_users SET enabled = false, disabled_at = $2,
+                    auth_generation = auth_generation + 1
+             WHERE user_id = $1::text::uuid AND enabled",
+            &[&user_id, &now],
+        )
+        .await?;
+    if updated == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    tx.execute(
+        "UPDATE console_sessions SET revoked_at = COALESCE(revoked_at, $2)
+         WHERE user_id = $1::text::uuid",
+        &[&user_id, &now],
+    )
+    .await?;
+    append_auth_event(
+        &tx,
+        audit,
+        AuthAuditEvent {
+            actor: actor_id,
+            action: "user.disabled",
+            target: Some(user_id),
+            result: "success",
+            actor_kind: Some(actor_kind),
+            actor_id: Some(actor_id),
+            actor_display: None,
+            authentication_method: None,
+            target_kind: Some("user"),
+            target_id: Some(user_id),
+            reason_code: Some("administrator_disabled"),
         },
     )
     .await?;

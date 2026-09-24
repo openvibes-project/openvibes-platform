@@ -12,12 +12,18 @@ tokens, and CSRF values stay in the console process.
 - `credential_by_username` returns the PHC string and account generation,
   including disabled accounts so the caller can keep password-failure work
   indistinguishable.
+- `user_role_bindings` returns active bindings for per-request capability
+  resolution. It does not cache effective permission state.
 - `create_session` accepts only a currently enabled account at the generation
   observed after password verification. Session lookups require matching
   account generation, no revocation, and both idle and absolute expiry in the
   future. `touch_session` never extends absolute expiry; `revoke_user_sessions`
   advances the account generation, revokes its sessions, and writes one audit
   event atomically.
+- `replace_password` replaces the PHC credential, advances auth generation,
+  revokes all sessions, and appends its audit event in one transaction.
+  `disable_local_user` disables an account and revokes its sessions with the
+  same atomic audit guarantee.
 - `create_preauth` / `consume_preauth` store and consume state only when the
   token, CSRF, and browser-binding digests all match and the state is live.
 - `login_is_throttled`, `record_login_failure`, and `clear_login_throttle`

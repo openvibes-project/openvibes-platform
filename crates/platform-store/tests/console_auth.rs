@@ -6,8 +6,9 @@ use chrono::{Duration, Utc};
 use common::TestDb;
 use platform_store::console_auth::{
     NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth, create_local_user,
-    create_preauth, create_session, credential_by_username, login_is_throttled,
-    record_login_failure, revoke_user_sessions, session, touch_session,
+    create_preauth, create_session, credential_by_username, disable_local_user, login_is_throttled,
+    record_login_failure, replace_password, revoke_user_sessions, session, touch_session,
+    user_role_bindings,
 };
 
 const USER_ID: &str = "11111111-1111-4111-8111-111111111111";
@@ -38,6 +39,13 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
     platform_store::migrate(&mut client).await.unwrap();
     let now = Utc::now();
     new_user(&mut client, now).await;
+    assert_eq!(
+        user_role_bindings(&client, USER_ID).await.unwrap(),
+        vec![platform_store::console_auth::UserRoleBinding {
+            role_id: "admin".into(),
+            asset_group_id: None,
+        }]
+    );
 
     let credential = credential_by_username(&client, "alice")
         .await
@@ -156,14 +164,14 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         (now + Duration::minutes(32)).timestamp_micros()
     );
     assert!(
-        revoke_user_sessions(
+        replace_password(
             &mut client,
             USER_ID,
+            "$argon2id$v=19$m=19456,t=2,p=1$new-salt$new-hash",
             now + Duration::minutes(3),
             &platform_store::console_auth::AuditContext::default(),
             USER_ID,
             "user",
-            "password_reset",
         )
         .await
         .unwrap()
@@ -182,6 +190,51 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
             .auth_generation,
         1
     );
+    assert_eq!(
+        credential_by_username(&client, "alice")
+            .await
+            .unwrap()
+            .unwrap()
+            .password_phc,
+        "$argon2id$v=19$m=19456,t=2,p=1$new-salt$new-hash"
+    );
+    let next_session_hash = [8_u8; 32];
+    assert!(
+        create_session(
+            &mut client,
+            &NewSession {
+                session_sha256: &next_session_hash,
+                csrf_sha256: &csrf_hash,
+                user_id: USER_ID,
+                auth_generation: 1,
+                now: now + Duration::minutes(3),
+                idle_expires_at: now + Duration::minutes(33),
+                absolute_expires_at: now + Duration::hours(8),
+                audit: platform_store::console_auth::AuditContext::default(),
+            },
+        )
+        .await
+        .unwrap()
+    );
+    assert!(
+        revoke_user_sessions(
+            &mut client,
+            USER_ID,
+            now + Duration::minutes(4),
+            &platform_store::console_auth::AuditContext::default(),
+            USER_ID,
+            "user",
+            "password_reset",
+        )
+        .await
+        .unwrap()
+    );
+    assert!(
+        session(&client, &next_session_hash, now + Duration::minutes(4))
+            .await
+            .unwrap()
+            .is_none()
+    );
     let revocation_events: i64 = client
         .query_one(
             "SELECT count(*) FROM audit_log WHERE action = 'auth.sessions.revoked'",
@@ -191,6 +244,24 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         .unwrap()
         .get(0);
     assert_eq!(revocation_events, 1);
+    assert!(
+        disable_local_user(
+            &mut client,
+            USER_ID,
+            now + Duration::minutes(5),
+            &platform_store::console_auth::AuditContext::default(),
+            USER_ID,
+            "user",
+        )
+        .await
+        .unwrap()
+    );
+    let disabled = credential_by_username(&client, "alice")
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(!disabled.enabled);
+    assert_eq!(disabled.auth_generation, 3);
     assert!(
         !revoke_user_sessions(
             &mut client,
