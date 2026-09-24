@@ -6,10 +6,11 @@ use chrono::{Duration, Utc};
 use common::TestDb;
 use platform_store::console_auth::{
     NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth, create_local_user,
-    create_preauth, create_session, credential_by_username, disable_local_user, login_is_throttled,
-    record_login_failure, rehash_password, replace_password, revoke_user_sessions, session,
-    touch_session, user_role_bindings,
+    create_preauth, create_session, credential_by_username, disable_local_user, list_local_users,
+    login_is_throttled, record_login_failure, rehash_password, replace_password,
+    revoke_user_sessions, session, touch_session, unlock_local_user, user_role_bindings,
 };
+use sha2::{Digest, Sha256};
 
 const USER_ID: &str = "11111111-1111-4111-8111-111111111111";
 const BINDING_ID: &str = "22222222-2222-4222-8222-222222222222";
@@ -30,6 +31,73 @@ async fn new_user(client: &mut platform_store::Client, now: chrono::DateTime<Utc
     )
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn administrative_user_listing_and_unlock_are_non_secret_and_audited() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    new_user(&mut client, now).await;
+    let mut digest = Sha256::new();
+    digest.update(b"openvibes-console-login-throttle-v1\0account\0alice");
+    let bucket: [u8; 32] = digest.finalize().into();
+    let buckets: [&[u8]; 1] = [&bucket];
+    record_login_failure(
+        &mut client,
+        &buckets,
+        now,
+        Duration::minutes(15),
+        1,
+        Duration::minutes(15),
+        &platform_store::console_auth::AuditContext::default(),
+    )
+    .await
+    .unwrap();
+    assert!(login_is_throttled(&client, &buckets, now).await.unwrap());
+    let users = list_local_users(&client).await.unwrap();
+    assert_eq!(users.len(), 1);
+    assert_eq!(users[0].username, "alice");
+    assert_eq!(users[0].role_ids, ["admin"]);
+    assert!(!format!("{users:?}").contains("opaque-hash"));
+
+    assert!(
+        unlock_local_user(
+            &mut client,
+            "alice",
+            now,
+            "operator uid 1000",
+            "local_admin"
+        )
+        .await
+        .unwrap()
+    );
+    assert!(!login_is_throttled(&client, &buckets, now).await.unwrap());
+    let audit = client
+        .query_one(
+            "SELECT action, target_kind, target_id FROM audit_log
+             WHERE action = 'user.unlocked'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(audit.get::<_, &str>(0), "user.unlocked");
+    assert_eq!(audit.get::<_, &str>(1), "user");
+    assert_eq!(audit.get::<_, &str>(2), USER_ID);
+    assert!(
+        !unlock_local_user(
+            &mut client,
+            "alice",
+            now,
+            "operator uid 1000",
+            "local_admin"
+        )
+        .await
+        .unwrap()
+    );
+    drop(client);
+    db.drop().await;
 }
 
 #[tokio::test]

@@ -1399,6 +1399,7 @@ dependencies = [
  "chrono",
  "deadpool-postgres",
  "serde_json",
+ "sha2",
  "tokio",
  "tokio-postgres",
 ]

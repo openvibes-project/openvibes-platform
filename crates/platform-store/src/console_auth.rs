@@ -1,6 +1,7 @@
 //! Transactional local-console user, pre-authentication, and session storage.
 
 use chrono::{DateTime, Duration, Utc};
+use sha2::{Digest, Sha256};
 use tokio_postgres::Row;
 
 use crate::{Client, StoreError};
@@ -118,6 +119,117 @@ pub struct UserRoleBinding {
     pub role_id: String,
     /// Asset group id for a scoped binding; `None` means global.
     pub asset_group_id: Option<String>,
+}
+
+/// Non-secret local-user fields available to audited administrative listings.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LocalUserSummary {
+    /// Stable user UUID.
+    pub user_id: String,
+    /// Canonical local username.
+    pub username: String,
+    /// Operator-facing label.
+    pub display_name: String,
+    /// Whether the account can authenticate.
+    pub enabled: bool,
+    /// Active built-in role bindings.
+    pub role_ids: Vec<String>,
+    /// Creation time.
+    pub created_at: DateTime<Utc>,
+    /// Most recent session activity, if any.
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// Lists local users without credentials, session secrets, or throttle hashes.
+pub async fn list_local_users(client: &Client) -> Result<Vec<LocalUserSummary>, StoreError> {
+    let rows = client
+        .query(
+            "SELECT u.user_id::text, u.username, u.display_name, u.enabled, u.created_at,
+                    array_agg(DISTINCT b.role_id ORDER BY b.role_id)
+                        FILTER (WHERE b.role_id IS NOT NULL),
+                    max(s.last_seen_at)
+             FROM console_users u
+             LEFT JOIN console_role_bindings b
+               ON b.user_id = u.user_id AND b.revoked_at IS NULL
+             LEFT JOIN console_sessions s ON s.user_id = u.user_id
+             GROUP BY u.user_id
+             ORDER BY u.username",
+            &[],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| LocalUserSummary {
+            user_id: row.get(0),
+            username: row.get(1),
+            display_name: row.get(2),
+            enabled: row.get(3),
+            created_at: row.get(4),
+            role_ids: row.get::<_, Option<Vec<String>>>(5).unwrap_or_default(),
+            last_seen_at: row.get(6),
+        })
+        .collect())
+}
+
+/// Clears an active per-account login lock and records the recovery atomically.
+pub async fn unlock_local_user(
+    client: &mut Client,
+    username: &str,
+    now: DateTime<Utc>,
+    actor_id: &str,
+    actor_kind: &str,
+) -> Result<bool, StoreError> {
+    let account_bucket = account_throttle_bucket(username);
+    let tx = client.transaction().await?;
+    let user_id: Option<String> = tx
+        .query_opt(
+            "SELECT user_id::text FROM console_users WHERE username = $1 AND enabled FOR UPDATE",
+            &[&username],
+        )
+        .await?
+        .map(|row| row.get(0));
+    let Some(user_id) = user_id else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let cleared = tx
+        .execute(
+            "DELETE FROM console_auth_throttle WHERE bucket_sha256 = $1 AND locked_until > $2",
+            &[&&account_bucket[..], &now],
+        )
+        .await?;
+    if cleared == 0 {
+        tx.rollback().await?;
+        return Ok(false);
+    }
+    append_auth_event(
+        &tx,
+        &AuditContext::default(),
+        AuthAuditEvent {
+            actor: actor_id,
+            action: "user.unlocked",
+            target: Some(&user_id),
+            result: "success",
+            actor_kind: Some(actor_kind),
+            actor_id: Some(actor_id),
+            actor_display: None,
+            authentication_method: None,
+            target_kind: Some("user"),
+            target_id: Some(&user_id),
+            reason_code: Some("administrator_unlock"),
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Derives the same account bucket used by local browser login throttling.
+fn account_throttle_bucket(username: &str) -> [u8; 32] {
+    let mut hash = Sha256::new();
+    hash.update(b"openvibes-console-login-throttle-v1\0account\0");
+    hash.update(username.as_bytes());
+    hash.finalize().into()
 }
 
 /// Creates a user, credential, initial global role binding, and audit event

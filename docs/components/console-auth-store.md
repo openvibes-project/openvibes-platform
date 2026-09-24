@@ -12,6 +12,11 @@ tokens, and CSRF values stay in the console process.
 - `credential_by_username` returns the PHC string and account generation,
   including disabled accounts so the caller can keep password-failure work
   indistinguishable.
+- `list_local_users` exposes only non-secret account metadata, active roles,
+  and last session activity for the audited local administration CLI.
+- `unlock_local_user` clears only a currently locked account throttle bucket
+  and writes the unlock event atomically. Source-address throttles remain in
+  effect.
 - `user_role_bindings` returns active bindings for per-request capability
   resolution. It does not cache effective permission state.
 - `create_session` accepts only a currently enabled account at the generation
