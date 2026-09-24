@@ -283,7 +283,12 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             let dropped = platform_store::drop_partitions_before(client, cutoff)
                 .await
                 .map_err(fail)?;
-            Ok(format!("created {created} partitions, dropped {dropped}\n"))
+            let audit_deleted = platform_store::audit::cleanup_expired_events(client, Utc::now())
+                .await
+                .map_err(fail)?;
+            Ok(format!(
+                "created {created} partitions, dropped {dropped}, deleted {audit_deleted} expired audit events\n"
+            ))
         }
     }
 }

@@ -28,6 +28,9 @@ operation and must use the effective policy cutoff.
 `until`, exact `actor`/`action`/`result` filters, and a limit from 1 to 100.
 Opaque cursors bind all filters. Successful reads append `audit.accessed`; the
 response does not include event details or request source metadata.
+The local `openvibes-admin maintenance` command also calls
+`cleanup_expired_events`, which reads the policy cutoff itself and deletes at
+most 10,000 rows per run; another scheduled run drains any remaining backlog.
 
 ## Failure behaviour
 

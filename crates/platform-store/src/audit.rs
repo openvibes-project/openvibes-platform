@@ -1,5 +1,5 @@
 use crate::{Client, StoreError, console_read::PageLimit};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 
 /// Administrator-controlled audit-log retention policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -221,6 +221,27 @@ pub async fn update_retention_policy(
     };
     tx.commit().await?;
     Ok(Some(policy))
+}
+
+/// Deletes at most 10,000 audit events older than the configured retention
+/// cutoff. Repeated maintenance runs drain larger backlogs safely.
+pub async fn cleanup_expired_events(
+    client: &Client,
+    now: DateTime<Utc>,
+) -> Result<u64, StoreError> {
+    let policy = retention_policy(client).await?;
+    let cutoff = now - Duration::days(i64::from(policy.retention_days));
+    let deleted = client
+        .execute(
+            "WITH expired AS (
+                 SELECT id FROM audit_log WHERE at < $1
+                 ORDER BY at, id LIMIT 10000
+             )
+             DELETE FROM audit_log a USING expired e WHERE a.id = e.id",
+            &[&cutoff],
+        )
+        .await?;
+    Ok(deleted)
 }
 
 /// Appends one audit entry. `detail` must never contain secrets.

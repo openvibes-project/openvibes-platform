@@ -5,7 +5,9 @@ mod common;
 use chrono::Utc;
 use common::TestDb;
 use platform_store::{
-    audit::{AuditQuery, events, retention_policy, update_retention_policy},
+    audit::{
+        AuditQuery, cleanup_expired_events, events, retention_policy, update_retention_policy,
+    },
     console_read::PageLimit,
 };
 
@@ -100,6 +102,32 @@ async fn audit_event_reads_are_filtered_keyset_paged_and_safe() {
     assert!(second.next.is_none());
     assert_eq!(first.items[0].actor, "alice");
     assert!(first.items[0].action == "logout" || first.items[0].action == "login.success");
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn audit_cleanup_uses_policy_and_deletes_expired_rows() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    let expired = now - chrono::Duration::days(366);
+    client
+        .execute(
+            "INSERT INTO audit_log(at, actor, action, result)
+         VALUES ($1, 'operator', 'old', 'success'), ($2, 'operator', 'new', 'success')",
+            &[&expired, &now],
+        )
+        .await
+        .unwrap();
+    assert_eq!(cleanup_expired_events(&client, now).await.unwrap(), 1);
+    let remaining: i64 = client
+        .query_one("SELECT count(*) FROM audit_log", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(remaining, 1);
     drop(client);
     db.drop().await;
 }

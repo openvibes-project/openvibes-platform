@@ -27,7 +27,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
 | `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
-| `maintenance [--retention-days 90]` | creates any missing partition from the retention cutoff to today + 7 days, so late or backlogged findings always have a partition; drops older ones, never today's. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M` |
+| `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
 | `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo |
 | `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |
 | `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |

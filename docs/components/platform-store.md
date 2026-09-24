@@ -168,6 +168,8 @@ Argon2id credential slots, hash-only pre-auth and session state, bounded login
 throttle buckets, idempotency records, role/permission bindings, exact-tag
 asset groups, service accounts and hashed tokens, finding-triage state/history,
 structured audit columns, and a versioned 365-day audit-retention policy.
+`audit::cleanup_expired_events` removes at most 10,000 events older than the
+stored policy cutoff per call; repeated maintenance runs drain larger backlogs.
 Built-in Viewer, Analyst, Operator, and Admin role permissions are seeded by
 the migration. The `openvibes_console` database role can read platform data
 and update console-owned state; it cannot update agent/finding source data or
