@@ -13,7 +13,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `openvibes-distribution` | service, port 18424 | `POST /v1/rule-bundle`: signed bundles to agents (SP2 DM2) | [openvibes-distribution.md](openvibes-distribution.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |
-| `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), hardened units, maintenance timer | [packaging.md](packaging.md) |
+| `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), hardened units, maintenance timer; the whole system end to end under systemd with the agent RPM (M6a) | [packaging.md](packaging.md) |
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).

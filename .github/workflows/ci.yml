@@ -145,11 +145,34 @@ jobs:
           cargo fetch --locked
           ROOT=$PWD; source scripts/integration-lib.sh
           build_agent "$PWD/target/integration/agent" > agent-path
+          # The agent's own RPM, from the same pinned revision (built offline
+          # in a later step).
+          git clone -q https://github.com/openvibes-project/openvibes-agent /opt/agent-src
+          git -C /opt/agent-src checkout -q "$(agent_rev)"
+          cargo fetch --locked --manifest-path /opt/agent-src/Cargo.toml
 
       - name: Build RPMs
         env:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
+
+      - name: Build the agent RPM and signing tool (pinned revision)
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          bash /opt/agent-src/scripts/build-rpm.sh
+          cargo build --release --locked --manifest-path /opt/agent-src/Cargo.toml \
+            -p openvibes-rules --example sign_bundle
+          mkdir -p dist
+          cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
+            /opt/agent-src/target/release/examples/sign_bundle dist/
+
+      - name: Upload RPMs for the systemd end to end
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rpms
+          path: dist/
+          if-no-files-found: error
 
       - name: Install and check RPMs
         run: |
@@ -193,3 +216,28 @@ jobs:
             LOAD_BIN="$PWD/target/release/openvibes-load" \
             BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
             bash scripts/load/run.sh 50 1000 10
+
+  # The documented install, scripted, under a real systemd (podman fedora:44,
+  # systemd as PID 1): PostgreSQL, ingest, distribution, and the agent from
+  # their RPMs; the agent enrolls, fetches its rules, and delivers findings.
+  systemd-e2e:
+    name: End to end under systemd (platform and agent RPMs)
+    needs: fedora
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms
+          path: dist
+
+      - name: End to end
+        run: |
+          chmod +x dist/sign_bundle
+          bash scripts/systemd-e2e.sh dist dist/sign_bundle
