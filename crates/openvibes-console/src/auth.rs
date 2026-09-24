@@ -20,6 +20,33 @@ const SESSION_SECRET_BYTES: usize = 32;
 const MAX_RAW_PASSWORD_CODE_POINTS: usize = 4_096;
 const MIN_PASSWORD_CODE_POINTS: usize = 15;
 const MAX_PASSWORD_CODE_POINTS: usize = 128;
+// ponytail: small local list rejects famous weak passphrases; add a reviewed breach corpus before production login.
+const BLOCKED_PASSWORDS: &[&str] = &[
+    "correct horse battery staple",
+    "correcthorsebatterystaple",
+    "passwordpassword",
+    "password1234567",
+    "password123456789",
+    "password123!@#1",
+    "qwertyuiopasdfghjkl",
+    "qwerty1234567890",
+    "123456789012345",
+    "1234567890123456",
+    "12345678901234567890",
+    "letmeinletmein1",
+    "iloveyouiloveyou",
+    "changemechangeme",
+    "adminadminadmin",
+    "welcomehome1234",
+    "monkeymonkey123",
+    "trustno1trustno1",
+    "dragon-dragon-dragon",
+    "superman12345678",
+    "footballfootball",
+    "baseballbaseball",
+    "sunshinesunshinesunshine",
+    "michaelmichael123",
+];
 // OWASP Password Storage Cheat Sheet floor for Argon2id: 19 MiB, t=2, p=1.
 const ARGON2_MEMORY_KIB: u32 = 19_456;
 const ARGON2_ITERATIONS: u32 = 2;
@@ -49,6 +76,10 @@ impl NormalizedPassword {
             normalized.zeroize();
             return Err(PasswordError::TooLong);
         }
+        if BLOCKED_PASSWORDS.contains(&normalized.as_str()) {
+            normalized.zeroize();
+            return Err(PasswordError::CommonPassword);
+        }
         Ok(Self(normalized))
     }
 
@@ -77,6 +108,8 @@ pub enum PasswordError {
     TooShort,
     /// More than 128 normalized code points, or more than 4,096 raw code points.
     TooLong,
+    /// The password exactly matches a locally blocked common choice.
+    CommonPassword,
 }
 
 /// PHC-formatted Argon2id credential that redacts debug output.
@@ -295,6 +328,11 @@ mod tests {
             NormalizedPassword::new("short"),
             Err(PasswordError::TooShort)
         ));
+        assert!(matches!(
+            NormalizedPassword::new("correct horse battery staple"),
+            Err(PasswordError::CommonPassword)
+        ));
+        assert!(NormalizedPassword::new("Correct horse battery staple").is_ok());
     }
 
     #[test]
