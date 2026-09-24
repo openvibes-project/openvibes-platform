@@ -53,3 +53,36 @@ async fn the_ingest_role_can_read_the_schema_version() {
     drop(client);
     db.drop().await;
 }
+
+/// Two operators (or a timer and an operator) running `migrate` or
+/// `maintenance` at once: both succeed, one after the other.
+#[tokio::test]
+async fn concurrent_migrate_and_maintenance_both_succeed() {
+    for _ in 0..3 {
+        let db = TestDb::create().await;
+        let (mut a, mut b) = (db.pool.get().await.unwrap(), db.pool.get().await.unwrap());
+        let (x, y) = tokio::join!(
+            platform_store::migrate(&mut a),
+            platform_store::migrate(&mut b)
+        );
+        assert_eq!((x.unwrap(), y.unwrap()), (3, 3));
+        let today = chrono::Utc::now().date_naive();
+        let (x, y) = tokio::join!(
+            platform_store::ensure_partitions(&a, today, 7),
+            platform_store::ensure_partitions(&b, today, 7)
+        );
+        assert_eq!(x.unwrap() + y.unwrap(), 8, "each partition created once");
+        drop((a, b));
+        db.drop().await;
+    }
+}
+
+#[tokio::test]
+async fn an_invalid_database_url_is_a_configuration_error() {
+    let error = platform_store::connect("postgresql://[not-a-url")
+        .await
+        .map(drop)
+        .unwrap_err();
+    assert_eq!(error, platform_store::StoreError::InvalidUrl);
+    assert_eq!(error.to_string(), "invalid database_url");
+}

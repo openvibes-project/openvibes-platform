@@ -39,6 +39,10 @@ async fn a_failed_enrollment_is_logged_without_the_token_or_csr() {
             .map(|r| r.0),
         Some(400)
     );
+    // An unknown path is logged as `other`, never copied: its length and
+    // content are the client's.
+    let long = format!("/{}", "x".repeat(4000));
+    assert_eq!(world.raw(&long, b"{}", None).await.map(|r| r.0), Some(404));
     world.stop().await;
     let logs = String::from_utf8(capture.0.lock().unwrap().clone()).unwrap();
     let line = logs
@@ -49,4 +53,6 @@ async fn a_failed_enrollment_is_logged_without_the_token_or_csr() {
         assert!(line.contains(field), "{field} missing in {line}");
     }
     assert!(!logs.contains(&token) && !logs.contains("not-really-a-csr"));
+    assert!(!logs.contains("xxxxxxxxxx"), "raw path copied into the log");
+    assert!(logs.contains("\"endpoint\":\"other\""));
 }

@@ -96,8 +96,9 @@ pub fn intermediate_request() -> Result<(String, String), PkiError> {
     Ok((csr, key.serialize_pem()))
 }
 
-/// Signs an intermediate CSR with the root: 2 years, path length 0. The CSR's
-/// signature is verified; only its public key is taken from it.
+/// Signs an intermediate CSR with the root: 2 years, path length 0. The root
+/// key must match the root certificate (`KeyMismatch`). The CSR's signature
+/// is verified; only its public key is taken from it.
 pub fn sign_intermediate(
     root: &KeyAndCert,
     csr_pem: &str,
@@ -105,12 +106,11 @@ pub fn sign_intermediate(
 ) -> Result<String, PkiError> {
     let csr =
         CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
-    let root_key = KeyPair::from_pem(&root.key_pem).map_err(|_| PkiError::InvalidPem)?;
-    let issuer = rcgen::Issuer::from_ca_cert_pem(&root.cert_pem, root_key)
-        .map_err(|_| PkiError::InvalidPem)?;
+    // Checks that the root is a CA and that the key is the root's own.
+    let root = Issuer::load(&root.cert_pem, &root.key_pem)?;
     let params = ca_params("OpenVIBES Intermediate CA", 0, now, INTERMEDIATE_DAYS)?;
     params
-        .signed_by(&csr.public_key, &issuer)
+        .signed_by(&csr.public_key, &root.issuer)
         .map(|cert| cert.pem())
         .map_err(|_| PkiError::Generation)
 }
@@ -204,6 +204,33 @@ pub fn verify_signed_by(cert_pem: &str, issuer_cert_pem: &str) -> Result<(), Pki
     let issuer = parse(&issuer_der)?;
     cert.verify_signature(Some(issuer.public_key()))
         .map_err(|_| PkiError::NotSignedBy)
+}
+
+/// Whether `cert_pem` is a usable intermediate of `root_cert_pem` at `now`:
+/// a CA with path length 0 (so not a leaf and not the root itself), signed
+/// by the root, and currently valid.
+pub fn check_intermediate(
+    cert_pem: &str,
+    root_cert_pem: &str,
+    now: DateTime<Utc>,
+) -> Result<(), PkiError> {
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    let constraints = cert
+        .basic_constraints()
+        .map_err(|_| PkiError::InvalidPem)?
+        .map(|extension| (extension.value.ca, extension.value.path_len_constraint));
+    let self_signed = cert.subject() == cert.issuer();
+    if constraints != Some((true, Some(0))) || self_signed {
+        return Err(PkiError::NotIntermediate);
+    }
+    verify_signed_by(cert_pem, root_cert_pem)?;
+    let validity = cert.validity();
+    let now = now.timestamp();
+    if now < validity.not_before.timestamp() || now > validity.not_after.timestamp() {
+        return Err(PkiError::IssuerExpired);
+    }
+    Ok(())
 }
 
 /// SHA-256 of the first certificate's DER encoding.

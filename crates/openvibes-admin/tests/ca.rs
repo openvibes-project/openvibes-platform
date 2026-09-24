@@ -94,6 +94,34 @@ async fn the_offline_chain_imports_and_issues_server_certificates() {
 }
 
 #[test]
+fn an_existing_certificate_leaves_no_orphan_key() {
+    let dir = scratch_dir("orphan");
+    let root = dir.join("root");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("root.crt"), "operator's file").unwrap();
+    let again = offline(&["ca", "init-root", "--out", s(&root)]);
+    assert!(!again.status.success());
+    assert!(
+        !root.join("root.key").exists(),
+        "no key without its certificate"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("root.crt")).unwrap(),
+        "operator's file"
+    );
+
+    let host = dir.join("host");
+    std::fs::create_dir_all(&host).unwrap();
+    std::fs::write(host.join("intermediate.csr"), "old").unwrap();
+    assert!(
+        !offline(&["ca", "intermediate-request", "--out", s(&host)])
+            .status
+            .success()
+    );
+    assert!(!host.join("intermediate.key").exists());
+}
+
+#[test]
 fn keys_are_never_overwritten() {
     let dir = scratch_dir("overwrite");
     let root = dir.join("root");
@@ -155,5 +183,30 @@ async fn a_bad_import_records_nothing_and_is_audited() {
         .map(|row| row.2)
         .collect();
     assert_eq!(results, ["ok", "error", "error"]);
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn the_root_cannot_be_imported_as_the_intermediate() {
+    let dir = scratch_dir("root-as-intermediate");
+    offline_chain(&dir);
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let refused = fixture.run(&[
+        "ca",
+        "import-intermediate",
+        "--cert",
+        s(&dir.join("root/root.crt")),
+        "--key",
+        s(&dir.join("root/root.key")),
+        "--root-cert",
+        s(&dir.join("root/root.crt")),
+    ]);
+    assert!(!refused.status.success());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("not an intermediate"));
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM ca_certificates").await,
+        0
+    );
     fixture.drop().await;
 }

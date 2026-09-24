@@ -17,7 +17,7 @@ rpm -qc openvibes-admin | grep -qx /etc/openvibes/admin.toml || fail "admin.toml
 systemd-analyze verify /usr/lib/systemd/system/openvibes-ingest.service \
     /usr/lib/systemd/system/openvibes-maintenance.service \
     /usr/lib/systemd/system/openvibes-maintenance.timer || fail "unit verification"
-grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service || fail "no graceful stop"
+grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service || fail "unit lacks KillSignal=SIGINT (the drain signal)"
 /usr/bin/openvibes-admin --help >/dev/null || fail "openvibes-admin does not run"
 out=$(/usr/bin/openvibes-ingest --config /nonexistent 2>&1) && fail "ingest started without config"
 [[ "$out" == *"invalid ingest configuration"* ]] || fail "ingest error: $out"

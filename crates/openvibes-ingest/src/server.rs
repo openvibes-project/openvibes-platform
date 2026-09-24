@@ -75,7 +75,10 @@ pub async fn run(
     config.validate()?;
     let pool = platform_store::connect_sized(&config.database_url, config.database_pool_size)
         .await
-        .map_err(|_| IngestError::Database)?;
+        .map_err(|error| match error {
+            platform_store::StoreError::InvalidUrl => IngestError::Config,
+            _ => IngestError::Database,
+        })?;
     let issuer = Issuer::load(
         &read_pem(&config.issuing_certificate_file)?,
         &read_pem(&config.issuing_key_file)?,

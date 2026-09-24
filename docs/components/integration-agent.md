@@ -8,7 +8,9 @@ PostgreSQL. Everything runs as the current, unprivileged user under
 
 ## What it proves
 
-1. Platform up: a throwaway PostgreSQL cluster (Unix socket only),
+1. Platform up: a throwaway PostgreSQL cluster (Unix socket only) whose
+   admin role `openvibes_admin` may create roles but is not a superuser, as in
+   the documented install,
    `openvibes-admin migrate` and `maintenance`, the built-in CA (root,
    intermediate, a server certificate for `localhost` and `127.0.0.1`),
    ingest on loopback until `/ready` answers.

@@ -45,11 +45,16 @@ impl std::error::Error for ConfigError {}
 /// Reads at most 64 KiB from `path` and parses it as TOML into `T`, which
 /// should use `#[serde(deny_unknown_fields)]` so typos fail loudly.
 pub fn load<T: DeserializeOwned>(path: &Path) -> Result<T, ConfigError> {
-    let file = match File::open(path) {
+    let file = match open_nonblocking(path) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(ConfigError::Missing),
         Err(_) => return Err(ConfigError::Invalid),
     };
+    // Only a regular file (a symlink to one is followed): a FIFO, device, or
+    // directory is refused rather than read.
+    if !file.metadata().is_ok_and(|metadata| metadata.is_file()) {
+        return Err(ConfigError::Invalid);
+    }
     let mut bytes = Vec::new();
     file.take(MAX_BYTES + 1)
         .read_to_end(&mut bytes)
@@ -59,6 +64,20 @@ pub fn load<T: DeserializeOwned>(path: &Path) -> Result<T, ConfigError> {
     }
     let text = std::str::from_utf8(&bytes).map_err(|_| ConfigError::Invalid)?;
     toml::from_str(text).map_err(|_| ConfigError::Invalid)
+}
+
+/// Opens without blocking, so a FIFO in place of the file cannot hang the
+/// service on open. Reads of a regular file are unaffected.
+fn open_nonblocking(path: &Path) -> io::Result<File> {
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        // O_NONBLOCK on Linux (asm-generic/fcntl.h).
+        options.custom_flags(0o4000);
+    }
+    options.open(path)
 }
 
 /// Fails with [`ConfigError::RelativePath`] unless every path is absolute.
@@ -112,5 +131,41 @@ mod tests {
             ConfigError::RelativePath
         );
         assert!(require_absolute(&[Path::new("/etc/x")]).is_ok());
+    }
+
+    /// A FIFO (or a directory, or a device) is refused at once instead of
+    /// blocking the service forever on open; a symlink to a file still loads.
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[allow(clippy::disallowed_types)] // mkfifo for the test only
+    fn only_regular_files_load() {
+        let dir = std::env::temp_dir().join(format!("ov-config-fifo-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fifo = dir.join("fifo.toml");
+        let _ = std::fs::remove_file(&fifo);
+        assert!(
+            std::process::Command::new("mkfifo")
+                .arg(&fifo)
+                .status()
+                .unwrap()
+                .success()
+        );
+        let (done, result) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let _ = done.send(load::<Sample>(&fifo).map(drop));
+        });
+        assert_eq!(
+            result
+                .recv_timeout(std::time::Duration::from_secs(2))
+                .expect("load must not block on a FIFO"),
+            Err(ConfigError::Invalid)
+        );
+        assert_eq!(load::<Sample>(&dir).unwrap_err(), ConfigError::Invalid);
+        let file = dir.join("real.toml");
+        std::fs::write(&file, "name = \"ingest\"\n").unwrap();
+        let link = dir.join("link.toml");
+        let _ = std::fs::remove_file(&link);
+        std::os::unix::fs::symlink(&file, &link).unwrap();
+        assert!(load::<Sample>(&link).is_ok());
     }
 }

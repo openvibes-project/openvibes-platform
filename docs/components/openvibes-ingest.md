@@ -20,7 +20,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | Key | Default | Range |
 |---|---|---|
 | `listen` | required | agent-facing TLS address |
-| `health_listen` | required | loopback address for `/health`, `/ready` |
+| `health_listen` | required | loopback address for `/health`, `/ready`; any other address is refused |
 | `server_certificate_file`, `server_key_file` | required | server chain (leaf first) and key |
 | `client_ca_file` | required | CA whose client certificates are accepted |
 | `issuing_certificate_file`, `issuing_key_file` | required | intermediate that signs agent certificates |
@@ -70,7 +70,10 @@ Strict TOML (unknown keys refused), absolute paths only:
   `finding_retention_days` are acknowledged but not stored. The rest are
   stored in one transaction (duplicates skipped) and every finding in the
   batch is acknowledged, including ones stored before.
-- Any database error, on any endpoint, is 503 and acknowledges nothing. A
+- Any database error, on any endpoint, is 503 (`unavailable`) and
+  acknowledges nothing; it is logged as a warning inside the request span
+  (endpoint, and `agent_id` once authenticated), never with SQL or the
+  connection string. A
   finding whose day has no partition also ends as 503 and a
   `findings not stored` log line; `openvibes-admin maintenance` keeps the
   window covered. Ingest never creates partitions.
@@ -83,13 +86,15 @@ Strict TOML (unknown keys refused), absolute paths only:
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the
   connection is dropped or the request gets 408, and its slot is freed.
-- More than `max_in_flight` concurrent requests → 503 for the extra ones.
+- More than `max_in_flight` concurrent requests → 503 (`busy`) for the extra
+  ones, logged as a request with status 503 but no database warning.
 - At most `max_connections` connections are accepted at once; the rest wait
   in the kernel backlog. Accept errors (e.g. out of file descriptors) back
   off instead of spinning.
 - Database waits, connects, and recycles are bounded to 5 s and every
   statement to 10 s, so a hung database yields 503, not hangs.
-- One JSON log line per request on stderr: `endpoint`, `status`,
+- One JSON log line per request on stderr: `endpoint` (the route, or
+  `other` for any unknown path, which is never copied), `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
 

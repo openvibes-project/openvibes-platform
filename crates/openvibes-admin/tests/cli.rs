@@ -104,3 +104,18 @@ async fn the_audit_actor_is_the_real_uid_even_without_user() {
     assert_eq!(fixture.audit().await[0].0, format!("uid {uid}"));
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn status_and_maintenance_on_an_unmigrated_database_say_to_migrate() {
+    let fixture = Fixture::create().await;
+    for command in [&["status"][..], &["maintenance"][..]] {
+        let output = fixture.run(command);
+        assert!(!output.status.success(), "{command:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("run openvibes-admin migrate"),
+            "{command:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fixture.drop().await;
+}

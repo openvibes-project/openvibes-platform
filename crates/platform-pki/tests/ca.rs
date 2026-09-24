@@ -73,3 +73,49 @@ fn a_mismatched_key_or_a_non_ca_certificate_cannot_issue() {
         Some(PkiError::InvalidPem)
     );
 }
+
+#[test]
+fn only_a_current_intermediate_of_that_root_imports() {
+    let now = Utc::now();
+    let (root, intermediate) = hierarchy();
+    platform_pki::check_intermediate(intermediate.cert_pem(), &root.cert_pem, now).unwrap();
+    assert_eq!(
+        platform_pki::check_intermediate(&root.cert_pem, &root.cert_pem, now),
+        Err(PkiError::NotIntermediate),
+        "the root is not its own intermediate"
+    );
+    let server = intermediate
+        .issue_server(&["ingest.example".into()], now)
+        .unwrap();
+    assert_eq!(
+        platform_pki::check_intermediate(&server.cert_pem, intermediate.cert_pem(), now),
+        Err(PkiError::NotIntermediate),
+        "a leaf is not an intermediate"
+    );
+    let (other_root, _) = hierarchy();
+    assert_eq!(
+        platform_pki::check_intermediate(intermediate.cert_pem(), &other_root.cert_pem, now),
+        Err(PkiError::NotSignedBy)
+    );
+    let later = now + chrono::Duration::days(3 * 365);
+    assert_eq!(
+        platform_pki::check_intermediate(intermediate.cert_pem(), &root.cert_pem, later),
+        Err(PkiError::IssuerExpired)
+    );
+}
+
+#[test]
+fn the_root_key_must_match_the_root_certificate() {
+    let now = Utc::now();
+    let root = generate_root(now).unwrap();
+    let other = generate_root(now).unwrap();
+    let mixed = KeyAndCert {
+        cert_pem: root.cert_pem.clone(),
+        key_pem: other.key_pem.clone(),
+    };
+    let (csr, _) = intermediate_request().unwrap();
+    assert_eq!(
+        sign_intermediate(&mixed, &csr, now).map(drop),
+        Err(PkiError::KeyMismatch)
+    );
+}

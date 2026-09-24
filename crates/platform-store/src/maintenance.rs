@@ -35,6 +35,37 @@ pub async fn ensure_partitions(
     today: NaiveDate,
     days_ahead: u32,
 ) -> Result<u32, StoreError> {
+    locked(client, create_partitions(client, today, days_ahead)).await
+}
+
+/// Advisory lock key for partition maintenance ("ovpa").
+const PARTITION_LOCK: i64 = 0x6f76_7061;
+
+/// Runs `work` holding the partition lock, so concurrent maintenance runs
+/// wait instead of racing on the same partitions. The session lock is
+/// released on every path, errors included, so a pooled connection never
+/// keeps it.
+async fn locked<T>(
+    client: &Client,
+    work: impl std::future::Future<Output = Result<T, StoreError>>,
+) -> Result<T, StoreError> {
+    client
+        .execute("SELECT pg_advisory_lock($1)", &[&PARTITION_LOCK])
+        .await?;
+    let result = work.await;
+    let unlocked = client
+        .execute("SELECT pg_advisory_unlock($1)", &[&PARTITION_LOCK])
+        .await;
+    let value = result?;
+    unlocked?;
+    Ok(value)
+}
+
+async fn create_partitions(
+    client: &Client,
+    today: NaiveDate,
+    days_ahead: u32,
+) -> Result<u32, StoreError> {
     let existing = partition_days(client).await?;
     let mut created = 0;
     for offset in 0..=i64::from(days_ahead) {
@@ -60,6 +91,10 @@ pub async fn ensure_partitions(
 /// Drops partitions for days strictly before `cutoff`, but never the
 /// partition for the current day; returns how many were dropped.
 pub async fn drop_partitions_before(client: &Client, cutoff: NaiveDate) -> Result<u32, StoreError> {
+    locked(client, drop_partitions(client, cutoff)).await
+}
+
+async fn drop_partitions(client: &Client, cutoff: NaiveDate) -> Result<u32, StoreError> {
     let cutoff = cutoff.min(chrono::Utc::now().date_naive());
     let mut dropped = 0;
     for day in partition_days(client).await?.range(..cutoff) {

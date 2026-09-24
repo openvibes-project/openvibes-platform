@@ -41,6 +41,9 @@ pub enum Enrolled {
     Existing(Identity),
     /// The token has no uses left.
     Exhausted,
+    /// The token was revoked or has expired (checked under the token lock,
+    /// so a revocation racing the request cannot slip through).
+    TokenInvalid,
 }
 
 /// A certificate issued for an agent.
@@ -154,16 +157,21 @@ pub async fn enroll(
         transaction.commit().await?;
         return Ok(Enrolled::Existing(identity));
     }
-    let (uses, max_uses): (i64, i32) = {
+    let (uses, max_uses, valid): (i64, i32, bool) = {
         let row = transaction
             .query_one(
-                "SELECT (SELECT count(*) FROM token_uses WHERE token_id = t.token_id), t.max_uses
+                "SELECT (SELECT count(*) FROM token_uses WHERE token_id = t.token_id), t.max_uses,
+                        t.revoked_at IS NULL AND t.expires_at > $2
                  FROM enrollment_tokens t WHERE t.token_id = $1::text::uuid",
-                &[&token_id],
+                &[&token_id, &now],
             )
             .await?;
-        (row.get(0), row.get(1))
+        (row.get(0), row.get(1), row.get(2))
     };
+    if !valid {
+        transaction.commit().await?;
+        return Ok(Enrolled::TokenInvalid);
+    }
     if uses >= i64::from(max_uses) {
         transaction.commit().await?;
         return Ok(Enrolled::Exhausted);

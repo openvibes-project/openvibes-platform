@@ -67,9 +67,12 @@ start_platform() {
     admin() { "$OPENVIBES_BIN_DIR/openvibes-admin" --config "$W/admin.toml" "$@"; }
 
     # PostgreSQL (Unix socket only) and the schema.
-    initdb -D "$W/pg/data" -U openvibes_admin --auth=trust >/dev/null
+    # As in the documented install: a superuser creates an admin role that
+    # may only create roles, and the database it owns.
+    initdb -D "$W/pg/data" -U postgres --auth=trust >/dev/null
     pg_ctl -D "$W/pg/data" -o "-k $W/pg/run -c listen_addresses=''" -l "$W/pg/log" -w start >/dev/null
-    createdb -h "$W/pg/run" -U openvibes_admin openvibes
+    createuser -h "$W/pg/run" -U postgres --createrole openvibes_admin
+    createdb -h "$W/pg/run" -U postgres -O openvibes_admin openvibes
     sql() { psql -h "$W/pg/run" -U openvibes_admin -d openvibes -AtX -c "$1"; }
     echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes_admin\"" > "$W/admin.toml"
     admin migrate >/dev/null

@@ -56,7 +56,9 @@ The audit target is the token id, never the token.
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,
 certificates `0644`, always with create-new: **nothing is ever
-overwritten**.
+overwritten**. A key and its certificate (or CSR) are written as a pair: if
+either file already exists, neither is written, so no key is left without
+its certificate.
 
 | Command | Where | Writes | Audited |
 |---|---|---|---|
@@ -71,8 +73,9 @@ host, carry only the **CSR** to the offline machine, `sign-intermediate`
 there, carry only the **certificate** back, then `import-intermediate`.
 The intermediate key never leaves the ingest host and the root key never
 leaves the offline machine. `import-intermediate` refuses a key that does
-not match the certificate or a certificate the given root did not sign, and
-records nothing then. Offline commands work without any config file.
+not match the certificate, a certificate the given root did not sign, one
+that is not an intermediate (the root itself, a leaf, or a CA without path
+length 0), or one outside its validity, and records nothing then. Offline commands work without any config file.
 
 ## Test
 
