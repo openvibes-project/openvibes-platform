@@ -22,6 +22,13 @@ async function recordCspViolations(page: Page): Promise<() => Promise<string[]>>
   return () => page.evaluate(() => window.openvibesCspViolations ?? []);
 }
 
+async function selectDemoOption(page: Page, label: string, value: string): Promise<void> {
+  await Promise.all([
+    page.waitForNavigation(),
+    page.getByLabel(label).selectOption(value),
+  ]);
+}
+
 const targetCsp = [
   "default-src 'none'",
   "script-src 'self'",
@@ -158,7 +165,7 @@ test("keeps native menu, dialog, and combobox primitives keyboard accessible", a
 
 test("keeps the 50,000-agent scenario bounded to one page", async ({ page }) => {
   await page.goto("/?seeded=1");
-  await page.getByLabel("Data scenario").selectOption("large");
+  await selectDemoOption(page, "Data scenario", "large");
   await page.goto("/agents");
 
   await expect(page.getByRole("heading", { name: "50 agents on this page" })).toBeVisible();
@@ -168,16 +175,31 @@ test("keeps the 50,000-agent scenario bounded to one page", async ({ page }) => 
 
 test("hides an out-of-scope agent and shows empty and unavailable states", async ({ page }) => {
   await page.goto("/?seeded=1");
-  await page.getByLabel("Persona").selectOption("scoped_operator");
+  await selectDemoOption(page, "Persona", "scoped_operator");
   await page.goto("/agents?agent=agent-00001");
   await expect(page.getByRole("heading", { name: "Data unavailable" })).toBeVisible();
   await expect(page.getByText("host-00001.example.test")).toHaveCount(0);
 
   await page.goto("/agents");
-  await page.getByLabel("Data scenario").selectOption("empty");
+  await selectDemoOption(page, "Data scenario", "empty");
   await expect(page.getByText("No agents match these filters.")).toBeVisible();
 
   await page.goto("/findings");
-  await page.getByLabel("Data scenario").selectOption("partial_failure");
+  await selectDemoOption(page, "Data scenario", "partial_failure");
   await expect(page.getByRole("heading", { name: "Data unavailable" })).toBeVisible();
+});
+
+test("shows stale, removed-permission, and expired-session states", async ({ page }) => {
+  await page.goto("/?seeded=1");
+  await selectDemoOption(page, "Data scenario", "stale");
+  await page.goto("/agents");
+  await expect(page.locator("tbody tr")).toHaveCount(50);
+  await expect(page.getByText("stale", { exact: true })).toHaveCount(50);
+
+  await selectDemoOption(page, "Data scenario", "permission_removed");
+  await expect(page.getByRole("heading", { name: "Access unavailable" })).toBeVisible();
+
+  await page.goto("/findings");
+  await selectDemoOption(page, "Data scenario", "expired_session");
+  await expect(page.getByRole("heading", { name: "Session expired" })).toBeVisible();
 });
