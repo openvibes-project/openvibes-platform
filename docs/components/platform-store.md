@@ -16,14 +16,22 @@ functions, so schema knowledge and SQL live in one place.
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
-  `Query` (a statement failed). Messages never contain SQL, parameters, or
+  `Query` (a statement failed), `InvalidUrl` (the configured URL does not
+  parse: a configuration error, not an outage). Messages never contain SQL, parameters, or
   connection strings.
 
 ## Migrations
 
-Numbered SQL files in `/migrations`, embedded at build time. `migrate` runs
-in one transaction with `schema_version` locked exclusively, so concurrent
-runs serialize; already-applied migrations are skipped. A database at a
+Numbered SQL files in `/migrations`, embedded at build time. Migration 4
+revokes UPDATE on `findings`, `certificates`, and `token_uses` from
+`openvibes_ingest`, which only inserts them; a test checks the role is
+refused every write, read, or DDL it does not use. Migration 5 adds `rule_set_id`
+to `findings` and `current_findings` (`''` = unknown sender) and keys
+current state by agent, rule set, and rule: rule ids are unique only within
+a rule set. `migrate` runs
+in one transaction that first takes an advisory lock (before even creating
+`schema_version`), so concurrent runs serialize and both succeed;
+already-applied migrations are skipped. A database at a
 **newer** version is refused with `NewerSchema`, never rolled back.
 
 Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
@@ -57,7 +65,10 @@ All run within the `openvibes_ingest` role's grants (the tests use
   transaction under `pg_advisory_xact_lock(hashtext(token_id))`, so
   concurrent enrollments with a single-use token yield exactly one identity.
   `Existing` when this token already enrolled this key (the protocol's retry
-  rule, same chain returned), `Exhausted` when no uses remain, else `New`
+  rule, same chain returned), `AgentRevoked` when that same-key retry belongs to an agent revoked since
+  (a revoked identity is never handed out again), `TokenInvalid` when the token is revoked or
+  expired at `now` (checked under the lock, so a revocation racing the
+  request cannot slip through), `Exhausted` when no uses remain, else `New`
   after creating the agent (`agent.<uuid>`), its certificate, the token use,
   and an `enroll` audit row.
 - `add_certificate` (renewal), `authenticate(&client, serial, spki) ->
@@ -81,7 +92,10 @@ The `detail` column is never given secrets.
 
 - `ensure_partitions(&client, today, days_ahead)`: creates `findings_YYYYMMDD`
   partitions for today and the next `days_ahead` days that are missing;
-  returns how many it created. Safe to run repeatedly.
+  returns how many it created. Safe to run repeatedly, and concurrently:
+  both this and `drop_partitions_before` hold a session advisory lock
+  (always released, errors included), so a second run waits and then finds
+  nothing to do.
 - `drop_partitions_before(&client, cutoff)`: drops partitions for days before
   `cutoff`, **never today's**, even if `cutoff` is later.
 - Partition names come only from dates, never from input.

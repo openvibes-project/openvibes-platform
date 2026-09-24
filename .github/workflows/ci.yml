@@ -47,10 +47,24 @@ jobs:
           cache: npm
           cache-dependency-path: crates/openvibes-console/web/package-lock.json
 
+      - name: Install console brand renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends imagemagick
+
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
       # The agent (openvibes-core) and protocol (fixtures) repositories are
       # private. Each has its own fine-grained, read-only token, used only
       # for that repository's URL and verbatim, so GitHub's log masking holds.
-      - name: Authenticate git for private dependencies
+      # The tokens live in a temporary git config for this step alone: every
+      # fetch that needs them happens here, and later steps (whose build
+      # scripts and tests run third-party code) build offline without them.
+      - name: Fetch private dependencies
         shell: bash
         env:
           AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
@@ -60,22 +74,20 @@ jobs:
             echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
             exit 1
           fi
+          GIT_CONFIG_GLOBAL="$(mktemp)"
+          export GIT_CONFIG_GLOBAL
+          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
           git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
           git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
+          cargo fetch --locked
 
-      - name: Install pinned toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - name: Install console brand renderer
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends imagemagick
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-
+      # The console frontend runs third-party npm code (install scripts,
+      # build tools, test runners), so it comes after the fetch step: the
+      # private-repository tokens no longer exist anywhere in the job.
       - name: Build and validate console frontend
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-console.sh
 
       - name: Prove console npm dependencies install offline
@@ -89,21 +101,35 @@ jobs:
           playwright install --with-deps chromium firefox webkit
 
       - name: Test console in real browsers
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: bash scripts/test-console-e2e.sh
 
       - name: Format
         run: cargo fmt --all --check
 
       - name: Clippy
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F unsafe-code
 
       - name: Docs
         env:
           RUSTDOCFLAGS: -D warnings
+          CARGO_NET_OFFLINE: "true"
         run: cargo doc --locked --workspace --all-features --no-deps
 
       - name: Tests
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: cargo test --locked --workspace --all-features
+
+      # The Nagle stall (TCP_NODELAY missing) only shows when the server is
+      # fast enough, i.e. in a release build; debug runs pass either way.
+      - name: Release-mode latency test
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: cargo test --release --locked -p openvibes-ingest --test delivery requests_are_not_delayed_by_nagle
 
       - name: Install cargo-audit
         uses: taiki-e/install-action@7623a79cdfecb99d681017af368ca353d9f49bb5 # v2.87.19
@@ -130,7 +156,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Authenticate git for private dependencies
+      # As in the ubuntu job: the tokens exist only in this step's temporary
+      # git config; the pinned agent (a private git dependency) is built
+      # here too, and later steps build offline.
+      - name: Fetch private dependencies and build the pinned agent
         shell: bash
         env:
           AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
@@ -141,11 +170,20 @@ jobs:
             exit 1
           fi
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          GIT_CONFIG_GLOBAL="$(mktemp)"
+          export GIT_CONFIG_GLOBAL
+          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
           git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
+          cargo fetch --locked
+          ROOT=$PWD; source scripts/integration-lib.sh
+          build_agent "$PWD/target/integration/agent" > agent-path
 
       - name: Build RPMs
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
       - name: Install and check RPMs
@@ -153,15 +191,15 @@ jobs:
           dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm
           bash scripts/check-rpm.sh
 
-      # initdb refuses root: build the agent and the bundle tool as root
-      # (which has the git credentials), then run the integration as a
-      # plain user against the installed binaries.
-      - name: Build the pinned agent and the bundle tool
+      # initdb refuses root: build the test tools as root, then run the
+      # integration as a plain user against the installed binaries.
+      - name: Build the bundle tool and the load generator
         shell: bash
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: |
-          ROOT=$PWD; source scripts/integration-lib.sh
-          build_agent "$PWD/target/integration/agent" > agent-path
           cargo build --release --locked -p openvibes-ingest --example integration_bundle
+          cargo build --release --locked -p openvibes-load
 
       - name: Integration against the installed binaries
         shell: bash
@@ -173,3 +211,12 @@ jobs:
             BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
             INTEGRATION_DIR=/home/ci/run \
             bash scripts/integration-agent.sh
+
+      # A shared runner is too small and noisy for the full target run; this
+      # keeps the generator working. Results live in docs/components/load.md.
+      - name: Load smoke test against the installed binaries
+        shell: bash
+        run: |
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load \
+            LOAD_BIN="$PWD/target/release/openvibes-load" LOAD_ARGS="--findings-every 5" \
+            bash scripts/load/run.sh 50 1000 10

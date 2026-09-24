@@ -8,7 +8,9 @@ PostgreSQL. Everything runs as the current, unprivileged user under
 
 ## What it proves
 
-1. Platform up: a throwaway PostgreSQL cluster (Unix socket only),
+1. Platform up: a throwaway PostgreSQL cluster (Unix socket only) whose
+   admin role `openvibes_admin` may create roles but is not a superuser, as in
+   the documented install,
    `openvibes-admin migrate` and `maintenance`, the built-in CA (root,
    intermediate, a server certificate for `localhost` and `127.0.0.1`),
    ingest on loopback until `/ready` answers.
@@ -16,7 +18,7 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    always-true rules) and a token from `openvibes-admin token create`,
    enrolls, sends an accepted heartbeat, and delivers its findings **exactly
    once**: its queue is empty and the ids it recorded as acknowledged equal
-   the ids in `findings`.
+   the ids in `findings`, and every stored finding names its rule set.
 3. **Restart:** the agent is stopped and started; it reconnects (a new
    accepted heartbeat) and nothing is delivered twice.
 4. **Renewal:** with the agent stopped, `obtained_at_ms` in its
@@ -32,6 +34,12 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    exactly once. The ids queued while revoked are recorded and each must
    be stored under the new `agent_id`, so a dropped batch cannot hide behind
    a later scan.
+
+6. **Expired certificate:** with the agent stopped, its stored certificate
+   is marked expired; given a token with a use left, it re-enrolls on its
+   own as a new `agent_id` and keeps delivering exactly once (protocol P5).
+   With only its used single-use token it would stay refused (401), which
+   the run checked before adding the token.
 
 A full run takes 2 to 3 minutes, because the agent ticks every 60 s.
 
@@ -60,8 +68,10 @@ tails of the ingest and agent logs, and stops every process it started.
 `postgresql-server` (`initdb`, `pg_ctl`, `createdb`, `psql`), `sqlite`,
 `jq`, `curl`, a Rust toolchain, and git access to the private agent
 repository (`CARGO_NET_GIT_FETCH_WITH_CLI=true` is set by the script).
-`scripts/integration-lib.sh` holds the shared helpers (`agent_rev`,
-`build_agent`, `wait_for`).
+`scripts/integration-lib.sh` holds the shared helpers: `agent_rev`,
+`build_agent`, `wait_for`, and `start_platform` (PostgreSQL, schema, CA,
+and ingest until `/ready`, with an `EXIT` trap that stops them and prints
+every log's tail on failure), which the load test reuses.
 
 ## How to test
 

@@ -41,6 +41,12 @@ pub enum Enrolled {
     Existing(Identity),
     /// The token has no uses left.
     Exhausted,
+    /// The token was revoked or has expired (checked under the token lock,
+    /// so a revocation racing the request cannot slip through).
+    TokenInvalid,
+    /// A same-key retry whose agent has since been revoked; a revoked
+    /// identity is never handed out again.
+    AgentRevoked,
 }
 
 /// A certificate issued for an agent.
@@ -76,6 +82,8 @@ pub struct StoredFinding {
     pub finding_id: String,
     /// Scan that produced it.
     pub scan_id: String,
+    /// Rule set whose bundle produced it; empty when the sender did not say.
+    pub rule_set_id: String,
     /// Matching rule.
     pub rule_id: String,
     /// Rule version.
@@ -138,13 +146,18 @@ pub async fn enroll(
         .await?;
     let existing = transaction
         .query_opt(
-            "SELECT u.agent_id, c.chain_pem, c.not_after
+            "SELECT u.agent_id, c.chain_pem, c.not_after, a.status = 'revoked'
              FROM token_uses u JOIN certificates c ON c.serial = u.serial
+             JOIN agents a ON a.agent_id = u.agent_id
              WHERE u.token_id = $1::text::uuid AND u.spki_sha256 = $2",
             &[&token_id, &spki_sha256.as_slice()],
         )
         .await?;
     if let Some(row) = existing {
+        if row.get::<_, bool>(3) {
+            transaction.commit().await?;
+            return Ok(Enrolled::AgentRevoked);
+        }
         let chain: String = row.get(1);
         let identity = Identity {
             agent_id: row.get(0),
@@ -154,16 +167,21 @@ pub async fn enroll(
         transaction.commit().await?;
         return Ok(Enrolled::Existing(identity));
     }
-    let (uses, max_uses): (i64, i32) = {
+    let (uses, max_uses, valid): (i64, i32, bool) = {
         let row = transaction
             .query_one(
-                "SELECT (SELECT count(*) FROM token_uses WHERE token_id = t.token_id), t.max_uses
+                "SELECT (SELECT count(*) FROM token_uses WHERE token_id = t.token_id), t.max_uses,
+                        t.revoked_at IS NULL AND t.expires_at > $2
                  FROM enrollment_tokens t WHERE t.token_id = $1::text::uuid",
-                &[&token_id],
+                &[&token_id, &now],
             )
             .await?;
-        (row.get(0), row.get(1))
+        (row.get(0), row.get(1), row.get(2))
     };
+    if !valid {
+        transaction.commit().await?;
+        return Ok(Enrolled::TokenInvalid);
+    }
     if uses >= i64::from(max_uses) {
         transaction.commit().await?;
         return Ok(Enrolled::Exhausted);
@@ -320,8 +338,8 @@ pub async fn store_findings(
             .execute(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
-                     origin, authenticated)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'online', true)
+                     origin, authenticated, rule_set_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'online', true, $13)
                  ON CONFLICT DO NOTHING",
                 &[
                     &finding.finding_id,
@@ -336,15 +354,16 @@ pub async fn store_findings(
                     &finding.message,
                     &finding.evidence,
                     &now,
+                    &finding.rule_set_id,
                 ],
             )
             .await?;
         transaction
             .execute(
                 "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
-                     severity, first_observed_at, last_observed_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $6)
-                 ON CONFLICT (agent_id, rule_id) DO UPDATE SET
+                     severity, first_observed_at, last_observed_at, rule_set_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+                 ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET
                      last_finding_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.last_finding_id ELSE current_findings.last_finding_id END,
                      rule_version = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
@@ -360,6 +379,7 @@ pub async fn store_findings(
                     &finding.rule_version,
                     &finding.severity,
                     &finding.observed_at,
+                    &finding.rule_set_id,
                 ],
             )
             .await?;

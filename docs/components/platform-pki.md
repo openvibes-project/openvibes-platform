@@ -9,7 +9,7 @@ and ingest do the file and database work.
 | Certificate | Lifetime | Constraints | Made by |
 |---|---|---|---|
 | Root (`OpenVIBES Root CA`) | 10 years (3652 days) | CA, path length 1, keyCertSign + cRLSign | `generate_root(now)`, offline |
-| Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` |
+| Intermediate (`OpenVIBES Intermediate CA`) | 2 years (730 days) | CA, path length 0 | key + CSR from `intermediate_request()` on the ingest host; signed offline by `sign_intermediate(&root, csr, now)` (capped at the root's expiry), which refuses a root key that is not the root certificate's (`KeyMismatch`) |
 | Server | 90 days | server auth, SANs from the given names | `Issuer::issue_server(names, now)`; `cert_pem` is leaf + intermediate |
 
 All keys are ECDSA P-256. Serials are 16 bytes whose first two bits are
@@ -48,6 +48,9 @@ bytes and matches what the database stores. `KeyAndCert`'s `Debug` output redact
 - `Issuer::load(cert_pem, key_pem)`: refuses a non-CA certificate (`NotCa`)
   and a key that does not belong to it (`KeyMismatch`).
 - `verify_signed_by(cert, issuer_cert)`: signature check (`NotSignedBy`).
+- `check_intermediate(cert, root_cert, now)`: a CA with path length 0 that
+  is not self-signed (`NotIntermediate`), signed by the root (`NotSignedBy`),
+  and valid at `now` (`IssuerExpired`).
 - `sha256_fingerprint(cert)`: SHA-256 of the DER encoding.
 - `PkiError`: `InvalidPem`, `InvalidCsr`, `UnsupportedKey`,
   `NonEmptySubject`, `KeyMismatch`, `NotCa`, `NotSignedBy`, `Generation`,

@@ -35,6 +35,7 @@ async fn enrolled(world: &World) -> (String, Vec<String>, String) {
 fn finding(id: &str, observed_ms: i64) -> Finding {
     Finding {
         schema_version: SchemaVersion::V1,
+        rule_set_id: None,
         finding_id: Identifier::new(id).unwrap(),
         scan_id: Identifier::new("scan.1").unwrap(),
         rule_id: Identifier::new(format!("rule.{id}")).unwrap(),
@@ -141,30 +142,59 @@ async fn heartbeats_and_findings_are_idempotent_and_bounded() {
         "the heartbeat hostname is stored"
     );
 
+    // One bad finding never fails its batch: each is stored or refused on
+    // its own, and a refused one is acknowledged with a reason.
+    let partition_gone = (Utc::now() - Duration::days(10)).date_naive();
+    world
+        .db()
+        .await
+        .batch_execute(&format!(
+            "DROP TABLE findings_{}",
+            partition_gone.format("%Y%m%d")
+        ))
+        .await
+        .unwrap();
     let transport = world.transport();
-    let (future, old) = blocking(move || {
+    let ack = blocking(move || {
         let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
         let client = PlatformClient::new(&transport, Some(&identity)).unwrap();
-        let future = client
-            .deliver(&[finding("f.4", now), finding("f.5", now + 10 * 60_000)])
-            .err();
-        let old = client
-            .deliver(&[finding("f.6", now - 100 * 86_400_000)])
-            .unwrap();
-        (future, old)
+        let mut huge = finding("f.7", now);
+        huge.rule_version = u64::MAX;
+        client
+            .deliver(&[
+                finding("f.4", now),
+                finding("f.5", now + 30 * 60_000),
+                finding("f.6", now + 2 * 3_600_000),
+                finding("f.8", now - 100 * 86_400_000),
+                huge,
+                finding("f.9", now - 10 * 86_400_000),
+            ])
+            .unwrap()
     })
     .await;
+    let mut accepted: Vec<&str> = ack
+        .accepted_finding_ids
+        .iter()
+        .map(|id| id.as_str())
+        .collect();
+    accepted.sort_unstable();
+    assert_eq!(accepted, ["f.4", "f.5", "f.6", "f.7", "f.8", "f.9"]);
+    let mut rejected: Vec<(&str, &str)> = ack
+        .rejected_findings
+        .iter()
+        .map(|rejected| (rejected.finding_id.as_str(), rejected.reason.as_str()))
+        .collect();
+    rejected.sort_unstable();
     assert_eq!(
-        future,
-        Some(TransportError::Rejected),
-        "a future-dated finding fails the batch"
+        rejected,
+        [
+            ("f.6", "future_observation"),
+            ("f.7", "out_of_range"),
+            ("f.8", "retention_expired"),
+            ("f.9", "unstorable"),
+        ]
     );
-    assert_eq!(old.accepted_finding_ids.len(), 1, "too old: acknowledged");
-    assert_eq!(
-        count(&world).await,
-        3,
-        "nothing from either batch was stored"
-    );
+    assert_eq!(count(&world).await, 5, "f.4 and f.5 (30 min ahead) stored");
     world.stop().await;
 }
 
@@ -215,5 +245,36 @@ async fn revoked_agents_get_identity_revoked_and_outages_503() {
         Some(503)
     );
     assert_eq!(support::health_get(world.health, "/health").await, 200);
+    world.stop().await;
+}
+
+/// Small responses must not wait for a delayed ACK (Nagle): without
+/// TCP_NODELAY every request took about 40 ms on loopback. Only a release
+/// build is fast enough to hit the stall; debug runs pass either way, and the
+/// `accepted_sockets_disable_nagle` unit test covers them.
+#[tokio::test]
+async fn requests_are_not_delayed_by_nagle() {
+    let world = World::start().await;
+    let (agent_id, chain, key) = enrolled(&world).await;
+    let transport = world.transport();
+    let mut millis = blocking(move || {
+        let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+        (0..9)
+            .map(|_| {
+                // A fresh client per request, as the agent opens one per tick.
+                let client = PlatformClient::new(&transport, Some(&identity)).unwrap();
+                let started = std::time::Instant::now();
+                client.heartbeat(&heartbeat(&agent_id)).unwrap();
+                started.elapsed().as_millis()
+            })
+            .collect::<Vec<_>>()
+    })
+    .await;
+    millis.sort_unstable();
+    assert!(
+        millis[4] < 20,
+        "median heartbeat {} ms: {millis:?}",
+        millis[4]
+    );
     world.stop().await;
 }

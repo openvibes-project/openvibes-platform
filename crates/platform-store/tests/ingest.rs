@@ -103,6 +103,63 @@ async fn enrollment_is_new_then_existing_then_exhausted() {
 }
 
 #[tokio::test]
+async fn a_token_revoked_or_expired_before_the_transaction_enrolls_nothing() {
+    let (db, single, multi) = setup().await;
+    let admin = db.pool.get().await.unwrap();
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    // The handler checked the token a moment earlier; then it was revoked.
+    tokens::revoke(&admin, &single, now).await.unwrap();
+    assert!(matches!(
+        ingest::enroll(&mut client, &single, [4; 32], now, issued(4, 4))
+            .await
+            .unwrap(),
+        Enrolled::TokenInvalid
+    ));
+    // Or it expired in between: `multi` expires in a day.
+    let later = now + Duration::days(2);
+    assert!(matches!(
+        ingest::enroll(&mut client, &multi, [5; 32], later, issued(5, 5))
+            .await
+            .unwrap(),
+        Enrolled::TokenInvalid
+    ));
+    let agents: i64 = admin
+        .query_one("SELECT count(*) FROM agents", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(agents, 0);
+    drop((client, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_same_key_retry_never_returns_a_revoked_identity() {
+    let (db, _, multi) = setup().await;
+    let admin = db.pool.get().await.unwrap();
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [6; 32], now, issued(6, 6))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    platform_store::agents::revoke(&admin, &identity.agent_id, now)
+        .await
+        .unwrap();
+    assert!(matches!(
+        ingest::enroll(&mut client, &multi, [6; 32], now, issued(7, 6))
+            .await
+            .unwrap(),
+        Enrolled::AgentRevoked
+    ));
+    drop((client, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn concurrent_enrollments_with_a_single_use_token_yield_one_identity() {
     let (db, single, _) = setup().await;
     let (mut a, mut b) = (as_ingest(&db).await, as_ingest(&db).await);
@@ -188,6 +245,7 @@ fn finding(id: &str, rule: &str, observed: DateTime<Utc>) -> StoredFinding {
     StoredFinding {
         finding_id: id.into(),
         scan_id: "scan.1".into(),
+        rule_set_id: "baseline".into(),
         rule_id: rule.into(),
         rule_version: 1,
         observed_at: observed,
@@ -312,5 +370,82 @@ async fn waits_and_statements_are_bounded() {
         "the wait is bounded"
     );
     drop(held);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_ingest_role_has_only_the_rights_it_uses() {
+    let (db, _, _) = setup().await;
+    let client = as_ingest(&db).await;
+    for statement in [
+        "UPDATE findings SET message = 'x'",
+        "UPDATE certificates SET chain_pem = 'x'",
+        "UPDATE token_uses SET used_at = now()",
+        "UPDATE enrollment_tokens SET revoked_at = now()",
+        "SELECT count(*) FROM audit_log",
+        "DELETE FROM agents",
+        "CREATE TABLE intruder (x int)",
+    ] {
+        let error = client.batch_execute(statement).await.expect_err(statement);
+        assert_eq!(
+            error.code(),
+            Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE),
+            "{statement}"
+        );
+    }
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn current_state_is_kept_per_rule_set() {
+    let (db, _, multi) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [8; 32], now, issued(8, 8))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    // Two rule sets from different issuers both define ssh.root_login.
+    let mut other = finding("f.b", "ssh.root_login", now - Duration::minutes(1));
+    other.rule_set_id = "vendor".into();
+    let batch = [
+        finding("f.a", "ssh.root_login", now - Duration::minutes(2)),
+        other,
+    ];
+    ingest::store_findings(&mut client, &identity.agent_id, &batch, now)
+        .await
+        .unwrap();
+    let admin = db.pool.get().await.unwrap();
+    let rows: Vec<(String, String)> = admin
+        .query(
+            "SELECT rule_set_id, last_finding_id FROM current_findings ORDER BY 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("baseline".into(), "f.a".into()),
+            ("vendor".into(), "f.b".into())
+        ],
+        "one current state per rule set, not one shared per rule id"
+    );
+    let stored: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM findings WHERE rule_set_id = 'vendor'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(stored, 1);
+    drop((client, admin));
     db.drop().await;
 }

@@ -4,11 +4,17 @@ Guidance for AI coding agents working in this repository.
 
 Cross-repo status, decisions, and the handover routine shared by all AI tools live outside this repository in `../AGENTS.md`, `../status.md`, and `../decisions.md` (local only, never pushed). Read them at the start of a session.
 
-No platform code exists yet. The platform is planned as separate modules: a
-receive-only ingest service (agents connect on port 18423), a rule
-distribution service, correlation, third-party/CMDB sync, and a web interface
-on 443. Everything exchanged with agents is specified in the
-`openvibes-protocol` repository; build against its schemas and fixtures.
+Built: sub-project 1, the ingest service (agents connect on port 18423),
+the admin CLI, the built-in PKI, storage, RPM packaging, and the
+integration and load tests. See `docs/components/README.md`. Planned as
+separate modules:
+- rule distribution (sub-project 2; the spec is in `docs/specs/`);
+- correlation;
+- third-party and CMDB sync;
+- the console on 443, specified by Codex on the `console` branch.
+
+Everything exchanged with agents is specified in the `openvibes-protocol`
+repository; build against its schemas and fixtures.
 
 ## Parallel work (Claude Code and Codex)
 

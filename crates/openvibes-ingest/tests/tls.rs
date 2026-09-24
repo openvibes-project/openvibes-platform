@@ -101,6 +101,14 @@ database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_inge
             good.replace("/etc/openvibes/tls/ingest.crt", "ingest.crt"),
         ),
         ("unknown", format!("{good}listn = \"x\"\n")),
+        (
+            "public-health",
+            good.replace("127.0.0.1:18480", "0.0.0.0:18480"),
+        ),
+        (
+            "lan-health",
+            good.replace("127.0.0.1:18480", "10.0.0.5:18480"),
+        ),
     ] {
         assert!(
             openvibes_ingest::load_config(&write(&format!("{name}.toml"), &text)).is_err(),

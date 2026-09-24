@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 5;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -16,11 +16,22 @@ const MIGRATIONS: &[(i32, &str)] = &[
         3,
         include_str!("../../../migrations/0003_agent_hostname.sql"),
     ),
+    (
+        4,
+        include_str!("../../../migrations/0004_ingest_least_privilege.sql"),
+    ),
+    (
+        5,
+        include_str!("../../../migrations/0005_finding_rule_set.sql"),
+    ),
 ];
 
 // The build fails if a migration is added without bumping SCHEMA_VERSION or
 // the reverse, so the two can never drift apart.
 const _: () = assert!(MIGRATIONS[MIGRATIONS.len() - 1].0 == SCHEMA_VERSION);
+
+/// Advisory lock key for `migrate` ("ovmi").
+const MIGRATE_LOCK: i64 = 0x6f76_6d69;
 
 const VERSION_TABLE: &str = "CREATE TABLE IF NOT EXISTS schema_version (version integer NOT NULL)";
 
@@ -45,6 +56,11 @@ pub async fn schema_version(client: &Client) -> Result<Option<i32>, StoreError> 
 /// refused, never rolled back.
 pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
     let transaction = client.transaction().await?;
+    // Serializes concurrent runs before anything else, including creating
+    // the version table (a racing CREATE ... IF NOT EXISTS fails).
+    transaction
+        .execute("SELECT pg_advisory_xact_lock($1)", &[&MIGRATE_LOCK])
+        .await?;
     transaction.batch_execute(VERSION_TABLE).await?;
     transaction
         .batch_execute("LOCK TABLE schema_version IN EXCLUSIVE MODE")

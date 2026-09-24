@@ -11,7 +11,10 @@ use common::{Fixture, row, stdout};
 #[tokio::test]
 async fn migrate_status_and_maintenance_are_audited() {
     let fixture = Fixture::create().await;
-    assert!(stdout(&fixture.run(&["migrate"])).contains("schema version 3"));
+    assert!(stdout(&fixture.run(&["migrate"])).contains(&format!(
+        "schema version {}",
+        platform_store::SCHEMA_VERSION
+    )));
     let status = stdout(&fixture.run(&["status"]));
     for line in [
         "agents active 0",
@@ -102,5 +105,33 @@ async fn the_audit_actor_is_the_real_uid_even_without_user() {
     assert!(output.status.success());
     let uid = std::fs::metadata("/proc/self").unwrap().uid();
     assert_eq!(fixture.audit().await[0].0, format!("uid {uid}"));
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn status_and_maintenance_on_an_unmigrated_database_say_to_migrate() {
+    let fixture = Fixture::create().await;
+    for command in [&["status"][..], &["maintenance"][..]] {
+        let output = fixture.run(command);
+        assert!(!output.status.success(), "{command:?}");
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("run openvibes-admin migrate"),
+            "{command:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run_with(&["migrate"], &[("SUDO_USER", "alice")]));
+    let audit = fixture.audit().await;
+    assert!(
+        audit[0].0.starts_with("ov-test (uid ") && audit[0].0.ends_with(" via sudo by alice"),
+        "{}",
+        audit[0].0
+    );
     fixture.drop().await;
 }

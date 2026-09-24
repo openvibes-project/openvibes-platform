@@ -12,62 +12,14 @@ export CARGO_NET_GIT_FETCH_WITH_CLI=true
 W=${INTEGRATION_DIR:-$ROOT/target/integration/run}
 INGEST_PORT=${INGEST_PORT:-28423}
 HEALTH_PORT=${HEALTH_PORT:-28480}
-PIDS=()
-cleanup() {
-    local status=$?
-    for pid in "${PIDS[@]}"; do kill "$pid" 2>/dev/null || true; done
-    wait 2>/dev/null || true
-    [[ -d "$W/pg/data" ]] && pg_ctl -D "$W/pg/data" -m immediate stop >/dev/null 2>&1 || true
-    if ((status != 0)); then
-        echo "--- ingest log (tail)"; tail -n 20 "$W/ingest.log" 2>/dev/null || true
-        echo "--- agent log (tail)"; tail -n 20 "$W/agent.log" 2>/dev/null || true
-    fi
-    exit "$status"
-}
-trap cleanup EXIT
-rm -rf "$W"; mkdir -p "$W/pg/run" "$W/ca" "$W/agent/state"; chmod 700 "$W/agent/state"
-
-# Binaries.
-if [[ -z "${OPENVIBES_BIN_DIR:-}" ]]; then
-    cargo build --quiet --release --locked -p openvibes-ingest -p openvibes-admin
-    OPENVIBES_BIN_DIR="$ROOT/target/release"
-fi
 AGENT_BIN=${AGENT_BIN:-$(build_agent "$ROOT/target/integration/agent")}
-admin() { "$OPENVIBES_BIN_DIR/openvibes-admin" --config "$W/admin.toml" "$@"; }
-
-# PostgreSQL (Unix socket only) and the schema.
-initdb -D "$W/pg/data" -U openvibes_admin --auth=trust >/dev/null
-pg_ctl -D "$W/pg/data" -o "-k $W/pg/run -c listen_addresses=''" -l "$W/pg/log" -w start >/dev/null
-createdb -h "$W/pg/run" -U openvibes_admin openvibes
-sql() { psql -h "$W/pg/run" -U openvibes_admin -d openvibes -AtX -c "$1"; }
-echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes_admin\"" > "$W/admin.toml"
-admin migrate >/dev/null
-admin maintenance >/dev/null
-
-# Built-in CA: root, intermediate, server certificate for 127.0.0.1.
-admin ca init-root --out "$W/ca/root" >/dev/null
-admin ca intermediate-request --out "$W/ca/int" >/dev/null
-admin ca sign-intermediate --root "$W/ca/root" --csr "$W/ca/int/intermediate.csr" \
-    --out "$W/ca/int/intermediate.crt" >/dev/null
-admin ca import-intermediate --cert "$W/ca/int/intermediate.crt" \
-    --key "$W/ca/int/intermediate.key" --root-cert "$W/ca/root/root.crt" >/dev/null
-admin ca issue-server localhost --san 127.0.0.1 --issuer-cert "$W/ca/int/intermediate.crt" \
-    --issuer-key "$W/ca/int/intermediate.key" --out "$W/ca/tls" >/dev/null
-
-# Ingest.
-cat > "$W/ingest.toml" <<EOF
-listen = "127.0.0.1:$INGEST_PORT"
-health_listen = "127.0.0.1:$HEALTH_PORT"
-server_certificate_file = "$W/ca/tls/localhost.crt"
-server_key_file = "$W/ca/tls/localhost.key"
-client_ca_file = "$W/ca/int/intermediate.crt"
-issuing_certificate_file = "$W/ca/int/intermediate.crt"
-issuing_key_file = "$W/ca/int/intermediate.key"
-database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_ingest"
-EOF
-"$OPENVIBES_BIN_DIR/openvibes-ingest" --config "$W/ingest.toml" 2> "$W/ingest.log" &
-PIDS+=($!)
-wait_for "ingest ready" 30 curl -fsS "http://127.0.0.1:$HEALTH_PORT/ready"
+start_platform
+# The documented install: migrate and every admin command as a role that
+# may create roles but is not a superuser.
+[[ "$(sql "SELECT rolsuper FROM pg_roles WHERE rolname = 'openvibes_admin'")" == f ]] ||
+    { echo "FAIL: openvibes_admin is a superuser"; exit 1; }
+echo "ok: admin role is not a superuser"
+mkdir -p "$W/agent/state"; chmod 700 "$W/agent/state"
 
 # Agent config with the signed integration bundle.
 if [[ -n "${BUNDLE_BIN:-}" ]]; then
@@ -88,8 +40,18 @@ trusted_keys = [{ issuer_key_id = "integration.test", public_key = "$KEY" }]
 EOF
 
 AGENT_PID=
+# Stops the agent and forgets its PID, so cleanup never signals a PID the
+# kernel may since have given to another process.
+stop_agent() {
+    [[ -n "$AGENT_PID" ]] || return 0
+    kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true
+    local kept=() pid
+    for pid in "${PIDS[@]}"; do [[ "$pid" == "$AGENT_PID" ]] || kept+=("$pid"); done
+    PIDS=("${kept[@]}")
+    AGENT_PID=
+}
 restart_agent() {
-    if [[ -n "$AGENT_PID" ]]; then kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; fi
+    stop_agent
     "$AGENT_BIN" "$W/agent/agent.toml" 2>> "$W/agent.log" &
     AGENT_PID=$!
     PIDS+=("$AGENT_PID")
@@ -121,6 +83,9 @@ acked_equals_stored() {
     [[ "$pending" == 0 && -n "$acked" && "$acked" == "$stored" ]]
 }
 wait_for "findings delivered exactly once" 20 acked_equals_stored
+[[ "$(sql "SELECT count(*) FROM findings WHERE rule_set_id <> 'integration'")" == 0 ]] ||
+    { echo "FAIL: a stored finding does not name its rule set"; exit 1; }
+echo "ok: findings name their rule set"
 [[ "$(sql "SELECT count(*) FROM findings")" == 2 ]] || { echo "FAIL: expected 2 findings"; exit 1; }
 
 BEFORE=$(heartbeats_ok)
@@ -130,7 +95,7 @@ wait_for "no finding delivered twice after restart" 10 acked_equals_stored
 
 # Renewal is due at obtained + 2/3 of the lifetime; obtained = 0 makes it due
 # now without faking the clock (which would future-date findings).
-kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+stop_agent
 sqlite3 "$W/agent/state/identity.sqlite" "UPDATE identity SET obtained_at_ms = 0"
 restart_agent
 certificates() { [[ "$(sql "SELECT count(*) FROM certificates WHERE agent_id = '$FIRST_AGENT'")" == "$1" ]]; }
@@ -141,7 +106,7 @@ wait_for "renewed certificate authenticates" 75 more_heartbeats_than "$BEFORE"
 # Revoke while the agent is stopped; on restart it scans (interval now 60 s,
 # so findings are queued) and then learns of the revocation, so those
 # findings must survive until it re-enrolls.
-kill "$AGENT_PID"; wait "$AGENT_PID" 2>/dev/null || true; AGENT_PID=
+stop_agent
 sed -i 's/^scan_interval_seconds = .*/scan_interval_seconds = 60/' "$W/agent/agent.toml"
 admin agent revoke "$FIRST_AGENT" >/dev/null
 new_token   # the agent reads it only once its identity is gone
@@ -168,4 +133,18 @@ for id in $REVOKED_IDS; do
         { echo "FAIL: finding $id queued while revoked was not delivered under the new identity"; exit 1; }
 done
 echo "ok: findings queued while revoked delivered under the new identity"
+# An expired certificate (a laptop off past its renewal window) cannot renew;
+# the agent drops it, keeps its queue, and enrolls again with its token file.
+SECOND_AGENT=$(sql "SELECT agent_id FROM agents WHERE status = 'active'")
+stop_agent
+sqlite3 "$W/agent/state/identity.sqlite" "UPDATE identity SET obtained_at_ms = 0, expires_at_ms = 1"
+new_token   # the used single-use token is refused (401); a token with a use left works
+restart_agent
+third_agent() {
+    [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'
+                AND agent_id NOT IN ('$FIRST_AGENT', '$SECOND_AGENT')")" == 1 ]]
+}
+wait_for "expired certificate: agent re-enrolled from its token file" 30 third_agent
+wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_equals_stored
+((${#PIDS[@]} == 2)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest and the live agent"; exit 1; }
 echo "integration: all checks passed"

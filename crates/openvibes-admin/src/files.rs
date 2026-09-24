@@ -44,3 +44,24 @@ pub fn write_new(path: &Path, contents: &str, mode: u32) -> Result<(), String> {
         .and_then(|()| file.sync_all())
         .map_err(|_| "cannot write output file".to_owned())
 }
+
+/// Writes a key and its companion file (certificate or CSR) together: if
+/// either already exists nothing is written, and if the second write fails
+/// the key just created is removed, so a key never exists without its pair.
+pub fn write_pair(
+    key: (&Path, &str),
+    other: (&Path, &str, u32),
+    key_mode: u32,
+) -> Result<(), String> {
+    if other.0.exists() {
+        return Err(format!(
+            "{} already exists; not overwritten",
+            other.0.display()
+        ));
+    }
+    write_new(key.0, key.1, key_mode)?;
+    write_new(other.0, other.1, other.2).inspect_err(|_| {
+        // Created by this call (create_new), so removing it loses nothing.
+        let _ = fs::remove_file(key.0);
+    })
+}

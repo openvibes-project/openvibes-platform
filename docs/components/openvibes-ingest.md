@@ -20,7 +20,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | Key | Default | Range |
 |---|---|---|
 | `listen` | required | agent-facing TLS address |
-| `health_listen` | required | loopback address for `/health`, `/ready` |
+| `health_listen` | required | loopback address for `/health`, `/ready`; any other address is refused |
 | `server_certificate_file`, `server_key_file` | required | server chain (leaf first) and key |
 | `client_ca_file` | required | CA whose client certificates are accepted |
 | `issuing_certificate_file`, `issuing_key_file` | required | intermediate that signs agent certificates |
@@ -50,7 +50,8 @@ Strict TOML (unknown keys refused), absolute paths only:
   is hashed with `platform_pki::enrollment_token_sha256`; unknown, expired,
   revoked, malformed, or used-up tokens → 401. The CSR must pass
   `check_csr` (P-256, empty subject, valid signature) → else 400. A retry
-  with the same token and the same key returns the same identity and chain.
+  with the same token and the same key returns the same identity and chain,
+  unless that agent was revoked since (401).
   Response: `EnrollmentResponse` with `agent.<uuid>`, leaf + intermediate,
   and the leaf expiry.
 - `POST /v1/renew` (authenticated): `RenewalRequest`; issues a certificate
@@ -65,31 +66,49 @@ Strict TOML (unknown keys refused), absolute paths only:
   at most every 5 minutes unless the hostname changed; an absent hostname
   keeps the stored one. 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
-  authenticated agent. A finding observed more than 5 minutes in the future
-  fails the whole batch (400, nothing stored). Findings older than
-  `finding_retention_days` are acknowledged but not stored. The rest are
-  stored in one transaction (duplicates skipped) and every finding in the
-  batch is acknowledged, including ones stored before.
-- Any database error, on any endpoint, is 503 and acknowledges nothing. A
-  finding whose day has no partition also ends as 503 and a
-  `findings not stored` log line; `openvibes-admin maintenance` keeps the
-  window covered. Ingest never creates partitions.
+  authenticated agent. **One bad finding never fails its batch**: each finding
+  is stored or refused on its own. Refused findings are acknowledged too (so
+  the agent drops them) and listed in `rejected_findings` with a reason:
+  `future_observation` (more than 1 hour ahead of the platform clock),
+  `retention_expired` (older than `finding_retention_days`), `out_of_range`
+  (for example a `rule_version` above 2^63 − 1), `unstorable` (no partition
+  for its day: fix `openvibes-admin maintenance`). The rest are stored in one
+  transaction (duplicates skipped) with the finding's `rule_set_id`, current
+  state kept per agent, rule set, and rule; every finding in the batch is
+  acknowledged, including ones stored before. Only a malformed or invalid
+  batch is 400 as a whole.
+- Any database error, on any endpoint, is 503 (`unavailable`) and
+  acknowledges nothing; it is logged as a warning inside the request span
+  (endpoint, and `agent_id` once authenticated), never with SQL or the
+  connection string. A
+  finding whose day has no partition is refused as `unstorable` (see above);
+  `openvibes-admin maintenance` keeps the window covered. Ingest never
+  creates partitions.
 
 ## Load control and logging
 
+- Accepted sockets set `TCP_NODELAY`: without it every request waited about
+  40 ms for the client's delayed ACK (found by the PM5 load test).
 - Bodies over 1 MiB → 400 (never read past the limit).
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the
   connection is dropped or the request gets 408, and its slot is freed.
-- More than `max_in_flight` concurrent requests → 503 for the extra ones.
+- More than `max_in_flight` concurrent requests → 503 (`busy`) for the extra
+  ones, logged as a request with status 503 but no database warning.
 - At most `max_connections` connections are accepted at once; the rest wait
   in the kernel backlog. Accept errors (e.g. out of file descriptors) back
   off instead of spinning.
 - Database waits, connects, and recycles are bounded to 5 s and every
   statement to 10 s, so a hung database yields 503, not hangs.
-- One JSON log line per request on stderr: `endpoint`, `status`,
+- One JSON log line per request on stderr: `endpoint` (the route, or
+  `other` for any unknown path, which is never copied), `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
+
+## Capacity
+
+About 1,000 req/s (the spec target) holds at p99 under 10 ms on a
+12-core desktop; see [load.md](load.md) for the measured results.
 
 ## Health
 

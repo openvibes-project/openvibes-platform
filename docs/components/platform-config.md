@@ -21,6 +21,7 @@ Bounded, strict TOML loading shared by every platform binary.
 | file absent | `Missing` |
 | more than 64 KiB (read stops after 64 KiB + 1 byte) | `TooLarge` |
 | unreadable, not UTF-8, not TOML, unknown or mistyped key | `Invalid` |
+| not a regular file: a FIFO, device, or directory (refused at once, never blocking; a symlink to a file is followed) | `Invalid` |
 | a relative path passed to `require_absolute` | `RelativePath` |
 
 ## Test

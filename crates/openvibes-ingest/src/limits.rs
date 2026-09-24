@@ -22,7 +22,7 @@ pub(crate) async fn bound(State(state): State<AppState>, request: Request, next:
         return ApiError::BadRequest.into_response();
     }
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
-        return ApiError::Unavailable.into_response();
+        return ApiError::Busy.into_response();
     };
     // The whole request, body included, must finish within the deadline,
     // so a slow client cannot keep its permit.
@@ -40,8 +40,16 @@ pub(crate) async fn bound(State(state): State<AppState>, request: Request, next:
 /// One JSON log line per request: endpoint, status, latency, and the agent
 /// id once authenticated. Bodies, tokens, CSRs, and certificates are never
 /// logged.
+/// The route a path names, or `other`; logs never copy the raw path.
+fn endpoint_name(path: &str) -> &'static str {
+    ["/v1/heartbeat", "/v1/findings", "/v1/enroll", "/v1/renew"]
+        .into_iter()
+        .find(|route| *route == path)
+        .unwrap_or("other")
+}
+
 pub(crate) async fn log(request: Request, next: Next) -> Response {
-    let endpoint = request.uri().path().to_owned();
+    let endpoint = endpoint_name(request.uri().path());
     let span =
         tracing::info_span!("request", endpoint = %endpoint, agent_id = tracing::field::Empty);
     let started = Instant::now();
