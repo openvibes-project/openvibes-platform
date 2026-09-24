@@ -1,11 +1,9 @@
 # Sub-project 2: Distribution Service
 
-**Status: questions resolved 2026-09-24; awaiting final approval.** Drafted
-overnight on 2026-09-24. On the same day the user chose the recommended
-option for every question in section 11, so the body below states the
-decided design. What remains is the user's approval of the spec as a
-whole, and then an implementation plan. That plan waits until the review
-fixes are done (see `decisions.md`).
+**Status: approved by the user on 2026-09-24.** Drafted overnight on
+2026-09-24; the user chose the recommended option for every question in
+section 11 and then approved the spec as a whole. Next: the implementation
+plan (DM0 to DM4).
 
 - Architecture context:
   [`2026-09-23-platform-architecture-design.md`](2026-09-23-platform-architecture-design.md),
