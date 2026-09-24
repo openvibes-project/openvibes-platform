@@ -1092,11 +1092,10 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "ed25519-dalek",
- "hyper",
- "hyper-util",
  "openvibes-core",
  "openvibes-rules",
  "openvibes-transport",
+ "platform-agent-server",
  "platform-config",
  "platform-pki",
  "platform-store",
@@ -1107,7 +1106,6 @@ dependencies = [
  "sha2",
  "tokio",
  "tokio-rustls",
- "tower",
  "tracing",
  "tracing-subscriber",
 ]
@@ -1220,6 +1218,27 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "platform-agent-server"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "chrono",
+ "hyper",
+ "hyper-util",
+ "openvibes-core",
+ "platform-config",
+ "platform-pki",
+ "platform-store",
+ "rustls",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-rustls",
+ "tower",
+ "tracing",
+]
 
 [[package]]
 name = "platform-config"

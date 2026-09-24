@@ -69,26 +69,38 @@ pub struct IngestConfig {
 impl IngestConfig {
     /// Rejects relative paths and out-of-range values.
     pub fn validate(&self) -> Result<(), IngestError> {
+        self.settings()
+            .validate()
+            .map_err(|_| IngestError::Config)?;
         platform_config::require_absolute(&[
-            &self.server_certificate_file,
-            &self.server_key_file,
-            &self.client_ca_file,
             &self.issuing_certificate_file,
             &self.issuing_key_file,
         ])
         .map_err(|_| IngestError::Config)?;
-        // Health and readiness are unauthenticated: loopback only.
-        let valid = self.health_listen.ip().is_loopback()
-            && (1..=365).contains(&self.client_certificate_days)
-            && self.max_in_flight >= 1
-            && (1..=36_500).contains(&self.finding_retention_days)
-            && (1..=300).contains(&self.request_timeout_seconds)
-            && (1..=65_536).contains(&self.max_connections)
-            && (1..=1024).contains(&self.database_pool_size);
+        let valid = (1..=365).contains(&self.client_certificate_days)
+            && (1..=36_500).contains(&self.finding_retention_days);
         if valid {
             Ok(())
         } else {
             Err(IngestError::Config)
+        }
+    }
+}
+
+impl IngestConfig {
+    /// The fields the shared agent server needs.
+    pub fn settings(&self) -> platform_agent_server::Settings {
+        platform_agent_server::Settings {
+            listen: self.listen,
+            health_listen: self.health_listen,
+            server_certificate_file: self.server_certificate_file.clone(),
+            server_key_file: self.server_key_file.clone(),
+            client_ca_file: self.client_ca_file.clone(),
+            database_url: self.database_url.clone(),
+            max_in_flight: self.max_in_flight,
+            request_timeout_seconds: self.request_timeout_seconds,
+            max_connections: self.max_connections,
+            database_pool_size: self.database_pool_size,
         }
     }
 }
