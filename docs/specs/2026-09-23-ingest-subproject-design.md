@@ -65,6 +65,9 @@ database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_inge
 client_certificate_days = 30
 max_in_flight = 4096                        # above this: 503
 finding_retention_days = 90
+request_timeout_seconds = 10               # TLS handshake, headers, whole request
+max_connections = 1024                     # keep below LimitNOFILE
+database_pool_size = 16
 ```
 
 `openvibes-admin` reads `/etc/openvibes/admin.toml` (database URL for the
@@ -103,7 +106,9 @@ current_findings, and insert audit_log. `openvibes_admin` owns the schema.
   10 years, path length 1. Intended for an offline machine; the key never
   goes onto a platform host.
 - `ca sign-intermediate --root DIR --csr FILE` or `--out DIR`: intermediate,
-  2 years, path length 0, key usage certificate signing only.
+  2 years (never past the root's expiry), path length 0, key usage
+  certificate and CRL signing (CRLs are not issued: revocation is a database
+  state).
 - `ca import-intermediate CHAIN`: records the chain; the key stays a file.
 - `ca issue-server NAME --san DNS|IP...`: server certificate, 90 days, from
   the intermediate.
@@ -132,7 +137,7 @@ Unknown certificate: 401. Revoked agent: 403 with
 | `POST /v1/enroll` (no client certificate) | Hash the token; look it up. Unknown, expired, or revoked token: 401. If a `token_uses` row exists for this token and the CSR's public-key hash, return the same identity (the stored chain): the protocol's retry rule. Otherwise, if uses are exhausted: 401. Else, in one transaction: create agent, issue certificate, record the use and certificate, write audit entry. Return `EnrollmentResponse`. |
 | `POST /v1/renew` | Check the CSR, issue a certificate for the requesting agent's own `agent_id` with the new key, record it. Earlier certificates stay valid until they expire. |
 | `POST /v1/heartbeat` | Update `last_seen_at`, `scanner_version`, `capabilities` at most once per 5 minutes per agent. 204. |
-| `POST /v1/findings` | Every finding's agent is the authenticated agent. A finding observed more than 5 minutes in the future fails the batch with 400 (the agent clock is wrong; it shows in logs and later in health). Findings older than the retention window are acknowledged without storing, as retention would drop them anyway. Then one transaction: insert all with `ON CONFLICT DO NOTHING`, upsert `current_findings` where newer. After commit, return `DeliveryAcknowledgement` naming every finding in the batch. On any database error: 503, nothing acknowledged. |
+| `POST /v1/findings` | Every finding's agent is the authenticated agent. One bad finding never fails the batch (protocol P5): a finding observed more than 1 hour in the future, older than the retention window, with an unrepresentable value, or for a day without a partition is acknowledged and listed in `rejected_findings` with a reason. The rest: one transaction, insert with `ON CONFLICT DO NOTHING`, upsert `current_findings` where newer. After commit, return `DeliveryAcknowledgement` naming every finding in the batch. On any database error: 503, nothing acknowledged. |
 
 **Load control.** A global in-flight limit returns 503 above `max_in_flight`;
 per-connection request and header timeouts; database pool sized in config.
@@ -176,7 +181,7 @@ openvibes-admin agent list [--offline] [--revoked] | show ID | revoke ID
   reuse with a different key (401) and with the same key (same identity);
   renewal cannot change `agent_id`; unknown certificate (401); certificate
   from another CA (handshake failure); revoked agent (403 plus
-  `identity_revoked`); body over 1 MiB (400); future-dated finding (400);
+  `identity_revoked`); body over 1 MiB (400); future-dated finding (refused alone, acknowledged with `future_observation`);
   database unavailable (503, nothing acknowledged); duplicate batch
   (acknowledged, stored once); in-flight limit (503).
 - **Cross-repo integration** (`scripts/integration-agent.sh`): starts

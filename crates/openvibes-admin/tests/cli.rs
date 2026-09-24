@@ -11,7 +11,10 @@ use common::{Fixture, row, stdout};
 #[tokio::test]
 async fn migrate_status_and_maintenance_are_audited() {
     let fixture = Fixture::create().await;
-    assert!(stdout(&fixture.run(&["migrate"])).contains("schema version 3"));
+    assert!(stdout(&fixture.run(&["migrate"])).contains(&format!(
+        "schema version {}",
+        platform_store::SCHEMA_VERSION
+    )));
     let status = stdout(&fixture.run(&["status"]));
     for line in [
         "agents active 0",
@@ -117,5 +120,18 @@ async fn status_and_maintenance_on_an_unmigrated_database_say_to_migrate() {
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run_with(&["migrate"], &[("SUDO_USER", "alice")]));
+    let audit = fixture.audit().await;
+    assert!(
+        audit[0].0.starts_with("ov-test (uid ") && audit[0].0.ends_with(" via sudo by alice"),
+        "{}",
+        audit[0].0
+    );
     fixture.drop().await;
 }

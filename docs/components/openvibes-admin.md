@@ -5,7 +5,9 @@ whoever can run it with the admin database role has full rights. Every
 command, including failed ones, appends an `audit_log` entry with the
 invoking OS user and `ok` or `error`. The actor is the real uid, which the
 caller cannot choose, with `$USER` as a readable hint: `alice (uid 1000)`,
-or `uid 1000` when `USER` is unset (timers, containers).
+or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
+(`sudo -u openvibes_admin …`), the person is appended from `SUDO_USER`:
+`openvibes_admin (uid 994) via sudo by alice`.
 
 ## Configuration
 

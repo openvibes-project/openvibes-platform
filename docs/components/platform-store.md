@@ -22,7 +22,10 @@ functions, so schema knowledge and SQL live in one place.
 
 ## Migrations
 
-Numbered SQL files in `/migrations`, embedded at build time. `migrate` runs
+Numbered SQL files in `/migrations`, embedded at build time. Migration 4
+revokes UPDATE on `findings`, `certificates`, and `token_uses` from
+`openvibes_ingest`, which only inserts them; a test checks the role is
+refused every write, read, or DDL it does not use. `migrate` runs
 in one transaction that first takes an advisory lock (before even creating
 `schema_version`), so concurrent runs serialize and both succeed;
 already-applied migrations are skipped. A database at a
