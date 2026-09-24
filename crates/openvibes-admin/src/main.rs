@@ -9,6 +9,7 @@ mod ca;
 mod files;
 mod rules;
 mod token;
+mod user;
 
 use std::{path::PathBuf, process::ExitCode};
 
@@ -62,6 +63,11 @@ enum Command {
         #[command(subcommand)]
         command: rules::RulesCommand,
     },
+    /// Local console accounts: create, list, disable, unlock, and reset passwords.
+    User {
+        #[command(subcommand)]
+        command: user::UserCommand,
+    },
 }
 
 impl Command {
@@ -74,6 +80,7 @@ impl Command {
             Self::Token { command } => command.name(),
             Self::Agent { command } => command.name(),
             Self::Rules { command } => command.name(),
+            Self::User { command } => command.name(),
         }
     }
 }
@@ -140,6 +147,10 @@ async fn main() -> ExitCode {
         },
         Command::Rules { command } => match require_current_schema(&client).await {
             Ok(()) => rules::run(command, &mut client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::User { command } => match require_current_schema(&client).await {
+            Ok(()) => user::run(command, &mut client, &actor).await,
             Err(error) => (Err(error), None),
         },
         other => (run(other, &mut client).await, None),
@@ -233,7 +244,8 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Ca { .. }
         | Command::Token { .. }
         | Command::Agent { .. }
-        | Command::Rules { .. } => {
+        | Command::Rules { .. }
+        | Command::User { .. } => {
             unreachable!("handled by the caller")
         }
         Command::Status => {

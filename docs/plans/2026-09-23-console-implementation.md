@@ -2,10 +2,11 @@
 
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
 3 are integrated. C0, C1, and the C2 read-store foundation are implemented;
-C3 local browser authentication is implemented through runtime wiring. The
-remaining C3 work is account bootstrap CLI, authenticated SQL-scoped C2
-handlers, authorization/audit pages and operations, and the remaining C3
-hardening and end-to-end coverage. The embedded login page, session gate, and
+C3 local browser authentication is implemented through runtime wiring, and
+`openvibes-admin user` provides first-account bootstrap and audited local
+account administration. Remaining C3 work is authenticated SQL-scoped C2
+handlers, authorization/audit pages and operations, and C3 hardening and
+end-to-end coverage. The embedded login page, session gate, and
 logout action are implemented with the local-auth API.
 
 Design inputs:
@@ -174,9 +175,9 @@ Work:
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;
-- add audited, interactive `openvibes-admin user` commands for create, list,
-  disable, unlock, and reset-password; this is first-Admin bootstrap and
-  lockout recovery;
+- audited, interactive `openvibes-admin user` commands now cover create, list,
+  disable, unlock, and reset-password; create provides first-Admin bootstrap
+  and supports lockout recovery without a secret CLI argument;
 - implement local login with generic failures, reviewed Argon2id parameters,
   common-password blocklist, per-account and per-source throttling, and
   temporary lockout;
