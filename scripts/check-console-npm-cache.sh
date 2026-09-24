@@ -88,6 +88,20 @@ if [[ "$(<"${cache_dir}/.lockfile-sha256")" != "${expected_lock_digest}" \
 fi
 
 npm cache verify --cache "${cache_dir}"
+
+# The install and build run without a network where the system allows an
+# unprivileged network namespace, so "offline" is enforced rather than
+# assumed (install scripts such as esbuild's postinstall run too). Some CI
+# kernels forbid it; the check then relies on --offline alone and says so.
+isolate=()
+if unshare -rn true 2>/dev/null; then
+    isolate=(unshare -rn)
+else
+    printf 'warning: no network namespace available; relying on npm --offline only\n' >&2
+fi
+
 cd -- "${web_root}"
-npm ci --offline --no-audit --no-fund --cache "${cache_dir}"
-npm run build
+"${isolate[@]}" npm ci --offline --no-audit --no-fund --cache "${cache_dir}"
+# Build into a scratch directory: the real dist/ (and its build stamp, which
+# embedded-ui builds need) is left untouched.
+"${isolate[@]}" npm run build -- --outDir "${work_dir}/dist" --emptyOutDir

@@ -90,6 +90,11 @@ jobs:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-console.sh
 
+      # Separate from the build so a new advisory fails CI loudly without
+      # making the build itself depend on the day it runs.
+      - name: Audit console npm dependencies
+        run: npm --prefix crates/openvibes-console/web audit --audit-level=low
+
       - name: Prove console npm dependencies install offline
         run: |
           archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)

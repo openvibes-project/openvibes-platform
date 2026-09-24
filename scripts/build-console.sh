@@ -40,7 +40,6 @@ npm run check:api
 npm run lint
 npm run typecheck
 npm test
-npm audit --audit-level=low
 npm run build
 
 node --input-type=module - "${web_root}" "${dist_root}" <<'NODE'
