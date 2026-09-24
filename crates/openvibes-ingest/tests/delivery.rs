@@ -35,6 +35,7 @@ async fn enrolled(world: &World) -> (String, Vec<String>, String) {
 fn finding(id: &str, observed_ms: i64) -> Finding {
     Finding {
         schema_version: SchemaVersion::V1,
+        rule_set_id: None,
         finding_id: Identifier::new(id).unwrap(),
         scan_id: Identifier::new("scan.1").unwrap(),
         rule_id: Identifier::new(format!("rule.{id}")).unwrap(),

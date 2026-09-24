@@ -245,6 +245,7 @@ fn finding(id: &str, rule: &str, observed: DateTime<Utc>) -> StoredFinding {
     StoredFinding {
         finding_id: id.into(),
         scan_id: "scan.1".into(),
+        rule_set_id: "baseline".into(),
         rule_id: rule.into(),
         rule_version: 1,
         observed_at: observed,
@@ -393,5 +394,58 @@ async fn the_ingest_role_has_only_the_rights_it_uses() {
         );
     }
     drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn current_state_is_kept_per_rule_set() {
+    let (db, _, multi) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [8; 32], now, issued(8, 8))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    // Two rule sets from different issuers both define ssh.root_login.
+    let mut other = finding("f.b", "ssh.root_login", now - Duration::minutes(1));
+    other.rule_set_id = "vendor".into();
+    let batch = [
+        finding("f.a", "ssh.root_login", now - Duration::minutes(2)),
+        other,
+    ];
+    ingest::store_findings(&mut client, &identity.agent_id, &batch, now)
+        .await
+        .unwrap();
+    let admin = db.pool.get().await.unwrap();
+    let rows: Vec<(String, String)> = admin
+        .query(
+            "SELECT rule_set_id, last_finding_id FROM current_findings ORDER BY 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| (row.get(0), row.get(1)))
+        .collect();
+    assert_eq!(
+        rows,
+        [
+            ("baseline".into(), "f.a".into()),
+            ("vendor".into(), "f.b".into())
+        ],
+        "one current state per rule set, not one shared per rule id"
+    );
+    let stored: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM findings WHERE rule_set_id = 'vendor'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(stored, 1);
+    drop((client, admin));
     db.drop().await;
 }

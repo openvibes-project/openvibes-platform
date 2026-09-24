@@ -83,6 +83,9 @@ acked_equals_stored() {
     [[ "$pending" == 0 && -n "$acked" && "$acked" == "$stored" ]]
 }
 wait_for "findings delivered exactly once" 20 acked_equals_stored
+[[ "$(sql "SELECT count(*) FROM findings WHERE rule_set_id <> 'integration'")" == 0 ]] ||
+    { echo "FAIL: a stored finding does not name its rule set"; exit 1; }
+echo "ok: findings name their rule set"
 [[ "$(sql "SELECT count(*) FROM findings")" == 2 ]] || { echo "FAIL: expected 2 findings"; exit 1; }
 
 BEFORE=$(heartbeats_ok)

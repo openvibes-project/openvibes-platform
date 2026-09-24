@@ -73,7 +73,8 @@ Strict TOML (unknown keys refused), absolute paths only:
   `retention_expired` (older than `finding_retention_days`), `out_of_range`
   (for example a `rule_version` above 2^63 − 1), `unstorable` (no partition
   for its day: fix `openvibes-admin maintenance`). The rest are stored in one
-  transaction (duplicates skipped); every finding in the batch is
+  transaction (duplicates skipped) with the finding's `rule_set_id`, current
+  state kept per agent, rule set, and rule; every finding in the batch is
   acknowledged, including ones stored before. Only a malformed or invalid
   batch is 400 as a whole.
 - Any database error, on any endpoint, is 503 (`unavailable`) and

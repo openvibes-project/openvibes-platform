@@ -56,6 +56,10 @@ fn stored(finding: &Finding, observed_at: DateTime<Utc>, rule_version: i64) -> S
     StoredFinding {
         finding_id: finding.finding_id.as_str().to_owned(),
         scan_id: finding.scan_id.as_str().to_owned(),
+        rule_set_id: finding
+            .rule_set_id
+            .as_ref()
+            .map_or_else(String::new, |id| id.as_str().to_owned()),
         rule_id: finding.rule_id.as_str().to_owned(),
         rule_version,
         observed_at,
