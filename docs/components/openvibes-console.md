@@ -194,8 +194,9 @@ banner are never included in the production RPM.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.
-- `/ready` currently reflects process readiness. Ongoing PostgreSQL health and
-  schema drift after startup are not yet reflected there; `/health` remains a
+- In authenticated mode, `/ready` is refreshed every five seconds from a
+  bounded database connection and schema-version check. It returns 503 on
+  timeout, database failure, or schema drift; `/health` remains a
   process-liveness check.
 - Production data routes remain unavailable until their owning milestones
   are complete. The loopback seeded API is synthetic and cannot access

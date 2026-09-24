@@ -24,6 +24,8 @@ use crate::{
 };
 
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
+const READINESS_CHECK_INTERVAL: Duration = Duration::from_secs(5);
+const READINESS_CHECK_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PUBLIC_CONNECTIONS: usize = 256;
 const MAX_HEALTH_CONNECTIONS: usize = 16;
 
@@ -150,7 +152,7 @@ pub async fn serve(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     config.validate()?;
-    let public_router = match (&config.database_url, &config.public_origin) {
+    let (public_router, readiness_pool) = match (&config.database_url, &config.public_origin) {
         (Some(database_url), Some(public_origin)) => {
             let pool = platform_store::connect(database_url).await?;
             let client = pool
@@ -165,14 +167,24 @@ pub async fn serve(
                 });
             }
             drop(client);
-            authenticated_router(pool, public_origin.as_str())
+            (
+                authenticated_router(pool.clone(), public_origin.as_str()),
+                Some(pool),
+            )
         }
-        (None, None) => development_router(),
+        (None, None) => (development_router(), None),
         _ => return Err(ConsoleError::Config),
     };
     let public_listener = TcpListener::bind(config.development_listen).await?;
     let health_listener = TcpListener::bind(config.health_listen).await?;
-    run_with_router(public_listener, health_listener, public_router, shutdown).await
+    run_with_router(
+        public_listener,
+        health_listener,
+        public_router,
+        readiness_pool,
+        shutdown,
+    )
+    .await
 }
 
 /// Serves already-bound listeners. This is exposed for process-level and
@@ -186,6 +198,7 @@ pub async fn run(
         public_listener,
         health_listener,
         development_router(),
+        None,
         shutdown,
     )
     .await
@@ -195,6 +208,7 @@ async fn run_with_router(
     public_listener: TcpListener,
     health_listener: TcpListener,
     public_router: Router,
+    readiness_pool: Option<platform_store::Pool>,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     if !public_listener.local_addr()?.ip().is_loopback()
@@ -206,6 +220,27 @@ async fn run_with_router(
     let readiness = Readiness::new(true);
     let (stop_sender, public_stop) = watch::channel(false);
     let health_stop = public_stop.clone();
+    let readiness_monitor = readiness_pool.map(|pool| {
+        let readiness = readiness.clone();
+        let mut stop = public_stop.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = sleep(READINESS_CHECK_INTERVAL) => {
+                        let ready = timeout(READINESS_CHECK_TIMEOUT, database_is_ready(&pool))
+                            .await
+                            .unwrap_or(false);
+                        readiness.set(ready);
+                    }
+                    changed = stop.changed() => {
+                        if changed.is_err() || *stop.borrow() {
+                            break;
+                        }
+                    }
+                }
+            }
+        })
+    });
     let public = axum::serve(
         CappedListener::new(public_listener, MAX_PUBLIC_CONNECTIONS),
         public_router.into_make_service_with_connect_info::<TrustedPeer>(),
@@ -256,7 +291,7 @@ async fn run_with_router(
             }
         }
     };
-    timeout(GRACEFUL_SHUTDOWN_TIMEOUT, drain)
+    let result = timeout(GRACEFUL_SHUTDOWN_TIMEOUT, drain)
         .await
         .map_err(|_| {
             ConsoleError::Io(io::Error::new(
@@ -264,7 +299,21 @@ async fn run_with_router(
                 "console graceful shutdown timed out",
             ))
         })?
-        .map_err(ConsoleError::Io)
+        .map_err(ConsoleError::Io);
+    if let Some(monitor) = readiness_monitor {
+        let _ = monitor.await;
+    }
+    result
+}
+
+async fn database_is_ready(pool: &platform_store::Pool) -> bool {
+    let Ok(client) = pool.get().await else {
+        return false;
+    };
+    matches!(
+        platform_store::schema_version(&client).await,
+        Ok(Some(platform_store::SCHEMA_VERSION))
+    )
 }
 
 async fn stop_requested(mut receiver: watch::Receiver<bool>) {

@@ -163,7 +163,8 @@ exact-Origin and CSRF checks, Fetch Metadata, session rotation, and audit
 events. Production TLS/proxy transport is not wired; this auth runtime remains
 restricted to loopback HTTP development. The embedded UI requests one-use
 pre-auth state, submits local credentials, gates the workspace on session
-validation, and revokes the session on sign out.
+validation, and revokes the session on sign out. The health listener refreshes
+`/ready` every five seconds from a bounded database/schema check.
 
 Work:
 
