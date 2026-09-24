@@ -7,6 +7,7 @@ type AgentSummary = components["schemas"]["AgentSummary"];
 type Finding = components["schemas"]["FindingView"];
 type FindingPage = components["schemas"]["FindingPage"];
 type FindingSummary = components["schemas"]["FindingSummary"];
+type AuditEventPage = components["schemas"]["AuditEventPage"];
 
 type ReadState<T> =
   | { status: "loading" }
@@ -255,6 +256,41 @@ export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
       </>}</ReadStatus>
     </section>
   );
+}
+
+export function AuditEventsReadPage({ seeded = false }: { seeded?: boolean }) {
+  const [defaultSince] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+  const search = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const since = search.get("since") ?? defaultSince;
+  const actor = search.get("actor") ?? "";
+  const action = search.get("action") ?? "";
+  const result = search.get("result") ?? "";
+  const params = new URLSearchParams({ since, limit: "50" });
+  for (const [key, value] of [["actor", actor], ["action", action], ["result", result]] as const) {
+    if (value !== "") params.set(key, value);
+  }
+  const cursor = search.get("cursor");
+  if (cursor) params.set("cursor", cursor);
+  const page = useRead<AuditEventPage>(`/api/v1/audit-events?${params.toString()}`, seeded);
+  return <section className="read-card" aria-labelledby="audit-events-title">
+    <div className="read-card__heading"><div><p className="eyebrow">Audit trail</p><h2 id="audit-events-title">Privileged activity</h2></div></div>
+    <form className="filter-form" action="/audit" method="get">
+      <label>Actor<input name="actor" defaultValue={actor} maxLength={128} /></label>
+      <label>Action<input name="action" defaultValue={action} maxLength={128} /></label>
+      <label>Result<input name="result" defaultValue={result} maxLength={128} /></label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <ReadStatus state={page}>{(events) => <>
+      {events.items.length === 0 ? <p className="read-state">No audit events match this time window.</p> : <div className="table-scroll"><table className="data-table">
+        <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Result</th></tr></thead>
+        <tbody>{events.items.map((event) => <tr key={event.id}>
+          <td><time dateTime={event.at}>{dateLabel(event.at)}</time></td><td>{event.actor}</td><td><code>{event.action}</code></td><td>{event.target ?? "—"}</td><td>{event.result}</td>
+        </tr>)}</tbody>
+      </table></div>}
+      {events.next_cursor && <a className="button-link" href={`/audit?${new URLSearchParams({ ...Object.fromEntries(params), cursor: events.next_cursor }).toString()}`}>Next page</a>}
+      <p className="read-state">Showing events from <time dateTime={since}>{dateLabel(since)}</time>. Event details and request source data are restricted.</p>
+    </>}</ReadStatus>
+  </section>;
 }
 
 function StatusPill({ value }: { value: string }) {

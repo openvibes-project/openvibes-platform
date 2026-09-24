@@ -725,6 +725,28 @@ async fn finding(
         .map_or_else(not_found, |finding| Json(finding).into_response())
 }
 
+async fn audit_events(headers: HeaderMap) -> Response {
+    let (persona, mode) = match context(&headers, Permission::AuditRead) {
+        Ok(context) => context,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    let events = if matches!(persona, Persona::Admin) {
+        vec![serde_json::json!({
+            "id": "1", "at": GENERATED_AT, "actor": "admin@example.test",
+            "action": "user.login", "target": "console", "result": "success",
+            "request_id": null, "actor_kind": "user", "actor_id": "admin",
+            "authentication_method": "local_password", "target_kind": null,
+            "target_id": null, "reason_code": null
+        })]
+    } else {
+        Vec::new()
+    };
+    Json(serde_json::json!({ "items": events, "next_cursor": null })).into_response()
+}
+
 pub(crate) fn router() -> Router {
     let repository: Arc<dyn ConsoleRepository> = Arc::new(SeededRepository::default());
     Router::new()
@@ -732,6 +754,7 @@ pub(crate) fn router() -> Router {
         .route("/api/v1/agents", get(agents))
         .route("/api/v1/agents/{id}", get(agent))
         .route("/api/v1/findings/summary", get(finding_summary))
+        .route("/api/v1/audit-events", get(audit_events))
         .route("/api/v1/findings/latest", get(findings))
         .route(
             "/api/v1/findings/latest/{agent}/{rule_set}/{rule}",

@@ -36,4 +36,13 @@ describe("console shell", () => {
     expect(markup).toContain("disabled");
     expect(markup).not.toContain("Seeded environment");
   });
+
+  it("renders the bounded audit search screen", () => {
+    const markup = renderToStaticMarkup(<App path="/audit" seeded />);
+
+    expect(markup).toContain("Privileged activity");
+    expect(markup).toContain('name="actor"');
+    expect(markup).toContain('name="action"');
+    expect(markup).toContain("Apply filters");
+  });
 });

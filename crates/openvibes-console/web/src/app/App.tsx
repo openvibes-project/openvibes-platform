@@ -5,7 +5,7 @@ import { Brand } from "../components/Brand";
 import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
-import { AgentsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
+import { AgentsReadPage, AuditEventsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
 import { navigationGroups, resolvePage } from "./navigation";
 
 type AppProps = {
@@ -170,6 +170,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
               {path === "/agents" ? <AgentsReadPage seeded={seeded} /> : null}
               {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
+              {path === "/audit" ? <AuditEventsReadPage seeded={seeded} /> : null}
               {!["/", "/agents", "/findings"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
