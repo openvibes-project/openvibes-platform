@@ -46,6 +46,13 @@ async fn unknown_api_route_is_problem_json_and_never_html() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert_public_security_headers(&response);
+    let response_id = response
+        .headers()
+        .get("x-request-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
     assert_eq!(
         response.headers().get(header::CONTENT_TYPE).unwrap(),
         "application/problem+json"
@@ -59,6 +66,7 @@ async fn unknown_api_route_is_problem_json_and_never_html() {
     assert_eq!(problem["code"], "api_not_found");
     assert_eq!(problem["status"], 404);
     assert!(problem["request_id"].as_str().unwrap().starts_with("c0-"));
+    assert_eq!(problem["request_id"], response_id);
     assert!(!String::from_utf8_lossy(&body).contains("<html"));
 }
 
@@ -105,6 +113,7 @@ async fn unknown_asset_is_an_empty_real_404() {
 
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     assert_public_security_headers(&response);
+    assert!(response.headers().get("x-request-id").is_some());
     assert!(response.headers().get(header::CONTENT_TYPE).is_none());
     assert_eq!(
         response.headers().get(header::CACHE_CONTROL).unwrap(),
@@ -216,6 +225,7 @@ async fn known_browser_routes_serve_the_no_store_spa_entry() {
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{path}");
         assert_public_security_headers(&response);
+        assert!(response.headers().get("x-request-id").is_some());
         assert_eq!(
             response.headers().get(header::CONTENT_TYPE).unwrap(),
             "text/html; charset=utf-8"

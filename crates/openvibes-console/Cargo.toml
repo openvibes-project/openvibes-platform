@@ -12,7 +12,7 @@ dev-seed = []
 
 [dependencies]
 argon2 = { version = "=0.6.0", features = ["zeroize"] }
-axum = { workspace = true, features = ["query"] }
+axum = { workspace = true, features = ["matched-path", "query"] }
 base64.workspace = true
 include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }

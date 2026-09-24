@@ -13,7 +13,7 @@ use axum::{
 };
 use tokio::{sync::Semaphore, time::timeout};
 
-use crate::problem::{ProblemDetails, problem_response};
+use crate::problem::{ProblemDetails, next_request_id, problem_response};
 
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
@@ -78,6 +78,38 @@ fn with_request_limits(router: Router) -> Router {
             request_limits,
         ))
         .layer(middleware::map_response(public_security_headers))
+        .layer(middleware::from_fn(request_logging))
+}
+
+async fn request_logging(request: axum::extract::Request, next: middleware::Next) -> Response {
+    let method = request.method().clone();
+    let path = request
+        .extensions()
+        .get::<axum::extract::MatchedPath>()
+        .map(|matched| matched.as_str())
+        .unwrap_or("unmatched")
+        .to_owned();
+    let mut response = next.run(request).await;
+    let request_id = response
+        .headers()
+        .get("x-request-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_owned)
+        .unwrap_or_else(next_request_id);
+    response.headers_mut().insert(
+        "x-request-id",
+        request_id
+            .parse()
+            .expect("generated request IDs are valid headers"),
+    );
+    tracing::info!(
+        request_id = %request_id,
+        method = %method,
+        path = %path,
+        status = response.status().as_u16(),
+        "console request completed"
+    );
+    response
 }
 
 async fn request_limits(

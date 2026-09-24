@@ -49,8 +49,10 @@ The production service has two HTTP surfaces:
 | Loopback health listener | `/health`, `/ready` | Liveness and dependency/schema readiness only; never exposed by the public router. |
 
 The JSON API uses closed request validation, bounded bodies, RFC Problem
-Details-style errors with stable codes and request IDs, opaque keyset cursors,
-and `Cache-Control: no-store`. Mutations use idempotency keys or
+Details-style errors with stable codes, and opaque keyset cursors. Every public
+response carries an `X-Request-ID`; structured request logs include that ID,
+method, matched route template, and status without query strings or bodies.
+Mutations use idempotency keys or
 ETag/`If-Match` where replay or stale edits matter. Rust DTOs generate the
 checked OpenAPI snapshot, which generates the committed browser TypeScript
 contract. The production build checks both snapshot and generated-client drift

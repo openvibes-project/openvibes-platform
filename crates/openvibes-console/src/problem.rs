@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use axum::{
     Json,
-    http::{HeaderValue, StatusCode, header},
+    http::{HeaderName, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
@@ -41,41 +41,44 @@ pub struct FieldError {
 
 impl ProblemDetails {
     pub(crate) fn new(status: StatusCode, code: &'static str, title: &'static str) -> Self {
-        let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         Self {
             code: code.to_owned(),
             title: title.to_owned(),
             status: status.as_u16(),
-            request_id: format!("c0-{sequence:016x}"),
+            request_id: next_request_id(),
             field_errors: None,
         }
     }
 
     pub(crate) fn not_found(code: &'static str, title: &'static str) -> Self {
-        let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         Self {
             code: code.to_owned(),
             title: title.to_owned(),
             status: StatusCode::NOT_FOUND.as_u16(),
-            request_id: format!("c0-{sequence:016x}"),
+            request_id: next_request_id(),
             field_errors: None,
         }
     }
 
     pub(crate) fn authentication_unavailable() -> Self {
-        let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
         Self {
             code: "authentication_unavailable".to_owned(),
             title: "Authentication is not available".to_owned(),
             status: StatusCode::SERVICE_UNAVAILABLE.as_u16(),
-            request_id: format!("c0-{sequence:016x}"),
+            request_id: next_request_id(),
             field_errors: None,
         }
     }
 }
 
+pub(crate) fn next_request_id() -> String {
+    let sequence = NEXT_REQUEST_ID.fetch_add(1, Ordering::Relaxed);
+    format!("c0-{sequence:016x}")
+}
+
 pub(crate) fn problem_response(problem: ProblemDetails) -> Response {
     let status = StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    let request_id = problem.request_id.clone();
     tracing::warn!(
         request_id = %problem.request_id,
         code = %problem.code,
@@ -90,5 +93,9 @@ pub(crate) fn problem_response(problem: ProblemDetails) -> Response {
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        HeaderName::from_static("x-request-id"),
+        HeaderValue::from_str(&request_id).expect("generated request IDs are valid headers"),
+    );
     response
 }
