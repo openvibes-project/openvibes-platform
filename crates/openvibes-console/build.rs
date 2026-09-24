@@ -48,8 +48,13 @@ fn main() {
     {
         println!("cargo:rerun-if-changed=web/{file}");
     }
-    validate_frontend(&crate_dir, &contract)
-        .unwrap_or_else(|error| panic!("embedded-ui frontend validation failed: {error}"));
+    validate_frontend(&crate_dir, &contract).unwrap_or_else(|error| {
+        panic!(
+            "embedded-ui frontend validation failed: {error}. The embedded-ui feature \
+             (included by --all-features) needs a current frontend build: run \
+             scripts/build-console.sh first"
+        )
+    });
 }
 
 fn load_contract(crate_dir: &Path) -> Result<FrontendContract, String> {

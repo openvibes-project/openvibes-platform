@@ -16,6 +16,15 @@ separate modules:
 Everything exchanged with agents is specified in the `openvibes-protocol`
 repository; build against its schemas and fixtures.
 
+## Console frontend and `--all-features`
+
+`openvibes-console`'s `embedded-ui` feature embeds the built web frontend,
+so any build with `--all-features` (workspace clippy, docs, tests) needs a
+current frontend build first: run `scripts/build-console.sh` (Node.js
+22.23.1 and npm), then the cargo commands. Without it, `build.rs` stops with
+a message saying so. Building without `--all-features` (or with explicit
+features other than `embedded-ui`) needs no Node.js.
+
 ## Parallel work (Claude Code and Codex)
 
 Two AI tools work in this repository at the same time, each in its own git
