@@ -24,7 +24,8 @@ the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes, plus finding summary, latest, and history reads. Control-
-plane routes and access-control/audit pages remain pending.
+plane reads, aside from audit-retention policy, and access-control/audit pages
+remain pending.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, and Findings pages use

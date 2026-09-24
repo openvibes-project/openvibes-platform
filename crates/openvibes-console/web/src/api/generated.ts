@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-retention": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_audit_retention"];
+        put: operations["update_authenticated_audit_retention"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/history": {
         parameters: {
             query?: never;
@@ -281,6 +297,23 @@ export interface components {
             scanner_version?: string | null;
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
+        };
+        /** @description Current administrator-controlled audit retention policy. */
+        AuditRetentionPolicy: {
+            /**
+             * Format: int32
+             * @description Number of days kept after the next maintenance run.
+             */
+            retention_days: number;
+            /** @description RFC 3339 update instant. */
+            updated_at: string;
+            /** @description Local user id that last changed the policy. */
+            updated_by: string;
+            /**
+             * Format: int64
+             * @description Version for conditional updates.
+             */
+            version: number;
         };
         /**
          * @description Authentication assurance reached by the current browser session.
@@ -561,6 +594,14 @@ export interface components {
          * @enum {string}
          */
         Severity: "critical" | "high" | "medium" | "low";
+        /** @description Request body for changing audit retention. */
+        UpdateAuditRetentionRequest: {
+            /**
+             * Format: int32
+             * @description Retention window in days, from 1 through 36500.
+             */
+            retention_days: number;
+        };
     };
     responses: never;
     parameters: never;
@@ -793,6 +834,142 @@ export interface operations {
                 };
             };
             /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_audit_retention: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current audit retention policy */
+            200: {
+                headers: {
+                    /** @description Policy version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRetentionPolicy"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_authenticated_audit_retention: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Quoted policy version from ETag */
+                "If-Match": string;
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAuditRetentionRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated retention policy */
+            200: {
+                headers: {
+                    /** @description New policy version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRetentionPolicy"];
+                };
+            };
+            /** @description Invalid retention value or request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Policy version is stale */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Update unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -54,8 +54,10 @@ separate certificate route provides full cursor pagination. Finding and
 latest-summary routes require `findings.read` and use the same active SQL
 scope; latest-finding list/detail and history list/event routes use that scope
 in SQL. Their bounded cursors are tied to the active filters and scope, and
-history requires a lower time bound for partition pruning. Control-plane data
-routes remain unavailable until their handlers and checks are implemented.
+history requires a lower time bound for partition pruning. Audit retention
+reads require `audit.read`; updates require global `audit.retention.manage`,
+CSRF, exact Origin, same-origin Fetch Metadata, and a version-matching
+`If-Match`. Other control-plane data routes remain unavailable.
 
 ## Failure behaviour
 

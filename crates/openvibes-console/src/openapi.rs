@@ -4,11 +4,12 @@ use utoipa::OpenApi;
 
 use crate::{
     api::{
-        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuthenticationLevel,
-        AuthenticationMethod, CertificatePage, CertificateView, CursorPagination,
-        EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
-        FindingSummary, FindingView, LoginRequest, LoginResponse, Permission, PermissionScope,
-        PreauthResponse, SessionPrincipal, SessionResponse, Severity,
+        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuditRetentionPolicy,
+        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
+        CursorPagination, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage,
+        FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest, LoginResponse,
+        Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse, Severity,
+        UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -34,11 +35,15 @@ use crate::{
         crate::router::authenticated_latest_findings,
         crate::router::authenticated_latest_finding,
         crate::router::authenticated_finding_history,
-        crate::router::authenticated_finding_event
+        crate::router::authenticated_finding_event,
+        crate::router::authenticated_audit_retention,
+        crate::router::update_authenticated_audit_retention
     ),
     components(schemas(
         AuthenticationLevel,
         AuthenticationMethod,
+        AuditRetentionPolicy,
+        AuditRetentionPolicy,
         AgentDetail,
         AgentPage,
         AgentStatus,
@@ -63,13 +68,16 @@ use crate::{
         ProblemDetails,
         SessionPrincipal,
         SessionResponse,
+        UpdateAuditRetentionRequest,
+        UpdateAuditRetentionRequest,
         Severity
     )),
     tags(
         (name = "session", description = "Current browser session"),
         (name = "authentication", description = "Local browser authentication"),
         (name = "agents", description = "Scope-filtered agent reads"),
-        (name = "findings", description = "Scope-filtered observation reads")
+        (name = "findings", description = "Scope-filtered observation reads"),
+        (name = "audit", description = "Audit policy and event access")
     )
 )]
 struct ConsoleApi;

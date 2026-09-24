@@ -312,6 +312,189 @@
         }
       }
     },
+    "/api/v1/audit-retention": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_retention",
+        "responses": {
+          "200": {
+            "description": "Current audit retention policy",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Policy version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRetentionPolicy"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "update_authenticated_audit_retention",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Quoted policy version from ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAuditRetentionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated retention policy",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New policy version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRetentionPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid retention value or request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Policy version is stale",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/findings/history": {
       "get": {
         "tags": [
@@ -1142,6 +1325,38 @@
           }
         }
       },
+      "AuditRetentionPolicy": {
+        "type": "object",
+        "description": "Current administrator-controlled audit retention policy.",
+        "required": [
+          "retention_days",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of days kept after the next maintenance run.",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC 3339 update instant."
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Local user id that last changed the policy."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for conditional updates.",
+            "minimum": 0
+          }
+        }
+      },
       "AuthenticationLevel": {
         "type": "string",
         "description": "Authentication assurance reached by the current browser session.",
@@ -1823,6 +2038,23 @@
           "medium",
           "low"
         ]
+      },
+      "UpdateAuditRetentionRequest": {
+        "type": "object",
+        "description": "Request body for changing audit retention.",
+        "required": [
+          "retention_days"
+        ],
+        "properties": {
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Retention window in days, from 1 through 36500.",
+            "maximum": 36500,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
       }
     }
   },
@@ -1842,6 +2074,10 @@
     {
       "name": "findings",
       "description": "Scope-filtered observation reads"
+    },
+    {
+      "name": "audit",
+      "description": "Audit policy and event access"
     }
   ]
 }

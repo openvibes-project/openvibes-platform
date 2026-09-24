@@ -551,6 +551,96 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(history_without_bound.status(), StatusCode::BAD_REQUEST);
+    let retention = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/audit-retention")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retention.status(), StatusCode::OK);
+    assert_eq!(retention.headers().get(header::ETAG).unwrap(), "\"1\"");
+    let retention: Value =
+        serde_json::from_slice(&to_bytes(retention.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(retention["retention_days"], 365);
+    let retention_update = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/v1/audit-retention")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header(header::IF_MATCH, "\"1\"")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"retention_days":180}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(retention_update.status(), StatusCode::OK);
+    assert_eq!(
+        retention_update.headers().get(header::ETAG).unwrap(),
+        "\"2\""
+    );
+    let retention_update: Value =
+        serde_json::from_slice(&to_bytes(retention_update.into_body(), 4096).await.unwrap())
+            .unwrap();
+    assert_eq!(retention_update["retention_days"], 180);
+    let stale_retention = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/v1/audit-retention")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header(header::IF_MATCH, "\"1\"")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"retention_days":30}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(stale_retention.status(), StatusCode::PRECONDITION_FAILED);
+    let missing_csrf = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/v1/audit-retention")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header(header::IF_MATCH, "\"2\"")
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(r#"{"retention_days":30}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(missing_csrf.status(), StatusCode::FORBIDDEN);
+    let audit_count = db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action = 'audit.retention.updated'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, i64>(0);
+    assert_eq!(audit_count, 1);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

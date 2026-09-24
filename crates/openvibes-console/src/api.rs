@@ -146,6 +146,28 @@ pub struct SessionResponse {
     pub absolute_expires_at: String,
 }
 
+/// Current administrator-controlled audit retention policy.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AuditRetentionPolicy {
+    /// Number of days kept after the next maintenance run.
+    pub retention_days: u32,
+    /// Version for conditional updates.
+    pub version: u64,
+    /// RFC 3339 update instant.
+    pub updated_at: String,
+    /// Local user id that last changed the policy.
+    pub updated_by: String,
+}
+
+/// Request body for changing audit retention.
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateAuditRetentionRequest {
+    /// Retention window in days, from 1 through 36500.
+    #[schema(minimum = 1, maximum = 36500)]
+    pub retention_days: u32,
+}
+
 /// One-use local login request. The password is never echoed by the API.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

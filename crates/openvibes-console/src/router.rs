@@ -5,7 +5,7 @@ use std::sync::{
 
 use axum::{
     Router,
-    extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State, rejection::QueryRejection},
+    extract::{ConnectInfo, DefaultBodyLimit, Json, Path, Query, State, rejection::QueryRejection},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -277,6 +277,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/findings/history/{observed_day}/{finding_id}",
             get(authenticated_finding_event),
+        )
+        .route(
+            "/v1/audit-retention",
+            get(authenticated_audit_retention).put(update_authenticated_audit_retention),
         )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
@@ -962,6 +966,181 @@ pub(crate) async fn authenticated_finding_summary(
 
 #[utoipa::path(
     get,
+    path = "/api/v1/audit-retention",
+    tag = "audit",
+    responses(
+        (status = 200, description = "Current audit retention policy", body = crate::AuditRetentionPolicy, headers(("ETag" = String, description = "Policy version"))),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn authenticated_audit_retention(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    if let Err(response) =
+        authenticated_agent_scope(&state, &headers, crate::Permission::AuditRead).await
+    {
+        return response;
+    }
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    match platform_store::audit::retention_policy(&client).await {
+        Ok(policy) => retention_policy_response(policy),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/audit-retention",
+    tag = "audit",
+    request_body = crate::UpdateAuditRetentionRequest,
+    params(
+        ("If-Match" = String, Header, description = "Quoted policy version from ETag"),
+        ("Origin" = String, Header, description = "Must exactly match configured origin"),
+        ("X-CSRF-Token" = String, Header, description = "Session synchronizer token")
+    ),
+    responses(
+        (status = 200, description = "Updated retention policy", body = crate::AuditRetentionPolicy, headers(("ETag" = String, description = "New policy version"))),
+        (status = 400, description = "Invalid retention value or request", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Origin, CSRF, or permission check failed", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 412, description = "Policy version is stale", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 428, description = "If-Match is required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Update unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn update_authenticated_audit_retention(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    payload: Result<
+        Json<crate::UpdateAuditRetentionRequest>,
+        axum::extract::rejection::JsonRejection,
+    >,
+) -> Response {
+    let (scope, user_id) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::AuditRetentionManage,
+        true,
+    )
+    .await
+    {
+        Ok(context) => context,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let expected_version = match parse_if_match_version(&headers) {
+        Ok(Some(version)) => version,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::PRECONDITION_REQUIRED,
+                "precondition_required",
+                "If-Match is required",
+            ));
+        }
+        Err(()) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_precondition",
+                "If-Match must contain one quoted policy version",
+            ));
+        }
+    };
+    let Json(payload) = match payload {
+        Ok(payload) => payload,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "Retention request is invalid",
+            ));
+        }
+    };
+    if !(1..=36_500).contains(&payload.retention_days) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_retention",
+            "Retention must be between 1 and 36500 days",
+        ));
+    }
+    let mut client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    match platform_store::audit::update_retention_policy(
+        &mut client,
+        payload.retention_days as i32,
+        expected_version,
+        &user_id,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(Some(policy)) => retention_policy_response(policy),
+        Ok(None) => problem_response(ProblemDetails::new(
+            StatusCode::PRECONDITION_FAILED,
+            "stale_policy",
+            "Audit retention policy changed; reload before saving",
+        )),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
+    let values = headers.get_all(header::IF_MATCH);
+    let mut iter = values.iter();
+    let Some(value) = iter.next() else {
+        return Ok(None);
+    };
+    if iter.next().is_some() {
+        return Err(());
+    }
+    let value = value.to_str().map_err(|_| ())?;
+    let version = value
+        .strip_prefix('"')
+        .and_then(|value| value.strip_suffix('"'))
+        .ok_or(())?;
+    if version.is_empty() || !version.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(());
+    }
+    let version = version.parse::<i64>().map_err(|_| ())?;
+    (version > 0).then_some(Some(version)).ok_or(())
+}
+
+fn retention_policy_response(policy: platform_store::audit::RetentionPolicy) -> Response {
+    let etag = format!("\"{}\"", policy.version);
+    let mut response = (
+        StatusCode::OK,
+        Json(crate::AuditRetentionPolicy {
+            retention_days: policy.retention_days.try_into().unwrap_or_default(),
+            version: policy.version.try_into().unwrap_or_default(),
+            updated_at: policy.updated_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+            updated_by: policy.updated_by,
+        }),
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if let Ok(value) = HeaderValue::from_str(&etag) {
+        response.headers_mut().insert(header::ETAG, value);
+    }
+    response
+}
+
+#[utoipa::path(
+    get,
     path = "/api/v1/findings/latest",
     tag = "findings",
     params(
@@ -1427,6 +1606,17 @@ async fn authenticated_agent_scope(
     headers: &HeaderMap,
     permission: crate::Permission,
 ) -> Result<platform_store::console_read::AgentScope, Response> {
+    authenticated_permission(state, headers, permission, false)
+        .await
+        .map(|(scope, _user_id)| scope)
+}
+
+async fn authenticated_permission(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    permission: crate::Permission,
+    csrf_required: bool,
+) -> Result<(platform_store::console_read::AgentScope, String), Response> {
     use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
     use platform_store::console_read::AgentScope;
 
@@ -1452,6 +1642,17 @@ async fn authenticated_agent_scope(
         )
     {
         return Err(authentication_required());
+    }
+    if csrf_required
+        && (!state.public_origin_valid
+            || !crate::browser_origin_allowed(headers, &state.public_origin)
+            || !crate::csrf_token_matches(headers, &csrf))
+    {
+        return Err(problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "request_rejected",
+            "The request was rejected",
+        )));
     }
     if !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
         .await
@@ -1481,10 +1682,11 @@ async fn authenticated_agent_scope(
         .find(|capability| capability.permission == permission)
     {
         Some(capability) => match &capability.scope {
-            crate::PermissionScope::Global => Ok(AgentScope::Global),
-            crate::PermissionScope::AssetGroups { asset_group_ids } => {
-                Ok(AgentScope::AssetGroups(asset_group_ids.clone()))
-            }
+            crate::PermissionScope::Global => Ok((AgentScope::Global, active.user_id)),
+            crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
+                AgentScope::AssetGroups(asset_group_ids.clone()),
+                active.user_id,
+            )),
         },
         None => Err(problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,

@@ -12,6 +12,10 @@ list, detail, and certificate routes behind `agents.read`, and finding summary
 latest/detail/history routes behind `findings.read`. The embedded login page,
 session gate, sign-out action, and production Overview/Agents/Findings data
 views are implemented against the authenticated routes.
+Audit-retention reads and versioned updates now use the global `audit.read` and
+`audit.retention.manage` permissions and commit policy changes with their audit
+event. Access-control/audit event pages and export, retention cleanup, and the
+rest of the control-plane routes remain outstanding.
 
 Design inputs:
 

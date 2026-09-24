@@ -15,11 +15,11 @@ policy and appending its audit event happen in one transaction.
   for a no-op update, and commits changed policy plus `audit.retention.updated`
   atomically.
 
-The console API must require global `audit.read` to show policy and global
-`audit.retention.manage` to update it. The mutation also requires a current
-session CSRF token, exact configured Origin, and same-origin Fetch Metadata.
-Audit cleanup remains a bounded maintenance operation and must use the
-effective policy cutoff.
+The console API requires global `audit.read` to show policy and global
+`audit.retention.manage` to update it. The API mutation also requires a current
+session CSRF token, exact configured Origin, same-origin Fetch Metadata, and a
+matching `If-Match` version. Audit cleanup remains a bounded maintenance
+operation and must use the effective policy cutoff.
 
 ## Failure behaviour
 
