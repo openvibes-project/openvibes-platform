@@ -76,7 +76,8 @@ All run within the `openvibes_ingest` role's grants (the tests use
   Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
   hash must match a recorded certificate.
 - `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
-  at most every 5 minutes, or at once when the hostname changes; an absent
+  at most every 5 minutes, or at once when the hostname or the capabilities
+  change; an absent
   hostname keeps the stored one (migration 3 adds `agents.hostname`,
   indexed). Returns whether it wrote.
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
