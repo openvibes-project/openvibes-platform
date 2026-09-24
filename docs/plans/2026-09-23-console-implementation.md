@@ -116,8 +116,8 @@ No shared migration is required.
 
 ## 4. Milestone C2 — PostgreSQL Read Adapter
 
-Prerequisite satisfied: PM4 and platform schema 3 are integrated in the
-console branch.
+Prerequisite satisfied: SP2 and platform schema 6 are integrated in the
+console branch. The shared C2 read-store change adds schema migration 7.
 
 Goal: prove agents and findings read models against PostgreSQL with measured
 query plans. Public production data routes remain disabled until C3 supplies
@@ -127,14 +127,19 @@ Work:
 
 1. Resolve the latest-finding read model: extend `current_findings` with the
    complete display snapshot or retain a reliable partition key and fields.
+   **Done in shared platform migration 7**: the latest snapshot and partition
+   day are retained in `current_findings` and populated by ingest.
 2. Use the existing indexed `agents.hostname` read model. Ingest already
    stores the latest present authenticated-heartbeat value through migration
    3; the console treats it only as a mutable, spoofable operator label.
 3. Add small typed `platform-store` query modules for summaries, agents,
-   certificates, latest observations, and history.
-4. Add indexes only from representative query plans.
+   certificates, latest observations, and history. **Done in
+   `console_read`.**
+4. Add indexes only from representative query plans. **Done in migration 7.**
 5. Run the same global read-model cases against PostgreSQL behind a test-only
-   harness; do not expose an unauthenticated production path.
+   harness; do not expose an unauthenticated production path. **Done:** the
+   `platform-store` PostgreSQL integration suite covers the read models and a
+   50,000-agent page plan/latency case.
 
 Verification:
 
@@ -153,8 +158,8 @@ permissions.
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add the next available append-only migration (0007 or later: main has
-  schema 5, and 0006 is reserved for sub-project 2's rule tables): local users,
+- add the next available append-only migration (0008 or later: schema 6 is
+  SP2's rule tables and schema 7 is the C2 read model): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;
