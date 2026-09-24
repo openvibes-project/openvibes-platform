@@ -21,9 +21,11 @@ implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
 the executable connects to PostgreSQL, requires schema version 8, and serves
 the authenticated router. Otherwise it serves the C0 development router,
-where `/api/v1/session` remains fail-closed. C2 data routes, SQL-enforced
-asset scopes and account bootstrap CLI are still pending. The embedded UI
-now has a login form, session gate, and sign-out action.
+where `/api/v1/session` remains fail-closed. Database-backed C2 data routes,
+SQL-enforced asset scopes, and access-control/audit pages remain pending. The
+first-account bootstrap and account recovery CLI is available through
+`openvibes-admin user`. The embedded UI now has a login form, session gate,
+and sign-out action.
 The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
