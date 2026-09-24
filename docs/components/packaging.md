@@ -124,6 +124,56 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 
 Agents trust `root.crt` (their `platform_ca_file`).
 
+## Trying the whole system
+
+From an empty Fedora 44 host to agent findings in PostgreSQL, with every
+component from its RPM under systemd. `scripts/systemd-e2e.sh` runs exactly
+these steps (in a podman container with systemd as PID 1), so they are
+tested on every change. For a single test host, the platform and the agent
+can share the machine, as below; normally the agent runs on the endpoints.
+
+1. **Platform:** "First install on Fedora" steps 1–7 above, with
+   distribution. On a test host, `issue-server localhost --san 127.0.0.1`
+   for ingest and `issue-server rules.localhost --san 127.0.0.1` for
+   distribution.
+2. **Rules:** on your signing machine, make a key and sign a rule set with
+   the agent repository's `sign_bundle` example (`cargo run --example
+   sign_bundle -- keygen KEY` prints the public key; `… sign KEY rules.json
+   baseline 1 org.rules 30 bundle.json`), then on the platform:
+
+   ```sh
+   sudo -u openvibes_admin openvibes-admin rules trust add baseline org.rules PUBLIC_KEY
+   sudo -u openvibes_admin openvibes-admin rules publish bundle.json
+   ```
+
+3. **Token:** `sudo -u openvibes_admin openvibes-admin token create --expires 1h`
+   (add `--uses N` for a fleet).
+4. **Agent** (on each endpoint): `dnf install openvibes-agent-*.rpm`, then
+
+   ```sh
+   install -m 0644 root.crt /etc/openvibes-agent/platform-ca.crt
+   install -o openvibes_agent -g openvibes_agent -m 0600 token /etc/openvibes-agent/token
+   ```
+
+   and in `/etc/openvibes-agent/agent.toml` set `platform_url` and
+   `distribution_url` (e.g. `https://ingest.example.com`; default ports
+   18423 and 18424) and the rule set, with no `bundle_file`:
+
+   ```toml
+   [[rule_sets]]
+   id = "baseline"
+   trusted_keys = [{ issuer_key_id = "org.rules", public_key = "PUBLIC_KEY" }]
+   ```
+
+   `systemctl enable --now openvibes-agent`.
+5. **Check:** `openvibes-admin agent list` shows the agent active;
+   `journalctl -u openvibes-distribution` logs a 200 for `/v1/rule-bundle`;
+   `psql -d openvibes -c "SELECT rule_id, message FROM findings"` (as
+   `openvibes_admin`) lists its findings.
+
+The agent package is documented in the agent repository
+(`docs/components/packaging.md`): its sandbox, upgrade, and uninstall.
+
 ## Renewing the server certificate
 
 It lasts 90 days. Before it expires, stage a copy of the intermediate key for
@@ -195,6 +245,8 @@ four units, that the ingest and distribution units stop with SIGINT (the
 signal they drain on; an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 
-CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, installs
-the RPMs, and runs `check-rpm.sh`; the integration test then runs against
+CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds
+the agent RPM from the pinned agent revision, installs the platform RPMs,
+and runs `check-rpm.sh`; the `systemd-e2e` job runs `scripts/systemd-e2e.sh`
+on those RPMs under a real systemd; the integration test then runs against
 the installed binaries ([integration-agent.md](integration-agent.md)).
