@@ -96,7 +96,8 @@ pub fn intermediate_request() -> Result<(String, String), PkiError> {
     Ok((csr, key.serialize_pem()))
 }
 
-/// Signs an intermediate CSR with the root: 2 years, path length 0. The root
+/// Signs an intermediate CSR with the root: 2 years (never past the root's
+/// own expiry; `IssuerExpired` once the root has expired), path length 0. The root
 /// key must match the root certificate (`KeyMismatch`). The CSR's signature
 /// is verified; only its public key is taken from it.
 pub fn sign_intermediate(
@@ -108,7 +109,15 @@ pub fn sign_intermediate(
         CertificateSigningRequestParams::from_pem(csr_pem).map_err(|_| PkiError::InvalidCsr)?;
     // Checks that the root is a CA and that the key is the root's own.
     let root = Issuer::load(&root.cert_pem, &root.key_pem)?;
-    let params = ca_params("OpenVIBES Intermediate CA", 0, now, INTERMEDIATE_DAYS)?;
+    if now >= root.not_after {
+        return Err(PkiError::IssuerExpired);
+    }
+    let mut params = ca_params("OpenVIBES Intermediate CA", 0, now, INTERMEDIATE_DAYS)?;
+    // Never outlive the root: clients would reject the chain after it.
+    if now + chrono::Duration::days(INTERMEDIATE_DAYS) > root.not_after {
+        params.not_after = OffsetDateTime::from_unix_timestamp(root.not_after.timestamp())
+            .map_err(|_| PkiError::Generation)?;
+    }
     params
         .signed_by(&csr.public_key, &root.issuer)
         .map(|cert| cert.pem())

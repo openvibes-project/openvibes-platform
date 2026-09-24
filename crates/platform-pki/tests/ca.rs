@@ -119,3 +119,21 @@ fn the_root_key_must_match_the_root_certificate() {
         Err(PkiError::KeyMismatch)
     );
 }
+
+#[test]
+fn an_intermediate_never_outlives_its_root() {
+    let issued = Utc::now();
+    let root = generate_root(issued).unwrap();
+    let (csr, _) = intermediate_request().unwrap();
+    // Signed in the root's last year: 2 years would run past the root.
+    let late = issued + chrono::Duration::days(9 * 365);
+    let cert = sign_intermediate(&root, &csr, late).unwrap();
+    assert!(
+        platform_pki::not_after(&cert).unwrap() <= platform_pki::not_after(&root.cert_pem).unwrap()
+    );
+    let after_root = issued + chrono::Duration::days(11 * 365);
+    assert_eq!(
+        sign_intermediate(&root, &csr, after_root).map(drop),
+        Err(PkiError::IssuerExpired)
+    );
+}
