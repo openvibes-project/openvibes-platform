@@ -9,6 +9,11 @@ async fn migration_applies_once_and_is_idempotent() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     assert_eq!(platform_store::schema_version(&client).await.unwrap(), None);
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
     assert_eq!(
         platform_store::migrate(&mut client).await.unwrap(),
         platform_store::SCHEMA_VERSION
@@ -20,6 +25,20 @@ async fn migration_applies_once_and_is_idempotent() {
     assert_eq!(
         platform_store::schema_version(&client).await.unwrap(),
         Some(platform_store::SCHEMA_VERSION)
+    );
+    assert!(
+        platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
+    client
+        .execute("UPDATE schema_version SET version = 6", &[])
+        .await
+        .unwrap();
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
     );
     drop(client);
     db.drop().await;
@@ -34,6 +53,11 @@ async fn a_newer_schema_is_refused() {
         .execute("UPDATE schema_version SET version = 99", &[])
         .await
         .unwrap();
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         platform_store::migrate(&mut client).await,
         Err(platform_store::StoreError::NewerSchema(99))

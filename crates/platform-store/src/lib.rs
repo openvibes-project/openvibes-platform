@@ -10,6 +10,8 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// Bounded global read models for the human console.
+pub mod console_read;
 /// Queries the ingest service runs.
 pub mod ingest;
 mod maintenance;
