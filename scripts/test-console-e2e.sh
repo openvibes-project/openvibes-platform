@@ -13,10 +13,8 @@ for required_command in node npm cargo; do
     fi
 done
 
-cd -- "${web_root}"
-npm run build
-
 cd -- "${repository_root}"
+scripts/build-console.sh
 cargo build --locked -p openvibes-console --features embedded-ui
 
 cd -- "${web_root}"

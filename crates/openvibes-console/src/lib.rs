@@ -14,10 +14,10 @@ mod api;
 mod assets;
 mod config;
 mod error;
+#[cfg(feature = "embedded-ui")]
+mod frontend_contract;
 mod openapi;
 mod problem;
-#[cfg(feature = "embedded-ui")]
-mod public_assets;
 mod router;
 mod server;
 

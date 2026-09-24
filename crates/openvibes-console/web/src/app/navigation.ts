@@ -87,6 +87,8 @@ const pages: Readonly<Record<string, ConsolePage>> = {
   },
 };
 
+export const pageRoutes: readonly string[] = Object.keys(pages);
+
 export function resolvePage(path: string): ConsolePage | undefined {
   return pages[path];
 }
