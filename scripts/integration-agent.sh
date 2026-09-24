@@ -176,6 +176,25 @@ restart_agent
 wait_for "scans continue on v2 while distribution is down" 75 more_v2_than "$BEFORE"
 kill -0 "$AGENT_PID" || { echo "FAIL: agent exited without distribution"; exit 1; }
 start_distribution
+# A refused envelope: v3 is signed by a key the platform trusts but the agent
+# does not. Distribution serves it; the agent refuses it and keeps scanning
+# on v2 (no integration.v3 findings, more integration.v2 findings).
+KEY3=$(bundle "$W/v3.json" 3 0 8)
+admin rules trust add integration integration.seed8 "$KEY3" >/dev/null
+admin rules publish "$W/v3.json" >/dev/null 2>&1
+served_200() {
+    jq -r 'select(.fields.endpoint == "/v1/rule-bundle" and .fields.status == 200) | 1' \
+        "$W/distribution.log" 2>/dev/null | wc -l
+}
+more_200_than() { (($(served_200) > $1)); }
+SERVED=$(served_200)
+BEFORE=$(v2_findings)
+restart_agent
+wait_for "distribution serves v3 (200)" 30 more_200_than "$SERVED"
+wait_for "agent refuses v3 and keeps scanning on v2" 75 more_v2_than "$BEFORE"
+[[ "$(sql "SELECT count(*) FROM findings WHERE rule_id = 'integration.v3'")" == 0 ]] ||
+    { echo "FAIL: the agent ran a bundle signed by a key it does not trust"; exit 1; }
+echo "ok: no finding from the refused v3"
 # The second agent is still active (its certificate expired): take the newest.
 THIRD_AGENT=$(sql "SELECT agent_id FROM agents WHERE status = 'active' ORDER BY enrolled_at DESC LIMIT 1")
 stop_agent

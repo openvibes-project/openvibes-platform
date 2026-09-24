@@ -52,6 +52,9 @@ PostgreSQL. Everything runs as the current, unprivileged user under
      `integration.v2` arrive;
    - with distribution stopped it keeps scanning on v2 (more `integration.v2`
      findings) and does not exit;
+   - distribution then serves a v3 signed by a key only the platform
+     trusts (`integration.seed8`): the agent refuses it, keeps scanning on
+     v2, and no `integration.v3` finding is stored;
    - revoked, it is told 403 `identity_revoked` by distribution.
 
 A full run takes 4 to 5 minutes, because the agent ticks every 60 s.
