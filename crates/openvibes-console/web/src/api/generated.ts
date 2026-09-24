@@ -68,6 +68,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/audit-events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_audit_events"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-retention": {
         parameters: {
             query?: never;
@@ -297,6 +313,42 @@ export interface components {
             scanner_version?: string | null;
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
+        };
+        /** @description Bounded audit-event page with an opaque continuation cursor. */
+        AuditEventPage: {
+            /** @description Events in descending timestamp order. */
+            items: components["schemas"]["AuditEventView"][];
+            /** @description Opaque cursor for the next page, if present. */
+            next_cursor?: string | null;
+        };
+        /** @description One safe audit event in a bounded audit search. */
+        AuditEventView: {
+            /** @description Stable action code. */
+            action: string;
+            /** @description Operator-facing actor label. */
+            actor: string;
+            /** @description Stable actor id. */
+            actor_id?: string | null;
+            /** @description Actor kind and stable id. */
+            actor_kind?: string | null;
+            /** @description RFC 3339 event timestamp. */
+            at: string;
+            /** @description Authentication method, when present. */
+            authentication_method?: string | null;
+            /** @description Stable database event identifier. */
+            id: string;
+            /** @description Safe reason code. */
+            reason_code?: string | null;
+            /** @description Request correlation id, when present. */
+            request_id?: string | null;
+            /** @description Event result code. */
+            result: string;
+            /** @description Safe target label, when present. */
+            target?: string | null;
+            /** @description Stable target id. */
+            target_id?: string | null;
+            /** @description Target kind and stable id. */
+            target_kind?: string | null;
         };
         /** @description Current administrator-controlled audit retention policy. */
         AuditRetentionPolicy: {
@@ -840,6 +892,36 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_audit_events: {
+        parameters: {
+            query: {
+                /** @description Inclusive RFC3339 lower bound */
+                since: string;
+                /** @description Exclusive RFC3339 upper bound */
+                until?: string;
+                actor?: string;
+                action?: string;
+                result?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Safe audit event page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEventPage"];
                 };
             };
         };

@@ -312,6 +312,88 @@
         }
       }
     },
+    "/api/v1/audit-events": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_events",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive RFC3339 lower bound",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Exclusive RFC3339 upper bound",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe audit event page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-retention": {
       "get": {
         "tags": [
@@ -1322,6 +1404,118 @@
           "status": {
             "$ref": "#/components/schemas/AgentStatus",
             "description": "Current lifecycle state."
+          }
+        }
+      },
+      "AuditEventPage": {
+        "type": "object",
+        "description": "Bounded audit-event page with an opaque continuation cursor.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventView"
+            },
+            "description": "Events in descending timestamp order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, if present."
+          }
+        }
+      },
+      "AuditEventView": {
+        "type": "object",
+        "description": "One safe audit event in a bounded audit search.",
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "action",
+          "result"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Stable action code."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Operator-facing actor label."
+          },
+          "actor_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable actor id."
+          },
+          "actor_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Actor kind and stable id."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339 event timestamp."
+          },
+          "authentication_method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Authentication method, when present."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable database event identifier."
+          },
+          "reason_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Safe reason code."
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Request correlation id, when present."
+          },
+          "result": {
+            "type": "string",
+            "description": "Event result code."
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Safe target label, when present."
+          },
+          "target_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable target id."
+          },
+          "target_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target kind and stable id."
           }
         }
       },

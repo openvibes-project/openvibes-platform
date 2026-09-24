@@ -1,7 +1,5 @@
+use crate::{Client, StoreError, console_read::PageLimit};
 use chrono::{DateTime, Utc};
-use deadpool_postgres::Client;
-
-use crate::StoreError;
 
 /// Administrator-controlled audit-log retention policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -14,6 +12,133 @@ pub struct RetentionPolicy {
     pub updated_at: DateTime<Utc>,
     /// Actor that last changed the policy.
     pub updated_by: String,
+}
+
+/// Exclusive audit-event continuation key: timestamp then sequence id.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuditCursor {
+    /// Timestamp of the last event in the previous page.
+    pub at: DateTime<Utc>,
+    /// Database sequence id of the last event in the previous page.
+    pub id: i64,
+}
+
+/// Bounded audit-event query. A lower timestamp is required for index use.
+#[derive(Clone, Debug)]
+pub struct AuditQuery {
+    /// Inclusive lower timestamp.
+    pub since: DateTime<Utc>,
+    /// Exclusive upper timestamp.
+    pub until: Option<DateTime<Utc>>,
+    /// Optional exact actor filter.
+    pub actor: Option<String>,
+    /// Optional exact action filter.
+    pub action: Option<String>,
+    /// Optional exact result filter.
+    pub result: Option<String>,
+    /// Exclusive keyset cursor.
+    pub after: Option<AuditCursor>,
+    /// Bounded page size.
+    pub limit: PageLimit,
+}
+
+/// Safe audit-event fields for the console. Event detail, source address, and
+/// user-agent are intentionally omitted from this general list model.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuditEvent {
+    /// Database sequence id.
+    pub id: i64,
+    /// Event timestamp.
+    pub at: DateTime<Utc>,
+    /// Human-readable actor.
+    pub actor: String,
+    /// Stable action code.
+    pub action: String,
+    /// Safe display target, if present.
+    pub target: Option<String>,
+    /// Result code.
+    pub result: String,
+    /// Correlation id, if present.
+    pub request_id: Option<String>,
+    /// Actor category.
+    pub actor_kind: Option<String>,
+    /// Stable actor id.
+    pub actor_id: Option<String>,
+    /// Authentication method, if applicable.
+    pub authentication_method: Option<String>,
+    /// Target category.
+    pub target_kind: Option<String>,
+    /// Stable target id.
+    pub target_id: Option<String>,
+    /// Safe reason code.
+    pub reason_code: Option<String>,
+}
+
+/// One page of audit events in descending time and id order.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuditPage {
+    /// At most the requested number of events.
+    pub items: Vec<AuditEvent>,
+    /// Cursor for the next page, if one exists.
+    pub next: Option<AuditCursor>,
+}
+
+/// Lists a bounded set of audit events using exact filters and keyset paging.
+pub async fn events(client: &Client, query: &AuditQuery) -> Result<AuditPage, StoreError> {
+    let after = query.after.as_ref();
+    let rows = client
+        .query(
+            "SELECT id, at, actor, action, target, result, request_id, actor_kind,
+                    actor_id, authentication_method, target_kind, target_id, reason_code
+             FROM audit_log
+             WHERE at >= $1 AND ($2::timestamptz IS NULL OR at < $2)
+               AND ($3::text IS NULL OR actor = $3)
+               AND ($4::text IS NULL OR action = $4)
+               AND ($5::text IS NULL OR result = $5)
+               AND ($6::boolean = false OR (at, id) < ($7, $8))
+             ORDER BY at DESC, id DESC LIMIT $9",
+            &[
+                &query.since,
+                &query.until,
+                &query.actor,
+                &query.action,
+                &query.result,
+                &after.is_some(),
+                &after.map(|cursor| cursor.at),
+                &after.map(|cursor| cursor.id),
+                &(i64::from(query.limit.get()) + 1),
+            ],
+        )
+        .await?;
+    let mut items: Vec<_> = rows.iter().map(audit_event_from_row).collect();
+    let next = if items.len() > usize::from(query.limit.get()) {
+        items.pop();
+        items.last().map(|event| AuditCursor {
+            at: event.at,
+            id: event.id,
+        })
+    } else {
+        None
+    };
+    Ok(AuditPage { items, next })
+}
+
+fn audit_event_from_row(row: &tokio_postgres::Row) -> AuditEvent {
+    AuditEvent {
+        id: row.get(0),
+        at: row.get(1),
+        actor: row.get(2),
+        action: row.get(3),
+        target: row.get(4),
+        result: row.get(5),
+        request_id: row.get(6),
+        actor_kind: row.get(7),
+        actor_id: row.get(8),
+        authentication_method: row.get(9),
+        target_kind: row.get(10),
+        target_id: row.get(11),
+        reason_code: row.get(12),
+    }
 }
 
 /// Reads the singleton console audit retention policy.

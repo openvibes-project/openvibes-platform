@@ -8,6 +8,9 @@ policy and appending its audit event happen in one transaction.
 ## Interfaces
 
 - `record` appends an operator or system event with no secret-bearing detail.
+- `events` performs exact-filtered, bounded keyset reads ordered by timestamp
+  and event id. A mandatory lower time bound keeps queries indexable. Its safe
+  view omits detail JSON, source address, and user agent.
 - `retention_policy` reads the current day limit, version, update timestamp,
   and actor.
 - `update_retention_policy` accepts 1–36500 days and an expected version. It
@@ -15,11 +18,16 @@ policy and appending its audit event happen in one transaction.
   for a no-op update, and commits changed policy plus `audit.retention.updated`
   atomically.
 
-The console API requires global `audit.read` to show policy and global
+The console API requires global `audit.read` to show policy and events and global
 `audit.retention.manage` to update it. The API mutation also requires a current
 session CSRF token, exact configured Origin, same-origin Fetch Metadata, and a
 matching `If-Match` version. Audit cleanup remains a bounded maintenance
 operation and must use the effective policy cutoff.
+
+`GET /api/v1/audit-events` accepts a required `since`, optional exclusive
+`until`, exact `actor`/`action`/`result` filters, and a limit from 1 to 100.
+Opaque cursors bind all filters. Successful reads append `audit.accessed`; the
+response does not include event details or request source metadata.
 
 ## Failure behaviour
 
@@ -32,4 +40,5 @@ retention values are refused before opening a transaction.
 ```sh
 eval "$(scripts/test-db.sh)"
 cargo test --locked -p platform-store --test console_audit
+cargo test --locked -p openvibes-console --test auth_http
 ```

@@ -62,6 +62,11 @@ impl PageLimit {
         (1..=MAX_PAGE_SIZE).contains(&value).then_some(Self(value))
     }
 
+    /// Returns the validated page size.
+    pub const fn get(self) -> u16 {
+        self.0
+    }
+
     fn value(self) -> i64 {
         i64::from(self.0)
     }

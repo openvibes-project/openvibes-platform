@@ -567,6 +567,25 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let retention: Value =
         serde_json::from_slice(&to_bytes(retention.into_body(), 4096).await.unwrap()).unwrap();
     assert_eq!(retention["retention_days"], 365);
+    let audit_events = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/audit-events?since=2000-01-01T00%3A00%3A00Z&limit=1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(audit_events.status(), StatusCode::OK);
+    let audit_events: Value =
+        serde_json::from_slice(&to_bytes(audit_events.into_body(), 16_384).await.unwrap()).unwrap();
+    assert_eq!(audit_events["items"].as_array().unwrap().len(), 1);
+    assert!(audit_events["items"][0].get("detail").is_none());
+    assert!(audit_events["items"][0].get("source_address").is_none());
+    assert!(audit_events["items"][0].get("user_agent").is_none());
+    assert!(audit_events["next_cursor"].is_string());
     let retention_update = router
         .clone()
         .oneshot(

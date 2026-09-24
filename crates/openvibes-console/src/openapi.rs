@@ -4,12 +4,12 @@ use utoipa::OpenApi;
 
 use crate::{
     api::{
-        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuditRetentionPolicy,
-        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
-        CursorPagination, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage,
-        FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest, LoginResponse,
-        Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse, Severity,
-        UpdateAuditRetentionRequest,
+        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuditEventPage,
+        AuditEventView, AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod,
+        CertificatePage, CertificateView, CursorPagination, EffectiveCapability,
+        FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+        FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
+        SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -37,12 +37,15 @@ use crate::{
         crate::router::authenticated_finding_history,
         crate::router::authenticated_finding_event,
         crate::router::authenticated_audit_retention,
+        crate::router::authenticated_audit_events,
         crate::router::update_authenticated_audit_retention
     ),
     components(schemas(
         AuthenticationLevel,
         AuthenticationMethod,
         AuditRetentionPolicy,
+        AuditEventPage,
+        AuditEventView,
         AuditRetentionPolicy,
         AgentDetail,
         AgentPage,
