@@ -131,6 +131,8 @@ fn content_type(path: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use crate::frontend_contract::PUBLIC_ASSETS;
+
     use super::{
         CachePolicy, MANIFEST_ASSETS, content_type, manifest_response, public_response, response,
     };
@@ -155,9 +157,9 @@ mod tests {
 
     #[test]
     fn public_asset_inventory_is_exact() {
-        assert!(public_response("/app.webmanifest").is_some());
-        assert!(public_response("/theme-bootstrap.js").is_some());
-        assert!(public_response("/brand/openvibes-mark-placeholder.svg").is_some());
+        for (route, _) in PUBLIC_ASSETS {
+            assert!(public_response(route).is_some(), "{route}");
+        }
         assert!(public_response("/brand/not-built.svg").is_none());
     }
 

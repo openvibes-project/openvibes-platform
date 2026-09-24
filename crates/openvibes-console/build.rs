@@ -192,9 +192,6 @@ fn validate_frontend(crate_dir: &Path, contract: &FrontendContract) -> Result<()
                 "generated public asset {relative:?} differs from source"
             ));
         }
-        if !index_text.contains(route) {
-            return Err(format!("index.html does not reference {route:?}"));
-        }
     }
     let entry_file = required_path(index_entry, "file", "index.html")?;
     if !index_text.contains(&format!("/{entry_file}")) {

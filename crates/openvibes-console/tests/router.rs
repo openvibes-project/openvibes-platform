@@ -285,7 +285,7 @@ async fn embedded_assets_have_explicit_types_and_cache_policies() {
     let brand = public_router()
         .oneshot(
             Request::builder()
-                .uri("/brand/openvibes-mark-placeholder.svg")
+                .uri("/brand/openvibes-mark.svg")
                 .body(Body::empty())
                 .unwrap(),
         )

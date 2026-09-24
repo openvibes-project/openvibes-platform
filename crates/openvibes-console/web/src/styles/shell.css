@@ -56,39 +56,43 @@
 }
 
 .brand__mark {
-  display: inline-flex;
-  align-items: center;
-  color: var(--color-brand);
-  font-weight: 800;
-  letter-spacing: -0.2em;
-}
-
-.brand__v {
-  font-size: 1.875rem;
-  line-height: 1;
-}
-
-.brand__signal {
-  font-size: 0.75rem;
-  letter-spacing: -0.2em;
-  transform: scaleY(1.45);
+  width: 2.75rem;
+  height: auto;
+  flex: 0 0 auto;
 }
 
 .brand__wordmark {
-  display: flex;
-  align-items: baseline;
-  font-size: 1.35rem;
-  letter-spacing: -0.04em;
-  white-space: nowrap;
+  display: grid;
+  width: 10.25rem;
+  min-width: 0;
 }
 
-.brand__open {
-  font-weight: 400;
+.brand__wordmark img {
+  grid-area: 1 / 1;
+  width: 100%;
+  height: auto;
 }
 
-.brand__vibes {
-  color: var(--color-brand-strong);
-  font-weight: 750;
+.brand__wordmark-dark {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) .brand__wordmark-light {
+    display: none;
+  }
+
+  :root:not([data-theme]) .brand__wordmark-dark {
+    display: block;
+  }
+}
+
+:root[data-theme="dark"] .brand__wordmark-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .brand__wordmark-dark {
+  display: block;
 }
 
 .sidebar__collapse {

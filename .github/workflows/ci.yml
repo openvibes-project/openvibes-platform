@@ -77,6 +77,11 @@ jobs:
           git submodule update --init
           cargo fetch --locked
 
+      - name: Install console brand renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends imagemagick
+
       - name: Build and validate console frontend
         run: bash scripts/build-console.sh
 
