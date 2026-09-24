@@ -190,6 +190,7 @@ fn tick(
                 // message, one evidence key.
                 finding_id: id(plan::finding_id(index, tick, n)),
                 scan_id: id(format!("scan.{observed}")),
+                rule_set_id: Some(id("baseline".into())),
                 rule_id: id(format!("baseline.rule.{n:03}")),
                 rule_version: 1,
                 observed_at_unix_ms: observed,

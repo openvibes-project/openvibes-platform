@@ -82,6 +82,8 @@ pub struct StoredFinding {
     pub finding_id: String,
     /// Scan that produced it.
     pub scan_id: String,
+    /// Rule set whose bundle produced it; empty when the sender did not say.
+    pub rule_set_id: String,
     /// Matching rule.
     pub rule_id: String,
     /// Rule version.
@@ -336,8 +338,8 @@ pub async fn store_findings(
             .execute(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
-                     origin, authenticated)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'online', true)
+                     origin, authenticated, rule_set_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'online', true, $13)
                  ON CONFLICT DO NOTHING",
                 &[
                     &finding.finding_id,
@@ -352,15 +354,16 @@ pub async fn store_findings(
                     &finding.message,
                     &finding.evidence,
                     &now,
+                    &finding.rule_set_id,
                 ],
             )
             .await?;
         transaction
             .execute(
                 "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
-                     severity, first_observed_at, last_observed_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $6)
-                 ON CONFLICT (agent_id, rule_id) DO UPDATE SET
+                     severity, first_observed_at, last_observed_at, rule_set_id)
+                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+                 ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET
                      last_finding_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.last_finding_id ELSE current_findings.last_finding_id END,
                      rule_version = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
@@ -376,6 +379,7 @@ pub async fn store_findings(
                     &finding.rule_version,
                     &finding.severity,
                     &finding.observed_at,
+                    &finding.rule_set_id,
                 ],
             )
             .await?;

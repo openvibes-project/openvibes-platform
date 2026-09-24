@@ -25,7 +25,10 @@ functions, so schema knowledge and SQL live in one place.
 Numbered SQL files in `/migrations`, embedded at build time. Migration 4
 revokes UPDATE on `findings`, `certificates`, and `token_uses` from
 `openvibes_ingest`, which only inserts them; a test checks the role is
-refused every write, read, or DDL it does not use. `migrate` runs
+refused every write, read, or DDL it does not use. Migration 5 adds `rule_set_id`
+to `findings` and `current_findings` (`''` = unknown sender) and keys
+current state by agent, rule set, and rule: rule ids are unique only within
+a rule set. `migrate` runs
 in one transaction that first takes an advisory lock (before even creating
 `schema_version`), so concurrent runs serialize and both succeed;
 already-applied migrations are skipped. A database at a

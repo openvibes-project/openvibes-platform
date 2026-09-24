@@ -18,7 +18,7 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    always-true rules) and a token from `openvibes-admin token create`,
    enrolls, sends an accepted heartbeat, and delivers its findings **exactly
    once**: its queue is empty and the ids it recorded as acknowledged equal
-   the ids in `findings`.
+   the ids in `findings`, and every stored finding names its rule set.
 3. **Restart:** the agent is stopped and started; it reconnects (a new
    accepted heartbeat) and nothing is delivered twice.
 4. **Renewal:** with the agent stopped, `obtained_at_ms` in its
