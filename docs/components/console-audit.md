@@ -1,0 +1,35 @@
+# Console audit storage
+
+`platform_store::audit` records platform audit events and manages the
+singleton console retention policy. The policy defaults to 365 days and uses a
+monotonic version to reject stale administrator updates. Updating a changed
+policy and appending its audit event happen in one transaction.
+
+## Interfaces
+
+- `record` appends an operator or system event with no secret-bearing detail.
+- `retention_policy` reads the current day limit, version, update timestamp,
+  and actor.
+- `update_retention_policy` accepts 1–36500 days and an expected version. It
+  returns `None` on a stale version, leaves the version/audit history unchanged
+  for a no-op update, and commits changed policy plus `audit.retention.updated`
+  atomically.
+
+The console API must require global `audit.read` to show policy and global
+`audit.retention.manage` to update it. The mutation also requires a current
+session CSRF token, exact configured Origin, and same-origin Fetch Metadata.
+Audit cleanup remains a bounded maintenance operation and must use the
+effective policy cutoff.
+
+## Failure behaviour
+
+Database failures return the fixed `StoreError` value; SQL text and values are
+not exposed. A stale expected version causes no change or audit event. Invalid
+retention values are refused before opening a transaction.
+
+## How to test
+
+```sh
+eval "$(scripts/test-db.sh)"
+cargo test --locked -p platform-store --test console_audit
+```
