@@ -291,7 +291,8 @@ pub async fn authenticate(
 }
 
 /// Records a heartbeat, writing at most once per 5 minutes per agent unless
-/// the hostname changed. A present hostname replaces the stored one; an
+/// the hostname or the capabilities (protocol P7: the enabled collectors)
+/// changed. A present hostname replaces the stored one; an
 /// absent one keeps it. Returns whether a write happened.
 pub async fn heartbeat(
     client: &Client,
@@ -308,7 +309,8 @@ pub async fn heartbeat(
                  hostname = COALESCE($6, hostname)
              WHERE agent_id = $1
                AND (last_seen_at IS NULL OR last_seen_at < $5
-                    OR hostname IS DISTINCT FROM COALESCE($6, hostname))",
+                    OR hostname IS DISTINCT FROM COALESCE($6, hostname)
+                    OR capabilities IS DISTINCT FROM $4)",
             &[
                 &agent_id,
                 &now,

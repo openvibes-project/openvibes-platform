@@ -449,3 +449,59 @@ async fn current_state_is_kept_per_rule_set() {
     drop((client, admin));
     db.drop().await;
 }
+
+#[tokio::test]
+async fn changed_capabilities_are_written_at_once() {
+    let (db, _, multi) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [5; 32], now, issued(5, 5))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    let id = identity.agent_id.as_str();
+    let all = [
+        "collector.processes".to_owned(),
+        "collector.packages".to_owned(),
+    ];
+    let fewer = ["collector.processes".to_owned()];
+    assert!(
+        ingest::heartbeat(&client, id, "0.2.0", None, &all, now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !ingest::heartbeat(&client, id, "0.2.0", None, &all, now + Duration::minutes(1))
+            .await
+            .unwrap(),
+        "unchanged capabilities stay throttled"
+    );
+    // Protocol P7: each heartbeat's list replaces the stored one, so a
+    // configuration change shows at once, not after the 5-minute throttle.
+    assert!(
+        ingest::heartbeat(
+            &client,
+            id,
+            "0.2.0",
+            None,
+            &fewer,
+            now + Duration::minutes(2)
+        )
+        .await
+        .unwrap(),
+        "changed capabilities are written at once"
+    );
+    let admin = db.pool.get().await.unwrap();
+    let stored: Vec<String> = admin
+        .query_one(
+            "SELECT capabilities FROM agents WHERE agent_id = $1",
+            &[&id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(stored, fewer);
+    db.drop().await;
+}

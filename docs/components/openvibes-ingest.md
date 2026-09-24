@@ -66,8 +66,11 @@ Shared with distribution: implemented in
 - `POST /v1/heartbeat` (authenticated): `Heartbeat`; its `agent_id` must be
   the authenticated agent's (else 400). Stores version, capabilities, and the
   optional `hostname` (a spoofable operator label, never identity), writing
-  at most every 5 minutes unless the hostname changed; an absent hostname
-  keeps the stored one. 204.
+  at most every 5 minutes unless the hostname or the capabilities changed;
+  an absent hostname keeps the stored one. Capabilities name the agent's
+  enabled collectors (`collector.processes`, `collector.packages`,
+  `collector.ports`; protocol P7), and each list replaces the stored one.
+  204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so
