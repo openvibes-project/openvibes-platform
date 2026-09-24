@@ -139,6 +139,10 @@ banner are never included in the production RPM.
   report-only.
 - A wrong method on an API route is a 405 Problem Details response with
   `Cache-Control: no-store`, like every API error.
+- The public and development routers cap extractor request bodies at 1 MiB,
+  request handling at 15 seconds, and in-flight requests at 128 per process.
+  Idle TCP connections are not capped yet; that limit is required before a
+  non-loopback or TLS listener is enabled.
 - Problem Details errors log their request ID, stable code, and HTTP status;
   request fields and secret values are not logged.
 - An `embedded-ui` build fails if the shared route/public-asset contract,
@@ -151,8 +155,9 @@ banner are never included in the production RPM.
   PNG signatures, alpha channel, and declared dimensions.
 **Still planned (C2 to C5):**
 
-- Request limits (body size, request deadline, in-flight and connection
-  caps, as in ingest) land before any non-loopback or TLS listener.
+- Connection caps land before any non-loopback or TLS listener. Body size,
+  request deadline, and in-flight request caps are already enforced on the
+  public and development routers.
 - Missing or invalid security configuration, a wildcard plaintext proxy bind,
   a non-loopback health listener, or an untrusted forwarded-header setup makes
   startup fail rather than weakening the trust boundary.

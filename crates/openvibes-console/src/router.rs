@@ -5,13 +5,20 @@ use std::sync::{
 
 use axum::{
     Router,
+    extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
     routing::get,
 };
+use tokio::{sync::Semaphore, time::timeout};
 
 use crate::problem::{ProblemDetails, problem_response};
+
+const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
+const MAX_IN_FLIGHT_REQUESTS: usize = 128;
+const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+// ponytail: one shared router cap; split API and asset budgets if one starves the other.
 
 #[cfg(feature = "embedded-ui")]
 use axum::extract::Path;
@@ -48,6 +55,10 @@ impl Readiness {
 /// enabled, only the explicitly declared browser routes receive the SPA entry
 /// document.
 pub fn public_router() -> Router {
+    with_request_limits(public_routes())
+}
+
+fn public_routes() -> Router {
     let router = Router::new()
         .nest("/api", api_router())
         .nest("/auth", Router::new().fallback(auth_not_found))
@@ -56,9 +67,39 @@ pub fn public_router() -> Router {
     #[cfg(feature = "embedded-ui")]
     let router = router.merge(frontend_router());
 
+    router.fallback(browser_not_found)
+}
+
+fn with_request_limits(router: Router) -> Router {
     router
-        .fallback(browser_not_found)
+        .layer(DefaultBodyLimit::max(MAX_REQUEST_BODY_BYTES))
+        .layer(middleware::from_fn_with_state(
+            Arc::new(Semaphore::new(MAX_IN_FLIGHT_REQUESTS)),
+            request_limits,
+        ))
         .layer(middleware::map_response(public_security_headers))
+}
+
+async fn request_limits(
+    axum::extract::State(capacity): axum::extract::State<Arc<Semaphore>>,
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> Response {
+    let Ok(_permit) = capacity.try_acquire_owned() else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "request_capacity_exceeded",
+            "The console is temporarily at capacity",
+        ));
+    };
+    match timeout(REQUEST_DEADLINE, next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => problem_response(ProblemDetails::new(
+            StatusCode::REQUEST_TIMEOUT,
+            "request_timed_out",
+            "The request exceeded its time limit",
+        )),
+    }
 }
 
 fn api_router() -> Router {
@@ -73,10 +114,10 @@ fn api_router() -> Router {
 /// page whose name resolves to 127.0.0.1 (DNS rebinding) cannot read it.
 /// Requests without `Host` pass; browsers always send one.
 pub fn development_router() -> Router {
-    let router = public_router();
+    let router = public_routes();
     #[cfg(feature = "dev-seed")]
     let router = router.merge(crate::seeded::router());
-    router.layer(middleware::from_fn(loopback_host_only))
+    with_request_limits(router).layer(middleware::from_fn(loopback_host_only))
 }
 
 async fn loopback_host_only(request: axum::extract::Request, next: middleware::Next) -> Response {
