@@ -7,7 +7,7 @@ decided design. What remains is the user's approval of the spec as a
 whole, and then an implementation plan. That plan waits until the review
 fixes are done (see `decisions.md`).
 
-Architecture context:
+- Architecture context:
   [`2026-09-23-platform-architecture-design.md`](2026-09-23-platform-architecture-design.md),
   sections 3, 4, 5 and 9 (item 2).
 - Protocol: `openvibes-protocol/spec/contracts-v1.md` ("Rule Distribution")
