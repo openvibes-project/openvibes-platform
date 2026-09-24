@@ -67,11 +67,13 @@ function requestHeaders(): Headers {
 }
 
 function useRead<T>(url: string): ReadState<T> {
-  const [state, setState] = useState<ReadState<T>>({ status: "loading" });
+  const [state, setState] = useState<{ url: string; result: ReadState<T> }>({
+    url: "",
+    result: { status: "loading" },
+  });
 
   useEffect(() => {
     const controller = new AbortController();
-    setState({ status: "loading" });
     if (url === "") return () => controller.abort();
     void fetch(url, { headers: requestHeaders(), signal: controller.signal })
       .then(async (response) => {
@@ -81,16 +83,23 @@ function useRead<T>(url: string): ReadState<T> {
         }
         return (await response.json()) as T;
       })
-      .then((value) => setState({ status: "ready", value }))
+      .then((value) => setState({ url, result: { status: "ready", value } }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         const detail = typeof error === "object" && error !== null ? error as { code?: string; message?: string } : {};
-        setState({ status: "error", code: detail.code ?? "unavailable", message: detail.message ?? "The console could not reach the read service." });
+        setState({
+          url,
+          result: {
+            status: "error",
+            code: detail.code ?? "unavailable",
+            message: detail.message ?? "The console could not reach the read service.",
+          },
+        });
       });
     return () => controller.abort();
   }, [url]);
 
-  return state;
+  return state.url === url ? state.result : { status: "loading" };
 }
 
 function ReadStatus<T>({ state, children }: { state: ReadState<T>; children: (value: T) => ReactNode }) {
