@@ -9,11 +9,17 @@ async fn migration_applies_once_and_is_idempotent() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     assert_eq!(platform_store::schema_version(&client).await.unwrap(), None);
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 3);
-    assert_eq!(platform_store::migrate(&mut client).await.unwrap(), 3);
+    assert_eq!(
+        platform_store::migrate(&mut client).await.unwrap(),
+        platform_store::SCHEMA_VERSION
+    );
+    assert_eq!(
+        platform_store::migrate(&mut client).await.unwrap(),
+        platform_store::SCHEMA_VERSION
+    );
     assert_eq!(
         platform_store::schema_version(&client).await.unwrap(),
-        Some(3)
+        Some(platform_store::SCHEMA_VERSION)
     );
     drop(client);
     db.drop().await;
@@ -65,7 +71,13 @@ async fn concurrent_migrate_and_maintenance_both_succeed() {
             platform_store::migrate(&mut a),
             platform_store::migrate(&mut b)
         );
-        assert_eq!((x.unwrap(), y.unwrap()), (3, 3));
+        assert_eq!(
+            (x.unwrap(), y.unwrap()),
+            (
+                platform_store::SCHEMA_VERSION,
+                platform_store::SCHEMA_VERSION
+            )
+        );
         let today = chrono::Utc::now().date_naive();
         let (x, y) = tokio::join!(
             platform_store::ensure_partitions(&a, today, 7),

@@ -371,3 +371,27 @@ async fn waits_and_statements_are_bounded() {
     drop(held);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_ingest_role_has_only_the_rights_it_uses() {
+    let (db, _, _) = setup().await;
+    let client = as_ingest(&db).await;
+    for statement in [
+        "UPDATE findings SET message = 'x'",
+        "UPDATE certificates SET chain_pem = 'x'",
+        "UPDATE token_uses SET used_at = now()",
+        "UPDATE enrollment_tokens SET revoked_at = now()",
+        "SELECT count(*) FROM audit_log",
+        "DELETE FROM agents",
+        "CREATE TABLE intruder (x int)",
+    ] {
+        let error = client.batch_execute(statement).await.expect_err(statement);
+        assert_eq!(
+            error.code(),
+            Some(&tokio_postgres::error::SqlState::INSUFFICIENT_PRIVILEGE),
+            "{statement}"
+        );
+    }
+    drop(client);
+    db.drop().await;
+}

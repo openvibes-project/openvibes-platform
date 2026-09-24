@@ -11,7 +11,10 @@ use common::{Fixture, row, stdout};
 #[tokio::test]
 async fn migrate_status_and_maintenance_are_audited() {
     let fixture = Fixture::create().await;
-    assert!(stdout(&fixture.run(&["migrate"])).contains("schema version 3"));
+    assert!(stdout(&fixture.run(&["migrate"])).contains(&format!(
+        "schema version {}",
+        platform_store::SCHEMA_VERSION
+    )));
     let status = stdout(&fixture.run(&["status"]));
     for line in [
         "agents active 0",
