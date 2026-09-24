@@ -1,10 +1,10 @@
 # OpenVIBES Console Technical Design
 
 
-> **Updated 2026-09-24 (Claude, at the user's request):** aligned with main's
-> migrations 4 and 5 and sub-project 2 (see `decisions.md`): findings keyed
-> by rule set, console migrations from 0007, rule tables reused from SP2.
-> The design is otherwise unchanged.
+> **Updated 2026-09-24 (Codex):** the shared C2 console read model is now
+> migration 7. Console-owned authentication, RBAC, and audit schema therefore
+> starts at migration 8 or later. The earlier migration range below is stale;
+> the append-only migration sequence is authoritative.
 
 Status: **approved by the project owner, 2026-09-23**. Product companion:
 [`2026-09-23-console-product-design.md`](2026-09-23-console-product-design.md).
@@ -687,11 +687,11 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 5 must add or extend. Main
-now has migration 4 (the ingest role keeps only the rights it uses) and 5
-(`rule_set_id` on `findings` and `current_findings`, current state keyed by
-agent, rule set, and rule); 0006 is reserved for sub-project 2's rule tables.
-**Console migrations are numbered 0007 or later**, rechecked at merge time.
+Append-only migrations after the current schema 7 must add or extend. Main
+has migration 4 (ingest least privilege), migration 5 (`rule_set_id`),
+migration 6 (SP2 rule tables), and migration 7 (C2 read models).
+**Console-owned migrations are numbered 0008 or later**, rechecked at merge
+time.
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
