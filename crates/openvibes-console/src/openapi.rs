@@ -27,7 +27,9 @@ use crate::{
         crate::router::login,
         crate::router::logout,
         crate::router::authenticated_agent_summary,
-        crate::router::authenticated_agents
+        crate::router::authenticated_agents,
+        crate::router::authenticated_agent_detail,
+        crate::router::authenticated_agent_certificates
     ),
     components(schemas(
         AuthenticationLevel,

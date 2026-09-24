@@ -132,6 +132,23 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .await
             .unwrap();
     }
+    for (serial, issued_at) in [(1_u8, enrolled_at), (2_u8, enrolled_at)] {
+        client
+            .execute(
+                "INSERT INTO certificates (serial, agent_id, spki_sha256, not_before,
+                    not_after, issued_at, chain_pem)
+                 VALUES ($1, 'agent.00000000-0000-4000-8000-000000000101',
+                    $2, $3, $4, $3, 'private certificate chain')",
+                &[
+                    &&[serial; 16][..],
+                    &&[serial; 32][..],
+                    &issued_at,
+                    &(issued_at + chrono::Duration::days(90)),
+                ],
+            )
+            .await
+            .unwrap();
+    }
     let password = "violet-satellite-mountain-otter-2026";
     let normalized = NormalizedPassword::new(password).unwrap();
     let phc = hash_password(&normalized).unwrap();
@@ -295,6 +312,75 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(mismatched_cursor.status(), StatusCode::BAD_REQUEST);
+    let agent_detail = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/agent.00000000-0000-4000-8000-000000000101")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(agent_detail.status(), StatusCode::OK);
+    let agent_detail: Value =
+        serde_json::from_slice(&to_bytes(agent_detail.into_body(), 16_384).await.unwrap()).unwrap();
+    assert_eq!(agent_detail["certificates"].as_array().unwrap().len(), 2);
+    assert!(
+        !agent_detail
+            .to_string()
+            .contains("private certificate chain")
+    );
+    let certificate_page = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/agent.00000000-0000-4000-8000-000000000101/certificates?limit=1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(certificate_page.status(), StatusCode::OK);
+    let certificate_page: Value =
+        serde_json::from_slice(&to_bytes(certificate_page.into_body(), 8192).await.unwrap())
+            .unwrap();
+    assert_eq!(certificate_page["items"].as_array().unwrap().len(), 1);
+    let certificate_cursor = certificate_page["next_cursor"].as_str().unwrap();
+    let next_certificates = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents/agent.00000000-0000-4000-8000-000000000101/certificates?limit=1&cursor={certificate_cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(next_certificates.status(), StatusCode::OK);
+    let next_certificates: Value =
+        serde_json::from_slice(&to_bytes(next_certificates.into_body(), 8192).await.unwrap())
+            .unwrap();
+    assert_eq!(next_certificates["items"].as_array().unwrap().len(), 1);
+    let wrong_agent_cursor = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!(
+                    "/api/v1/agents/agent.00000000-0000-4000-8000-000000000102/certificates?cursor={certificate_cursor}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(wrong_agent_cursor.status(), StatusCode::BAD_REQUEST);
     let old_session_cookie = session_cookie.clone();
     let (preauth_cookie, browser_cookie, csrf) = new_preauth(&router).await;
     let rotated_login = router

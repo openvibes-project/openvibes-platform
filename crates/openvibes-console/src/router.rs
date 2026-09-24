@@ -5,7 +5,7 @@ use std::sync::{
 
 use axum::{
     Router,
-    extract::{ConnectInfo, DefaultBodyLimit, Query, State, rejection::QueryRejection},
+    extract::{ConnectInfo, DefaultBodyLimit, Path, Query, State, rejection::QueryRejection},
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -27,9 +27,6 @@ const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
 const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
 // ponytail: one shared router cap; split API and asset budgets if one starves the other.
-
-#[cfg(feature = "embedded-ui")]
-use axum::extract::Path;
 
 #[cfg(feature = "embedded-ui")]
 use crate::assets::{self, CachePolicy};
@@ -57,6 +54,13 @@ pub(crate) struct AgentListParams {
     limit: Option<u16>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct CertificateListParams {
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
 #[derive(Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 struct AgentCursorToken {
@@ -64,6 +68,15 @@ struct AgentCursorToken {
     scope: platform_store::console_read::AgentScope,
     last_seen_at: Option<String>,
     agent_id: String,
+}
+
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct CertificateCursorToken {
+    agent_id: String,
+    scope: platform_store::console_read::AgentScope,
+    issued_at: String,
+    serial: String,
 }
 
 impl Readiness {
@@ -206,6 +219,11 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/session", get(authenticated_session))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
         .route("/v1/agents", get(authenticated_agents))
+        .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))
+        .route(
+            "/v1/agents/{agent_id}/certificates",
+            get(authenticated_agent_certificates),
+        )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
@@ -595,28 +613,7 @@ pub(crate) async fn authenticated_agents(
         Ok(page) => page,
         Err(_) => return unavailable_auth(),
     };
-    let items = page
-        .items
-        .into_iter()
-        .map(|agent| crate::AgentView {
-            id: agent.agent_id,
-            hostname: agent.hostname,
-            status: match agent.state {
-                AgentState::Active => crate::AgentStatus::Active,
-                AgentState::Stale => crate::AgentStatus::Stale,
-                AgentState::Revoked => crate::AgentStatus::Revoked,
-            },
-            enrolled_at: agent.enrolled_at.to_rfc3339_opts(SecondsFormat::Secs, true),
-            revoked_at: agent
-                .revoked_at
-                .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
-            last_seen_at: agent
-                .last_seen_at
-                .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
-            scanner_version: agent.scanner_version,
-            capabilities: agent.capabilities,
-        })
-        .collect();
+    let items = page.items.into_iter().map(agent_view).collect();
     let next_cursor = match page.next {
         None => None,
         Some(cursor) => {
@@ -651,6 +648,221 @@ fn invalid_agent_query() -> Response {
         "invalid_query",
         "Agent query parameters are invalid",
     ))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents/{agent_id}",
+    tag = "agents",
+    params(("agent_id" = String, Path, description = "Stable agent identifier")),
+    responses(
+        (status = 200, description = "Visible agent detail", body = crate::AgentDetail),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "Agent not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn authenticated_agent_detail(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<String>,
+) -> Response {
+    use platform_store::console_read::{PageLimit, agent_in_scope, certificates_in_scope};
+
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let agent = match agent_in_scope(&client, &agent_id, Utc::now(), &scope).await {
+        Ok(Some(agent)) => agent,
+        Ok(None) => {
+            return problem_response(ProblemDetails::not_found(
+                "agent_not_found",
+                "Agent not found",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    let certificates = match certificates_in_scope(
+        &client,
+        &agent_id,
+        None,
+        PageLimit::new(100).expect("the fixed certificate detail limit is valid"),
+        &scope,
+    )
+    .await
+    {
+        Ok(page) => page.items.into_iter().map(certificate_view).collect(),
+        Err(_) => return unavailable_auth(),
+    };
+    (
+        StatusCode::OK,
+        axum::Json(crate::AgentDetail {
+            agent: agent_view(agent),
+            certificates,
+        }),
+    )
+        .into_response()
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/agents/{agent_id}/certificates",
+    tag = "agents",
+    params(
+        ("agent_id" = String, Path, description = "Stable agent identifier"),
+        ("cursor" = Option<String>, Query, description = "Opaque continuation cursor"),
+        ("limit" = Option<u16>, Query, description = "Page size from 1 to 100")
+    ),
+    responses(
+        (status = 200, description = "Visible certificate metadata page", body = crate::CertificatePage),
+        (status = 400, description = "Invalid query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn authenticated_agent_certificates(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<String>,
+    query: Result<Query<CertificateListParams>, QueryRejection>,
+) -> Response {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::console_read::{CertificateCursor, PageLimit, certificates_in_scope};
+
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::AgentsRead).await {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let Query(params) = match query {
+        Ok(query) => query,
+        Err(_) => return invalid_agent_query(),
+    };
+    let Some(limit) = PageLimit::new(params.limit.unwrap_or(crate::DEFAULT_PAGE_SIZE)) else {
+        return invalid_agent_query();
+    };
+    let after = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let decoded = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(decoded) => decoded,
+                Err(_) => return invalid_agent_query(),
+            };
+            let token = match serde_json::from_slice::<CertificateCursorToken>(&decoded) {
+                Ok(token) if token.agent_id == agent_id && token.scope == scope => token,
+                _ => return invalid_agent_query(),
+            };
+            let issued_at = match chrono::DateTime::parse_from_rfc3339(&token.issued_at) {
+                Ok(value) => value.with_timezone(&Utc),
+                Err(_) => return invalid_agent_query(),
+            };
+            let Some(serial) = decode_hex(&token.serial) else {
+                return invalid_agent_query();
+            };
+            Some(CertificateCursor { issued_at, serial })
+        }
+        Some(_) => return invalid_agent_query(),
+    };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let page = match certificates_in_scope(&client, &agent_id, after.as_ref(), limit, &scope).await
+    {
+        Ok(page) => page,
+        Err(_) => return unavailable_auth(),
+    };
+    let next_cursor = match page.next {
+        None => None,
+        Some(cursor) => {
+            let token = CertificateCursorToken {
+                agent_id,
+                scope,
+                issued_at: cursor
+                    .issued_at
+                    .to_rfc3339_opts(SecondsFormat::Micros, true),
+                serial: encode_hex(&cursor.serial),
+            };
+            match serde_json::to_vec(&token) {
+                Ok(token) => Some(URL_SAFE_NO_PAD.encode(token)),
+                Err(_) => return unavailable_auth(),
+            }
+        }
+    };
+    (
+        StatusCode::OK,
+        axum::Json(crate::CertificatePage {
+            items: page.items.into_iter().map(certificate_view).collect(),
+            next_cursor,
+            generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        }),
+    )
+        .into_response()
+}
+
+fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
+    use platform_store::console_read::AgentState;
+    crate::AgentView {
+        id: agent.agent_id,
+        hostname: agent.hostname,
+        status: match agent.state {
+            AgentState::Active => crate::AgentStatus::Active,
+            AgentState::Stale => crate::AgentStatus::Stale,
+            AgentState::Revoked => crate::AgentStatus::Revoked,
+        },
+        enrolled_at: agent.enrolled_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+        revoked_at: agent
+            .revoked_at
+            .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        last_seen_at: agent
+            .last_seen_at
+            .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        scanner_version: agent.scanner_version,
+        capabilities: agent.capabilities,
+    }
+}
+
+fn certificate_view(
+    certificate: platform_store::console_read::Certificate,
+) -> crate::CertificateView {
+    crate::CertificateView {
+        serial: encode_hex(&certificate.serial),
+        not_before: certificate
+            .not_before
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+        not_after: certificate
+            .not_after
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+        issued_at: certificate
+            .issued_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+fn decode_hex(value: &str) -> Option<Vec<u8>> {
+    if value.is_empty() || !value.len().is_multiple_of(2) {
+        return None;
+    }
+    value
+        .as_bytes()
+        .chunks_exact(2)
+        .map(|pair| {
+            let digits = std::str::from_utf8(pair).ok()?;
+            u8::from_str_radix(digits, 16).ok()
+        })
+        .collect()
 }
 
 async fn authenticated_agent_scope(
