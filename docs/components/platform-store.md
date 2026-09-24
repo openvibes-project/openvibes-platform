@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 7; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 8; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -160,6 +160,19 @@ through C3 handlers that enforce scope in SQL.
 
 `console_read::schema_is_current` returns true only when the database schema
 matches this binary exactly; empty, old, and newer schemas remain unready.
+
+## Console identity and access schema (schema 8)
+
+Migration 8 adds the persistent local identity boundary used by C3: users and
+Argon2id credential slots, hash-only pre-auth and session state, bounded login
+throttle buckets, idempotency records, role/permission bindings, exact-tag
+asset groups, service accounts and hashed tokens, finding-triage state/history,
+structured audit columns, and a versioned 365-day audit-retention policy.
+Built-in Viewer, Analyst, Operator, and Admin role permissions are seeded by
+the migration. The `openvibes_console` database role can read platform data
+and update console-owned state; it cannot update agent/finding source data or
+modify/delete audit rows. This migration establishes tables and grants;
+bounded transactional store operations follow in C3 work.
 
 ## Test
 
