@@ -13,6 +13,10 @@ queries enforce the caller's asset-group scope.
   cookie, rejects bearer or conflicting credentials, checks session and CSRF
   digests in constant time, touches the bounded idle expiry, and resolves active
   role bindings on each request.
+- `GET /auth/v1/preauth` stores a five-minute, one-use hash-only challenge and
+  returns its CSRF token with separate HttpOnly pre-auth and browser-binding
+  cookies. It sets no cookies if persistence fails. The in-memory secret
+  wrappers clear their owned buffers when dropped.
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -36,6 +40,7 @@ agent or finding records.
 ## How to test
 
 Run `cargo test --offline -p openvibes-console` for API contract and router
-checks. Database-backed session coverage uses the isolated PostgreSQL target in
+checks, including fail-closed pre-auth issuance when PostgreSQL is unavailable.
+Positive database-backed auth-flow coverage uses the isolated PostgreSQL target in
 the platform-store test harness: `OPENVIBES_TEST_DATABASE_URL=… cargo test
 --offline -p platform-store --test console_auth`.

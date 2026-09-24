@@ -35,6 +35,11 @@ use crate::frontend_contract::{BROWSER_ROUTES, PUBLIC_ASSETS};
 #[derive(Clone, Debug, Default)]
 pub struct Readiness(Arc<AtomicBool>);
 
+#[derive(Clone)]
+struct AuthHttpState {
+    pool: Pool,
+}
+
 impl Readiness {
     /// Creates a readiness handle with the requested initial state.
     pub fn new(ready: bool) -> Self {
@@ -64,9 +69,10 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool) -> Router {
+    let state = AuthHttpState { pool };
     let router = Router::new()
-        .nest("/api", authenticated_api_router().with_state(pool))
-        .nest("/auth", Router::new().fallback(auth_not_found))
+        .nest("/api", authenticated_api_router().with_state(state.clone()))
+        .nest("/auth", authenticated_auth_router().with_state(state))
         .nest("/assets", asset_router());
     #[cfg(feature = "embedded-ui")]
     let router = router.merge(frontend_router());
@@ -156,11 +162,17 @@ fn api_router() -> Router {
         .fallback(api_not_found)
 }
 
-fn authenticated_api_router() -> Router<Pool> {
+fn authenticated_api_router() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(authenticated_session))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
+}
+
+fn authenticated_auth_router() -> Router<AuthHttpState> {
+    Router::new()
+        .route("/v1/preauth", get(preauth))
+        .fallback(auth_not_found)
 }
 
 /// The public router as served on the loopback development listener: it
@@ -263,7 +275,7 @@ pub(crate) async fn session() -> Response {
 }
 
 async fn authenticated_session(
-    State(pool): State<Pool>,
+    State(state): State<AuthHttpState>,
     request: axum::extract::Request,
 ) -> Response {
     use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
@@ -281,7 +293,7 @@ async fn authenticated_session(
     let digest = session_digest(secret.expose_secret());
     let csrf = session_csrf(secret.expose_secret()).0;
     let now = Utc::now();
-    let client = match pool.get().await {
+    let client = match state.pool.get().await {
         Ok(client) => client,
         Err(_) => {
             return problem_response(ProblemDetails::new(
@@ -376,6 +388,83 @@ async fn authenticated_session(
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+#[derive(serde::Serialize)]
+struct PreauthResponse {
+    csrf_token: String,
+}
+
+impl Drop for PreauthResponse {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.csrf_token.zeroize();
+    }
+}
+
+async fn preauth(State(state): State<AuthHttpState>) -> Response {
+    use crate::auth::{SessionSecret, session_csrf, session_digest};
+
+    let (Ok(preauth_secret), Ok(browser_secret)) =
+        (SessionSecret::generate(), SessionSecret::generate())
+    else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authentication_unavailable",
+            "Authentication is temporarily unavailable",
+        ));
+    };
+    let (csrf_token, csrf_digest) = session_csrf(preauth_secret.cookie_value());
+    let token_digest = session_digest(preauth_secret.cookie_value());
+    let browser_digest = session_digest(browser_secret.cookie_value());
+    let now = Utc::now();
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "authentication_unavailable",
+                "Authentication is temporarily unavailable",
+            ));
+        }
+    };
+    if console_auth::create_preauth(
+        &client,
+        &console_auth::NewPreauth {
+            token_sha256: &token_digest,
+            csrf_sha256: &csrf_digest,
+            browser_sha256: &browser_digest,
+            created_at: now,
+            expires_at: now + Duration::minutes(5),
+        },
+    )
+    .await
+    .is_err()
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "authentication_unavailable",
+            "Authentication is temporarily unavailable",
+        ));
+    }
+    let mut response = (StatusCode::OK, axum::Json(PreauthResponse { csrf_token })).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    let preauth_cookie = format!(
+        "__Host-openvibes-preauth={}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=300",
+        preauth_secret.cookie_value()
+    );
+    let browser_cookie = format!(
+        "__Host-openvibes-browser={}; Secure; HttpOnly; SameSite=Lax; Path=/; Max-Age=300",
+        browser_secret.cookie_value()
+    );
+    for cookie in [preauth_cookie, browser_cookie] {
+        if let Ok(value) = HeaderValue::from_str(&cookie) {
+            response.headers_mut().append(header::SET_COOKIE, value);
+        }
+    }
     response
 }
 

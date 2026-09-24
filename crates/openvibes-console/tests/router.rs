@@ -130,6 +130,29 @@ async fn authenticated_session_rejects_missing_or_malformed_credentials_without_
 }
 
 #[tokio::test]
+async fn preauth_does_not_issue_browser_secrets_when_the_store_is_unavailable() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool)
+        .oneshot(
+            Request::builder()
+                .uri("/auth/v1/preauth")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_public_security_headers(&response);
+    assert!(!response.headers().contains_key(header::SET_COOKIE));
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let problem: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(problem["code"], "authentication_unavailable");
+    assert_eq!(problem["status"], 503);
+}
+
+#[tokio::test]
 async fn unknown_asset_is_an_empty_real_404() {
     let response = public_router()
         .oneshot(

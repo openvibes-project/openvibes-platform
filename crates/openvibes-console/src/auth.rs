@@ -411,6 +411,13 @@ impl SessionSecret {
     }
 }
 
+impl Drop for SessionSecret {
+    fn drop(&mut self) {
+        self.value.zeroize();
+        self.hash.zeroize();
+    }
+}
+
 impl fmt::Debug for SessionSecret {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str("SessionSecret([REDACTED])")
