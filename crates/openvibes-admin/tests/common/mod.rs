@@ -50,11 +50,20 @@ impl Fixture {
     }
 
     pub fn run(&self, args: &[&str]) -> Output {
+        self.run_with(args, &[])
+    }
+
+    /// Runs the CLI with extra environment variables (for example
+    /// `SUDO_USER`); `USER` is always `ov-test` and `SUDO_USER` unset unless
+    /// given.
+    pub fn run_with(&self, args: &[&str], env: &[(&str, &str)]) -> Output {
         Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
             .arg("--config")
             .arg(&self.config)
             .args(args)
             .env("USER", "ov-test")
+            .env_remove("SUDO_USER")
+            .envs(env.iter().copied())
             .output()
             .unwrap()
     }

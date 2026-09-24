@@ -119,3 +119,16 @@ async fn status_and_maintenance_on_an_unmigrated_database_say_to_migrate() {
     }
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run_with(&["migrate"], &[("SUDO_USER", "alice")]));
+    let audit = fixture.audit().await;
+    assert!(
+        audit[0].0.starts_with("ov-test (uid ") && audit[0].0.ends_with(" via sudo by alice"),
+        "{}",
+        audit[0].0
+    );
+    fixture.drop().await;
+}

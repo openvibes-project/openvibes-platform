@@ -172,9 +172,19 @@ fn actor() -> String {
     };
     #[cfg(not(unix))]
     let uid = String::from("unknown");
-    match std::env::var("USER") {
+    let actor = match std::env::var("USER") {
         Ok(user) if !user.is_empty() => format!("{user} (uid {uid})"),
         _ => format!("uid {uid}"),
+    };
+    // Run as `sudo -u openvibes_admin`, the uid is the service account; sudo
+    // names the person in SUDO_USER. Like USER it is only a readable hint
+    // (the uid is the fact); sudo's own log is authoritative.
+    match std::env::var("SUDO_USER") {
+        Ok(person) if !person.is_empty() => {
+            let person: String = person.chars().take(64).collect();
+            format!("{actor} via sudo by {person}")
+        }
+        _ => actor,
     }
 }
 

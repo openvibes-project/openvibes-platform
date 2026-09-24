@@ -151,8 +151,9 @@ intermediate's last day.
 
 ## Known gaps
 
-- Run as `sudo -u openvibes_admin`, audit entries name `openvibes_admin`;
-  sudo's own log names the human.
+- Run as `sudo -u openvibes_admin`, audit entries name the service account
+  and, as a hint, the person from `SUDO_USER`; sudo's own log is
+  authoritative.
 - Finding retention is set twice: `finding_retention_days` in `ingest.toml`
   and `maintenance --retention-days` (default 90 in both).
 
