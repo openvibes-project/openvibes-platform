@@ -43,5 +43,7 @@ pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
 pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
-pub use router::{Readiness, development_router, health_router, public_router};
+pub use router::{
+    Readiness, authenticated_router, development_router, health_router, public_router,
+};
 pub use server::{run, serve};

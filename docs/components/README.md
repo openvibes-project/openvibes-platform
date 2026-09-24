@@ -18,6 +18,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
 | `openvibes-console` | web application and `/api/v1` | seeded C1 read slice; request limits; offline build path | [openvibes-console.md](openvibes-console.md) |
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
+| `console-auth-http` | console module | database-backed browser session validation and per-request capability resolution (C3) | [console-auth-http.md](console-auth-http.md) |
 | `console-rbac` | console module | built-in role permissions and asset-scope resolution | [console-rbac.md](console-rbac.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 

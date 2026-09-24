@@ -201,6 +201,25 @@ impl PresentedSecret {
     }
 }
 
+/// Computes the byte digest used by the console store for a presented session.
+pub(crate) fn session_digest(secret: &str) -> [u8; 32] {
+    let digest = digest::digest(&digest::SHA256, secret.as_bytes());
+    let mut output = [0; 32];
+    output.copy_from_slice(digest.as_ref());
+    output
+}
+
+/// Derives a stable, session-bound synchronizer token and its storage digest.
+/// The token is reproducible from the high-entropy session cookie so it never
+/// needs to be stored in plaintext.
+pub(crate) fn session_csrf(secret: &str) -> (String, [u8; 32]) {
+    let mut input = b"openvibes-console-csrf-v1\0".to_vec();
+    input.extend_from_slice(secret.as_bytes());
+    let token = URL_SAFE_NO_PAD.encode(digest::digest(&digest::SHA256, &input).as_ref());
+    input.zeroize();
+    (token.clone(), session_digest(&token))
+}
+
 impl Drop for PresentedSecret {
     fn drop(&mut self) {
         self.0.zeroize();
@@ -454,7 +473,7 @@ mod tests {
         CredentialParseError, NormalizedPassword, PasswordError, PresentedCredentials,
         SESSION_ABSOLUTE_TIMEOUT_MS, SESSION_IDLE_TIMEOUT_MS, SessionLifetime, SessionSecret,
         browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
-        session_cookie, verify_password,
+        session_cookie, session_csrf, session_digest, verify_password,
     };
 
     #[test]
@@ -502,6 +521,20 @@ mod tests {
         assert!(csrf_token_matches(&headers, &expected));
         headers.append("x-csrf-token", HeaderValue::from_str(&expected).unwrap());
         assert!(!csrf_token_matches(&headers, &expected));
+    }
+
+    #[test]
+    fn session_csrf_is_stable_and_bound_to_one_cookie_secret() {
+        let (token, stored_digest) = session_csrf("high-entropy-cookie-value");
+        let (same_token, same_digest) = session_csrf("high-entropy-cookie-value");
+        let (other_token, _) = session_csrf("another-cookie-value");
+        assert_eq!(token, same_token);
+        assert_eq!(stored_digest, same_digest);
+        assert_ne!(token, other_token);
+        assert_eq!(stored_digest, session_digest(&token));
+        let mut headers = HeaderMap::new();
+        headers.insert("x-csrf-token", HeaderValue::from_str(&token).unwrap());
+        assert!(csrf_token_matches(&headers, &token));
     }
 
     #[test]

@@ -14,8 +14,10 @@ dev-seed = []
 argon2 = { version = "=0.6.0", features = ["zeroize"] }
 axum = { workspace = true, features = ["matched-path", "query"] }
 base64.workspace = true
+chrono.workspace = true
 include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
+platform-store = { path = "../platform-store" }
 ring.workspace = true
 serde.workspace = true
 serde_json.workspace = true

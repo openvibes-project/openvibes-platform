@@ -5,12 +5,15 @@ use std::sync::{
 
 use axum::{
     Router,
-    extract::DefaultBodyLimit,
+    extract::{DefaultBodyLimit, State},
     http::{HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
     routing::get,
 };
+use chrono::{Duration, SecondsFormat, Utc};
+use platform_store::{Pool, console_auth};
+use subtle::ConstantTimeEq;
 use tokio::{sync::Semaphore, time::timeout};
 
 use crate::problem::{ProblemDetails, next_request_id, problem_response};
@@ -56,6 +59,18 @@ impl Readiness {
 /// document.
 pub fn public_router() -> Router {
     with_request_limits(public_routes())
+}
+
+/// Builds the authenticated C3 router backed by the shared PostgreSQL store.
+/// Data routes remain absent until every query applies SQL-enforced asset scope.
+pub fn authenticated_router(pool: Pool) -> Router {
+    let router = Router::new()
+        .nest("/api", authenticated_api_router().with_state(pool))
+        .nest("/auth", Router::new().fallback(auth_not_found))
+        .nest("/assets", asset_router());
+    #[cfg(feature = "embedded-ui")]
+    let router = router.merge(frontend_router());
+    with_request_limits(router.fallback(browser_not_found))
 }
 
 fn public_routes() -> Router {
@@ -137,6 +152,13 @@ async fn request_limits(
 fn api_router() -> Router {
     Router::new()
         .route("/v1/session", get(session))
+        .method_not_allowed_fallback(api_method_not_allowed)
+        .fallback(api_not_found)
+}
+
+fn authenticated_api_router() -> Router<Pool> {
+    Router::new()
+        .route("/v1/session", get(authenticated_session))
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
@@ -238,6 +260,133 @@ async fn api_not_found() -> Response {
 )]
 pub(crate) async fn session() -> Response {
     problem_response(ProblemDetails::authentication_unavailable())
+}
+
+async fn authenticated_session(
+    State(pool): State<Pool>,
+    request: axum::extract::Request,
+) -> Response {
+    use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
+
+    let secret = match presented_credentials(request.headers()) {
+        Ok(PresentedCredentials::Session(secret)) => secret,
+        _ => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::UNAUTHORIZED,
+                "authentication_required",
+                "Authentication required",
+            ));
+        }
+    };
+    let digest = session_digest(secret.expose_secret());
+    let csrf = session_csrf(secret.expose_secret()).0;
+    let now = Utc::now();
+    let client = match pool.get().await {
+        Ok(client) => client,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "authentication_unavailable",
+                "Authentication is temporarily unavailable",
+            ));
+        }
+    };
+    let active = match console_auth::session(&client, &digest, now).await {
+        Ok(Some(session)) => session,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::UNAUTHORIZED,
+                "authentication_required",
+                "Authentication required",
+            ));
+        }
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "authentication_unavailable",
+                "Authentication is temporarily unavailable",
+            ));
+        }
+    };
+    let expected_csrf_hash = crate::auth::session_digest(&csrf);
+    if active.csrf_sha256.len() != expected_csrf_hash.len()
+        || !bool::from(
+            active
+                .csrf_sha256
+                .as_slice()
+                .ct_eq(expected_csrf_hash.as_slice()),
+        )
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::UNAUTHORIZED,
+            "authentication_required",
+            "Authentication required",
+        ));
+    }
+    if !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
+        .await
+        .unwrap_or(false)
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::UNAUTHORIZED,
+            "authentication_required",
+            "Authentication required",
+        ));
+    }
+    let bindings = match console_auth::user_role_bindings(&client, &active.user_id).await {
+        Ok(bindings) => bindings,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "authentication_unavailable",
+                "Authentication is temporarily unavailable",
+            ));
+        }
+    };
+    let mut resolved = Vec::with_capacity(bindings.len());
+    for binding in bindings {
+        let Some(role) = built_in_role(&binding.role_id) else {
+            continue;
+        };
+        let binding = match binding.asset_group_id {
+            Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
+            None => Ok(crate::RoleBinding::global(role)),
+        };
+        if let Ok(binding) = binding {
+            resolved.push(binding);
+        }
+    }
+    let idle_expiry = (now + Duration::minutes(30)).min(active.absolute_expires_at);
+    let response = crate::SessionResponse {
+        principal: crate::SessionPrincipal {
+            id: active.user_id,
+            display_name: active.display_name,
+            username: Some(active.username),
+        },
+        authentication_method: crate::AuthenticationMethod::LocalPassword,
+        authentication_level: crate::AuthenticationLevel::SingleFactor,
+        capabilities: crate::resolve_capabilities(&resolved),
+        csrf_token: csrf,
+        idle_expires_at: idle_expiry.to_rfc3339_opts(SecondsFormat::Secs, true),
+        absolute_expires_at: active
+            .absolute_expires_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+    };
+    let mut response = (StatusCode::OK, axum::Json(response)).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+fn built_in_role(role_id: &str) -> Option<crate::BuiltInRole> {
+    match role_id {
+        "viewer" => Some(crate::BuiltInRole::Viewer),
+        "analyst" => Some(crate::BuiltInRole::Analyst),
+        "operator" => Some(crate::BuiltInRole::Operator),
+        "admin" => Some(crate::BuiltInRole::Admin),
+        _ => None,
+    }
 }
 
 async fn api_method_not_allowed() -> Response {
