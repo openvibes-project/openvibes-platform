@@ -128,6 +128,51 @@ test("gates the workspace when there is no authenticated session", async ({ page
   await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
 });
 
+test("completes the browser login, session check, and sign-out journey", async ({ page }) => {
+  const preauthToken = "p".repeat(43);
+  const sessionToken = "s".repeat(43);
+  await page.route("**/auth/v1/preauth", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ csrf_token: preauthToken, expires_at: "2026-09-24T23:59:00Z" }),
+  }));
+  await page.route("**/auth/v1/login", async (route) => {
+    expect(route.request().headers()["x-csrf-token"]).toBe(preauthToken);
+    expect(JSON.parse(route.request().postData() ?? "{}")).toEqual({
+      username: "alice",
+      password: "violet-satellite-mountain-otter-2026",
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      principal: { id: "test-user", display_name: "Test Operator" },
+      authentication_method: "local_password",
+      authentication_level: "single_factor",
+      capabilities: [],
+      csrf_token: sessionToken,
+      idle_expires_at: "2026-09-24T23:59:00Z",
+      absolute_expires_at: "2026-09-25T07:29:00Z",
+    }),
+  }));
+  await page.route("**/auth/v1/logout", async (route) => {
+    expect(route.request().headers()["x-csrf-token"]).toBe(sessionToken);
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Username").fill("alice");
+  await page.getByLabel("Password").fill("violet-satellite-mountain-otter-2026");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL("/login");
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+});
+
 test("applies and persists an explicit theme before application startup", async ({ page }) => {
   await mockAuthenticatedSession(page);
   await page.addInitScript(() => {

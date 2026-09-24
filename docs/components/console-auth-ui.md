@@ -31,6 +31,6 @@ after each submit attempt.
 ## How to test
 
 npm test covers the login route markup. npm run test:e2e -- --project
-chromium covers the sign-in page, accessibility tree, pre-auth request,
-session gate, and authenticated shell contract using controlled HTTP
-responses.
+Chromium and Firefox e2e runs cover the sign-in page, accessibility tree,
+pre-auth request, CSRF header and credential payload, session gate, logout
+CSRF header, and authenticated shell using controlled HTTP responses.
