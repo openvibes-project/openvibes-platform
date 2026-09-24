@@ -25,10 +25,10 @@ where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes, plus finding summary, latest, and history reads. Control-
 plane routes and access-control/audit pages remain pending.
-The
-first-account bootstrap and account recovery CLI is available through
-`openvibes-admin user`. The embedded UI now has a login form, session gate,
-and sign-out action.
+The first-account bootstrap and account recovery CLI is available through
+`openvibes-admin user`. The embedded UI has a login form, session gate, and
+sign-out action, and its production Overview, Agents, and Findings pages use
+the authenticated read routes.
 The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
@@ -82,18 +82,19 @@ Collection DTOs use opaque cursors with a default limit of 50, maximum limit
 of 100, and a 2,048-byte cursor bound. Response envelopes contain typed items,
 an optional next cursor, and an RFC 3339 generation time. Agent, certificate,
 latest-finding, and finding-history response schemas are generated into OpenAPI
-and the TypeScript client now; the seeded API reuses those DTOs. Agent fields
-match the stored schema, including optional hostname/heartbeat data and
-multiple certificate records. Finding fields include confidence, evidence,
-scan ID, receive time, and authenticated origin. Operation paths are added
-when their database-backed routes are implemented, with production data
-remaining unavailable until each route has authentication and SQL-enforced
-scope. The agent summary route is now the first production data read.
+and the TypeScript client; the seeded API reuses those DTOs. Agent fields match
+the stored schema, including optional hostname/heartbeat data and multiple
+certificate records. Finding fields include confidence, evidence, scan ID,
+receive time, and authenticated origin. Implemented agent and finding reads
+resolve current permission scopes for each request and apply asset-group
+selectors in SQL before pagination or aggregation. Control-plane reads and
+audit operations remain unavailable.
 
-The first-release UI covers sign-in, overview, agents, findings and analyst triage,
-enrollment tokens, pre-signed rule bundles, access control and exact agent
-tags, service accounts, and the audit log, retention policy, and bounded CSV
-export. CA and rule-trust-key administration remain CLI-only.
+The implemented production UI covers sign-in, overview, agents, and findings.
+Analyst triage, enrollment tokens, pre-signed rule bundles, access control and
+exact agent tags, service accounts, and the audit log, retention policy, and
+bounded CSV export are still planned. CA and rule-trust-key administration
+remain CLI-only.
 
 ## Configuration
 

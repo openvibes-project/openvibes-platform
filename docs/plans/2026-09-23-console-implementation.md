@@ -10,8 +10,8 @@ end-to-end coverage. The C2 store now has SQL-scoped agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
 latest/detail/history routes behind `findings.read`. The embedded login page,
-session gate, and
-logout action are implemented with the local-auth API.
+session gate, sign-out action, and production Overview/Agents/Findings data
+views are implemented against the authenticated routes.
 
 Design inputs:
 

@@ -13,8 +13,9 @@ type ReadState<T> =
   | { status: "error"; code: string; message: string }
   | { status: "ready"; value: T };
 
-function requestHeaders(): Headers {
+function requestHeaders(seeded: boolean): Headers {
   const headers = new Headers({ Accept: "application/json" });
+  if (!seeded) return headers;
   try {
     headers.set("X-OpenVIBES-Dev-Persona", localStorage.getItem("openvibes.dev.persona") ?? "analyst");
     headers.set("X-OpenVIBES-Dev-Mode", localStorage.getItem("openvibes.dev.mode") ?? "mixed");
@@ -24,7 +25,7 @@ function requestHeaders(): Headers {
   return headers;
 }
 
-function useRead<T>(url: string): ReadState<T> {
+function useRead<T>(url: string, seeded = false): ReadState<T> {
   const [state, setState] = useState<{ url: string; result: ReadState<T> }>({
     url: "",
     result: { status: "loading" },
@@ -33,7 +34,7 @@ function useRead<T>(url: string): ReadState<T> {
   useEffect(() => {
     const controller = new AbortController();
     if (url === "") return () => controller.abort();
-    void fetch(url, { headers: requestHeaders(), signal: controller.signal })
+    void fetch(url, { headers: requestHeaders(seeded), signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           const problem = (await response.json()) as { code?: string; title?: string };
@@ -55,7 +56,7 @@ function useRead<T>(url: string): ReadState<T> {
         });
       });
     return () => controller.abort();
-  }, [url]);
+  }, [url, seeded]);
 
   return state.url === url ? state.result : { status: "loading" };
 }
@@ -64,11 +65,11 @@ function ReadStatus<T>({ state, children }: { state: ReadState<T>; children: (va
   if (state.status === "loading") return <p className="read-state" role="status">Loading current data…</p>;
   if (state.status === "error") {
     const forbidden = state.code === "permission_denied";
-    const expired = state.code === "session_expired";
+    const expired = state.code === "session_expired" || state.code === "authentication_required";
     return (
       <section className="read-state read-state--error" role="alert">
         <h2>{forbidden ? "Access unavailable" : expired ? "Session expired" : "Data unavailable"}</h2>
-        <p>{forbidden ? "Your current role does not permit this view." : expired ? "Choose another seeded session to continue." : state.message}</p>
+        <p>{forbidden ? "Your current role does not permit this view." : expired ? "Sign in again to continue." : state.message}</p>
       </section>
     );
   }
@@ -80,9 +81,9 @@ function dateLabel(value: string): string {
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-export function OverviewReadPage() {
-  const agents = useRead<AgentSummary>("/api/v1/agents/summary");
-  const findings = useRead<FindingSummary>("/api/v1/findings/summary");
+export function OverviewReadPage({ seeded = false }: { seeded?: boolean }) {
+  const agents = useRead<AgentSummary>("/api/v1/agents/summary", seeded);
+  const findings = useRead<FindingSummary>("/api/v1/findings/summary", seeded);
   return (
     <div className="read-dashboard">
       <section className="read-card" aria-labelledby="fleet-summary-title">
@@ -126,15 +127,17 @@ function pagedUrl(path: string, params: URLSearchParams, cursor: string | null):
   return `${path}${next.size === 0 ? "" : `?${next.toString()}`}`;
 }
 
-export function AgentsReadPage() {
+export function AgentsReadPage({ seeded = false }: { seeded?: boolean }) {
   const params = currentSearch();
   const selectedAgent = params.get("agent");
   const [filterQuery, setFilterQuery] = useState(params.get("q") ?? "");
-  const [filterStatus, setFilterStatus] = useState(params.get("status") ?? "");
-  const detail = useRead<AgentDetail>(selectedAgent ? `/api/v1/agents/${encodeURIComponent(selectedAgent)}` : "");
+  const statusParam = seeded ? "status" : "state";
+  const [filterStatus, setFilterStatus] = useState(params.get(statusParam) ?? "");
+  const detail = useRead<AgentDetail>(selectedAgent ? `/api/v1/agents/${encodeURIComponent(selectedAgent)}` : "", seeded);
   const listParams = new URLSearchParams(params);
   listParams.delete("agent");
-  const list = useRead<AgentPage>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`);
+  if (!seeded) listParams.delete("q");
+  const list = useRead<AgentPage>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`, seeded);
 
   if (selectedAgent) {
     return <ReadStatus state={detail}>{(agent) => (
@@ -169,8 +172,8 @@ export function AgentsReadPage() {
         <div className="read-toolbar">
           <h2 id="agents-table-title">{page.items.length.toLocaleString()} agents on this page</h2>
           <form className="filter-form" action="/agents" method="get">
-            <label>Search hostname or ID<input name="q" value={filterQuery} onChange={(event) => setFilterQuery(event.currentTarget.value)} maxLength={128} /></label>
-            <label>Status<select name="status" value={filterStatus} onChange={(event) => setFilterStatus(event.currentTarget.value)}>
+            {seeded && <label>Search hostname or ID<input name="q" value={filterQuery} onChange={(event) => setFilterQuery(event.currentTarget.value)} maxLength={128} /></label>}
+            <label>Status<select name={statusParam} value={filterStatus} onChange={(event) => setFilterStatus(event.currentTarget.value)}>
               <option value="">All statuses</option><option value="active">Active</option><option value="stale">Stale</option><option value="revoked">Revoked</option>
             </select></label>
             <button type="submit">Apply filters</button>
@@ -191,13 +194,15 @@ export function AgentsReadPage() {
   );
 }
 
-export function FindingsReadPage() {
+export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
   const params = currentSearch();
   const selected = params.get("finding");
   const severity = params.get("severity") ?? "";
   const query = params.get("q") ?? "";
-  const detail = useRead<Finding>(selected ? `/api/v1/findings/latest/${selected.split("/").map(encodeURIComponent).join("/")}` : "");
-  const list = useRead<FindingPage>(selected ? "" : `/api/v1/findings/latest${params.size ? `?${params}` : ""}`);
+  const detail = useRead<Finding>(selected ? `/api/v1/findings/latest/${selected.split("/").map(encodeURIComponent).join("/")}` : "", seeded);
+  const listParams = new URLSearchParams(params);
+  if (!seeded) listParams.delete("q");
+  const list = useRead<FindingPage>(selected ? "" : `/api/v1/findings/latest${listParams.size ? `?${listParams}` : ""}`, seeded);
 
   if (selected) {
     return <ReadStatus state={detail}>{(finding) => (
@@ -228,7 +233,7 @@ export function FindingsReadPage() {
         <div className="read-toolbar">
           <h2 id="findings-table-title">{page.items.length.toLocaleString()} observations on this page</h2>
           <form className="filter-form" action="/findings" method="get">
-            <label>Search host, rule, or text<input name="q" defaultValue={query} maxLength={128} /></label>
+            {seeded && <label>Search host, rule, or text<input name="q" defaultValue={query} maxLength={128} /></label>}
             <label>Severity<select name="severity" defaultValue={severity}>
               <option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
             </select></label>
@@ -246,7 +251,7 @@ export function FindingsReadPage() {
             </tr>)}</tbody>
           </table></div>
         )}
-        <PageFooter page={page} href="/findings" params={params} />
+        <PageFooter page={page} href="/findings" params={listParams} />
       </>}</ReadStatus>
     </section>
   );

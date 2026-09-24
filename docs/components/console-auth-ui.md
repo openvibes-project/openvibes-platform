@@ -18,6 +18,9 @@ session cookie.
   synthetic personas.
 - The application shell's Sign out action POSTs /auth/v1/logout with the
   current session CSRF token.
+- The production Overview, Agents, and Findings pages use the authenticated
+  C2 read routes. Demo persona headers and unsupported free-text filters are
+  only used in the explicitly seeded development experience.
 
 ## Configuration and failure behaviour
 

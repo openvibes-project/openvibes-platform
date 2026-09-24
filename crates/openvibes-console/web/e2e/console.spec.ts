@@ -157,6 +157,22 @@ test("completes the browser login, session check, and sign-out journey", async (
       absolute_expires_at: "2026-09-25T07:29:00Z",
     }),
   }));
+  await page.route("**/api/v1/agents/summary", (route) => {
+    expect(route.request().headers()).not.toHaveProperty("x-openvibes-dev-persona");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 12, active: 10, stale: 2, revoked: 0 }),
+    });
+  });
+  await page.route("**/api/v1/findings/summary", (route) => {
+    expect(route.request().headers()).not.toHaveProperty("x-openvibes-dev-persona");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 4, impacted_agents: 3, critical: 1, high: 2, medium: 1, low: 0 }),
+    });
+  });
   await page.route("**/auth/v1/logout", async (route) => {
     expect(route.request().headers()["x-csrf-token"]).toBe(sessionToken);
     await route.fulfill({ status: 204 });
@@ -168,6 +184,8 @@ test("completes the browser login, session check, and sign-out journey", async (
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page).toHaveURL("/");
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByText("Enrolled")).toBeVisible();
+  await expect(page.getByText("12", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL("/login");
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();

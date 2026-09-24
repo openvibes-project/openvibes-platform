@@ -167,10 +167,10 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
                 </div>
               </header>
 
-              {seeded && path === "/" ? <OverviewReadPage /> : null}
-              {seeded && path === "/agents" ? <AgentsReadPage /> : null}
-              {seeded && path === "/findings" ? <FindingsReadPage /> : null}
-              {!seeded || !["/", "/agents", "/findings"].includes(path) ? <div className="shell-panel">
+              {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
+              {path === "/agents" ? <AgentsReadPage seeded={seeded} /> : null}
+              {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
+              {!["/", "/agents", "/findings"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
                   <p className="eyebrow">Interface foundation</p>
