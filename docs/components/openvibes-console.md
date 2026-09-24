@@ -31,8 +31,8 @@ Production authentication and data routes remain fail-closed until their
 later milestones provide the required database-backed sessions and
 authorisation.
 
-C0 is not complete yet. The checked offline npm source cache and reviewed
-transparent production logo derivatives remain required.
+C0 is not complete yet. Reviewed transparent production logo derivatives
+remain required.
 
 ## Interfaces
 
@@ -124,8 +124,18 @@ The reproducible production sequence is Rust OpenAPI export, snapshot/client
 drift checking, locked frontend install and checks, Vite build, generation of
 the content-derived build stamp, embedded-asset validation, then the Rust
 `embedded-ui` release build. The Rust build script reads the checked frontend
-contract and verifies the stamp but never invokes a package manager. The
-eventual RPM build uses a checksummed npm source cache with `npm ci --offline`.
+contract and verifies the stamp but never invokes a package manager.
+
+`scripts/build-console-npm-cache.sh OUTPUT_DIR` creates a separate
+`linux-x64` cache artefact named by the SHA-256 of `package-lock.json`, plus a
+checksum sidecar. It contains npm's content-addressed cache, the lock digest,
+and the target platform, but no `node_modules`. The networked cache-preparation
+stage is separate from packaging. `scripts/check-console-npm-cache.sh ARCHIVE`
+checks the sidecar, allow-lists archive paths, refuses special files, confirms
+the current lock digest and platform, then runs `npm ci --offline` and the Vite
+build. CI runs both scripts. The eventual RPM build consumes the same artefact;
+the first package target is Fedora Linux x86_64, so caches for other platforms
+are deliberately distinct.
 
 For the current C0 foundation, run:
 
@@ -135,6 +145,8 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F
 cargo doc --locked --workspace --all-features --no-deps
 cargo test --locked --workspace --all-features
 scripts/build-console.sh
+archive=$(scripts/build-console-npm-cache.sh target/console-npm-cache)
+scripts/check-console-npm-cache.sh "$archive"
 scripts/test-console-e2e.sh
 cargo run --locked -p openvibes-console --bin export_openapi -- \
   --check docs/api/console-v1.openapi.json
