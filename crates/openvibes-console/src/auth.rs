@@ -2,6 +2,10 @@
 
 use std::fmt;
 
+use argon2::{
+    Algorithm, Argon2, Params, Version,
+    password_hash::{PasswordHasher, PasswordVerifier, phc::PasswordHash as PhcPasswordHash},
+};
 use axum::http::{HeaderMap, header};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
@@ -16,6 +20,14 @@ const SESSION_SECRET_BYTES: usize = 32;
 const MAX_RAW_PASSWORD_CODE_POINTS: usize = 4_096;
 const MIN_PASSWORD_CODE_POINTS: usize = 15;
 const MAX_PASSWORD_CODE_POINTS: usize = 128;
+// OWASP Password Storage Cheat Sheet floor for Argon2id: 19 MiB, t=2, p=1.
+const ARGON2_MEMORY_KIB: u32 = 19_456;
+const ARGON2_ITERATIONS: u32 = 2;
+const ARGON2_PARALLELISM: u32 = 1;
+const ARGON2_MAX_MEMORY_KIB: u32 = 65_536;
+const ARGON2_MAX_ITERATIONS: u32 = 5;
+const ARGON2_MAX_PARALLELISM: u32 = 4;
+const MAX_PASSWORD_HASH_LENGTH: usize = 512;
 
 /// An NFC-normalized password that is cleared when dropped.
 pub struct NormalizedPassword(String);
@@ -65,6 +77,92 @@ pub enum PasswordError {
     TooShort,
     /// More than 128 normalized code points, or more than 4,096 raw code points.
     TooLong,
+}
+
+/// PHC-formatted Argon2id credential that redacts debug output.
+pub struct PasswordHash(String);
+
+impl PasswordHash {
+    /// Returns the PHC string for secure database storage.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Debug for PasswordHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("PasswordHash([REDACTED])")
+    }
+}
+
+/// Verification result, including whether the stored work factor needs an upgrade.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct PasswordVerification {
+    /// Whether the normalized password matches the credential.
+    pub valid: bool,
+    /// Whether a successful login should replace this hash with the current floor.
+    pub needs_rehash: bool,
+}
+
+/// Failure while hashing or parsing a persisted password credential.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PasswordHashError {
+    /// The hashing implementation could not generate a credential.
+    HashingFailed,
+    /// The stored PHC value is malformed, unsupported, or exceeds resource bounds.
+    InvalidCredential,
+}
+
+/// Hashes a normalized password using a per-password random salt and Argon2id.
+pub fn hash_password(password: &NormalizedPassword) -> Result<PasswordHash, PasswordHashError> {
+    let params = current_argon2_params().map_err(|_| PasswordHashError::HashingFailed)?;
+    let hasher = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+    let hash = hasher
+        .hash_password(password.as_bytes())
+        .map_err(|_| PasswordHashError::HashingFailed)?
+        .to_string();
+    Ok(PasswordHash(hash))
+}
+
+/// Verifies a normalized password against a bounded Argon2id PHC credential.
+pub fn verify_password(
+    password: &NormalizedPassword,
+    credential: &str,
+) -> Result<PasswordVerification, PasswordHashError> {
+    if credential.len() > MAX_PASSWORD_HASH_LENGTH {
+        return Err(PasswordHashError::InvalidCredential);
+    }
+    let parsed =
+        PhcPasswordHash::new(credential).map_err(|_| PasswordHashError::InvalidCredential)?;
+    if parsed.algorithm.as_str() != "argon2id" || parsed.version != Some(0x13) {
+        return Err(PasswordHashError::InvalidCredential);
+    }
+    let params = Params::try_from(&parsed).map_err(|_| PasswordHashError::InvalidCredential)?;
+    if params.m_cost() > ARGON2_MAX_MEMORY_KIB
+        || params.t_cost() > ARGON2_MAX_ITERATIONS
+        || params.p_cost() > ARGON2_MAX_PARALLELISM
+    {
+        return Err(PasswordHashError::InvalidCredential);
+    }
+
+    let current = current_argon2_params().map_err(|_| PasswordHashError::HashingFailed)?;
+    let hasher = Argon2::new(Algorithm::Argon2id, Version::V0x13, current);
+    let valid = hasher.verify_password(password.as_bytes(), &parsed).is_ok();
+    Ok(PasswordVerification {
+        valid,
+        needs_rehash: params.m_cost() < ARGON2_MEMORY_KIB
+            || params.t_cost() < ARGON2_ITERATIONS
+            || params.p_cost() < ARGON2_PARALLELISM,
+    })
+}
+
+fn current_argon2_params() -> Result<Params, argon2::Error> {
+    Params::new(
+        ARGON2_MEMORY_KIB,
+        ARGON2_ITERATIONS,
+        ARGON2_PARALLELISM,
+        Some(32),
+    )
 }
 
 /// Newly generated opaque session secret and its database-safe SHA-256 digest.
@@ -144,7 +242,8 @@ mod tests {
     use axum::http::{HeaderMap, HeaderValue, header};
 
     use super::{
-        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed, session_cookie,
+        NormalizedPassword, PasswordError, SessionSecret, browser_origin_allowed, hash_password,
+        session_cookie, verify_password,
     };
 
     #[test]
@@ -196,5 +295,37 @@ mod tests {
             NormalizedPassword::new("short"),
             Err(PasswordError::TooShort)
         ));
+    }
+
+    #[test]
+    fn argon2id_hashes_verify_and_reject_unbounded_credentials() {
+        let password = NormalizedPassword::new("correct horse battery").unwrap();
+        let other = NormalizedPassword::new("different password phrase").unwrap();
+        let hash = hash_password(&password).unwrap();
+        assert!(hash.as_str().starts_with("$argon2id$v=19$m=19456,t=2,p=1$"));
+        assert!(verify_password(&password, hash.as_str()).unwrap().valid);
+        let wrong = verify_password(&other, hash.as_str()).unwrap();
+        assert!(!wrong.valid);
+        assert!(!wrong.needs_rehash);
+        assert!(!format!("{hash:?}").contains(hash.as_str()));
+        assert!(
+            verify_password(&password, "$argon2id$v=19$m=4294967295,t=2,p=1$salt$hash").is_err()
+        );
+    }
+
+    #[test]
+    fn successful_verification_marks_below_floor_hashes_for_upgrade() {
+        use argon2::{Algorithm, Argon2, Params, Version, password_hash::PasswordHasher};
+
+        let password = NormalizedPassword::new("correct horse battery").unwrap();
+        let old_params = Params::new(8, 1, 1, Some(32)).unwrap();
+        let old_hasher = Argon2::new(Algorithm::Argon2id, Version::V0x13, old_params);
+        let old_hash = old_hasher
+            .hash_password(password.as_bytes())
+            .unwrap()
+            .to_string();
+        let result = verify_password(&password, &old_hash).unwrap();
+        assert!(result.valid);
+        assert!(result.needs_rehash);
     }
 }

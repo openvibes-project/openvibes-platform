@@ -11,6 +11,7 @@ embedded-ui = ["dep:include_dir"]
 dev-seed = []
 
 [dependencies]
+argon2 = { version = "=0.6.0", features = ["zeroize"] }
 axum = { workspace = true, features = ["query"] }
 base64.workspace = true
 include_dir = { workspace = true, optional = true }
