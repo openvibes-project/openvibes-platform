@@ -106,8 +106,9 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    and `firewall-cmd --permanent --add-port=18423/tcp && firewall-cmd --reload`.
 6. Check: `curl http://127.0.0.1:18480/ready` → 200.
 7. Distribution (optional, `dnf install openvibes-distribution`): give it
-   its own server certificate, issued like ingest's in step 3 (for example
-   `ca issue-server rules.example.com … --out $S/tls`), and install it:
+   its own server certificate, issued in step 3 next to ingest's (for
+   example `ca issue-server rules.example.com … --out $S/tls`) and installed
+   in step 4, before the staging directory is removed:
 
    ```sh
    install -m 0644 $S/tls/rules.example.com.crt /etc/openvibes/tls/distribution.crt
