@@ -2,6 +2,7 @@
 
 use std::fmt;
 
+use axum::http::{HeaderMap, header};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use ring::{
     digest,
@@ -54,6 +55,24 @@ pub fn session_cookie(secret: &SessionSecret) -> String {
     )
 }
 
+/// Checks the browser origin and rejects an explicitly cross-site request.
+///
+/// `configured_origin` must be the canonical external origin from validated
+/// runtime configuration. Exactly one matching `Origin` header is required.
+pub fn browser_origin_allowed(headers: &HeaderMap, configured_origin: &str) -> bool {
+    let mut origins = headers.get_all(header::ORIGIN).iter();
+    if origins.next().and_then(|value| value.to_str().ok()) != Some(configured_origin)
+        || origins.next().is_some()
+    {
+        return false;
+    }
+
+    !headers
+        .get_all("sec-fetch-site")
+        .iter()
+        .any(|value| value.as_bytes().eq_ignore_ascii_case(b"cross-site"))
+}
+
 fn hex(bytes: &[u8]) -> String {
     const DIGITS: &[u8; 16] = b"0123456789abcdef";
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -66,7 +85,9 @@ fn hex(bytes: &[u8]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{SessionSecret, session_cookie};
+    use axum::http::{HeaderMap, HeaderValue, header};
+
+    use super::{SessionSecret, browser_origin_allowed, session_cookie};
 
     #[test]
     fn session_cookie_is_opaque_and_only_the_digest_is_persistable() {
@@ -78,5 +99,27 @@ mod tests {
         assert_eq!(secret.hash().len(), 64);
         assert!(!format!("{secret:?}").contains(secret.cookie_value()));
         assert_ne!(secret.hash(), secret.cookie_value());
+    }
+
+    #[test]
+    fn browser_origin_requires_one_exact_origin_and_rejects_cross_site_metadata() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ORIGIN,
+            HeaderValue::from_static("https://console.example"),
+        );
+        assert!(browser_origin_allowed(&headers, "https://console.example"));
+        assert!(!browser_origin_allowed(&headers, "https://other.example"));
+
+        headers.insert("sec-fetch-site", HeaderValue::from_static("cross-site"));
+        assert!(!browser_origin_allowed(&headers, "https://console.example"));
+        headers.insert("sec-fetch-site", HeaderValue::from_static("same-origin"));
+        assert!(browser_origin_allowed(&headers, "https://console.example"));
+
+        headers.append(
+            header::ORIGIN,
+            HeaderValue::from_static("https://console.example"),
+        );
+        assert!(!browser_origin_allowed(&headers, "https://console.example"));
     }
 }
