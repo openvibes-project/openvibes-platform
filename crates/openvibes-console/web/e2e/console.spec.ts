@@ -1,5 +1,26 @@
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
+
+declare global {
+  interface Window {
+    openvibesCspViolations?: string[];
+  }
+}
+
+/**
+ * Records every CSP violation, report-only included, from the page's own
+ * `securitypolicyviolation` events. Console text differs between browsers
+ * (Firefox writes "Content-Security-Policy"), so it is not scraped.
+ */
+async function recordCspViolations(page: Page): Promise<() => Promise<string[]>> {
+  await page.addInitScript(() => {
+    window.openvibesCspViolations = [];
+    document.addEventListener("securitypolicyviolation", (event) => {
+      window.openvibesCspViolations?.push(`${event.effectiveDirective} ${event.blockedURI}`);
+    });
+  });
+  return () => page.evaluate(() => window.openvibesCspViolations ?? []);
+}
 
 const targetCsp = [
   "default-src 'none'",
@@ -17,12 +38,7 @@ const targetCsp = [
 ];
 
 test("serves the accessible shell with the target security boundary", async ({ page }) => {
-  const cspMessages: string[] = [];
-  page.on("console", (message) => {
-    if (message.text().toLowerCase().includes("content security policy")) {
-      cspMessages.push(message.text());
-    }
-  });
+  const cspViolations = await recordCspViolations(page);
 
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
@@ -50,7 +66,7 @@ test("serves the accessible shell with the target security boundary", async ({ p
 
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
-  expect(cspMessages).toEqual([]);
+  expect(await cspViolations()).toEqual([]);
 });
 
 test("applies and persists an explicit theme before application startup", async ({ page }) => {
@@ -110,12 +126,7 @@ test("supports keyboard entry and the compact-navigation control", async ({ page
 });
 
 test("keeps native menu, dialog, and combobox primitives keyboard accessible", async ({ page }) => {
-  const cspMessages: string[] = [];
-  page.on("console", (message) => {
-    if (message.text().toLowerCase().includes("content security policy")) {
-      cspMessages.push(message.text());
-    }
-  });
+  const cspViolations = await recordCspViolations(page);
 
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
@@ -142,5 +153,5 @@ test("keeps native menu, dialog, and combobox primitives keyboard accessible", a
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
   await expect(help).toBeFocused();
-  expect(cspMessages).toEqual([]);
+  expect(await cspViolations()).toEqual([]);
 });
