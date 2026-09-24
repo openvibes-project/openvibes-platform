@@ -377,7 +377,7 @@ impl SessionSecret {
         let mut bytes = [0; SESSION_SECRET_BYTES];
         SystemRandom::new().fill(&mut bytes)?;
         let value = URL_SAFE_NO_PAD.encode(bytes);
-        let hash = hex(&digest::digest(&digest::SHA256, value.as_bytes()).as_ref());
+        let hash = hex(digest::digest(&digest::SHA256, value.as_bytes()).as_ref());
         Ok(Self { value, hash })
     }
 

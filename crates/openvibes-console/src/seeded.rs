@@ -25,6 +25,7 @@ const GENERATED_AT: &str = "2026-09-24T12:00:00Z";
 const DEFAULT_LIMIT: u16 = 50;
 const MAX_SEARCH_LENGTH: usize = 128;
 const MAX_AGENTS: usize = 50_000;
+type SeedError = Box<Response>;
 
 impl AgentStatus {
     fn label(self) -> &'static str {
@@ -61,7 +62,7 @@ enum SeedMode {
 }
 
 impl SeedMode {
-    fn parse(headers: &HeaderMap) -> Result<Self, Response> {
+    fn parse(headers: &HeaderMap) -> Result<Self, SeedError> {
         let Some(value) = headers.get("x-openvibes-dev-mode") else {
             return Ok(Self::Mixed);
         };
@@ -87,7 +88,7 @@ enum Persona {
 }
 
 impl Persona {
-    fn parse(headers: &HeaderMap) -> Result<Self, Response> {
+    fn parse(headers: &HeaderMap) -> Result<Self, SeedError> {
         let Some(value) = headers.get("x-openvibes-dev-persona") else {
             return Ok(Self::Analyst);
         };
@@ -177,7 +178,7 @@ struct RawFindingFilters {
 }
 
 impl TryFrom<RawAgentFilters> for AgentFilters {
-    type Error = Response;
+    type Error = SeedError;
 
     fn try_from(raw: RawAgentFilters) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -189,7 +190,7 @@ impl TryFrom<RawAgentFilters> for AgentFilters {
 }
 
 impl TryFrom<RawFindingFilters> for FindingFilters {
-    type Error = Response;
+    type Error = SeedError;
 
     fn try_from(raw: RawFindingFilters) -> Result<Self, Self::Error> {
         Ok(Self {
@@ -534,9 +535,13 @@ fn pagination(
     cursor: Option<String>,
     limit: u16,
     collection: &'static str,
-) -> Result<CursorPagination, Response> {
-    let pagination = CursorPagination::new(cursor, limit)
-        .map_err(|_| bad_request("invalid_pagination", "Invalid page cursor or limit"))?;
+) -> Result<CursorPagination, SeedError> {
+    let pagination = CursorPagination::new(cursor, limit).map_err(|_| {
+        Box::new(bad_request(
+            "invalid_pagination",
+            "Invalid page cursor or limit",
+        ))
+    })?;
     let max_offset = if collection == "agents" {
         MAX_AGENTS
     } else {
@@ -545,29 +550,29 @@ fn pagination(
     if pagination.cursor().is_some_and(|cursor| {
         cursor_offset(Some(cursor), collection).is_none_or(|offset| offset > max_offset)
     }) {
-        return Err(bad_request(
+        return Err(Box::new(bad_request(
             "invalid_pagination",
             "Invalid page cursor or limit",
-        ));
+        )));
     }
     Ok(pagination)
 }
 
-fn bounded_query(query: Option<String>) -> Result<Option<String>, Response> {
+fn bounded_query(query: Option<String>) -> Result<Option<String>, SeedError> {
     if query
         .as_ref()
         .is_some_and(|query| query.len() > MAX_SEARCH_LENGTH)
     {
-        return Err(bad_request(
+        return Err(Box::new(bad_request(
             "invalid_filter",
             "Search filter exceeds its limit",
-        ));
+        )));
     }
     Ok(query.filter(|query| !query.is_empty()))
 }
 
-fn invalid_header(name: &'static str) -> Response {
-    bad_request("invalid_demo_selection", name)
+fn invalid_header(name: &'static str) -> SeedError {
+    Box::new(bad_request("invalid_demo_selection", name))
 }
 
 fn bad_request(code: &'static str, title: &'static str) -> Response {
@@ -605,14 +610,14 @@ fn expired() -> Response {
     ))
 }
 
-fn context(headers: &HeaderMap, permission: Permission) -> Result<(Persona, SeedMode), Response> {
+fn context(headers: &HeaderMap, permission: Permission) -> Result<(Persona, SeedMode), SeedError> {
     let persona = Persona::parse(headers)?;
     let mode = SeedMode::parse(headers)?;
     if matches!(mode, SeedMode::ExpiredSession) {
-        return Err(expired());
+        return Err(Box::new(expired()));
     }
     if !persona.permits(permission, mode) {
-        return Err(denied());
+        return Err(Box::new(denied()));
     }
     Ok((persona, mode))
 }
@@ -623,10 +628,10 @@ fn read_error(mode: SeedMode) -> Option<Response> {
 
 fn parse_query<T: for<'de> Deserialize<'de>>(
     query: Result<Query<T>, QueryRejection>,
-) -> Result<T, Response> {
+) -> Result<T, SeedError> {
     query
         .map(|Query(query)| query)
-        .map_err(|_| bad_request("invalid_query", "Query parameters are invalid"))
+        .map_err(|_| Box::new(bad_request("invalid_query", "Query parameters are invalid")))
 }
 
 async fn agent_summary(
@@ -635,7 +640,7 @@ async fn agent_summary(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::AgentsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     (Json(repository.agent_summary(persona, mode))).into_response()
 }
@@ -647,11 +652,11 @@ async fn agents(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::AgentsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let filters = match parse_query(query).and_then(AgentFilters::try_from) {
         Ok(filters) => filters,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     (Json(repository.agents(&filters, persona, mode))).into_response()
 }
@@ -663,7 +668,7 @@ async fn agent(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::AgentsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     repository
         .agent(&id, persona, mode)
@@ -676,7 +681,7 @@ async fn finding_summary(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::FindingsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if let Some(response) = read_error(mode) {
         return response;
@@ -691,14 +696,14 @@ async fn findings(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::FindingsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if let Some(response) = read_error(mode) {
         return response;
     }
     let filters = match parse_query(query).and_then(FindingFilters::try_from) {
         Ok(filters) => filters,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     (Json(repository.findings(&filters, persona, mode))).into_response()
 }
@@ -710,7 +715,7 @@ async fn finding(
 ) -> Response {
     let (persona, mode) = match context(&headers, Permission::FindingsRead) {
         Ok(context) => context,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if let Some(response) = read_error(mode) {
         return response;

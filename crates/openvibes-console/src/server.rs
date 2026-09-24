@@ -83,29 +83,27 @@ impl Listener for CappedListener {
     type Io = CappedStream;
     type Addr = std::net::SocketAddr;
 
-    fn accept(&mut self) -> impl Future<Output = (Self::Io, Self::Addr)> + Send {
-        async move {
-            let permit = self
-                .capacity
-                .clone()
-                .acquire_owned()
-                .await
-                .expect("connection permits stay open for the listener lifetime");
-            loop {
-                match self.listener.accept().await {
-                    Ok((stream, address)) => {
-                        return (
-                            CappedStream {
-                                stream,
-                                _permit: permit,
-                            },
-                            address,
-                        );
-                    }
-                    Err(error) => {
-                        tracing::error!(%error, "console listener accept failed");
-                        sleep(Duration::from_millis(50)).await;
-                    }
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        let permit = self
+            .capacity
+            .clone()
+            .acquire_owned()
+            .await
+            .expect("connection permits stay open for the listener lifetime");
+        loop {
+            match self.listener.accept().await {
+                Ok((stream, address)) => {
+                    return (
+                        CappedStream {
+                            stream,
+                            _permit: permit,
+                        },
+                        address,
+                    );
+                }
+                Err(error) => {
+                    tracing::error!(%error, "console listener accept failed");
+                    sleep(Duration::from_millis(50)).await;
                 }
             }
         }
