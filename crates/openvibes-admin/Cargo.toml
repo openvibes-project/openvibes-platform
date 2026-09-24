@@ -12,6 +12,11 @@ platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
 ring.workspace = true
 base64.workspace = true
+ed25519-dalek.workspace = true
+openvibes-core.workspace = true
+openvibes-rules.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
 platform-store = { path = "../platform-store" }
 serde.workspace = true
 tokio.workspace = true

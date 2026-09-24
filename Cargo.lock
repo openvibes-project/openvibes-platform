@@ -1068,11 +1068,16 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "clap",
+ "ed25519-dalek",
+ "openvibes-core",
+ "openvibes-rules",
  "platform-config",
  "platform-pki",
  "platform-store",
  "ring",
  "serde",
+ "serde_json",
+ "sha2",
  "tokio",
 ]
 

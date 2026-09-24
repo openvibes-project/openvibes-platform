@@ -54,6 +54,39 @@ written, the command exits non-zero with a warning.
 
 The audit target is the token id, never the token.
 
+## Rules commands
+
+Rule sets for the distribution service. Keys and bundles are signed
+offline; the platform never holds a rule-signing key.
+
+| Command | Does |
+|---|---|
+| `rules trust add RULE_SET ISSUER_KEY_ID PUBLIC_KEY_B64URL` | trusts a 32-byte Ed25519 key (base64url, no padding; weak keys refused) for the set, creating the set. Prints `trusted` or `already trusted`. An id already used for a different or removed key is refused: ids are never re-used. |
+| `rules trust list [RULE_SET]` | `SET ISSUER KEY added TIME [removed TIME]` per key |
+| `rules trust remove RULE_SET ISSUER_KEY_ID` | stops trusting the key for future publishing; served bundles are unchanged (agents trust keys themselves) |
+| `rules publish FILE` | verifies the envelope with the agent's own `openvibes-rules` loader against the set's currently trusted keys, then stores its exact bytes. Prints `published SET vN`, or `unchanged: …` for the same version with the same bytes. |
+| `rules list` | `SET vN\|none keys K expires TIME\|- [retired]` |
+| `rules show RULE_SET` | per bundle, newest first: version, SHA-256, issuer, size, when and by whom published, expiry |
+| `rules retire RULE_SET` | stops serving the set (404 to agents) and refuses further publishing; bundles are kept |
+
+`publish` refuses (exit 1, nothing stored):
+- a file over 1,048,576 bytes (`envelope is larger than 1048576 bytes`), or
+  one that is not an envelope (`not a signed rule envelope`);
+- an unknown set, no trusted key, or a removed key (`untrusted issuer`);
+- a bad signature or digest (`invalid signature`);
+- an expired envelope, or one created in the future;
+- a version not above the current one (`version N is not above current
+  version C`), or the current version with different bytes (`version N
+  already published with different content`);
+- a retired set.
+
+It warns on stderr when the bundle expires in less than 7 days. Publishers
+of one set are serialized, so concurrent identical publishes store one row.
+
+Audit targets: `SET vN sha256:HEX` for `publish` (none if the file is not
+an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
+`retire`, and `trust list RULE_SET`.
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,

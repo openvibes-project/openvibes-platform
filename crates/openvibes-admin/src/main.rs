@@ -7,6 +7,7 @@
 mod agent;
 mod ca;
 mod files;
+mod rules;
 mod token;
 
 use std::{path::PathBuf, process::ExitCode};
@@ -56,6 +57,11 @@ enum Command {
         #[command(subcommand)]
         command: token::TokenCommand,
     },
+    /// Rule sets: trusted keys and signed bundles for distribution.
+    Rules {
+        #[command(subcommand)]
+        command: rules::RulesCommand,
+    },
 }
 
 impl Command {
@@ -67,6 +73,7 @@ impl Command {
             Self::Ca { command } => command.name(),
             Self::Token { command } => command.name(),
             Self::Agent { command } => command.name(),
+            Self::Rules { command } => command.name(),
         }
     }
 }
@@ -129,6 +136,10 @@ async fn main() -> ExitCode {
         },
         Command::Agent { command } => match require_current_schema(&client).await {
             Ok(()) => agent::run(command, &client).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Rules { command } => match require_current_schema(&client).await {
+            Ok(()) => rules::run(command, &mut client, &actor).await,
             Err(error) => (Err(error), None),
         },
         other => (run(other, &mut client).await, None),
@@ -218,7 +229,11 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
     }
     require_current_schema(client).await?;
     match command {
-        Command::Migrate | Command::Ca { .. } | Command::Token { .. } | Command::Agent { .. } => {
+        Command::Migrate
+        | Command::Ca { .. }
+        | Command::Token { .. }
+        | Command::Agent { .. }
+        | Command::Rules { .. } => {
             unreachable!("handled by the caller")
         }
         Command::Status => {
