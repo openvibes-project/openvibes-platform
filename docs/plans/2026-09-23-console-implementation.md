@@ -1,7 +1,11 @@
 # OpenVIBES Console Implementation Plan
 
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
-3 are integrated in the `console` worktree; C0 implementation may proceed.
+3 are integrated. C0, C1, and the C2 read-store foundation are implemented;
+C3 local browser authentication is implemented through runtime wiring. The
+remaining C3 work is account bootstrap CLI, authenticated SQL-scoped C2
+handlers, authorization/audit pages and operations, browser login/session UI,
+and the remaining C3 hardening and end-to-end coverage.
 
 Design inputs:
 
@@ -148,7 +152,15 @@ Verification:
 ## 5. Milestone C3 — Authentication, Sessions, and RBAC
 
 Goal: production local username/password login and server-enforced, auditable
-permissions.
+permissions. **Progress:** schema 8 and store transactions exist for local
+credentials, pre-auth state, throttling, hashed sessions, RBAC bindings, and
+password reset/disable. The console now serves pre-auth, login, session, and
+logout against that store when paired auth configuration is present, checks
+for schema 8 at startup, and otherwise stays in C0 fail-closed mode. Login
+uses generic failures, bounded Argon2id work, hashed account/source throttles,
+exact-Origin and CSRF checks, Fetch Metadata, session rotation, and audit
+events. Production TLS/proxy transport is not wired; this auth runtime remains
+restricted to loopback HTTP development.
 
 Work:
 

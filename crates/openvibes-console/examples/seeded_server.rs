@@ -24,6 +24,8 @@ async fn main() -> ExitCode {
                 .parse::<SocketAddr>()
                 .expect("valid address"),
             health_listen: "127.0.0.1:18491".parse().expect("valid address"),
+            database_url: None,
+            public_origin: None,
         },
         Some(config_path) => match openvibes_console::load_config(&config_path) {
             Ok(config) => config,

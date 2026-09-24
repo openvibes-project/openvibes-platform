@@ -124,7 +124,7 @@ pub struct SessionPrincipal {
     pub username: Option<String>,
 }
 
-/// Successful response from `GET /api/v1/session` once C3 authentication is available.
+/// Successful response from `GET /api/v1/session` for an active session.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct SessionResponse {
     /// Current human principal. Service-account tokens cannot call this route.

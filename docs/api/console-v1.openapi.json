@@ -14,8 +14,8 @@
         "tags": [
           "session"
         ],
-        "summary": "Reports the authenticated browser session once C3 authentication exists.",
-        "description": "C0 deliberately returns a bounded failure instead of creating a temporary\nunauthenticated or implicitly privileged session.",
+        "summary": "Reports the current authenticated browser session.",
+        "description": "The C0 router deliberately returns a bounded failure instead of creating a\ntemporary unauthenticated or implicitly privileged session.",
         "operationId": "session",
         "responses": {
           "200": {
@@ -1020,7 +1020,7 @@
       },
       "SessionResponse": {
         "type": "object",
-        "description": "Successful response from `GET /api/v1/session` once C3 authentication is available.",
+        "description": "Successful response from `GET /api/v1/session` for an active session.",
         "required": [
           "principal",
           "authentication_method",

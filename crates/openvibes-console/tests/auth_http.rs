@@ -9,7 +9,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use chrono::Utc;
-use openvibes_console::{NormalizedPassword, authenticated_router, hash_password};
+use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
 use platform_store::{
     self,
     console_auth::{NewLocalUser, create_local_user},
@@ -155,7 +155,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                     format!("{preauth_cookie}; {browser_cookie}"),
                 )
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(ConnectInfo(address))
+                .extension(ConnectInfo(TrustedPeer::new(address)))
                 .body(Body::from(format!(
                     "{{\"username\":\"alice\",\"password\":\"{password}\"}}"
                 )))
@@ -220,7 +220,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                     format!("{preauth_cookie}; {browser_cookie}; {old_session_cookie}"),
                 )
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(ConnectInfo(address))
+                .extension(ConnectInfo(TrustedPeer::new(address)))
                 .body(Body::from(format!(
                     "{{\"username\":\"alice\",\"password\":\"{password}\"}}"
                 )))
@@ -268,7 +268,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 .header("sec-fetch-site", "same-origin")
                 .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
                 .header(header::COOKIE, session_cookie.clone())
-                .extension(ConnectInfo(address))
+                .extension(ConnectInfo(TrustedPeer::new(address)))
                 .body(Body::empty())
                 .unwrap(),
         )
@@ -307,7 +307,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                     format!("{preauth_cookie}; {browser_cookie}"),
                 )
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(ConnectInfo(address))
+                .extension(ConnectInfo(TrustedPeer::new(address)))
                 .body(Body::from(
                     r#"{"username":"alice","password":"wrong password"}"#,
                 ))
@@ -336,7 +336,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                     format!("{preauth_cookie}; {browser_cookie}"),
                 )
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(ConnectInfo(address))
+                .extension(ConnectInfo(TrustedPeer::new(address)))
                 .body(Body::from(
                     r#"{"username":"nobody","password":"wrong password"}"#,
                 ))

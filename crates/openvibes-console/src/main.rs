@@ -1,6 +1,6 @@
 #![forbid(unsafe_code)]
 
-//! `openvibes-console [--config PATH]`: C0 console development server.
+//! `openvibes-console [--config PATH]`: loopback console server in C0 or C3 auth mode.
 
 use std::{path::PathBuf, process::ExitCode};
 

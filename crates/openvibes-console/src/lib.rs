@@ -4,9 +4,9 @@
 //! Human-facing OpenVIBES console HTTP skeleton.
 //!
 //! C0 provides strict route separation and loopback-only development and
-//! health listeners. Production authentication, TLS, data access, and
-//! production data access remain intentionally unavailable until their
-//! implementation milestones. Production frontend assets are included only
+//! health listeners. Optional C3 local authentication uses database-backed
+//! sessions on the same loopback listener. TLS and authenticated data access
+//! remain unavailable until their implementation milestones. Production frontend assets are included only
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
 mod api;
@@ -47,4 +47,4 @@ pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities}
 pub use router::{
     Readiness, authenticated_router, development_router, health_router, public_router,
 };
-pub use server::{run, serve};
+pub use server::{TrustedPeer, run, serve};

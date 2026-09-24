@@ -37,13 +37,14 @@ queries enforce the caller's asset-group scope.
 
 ## Configuration
 
-The caller supplies a `platform_store::Pool` and canonical public origin; pool
-sizing and the PostgreSQL connection string stay with process configuration.
-Login throttling requires trusted socket `ConnectInfo`; forwarded headers are
-not interpreted. Public origins must be canonical HTTPS origins; HTTP is
-accepted only for loopback development. The current C0 executable still serves
-`public_router()`; its config and listener do not yet construct this router.
-No production data route is enabled here.
+The router constructor accepts a `platform_store::Pool` and canonical public
+origin. The executable constructs it when strict config supplies both
+`database_url` and `public_origin`, and requires that migrations have already
+advanced the database to schema 8. Startup never runs migrations. The current
+listener is loopback-only and config accepts only canonical HTTP loopback
+origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
+are ignored. When auth settings are absent, the executable serves the C0
+fail-closed router. No production data route is enabled here.
 
 ## Failure behaviour
 

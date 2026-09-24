@@ -16,7 +16,14 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved. C0 is complete, and the C1 seeded read slice is
+The design is approved. C0 and C1 are complete. C3 local authentication is
+implemented through pre-auth, login, session validation/refresh, logout, and
+password hash upgrade. When both `database_url` and `public_origin` are set,
+the executable connects to PostgreSQL, requires schema version 8, and serves
+the authenticated router. Otherwise it serves the C0 development router,
+where `/api/v1/session` remains fail-closed. C2 data routes, SQL-enforced
+asset scopes, account bootstrap CLI, and browser login UI are still pending.
+The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
@@ -33,9 +40,8 @@ transparent SVG paths: a compact mark and light- and dark-surface wordmarks.
 The expanded shell follows the active theme while the compact shell, favicon,
 and application manifest use the mark. ImageMagick deterministically renders
 the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
-Production authentication and data routes remain fail-closed until their
-later milestones provide the required database-backed sessions and
-authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
+Production data routes remain unavailable until their later milestones
+provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
 OpenAPI snapshot or package.
 
@@ -86,18 +92,24 @@ export. CA and rule-trust-key administration remain CLI-only.
 ### Current (C0)
 
 `openvibes-console [--config PATH]` reads `/etc/openvibes/console.toml` by
-default: strict TOML (unknown keys refused) with two keys, both loopback
-only and different:
+default: strict TOML (unknown keys refused). Both listeners must be distinct
+loopback addresses. Optional `database_url` and `public_origin` must be
+provided together; the origin must be canonical HTTP on loopback. For example:
 
 ```toml
 development_listen = "127.0.0.1:8443"   # the development web listener
 health_listen = "127.0.0.1:18482"       # /health and /ready
+database_url = "postgresql:///openvibes?host=/run/postgresql" # optional
+public_origin = "http://localhost:8443" # required with database_url
 ```
 
-A non-loopback address, equal addresses, or a malformed file is refused at
-startup ("invalid console configuration"), and `run` refuses a listener that
-is not loopback even if bound elsewhere. The e2e fixture uses 18490/18491,
-clear of ingest's 18480 and distribution's 18481.
+A non-loopback address, equal addresses, unpaired auth fields, non-loopback
+origin, or malformed file is refused at startup ("invalid console
+configuration"), and `run` refuses a listener that is not loopback even if
+bound elsewhere. Startup checks that the database is already at schema 8; it
+never runs migrations. The database URL is redacted from `Debug`. Authenticated
+requests must use the configured Host authority. The e2e fixture uses
+18490/18491, clear of ingest's 18480 and distribution's 18481.
 
 ### Development seed (C1)
 
@@ -132,18 +144,25 @@ are:
 - session lifetimes, request limits, password hashing, export limits, and the
   private CSV spool are bounded configuration rather than browser choices.
 
-The exact TOML keys and defaults land with the runtime configuration milestone
-and this page must be updated in that same change. Development uses a
+The exact TOML keys and defaults for production TLS land with the runtime
+configuration milestone. Development uses a
 loopback-only seeded server; the `dev-seed` implementation and its conspicuous
 banner are never included in the production RPM.
 
 ## Failure behaviour
 
-**Now (C0 and C1):**
+**Now (C0, C1, and the C3 local-auth slice):**
 
 - The development listener answers only loopback `Host` names (`localhost`,
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
+- Authenticated runtime startup refuses absent/unreachable databases and any
+  schema version other than 8; it does not migrate. The configured Host
+  authority is enforced for authenticated requests. Login uses trusted socket
+  peer information from the capped listener; forwarded headers are ignored.
+- Login, logout, pre-auth, session refresh, and password-hash upgrade persist
+  through `platform-store` transactions. Login failures have a generic shape;
+  password work has a four-operation concurrency bound.
 - Framing is refused: `Content-Security-Policy: frame-ancestors 'none'` is
   enforced (with `X-Frame-Options: DENY`) while the full policy is still
   report-only.
@@ -175,9 +194,9 @@ banner are never included in the production RPM.
 - Production data routes remain unavailable until their owning milestones
   are complete. The loopback seeded API is synthetic and cannot access
   production state. There is no permissive production authentication mode.
-- `GET /api/v1/session` therefore returns a no-store, bounded 503 Problem
-  Details response until C3; its eventual 200 schema is already versioned in
-  the checked API contract.
+- In C0 mode, `GET /api/v1/session` returns a no-store, bounded 503 Problem
+  Details response. In authenticated mode it validates the DB session and
+  resolves active role bindings on every request.
 - API failures are bounded Problem Details responses and never expose SQL,
   credentials, tokens, certificates, IdP payloads, or authorisation detail.
 - Authorisation is applied in database queries before aggregation, filtering,

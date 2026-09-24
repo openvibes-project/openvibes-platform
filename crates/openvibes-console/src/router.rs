@@ -13,12 +13,14 @@ use axum::{
 };
 use chrono::{Duration, SecondsFormat, Utc};
 use platform_store::{Pool, console_auth};
-use std::net::SocketAddr;
 use subtle::ConstantTimeEq;
 use tokio::{sync::Semaphore, time::timeout};
 use zeroize::{Zeroize, Zeroizing};
 
-use crate::problem::{ProblemDetails, next_request_id, problem_response};
+use crate::{
+    config::valid_public_origin,
+    problem::{ProblemDetails, next_request_id, problem_response},
+};
 
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
@@ -85,11 +87,17 @@ pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> R
     };
     let router = Router::new()
         .nest("/api", authenticated_api_router().with_state(state.clone()))
-        .nest("/auth", authenticated_auth_router().with_state(state))
+        .nest(
+            "/auth",
+            authenticated_auth_router().with_state(state.clone()),
+        )
         .nest("/assets", asset_router());
     #[cfg(feature = "embedded-ui")]
     let router = router.merge(frontend_router());
-    with_request_limits(router.fallback(browser_not_found))
+    with_request_limits(router.fallback(browser_not_found)).layer(middleware::from_fn_with_state(
+        state,
+        authenticated_host_only,
+    ))
 }
 
 fn public_routes() -> Router {
@@ -217,6 +225,34 @@ async fn loopback_host_only(request: axum::extract::Request, next: middleware::N
     }
 }
 
+async fn authenticated_host_only(
+    State(state): State<AuthHttpState>,
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> Response {
+    let allowed = request.headers().get(header::HOST).is_none_or(|host| {
+        let expected = state
+            .public_origin
+            .parse::<axum::http::Uri>()
+            .ok()
+            .and_then(|origin| origin.authority().cloned());
+        host.to_str().is_ok_and(|host| {
+            expected
+                .as_ref()
+                .is_some_and(|expected| host.eq_ignore_ascii_case(expected.as_str()))
+        })
+    });
+    if allowed {
+        next.run(request).await
+    } else {
+        let mut response = StatusCode::MISDIRECTED_REQUEST.into_response();
+        response
+            .headers_mut()
+            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+        response
+    }
+}
+
 /// `localhost`, `127.0.0.1`, or `[::1]`, with or without a port.
 fn is_loopback_host(host: &str) -> bool {
     let name = match host.strip_prefix('[') {
@@ -224,35 +260,6 @@ fn is_loopback_host(host: &str) -> bool {
         None => host.rsplit_once(':').map_or(host, |(name, _)| name),
     };
     name.eq_ignore_ascii_case("localhost") || name == "127.0.0.1" || name == "::1"
-}
-
-fn valid_public_origin(origin: &str) -> bool {
-    let Ok(uri) = origin.parse::<axum::http::Uri>() else {
-        return false;
-    };
-    let Some(scheme) = uri.scheme_str() else {
-        return false;
-    };
-    let Some(authority) = uri.authority() else {
-        return false;
-    };
-    let Some((_, raw_authority)) = origin.split_once("://") else {
-        return false;
-    };
-    if raw_authority.contains(['/', '?', '#'])
-        || uri
-            .path_and_query()
-            .is_some_and(|path| path.as_str() != "/")
-        || authority.as_str().contains('@')
-        || origin != origin.to_ascii_lowercase()
-    {
-        return false;
-    }
-    match scheme {
-        "https" => true,
-        "http" => is_loopback_host(authority.as_str()),
-        _ => false,
-    }
 }
 
 #[cfg(feature = "embedded-ui")]
@@ -301,10 +308,10 @@ async fn api_not_found() -> Response {
     ))
 }
 
-/// Reports the authenticated browser session once C3 authentication exists.
+/// Reports the current authenticated browser session.
 ///
-/// C0 deliberately returns a bounded failure instead of creating a temporary
-/// unauthenticated or implicitly privileged session.
+/// The C0 router deliberately returns a bounded failure instead of creating a
+/// temporary unauthenticated or implicitly privileged session.
 #[utoipa::path(
     get,
     path = "/api/v1/session",
@@ -533,7 +540,7 @@ async fn preauth(State(state): State<AuthHttpState>) -> Response {
 )]
 async fn login(
     State(state): State<AuthHttpState>,
-    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    ConnectInfo(peer): ConnectInfo<crate::TrustedPeer>,
     headers: HeaderMap,
     payload: Result<axum::Json<crate::LoginRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
@@ -839,7 +846,7 @@ async fn logout(State(state): State<AuthHttpState>, request: axum::extract::Requ
     let now = Utc::now();
     let source = request
         .extensions()
-        .get::<ConnectInfo<SocketAddr>>()
+        .get::<ConnectInfo<crate::TrustedPeer>>()
         .map(|ConnectInfo(address)| address.ip().to_string());
     let user_agent = bounded_user_agent(headers);
     let audit = console_auth::AuditContext {

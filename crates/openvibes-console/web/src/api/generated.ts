@@ -12,7 +12,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Reports the authenticated browser session once C3 authentication exists.
+         * Reports the current authenticated browser session.
          * @description C0 deliberately returns a bounded failure instead of creating a temporary
          *     unauthenticated or implicitly privileged session.
          */
@@ -319,7 +319,7 @@ export interface components {
             /** @description Local username when the identity has one. */
             username?: string | null;
         };
-        /** @description Successful response from `GET /api/v1/session` once C3 authentication is available. */
+        /** @description Successful response from `GET /api/v1/session` for an active session. */
         SessionResponse: {
             /**
              * Format: date-time

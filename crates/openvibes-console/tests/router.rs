@@ -3,7 +3,7 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use openvibes_console::{
-    Readiness, authenticated_router, development_router, health_router, public_router,
+    Readiness, TrustedPeer, authenticated_router, development_router, health_router, public_router,
 };
 use serde_json::Value;
 use tower::ServiceExt;
@@ -164,9 +164,9 @@ async fn login_rejects_bad_origin_before_consulting_credentials() {
                 .uri("/auth/v1/login")
                 .header(header::ORIGIN, "https://attacker.example")
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(axum::extract::ConnectInfo(
+                .extension(axum::extract::ConnectInfo(TrustedPeer::new(
                     "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
-                ))
+                )))
                 .body(Body::from(r#"{"username":"alice","password":"incorrect"}"#))
                 .unwrap(),
         )
@@ -192,9 +192,9 @@ async fn malformed_login_body_uses_problem_details() {
                 .uri("/auth/v1/login")
                 .header(header::ORIGIN, "https://console.example")
                 .header(header::CONTENT_TYPE, "application/json")
-                .extension(axum::extract::ConnectInfo(
+                .extension(axum::extract::ConnectInfo(TrustedPeer::new(
                     "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
-                ))
+                )))
                 .body(Body::from("{"))
                 .unwrap(),
         )
@@ -228,9 +228,9 @@ async fn invalid_public_origins_cannot_enable_browser_login() {
                     .uri("/auth/v1/login")
                     .header(header::ORIGIN, origin)
                     .header(header::CONTENT_TYPE, "application/json")
-                    .extension(axum::extract::ConnectInfo(
+                    .extension(axum::extract::ConnectInfo(TrustedPeer::new(
                         "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
-                    ))
+                    )))
                     .body(Body::from(r#"{"username":"alice","password":"incorrect"}"#))
                     .unwrap(),
             )
@@ -238,6 +238,28 @@ async fn invalid_public_origins_cannot_enable_browser_login() {
             .unwrap();
         assert_eq!(response.status(), StatusCode::FORBIDDEN, "origin: {origin}");
     }
+}
+
+#[tokio::test]
+async fn authenticated_router_rejects_unconfigured_hosts() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://console.example")
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/session")
+                .header(header::HOST, "attacker.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
 }
 
 #[tokio::test]

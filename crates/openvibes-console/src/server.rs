@@ -1,12 +1,17 @@
 use std::{
     future::{Future, IntoFuture},
     io,
+    net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
 
-use axum::serve::Listener;
+use axum::{
+    Router,
+    extract::connect_info::Connected,
+    serve::{IncomingStream, Listener},
+};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpListener, TcpStream},
@@ -14,7 +19,9 @@ use tokio::{
     time::{sleep, timeout},
 };
 
-use crate::{ConsoleConfig, ConsoleError, Readiness, development_router, health_router};
+use crate::{
+    ConsoleConfig, ConsoleError, Readiness, authenticated_router, development_router, health_router,
+};
 
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PUBLIC_CONNECTIONS: usize = 256;
@@ -23,6 +30,22 @@ const MAX_HEALTH_CONNECTIONS: usize = 16;
 struct CappedListener {
     listener: TcpListener,
     capacity: std::sync::Arc<Semaphore>,
+}
+
+/// Socket peer address supplied by the console's capped TCP listener.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TrustedPeer(SocketAddr);
+
+impl TrustedPeer {
+    /// Wraps a peer address when constructing an in-process router request.
+    pub fn new(address: SocketAddr) -> Self {
+        Self(address)
+    }
+
+    /// Returns the remote IP address.
+    pub fn ip(self) -> std::net::IpAddr {
+        self.0.ip()
+    }
 }
 
 impl CappedListener {
@@ -81,7 +104,7 @@ impl AsyncWrite for CappedStream {
 
 impl Listener for CappedListener {
     type Io = CappedStream;
-    type Addr = std::net::SocketAddr;
+    type Addr = TrustedPeer;
 
     async fn accept(&mut self) -> (Self::Io, Self::Addr) {
         let permit = self
@@ -98,7 +121,7 @@ impl Listener for CappedListener {
                             stream,
                             _permit: permit,
                         },
-                        address,
+                        TrustedPeer(address),
                     );
                 }
                 Err(error) => {
@@ -110,7 +133,13 @@ impl Listener for CappedListener {
     }
 
     fn local_addr(&self) -> io::Result<Self::Addr> {
-        self.listener.local_addr()
+        self.listener.local_addr().map(TrustedPeer)
+    }
+}
+
+impl Connected<IncomingStream<'_, CappedListener>> for TrustedPeer {
+    fn connect_info(stream: IncomingStream<'_, CappedListener>) -> Self {
+        *stream.remote_addr()
     }
 }
 
@@ -121,9 +150,29 @@ pub async fn serve(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     config.validate()?;
+    let public_router = match (&config.database_url, &config.public_origin) {
+        (Some(database_url), Some(public_origin)) => {
+            let pool = platform_store::connect(database_url).await?;
+            let client = pool
+                .get()
+                .await
+                .map_err(|_| platform_store::StoreError::Unavailable)?;
+            let actual = platform_store::schema_version(&client).await?;
+            if actual != Some(platform_store::SCHEMA_VERSION) {
+                return Err(ConsoleError::SchemaVersion {
+                    actual,
+                    expected: platform_store::SCHEMA_VERSION,
+                });
+            }
+            drop(client);
+            authenticated_router(pool, public_origin.as_str())
+        }
+        (None, None) => development_router(),
+        _ => return Err(ConsoleError::Config),
+    };
     let public_listener = TcpListener::bind(config.development_listen).await?;
     let health_listener = TcpListener::bind(config.health_listen).await?;
-    run(public_listener, health_listener, shutdown).await
+    run_with_router(public_listener, health_listener, public_router, shutdown).await
 }
 
 /// Serves already-bound listeners. This is exposed for process-level and
@@ -131,6 +180,21 @@ pub async fn serve(
 pub async fn run(
     public_listener: TcpListener,
     health_listener: TcpListener,
+    shutdown: impl Future<Output = ()>,
+) -> Result<(), ConsoleError> {
+    run_with_router(
+        public_listener,
+        health_listener,
+        development_router(),
+        shutdown,
+    )
+    .await
+}
+
+async fn run_with_router(
+    public_listener: TcpListener,
+    health_listener: TcpListener,
+    public_router: Router,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     if !public_listener.local_addr()?.ip().is_loopback()
@@ -144,7 +208,7 @@ pub async fn run(
     let health_stop = public_stop.clone();
     let public = axum::serve(
         CappedListener::new(public_listener, MAX_PUBLIC_CONNECTIONS),
-        development_router(),
+        public_router.into_make_service_with_connect_info::<TrustedPeer>(),
     )
     .with_graceful_shutdown(stop_requested(public_stop))
     .into_future();
