@@ -14,6 +14,8 @@ pub mod ca;
 pub mod ingest;
 mod maintenance;
 mod migrate;
+/// Rule sets, trust keys, and published bundles.
+pub mod rules;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;

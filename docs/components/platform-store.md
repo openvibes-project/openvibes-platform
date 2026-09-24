@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 3; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 6; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -28,7 +28,8 @@ revokes UPDATE on `findings`, `certificates`, and `token_uses` from
 refused every write, read, or DDL it does not use. Migration 5 adds `rule_set_id`
 to `findings` and `current_findings` (`''` = unknown sender) and keys
 current state by agent, rule set, and rule: rule ids are unique only within
-a rule set. `migrate` runs
+a rule set. Migration 6 adds rule distribution (below) and the role
+`openvibes_distribution`. `migrate` runs
 in one transaction that first takes an advisory lock (before even creating
 `schema_version`), so concurrent runs serialize and both succeed;
 already-applied migrations are skipped. A database at a
@@ -82,6 +83,32 @@ All run within the `openvibes_ingest` role's grants (the tests use
   transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
   keeping the newest observation and the first-seen time.
 - Certificate chains are stored as a JSON array in `certificates.chain_pem`.
+
+## Rule distribution (`rules::…`, schema 6)
+
+Tables: `rule_sets` (id, `created_at`, `retired_at`), `rule_trust_keys`
+(per set and issuer key id: 32-byte Ed25519 key, `added_at`, `removed_at`),
+and `rule_bundles` (per set and version: the exact envelope bytes, at most
+1 MiB, its SHA-256, issuer, signed creation and expiry, `published_at`,
+`published_by`). The current bundle is the highest version; there is no
+mutable pointer.
+
+`openvibes_distribution` may only read `agents`, `certificates`,
+`rule_sets`, `rule_bundles`, and `schema_version`; it cannot see trust keys.
+`openvibes_ingest` has no rights on the rule tables. A test checks both.
+
+- `add_trust_key(set, issuer, key)` creates the set if needed →
+  `Added`, `AlreadyTrusted` (same key), `Conflict` (different key, or the id
+  was removed: ids are never re-used), `Retired`.
+- `trust_keys(set?)`, `active_trust_keys(set)`, `remove_trust_key(set, issuer)`.
+- `publish(&mut client, &NewBundle)` takes a per-set advisory lock, so
+  concurrent publishers serialize → `Stored`, `Unchanged` (same version and
+  bytes), `VersionConflict`, `NotAboveCurrent(v)`, `Retired`, `UnknownSet`.
+  The caller verifies the signature first (`openvibes-admin rules publish`).
+- `list()`, `bundles(set)` (newest first), `retire(set)` (bundles are kept).
+- `serve(set, current_version?)` → `Unknown` (unknown, retired, or nothing
+  published), `UpToDate`, or `Envelope(bytes)`. One primary-key query, read
+  backwards; the bytes are fetched only when the agent's version is older.
 
 ## Audit log
 
