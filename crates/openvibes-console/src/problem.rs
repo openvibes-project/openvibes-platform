@@ -76,6 +76,12 @@ impl ProblemDetails {
 
 pub(crate) fn problem_response(problem: ProblemDetails) -> Response {
     let status = StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    tracing::warn!(
+        request_id = %problem.request_id,
+        code = %problem.code,
+        status = status.as_u16(),
+        "console request failed"
+    );
     let mut response = (status, Json(problem)).into_response();
     response.headers_mut().insert(
         header::CONTENT_TYPE,

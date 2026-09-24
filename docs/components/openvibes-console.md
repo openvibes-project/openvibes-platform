@@ -16,7 +16,8 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved and C0 is complete: a
+The design is approved. C0 is complete, and the C1 seeded read slice is
+implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
 frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
@@ -128,7 +129,7 @@ banner are never included in the production RPM.
 
 ## Failure behaviour
 
-**Now (C0):**
+**Now (C0 and C1):**
 
 - The development listener answers only loopback `Host` names (`localhost`,
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
@@ -138,6 +139,8 @@ banner are never included in the production RPM.
   report-only.
 - A wrong method on an API route is a 405 Problem Details response with
   `Cache-Control: no-store`, like every API error.
+- Problem Details errors log their request ID, stable code, and HTTP status;
+  request fields and secret values are not logged.
 - An `embedded-ui` build fails if the shared route/public-asset contract,
   generated frontend manifest, SPA entry, exact public-file inventory, or a
   referenced embedded asset is missing or inconsistent. It also refuses a
