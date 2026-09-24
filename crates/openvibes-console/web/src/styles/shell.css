@@ -248,6 +248,12 @@
   color: var(--color-border-strong);
 }
 
+.topbar__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
 .theme-control {
   display: flex;
   align-items: center;
@@ -264,6 +270,82 @@
   border-radius: var(--radius-small);
   background: var(--color-surface);
   color: var(--color-text);
+}
+
+.help-menu__trigger,
+.help-menu__popover :is(button, a),
+.help-dialog button {
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-small);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  font-weight: 650;
+}
+
+.help-menu__trigger {
+  min-height: 2.25rem;
+  padding: 0 var(--space-3);
+}
+
+.help-menu__popover {
+  position: fixed;
+  inset: 4.5rem var(--space-5) auto auto;
+  width: min(15rem, calc(100vw - 2rem));
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-raised);
+}
+
+.help-menu__popover :is(button, a) {
+  display: flex;
+  width: 100%;
+  min-height: 2.5rem;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-color: transparent;
+  text-align: left;
+  text-decoration: none;
+}
+
+.help-menu__popover :is(button, a):hover {
+  border-color: var(--color-border);
+  background: var(--color-brand-soft);
+}
+
+.help-dialog {
+  width: min(32rem, calc(100vw - 2rem));
+  padding: var(--space-6);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-large);
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: var(--shadow-raised);
+}
+
+.help-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.help-dialog p:last-child {
+  margin-bottom: 0;
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+
+.help-dialog__close {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.help-dialog__close button {
+  display: grid;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  font-size: 1.25rem;
 }
 
 .seeded-banner {
@@ -445,6 +527,22 @@ h2 {
     padding-inline: var(--space-4);
   }
 
+  .theme-control__label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .help-menu__popover {
+    inset: 3.75rem var(--space-3) auto auto;
+  }
+
   .seeded-banner {
     align-items: flex-start;
     flex-direction: column;
@@ -466,7 +564,9 @@ h2 {
   .navigation__link[aria-current="page"],
   .shell-panel,
   .seeded-banner,
-  .button-link {
+  .button-link,
+  .help-menu__popover,
+  .help-dialog {
     border: 1px solid CanvasText;
   }
 

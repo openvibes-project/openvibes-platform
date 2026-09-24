@@ -13,7 +13,9 @@ behaviour, and how to test. Updated in the same change as the component.
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `openvibes-distribution` | service, port 18424 | `POST /v1/rule-bundle`: signed bundles to agents (SP2 DM2) | [openvibes-distribution.md](openvibes-distribution.md) |
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
-| `openvibes-console` | web application and `/api/v1` | C0 route/build contracts implemented; interaction/offline-build work remains | [openvibes-console.md](openvibes-console.md) |
+| `openvibes-console` | web application and `/api/v1` | C0 build/browser contracts implemented; offline package build and final brand assets remain | [openvibes-console.md](openvibes-console.md) |
+| `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4) | [integration-agent.md](integration-agent.md) |
+| `packaging` | RPMs | openvibes-ingest, openvibes-admin, hardened units, maintenance timer (PM4) | [packaging.md](packaging.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).
 Architecture and design: [`../specs/`](../specs/). Implementation plans:
