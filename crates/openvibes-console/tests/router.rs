@@ -2,7 +2,7 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use openvibes_console::{Readiness, health_router, public_router};
+use openvibes_console::{Readiness, development_router, health_router, public_router};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -24,6 +24,12 @@ fn assert_public_security_headers(response: &axum::response::Response) {
         "nosniff"
     );
     assert!(response.headers().contains_key("permissions-policy"));
+    // Framing is refused now, not only reported: report-only does not block.
+    assert_eq!(response.headers().get("x-frame-options").unwrap(), "DENY");
+    assert_eq!(
+        response.headers().get("content-security-policy").unwrap(),
+        "frame-ancestors 'none'"
+    );
 }
 
 #[tokio::test]
@@ -340,5 +346,58 @@ async fn embedded_assets_have_explicit_types_and_cache_policies() {
                 .unwrap(),
             "nosniff"
         );
+    }
+}
+
+#[tokio::test]
+async fn a_wrong_method_on_an_api_route_is_problem_json() {
+    let response = public_router()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/session")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/problem+json"
+    );
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 64 * 1024).await.unwrap()).unwrap();
+    assert_eq!(body["code"], "method_not_allowed");
+    assert_eq!(body["status"], 405);
+}
+
+#[tokio::test]
+async fn the_development_listener_answers_only_loopback_host_names() {
+    let request = |host: &str| {
+        Request::builder()
+            .uri("/api/v1/session")
+            .header(header::HOST, host)
+            .body(Body::empty())
+            .unwrap()
+    };
+    // DNS rebinding: a hostile page's name resolving to 127.0.0.1.
+    let response = development_router()
+        .oneshot(request("evil.example"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+    for host in [
+        "localhost:18490",
+        "127.0.0.1:18490",
+        "[::1]:18490",
+        "localhost",
+    ] {
+        let response = development_router().oneshot(request(host)).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE, "{host}");
     }
 }

@@ -6,7 +6,7 @@ use std::{
 
 use tokio::{net::TcpListener, sync::watch, time::timeout};
 
-use crate::{ConsoleConfig, ConsoleError, Readiness, health_router, public_router};
+use crate::{ConsoleConfig, ConsoleError, Readiness, development_router, health_router};
 
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -38,7 +38,7 @@ pub async fn run(
     let readiness = Readiness::new(true);
     let (stop_sender, public_stop) = watch::channel(false);
     let health_stop = public_stop.clone();
-    let public = axum::serve(public_listener, public_router())
+    let public = axum::serve(public_listener, development_router())
         .with_graceful_shutdown(stop_requested(public_stop))
         .into_future();
     let health = axum::serve(health_listener, health_router(readiness.clone()))
