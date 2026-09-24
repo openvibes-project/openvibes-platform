@@ -135,6 +135,31 @@ async fn a_token_revoked_or_expired_before_the_transaction_enrolls_nothing() {
 }
 
 #[tokio::test]
+async fn a_same_key_retry_never_returns_a_revoked_identity() {
+    let (db, _, multi) = setup().await;
+    let admin = db.pool.get().await.unwrap();
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [6; 32], now, issued(6, 6))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    platform_store::agents::revoke(&admin, &identity.agent_id, now)
+        .await
+        .unwrap();
+    assert!(matches!(
+        ingest::enroll(&mut client, &multi, [6; 32], now, issued(7, 6))
+            .await
+            .unwrap(),
+        Enrolled::AgentRevoked
+    ));
+    drop((client, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn concurrent_enrollments_with_a_single_use_token_yield_one_identity() {
     let (db, single, _) = setup().await;
     let (mut a, mut b) = (as_ingest(&db).await, as_ingest(&db).await);

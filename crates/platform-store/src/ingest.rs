@@ -44,6 +44,9 @@ pub enum Enrolled {
     /// The token was revoked or has expired (checked under the token lock,
     /// so a revocation racing the request cannot slip through).
     TokenInvalid,
+    /// A same-key retry whose agent has since been revoked; a revoked
+    /// identity is never handed out again.
+    AgentRevoked,
 }
 
 /// A certificate issued for an agent.
@@ -141,13 +144,18 @@ pub async fn enroll(
         .await?;
     let existing = transaction
         .query_opt(
-            "SELECT u.agent_id, c.chain_pem, c.not_after
+            "SELECT u.agent_id, c.chain_pem, c.not_after, a.status = 'revoked'
              FROM token_uses u JOIN certificates c ON c.serial = u.serial
+             JOIN agents a ON a.agent_id = u.agent_id
              WHERE u.token_id = $1::text::uuid AND u.spki_sha256 = $2",
             &[&token_id, &spki_sha256.as_slice()],
         )
         .await?;
     if let Some(row) = existing {
+        if row.get::<_, bool>(3) {
+            transaction.commit().await?;
+            return Ok(Enrolled::AgentRevoked);
+        }
         let chain: String = row.get(1);
         let identity = Identity {
             agent_id: row.get(0),

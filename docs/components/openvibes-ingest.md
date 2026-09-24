@@ -50,7 +50,8 @@ Strict TOML (unknown keys refused), absolute paths only:
   is hashed with `platform_pki::enrollment_token_sha256`; unknown, expired,
   revoked, malformed, or used-up tokens → 401. The CSR must pass
   `check_csr` (P-256, empty subject, valid signature) → else 400. A retry
-  with the same token and the same key returns the same identity and chain.
+  with the same token and the same key returns the same identity and chain,
+  unless that agent was revoked since (401).
   Response: `EnrollmentResponse` with `agent.<uuid>`, leaf + intermediate,
   and the leaf expiry.
 - `POST /v1/renew` (authenticated): `RenewalRequest`; issues a certificate

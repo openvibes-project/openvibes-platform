@@ -64,7 +64,9 @@ pub(crate) async fn enroll(
     .await?
     {
         Enrolled::New(identity) | Enrolled::Existing(identity) => respond(identity),
-        Enrolled::Exhausted | Enrolled::TokenInvalid => Err(ApiError::Unauthorized),
+        Enrolled::Exhausted | Enrolled::TokenInvalid | Enrolled::AgentRevoked => {
+            Err(ApiError::Unauthorized)
+        }
     }
 }
 
