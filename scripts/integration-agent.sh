@@ -147,4 +147,44 @@ third_agent() {
 wait_for "expired certificate: agent re-enrolled from its token file" 30 third_agent
 wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_equals_stored
 ((${#PIDS[@]} == 2)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest and the live agent"; exit 1; }
+
+# Rule distribution (SP2): the agent switches from its provisioned bundle to
+# fetching from openvibes-distribution. v1 is the exact file it already
+# accepted (a re-signed v1 would differ and be refused as a conflict).
+start_distribution
+bundle() {
+    if [[ -n "${BUNDLE_BIN:-}" ]]; then "$BUNDLE_BIN" "$@"
+    else (cd "$ROOT" && cargo run -q --locked -p openvibes-ingest --example integration_bundle -- "$@"); fi
+}
+[[ "$(bundle "$W/v2.json" 2)" == "$KEY" ]] || { echo "FAIL: v2 signed with another key"; exit 1; }
+admin rules trust add integration integration.test "$KEY" >/dev/null
+admin rules publish "$W/agent/rules.json" >/dev/null
+echo "ok: rules v1 published"
+stop_agent
+sed -i '/^bundle_file = /d; /^\[\[rule_sets\]\]/i distribution_url = "https://127.0.0.1:'"$DIST_PORT"'"' "$W/agent/agent.toml"
+distribution_answered() {
+    [[ -n "$(jq -r --argjson s "$1" 'select(.fields.endpoint == "/v1/rule-bundle" and .fields.status == $s) | 1' \
+        "$W/distribution.log" 2>/dev/null)" ]]
+}
+restart_agent
+wait_for "agent polls distribution (204 for its current v1)" 30 distribution_answered 204
+admin rules publish "$W/v2.json" >/dev/null
+v2_findings() { sql "SELECT count(*) FROM findings WHERE rule_id = 'integration.v2'"; }
+more_v2_than() { (($(v2_findings) > $1)); }
+restart_agent
+wait_for "agent fetched v2 (200)" 30 distribution_answered 200
+wait_for "agent runs v2: its new rule's findings arrive" 75 more_v2_than 0
+BEFORE=$(v2_findings)
+stop_distribution
+restart_agent
+wait_for "scans continue on v2 while distribution is down" 75 more_v2_than "$BEFORE"
+kill -0 "$AGENT_PID" || { echo "FAIL: agent exited without distribution"; exit 1; }
+start_distribution
+# The second agent is still active (its certificate expired): take the newest.
+THIRD_AGENT=$(sql "SELECT agent_id FROM agents WHERE status = 'active' ORDER BY enrolled_at DESC LIMIT 1")
+stop_agent
+admin agent revoke "$THIRD_AGENT" >/dev/null
+restart_agent
+wait_for "distribution tells the revoked agent identity_revoked" 75 distribution_answered 403
+((${#PIDS[@]} == 3)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest, distribution, agent"; exit 1; }
 echo "integration: all checks passed"

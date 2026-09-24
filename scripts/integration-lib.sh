@@ -61,7 +61,8 @@ start_platform() {
 
     # Binaries.
     if [[ -z "${OPENVIBES_BIN_DIR:-}" ]]; then
-        cargo build --quiet --release --locked -p openvibes-ingest -p openvibes-admin
+        cargo build --quiet --release --locked -p openvibes-ingest -p openvibes-distribution \
+            -p openvibes-admin
         OPENVIBES_BIN_DIR="$ROOT/target/release"
     fi
     admin() { "$OPENVIBES_BIN_DIR/openvibes-admin" --config "$W/admin.toml" "$@"; }
@@ -104,4 +105,33 @@ EOF
     INGEST_PID=$!
     PIDS+=("$INGEST_PID")
     wait_for "ingest ready" 30 curl -fsS "http://127.0.0.1:$HEALTH_PORT/ready"
+}
+
+# openvibes-distribution on 127.0.0.1:$DIST_PORT (default 28424) until
+# /ready on $DIST_HEALTH_PORT (default 28481), with the platform's server
+# certificate and the least-privilege database role. Call after
+# start_platform; again after stop_distribution to restart. Defines DIST_PID.
+start_distribution() {
+    DIST_PORT=${DIST_PORT:-28424}
+    DIST_HEALTH_PORT=${DIST_HEALTH_PORT:-28481}
+    cat > "$W/distribution.toml" <<EOF
+listen = "127.0.0.1:$DIST_PORT"
+health_listen = "127.0.0.1:$DIST_HEALTH_PORT"
+server_certificate_file = "$W/ca/tls/localhost.crt"
+server_key_file = "$W/ca/tls/localhost.key"
+client_ca_file = "$W/ca/int/intermediate.crt"
+database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_distribution"
+EOF
+    "$OPENVIBES_BIN_DIR/openvibes-distribution" --config "$W/distribution.toml" 2>> "$W/distribution.log" &
+    DIST_PID=$!
+    PIDS+=("$DIST_PID")
+    wait_for "distribution ready" 30 curl -fsS "http://127.0.0.1:$DIST_HEALTH_PORT/ready"
+}
+
+# Stops distribution and forgets its PID.
+stop_distribution() {
+    kill "$DIST_PID"; wait "$DIST_PID" 2>/dev/null || true
+    local kept=() pid
+    for pid in "${PIDS[@]}"; do [[ "$pid" == "$DIST_PID" ]] || kept+=("$pid"); done
+    PIDS=("${kept[@]}")
 }
