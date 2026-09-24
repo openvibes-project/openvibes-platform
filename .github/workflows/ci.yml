@@ -40,10 +40,19 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
       # The agent (openvibes-core) and protocol (fixtures) repositories are
       # private. Each has its own fine-grained, read-only token, used only
       # for that repository's URL and verbatim, so GitHub's log masking holds.
-      - name: Authenticate git for private dependencies
+      # The tokens live in a temporary git config for this step alone: every
+      # fetch that needs them happens here, and later steps (whose build
+      # scripts and tests run third-party code) build offline without them.
+      - name: Fetch private dependencies
         shell: bash
         env:
           AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
@@ -53,33 +62,38 @@ jobs:
             echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
             exit 1
           fi
+          GIT_CONFIG_GLOBAL="$(mktemp)"
+          export GIT_CONFIG_GLOBAL
+          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
           git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
           git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
-
-      - name: Install pinned toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - name: Cache Cargo dependencies
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+          cargo fetch --locked
 
       - name: Format
         run: cargo fmt --all --check
 
       - name: Clippy
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings -F unsafe-code
 
       - name: Docs
         env:
           RUSTDOCFLAGS: -D warnings
+          CARGO_NET_OFFLINE: "true"
         run: cargo doc --locked --workspace --all-features --no-deps
 
       - name: Tests
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: cargo test --locked --workspace --all-features
 
       # The Nagle stall (TCP_NODELAY missing) only shows when the server is
       # fast enough, i.e. in a release build; debug runs pass either way.
       - name: Release-mode latency test
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: cargo test --release --locked -p openvibes-ingest --test delivery requests_are_not_delayed_by_nagle
 
       - name: Install cargo-audit
@@ -107,7 +121,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Authenticate git for private dependencies
+      # As in the ubuntu job: the tokens exist only in this step's temporary
+      # git config; the pinned agent (a private git dependency) is built
+      # here too, and later steps build offline.
+      - name: Fetch private dependencies and build the pinned agent
         shell: bash
         env:
           AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
@@ -118,11 +135,20 @@ jobs:
             exit 1
           fi
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          GIT_CONFIG_GLOBAL="$(mktemp)"
+          export GIT_CONFIG_GLOBAL
+          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
           git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
+          cargo fetch --locked
+          ROOT=$PWD; source scripts/integration-lib.sh
+          build_agent "$PWD/target/integration/agent" > agent-path
 
       - name: Build RPMs
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
       - name: Install and check RPMs
@@ -130,14 +156,13 @@ jobs:
           dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm
           bash scripts/check-rpm.sh
 
-      # initdb refuses root: build the agent and the bundle tool as root
-      # (which has the git credentials), then run the integration as a
-      # plain user against the installed binaries.
-      - name: Build the pinned agent and the bundle tool
+      # initdb refuses root: build the test tools as root, then run the
+      # integration as a plain user against the installed binaries.
+      - name: Build the bundle tool and the load generator
         shell: bash
+        env:
+          CARGO_NET_OFFLINE: "true"
         run: |
-          ROOT=$PWD; source scripts/integration-lib.sh
-          build_agent "$PWD/target/integration/agent" > agent-path
           cargo build --release --locked -p openvibes-ingest --example integration_bundle
           cargo build --release --locked -p openvibes-load
 
