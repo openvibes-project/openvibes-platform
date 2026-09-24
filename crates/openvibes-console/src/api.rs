@@ -215,6 +215,232 @@ pub struct CursorPage<T> {
     pub generated_at: String,
 }
 
+/// Lifecycle state reported for an enrolled agent.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AgentStatus {
+    /// The agent is enrolled and reporting within the expected interval.
+    Active,
+    /// The agent has not reported within the configured stale interval.
+    Stale,
+    /// The agent was revoked by an operator.
+    Revoked,
+}
+
+/// Severity attached to the latest observation for a rule.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Severity {
+    /// Highest severity.
+    Critical,
+    /// High severity.
+    High,
+    /// Medium severity.
+    Medium,
+    /// Low severity.
+    Low,
+}
+
+/// Provenance of a stored observation.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingOrigin {
+    /// Received from an enrolled agent.
+    Online,
+    /// Loaded from an operator-provided import.
+    Import,
+}
+
+/// Operator-facing agent fields shared by the read API and seeded server.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct AgentView {
+    /// Stable platform agent identifier.
+    pub id: String,
+    /// Latest hostname reported by an authenticated heartbeat; this is an operator label.
+    pub hostname: Option<String>,
+    /// Current lifecycle state.
+    pub status: AgentStatus,
+    /// RFC 3339 enrollment time.
+    pub enrolled_at: String,
+    /// RFC 3339 revocation time, if revoked.
+    pub revoked_at: Option<String>,
+    /// RFC 3339 time of the latest heartbeat, if present.
+    pub last_seen_at: Option<String>,
+    /// Reported scanner version, if present.
+    pub scanner_version: Option<String>,
+    /// Reported agent capabilities.
+    pub capabilities: Vec<String>,
+}
+
+/// Certificate metadata exposed in an agent detail response.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct CertificateView {
+    /// Certificate serial rendered as hexadecimal.
+    pub serial: String,
+    /// RFC 3339 certificate validity start.
+    pub not_before: String,
+    /// RFC 3339 certificate expiry time.
+    pub not_after: String,
+    /// RFC 3339 certificate issuance time.
+    pub issued_at: String,
+}
+
+/// A page of certificate metadata using the shared cursor response shape.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct CertificatePage {
+    /// Records in stable server-defined order.
+    pub items: Vec<CertificateView>,
+    /// Opaque cursor for the next page, or `null` at the end.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 instant when this page was generated.
+    pub generated_at: String,
+}
+
+/// Agent and current certificate metadata.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct AgentDetail {
+    /// Operator-facing agent fields.
+    #[serde(flatten)]
+    pub agent: AgentView,
+    /// Certificate metadata for the agent.
+    pub certificates: Vec<CertificateView>,
+}
+
+/// Fleet counts visible to the current principal.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct AgentSummary {
+    /// Number of visible enrolled agents.
+    pub total: u64,
+    /// Number of visible active agents.
+    pub active: u64,
+    /// Number of visible stale agents.
+    pub stale: u64,
+    /// Number of visible revoked agents.
+    pub revoked: u64,
+}
+
+/// Latest observation state for one agent, rule set, and rule.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingView {
+    /// Stable latest-finding identifier.
+    pub id: String,
+    /// Agent associated with this observation.
+    pub agent_id: String,
+    /// Latest hostname reported by the agent; this is an operator label.
+    pub hostname: Option<String>,
+    /// Rule set that produced the finding, or `~unknown` for legacy data.
+    pub rule_set_id: String,
+    /// Rule identifier within the rule set.
+    pub rule_id: String,
+    /// Signed rule version.
+    pub rule_version: u64,
+    /// Latest observed severity.
+    pub severity: Severity,
+    /// Confidence as a percentage from 0 through 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub confidence: u8,
+    /// Latest observation message.
+    pub message: String,
+    /// Evidence key/value strings from the observation.
+    pub evidence: Vec<String>,
+    /// Scan that produced the observation.
+    pub scan_id: String,
+    /// Whether the observation was received through an authenticated agent.
+    pub authenticated: bool,
+    /// Observation provenance.
+    pub origin: FindingOrigin,
+    /// RFC 3339 time of the first observation.
+    pub first_observed_at: String,
+    /// RFC 3339 time of the latest observation.
+    pub last_observed_at: String,
+    /// RFC 3339 time the platform received this observation.
+    pub received_at: String,
+}
+
+/// Counts for the latest observation rows visible to the current principal.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingSummary {
+    /// Number of visible latest observation rows.
+    pub total: u64,
+    /// Number of visible agents with at least one latest observation.
+    pub impacted_agents: u64,
+    /// Visible critical latest observations.
+    pub critical: u64,
+    /// Visible high latest observations.
+    pub high: u64,
+    /// Visible medium latest observations.
+    pub medium: u64,
+    /// Visible low latest observations.
+    pub low: u64,
+}
+
+/// A page of agents using the shared cursor response shape.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct AgentPage {
+    /// Records in stable server-defined order.
+    pub items: Vec<AgentView>,
+    /// Opaque cursor for the next page, or `null` at the end.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 instant when this page was generated.
+    pub generated_at: String,
+}
+
+/// A page of latest observations using the shared cursor response shape.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingPage {
+    /// Records in stable server-defined order.
+    pub items: Vec<FindingView>,
+    /// Opaque cursor for the next page, or `null` at the end.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 instant when this page was generated.
+    pub generated_at: String,
+}
+
+/// One historical observation event.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingHistoryEntry {
+    /// Finding identifier from the partitioned event table.
+    pub id: String,
+    /// Agent associated with this event.
+    pub agent_id: String,
+    /// Rule set that produced the event, or `~unknown` for legacy data.
+    pub rule_set_id: String,
+    /// Rule identifier within the rule set.
+    pub rule_id: String,
+    /// Signed rule version.
+    pub rule_version: u64,
+    /// Severity recorded for this observation.
+    pub severity: Severity,
+    /// Confidence as a percentage from 0 through 100.
+    #[schema(minimum = 0, maximum = 100)]
+    pub confidence: u8,
+    /// Message recorded for this observation.
+    pub message: String,
+    /// Evidence key/value strings from the observation.
+    pub evidence: Vec<String>,
+    /// Scan that produced the observation.
+    pub scan_id: String,
+    /// Whether the observation was received through an authenticated agent.
+    pub authenticated: bool,
+    /// Observation provenance.
+    pub origin: FindingOrigin,
+    /// RFC 3339 time the agent or importer observed this finding.
+    pub observed_at: String,
+    /// RFC 3339 time the platform received this observation.
+    pub received_at: String,
+}
+
+/// A page of historical observation events using the shared cursor response shape.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingHistoryPage {
+    /// Records in stable server-defined order.
+    pub items: Vec<FindingHistoryEntry>,
+    /// Opaque cursor for the next page, or `null` at the end.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 instant when this page was generated.
+    pub generated_at: String,
+}
+
 /// Why a pagination request is outside its documented bounds.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PaginationError {

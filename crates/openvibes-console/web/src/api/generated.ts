@@ -29,6 +29,67 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description Agent and current certificate metadata. */
+        AgentDetail: components["schemas"]["AgentView"] & {
+            /** @description Certificate metadata for the agent. */
+            certificates: components["schemas"]["CertificateView"][];
+        };
+        /** @description A page of agents using the shared cursor response shape. */
+        AgentPage: {
+            /** @description RFC 3339 instant when this page was generated. */
+            generated_at: string;
+            /** @description Records in stable server-defined order. */
+            items: components["schemas"]["AgentView"][];
+            /** @description Opaque cursor for the next page, or `null` at the end. */
+            next_cursor?: string | null;
+        };
+        /**
+         * @description Lifecycle state reported for an enrolled agent.
+         * @enum {string}
+         */
+        AgentStatus: "active" | "stale" | "revoked";
+        /** @description Fleet counts visible to the current principal. */
+        AgentSummary: {
+            /**
+             * Format: int64
+             * @description Number of visible active agents.
+             */
+            active: number;
+            /**
+             * Format: int64
+             * @description Number of visible revoked agents.
+             */
+            revoked: number;
+            /**
+             * Format: int64
+             * @description Number of visible stale agents.
+             */
+            stale: number;
+            /**
+             * Format: int64
+             * @description Number of visible enrolled agents.
+             */
+            total: number;
+        };
+        /** @description Operator-facing agent fields shared by the read API and seeded server. */
+        AgentView: {
+            /** @description Reported agent capabilities. */
+            capabilities: string[];
+            /** @description RFC 3339 enrollment time. */
+            enrolled_at: string;
+            /** @description Latest hostname reported by an authenticated heartbeat; this is an operator label. */
+            hostname?: string | null;
+            /** @description Stable platform agent identifier. */
+            id: string;
+            /** @description RFC 3339 time of the latest heartbeat, if present. */
+            last_seen_at?: string | null;
+            /** @description RFC 3339 revocation time, if revoked. */
+            revoked_at?: string | null;
+            /** @description Reported scanner version, if present. */
+            scanner_version?: string | null;
+            /** @description Current lifecycle state. */
+            status: components["schemas"]["AgentStatus"];
+        };
         /**
          * @description Authentication assurance reached by the current browser session.
          * @enum {string}
@@ -39,6 +100,26 @@ export interface components {
          * @enum {string}
          */
         AuthenticationMethod: "local_password" | "oidc" | "saml";
+        /** @description A page of certificate metadata using the shared cursor response shape. */
+        CertificatePage: {
+            /** @description RFC 3339 instant when this page was generated. */
+            generated_at: string;
+            /** @description Records in stable server-defined order. */
+            items: components["schemas"]["CertificateView"][];
+            /** @description Opaque cursor for the next page, or `null` at the end. */
+            next_cursor?: string | null;
+        };
+        /** @description Certificate metadata exposed in an agent detail response. */
+        CertificateView: {
+            /** @description RFC 3339 certificate issuance time. */
+            issued_at: string;
+            /** @description RFC 3339 certificate expiry time. */
+            not_after: string;
+            /** @description RFC 3339 certificate validity start. */
+            not_before: string;
+            /** @description Certificate serial rendered as hexadecimal. */
+            serial: string;
+        };
         /** @description Validated cursor and limit accepted by cursor-paginated collection routes. */
         CursorPagination: {
             cursor?: string | null;
@@ -63,6 +144,140 @@ export interface components {
             field: string;
             /** @description Bounded operator-facing explanation. */
             message: string;
+        };
+        /** @description One historical observation event. */
+        FindingHistoryEntry: {
+            /** @description Agent associated with this event. */
+            agent_id: string;
+            /** @description Whether the observation was received through an authenticated agent. */
+            authenticated: boolean;
+            /**
+             * Format: int32
+             * @description Confidence as a percentage from 0 through 100.
+             */
+            confidence: number;
+            /** @description Evidence key/value strings from the observation. */
+            evidence: string[];
+            /** @description Finding identifier from the partitioned event table. */
+            id: string;
+            /** @description Message recorded for this observation. */
+            message: string;
+            /** @description RFC 3339 time the agent or importer observed this finding. */
+            observed_at: string;
+            /** @description Observation provenance. */
+            origin: components["schemas"]["FindingOrigin"];
+            /** @description RFC 3339 time the platform received this observation. */
+            received_at: string;
+            /** @description Rule identifier within the rule set. */
+            rule_id: string;
+            /** @description Rule set that produced the event, or `~unknown` for legacy data. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Signed rule version.
+             */
+            rule_version: number;
+            /** @description Scan that produced the observation. */
+            scan_id: string;
+            /** @description Severity recorded for this observation. */
+            severity: components["schemas"]["Severity"];
+        };
+        /** @description A page of historical observation events using the shared cursor response shape. */
+        FindingHistoryPage: {
+            /** @description RFC 3339 instant when this page was generated. */
+            generated_at: string;
+            /** @description Records in stable server-defined order. */
+            items: components["schemas"]["FindingHistoryEntry"][];
+            /** @description Opaque cursor for the next page, or `null` at the end. */
+            next_cursor?: string | null;
+        };
+        /**
+         * @description Provenance of a stored observation.
+         * @enum {string}
+         */
+        FindingOrigin: "online" | "import";
+        /** @description A page of latest observations using the shared cursor response shape. */
+        FindingPage: {
+            /** @description RFC 3339 instant when this page was generated. */
+            generated_at: string;
+            /** @description Records in stable server-defined order. */
+            items: components["schemas"]["FindingView"][];
+            /** @description Opaque cursor for the next page, or `null` at the end. */
+            next_cursor?: string | null;
+        };
+        /** @description Counts for the latest observation rows visible to the current principal. */
+        FindingSummary: {
+            /**
+             * Format: int64
+             * @description Visible critical latest observations.
+             */
+            critical: number;
+            /**
+             * Format: int64
+             * @description Visible high latest observations.
+             */
+            high: number;
+            /**
+             * Format: int64
+             * @description Number of visible agents with at least one latest observation.
+             */
+            impacted_agents: number;
+            /**
+             * Format: int64
+             * @description Visible low latest observations.
+             */
+            low: number;
+            /**
+             * Format: int64
+             * @description Visible medium latest observations.
+             */
+            medium: number;
+            /**
+             * Format: int64
+             * @description Number of visible latest observation rows.
+             */
+            total: number;
+        };
+        /** @description Latest observation state for one agent, rule set, and rule. */
+        FindingView: {
+            /** @description Agent associated with this observation. */
+            agent_id: string;
+            /** @description Whether the observation was received through an authenticated agent. */
+            authenticated: boolean;
+            /**
+             * Format: int32
+             * @description Confidence as a percentage from 0 through 100.
+             */
+            confidence: number;
+            /** @description Evidence key/value strings from the observation. */
+            evidence: string[];
+            /** @description RFC 3339 time of the first observation. */
+            first_observed_at: string;
+            /** @description Latest hostname reported by the agent; this is an operator label. */
+            hostname?: string | null;
+            /** @description Stable latest-finding identifier. */
+            id: string;
+            /** @description RFC 3339 time of the latest observation. */
+            last_observed_at: string;
+            /** @description Latest observation message. */
+            message: string;
+            /** @description Observation provenance. */
+            origin: components["schemas"]["FindingOrigin"];
+            /** @description RFC 3339 time the platform received this observation. */
+            received_at: string;
+            /** @description Rule identifier within the rule set. */
+            rule_id: string;
+            /** @description Rule set that produced the finding, or `~unknown` for legacy data. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Signed rule version.
+             */
+            rule_version: number;
+            /** @description Scan that produced the observation. */
+            scan_id: string;
+            /** @description Latest observed severity. */
+            severity: components["schemas"]["Severity"];
         };
         /**
          * @description Stable console permission identifiers.
@@ -127,6 +342,11 @@ export interface components {
             /** @description Current human principal. Service-account tokens cannot call this route. */
             principal: components["schemas"]["SessionPrincipal"];
         };
+        /**
+         * @description Severity attached to the latest observation for a rule.
+         * @enum {string}
+         */
+        Severity: "critical" | "high" | "medium" | "low";
     };
     responses: never;
     parameters: never;

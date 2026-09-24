@@ -11,11 +11,12 @@ use axum::{
     routing::get,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use serde::Deserialize;
 
 use crate::{
-    CursorPage, CursorPagination, Permission,
+    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, CertificateView, CursorPage,
+    CursorPagination, FindingOrigin, FindingPage, FindingSummary, FindingView, Permission,
+    Severity,
     problem::{ProblemDetails, problem_response},
 };
 
@@ -23,14 +24,6 @@ const GENERATED_AT: &str = "2026-09-24T12:00:00Z";
 const DEFAULT_LIMIT: u16 = 50;
 const MAX_SEARCH_LENGTH: usize = 128;
 const MAX_AGENTS: usize = 50_000;
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum AgentStatus {
-    Active,
-    Stale,
-    Revoked,
-}
 
 impl AgentStatus {
     fn label(self) -> &'static str {
@@ -42,15 +35,6 @@ impl AgentStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "snake_case")]
-pub(crate) enum Severity {
-    Critical,
-    High,
-    Medium,
-    Low,
-}
-
 impl Severity {
     fn label(self) -> &'static str {
         match self {
@@ -60,64 +44,6 @@ impl Severity {
             Self::Low => "low",
         }
     }
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct AgentView {
-    pub id: String,
-    pub hostname: String,
-    pub status: AgentStatus,
-    pub last_seen_at: String,
-    pub certificate_expires_at: String,
-    pub environment: String,
-    pub platform: String,
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct CertificateView {
-    pub serial: String,
-    pub not_after: String,
-    pub revoked: bool,
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct AgentDetail {
-    #[serde(flatten)]
-    pub agent: AgentView,
-    pub certificate: CertificateView,
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct AgentSummary {
-    pub total: u64,
-    pub active: u64,
-    pub stale: u64,
-    pub revoked: u64,
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct FindingView {
-    pub id: String,
-    pub agent_id: String,
-    pub hostname: String,
-    pub rule_set_id: String,
-    pub rule_id: String,
-    pub rule_version: u64,
-    pub severity: Severity,
-    pub message: String,
-    pub first_observed_at: String,
-    pub last_observed_at: String,
-    pub occurrence_count: u64,
-}
-
-#[derive(Clone, Debug, Serialize, ToSchema)]
-pub(crate) struct FindingSummary {
-    pub total: u64,
-    pub impacted_agents: u64,
-    pub critical: u64,
-    pub high: u64,
-    pub medium: u64,
-    pub low: u64,
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
@@ -212,7 +138,8 @@ impl Persona {
 #[derive(Clone, Debug)]
 struct AgentRecord {
     view: AgentView,
-    certificate: CertificateView,
+    certificates: Vec<CertificateView>,
+    scope_member: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -285,20 +212,10 @@ fn default_limit() -> u16 {
 
 trait ConsoleRepository: Send + Sync {
     fn agent_summary(&self, persona: Persona, mode: SeedMode) -> AgentSummary;
-    fn agents(
-        &self,
-        filters: &AgentFilters,
-        persona: Persona,
-        mode: SeedMode,
-    ) -> CursorPage<AgentView>;
+    fn agents(&self, filters: &AgentFilters, persona: Persona, mode: SeedMode) -> AgentPage;
     fn agent(&self, id: &str, persona: Persona, mode: SeedMode) -> Option<AgentDetail>;
     fn finding_summary(&self, persona: Persona, mode: SeedMode) -> FindingSummary;
-    fn findings(
-        &self,
-        filters: &FindingFilters,
-        persona: Persona,
-        mode: SeedMode,
-    ) -> CursorPage<FindingView>;
+    fn findings(&self, filters: &FindingFilters, persona: Persona, mode: SeedMode) -> FindingPage;
     fn finding(
         &self,
         agent: &str,
@@ -319,52 +236,47 @@ impl Default for SeededRepository {
         let agents = (1..=MAX_AGENTS)
             .map(|number| {
                 let id = format!("agent-{number:05}");
-                let hostname = format!("host-{number:05}.example.test");
-                let environment = if number % 5 == 0 {
-                    "production"
-                } else if number % 5 == 1 {
-                    "staging"
-                } else {
-                    "development"
-                };
+                let hostname = (number % 11 != 0).then(|| format!("host-{number:05}.example.test"));
+                let never_seen = number % 199 == 0;
                 let status = if number % 97 == 0 {
                     AgentStatus::Revoked
-                } else if number % 6 == 0 {
+                } else if number % 6 == 0 || never_seen {
                     AgentStatus::Stale
                 } else {
                     AgentStatus::Active
                 };
-                let last_seen_at = if matches!(status, AgentStatus::Stale) {
-                    "2026-09-22T08:00:00Z"
+                let last_seen_at = if never_seen {
+                    None
+                } else if matches!(status, AgentStatus::Stale) {
+                    Some("2026-09-22T08:00:00Z")
                 } else {
-                    "2026-09-24T11:58:00Z"
+                    Some("2026-09-24T11:58:00Z")
                 };
                 let certificate = CertificateView {
                     serial: format!("{number:016X}"),
+                    not_before: "2026-09-01T00:00:00Z".to_owned(),
                     not_after: if number % 89 == 0 {
                         "2026-09-20T00:00:00Z"
                     } else {
                         "2027-09-24T00:00:00Z"
                     }
                     .to_owned(),
-                    revoked: matches!(status, AgentStatus::Revoked),
+                    issued_at: "2026-09-01T00:00:00Z".to_owned(),
                 };
                 AgentRecord {
                     view: AgentView {
                         id,
                         hostname,
                         status,
-                        last_seen_at: last_seen_at.to_owned(),
-                        certificate_expires_at: certificate.not_after.clone(),
-                        environment: environment.to_owned(),
-                        platform: match number % 3 {
-                            0 => "Fedora Linux",
-                            1 => "Windows",
-                            _ => "macOS",
-                        }
-                        .to_owned(),
+                        enrolled_at: "2026-09-01T00:00:00Z".to_owned(),
+                        revoked_at: matches!(status, AgentStatus::Revoked)
+                            .then(|| "2026-09-23T08:00:00Z".to_owned()),
+                        last_seen_at: last_seen_at.map(str::to_owned),
+                        scanner_version: Some("0.4.0".to_owned()),
+                        capabilities: vec!["findings".to_owned(), "heartbeat".to_owned()],
                     },
-                    certificate,
+                    certificates: vec![certificate],
+                    scope_member: number % 5 == 0,
                 }
             })
             .collect::<Vec<_>>();
@@ -374,7 +286,8 @@ impl Default for SeededRepository {
                 FindingView {
                     id: format!("finding-{number:05}"),
                     agent_id: format!("agent-{agent_number:05}"),
-                    hostname: format!("host-{agent_number:05}.example.test"),
+                    hostname: (agent_number % 11 != 0)
+                        .then(|| format!("host-{agent_number:05}.example.test")),
                     rule_set_id: if number == 120 {
                         "~unknown".to_owned()
                     } else {
@@ -388,10 +301,19 @@ impl Default for SeededRepository {
                         2 => Severity::Medium,
                         _ => Severity::Low,
                     },
+                    confidence: if number == 120 { 82 } else { 95 },
                     message: format!("Synthetic security observation {number:04}"),
+                    evidence: vec![format!("synthetic.observation={number:04}")],
+                    scan_id: format!("scan-{number:05}"),
+                    authenticated: number != 120,
+                    origin: if number == 120 {
+                        FindingOrigin::Import
+                    } else {
+                        FindingOrigin::Online
+                    },
                     first_observed_at: "2026-09-20T12:00:00Z".to_owned(),
                     last_observed_at: format!("2026-09-24T11:{:02}:00Z", 59 - number % 60),
-                    occurrence_count: 1 + u64::from(number % 40),
+                    received_at: format!("2026-09-24T12:{:02}:00Z", number % 60),
                 }
             })
             .collect();
@@ -406,7 +328,7 @@ impl SeededRepository {
         }
         let status_ok =
             !matches!(mode, SeedMode::Stale) || matches!(agent.view.status, AgentStatus::Stale);
-        status_ok && (persona.global_scope() || agent.view.environment == "production")
+        status_ok && (persona.global_scope() || agent.scope_member)
     }
 
     fn matching_findings(&self, persona: Persona, mode: SeedMode) -> Vec<FindingView> {
@@ -454,33 +376,30 @@ impl ConsoleRepository for SeededRepository {
             )
     }
 
-    fn agents(
-        &self,
-        filters: &AgentFilters,
-        persona: Persona,
-        mode: SeedMode,
-    ) -> CursorPage<AgentView> {
+    fn agents(&self, filters: &AgentFilters, persona: Persona, mode: SeedMode) -> AgentPage {
         let query = filters
             .query
             .as_deref()
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let matched = self
-            .agents
-            .iter()
-            .take(agent_count(mode))
-            .filter(|agent| {
-                self.visible(agent, persona, mode)
-                    && filters
-                        .status
-                        .is_none_or(|status| agent.view.status.label() == status.label())
-                    && (query.is_empty()
-                        || agent.view.hostname.to_ascii_lowercase().contains(&query)
-                        || agent.view.id.contains(&query))
-            })
-            .collect::<Vec<_>>();
+        let matched =
+            self.agents
+                .iter()
+                .take(agent_count(mode))
+                .filter(|agent| {
+                    self.visible(agent, persona, mode)
+                        && filters
+                            .status
+                            .is_none_or(|status| agent.view.status.label() == status.label())
+                        && (query.is_empty()
+                            || agent.view.hostname.as_deref().is_some_and(|hostname| {
+                                hostname.to_ascii_lowercase().contains(&query)
+                            })
+                            || agent.view.id.contains(&query))
+                })
+                .collect::<Vec<_>>();
         let offset = cursor_offset(filters.page.cursor(), "agents").unwrap_or(0);
-        page(
+        let page = page(
             matched
                 .into_iter()
                 .map(|agent| agent.view.clone())
@@ -488,7 +407,12 @@ impl ConsoleRepository for SeededRepository {
             offset,
             filters.page.limit(),
             "agents",
-        )
+        );
+        AgentPage {
+            items: page.items,
+            next_cursor: page.next_cursor,
+            generated_at: page.generated_at,
+        }
     }
 
     fn agent(&self, id: &str, persona: Persona, mode: SeedMode) -> Option<AgentDetail> {
@@ -499,7 +423,7 @@ impl ConsoleRepository for SeededRepository {
             .find(|agent| agent.view.id == id && self.visible(agent, persona, mode))?;
         Some(AgentDetail {
             agent: agent.view.clone(),
-            certificate: agent.certificate.clone(),
+            certificates: agent.certificates.clone(),
         })
     }
 
@@ -527,30 +451,27 @@ impl ConsoleRepository for SeededRepository {
         summary
     }
 
-    fn findings(
-        &self,
-        filters: &FindingFilters,
-        persona: Persona,
-        mode: SeedMode,
-    ) -> CursorPage<FindingView> {
+    fn findings(&self, filters: &FindingFilters, persona: Persona, mode: SeedMode) -> FindingPage {
         let query = filters
             .query
             .as_deref()
             .unwrap_or_default()
             .to_ascii_lowercase();
-        let mut matched = self
-            .matching_findings(persona, mode)
-            .into_iter()
-            .filter(|finding| {
-                filters
-                    .severity
-                    .is_none_or(|severity| finding.severity.label() == severity.label())
-                    && (query.is_empty()
-                        || finding.hostname.to_ascii_lowercase().contains(&query)
-                        || finding.rule_id.to_ascii_lowercase().contains(&query)
-                        || finding.message.to_ascii_lowercase().contains(&query))
-            })
-            .collect::<Vec<_>>();
+        let mut matched =
+            self.matching_findings(persona, mode)
+                .into_iter()
+                .filter(|finding| {
+                    filters
+                        .severity
+                        .is_none_or(|severity| finding.severity.label() == severity.label())
+                        && (query.is_empty()
+                            || finding.hostname.as_deref().is_some_and(|hostname| {
+                                hostname.to_ascii_lowercase().contains(&query)
+                            })
+                            || finding.rule_id.to_ascii_lowercase().contains(&query)
+                            || finding.message.to_ascii_lowercase().contains(&query))
+                })
+                .collect::<Vec<_>>();
         matched.sort_by(|left, right| {
             right
                 .last_observed_at
@@ -558,7 +479,12 @@ impl ConsoleRepository for SeededRepository {
                 .then_with(|| left.id.cmp(&right.id))
         });
         let offset = cursor_offset(filters.page.cursor(), "findings").unwrap_or(0);
-        page(matched, offset, filters.page.limit(), "findings")
+        let page = page(matched, offset, filters.page.limit(), "findings");
+        FindingPage {
+            items: page.items,
+            next_cursor: page.next_cursor,
+            generated_at: page.generated_at,
+        }
     }
 
     fn finding(

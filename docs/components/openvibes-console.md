@@ -65,8 +65,14 @@ this browser-session route.
 
 Collection DTOs use opaque cursors with a default limit of 50, maximum limit
 of 100, and a 2,048-byte cursor bound. Response envelopes contain typed items,
-an optional next cursor, and an RFC 3339 generation time. Concrete collection
-schemas enter OpenAPI when their owning routes are implemented.
+an optional next cursor, and an RFC 3339 generation time. Agent, certificate,
+latest-finding, and finding-history response schemas are generated into OpenAPI
+and the TypeScript client now; the seeded API reuses those DTOs. Agent fields
+match the stored schema, including optional hostname/heartbeat data and
+multiple certificate records. Finding fields include confidence, evidence,
+scan ID, receive time, and authenticated origin. Operation paths are added
+when their database-backed routes are implemented, with production data
+remaining unavailable until authentication and SQL-enforced scope are ready.
 
 The first-release UI covers overview, agents, findings and analyst triage,
 enrollment tokens, pre-signed rule bundles, access control and exact agent

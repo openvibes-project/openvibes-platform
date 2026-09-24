@@ -171,6 +171,13 @@ test("keeps the 50,000-agent scenario bounded to one page", async ({ page }) => 
   await expect(page.getByRole("heading", { name: "50 agents on this page" })).toBeVisible();
   await expect(page.locator("tbody tr")).toHaveCount(50);
   await expect(page.getByRole("link", { name: "Next page" })).toBeVisible();
+
+  await page.goto("/agents?agent=agent-00011");
+  await expect(page.getByRole("heading", { level: 2, name: "agent-00011" })).toBeVisible();
+  await expect(page.getByText("Hostname not reported")).toBeVisible();
+  await expect(page.getByText("0.4.0")).toBeVisible();
+  await expect(page.getByText("findings, heartbeat")).toBeVisible();
+  await expect(page.locator(".certificate-list li")).toHaveCount(1);
 });
 
 test("hides an out-of-scope agent and shows empty and unavailable states", async ({ page }) => {
@@ -195,11 +202,25 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
   await page.goto("/agents");
   await expect(page.locator("tbody tr")).toHaveCount(50);
   await expect(page.getByText("stale", { exact: true })).toHaveCount(50);
+  await page.goto("/agents?agent=agent-00199");
+  await expect(page.getByText("No heartbeat recorded")).toBeVisible();
 
+  await page.goto("/agents");
   await selectDemoOption(page, "Data scenario", "permission_removed");
   await expect(page.getByRole("heading", { name: "Access unavailable" })).toBeVisible();
 
   await page.goto("/findings");
   await selectDemoOption(page, "Data scenario", "expired_session");
   await expect(page.getByRole("heading", { name: "Session expired" })).toBeVisible();
+});
+
+test("shows latest finding provenance and evidence", async ({ page }) => {
+  await page.goto("/?seeded=1");
+  await page.goto("/findings?finding=agent-00041%2F~unknown%2FOV-0120");
+
+  await expect(page.getByRole("heading", { level: 2, name: "OV-0120 · rule set unknown (earlier agent)" })).toBeVisible();
+  await expect(page.getByText("Imported · unauthenticated", { exact: true })).toBeVisible();
+  await expect(page.getByText("82%", { exact: true })).toBeVisible();
+  await expect(page.getByText("scan-00120", { exact: true })).toBeVisible();
+  await expect(page.getByText("synthetic.observation=0120", { exact: true })).toBeVisible();
 });

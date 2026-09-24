@@ -4,8 +4,11 @@ use utoipa::OpenApi;
 
 use crate::{
     api::{
-        AuthenticationLevel, AuthenticationMethod, CursorPagination, EffectiveCapability,
-        Permission, PermissionScope, SessionPrincipal, SessionResponse,
+        AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuthenticationLevel,
+        AuthenticationMethod, CertificatePage, CertificateView, CursorPagination,
+        EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
+        FindingSummary, FindingView, Permission, PermissionScope, SessionPrincipal,
+        SessionResponse, Severity,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -22,14 +25,28 @@ use crate::{
     components(schemas(
         AuthenticationLevel,
         AuthenticationMethod,
+        AgentDetail,
+        AgentPage,
+        AgentStatus,
+        AgentSummary,
+        AgentView,
+        CertificatePage,
+        CertificateView,
         CursorPagination,
         EffectiveCapability,
         FieldError,
+        FindingHistoryEntry,
+        FindingHistoryPage,
+        FindingOrigin,
+        FindingPage,
+        FindingSummary,
+        FindingView,
         Permission,
         PermissionScope,
         ProblemDetails,
         SessionPrincipal,
-        SessionResponse
+        SessionResponse,
+        Severity
     )),
     tags((name = "session", description = "Current browser session"))
 )]

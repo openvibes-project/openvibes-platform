@@ -24,9 +24,11 @@ mod seeded;
 mod server;
 
 pub use api::{
-    AuthenticationLevel, AuthenticationMethod, CursorPage, CursorPagination, DEFAULT_PAGE_SIZE,
-    EffectiveCapability, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission,
-    PermissionScope, SessionPrincipal, SessionResponse,
+    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuthenticationLevel,
+    AuthenticationMethod, CertificatePage, CertificateView, CursorPage, CursorPagination,
+    DEFAULT_PAGE_SIZE, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin,
+    FindingPage, FindingSummary, FindingView, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
+    Permission, PermissionScope, SessionPrincipal, SessionResponse, Severity,
 };
 pub use config::{ConsoleConfig, load_config};
 pub use error::ConsoleError;

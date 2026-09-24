@@ -1,54 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { components } from "../api/generated";
 
-type Page<T> = {
-  items: T[];
-  next_cursor: string | null;
-  generated_at: string;
-};
-
-type Agent = {
-  id: string;
-  hostname: string;
-  status: "active" | "stale" | "revoked";
-  last_seen_at: string;
-  certificate_expires_at: string;
-  environment: string;
-  platform: string;
-};
-
-type AgentSummary = {
-  total: number;
-  active: number;
-  stale: number;
-  revoked: number;
-};
-
-type AgentDetail = Agent & {
-  certificate: { serial: string; not_after: string; revoked: boolean };
-};
-
-type Finding = {
-  id: string;
-  agent_id: string;
-  hostname: string;
-  rule_set_id: string;
-  rule_id: string;
-  rule_version: number;
-  severity: "critical" | "high" | "medium" | "low";
-  message: string;
-  first_observed_at: string;
-  last_observed_at: string;
-  occurrence_count: number;
-};
-
-type FindingSummary = {
-  total: number;
-  impacted_agents: number;
-  critical: number;
-  high: number;
-  medium: number;
-  low: number;
-};
+type AgentDetail = components["schemas"]["AgentDetail"];
+type AgentPage = components["schemas"]["AgentPage"];
+type AgentSummary = components["schemas"]["AgentSummary"];
+type Finding = components["schemas"]["FindingView"];
+type FindingPage = components["schemas"]["FindingPage"];
+type FindingSummary = components["schemas"]["FindingSummary"];
 
 type ReadState<T> =
   | { status: "loading" }
@@ -176,23 +134,31 @@ export function AgentsReadPage() {
   const detail = useRead<AgentDetail>(selectedAgent ? `/api/v1/agents/${encodeURIComponent(selectedAgent)}` : "");
   const listParams = new URLSearchParams(params);
   listParams.delete("agent");
-  const list = useRead<Page<Agent>>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`);
+  const list = useRead<AgentPage>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`);
 
   if (selectedAgent) {
     return <ReadStatus state={detail}>{(agent) => (
       <section className="read-card read-detail" aria-labelledby="agent-detail-title">
         <a href="/agents">← Back to agents</a>
         <p className="eyebrow">Agent detail</p>
-        <h2 id="agent-detail-title">{agent.hostname}</h2>
+        <h2 id="agent-detail-title">{agent.hostname ?? agent.id}</h2>
         <dl className="detail-list">
           <div><dt>Agent ID</dt><dd>{agent.id}</dd></div>
+          {!agent.hostname && <div><dt>Hostname</dt><dd>Hostname not reported</dd></div>}
           <div><dt>Status</dt><dd><StatusPill value={agent.status} /></dd></div>
-          <div><dt>Last contact</dt><dd><time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time></dd></div>
-          <div><dt>Environment</dt><dd>{agent.environment}</dd></div>
-          <div><dt>Platform</dt><dd>{agent.platform}</dd></div>
-          <div><dt>Certificate serial</dt><dd>{agent.certificate.serial}</dd></div>
-          <div><dt>Certificate expires</dt><dd><time dateTime={agent.certificate.not_after}>{dateLabel(agent.certificate.not_after)}</time></dd></div>
+          <div><dt>Enrolled</dt><dd><time dateTime={agent.enrolled_at}>{dateLabel(agent.enrolled_at)}</time></dd></div>
+          <div><dt>Last contact</dt><dd>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "No heartbeat recorded"}</dd></div>
+          <div><dt>Scanner</dt><dd>{agent.scanner_version ?? "Not reported"}</dd></div>
+          <div><dt>Capabilities</dt><dd>{agent.capabilities.length > 0 ? agent.capabilities.join(", ") : "None reported"}</dd></div>
         </dl>
+        <h3>Certificates</h3>
+        {agent.certificates.length === 0 ? <p>No certificates recorded.</p> : (
+          <ul className="certificate-list">{agent.certificates.map((certificate) => (
+            <li key={certificate.serial}>
+              <code>{certificate.serial}</code> · Issued {dateLabel(certificate.issued_at)} · Expires {dateLabel(certificate.not_after)}
+            </li>
+          ))}</ul>
+        )}
       </section>
     )}</ReadStatus>;
   }
@@ -212,10 +178,10 @@ export function AgentsReadPage() {
         </div>
         {page.items.length === 0 ? <p className="read-state">No agents match these filters.</p> : (
           <div className="table-scroll"><table className="data-table">
-            <thead><tr><th scope="col">Hostname</th><th scope="col">Status</th><th scope="col">Last contact</th><th scope="col">Environment</th><th scope="col">Platform</th></tr></thead>
+            <thead><tr><th scope="col">Hostname</th><th scope="col">Status</th><th scope="col">Last contact</th><th scope="col">Scanner</th></tr></thead>
             <tbody>{page.items.map((agent) => <tr key={agent.id}>
-              <th scope="row"><a href={`/agents?agent=${encodeURIComponent(agent.id)}`}>{agent.hostname}</a><span className="table-subtext">{agent.id}</span></th>
-              <td><StatusPill value={agent.status} /></td><td><time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time></td><td>{agent.environment}</td><td>{agent.platform}</td>
+              <th scope="row"><a href={`/agents?agent=${encodeURIComponent(agent.id)}`}>{agent.hostname ?? "Hostname not reported"}</a><span className="table-subtext">{agent.id}</span></th>
+              <td><StatusPill value={agent.status} /></td><td>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "Never"}</td><td>{agent.scanner_version ?? "Not reported"}</td>
             </tr>)}</tbody>
           </table></div>
         )}
@@ -231,7 +197,7 @@ export function FindingsReadPage() {
   const severity = params.get("severity") ?? "";
   const query = params.get("q") ?? "";
   const detail = useRead<Finding>(selected ? `/api/v1/findings/latest/${selected.split("/").map(encodeURIComponent).join("/")}` : "");
-  const list = useRead<Page<Finding>>(selected ? "" : `/api/v1/findings/latest${params.size ? `?${params}` : ""}`);
+  const list = useRead<FindingPage>(selected ? "" : `/api/v1/findings/latest${params.size ? `?${params}` : ""}`);
 
   if (selected) {
     return <ReadStatus state={detail}>{(finding) => (
@@ -240,13 +206,17 @@ export function FindingsReadPage() {
         <p className="eyebrow">Observed match</p>
         <h2 id="finding-detail-title">{finding.rule_id} · {finding.rule_set_id === "~unknown" ? "rule set unknown (earlier agent)" : finding.rule_set_id}</h2>
         <dl className="detail-list">
-          <div><dt>Agent</dt><dd><a href={`/agents?agent=${encodeURIComponent(finding.agent_id)}`}>{finding.hostname}</a></dd></div>
+          <div><dt>Agent</dt><dd><a href={`/agents?agent=${encodeURIComponent(finding.agent_id)}`}>{finding.hostname ?? finding.agent_id}</a></dd></div>
           <div><dt>Severity</dt><dd><StatusPill value={finding.severity} /></dd></div>
           <div><dt>Rule version</dt><dd>{finding.rule_version}</dd></div>
           <div><dt>Observation</dt><dd>{finding.message}</dd></div>
+          <div><dt>Confidence</dt><dd>{finding.confidence}%</dd></div>
+          <div><dt>Origin</dt><dd>{finding.origin === "import" ? "Imported" : "Online"}{finding.authenticated ? " · authenticated" : " · unauthenticated"}</dd></div>
+          <div><dt>Scan ID</dt><dd>{finding.scan_id}</dd></div>
           <div><dt>First observed</dt><dd><time dateTime={finding.first_observed_at}>{dateLabel(finding.first_observed_at)}</time></dd></div>
           <div><dt>Last observed</dt><dd><time dateTime={finding.last_observed_at}>{dateLabel(finding.last_observed_at)}</time></dd></div>
-          <div><dt>Observations</dt><dd>{finding.occurrence_count.toLocaleString()}</dd></div>
+          <div><dt>Received</dt><dd><time dateTime={finding.received_at}>{dateLabel(finding.received_at)}</time></dd></div>
+          <div><dt>Evidence</dt><dd>{finding.evidence.length > 0 ? <ul>{finding.evidence.map((entry) => <li key={entry}><code>{entry}</code></li>)}</ul> : "No evidence recorded"}</dd></div>
         </dl>
       </section>
     )}</ReadStatus>;
@@ -267,11 +237,12 @@ export function FindingsReadPage() {
         </div>
         {page.items.length === 0 ? <p className="read-state">No findings match these filters.</p> : (
           <div className="table-scroll"><table className="data-table">
-            <thead><tr><th scope="col">Rule</th><th scope="col">Severity</th><th scope="col">Agent</th><th scope="col">Last observed</th><th scope="col">Count</th></tr></thead>
+            <thead><tr><th scope="col">Rule</th><th scope="col">Severity</th><th scope="col">Agent</th><th scope="col">Last observed</th><th scope="col">Confidence</th><th scope="col">Origin</th></tr></thead>
             <tbody>{page.items.map((finding) => <tr key={finding.id}>
               <th scope="row"><a href={`/findings?finding=${encodeURIComponent(`${finding.agent_id}/${finding.rule_set_id}/${finding.rule_id}`)}`}>{finding.rule_id}</a><span className="table-subtext">{finding.rule_set_id === "~unknown" ? "rule set unknown (earlier agent)" : finding.rule_set_id}</span></th>
-              <td><StatusPill value={finding.severity} /></td><td><a href={`/agents?agent=${encodeURIComponent(finding.agent_id)}`}>{finding.hostname}</a></td>
-              <td><time dateTime={finding.last_observed_at}>{dateLabel(finding.last_observed_at)}</time></td><td>{finding.occurrence_count.toLocaleString()}</td>
+              <td><StatusPill value={finding.severity} /></td><td><a href={`/agents?agent=${encodeURIComponent(finding.agent_id)}`}>{finding.hostname ?? finding.agent_id}</a></td>
+              <td><time dateTime={finding.last_observed_at}>{dateLabel(finding.last_observed_at)}</time></td>
+              <td>{finding.confidence}%</td><td>{finding.origin === "import" ? "Imported · unauthenticated" : "Online"}</td>
             </tr>)}</tbody>
           </table></div>
         )}
@@ -285,7 +256,7 @@ function StatusPill({ value }: { value: string }) {
   return <span className={`status-pill status-pill--${value}`}>{value.replaceAll("_", " ")}</span>;
 }
 
-function PageFooter<T>({ page, href, params }: { page: Page<T>; href: string; params: URLSearchParams }) {
+function PageFooter({ page, href, params }: { page: { next_cursor?: string | null; generated_at: string }; href: string; params: URLSearchParams }) {
   return <footer className="page-footer">
     <p>Generated <time dateTime={page.generated_at}>{dateLabel(page.generated_at)}</time></p>
     {page.next_cursor && <a className="button-link" href={pagedUrl(href, params, page.next_cursor)}>Next page</a>}
