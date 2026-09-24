@@ -7,8 +7,8 @@ readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"
 
-if [[ $# -lt 1 || $# -gt 2 ]]; then
-    printf 'usage: %s CACHE.tar.gz [EXTRACTED_CACHE_DIR]\n' "$0" >&2
+if [[ $# -ne 1 && $# -ne 3 ]]; then
+    printf 'usage: %s CACHE.tar.gz [EXTRACTED_CACHE_DIR EXPECTED_SHA256]\n' "$0" >&2
     exit 2
 fi
 
@@ -27,7 +27,13 @@ fi
 readonly archive="$(cd -- "$(dirname -- "$1")" && pwd -P)/$(basename -- "$1")"
 readonly checksum="${archive}.sha256"
 persisted_cache=
-if [[ $# -eq 2 ]]; then
+expected_sha256=
+if [[ $# -eq 3 ]]; then
+    expected_sha256="$3"
+    if [[ ! "${expected_sha256}" =~ ^[0-9a-f]{64}$ ]]; then
+        printf 'error: expected SHA-256 must be 64 lowercase hex characters\n' >&2
+        exit 2
+    fi
     cache_parent="$(dirname -- "$2")"
     mkdir -p -- "${cache_parent}"
     persisted_cache="$(cd -- "${cache_parent}" && pwd -P)/$(basename -- "$2")"
@@ -53,7 +59,8 @@ if [[ ! "${recorded_digest}" =~ ^[0-9a-f]{64}$ \
     || "${recorded_name}" != "$(basename -- "${archive}")" \
     || -n "${trailing:-}" \
     || "$(wc -l <"${checksum}")" -ne 1 \
-    || "${recorded_digest}" != "${actual_digest}" ]]; then
+    || "${recorded_digest}" != "${actual_digest}" \
+    || ( -n "${expected_sha256}" && "${recorded_digest}" != "${expected_sha256}" ) ]]; then
     printf 'error: cache artefact checksum is invalid\n' >&2
     exit 1
 fi

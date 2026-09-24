@@ -197,21 +197,22 @@ and the target platform, but no `node_modules`. The networked cache-preparation
 stage is separate from packaging. `scripts/check-console-npm-cache.sh ARCHIVE`
 checks the sidecar, allow-lists archive paths, refuses links and special files,
 confirms the current lock digest and platform, then runs `npm ci --offline`
-and a Vite build in a scratch directory. Pass a second path to persist the
-validated extraction for packaging. `scripts/build-console.sh
+and a Vite build in a scratch directory. Packaging extraction also requires an
+independently pinned digest from trusted RPM source metadata:
+`scripts/check-console-npm-cache.sh ARCHIVE CACHE_DIR EXPECTED_SHA256`.
+`scripts/build-console.sh
 --offline-cache-dir CACHE_DIR` then checks the lock digest/platform again,
 verifies npm's cache, and runs every npm command with networking disabled by
 `unshare -rn`. The first package target is Fedora Linux x86_64, so caches for
 other platforms are deliberately distinct. The eventual RPM source metadata
-must pin the expected archive digest independently of the archive and its
-sidecar.
+supplies the expected archive digest independently of the archive and its
+sidecar. The one-argument checker mode used in CI validates corruption only.
 
 For a network-isolated package build, persist the validated cache and pass it
 to the frontend build:
 
 ```sh
-archive=$(scripts/build-console-npm-cache.sh target/console-npm-cache)
-scripts/check-console-npm-cache.sh "$archive" target/console-npm-cache/extracted
+scripts/check-console-npm-cache.sh "$CACHE_ARCHIVE" target/console-npm-cache/extracted "$EXPECTED_SHA256"
 scripts/build-console.sh --offline-cache-dir target/console-npm-cache/extracted
 ```
 
