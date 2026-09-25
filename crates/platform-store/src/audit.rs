@@ -397,3 +397,27 @@ pub async fn record(
         .await?;
     Ok(())
 }
+
+/// Appends an audit event with redacted structured metadata and a correlation
+/// ID. Callers must never include credentials, prompts, answers, or records in
+/// `detail`.
+pub async fn record_with_detail(
+    client: &Client,
+    actor: &str,
+    action: &str,
+    target: &str,
+    result: &str,
+    request_id: &str,
+    detail: &serde_json::Value,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "INSERT INTO audit_log
+             (actor, action, target, result, detail, request_id,
+              actor_kind, actor_id, target_kind, target_id)
+             VALUES ($1, $2, $3, $4, $5, $6, 'user', $1, 'assistant', $3)",
+            &[&actor, &action, &target, &result, detail, &request_id],
+        )
+        .await?;
+    Ok(())
+}

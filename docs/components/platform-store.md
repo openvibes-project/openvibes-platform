@@ -212,6 +212,9 @@ reading vulnerability tables.
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.
+`audit::record_with_detail` adds a request ID and caller-supplied redacted JSON
+metadata for events that need correlation; prompts, answers, and retrieved
+records are not valid detail values.
 The `detail` column is never given secrets.
 
 ## Partitions and retention
