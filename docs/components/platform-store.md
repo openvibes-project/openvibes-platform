@@ -174,6 +174,20 @@ Schema 11 (VM5) adds NVD columns (`cvss_score`, `cvss_version`,
 `feed_cursor`/`set_feed_cursor` hold NVD's sync point. `vulns::summary`
 moved to `vulns/summary.rs` (same path).
 
+## Assistant lookups (`assistant::…`)
+
+Read-only queries for the console's assistant (assistant spec §5). Each
+takes an `AgentScope` (`All`, or `Only(agent IDs)`, resolved by the console
+from the user's asset scope) that applies in SQL to items and counts alike,
+a `limit` (1–100), and returns the total so callers can say what was left
+out: `finding_groups` (one row per rule set and rule, console decision 18;
+text filter on rule, rule set, and latest message with `LIKE` wildcards
+escaped; minimum severity), `finding_endpoints` (in-window endpoints and the
+count not seen in the window), `agent_summaries` (by agent ID or
+case-insensitive host name), `host_vulnerabilities` (open, by priority),
+`vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
+unrecognised severity reports `unknown`. Nothing writes.
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.
