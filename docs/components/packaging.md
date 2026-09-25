@@ -1,15 +1,15 @@
 # packaging (RPM)
 
-`packaging/rpm/` builds three Fedora packages from one spec,
+`packaging/rpm/` builds four Fedora packages from one spec,
 `openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
-and **openvibes-admin**.
+**openvibes-vulns**, and **openvibes-admin**.
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
 deployment, not for inclusion in Fedora itself.
 
 ```sh
-scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,admin}-*.rpm
+scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin}-*.rpm
 ```
 
 ## Contents
@@ -26,6 +26,10 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-distribution.service` | 0644 root | distribution |
 | `/usr/lib/sysusers.d/openvibes-distribution.conf` | user `openvibes_distribution` | distribution |
 | `/etc/openvibes/distribution.toml` | 0640 root:openvibes_distribution, `%config(noreplace)` | distribution |
+| `/usr/bin/openvibes-vulns` | 0755 root | vulns |
+| `/usr/lib/systemd/system/openvibes-vulns.service` | 0644 root | vulns |
+| `/usr/lib/sysusers.d/openvibes-vulns.conf` | user `openvibes_vulns` | vulns |
+| `/etc/openvibes/vulns.toml` | 0640 root:openvibes_vulns, `%config(noreplace)` | vulns |
 | `/usr/bin/openvibes-admin` | 0755 root | admin |
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
@@ -51,6 +55,10 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-distribution.service`: the same unit and hardening as ingest,
   as `openvibes_distribution`; it writes nothing, so it has no state
   directory.
+- `openvibes-vulns.service`: the same unit and hardening, as
+  `openvibes_vulns`; it connects out to Fedora's mirrors (or `proxy_url`)
+  and writes only to PostgreSQL. On SIGINT it stops; an interrupted feed
+  check is redone at the next start.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
@@ -121,6 +129,15 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    and check `curl http://127.0.0.1:18481/ready` → 200. Trust keys and
    publish bundles with `openvibes-admin rules` ([openvibes-admin.md](openvibes-admin.md));
    agents set `distribution_url` and leave out `bundle_file`.
+8. Vulnerabilities (optional, `dnf install openvibes-vulns`): it needs no
+   certificate. `openvibes-admin migrate` (schema 8) already created its
+   database role. It reaches `mirrors.fedoraproject.org` over HTTPS; behind
+   a proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. Without network
+   access, import feeds by hand (`openvibes-admin feeds import FILE
+   --source fedora-44-x86_64`, [openvibes-admin.md](openvibes-admin.md)).
+   Then `systemctl enable --now openvibes-vulns` and check
+   `curl http://127.0.0.1:18483/ready` → 200; `openvibes-admin feeds
+   status` shows each Fedora release your agents report once it is checked.
 
 Agents trust `root.crt` (their `platform_ca_file`).
 
@@ -132,8 +149,8 @@ these steps (in a podman container with systemd as PID 1), so they are
 tested on every change. For a single test host, the platform and the agent
 can share the machine, as below; normally the agent runs on the endpoints.
 
-1. **Platform:** "First install on Fedora" steps 1–7 above, with
-   distribution. On a test host, `issue-server localhost --san 127.0.0.1`
+1. **Platform:** "First install on Fedora" steps 1–8 above, with
+   distribution and vulns. On a test host, `issue-server localhost --san 127.0.0.1`
    for ingest and `issue-server rules.localhost --san 127.0.0.1` for
    distribution.
 2. **Rules:** on your signing machine, make a key and sign a rule set with
@@ -170,7 +187,11 @@ can share the machine, as below; normally the agent runs on the endpoints.
 5. **Check:** `openvibes-admin agent list` shows the agent active;
    `journalctl -u openvibes-distribution` logs a 200 for `/v1/rule-bundle`;
    `psql -d openvibes -c "SELECT rule_id, message FROM findings"` (as
-   `openvibes_admin`) lists its findings.
+   `openvibes_admin`) lists its findings; `openvibes-admin vulns list`
+   lists the agent's vulnerable packages once its release's feed is in
+   (the end-to-end test imports an offline feed that marks the
+   container's `bash` as vulnerable, before the agent enrolls, so the
+   vulnerability can only open through the service's re-match).
 
 The agent package is documented in the agent repository
 (`docs/components/packaging.md`): its sandbox, upgrade, and uninstall.
@@ -242,8 +263,8 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
-four units, that the ingest and distribution units stop with SIGINT (the
-signal they drain on; an actual stop is not exercised here), and that the
+five units, that the ingest, distribution, and vulns units stop with
+SIGINT (an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 
 CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds

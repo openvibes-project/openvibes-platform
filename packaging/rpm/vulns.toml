@@ -1,0 +1,8 @@
+# openvibes-vulns: Fedora security advisories fetched and matched against
+# host inventories; see docs/components/openvibes-vulns.md.
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_vulns"
+health_listen = "127.0.0.1:18483"          # /health, /ready; loopback only
+check_interval_minutes = 60                # 15 to 1440; downloads only on change
+# Offline platforms: set a local mirror, or import with openvibes-admin feeds import.
+metalink_url = "https://mirrors.fedoraproject.org/metalink?repo=updates-released-f{release}&arch={arch}"
+# proxy_url = "http://proxy.example:3128"

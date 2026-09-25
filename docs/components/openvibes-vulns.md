@@ -54,6 +54,9 @@ arch = "x86_64"                        # its feed lists every architecture's fix
 max_download_bytes = 67108864
 ```
 
+Packaged as the `openvibes-vulns` RPM with its unit and user
+`openvibes_vulns` ([packaging.md](packaging.md)).
+
 ## Failure behaviour
 
 - Unreadable or oversized feed: `ImportError::Parse`, recorded as the
