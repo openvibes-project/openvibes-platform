@@ -9,8 +9,8 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
 | `platform-store` | library | schema 6, rule distribution, partitions, status, tokens, agents, CA certificates (PM1, PM2) | [platform-store.md](platform-store.md) |
 | `platform-agent-server` | library | shared agent-facing server: TLS, auth, limits, logs, health, drain (SP2 DM0) | [platform-agent-server.md](platform-agent-server.md) |
-| `platform-assistant` | library | assistant configuration, OpenAI-compatible backend client, capability probe (AS1); scoped lookups, orchestrator, output sanitising (AS2) | [platform-assistant.md](platform-assistant.md) |
-| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2) | [openvibes-admin.md](openvibes-admin.md) |
+| `platform-assistant` | library | assistant configuration, OpenAI-compatible backend client, capability probe (AS1); scoped lookups, orchestrator, output sanitising (AS2); evaluation fleet, question set, gate (AS3) | [platform-assistant.md](platform-assistant.md) |
+| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); assistant check, eval (AS3) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `openvibes-distribution` | service, port 18424 | `POST /v1/rule-bundle`: signed bundles to agents (SP2 DM2) | [openvibes-distribution.md](openvibes-distribution.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |

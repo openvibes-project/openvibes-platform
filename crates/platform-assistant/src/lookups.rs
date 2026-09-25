@@ -11,7 +11,7 @@ use std::{collections::BTreeSet, future::Future};
 use chrono::{DateTime, Duration, SecondsFormat, Utc};
 use openvibes_core::{PayloadEncoding, RuleSet, SignedRuleEnvelope};
 use platform_store::{
-    Pool,
+    Pool, StoreError,
     assistant::{
         self as store, ADVISORY_SEVERITIES, AgentScope, FINDING_SEVERITIES, GroupFilter, Page,
     },
@@ -529,18 +529,161 @@ pub trait LookupRunner: Send + Sync {
     ) -> impl Future<Output = Result<LookupOutput, LookupError>> + Send;
 }
 
-/// Lookups against `platform-store`, limited to one user's scope.
-pub struct StoreLookups {
+/// Where lookup data comes from: the database ([`StoreSource`]) or the
+/// evaluation fleet ([`crate::eval::Fleet`]). Both return the same store
+/// types, so results look identical to the model.
+pub trait Source: Send + Sync {
+    /// See [`store::finding_groups`].
+    fn finding_groups(
+        &self,
+        filter: &GroupFilter<'_>,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<store::FindingGroup>, StoreError>> + Send;
+    /// See [`store::finding_endpoints`].
+    fn finding_endpoints(
+        &self,
+        rule_set: &str,
+        rule: &str,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> impl Future<Output = Result<store::EndpointPage, StoreError>> + Send;
+    /// See [`store::agent_summaries`].
+    fn agent_summaries(
+        &self,
+        key: &str,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<store::AgentSummary>, StoreError>> + Send;
+    /// See [`store::host_vulnerabilities`].
+    fn host_vulnerabilities(
+        &self,
+        agent_id: &str,
+        min_severity: Option<&str>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<store::HostVulnerability>, StoreError>> + Send;
+    /// See [`store::vulnerable_hosts`].
+    fn vulnerable_hosts(
+        &self,
+        id: &str,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<store::VulnerableHost>, StoreError>> + Send;
+    /// See [`store::overview`].
+    fn overview(
+        &self,
+        since: DateTime<Utc>,
+        now: DateTime<Utc>,
+        limit: u32,
+    ) -> impl Future<Output = Result<store::Overview, StoreError>> + Send;
+    /// The latest published envelope of `rule_set`.
+    fn rule_envelope(
+        &self,
+        rule_set: &str,
+    ) -> impl Future<Output = Result<Served, StoreError>> + Send;
+}
+
+/// `platform-store`, limited to one user's scope.
+pub struct StoreSource {
     pool: Pool,
     scope: AgentScope,
+}
+
+impl StoreSource {
+    async fn client(&self) -> Result<platform_store::Client, StoreError> {
+        self.pool.get().await.map_err(|_| StoreError::Unavailable)
+    }
+}
+
+impl Source for StoreSource {
+    async fn finding_groups(
+        &self,
+        filter: &GroupFilter<'_>,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<Page<store::FindingGroup>, StoreError> {
+        store::finding_groups(&self.client().await?, &self.scope, filter, since, limit).await
+    }
+    async fn finding_endpoints(
+        &self,
+        rule_set: &str,
+        rule: &str,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<store::EndpointPage, StoreError> {
+        store::finding_endpoints(
+            &self.client().await?,
+            &self.scope,
+            rule_set,
+            rule,
+            since,
+            limit,
+        )
+        .await
+    }
+    async fn agent_summaries(
+        &self,
+        key: &str,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<Page<store::AgentSummary>, StoreError> {
+        store::agent_summaries(&self.client().await?, &self.scope, key, since, limit).await
+    }
+    async fn host_vulnerabilities(
+        &self,
+        agent_id: &str,
+        min_severity: Option<&str>,
+        limit: u32,
+    ) -> Result<Page<store::HostVulnerability>, StoreError> {
+        store::host_vulnerabilities(
+            &self.client().await?,
+            &self.scope,
+            agent_id,
+            min_severity,
+            limit,
+        )
+        .await
+    }
+    async fn vulnerable_hosts(
+        &self,
+        id: &str,
+        limit: u32,
+    ) -> Result<Page<store::VulnerableHost>, StoreError> {
+        store::vulnerable_hosts(&self.client().await?, &self.scope, id, limit).await
+    }
+    async fn overview(
+        &self,
+        since: DateTime<Utc>,
+        now: DateTime<Utc>,
+        limit: u32,
+    ) -> Result<store::Overview, StoreError> {
+        store::overview(&self.client().await?, &self.scope, since, now, limit).await
+    }
+    async fn rule_envelope(&self, rule_set: &str) -> Result<Served, StoreError> {
+        rules::serve(&self.client().await?, rule_set, None).await
+    }
+}
+
+/// Runs lookups against a [`Source`] as of a fixed time.
+pub struct Lookups<S> {
+    source: S,
     now: DateTime<Utc>,
 }
+
+impl<S: Source> Lookups<S> {
+    /// Lookups against `source` as of `now`.
+    pub fn with_source(source: S, now: DateTime<Utc>) -> Self {
+        Self { source, now }
+    }
+}
+
+/// Lookups against `platform-store`, limited to one user's scope.
+pub type StoreLookups = Lookups<StoreSource>;
 
 impl StoreLookups {
     /// Lookups for a user whose asset scope is `scope`, as of `now`.
     #[must_use]
     pub fn new(pool: Pool, scope: AgentScope, now: DateTime<Utc>) -> Self {
-        Self { pool, scope, now }
+        Self::with_source(StoreSource { pool, scope }, now)
     }
 }
 
@@ -583,13 +726,11 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
         .collect()
 }
 
-impl StoreLookups {
-    async fn resolve_agent(
-        &self,
-        client: &platform_store::Client,
-        key: &str,
-    ) -> Result<Option<String>, LookupError> {
-        let found = store::agent_summaries(client, &self.scope, key, self.now, 2)
+impl<S: Source> Lookups<S> {
+    async fn resolve_agent(&self, key: &str) -> Result<Option<String>, LookupError> {
+        let found = self
+            .source
+            .agent_summaries(key, self.now, 2)
             .await
             .map_err(|_| LookupError::Store)?;
         match found.items.as_slice() {
@@ -600,9 +741,8 @@ impl StoreLookups {
     }
 }
 
-impl LookupRunner for StoreLookups {
+impl<S: Source> LookupRunner for Lookups<S> {
     async fn run(&self, lookup: &Lookup, items: u32) -> Result<LookupOutput, LookupError> {
-        let client = self.pool.get().await.map_err(|_| LookupError::Store)?;
         let store_error = |_| LookupError::Store;
         let since = |hours: u32| self.now - Duration::hours(i64::from(hours));
         let mut summary = Map::new();
@@ -618,15 +758,11 @@ impl LookupRunner for StoreLookups {
                     min_severity: *min_severity,
                     rule_set_id: rule_set.as_deref(),
                 };
-                let page = store::finding_groups(
-                    &client,
-                    &self.scope,
-                    &filter,
-                    since(*window_hours),
-                    items,
-                )
-                .await
-                .map_err(store_error)?;
+                let page = self
+                    .source
+                    .finding_groups(&filter, since(*window_hours), items)
+                    .await
+                    .map_err(store_error)?;
                 summary.insert("window_hours".into(), json!(window_hours));
                 LookupOutput::page(summary, groups_json(&page), page.total)
             }
@@ -635,16 +771,11 @@ impl LookupRunner for StoreLookups {
                 rule,
                 window_hours,
             } => {
-                let page = store::finding_endpoints(
-                    &client,
-                    &self.scope,
-                    rule_set,
-                    rule,
-                    since(*window_hours),
-                    items,
-                )
-                .await
-                .map_err(store_error)?;
+                let page = self
+                    .source
+                    .finding_endpoints(rule_set, rule, since(*window_hours), items)
+                    .await
+                    .map_err(store_error)?;
                 summary.insert("finding".into(), json!(finding_cite(rule_set, rule)));
                 summary.insert("window_hours".into(), json!(window_hours));
                 summary.insert("not_seen_in_window".into(), json!(page.older));
@@ -665,15 +796,11 @@ impl LookupRunner for StoreLookups {
                 LookupOutput::page(summary, endpoints, page.total)
             }
             Lookup::AgentSummary { agent } => {
-                let page = store::agent_summaries(
-                    &client,
-                    &self.scope,
-                    agent,
-                    since(DEFAULT_WINDOW_HOURS),
-                    items.min(5),
-                )
-                .await
-                .map_err(store_error)?;
+                let page = self
+                    .source
+                    .agent_summaries(agent, since(DEFAULT_WINDOW_HOURS), items.min(5))
+                    .await
+                    .map_err(store_error)?;
                 let offline_before =
                     self.now - Duration::minutes(platform_store::OFFLINE_AFTER_MINUTES);
                 let agents = page
@@ -707,19 +834,15 @@ impl LookupRunner for StoreLookups {
                 agent,
                 min_severity,
             } => {
-                let Some(agent_id) = self.resolve_agent(&client, agent).await? else {
+                let Some(agent_id) = self.resolve_agent(agent).await? else {
                     summary.insert("agent".into(), Value::Null);
                     return Ok(LookupOutput::page(summary, Vec::new(), 0));
                 };
-                let page = store::host_vulnerabilities(
-                    &client,
-                    &self.scope,
-                    &agent_id,
-                    *min_severity,
-                    items,
-                )
-                .await
-                .map_err(store_error)?;
+                let page = self
+                    .source
+                    .host_vulnerabilities(&agent_id, *min_severity, items)
+                    .await
+                    .map_err(store_error)?;
                 summary.insert("agent".into(), json!(agent_cite(&agent_id)));
                 let vulns = page
                     .items
@@ -740,7 +863,9 @@ impl LookupRunner for StoreLookups {
                 LookupOutput::page(summary, vulns, page.total)
             }
             Lookup::VulnerabilityHosts { id } => {
-                let page = store::vulnerable_hosts(&client, &self.scope, id, items)
+                let page = self
+                    .source
+                    .vulnerable_hosts(id, items)
                     .await
                     .map_err(store_error)?;
                 let hosts = page
@@ -759,15 +884,11 @@ impl LookupRunner for StoreLookups {
                 LookupOutput::page(summary, hosts, page.total)
             }
             Lookup::FleetOverview { window_hours } => {
-                let overview = store::overview(
-                    &client,
-                    &self.scope,
-                    since(*window_hours),
-                    self.now,
-                    items.min(5),
-                )
-                .await
-                .map_err(store_error)?;
+                let overview = self
+                    .source
+                    .overview(since(*window_hours), self.now, items.min(5))
+                    .await
+                    .map_err(store_error)?;
                 summary.insert("window_hours".into(), json!(window_hours));
                 summary.insert(
                     "agents".into(),
@@ -807,7 +928,9 @@ impl LookupRunner for StoreLookups {
                 )
             }
             Lookup::RuleDescription { rule_set, rule } => {
-                let served = rules::serve(&client, rule_set, None)
+                let served = self
+                    .source
+                    .rule_envelope(rule_set)
                     .await
                     .map_err(store_error)?;
                 summary.insert("rule".into(), rule_json(served, rule_set, rule));

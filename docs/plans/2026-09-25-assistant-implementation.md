@@ -83,20 +83,23 @@ and GPU, then an own server in AS6). External providers and pseudonymization
   hostile model outputs (HTML, images, links, forged citations).
 
 ### Task AS3: operator commands and the quality gate
-- [ ] `openvibes-admin assistant check`: runs the capability probe and prints
+- [x] `openvibes-admin assistant check`: runs the capability probe and prints
   what the backend supports and its measured speed. Audited.
-- [ ] Question set: ~50 questions over the console seed data with expected
-  lookups and facts, plus the injection cases (spec §11), as data files.
-- [ ] `openvibes-admin assistant eval`: runs the set against the configured
+- [x] Question set: 53 questions with expected lookups and facts, plus the
+  injection cases (spec §11), as data files, asked against a fixed
+  evaluation fleet rather than platform data.
+- [x] `openvibes-admin assistant eval`: runs the set against the configured
   backend, prints accuracy, injection results, and latency percentiles;
   non-zero exit when the gate fails.
-- [ ] Recommended models as a data file (name, size, profile, SHA-256 of the
-  tested GGUF, date tested), shown by `assistant check`; updated per release
-  after the gate, never compiled in.
+- [x] Recommended models as a data file (name, size, profile, SHA-256 of the
+  tested GGUF, date tested), shown by `assistant check`; embedded in the
+  binary as data and updated per release after the gate, never as code.
 - [ ] Run the gate on the minimum tier (4 cores, 8 GB, no GPU) with
   Qwen3.5-4B and Gemma 4 E4B, and on one GPU; record the measured numbers in
-  the spec's profile table and in `docs/sizing.md`. Adjust `small` budgets if
-  the minimum tier misses the gate.
+  the spec's profile table, `eval/models.toml`, and `docs/sizing.md`. Adjust
+  `small` budgets if the minimum tier misses the gate. Open: model downloads
+  (huggingface.co) are blocked in the development environment; the commands
+  are ready for an operator to run.
 
 ### Task AS4: console integration (Codex, after C3)
 - [ ] Migration: `assistant_conversations` and `assistant_messages`

@@ -100,6 +100,18 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 
 All are audited; `feeds import` with the source as target.
 
+## Assistant commands
+
+Both read the `[assistant]` section of the console's configuration
+(`--file`, default `/etc/openvibes/console.toml`; other sections are
+ignored), so run them as a user that can read it and its key files. They
+are audited with the configured model as the target.
+
+| Command | Result |
+|---|---|
+| `assistant check` | Probes the backend: URL and location (local, own network, external), whether the model is listed, time to first token and speed (streaming backends), native tool calls and JSON-schema output, the lookup mode that will be used, the profile, and the recommended models (with whether each has passed the gate here). Fails if the backend cannot answer a plain question. |
+| `assistant eval [--cases FILE]` | Asks the question set (built in: 53 cases, 6 of them injection tests) against the evaluation fleet, never platform data, and prints lookup accuracy, fact completeness, contradictions or leaks, injections resisted, errors, median and p95 latency, and each failed case. Exits non-zero when the gate (spec §10) fails. |
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 chrono.workspace = true
 clap.workspace = true
+platform-assistant = { path = "../platform-assistant" }
 platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
 ring.workspace = true

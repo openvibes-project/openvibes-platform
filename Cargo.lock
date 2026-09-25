@@ -1107,6 +1107,7 @@ dependencies = [
  "openvibes-core",
  "openvibes-rules",
  "openvibes-vulns",
+ "platform-assistant",
  "platform-config",
  "platform-pki",
  "platform-store",
