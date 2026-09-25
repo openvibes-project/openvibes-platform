@@ -64,7 +64,9 @@ spec (`2026-09-25-vulnerability-management-design.md`) beyond Fedora.
    Later checks, hourly as today, read `modified_id.csv` with its ETag and
    fetch only records changed since the last check, one by one; over
    5,000 changes the release is re-downloaded instead. Offline: `feeds
-   import FILE --source debian-12` takes an `all.zip`.
+   import FILE --source debian-12` takes an `all.zip`. New dependency: a
+   zip reader (the `zip` crate, deflate only, via the `flate2` already
+   used); entries are read one by one with a size cap.
 7. **Host releases:** from os-release, `debian` 12 → `Debian:12`,
    `ubuntu` 24.04 → `Ubuntu:24.04:LTS` (or without `:LTS`, as OSV names
    it), `rocky` 9.4 → `Rocky Linux:9`, `almalinux` 9.4 → `AlmaLinux:9`.
