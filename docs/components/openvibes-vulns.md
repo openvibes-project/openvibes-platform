@@ -125,6 +125,10 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   EPSS scores are only added or updated. The same holds for EUVD (a CVE
   leaving its exploited list loses the mark) and NVD (a failed run keeps
   its sync point and resumes).
+- **Known limit (scale check, `docs/sizing.md`):** matching a whole
+  release in one query exceeds the 10 s statement timeout at 10,000 hosts,
+  and the feed is recorded as current before matching, so a failed match
+  is not retried. Per-host matching (45 ms) is unaffected.
 - `/ready` is 503 while the database is unreachable or at another schema.
 - **Compared with `dnf`:** checked on this Fedora 44 host against the real
   feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
@@ -135,6 +139,10 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   kernel, and the installed fix counts for them.
 
 ## Test
+
+Scale check (`examples/scale.rs`, VM spec §10): N synthetic hosts with a
+real package list, stored and matched against a real feed; see the usage
+in the file and the results in `docs/sizing.md`.
 
 ```sh
 eval "$(scripts/test-db.sh)"
