@@ -74,7 +74,7 @@ Deliverables:
 - add explicit `scripts/build-console.sh` build sequence;
 - embed the Vite build output in the Rust binary;
 - route API/auth/assets/browser paths without SPA fall-through leaks;
-- apply no-store/immutable cache rules and report-only target security headers;
+- apply no-store/immutable cache rules and the target security headers;
 - add `/health` and `/ready` on a separate loopback-only listener, absent from
   the public TLS router;
 - configure Vite manifest output and disable asset inlining;
@@ -173,15 +173,13 @@ Verification:
 ## 5. Milestone C3 — Authentication, Sessions, and RBAC
 
 Goal: production local username/password login and server-enforced, auditable
-permissions. **Progress:** schema 8 and store transactions exist for local
-credentials, pre-auth state, throttling, hashed sessions, RBAC bindings, and
-password reset/disable. The console now serves pre-auth, login, session, and
-logout against that store when paired auth configuration is present, checks
-for schema 8 at startup, and otherwise stays in C0 fail-closed mode. Login
-uses generic failures, bounded Argon2id work, hashed account/source throttles,
-exact-Origin and CSRF checks, Fetch Metadata, session rotation, and audit
-events. Production TLS/proxy transport is not wired; this auth runtime remains
-restricted to loopback HTTP development. The embedded UI requests one-use
+permissions. The console serves pre-auth, login, session, and logout against
+the database when paired auth configuration is present, checks for schema 11
+at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
+failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
+and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct
+TLS and explicit trusted loopback proxy modes are wired; the proxy's Unix
+socket transport remains open. The embedded UI requests one-use
 pre-auth state, submits local credentials, gates the workspace on session
 validation, and revokes the session on sign out. The health listener refreshes
 `/ready` every five seconds from a bounded database/schema check.
@@ -270,7 +268,8 @@ Work:
   a canonical external HTTPS origin, trusted proxy allow-list, and loopback/
   Unix-socket plaintext or TLS-protected non-loopback upstream;
 - direct TLS 1.3 and explicit loopback-TCP proxy modes are implemented;
-  Unix-socket proxy upstreams remain open;
+  Unix-socket proxy upstreams remain open and need an explicit peer-identity
+  allow-list before they can accept forwarded authentication context;
 - RPM build order including deterministic frontend assets;
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
