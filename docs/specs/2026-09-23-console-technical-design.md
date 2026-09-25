@@ -712,12 +712,14 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 10 must add or extend. Main
+Append-only migrations after the current schema 12 must add or extend. Main
 has migration 4 (the ingest role keeps only the rights it uses), 5
 (`rule_set_id` on `findings` and `current_findings`, current state keyed by
-agent, rule set, and rule), 6 (sub-project 2's rule tables), and 7 to 10
-(inventory, vulnerabilities, running kernel, CVE enrichment).
-**Console migrations are numbered 0011 or later**, rechecked at merge time.
+agent, rule set, and rule), 6 (sub-project 2's rule tables), and 7 to 12
+(inventory, vulnerabilities, running kernel, CVE enrichment, NVD and EUVD,
+`MAINTAIN` for the vulnerability tables).
+**Console migrations are numbered 0013 or later**, rechecked at merge time.
+Schema 12 needs PostgreSQL 17 or later (`GRANT MAINTAIN`).
 The first adds an index on
 `current_findings (rule_set_id, rule_id, last_observed_at DESC, agent_id)`
 for fleet grouping and group endpoint pages (the primary key leads with
@@ -772,7 +774,7 @@ Existing schema facts and gaps:
 - enrollment-token creator is free text, so console issuance needs a nullable
   stable principal reference while retaining CLI history.
 
-All schema and SQL stay in `platform-store`. Schema 10 is integrated in the
+All schema and SQL stay in `platform-store`. Schema 12 is integrated in the
 console branch (`console-current`, which replaced `console-fixes` on
 2026-09-25); the console takes the next available migration number
 only at implementation start, after checking the current shared base and any
