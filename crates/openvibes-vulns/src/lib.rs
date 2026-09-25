@@ -6,5 +6,6 @@
 
 pub mod feed;
 pub mod matching;
+pub mod repodata;
 pub mod rpmver;
 pub mod updateinfo;
