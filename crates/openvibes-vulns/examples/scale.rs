@@ -209,7 +209,10 @@ async fn main() {
 
     // Housekeeping only: VACUUM of 36 M rows outlasts the services' 10 s
     // statement timeout, which every measured step below keeps.
-    owner.batch_execute("SET statement_timeout = 0").await.unwrap();
+    owner
+        .batch_execute("SET statement_timeout = 0")
+        .await
+        .unwrap();
     owner.batch_execute("VACUUM ANALYZE").await.unwrap();
     for table in ["host_packages", "package_versions", "agents"] {
         let row = owner
