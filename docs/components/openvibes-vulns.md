@@ -15,6 +15,12 @@ the offline core used by `openvibes-admin feeds import` and the
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.
+- `dpkgver::compare` — Debian version order, exactly dpkg's
+  (`[epoch:]upstream[-revision]`; `~` before everything, letters before
+  other symbols, digit runs numerically). The `dpkgcmp` example agrees with
+  `dpkg --compare-versions` (Debian 12) on 4,000 real version pairs from
+  Debian's OSV data and an installed system, malformed ones included. Used
+  for Debian and Ubuntu (OSV spec 2026-09-25).
 - `updateinfo::{read, read_zstd}` — streaming parse of Fedora's
   `updateinfo.xml[.zst]`: security advisories only; CVEs from reference
   titles and descriptions; severity (`None` → unrated); fixed binary
