@@ -334,7 +334,7 @@ pub async fn store_findings(
     let mut stored = 0;
     for finding in findings {
         let day = finding.observed_at.date_naive();
-        stored += transaction
+        let inserted = transaction
             .execute(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
@@ -358,6 +358,7 @@ pub async fn store_findings(
                 ],
             )
             .await?;
+        stored += u64::from(inserted == 1);
         transaction
             .execute(
                 "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
@@ -407,6 +408,18 @@ pub async fn store_findings(
                 ],
             )
             .await?;
+        if inserted == 1 {
+            crate::console_triage::reopen_on_observation(
+                &transaction,
+                agent_id,
+                &finding.rule_set_id,
+                &finding.rule_id,
+                &finding.finding_id,
+                finding.observed_at,
+                now,
+            )
+            .await?;
+        }
     }
     transaction.commit().await?;
     Ok(stored)

@@ -19,7 +19,7 @@ to `openvibes-admin tui`.
 The design is approved. C0 and C1 are complete. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 10, and serves
+the executable connects to PostgreSQL, requires schema version 11, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -106,8 +106,9 @@ selectors in SQL before pagination or aggregation. Control-plane reads and
 audit operations remain unavailable.
 
 The implemented production UI covers sign-in, overview, agents, findings,
-enrollment, service accounts, and rule sets. Analyst triage and some remaining
-production deployment hardening are still planned. CA and rule-trust-key
+enrollment, service accounts, rule sets, and latest-finding analyst triage with
+version-checked updates. Some remaining production deployment hardening is
+still planned. CA and rule-trust-key
 administration remain CLI-only.
 
 ## Configuration
@@ -129,7 +130,7 @@ public_origin = "http://localhost:8443" # required with database_url
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
 origin, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if
-bound elsewhere. Startup checks that the database is already at schema 10; it
+bound elsewhere. Startup checks that the database is already at schema 11; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.

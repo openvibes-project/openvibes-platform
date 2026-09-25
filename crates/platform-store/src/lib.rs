@@ -14,6 +14,8 @@ pub mod ca;
 pub mod console_auth;
 /// Bounded global read models for the human console.
 pub mod console_read;
+/// Versioned analyst workflow state and history for current findings.
+pub mod console_triage;
 /// Queries the ingest service runs.
 pub mod ingest;
 mod maintenance;

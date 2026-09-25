@@ -876,6 +876,37 @@ pub struct FindingView {
     pub received_at: String,
 }
 
+/// Human workflow state attached to the latest finding.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingTriageView {
+    /// Workflow state.
+    pub state: String,
+    /// Rule version this state covers.
+    pub rule_version: i64,
+    /// Assigned analyst username.
+    pub assigned_to: Option<String>,
+    /// Operator note.
+    pub note: Option<String>,
+    /// Accepted risk expiry, if applicable.
+    pub accepted_until: Option<String>,
+    /// Monotonic update version used with ETag and If-Match.
+    pub version: i64,
+}
+
+/// Requested human workflow update for a latest finding.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct UpdateFindingTriageRequest {
+    /// Workflow state.
+    pub state: String,
+    /// Analyst username; omit or null to unassign.
+    pub assigned_to: Option<String>,
+    /// Required when moving to a completed state.
+    pub note: Option<String>,
+    /// Required only for accepted risk.
+    pub accepted_until: Option<String>,
+}
+
 /// Counts for the latest observation rows visible to the current principal.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct FindingSummary {

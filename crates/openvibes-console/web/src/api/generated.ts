@@ -366,6 +366,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_finding_triage"];
+        put: operations["update_authenticated_finding_triage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/summary": {
         parameters: {
             query?: never;
@@ -1069,6 +1085,27 @@ export interface components {
              */
             total: number;
         };
+        /** @description Human workflow state attached to the latest finding. */
+        FindingTriageView: {
+            /** @description Accepted risk expiry, if applicable. */
+            accepted_until?: string | null;
+            /** @description Assigned analyst username. */
+            assigned_to?: string | null;
+            /** @description Operator note. */
+            note?: string | null;
+            /**
+             * Format: int64
+             * @description Rule version this state covers.
+             */
+            rule_version: number;
+            /** @description Workflow state. */
+            state: string;
+            /**
+             * Format: int64
+             * @description Monotonic update version used with ETag and If-Match.
+             */
+            version: number;
+        };
         /** @description Latest observation state for one agent, rule set, and rule. */
         FindingView: {
             /** @description Agent associated with this observation. */
@@ -1386,6 +1423,17 @@ export interface components {
              * @description Retention window in days, from 1 through 36500.
              */
             retention_days: number;
+        };
+        /** @description Requested human workflow update for a latest finding. */
+        UpdateFindingTriageRequest: {
+            /** @description Required only for accepted risk. */
+            accepted_until?: string | null;
+            /** @description Analyst username; omit or null to unassign. */
+            assigned_to?: string | null;
+            /** @description Required when moving to a completed state. */
+            note?: string | null;
+            /** @description Workflow state. */
+            state: string;
         };
     };
     responses: never;
@@ -2542,6 +2590,100 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_finding_triage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current finding triage */
+            200: {
+                headers: {
+                    /** @description Triage version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingTriageView"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Finding not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_authenticated_finding_triage: {
+        parameters: {
+            query?: never;
+            header: {
+                "If-Match": string;
+            };
+            path: {
+                agent_id: string;
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFindingTriageRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated finding triage */
+            200: {
+                headers: {
+                    /** @description New triage version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingTriageView"];
+                };
+            };
+            /** @description Stale triage version */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

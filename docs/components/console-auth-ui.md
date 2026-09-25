@@ -33,6 +33,10 @@ session cookie.
   history. Users with `rules.upload` can select a signed JSON envelope, review
   its verified signature/issuer/version/digest, and confirm publishing the
   same bytes. Signing and trust-key administration stay outside the web UI.
+- The production finding detail page shows workflow state, assignee, note,
+  accepted-risk expiry, detector version, and triage write version. Users with
+  `findings.triage` can submit changes using the response ETag; read-only users
+  can inspect the saved workflow state.
 - The production Overview, Agents, and Findings pages use the authenticated
   C2 read routes. Demo persona headers and unsupported free-text filters are
   only used in the explicitly seeded development experience.

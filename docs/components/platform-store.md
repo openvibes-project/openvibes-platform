@@ -191,6 +191,14 @@ console can verify uploaded signed envelopes against the active public keys.
 It grants no trust-key mutation rights; adding/removing keys remains an audited
 local `openvibes-admin` operation.
 
+## Console finding triage history (schema 11)
+
+Migration 11 records assignment, accepted-risk expiry, and rule version in
+triage history. `console_triage` reads default Open state for live latest
+findings, performs ETag-versioned state changes with history and audit in the
+same transaction, and reopens completed triage when a new applicable latest
+observation arrives during ingest.
+
 ## Test
 
 ```sh

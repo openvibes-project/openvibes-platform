@@ -64,7 +64,7 @@ permission-checked read models, enrollment-token management, and audit routes.
 The router constructor accepts a `platform_store::Pool` and canonical public
 origin. The executable constructs it when strict config supplies both
   `database_url` and `public_origin`, and requires that migrations have already
-advanced the database to schema 10. Startup never runs migrations. The current
+advanced the database to schema 11. Startup never runs migrations. The current
 listener is loopback-only and config accepts only canonical HTTP loopback
 origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
 are ignored. When auth settings are absent, the executable serves the C0
@@ -78,7 +78,11 @@ separate certificate route provides full cursor pagination. Finding and
 latest-summary routes require `findings.read` and use the same active SQL
 scope; latest-finding list/detail and history list/event routes use that scope
 in SQL. Their bounded cursors are tied to the active filters and scope, and
-history requires a lower time bound for partition pruning. Audit retention
+history requires a lower time bound for partition pruning. Latest-finding
+triage reads and writes use the same finding scope; writes require
+`findings.triage`, CSRF, exact Origin, same-origin Fetch Metadata, and a
+matching ETag `If-Match`. State, assignment, note, history, and audit are
+committed atomically. Audit retention
 reads require `audit.read`; updates require global `audit.retention.manage`,
 CSRF, exact Origin, same-origin Fetch Metadata, and a version-matching
 `If-Match`. Other control-plane data routes remain unavailable.

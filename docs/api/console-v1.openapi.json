@@ -1597,6 +1597,170 @@
         }
       }
     },
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_triage",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current finding triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingTriageView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Finding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "update_authenticated_finding_triage",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFindingTriageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated finding triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingTriageView"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale triage version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/findings/summary": {
       "get": {
         "tags": [
@@ -3525,6 +3689,52 @@
           }
         }
       },
+      "FindingTriageView": {
+        "type": "object",
+        "description": "Human workflow state attached to the latest finding.",
+        "required": [
+          "state",
+          "rule_version",
+          "version"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Accepted risk expiry, if applicable."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assigned analyst username."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator note."
+          },
+          "rule_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rule version this state covers."
+          },
+          "state": {
+            "type": "string",
+            "description": "Workflow state."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonic update version used with ETag and If-Match."
+          }
+        }
+      },
       "FindingView": {
         "type": "object",
         "description": "Latest observation state for one agent, rule set, and rule.",
@@ -4270,6 +4480,41 @@
             "description": "Retention window in days, from 1 through 36500.",
             "maximum": 36500,
             "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateFindingTriageRequest": {
+        "type": "object",
+        "description": "Requested human workflow update for a latest finding.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for accepted risk."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Analyst username; omit or null to unassign."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required when moving to a completed state."
+          },
+          "state": {
+            "type": "string",
+            "description": "Workflow state."
           }
         },
         "additionalProperties": false

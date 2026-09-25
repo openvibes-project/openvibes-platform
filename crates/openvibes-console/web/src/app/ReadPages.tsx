@@ -201,7 +201,7 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
   );
 }
 
-export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
+export function FindingsReadPage({ seeded = false, csrfToken, canTriage = false }: { seeded?: boolean; csrfToken?: string | undefined; canTriage?: boolean }) {
   const params = currentSearch();
   const selected = params.get("finding");
   const severity = params.get("severity") ?? "";
@@ -230,6 +230,7 @@ export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
           <div><dt>Received</dt><dd><time dateTime={finding.received_at}>{dateLabel(finding.received_at)}</time></dd></div>
           <div><dt>Evidence</dt><dd>{finding.evidence.length > 0 ? <ul>{finding.evidence.map((entry) => <li key={entry}><code>{entry}</code></li>)}</ul> : "No evidence recorded"}</dd></div>
         </dl>
+        {!seeded && <FindingTriage agentId={finding.agent_id} ruleSetId={finding.rule_set_id} ruleId={finding.rule_id} csrfToken={csrfToken} canTriage={canTriage} />}
       </section>
     )}</ReadStatus>;
   }
@@ -262,6 +263,17 @@ export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
       </>}</ReadStatus>
     </section>
   );
+}
+
+function FindingTriage({ agentId, ruleSetId, ruleId, csrfToken, canTriage }: { agentId: string; ruleSetId: string; ruleId: string; csrfToken?: string | undefined; canTriage: boolean }) {
+  const url = `/api/v1/findings/latest/${[agentId, ruleSetId, ruleId].map(encodeURIComponent).join("/")}/triage`;
+  const [value, setValue] = useState<{ state: string; rule_version: number; assigned_to: string | null; note: string | null; accepted_until: string | null; version: number }>();
+  const [etag, setEtag] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { let active = true; void fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } }).then(async (response) => { if (!response.ok) throw new Error("Triage could not be loaded."); const body = await response.json(); if (active) { setValue(body); setEtag(response.headers.get("ETag") ?? "\"" + body.version + "\""); } }).catch(() => { if (active) setMessage("Triage could not be loaded."); }); return () => { active = false; }; }, [url]);
+  async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!value || !csrfToken) return; const form = new FormData(event.currentTarget); setBusy(true); setMessage(""); try { const response = await fetch(url, { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json", "Accept": "application/json", "If-Match": etag, "X-CSRF-Token": csrfToken }, body: JSON.stringify({ state: form.get("state"), assigned_to: form.get("assigned_to") || null, note: form.get("note") || null, accepted_until: form.get("accepted_until") || null }) }); if (!response.ok) throw new Error(response.status === 412 ? "Triage changed elsewhere. Reload this finding before saving." : "Triage update failed."); const body = await response.json(); setValue(body); setEtag(response.headers.get("ETag") ?? "\"" + body.version + "\""); setMessage("Triage saved."); } catch (error) { setMessage(error instanceof Error ? error.message : "Triage update failed."); } finally { setBusy(false); } }
+  return <section className="read-card" aria-labelledby="finding-triage-title"><h3 id="finding-triage-title">Triage</h3>{!value ? <p role="status">{message || "Loading triage…"}</p> : <form className="filter-form" onSubmit={(event) => void save(event)}><label>State<select name="state" defaultValue={value.state} disabled={!canTriage}><option value="open">Open</option><option value="investigating">Investigating</option><option value="mitigated">Mitigated</option><option value="accepted_risk">Accepted risk</option><option value="false_positive">False positive</option></select></label><label>Assigned analyst username<input name="assigned_to" defaultValue={value.assigned_to ?? ""} disabled={!canTriage} /></label><label>Note<textarea name="note" defaultValue={value.note ?? ""} maxLength={4000} disabled={!canTriage} /></label><label>Accepted until (RFC 3339)<input name="accepted_until" type="text" placeholder="2026-12-31T23:59:00Z" defaultValue={value.accepted_until ?? ""} disabled={!canTriage} /></label><p>Rule version {value.rule_version ?? "current"} · version {value.version}</p>{canTriage && <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save triage"}</button>}<p role="status">{message || (!canTriage ? "Read only" : "")}</p></form>}</section>;
 }
 
 export function AuditEventsReadPage({ seeded = false, canExport = false }: { seeded?: boolean; canExport?: boolean }) {
