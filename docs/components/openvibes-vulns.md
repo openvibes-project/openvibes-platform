@@ -129,10 +129,10 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   and one transaction each; 10,000 hosts re-matched in 38 s). A feed is
   recorded as current only after its match succeeds; a failed match is
   recorded as the feed's error and retried by the next check.
-- **Known limits (scale check, `docs/sizing.md`):** at 10,000 hosts the
-  first import after a feed's arrival can still time out (then succeeds on
-  retry), and `vulns list` without filters times out at 244,000 open
-  vulnerabilities.
+- After storing a feed's advisories the import runs `ANALYZE` on the
+  advisory tables, so matching right after it is planned with current
+  statistics (scale check, `docs/sizing.md`: 10,000 hosts imported and
+  matched in 32 s).
 - `/ready` is 503 while the database is unreachable or at another schema.
 - **Compared with `dnf`:** checked on this Fedora 44 host against the real
   feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
