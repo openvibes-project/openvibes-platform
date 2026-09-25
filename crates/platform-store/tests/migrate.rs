@@ -45,7 +45,7 @@ async fn migration_applies_once_and_is_idempotent() {
 }
 
 #[tokio::test]
-async fn schema_seven_upgrades_to_eight() {
+async fn schema_eleven_upgrades_to_sixteen() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     client
@@ -59,12 +59,16 @@ async fn schema_seven_upgrades_to_eight() {
         include_str!("../../../migrations/0004_ingest_least_privilege.sql"),
         include_str!("../../../migrations/0005_finding_rule_set.sql"),
         include_str!("../../../migrations/0006_rule_distribution.sql"),
-        include_str!("../../../migrations/0007_console_read_models.sql"),
+        include_str!("../../../migrations/0007_inventory.sql"),
+        include_str!("../../../migrations/0008_vulnerabilities.sql"),
+        include_str!("../../../migrations/0009_running_kernel.sql"),
+        include_str!("../../../migrations/0010_cve_enrichment.sql"),
+        include_str!("../../../migrations/0011_nvd_euvd.sql"),
     ] {
         client.batch_execute(migration).await.unwrap();
     }
     client
-        .execute("INSERT INTO schema_version VALUES (7)", &[])
+        .execute("INSERT INTO schema_version VALUES (11)", &[])
         .await
         .unwrap();
     assert_eq!(

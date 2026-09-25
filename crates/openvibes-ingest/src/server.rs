@@ -26,6 +26,7 @@ fn routes(state: AppState) -> Router {
     Router::new()
         .route("/v1/heartbeat", post(crate::delivery::heartbeat))
         .route("/v1/findings", post(crate::delivery::findings))
+        .route("/v1/inventory", post(crate::delivery::inventory))
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))
         .with_state(state)

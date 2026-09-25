@@ -3,7 +3,8 @@
 
 > **Updated 2026-09-24 (Claude, at the user's request):** aligned with main's
 > migrations 4 and 5 and sub-project 2 (see `decisions.md`): findings keyed
-> by rule set, console migrations from 0007, rule tables reused from SP2.
+> by rule set, console migrations from 0012 after VM0–VM5, rule tables reused
+> from SP2.
 > The design is otherwise unchanged.
 
 Status: **approved by the project owner, 2026-09-23**. Product companion:
@@ -691,7 +692,8 @@ Append-only migrations after the current schema 5 must add or extend. Main
 now has migration 4 (the ingest role keeps only the rights it uses) and 5
 (`rule_set_id` on `findings` and `current_findings`, current state keyed by
 agent, rule set, and rule); 0006 is reserved for sub-project 2's rule tables.
-**Console migrations are numbered 0007 or later**, rechecked at merge time.
+Main now uses migrations 0007–0011 for VM0–VM5. **Console migrations start at
+0012**, after rechecking the current main branch.
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -740,9 +742,9 @@ Existing schema facts and gaps:
   stable principal reference while retaining CLI history.
 
 All schema and SQL stay in `platform-store`. Schema 5 is integrated in the
-console branch (via `console-fixes`, 2026-09-24); the console takes the next available migration number
-only at implementation start, after checking the current shared base and any
-active platform branch.
+console branch (via `console-fixes`, 2026-09-24); the console migrations were
+renumbered to 0012–0016 when VM0–VM5 merged, after checking the current main
+branch.
 
 ## 15. Security Acceptance Tests
 

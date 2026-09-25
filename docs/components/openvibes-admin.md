@@ -52,7 +52,7 @@ The user commands are audited, including failed attempts. Creation provisions
 the user, credential, initial role binding, and user-created audit event in one
 store transaction. Disable and password reset invalidate all browser sessions.
 Unlock clears only an active account bucket; IP/source throttles still protect
-the service. The first account can be created after schema 8 is applied.
+the service. The first account can be created after schema 13 is applied.
 
 ## Agent commands
 
@@ -106,6 +106,19 @@ of one set are serialized, so concurrent identical publishes store one row.
 Audit targets: `SET vN sha256:HEX` for `publish` (none if the file is not
 an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 `retire`, and `trust list RULE_SET`.
+
+## Vulnerability commands
+
+| Command | Does |
+|---|---|
+| `feeds import FILE --source fedora-<rel>-<arch>` | imports a downloaded `updateinfo.xml` or `.xml.zst` (offline platforms), re-matches that release: `imported N advisories into SOURCE; M open on fedora REL` |
+| `feeds import FILE --source kev\|epss\|nvd\|euvd` | imports a CISA KEV JSON, an EPSS CSV (`.gz` or plain), an NVD API response page (only CVEs advisories name are kept), or an EUVD exploited list (the whole list: CVEs missing from it lose the mark): `imported N CVEs from kev` |
+| `feeds status` | per source: advisories (or CVEs for `kev`, `epss`, `nvd`, `euvd`), last check, last change, last error |
+| `vulns summary` | open count by severity and host count; open ones exploited in the wild (CISA KEV or EUVD), when any; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
+| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
+| `vulns show ADVISORY\|HOST` | an advisory with its link, one line per CVE (`CVE-… CVSS 6.1 (3.1) CWE-79 KEV EUVD-… EPSS 94.0%: description`, first 200 characters), and hosts; or a host with its open vulnerabilities |
+
+All are audited; `feeds import` with the source as target.
 
 ## CA commands
 

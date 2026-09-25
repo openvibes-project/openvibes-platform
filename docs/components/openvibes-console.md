@@ -19,7 +19,7 @@ to `openvibes-admin tui`.
 The design is approved. C0 and C1 are complete. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 11, and serves
+the executable connects to PostgreSQL, requires schema version 16, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -138,7 +138,7 @@ origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at 
 configuration"), and `run` refuses a listener that is not loopback even if
 bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
-1.3 only with a 10-second deadline. Startup checks that the database is already at schema 11; it
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 16; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -199,8 +199,9 @@ builds the embedded UI and release binary without network access, creates an
 isolated `target/rpm-console` rpmbuild tree, and emits the package there. CI
 installs that RPM after platform migrations inside Fedora 44 with systemd as
 PID 1, then checks readiness, HTTPS delivery, response security headers, the
-systemd seccomp and `NoNewPrivs` settings, and Unix proxy access for allowed
-and disallowed peer UIDs.
+systemd seccomp and `NoNewPrivs` settings, Unix proxy access for allowed and
+disallowed peer UIDs, and reinstall preservation of local configuration, TLS
+files, and service state.
 
 ## Failure behaviour
 
@@ -210,7 +211,7 @@ and disallowed peer UIDs.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 11; it does not migrate. The configured Host
+  schema version other than 16; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener; forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist

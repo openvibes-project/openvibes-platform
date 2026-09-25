@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 8; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 16; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -76,7 +76,8 @@ All run within the `openvibes_ingest` role's grants (the tests use
   Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
   hash must match a recorded certificate.
 - `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
-  at most every 5 minutes, or at once when the hostname changes; an absent
+  at most every 5 minutes, or at once when the hostname or the capabilities
+  change; an absent
   hostname keeps the stored one (migration 3 adds `agents.hostname`,
   indexed). Returns whether it wrote.
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
@@ -115,6 +116,63 @@ mutable pointer.
 - `serve(set, current_version?)` → `Unknown` (unknown, retired, or nothing
   published), `UpToDate`, or `Envelope(bytes)`. One primary-key query, read
   backwards; the bytes are fetched only when the agent's version is older.
+
+## Inventories (`inventory::…`, schema 7)
+
+Distinct package versions are stored once for the fleet in
+`package_versions` (manager, name, epoch, version, release, arch; unique),
+and `host_packages` links each host to the versions it has, so 10,000
+Fedora hosts need about 36M two-key rows rather than full package rows.
+`agents` gains `os_id`, `os_version`, `inventory_sha256`, and
+`inventory_at`. `openvibes_ingest` may add versions and replace a host's
+links, never edit or delete versions (a test checks it).
+
+- `replace(&mut client, agent_id, os_id, os_version, running_kernel,
+  packages, sha256, now)` locks the agent row; an equal digest is `Unchanged` (nothing written, no
+  notification); otherwise it inserts unknown versions, replaces the host's
+  links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
+  the agent id (delivered at commit) → `Stored`. Several installed versions
+  of one package (kernels) are all kept.
+
+## Vulnerabilities (`vulns::…`, schema 8)
+
+`advisories` (id, source, release, severity, title, times, url),
+`advisory_cves`, `advisory_packages` (fixed name, arch, EVR),
+`vulnerabilities` (host × advisory: affected packages as JSON, first seen,
+fixed at — kept after fixing; `reboot_needed` since schema 9), and
+`feed_sources` (last check, last change,
+content digest, advisories, last error). Role `openvibes_vulns` writes only
+these and reads `agents`, `package_versions`, `host_packages`.
+
+- `replace_advisories` upserts in bulk and never deletes advisories.
+- `candidates(release, host?)` joins advisories to installed versions of the
+  same name with a compatible arch; `openvibes-vulns` decides.
+- `apply(scope, found, now)` opens or updates found ones (reopening keeps
+  `first_seen_at`) and fixes open ones in scope that were not found.
+- `record_feed`, `feeds`, `list(filter)`, `summary` (aggregated in SQL).
+
+Schema 9 adds `agents.running_kernel` (protocol P9) and
+`vulnerabilities.reboot_needed`: the fix is installed and only a reboot
+is missing. The row stays unfixed (it closes after the reboot), but
+`summary` counts it as its own state, not as open.
+
+Schema 10 (VM4) adds `cve_enrichment` (`cve_id`; KEV `kev_added`,
+`kev_due`, `kev_ransomware`; EPSS `epss`, `epss_percentile`,
+`epss_date`) and `feed_sources.etag`. `enrichment::{replace_kev,
+replace_epss}` write it in bulk (KEV clears CVEs no longer listed);
+`vulns::list` sorts by priority and returns each advisory's strongest KEV
+and EPSS values; `summary` counts open ones on KEV;
+`feed_etag`/`set_feed_etag` keep a source's ETag.
+
+Schema 11 (VM5) adds NVD columns (`cvss_score`, `cvss_version`,
+`cvss_vector`, `cwe`, `description`, `nvd_modified_at`,
+`nvd_checked_at`), EUVD columns (`euvd_id`, `euvd_exploited`,
+`euvd_exploited_since`) and `feed_sources.cursor`.
+`enrichment::upsert_nvd` keeps only CVEs `advisory_cves` names;
+`nvd_pending` lists named CVEs never asked (or unknown for 7 days);
+`mark_nvd_checked`, `nvd_known`, `replace_euvd`, `cve_details`;
+`feed_cursor`/`set_feed_cursor` hold NVD's sync point. `vulns::summary`
+moved to `vulns/summary.rs` (same path).
 
 ## Audit log
 
@@ -161,9 +219,9 @@ through C3 handlers that enforce scope in SQL.
 `console_read::schema_is_current` returns true only when the database schema
 matches this binary exactly; empty, old, and newer schemas remain unready.
 
-## Console identity and access schema (schema 8)
+## Console identity and access schema (schema 13)
 
-Migration 8 adds the persistent local identity boundary used by C3: users and
+Migration 13 adds the persistent local identity boundary used by C3: users and
 Argon2id credential slots, hash-only pre-auth and session state, bounded login
 throttle buckets, idempotency records, role/permission bindings, exact-tag
 asset groups, service accounts and hashed tokens, finding-triage state/history,
@@ -178,7 +236,7 @@ bounded transactional store operations follow in C3 work.
 
 ## Console enrollment-token administration (schema 9)
 
-Migration 9 grants the console role access to enrollment-token metadata and
+Migration 14 grants the console role access to enrollment-token metadata and
 use counts. The console stores only the SHA-256 digest of the token's decoded
 32-byte secret. Its idempotent creation transaction stores the token,
 24-hour request/response replay record, and audit event together; listing
@@ -186,14 +244,14 @@ never exposes secret material.
 
 ## Console rule verification reads (schema 10)
 
-Migration 10 grants `openvibes_console` `SELECT` on `rule_trust_keys` so the
+Migration 15 grants `openvibes_console` `SELECT` on `rule_trust_keys` so the
 console can verify uploaded signed envelopes against the active public keys.
 It grants no trust-key mutation rights; adding/removing keys remains an audited
 local `openvibes-admin` operation.
 
-## Console finding triage history (schema 11)
+## Console finding triage history (schema 16)
 
-Migration 11 records assignment, accepted-risk expiry, and rule version in
+Migration 16 records assignment, accepted-risk expiry, and rule version in
 triage history. `console_triage` reads default Open state for live latest
 findings, performs ETag-versioned state changes with history and audit in the
 same transaction, and reopens completed triage when a new applicable latest

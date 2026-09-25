@@ -19,6 +19,7 @@ openvibes-rules.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 platform-store = { path = "../platform-store" }
+openvibes-vulns = { path = "../openvibes-vulns" }
 serde.workspace = true
 rpassword = "=7.5.4"
 tokio.workspace = true

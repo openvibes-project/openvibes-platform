@@ -16,8 +16,12 @@ pub mod console_auth;
 pub mod console_read;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
+/// CVE enrichment: KEV and EPSS (vulnerability management).
+pub mod enrichment;
 /// Queries the ingest service runs.
 pub mod ingest;
+/// Host package inventories (vulnerability management).
+pub mod inventory;
 mod maintenance;
 mod migrate;
 /// Rule sets, trust keys, and published bundles.
@@ -25,6 +29,8 @@ pub mod rules;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
+/// Advisories, vulnerabilities, and feed state (vulnerability management).
+pub mod vulns;
 
 use std::{fmt, str::FromStr, time::Duration};
 

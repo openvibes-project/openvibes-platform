@@ -9,7 +9,7 @@ use crate::{Client, StoreError, status::OFFLINE_AFTER_MINUTES};
 pub const MAX_PAGE_SIZE: u16 = 100;
 
 /// SQL visibility for agent-bound console reads. Scoped groups use the
-/// version-one exact-tag conjunction selectors stored in schema 8.
+/// version-one exact-tag conjunction selectors stored in schema 13.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum AgentScope {
     /// Every agent is visible to the caller.

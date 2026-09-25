@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 7: keep latest-finding display data
+-- OpenVIBES platform schema version 12: keep latest-finding display data
 -- independent of the retention window for partitioned history.
 ALTER TABLE current_findings
     ADD COLUMN last_observed_day date,
@@ -43,10 +43,10 @@ ALTER TABLE current_findings
     ADD CONSTRAINT current_findings_confidence_check CHECK (confidence BETWEEN 0 AND 100),
     ADD CONSTRAINT current_findings_origin_check CHECK (origin IN ('online', 'import')),
     ADD CONSTRAINT current_findings_severity_check
-        CHECK (severity IN ('critical', 'high', 'medium', 'low'));
+        CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info'));
 ALTER TABLE findings
     ADD CONSTRAINT findings_severity_check
-        CHECK (severity IN ('critical', 'high', 'medium', 'low'));
+        CHECK (severity IN ('critical', 'high', 'medium', 'low', 'info'));
 
 CREATE INDEX agents_console_last_seen_idx
     ON agents (last_seen_at DESC NULLS LAST, agent_id ASC);
