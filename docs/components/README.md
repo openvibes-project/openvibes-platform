@@ -8,7 +8,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-config` | library | built (PM0) | [platform-config.md](platform-config.md) |
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
 | `platform-store` | library | schema 8, rule distribution, console identity/sessions, partitions, status, tokens, agents, CA certificates (PM1, PM2, C2, C3) | [platform-store.md](platform-store.md) |
-| `platform_store::console_auth` | module | local identity/session store, access inventory, and atomic role-binding operations (C3) | [console-auth-store.md](console-auth-store.md) |
+| `platform_store::console_auth` | module | local identity/session store, access inventory, role bindings, and previewed agent-tag updates (C3) | [console-auth-store.md](console-auth-store.md) |
 | `platform_store::console_read` | module | bounded, cursor-paginated console read models and SQL-enforced scoped agent reads (C2/C3) | [console-read.md](console-read.md) |
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |
 | `platform-agent-server` | library | shared agent-facing server: TLS, auth, limits, logs, health, drain (SP2 DM0) | [platform-agent-server.md](platform-agent-server.md) |

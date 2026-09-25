@@ -21,6 +21,10 @@ tokens, and CSRF values stay in the console process.
   resolution. It does not cache effective permission state.
 - `access_inventory` lists roles/permission ids, enabled local users, active
   local-user bindings, and exact asset-group selectors without credential data.
+- `preview_agent_tags` reports group and scoped-binding membership changes for
+  a proposed tag set. `apply_agent_tags` verifies the preview token under a
+  transaction lock, then replaces tags and records detailed impact atomically.
+  Preview bindings are capped at 500 per direction; larger impacts fail closed.
 - `create_user_role_binding` and `revoke_user_role_binding` commit binding
   changes with their audit events atomically. Revocation serializes through an
   advisory lock and preserves the final global Admin binding.

@@ -12,6 +12,75 @@ pub const MAX_PAGE_SIZE: u16 = 100;
 /// Maximum accepted encoded cursor length.
 pub const MAX_CURSOR_LENGTH: usize = 2_048;
 
+/// Exact tag key and value proposed for an agent.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentTagInput {
+    /// Tag key.
+    pub key: String,
+    /// Tag value.
+    pub value: String,
+}
+
+/// Proposed exact agent tag set.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AgentTagChangeRequest {
+    /// Complete replacement tag set.
+    pub tags: Vec<AgentTagInput>,
+}
+
+/// Confirmed tag update request, bound to an impact preview.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ApplyAgentTagsRequest {
+    /// Complete replacement tag set.
+    pub tags: Vec<AgentTagInput>,
+    /// Opaque preview token.
+    pub preview_token: String,
+}
+
+/// Asset group affected by a proposed tag change.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentTagGroupImpact {
+    /// Group identifier.
+    pub asset_group_id: String,
+    /// Group name.
+    pub name: String,
+}
+
+/// Exact-tag impact preview.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentTagPreviewResponse {
+    /// Existing tags.
+    pub current: Vec<AgentTagInput>,
+    /// Proposed tags.
+    pub proposed: Vec<AgentTagInput>,
+    /// Groups the agent will enter.
+    pub gained_groups: Vec<AgentTagGroupImpact>,
+    /// Groups the agent will leave.
+    pub lost_groups: Vec<AgentTagGroupImpact>,
+    /// Active scoped bindings gained.
+    pub gained_bindings: Vec<AgentTagBindingImpact>,
+    /// Active scoped bindings lost.
+    pub lost_bindings: Vec<AgentTagBindingImpact>,
+    /// Token required to apply this proposal.
+    pub preview_token: String,
+}
+
+/// Binding affected by a proposed agent tag change.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentTagBindingImpact {
+    /// Binding UUID.
+    pub binding_id: String,
+    /// Username.
+    pub username: String,
+    /// Role identifier.
+    pub role_id: String,
+    /// Asset group name.
+    pub asset_group_name: String,
+}
+
 /// Authentication mechanism that established a browser session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

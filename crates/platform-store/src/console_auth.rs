@@ -200,6 +200,245 @@ pub struct AccessInventory {
     pub users: Vec<LocalUserSummary>,
 }
 
+/// One exact agent tag (`key=value`).
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AgentTag {
+    /// Tag key.
+    pub key: String,
+    /// Tag value.
+    pub value: String,
+}
+
+/// Tag-set preview with groups whose membership changes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentTagPreview {
+    /// Existing exact tags.
+    pub current: Vec<AgentTag>,
+    /// Proposed exact tags.
+    pub proposed: Vec<AgentTag>,
+    /// Groups the agent would enter.
+    pub gained_groups: Vec<(String, String)>,
+    /// Groups the agent would leave.
+    pub lost_groups: Vec<(String, String)>,
+    /// Scoped role bindings gained through the new group membership.
+    pub gained_bindings: Vec<TagBindingImpact>,
+    /// Scoped role bindings lost with the old group membership.
+    pub lost_bindings: Vec<TagBindingImpact>,
+    /// Opaque token bound to this snapshot and proposal.
+    pub token: String,
+}
+
+/// Safe details for an active scoped role binding affected by a tag change.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize)]
+pub struct TagBindingImpact {
+    /// Binding UUID.
+    pub binding_id: String,
+    /// Username.
+    pub username: String,
+    /// Role identifier.
+    pub role_id: String,
+    /// Asset group name.
+    pub asset_group_name: String,
+}
+
+/// Previews exact-tag membership changes without modifying the database.
+pub async fn preview_agent_tags(
+    client: &Client,
+    agent_id: &str,
+    proposed: &[AgentTag],
+) -> Result<Option<AgentTagPreview>, StoreError> {
+    let exists = client
+        .query_opt("SELECT 1 FROM agents WHERE agent_id=$1", &[&agent_id])
+        .await?;
+    if exists.is_none() {
+        return Ok(None);
+    }
+    let current = client
+        .query(
+            "SELECT tag_key,tag_value FROM console_agent_tags WHERE agent_id=$1 ORDER BY tag_key",
+            &[&agent_id],
+        )
+        .await?
+        .into_iter()
+        .map(|r| AgentTag {
+            key: r.get(0),
+            value: r.get(1),
+        })
+        .collect::<Vec<_>>();
+    let groups = tag_group_membership(client, &current, proposed).await?;
+    let gained_bindings = tag_binding_impacts(client, &groups.0).await?;
+    let lost_bindings = tag_binding_impacts(client, &groups.1).await?;
+    let mut hash = Sha256::new();
+    hash.update(
+        serde_json::to_vec(&(
+            agent_id,
+            &current,
+            proposed,
+            &groups.0,
+            &groups.1,
+            &gained_bindings,
+            &lost_bindings,
+        ))
+        .unwrap_or_default(),
+    );
+    Ok(Some(AgentTagPreview {
+        current,
+        proposed: proposed.to_vec(),
+        gained_groups: groups.0,
+        lost_groups: groups.1,
+        gained_bindings,
+        lost_bindings,
+        token: encode_hex(&hash.finalize()),
+    }))
+}
+
+/// Applies an unchanged preview, replacing tags and recording membership impact atomically.
+pub async fn apply_agent_tags(
+    client: &mut Client,
+    agent_id: &str,
+    proposed: &[AgentTag],
+    preview_token: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<AgentTagPreview>, StoreError> {
+    let tx = client.transaction().await?;
+    const TAG_LOCK: i64 = 0x7461_6773_6368_6765;
+    tx.query_one("SELECT pg_advisory_xact_lock($1)", &[&TAG_LOCK])
+        .await?;
+    tx.query_opt(
+        "SELECT agent_id FROM agents WHERE agent_id=$1 FOR UPDATE",
+        &[&agent_id],
+    )
+    .await?;
+    let exists = tx
+        .query_opt("SELECT 1 FROM agents WHERE agent_id=$1", &[&agent_id])
+        .await?;
+    if exists.is_none() {
+        tx.rollback().await?;
+        return Ok(None);
+    }
+    let current = tx
+        .query(
+            "SELECT tag_key,tag_value FROM console_agent_tags WHERE agent_id=$1 ORDER BY tag_key",
+            &[&agent_id],
+        )
+        .await?
+        .into_iter()
+        .map(|r| AgentTag {
+            key: r.get(0),
+            value: r.get(1),
+        })
+        .collect::<Vec<_>>();
+    let groups = tag_group_membership(&tx, &current, proposed).await?;
+    let gained_bindings = tag_binding_impacts(&tx, &groups.0).await?;
+    let lost_bindings = tag_binding_impacts(&tx, &groups.1).await?;
+    let mut hash = Sha256::new();
+    hash.update(
+        serde_json::to_vec(&(
+            agent_id,
+            &current,
+            proposed,
+            &groups.0,
+            &groups.1,
+            &gained_bindings,
+            &lost_bindings,
+        ))
+        .unwrap_or_default(),
+    );
+    let token = encode_hex(&hash.finalize());
+    if token != preview_token {
+        tx.rollback().await?;
+        return Ok(Some(AgentTagPreview {
+            current,
+            proposed: proposed.to_vec(),
+            gained_groups: groups.0,
+            lost_groups: groups.1,
+            gained_bindings,
+            lost_bindings,
+            token,
+        }));
+    }
+    tx.execute(
+        "DELETE FROM console_agent_tags WHERE agent_id=$1",
+        &[&agent_id],
+    )
+    .await?;
+    for tag in proposed {
+        tx.execute("INSERT INTO console_agent_tags(agent_id,tag_key,tag_value,changed_at,changed_by) VALUES($1,$2,$3,$4,$5)", &[&agent_id,&tag.key,&tag.value,&now,&actor_id]).await?;
+    }
+    let detail = serde_json::json!({"current_tags":current,"proposed_tags":proposed,"gained_groups":groups.0,"lost_groups":groups.1,"gained_bindings":gained_bindings,"lost_bindings":lost_bindings}).to_string();
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'agent.tags.changed','agent','success',$2::jsonb,'user',$1,$1,'agent',$3)", &[&actor_id,&detail,&agent_id]).await?;
+    tx.commit().await?;
+    Ok(None)
+}
+
+async fn tag_group_membership<C: deadpool_postgres::GenericClient + Sync>(
+    client: &C,
+    current: &[AgentTag],
+    proposed: &[AgentTag],
+) -> Result<(Vec<(String, String)>, Vec<(String, String)>), StoreError> {
+    let rows = client.query("SELECT g.asset_group_id::text,g.name,COALESCE(array_agg(s.tag_key||'='||s.tag_value ORDER BY s.tag_key) FILTER(WHERE s.tag_key IS NOT NULL),ARRAY[]::text[]) FROM console_asset_groups g LEFT JOIN console_asset_group_selectors s USING(asset_group_id) GROUP BY g.asset_group_id ORDER BY g.name", &[]).await?;
+    let matches = |selectors: &Vec<String>, tags: &[AgentTag]| {
+        selectors.iter().all(|selector| {
+            tags.iter()
+                .any(|tag| selector == &format!("{}={}", tag.key, tag.value))
+        })
+    };
+    let now = rows
+        .iter()
+        .filter(|r| matches(&r.get::<_, Vec<String>>(2), current))
+        .map(|r| (r.get(0), r.get(1)))
+        .collect::<Vec<_>>();
+    let next = rows
+        .iter()
+        .filter(|r| matches(&r.get::<_, Vec<String>>(2), proposed))
+        .map(|r| (r.get(0), r.get(1)))
+        .collect::<Vec<_>>();
+    Ok((
+        next.iter().filter(|g| !now.contains(g)).cloned().collect(),
+        now.iter().filter(|g| !next.contains(g)).cloned().collect(),
+    ))
+}
+
+async fn tag_binding_impacts<C: deadpool_postgres::GenericClient + Sync>(
+    client: &C,
+    groups: &[(String, String)],
+) -> Result<Vec<TagBindingImpact>, StoreError> {
+    if groups.is_empty() {
+        return Ok(Vec::new());
+    }
+    let ids = groups
+        .iter()
+        .map(|group| group.0.clone())
+        .collect::<Vec<_>>();
+    let rows = client.query(
+        "SELECT b.binding_id::text,u.username,b.role_id,g.name FROM console_role_bindings b JOIN console_users u USING(user_id) JOIN console_asset_groups g USING(asset_group_id) WHERE b.revoked_at IS NULL AND u.enabled AND b.asset_group_id::text=ANY($1::text[]) ORDER BY g.name,u.username,b.role_id,b.binding_id LIMIT 501",
+        &[&ids],
+    ).await?;
+    if rows.len() > 500 {
+        return Err(StoreError::Query);
+    }
+    Ok(rows
+        .into_iter()
+        .map(|row| TagBindingImpact {
+            binding_id: row.get(0),
+            username: row.get(1),
+            role_id: row.get(2),
+            asset_group_name: row.get(3),
+        })
+        .collect())
+}
+
+fn encode_hex(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 15) as usize] as char);
+    }
+    out
+}
+
 /// Outcome of revoking an active local-user role binding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum BindingRevocation {

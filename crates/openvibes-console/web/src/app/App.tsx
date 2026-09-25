@@ -168,7 +168,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               </header>
 
               {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
-              {path === "/agents" ? <AgentsReadPage seeded={seeded} /> : null}
+              {path === "/agents" ? <AgentsReadPage seeded={seeded} csrfToken={session?.csrf_token} canManageTags={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
               {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
               {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
               {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} /> : null}

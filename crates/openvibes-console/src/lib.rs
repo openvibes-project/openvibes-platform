@@ -27,13 +27,14 @@ mod server;
 
 pub use api::{
     AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
-    AgentPage, AgentStatus, AgentSummary, AgentView, AuditEventPage, AuditEventView,
-    AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, CertificatePage,
-    CertificateView, CreateAccessBindingRequest, CursorPage, CursorPagination, DEFAULT_PAGE_SIZE,
-    EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
-    FindingSummary, FindingView, LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
-    PaginationError, Permission, PermissionScope, PreauthResponse, SessionPrincipal,
-    SessionResponse, Severity, UpdateAuditRetentionRequest,
+    AgentPage, AgentStatus, AgentSummary, AgentTagBindingImpact, AgentTagChangeRequest,
+    AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest,
+    AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
+    AuthenticationMethod, CertificatePage, CertificateView, CreateAccessBindingRequest, CursorPage,
+    CursorPagination, DEFAULT_PAGE_SIZE, EffectiveCapability, FindingHistoryEntry,
+    FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest,
+    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
+    PreauthResponse, SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,

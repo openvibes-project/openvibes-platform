@@ -117,6 +117,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Applies an agent tag set only while its membership preview remains current. */
+        put: operations["apply_authenticated_agent_tags"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/agents/{agent_id}/tags/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Previews asset group membership changes for an agent's complete tag set. */
+        post: operations["preview_authenticated_agent_tags"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-events": {
         parameters: {
             query?: never;
@@ -416,6 +450,53 @@ export interface components {
              */
             total: number;
         };
+        /** @description Binding affected by a proposed agent tag change. */
+        AgentTagBindingImpact: {
+            /** @description Asset group name. */
+            asset_group_name: string;
+            /** @description Binding UUID. */
+            binding_id: string;
+            /** @description Role identifier. */
+            role_id: string;
+            /** @description Username. */
+            username: string;
+        };
+        /** @description Proposed exact agent tag set. */
+        AgentTagChangeRequest: {
+            /** @description Complete replacement tag set. */
+            tags: components["schemas"]["AgentTagInput"][];
+        };
+        /** @description Asset group affected by a proposed tag change. */
+        AgentTagGroupImpact: {
+            /** @description Group identifier. */
+            asset_group_id: string;
+            /** @description Group name. */
+            name: string;
+        };
+        /** @description Exact tag key and value proposed for an agent. */
+        AgentTagInput: {
+            /** @description Tag key. */
+            key: string;
+            /** @description Tag value. */
+            value: string;
+        };
+        /** @description Exact-tag impact preview. */
+        AgentTagPreviewResponse: {
+            /** @description Existing tags. */
+            current: components["schemas"]["AgentTagInput"][];
+            /** @description Active scoped bindings gained. */
+            gained_bindings: components["schemas"]["AgentTagBindingImpact"][];
+            /** @description Groups the agent will enter. */
+            gained_groups: components["schemas"]["AgentTagGroupImpact"][];
+            /** @description Active scoped bindings lost. */
+            lost_bindings: components["schemas"]["AgentTagBindingImpact"][];
+            /** @description Groups the agent will leave. */
+            lost_groups: components["schemas"]["AgentTagGroupImpact"][];
+            /** @description Token required to apply this proposal. */
+            preview_token: string;
+            /** @description Proposed tags. */
+            proposed: components["schemas"]["AgentTagInput"][];
+        };
         /** @description Operator-facing agent fields shared by the read API and seeded server. */
         AgentView: {
             /** @description Reported agent capabilities. */
@@ -434,6 +515,13 @@ export interface components {
             scanner_version?: string | null;
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
+        };
+        /** @description Confirmed tag update request, bound to an impact preview. */
+        ApplyAgentTagsRequest: {
+            /** @description Opaque preview token. */
+            preview_token: string;
+            /** @description Complete replacement tag set. */
+            tags: components["schemas"]["AgentTagInput"][];
         };
         /** @description Bounded audit-event page with an opaque continuation cursor. */
         AuditEventPage: {
@@ -1114,6 +1202,92 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    apply_authenticated_agent_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApplyAgentTagsRequest"];
+            };
+        };
+        responses: {
+            /** @description Tags changed and impact audited */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid tag set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Preview is stale */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTagPreviewResponse"];
+                };
+            };
+        };
+    };
+    preview_authenticated_agent_tags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentTagChangeRequest"];
+            };
+        };
+        responses: {
+            /** @description Membership impact preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentTagPreviewResponse"];
+                };
+            };
+            /** @description Invalid tag set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

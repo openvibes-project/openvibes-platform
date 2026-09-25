@@ -417,6 +417,121 @@
         }
       }
     },
+    "/api/v1/agents/{agent_id}/tags": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Applies an agent tag set only while its membership preview remains current.",
+        "operationId": "apply_authenticated_agent_tags",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyAgentTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Tags changed and impact audited"
+          },
+          "400": {
+            "description": "Invalid tag set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Preview is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/tags/preview": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Previews asset group membership changes for an agent's complete tag set.",
+        "operationId": "preview_authenticated_agent_tags",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTagChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Membership impact preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tag set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-events": {
       "get": {
         "tags": [
@@ -1698,6 +1813,149 @@
           }
         }
       },
+      "AgentTagBindingImpact": {
+        "type": "object",
+        "description": "Binding affected by a proposed agent tag change.",
+        "required": [
+          "binding_id",
+          "username",
+          "role_id",
+          "asset_group_name"
+        ],
+        "properties": {
+          "asset_group_name": {
+            "type": "string",
+            "description": "Asset group name."
+          },
+          "binding_id": {
+            "type": "string",
+            "description": "Binding UUID."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role identifier."
+          },
+          "username": {
+            "type": "string",
+            "description": "Username."
+          }
+        }
+      },
+      "AgentTagChangeRequest": {
+        "type": "object",
+        "description": "Proposed exact agent tag set.",
+        "required": [
+          "tags"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Complete replacement tag set."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentTagGroupImpact": {
+        "type": "object",
+        "description": "Asset group affected by a proposed tag change.",
+        "required": [
+          "asset_group_id",
+          "name"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "Group identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          }
+        }
+      },
+      "AgentTagInput": {
+        "type": "object",
+        "description": "Exact tag key and value proposed for an agent.",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Tag key."
+          },
+          "value": {
+            "type": "string",
+            "description": "Tag value."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentTagPreviewResponse": {
+        "type": "object",
+        "description": "Exact-tag impact preview.",
+        "required": [
+          "current",
+          "proposed",
+          "gained_groups",
+          "lost_groups",
+          "gained_bindings",
+          "lost_bindings",
+          "preview_token"
+        ],
+        "properties": {
+          "current": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Existing tags."
+          },
+          "gained_bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagBindingImpact"
+            },
+            "description": "Active scoped bindings gained."
+          },
+          "gained_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagGroupImpact"
+            },
+            "description": "Groups the agent will enter."
+          },
+          "lost_bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagBindingImpact"
+            },
+            "description": "Active scoped bindings lost."
+          },
+          "lost_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagGroupImpact"
+            },
+            "description": "Groups the agent will leave."
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "Token required to apply this proposal."
+          },
+          "proposed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Proposed tags."
+          }
+        }
+      },
       "AgentView": {
         "type": "object",
         "description": "Operator-facing agent fields shared by the read API and seeded server.",
@@ -1756,6 +2014,28 @@
             "description": "Current lifecycle state."
           }
         }
+      },
+      "ApplyAgentTagsRequest": {
+        "type": "object",
+        "description": "Confirmed tag update request, bound to an impact preview.",
+        "required": [
+          "tags",
+          "preview_token"
+        ],
+        "properties": {
+          "preview_token": {
+            "type": "string",
+            "description": "Opaque preview token."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Complete replacement tag set."
+          }
+        },
+        "additionalProperties": false
       },
       "AuditEventPage": {
         "type": "object",

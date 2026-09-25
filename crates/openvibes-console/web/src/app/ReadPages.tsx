@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { components } from "../api/generated";
+import { AgentTags } from "./AgentTags";
 
 type AgentDetail = components["schemas"]["AgentDetail"];
 type AgentPage = components["schemas"]["AgentPage"];
@@ -129,7 +130,7 @@ function pagedUrl(path: string, params: URLSearchParams, cursor: string | null):
   return `${path}${next.size === 0 ? "" : `?${next.toString()}`}`;
 }
 
-export function AgentsReadPage({ seeded = false }: { seeded?: boolean }) {
+export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = false }: { seeded?: boolean; csrfToken?: string | undefined; canManageTags?: boolean }) {
   const params = currentSearch();
   const selectedAgent = params.get("agent");
   const [filterQuery, setFilterQuery] = useState(params.get("q") ?? "");
@@ -164,6 +165,7 @@ export function AgentsReadPage({ seeded = false }: { seeded?: boolean }) {
             </li>
           ))}</ul>
         )}
+        <AgentTags agentId={agent.id} csrfToken={csrfToken} canManage={canManageTags && !seeded} />
       </section>
     )}</ReadStatus>;
   }

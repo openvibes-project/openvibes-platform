@@ -5,12 +5,14 @@ use utoipa::OpenApi;
 use crate::{
     api::{
         AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
-        AgentPage, AgentStatus, AgentSummary, AgentView, AuditEventPage, AuditEventView,
-        AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, CertificatePage,
-        CertificateView, CreateAccessBindingRequest, CursorPagination, EffectiveCapability,
-        FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
-        FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
-        SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
+        AgentPage, AgentStatus, AgentSummary, AgentTagBindingImpact, AgentTagChangeRequest,
+        AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView,
+        ApplyAgentTagsRequest, AuditEventPage, AuditEventView, AuditRetentionPolicy,
+        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
+        CreateAccessBindingRequest, CursorPagination, EffectiveCapability, FindingHistoryEntry,
+        FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest,
+        LoginResponse, Permission, PermissionScope, PreauthResponse, SessionPrincipal,
+        SessionResponse, Severity, UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -24,6 +26,8 @@ use crate::{
         license(name = "MIT")
     ),
     paths(
+        crate::router::preview_authenticated_agent_tags,
+        crate::router::apply_authenticated_agent_tags,
         crate::router::authenticated_access_inventory,
         crate::router::create_authenticated_access_binding,
         crate::router::revoke_authenticated_access_binding,
@@ -46,6 +50,12 @@ use crate::{
         crate::router::update_authenticated_audit_retention
     ),
     components(schemas(
+        AgentTagBindingImpact,
+        AgentTagChangeRequest,
+        AgentTagGroupImpact,
+        AgentTagInput,
+        AgentTagPreviewResponse,
+        ApplyAgentTagsRequest,
         AccessAssetGroup,
         AccessBinding,
         AccessInventory,
