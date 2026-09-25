@@ -206,6 +206,37 @@ credentials and removes only its own socket inode at shutdown. Keep the health
 port loopback-only and expose only the proxy's public HTTPS port in the
 firewall.
 
+## Console update and recovery
+
+The console refuses to start unless the database is at its exact supported
+schema version. The console RPM does not run migrations, and schema migrations
+are forward-only. For an update, take a consistent platform database backup
+using the site's PostgreSQL backup procedure, including global role
+definitions. Keep a separate protected copy of `/etc/openvibes/console.toml`
+and the TLS certificate/key files; the database backup does not contain
+those files.
+
+Stop `openvibes-console`, `openvibes-ingest`, `openvibes-distribution`, the
+maintenance timer/service, and `openvibes-vulns` if installed before
+upgrading. This keeps version-exact
+services from restarting against either side of the schema change; in
+particular, the console RPM's restart hook must not start the new binary
+against the old schema. Upgrade the coordinated platform packages, run
+`openvibes-admin migrate` as `openvibes_admin`, then start the previously
+active services and confirm the console `/ready` endpoint returns 200. The
+console does not modify the schema during startup.
+
+Do not downgrade only the console binary after applying a newer schema: an
+older binary can refuse the database or misread newer data. To return to a
+previous release, stop platform services, restore the complete pre-upgrade
+database and its role definitions, restore the matching console config and
+TLS files, install the matching platform packages, and start the services
+after PostgreSQL is ready. A database restore can reinstate sessions and
+credentials as they existed at the backup time, making post-backup account
+disables, password resets, and token revocations disappear. Invalidate
+sessions and review, revoke, or rotate credentials whose state may have
+changed after the backup before exposing the restored instance.
+
 ## Trying the whole system
 
 From an empty Fedora 44 host to agent findings in PostgreSQL, with every

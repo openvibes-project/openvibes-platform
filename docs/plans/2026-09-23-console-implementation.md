@@ -277,7 +277,9 @@ Work:
 - final CSP enforcement, HSTS, no-referrer, nosniff, Permissions Policy;
 - structured safe logs with request IDs and no finding/token body content;
 - readiness for database/schema and local-auth state;
-- upgrade, rollback-safety, backup/restore notes, and operator documentation;
+- [x] upgrade, rollback-safety, backup/restore notes, and operator
+  documentation; the runbook covers exact-schema startup, the RPM restart
+  hook, coordinated migrations, and credential state restored from backups;
 - final `docs/components/openvibes-console.md` and component index update.
 
 Verification:
