@@ -261,6 +261,38 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 capability["permission"] == "rbac.manage" && capability["scope"]["kind"] == "global"
             })
     );
+    let create_group = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/access-control/asset-groups")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    r#"{"name":"Production","selectors":[{"key":"env","value":"prod"}]}"#,
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(create_group.status(), StatusCode::CREATED);
+    let group: Value =
+        serde_json::from_slice(&to_bytes(create_group.into_body(), 8192).await.unwrap()).unwrap();
+    let group_id = group["asset_group_id"].as_str().unwrap();
+    let update_group=router.clone().oneshot(Request::builder()
+        .method("PUT").uri(format!("/api/v1/access-control/asset-groups/{group_id}"))
+        .header(header::COOKIE,session_cookie.clone()).header(header::ORIGIN,"https://console.example")
+        .header("sec-fetch-site","same-origin").header("x-csrf-token",session["csrf_token"].as_str().unwrap())
+        .header(header::CONTENT_TYPE,"application/json")
+        .body(Body::from(r#"{"name":"Production Fleet","selectors":[{"key":"env","value":"prod"},{"key":"region","value":"north"}]}"#)).unwrap()).await.unwrap();
+    assert_eq!(update_group.status(), StatusCode::OK);
+    let updated: Value =
+        serde_json::from_slice(&to_bytes(update_group.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(updated["selectors"].as_array().unwrap().len(), 2);
     let access = router
         .clone()
         .oneshot(

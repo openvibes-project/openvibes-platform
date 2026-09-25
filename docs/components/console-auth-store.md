@@ -21,6 +21,9 @@ tokens, and CSRF values stay in the console process.
   resolution. It does not cache effective permission state.
 - `access_inventory` lists roles/permission ids, enabled local users, active
   local-user bindings, and exact asset-group selectors without credential data.
+- `save_asset_group` creates or replaces a complete bounded selector set and
+  its audit detail atomically. Selector writes share a transaction advisory
+  lock with tag mutations so a tag impact preview cannot race selector edits.
 - `preview_agent_tags` reports group and scoped-binding membership changes for
   a proposed tag set. `apply_agent_tags` verifies the preview token under a
   transaction lock, then replaces tags and records detailed impact atomically.

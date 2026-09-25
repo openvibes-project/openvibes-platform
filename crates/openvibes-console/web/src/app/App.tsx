@@ -171,7 +171,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               {path === "/agents" ? <AgentsReadPage seeded={seeded} csrfToken={session?.csrf_token} canManageTags={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
               {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
               {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
-              {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} /> : null}
+              {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} canManageGroups={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
               {!["/", "/agents", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>

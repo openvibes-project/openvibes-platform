@@ -29,6 +29,128 @@
         }
       }
     },
+    "/api/v1/access-control/asset-groups": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Creates an asset group from a bounded conjunction of exact tag selectors.",
+        "operationId": "create_authenticated_asset_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAssetGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Asset group created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessAssetGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/asset-groups/{group_id}": {
+      "put": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Replaces an asset group's name and complete selector conjunction.",
+        "operationId": "update_authenticated_asset_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAssetGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Asset group updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessAssetGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Asset group not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/access-control/bindings": {
       "post": {
         "tags": [
@@ -2037,6 +2159,25 @@
         },
         "additionalProperties": false
       },
+      "AssetGroupSelectorInput": {
+        "type": "object",
+        "description": "Exact tag selector used to define asset-group membership.",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Tag key."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact tag value."
+          }
+        },
+        "additionalProperties": false
+      },
       "AuditEventPage": {
         "type": "object",
         "description": "Bounded audit-event page with an opaque continuation cursor.",
@@ -2809,6 +2950,28 @@
             "description": "Short human-readable error title."
           }
         }
+      },
+      "SaveAssetGroupRequest": {
+        "type": "object",
+        "description": "Request to create or replace an asset group's complete selector set.",
+        "required": [
+          "name",
+          "selectors"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Operator-facing group name."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetGroupSelectorInput"
+            },
+            "description": "Complete conjunction of exact selectors, from one through 32."
+          }
+        },
+        "additionalProperties": false
       },
       "SessionPrincipal": {
         "type": "object",

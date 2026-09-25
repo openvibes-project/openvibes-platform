@@ -21,4 +21,14 @@ controls only when the current session has global `rbac.manage`. SQL still
 enforces resolved asset scope before any filtering, aggregation, pagination,
 or facet calculation.
 
+Global `asset_groups.manage` administrators can create groups with one to 32
+exact selectors or replace an existing group's name and full selector set
+through POST/PUT under `/api/v1/access-control/asset-groups`. Selector keys are
+unique within a group and key/value lengths follow the schema limits. Changes
+require the same Origin, Fetch Metadata, and CSRF checks, and their selector
+data and audit detail commit in one transaction. Selector writes serialize
+with agent tag changes. The Access page provides create/edit forms; editing
+requires explicit confirmation because it can change membership and scoped
+visibility.
+
 Run `cargo test -p openvibes-console rbac::tests`.

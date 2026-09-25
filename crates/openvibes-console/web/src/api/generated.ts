@@ -20,6 +20,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/access-control/asset-groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Creates an asset group from a bounded conjunction of exact tag selectors. */
+        post: operations["create_authenticated_asset_group"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/access-control/asset-groups/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Replaces an asset group's name and complete selector conjunction. */
+        put: operations["update_authenticated_asset_group"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/access-control/bindings": {
         parameters: {
             query?: never;
@@ -523,6 +557,13 @@ export interface components {
             /** @description Complete replacement tag set. */
             tags: components["schemas"]["AgentTagInput"][];
         };
+        /** @description Exact tag selector used to define asset-group membership. */
+        AssetGroupSelectorInput: {
+            /** @description Tag key. */
+            key: string;
+            /** @description Exact tag value. */
+            value: string;
+        };
         /** @description Bounded audit-event page with an opaque continuation cursor. */
         AuditEventPage: {
             /** @description Events in descending timestamp order. */
@@ -827,6 +868,13 @@ export interface components {
             /** @description Short human-readable error title. */
             title: string;
         };
+        /** @description Request to create or replace an asset group's complete selector set. */
+        SaveAssetGroupRequest: {
+            /** @description Operator-facing group name. */
+            name: string;
+            /** @description Complete conjunction of exact selectors, from one through 32. */
+            selectors: components["schemas"]["AssetGroupSelectorInput"][];
+        };
         /** @description Human principal represented by an authenticated browser session. */
         SessionPrincipal: {
             /** @description Operator-facing display label. */
@@ -897,6 +945,101 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessInventory"];
+                };
+            };
+        };
+    };
+    create_authenticated_asset_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAssetGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Asset group created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessAssetGroup"];
+                };
+            };
+            /** @description Invalid selector set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Name conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_authenticated_asset_group: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SaveAssetGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description Asset group updated */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessAssetGroup"];
+                };
+            };
+            /** @description Invalid selector set */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Asset group not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Name conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

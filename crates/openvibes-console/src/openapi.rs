@@ -7,12 +7,13 @@ use crate::{
         AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
         AgentPage, AgentStatus, AgentSummary, AgentTagBindingImpact, AgentTagChangeRequest,
         AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView,
-        ApplyAgentTagsRequest, AuditEventPage, AuditEventView, AuditRetentionPolicy,
-        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
-        CreateAccessBindingRequest, CursorPagination, EffectiveCapability, FindingHistoryEntry,
-        FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest,
-        LoginResponse, Permission, PermissionScope, PreauthResponse, SessionPrincipal,
-        SessionResponse, Severity, UpdateAuditRetentionRequest,
+        ApplyAgentTagsRequest, AssetGroupSelectorInput, AuditEventPage, AuditEventView,
+        AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, CertificatePage,
+        CertificateView, CreateAccessBindingRequest, CursorPagination, EffectiveCapability,
+        FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+        FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
+        SaveAssetGroupRequest, SessionPrincipal, SessionResponse, Severity,
+        UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -26,6 +27,8 @@ use crate::{
         license(name = "MIT")
     ),
     paths(
+        crate::router::create_authenticated_asset_group,
+        crate::router::update_authenticated_asset_group,
         crate::router::preview_authenticated_agent_tags,
         crate::router::apply_authenticated_agent_tags,
         crate::router::authenticated_access_inventory,
@@ -50,6 +53,8 @@ use crate::{
         crate::router::update_authenticated_audit_retention
     ),
     components(schemas(
+        AssetGroupSelectorInput,
+        SaveAssetGroupRequest,
         AgentTagBindingImpact,
         AgentTagChangeRequest,
         AgentTagGroupImpact,

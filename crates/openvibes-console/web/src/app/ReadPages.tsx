@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { components } from "../api/generated";
 import { AgentTags } from "./AgentTags";
+import { AssetGroups } from "./AssetGroups";
 
 type AgentDetail = components["schemas"]["AgentDetail"];
 type AgentPage = components["schemas"]["AgentPage"];
@@ -300,7 +301,7 @@ export function AuditEventsReadPage({ seeded = false, canExport = false }: { see
   </section>;
 }
 
-export function AccessControlReadPage({ seeded = false, canManage = false, csrfToken }: { seeded?: boolean; canManage?: boolean; csrfToken?: string | undefined }) {
+export function AccessControlReadPage({ seeded = false, canManage = false, canManageGroups = false, csrfToken }: { seeded?: boolean; canManage?: boolean; canManageGroups?: boolean; csrfToken?: string | undefined }) {
   const [mutationError, setMutationError] = useState(false);
   const inventory = useRead<AccessInventory>("/api/v1/access-control", seeded);
   async function createBinding(event: FormEvent<HTMLFormElement>) {
@@ -353,8 +354,7 @@ export function AccessControlReadPage({ seeded = false, canManage = false, csrfT
       {access.bindings.length === 0 ? <p className="read-state">No active local-user bindings.</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col">Added by</th>{canManage && <th scope="col">Actions</th>}</tr></thead>
         <tbody>{access.bindings.map((binding) => <tr key={binding.binding_id}><th scope="row">{binding.display_name}<span className="table-subtext">{binding.username}</span></th><td>{binding.role_id}</td><td>{binding.asset_group_name ?? "Global"}</td><td>{binding.created_by}</td>{canManage && <td><button type="button" onClick={() => void revokeBinding(binding.binding_id)}>Revoke</button></td>}</tr>)}</tbody>
       </table></div>}
-      <h3>Asset groups</h3>
-      {access.asset_groups.length === 0 ? <p className="read-state">No manual asset groups are configured.</p> : <ul>{access.asset_groups.map((group) => <li key={group.asset_group_id}><strong>{group.name}</strong>: {group.selectors.join(" AND ")}</li>)}</ul>}
+      <AssetGroups groups={access.asset_groups} canManage={canManageGroups && !seeded} csrfToken={csrfToken} onError={() => setMutationError(true)} />
     </>}</ReadStatus>
   </section>;
 }

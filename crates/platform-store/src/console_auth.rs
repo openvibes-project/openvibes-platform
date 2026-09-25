@@ -200,6 +200,59 @@ pub struct AccessInventory {
     pub users: Vec<LocalUserSummary>,
 }
 
+/// Saves an asset group and replaces its exact selector set with one audit row.
+pub async fn save_asset_group(
+    client: &mut Client,
+    group_id: Option<&str>,
+    name: &str,
+    selectors: &[AgentTag],
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<AssetGroupSummary>, StoreError> {
+    let tx = client.transaction().await?;
+    const TAG_LOCK: i64 = 0x7461_6773_6368_6765;
+    tx.query_one("SELECT pg_advisory_xact_lock($1)", &[&TAG_LOCK])
+        .await?;
+    let row = if let Some(id) = group_id {
+        tx.query_opt("UPDATE console_asset_groups SET name=$2 WHERE asset_group_id=$1::text::uuid RETURNING asset_group_id::text,name", &[&id,&name]).await?
+    } else {
+        tx.query_opt("INSERT INTO console_asset_groups(asset_group_id,name,created_at,created_by) VALUES(gen_random_uuid(),$1,$2,$3) RETURNING asset_group_id::text,name", &[&name,&now,&actor_id]).await?
+    };
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let saved_id: String = row.get(0);
+    let saved_name: String = row.get(1);
+    tx.execute(
+        "DELETE FROM console_asset_group_selectors WHERE asset_group_id=$1::text::uuid",
+        &[&saved_id],
+    )
+    .await?;
+    for selector in selectors {
+        tx.execute("INSERT INTO console_asset_group_selectors(asset_group_id,tag_key,tag_value,created_at) VALUES($1::text::uuid,$2,$3,$4)", &[&saved_id,&selector.key,&selector.value,&now]).await?;
+    }
+    let selector_values = selectors
+        .iter()
+        .map(|selector| format!("{}={}", selector.key, selector.value))
+        .collect::<Vec<_>>();
+    let action = if group_id.is_some() {
+        "asset_group.updated"
+    } else {
+        "asset_group.created"
+    };
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,$2,'asset_group','success',jsonb_build_object('name',$3::text,'selectors',to_jsonb($4::text[])),'user',$1,$1,'asset_group',$5)", &[&actor_id,&action,&saved_name,&selector_values,&saved_id]).await?;
+    tx.commit().await?;
+    Ok(Some(AssetGroupSummary {
+        asset_group_id: saved_id,
+        name: saved_name,
+        selectors: selectors
+            .iter()
+            .map(|s| format!("{}={}", s.key, s.value))
+            .collect(),
+    }))
+}
+
 /// One exact agent tag (`key=value`).
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct AgentTag {

@@ -17,9 +17,14 @@ permission-gated and commits export metadata before its download response.
 Audit-retention reads and versioned updates now use the global `audit.read` and
 `audit.retention.manage` permissions and commit policy changes with their audit
 event. `openvibes-admin maintenance` applies the stored audit-retention cutoff
-in batches of at most 10,000 rows. Remaining C3 work includes asset-group
-selector management, the rest of the control-plane routes, production TLS/proxy setup,
-final CSP/browser headers, and broader end-to-end coverage.
+in batches of at most 10,000 rows. Agent-tag changes now have a group and
+scoped-binding impact preview, stale-preview rejection, an audited transactional
+apply, and a global-admin agent-detail editor. Asset groups can be created and
+their exact selector conjunctions replaced through audited, CSRF-protected
+global-admin endpoints and the Access page. Remaining C3 work includes the rest
+of the control-plane routes, production TLS/proxy setup, final CSP/browser
+headers, broader end-to-end coverage, and dedicated agent-tag preview/apply
+integration coverage.
 
 Design inputs:
 

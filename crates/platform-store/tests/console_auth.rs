@@ -5,15 +5,64 @@ mod common;
 use chrono::{Duration, Utc};
 use common::TestDb;
 use platform_store::console_auth::{
-    NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth, create_local_user,
-    create_preauth, create_session, credential_by_username, disable_local_user, list_local_users,
-    login_is_throttled, record_login_failure, rehash_password, replace_password,
-    revoke_user_sessions, session, touch_session, unlock_local_user, user_role_bindings,
+    AgentTag, NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth,
+    create_local_user, create_preauth, create_session, credential_by_username, disable_local_user,
+    list_local_users, login_is_throttled, record_login_failure, rehash_password, replace_password,
+    revoke_user_sessions, save_asset_group, session, touch_session, unlock_local_user,
+    user_role_bindings,
 };
 use sha2::{Digest, Sha256};
 
 const USER_ID: &str = "11111111-1111-4111-8111-111111111111";
 const BINDING_ID: &str = "22222222-2222-4222-8222-222222222222";
+
+#[tokio::test]
+async fn asset_group_selector_replacement_and_audit_are_atomic() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    let created = save_asset_group(
+        &mut client,
+        None,
+        "Production",
+        &[AgentTag {
+            key: "environment".into(),
+            value: "production".into(),
+        }],
+        "operator",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(created.selectors, ["environment=production"]);
+    let updated = save_asset_group(
+        &mut client,
+        Some(&created.asset_group_id),
+        "Production Fleet",
+        &[
+            AgentTag {
+                key: "environment".into(),
+                value: "prod".into(),
+            },
+            AgentTag {
+                key: "region".into(),
+                value: "north".into(),
+            },
+        ],
+        "operator",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(updated.name, "Production Fleet");
+    assert_eq!(updated.selectors, ["environment=prod", "region=north"]);
+    let audits: i64=client.query_one("SELECT count(*) FROM audit_log WHERE action IN ('asset_group.created','asset_group.updated') AND target_id=$1",&[&created.asset_group_id]).await.unwrap().get(0);
+    assert_eq!(audits, 2);
+    db.drop().await;
+}
 
 async fn new_user(client: &mut platform_store::Client, now: chrono::DateTime<Utc>) {
     create_local_user(

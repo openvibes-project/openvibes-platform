@@ -339,6 +339,26 @@ pub struct AccessAssetGroup {
     pub selectors: Vec<String>,
 }
 
+/// Exact tag selector used to define asset-group membership.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct AssetGroupSelectorInput {
+    /// Tag key.
+    pub key: String,
+    /// Exact tag value.
+    pub value: String,
+}
+
+/// Request to create or replace an asset group's complete selector set.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SaveAssetGroupRequest {
+    /// Operator-facing group name.
+    pub name: String,
+    /// Complete conjunction of exact selectors, from one through 32.
+    pub selectors: Vec<AssetGroupSelectorInput>,
+}
+
 /// Request to assign a role to one local user with optional asset-group scope.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
