@@ -1329,11 +1329,14 @@ name = "platform-assistant"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "openvibes-core",
  "platform-pki",
+ "platform-store",
  "rcgen",
  "rustls",
  "serde",
  "serde_json",
+ "tokio",
  "toml",
  "ureq",
 ]

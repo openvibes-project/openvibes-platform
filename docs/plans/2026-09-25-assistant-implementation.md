@@ -67,18 +67,18 @@ and GPU, then an own server in AS6). External providers and pseudonymization
   runtime-specific.
 
 ### Task AS2: lookups and orchestrator (`platform-assistant`)
-- [ ] `platform-store` read functions for the seven lookups (spec §5), each
+- [x] `platform-store` read functions for the seven lookups (spec §5), each
   taking a `Scope` and bounded arguments, returning compact results with
-  object IDs and an "items left out" count. Uses the console's scope type
-  once C3 defines it; until then a `Scope` trait with an all-access and a
-  tag-filtered test implementation. Tests first against the test database
+  object IDs and an "items left out" count. Scope is
+  `platform_store::assistant::AgentScope` (`All` or `Only(agent IDs)`); the
+  console resolves a user's asset scope to it once C3 defines scopes. Tests first against the test database
   with two scopes.
-- [ ] Orchestrator: prompt builder with the profile budget (trimming history
+- [x] Orchestrator: prompt builder with the profile budget (trimming history
   first, then result items), lookup loop with `max_lookups`, schema
   validation of every lookup request, `prompted`-mode parser, final-answer
   extraction, host data quoted and labelled as data.
-- [ ] Output sanitiser and citation check: plain text only, citations as
-  `[agent:ID]`, `[finding:SET/RULE]`, `[vuln:ID]` verified against the lookup
+- [x] Output sanitiser and citation check: plain text only, citations as
+  `[agent:ID]`, `[finding:SET/RULE]`, `[advisory:ID]` verified against the lookup
   results of this question; anything else becomes inert text. Tests with
   hostile model outputs (HTML, images, links, forged citations).
 

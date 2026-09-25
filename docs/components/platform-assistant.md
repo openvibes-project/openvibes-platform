@@ -1,10 +1,12 @@
 # platform-assistant
 
-The console's assistant (spec `docs/specs/2026-09-25-assistant-design.md`).
-AS1 delivers its configuration, a client for any OpenAI-compatible model
-backend, and the capability probe. Lookups and the orchestrator (AS2), the
-operator commands (AS3), and the console routes and chat panel (AS4) build
-on it. It has no server and no database role of its own.
+The console's assistant (spec `docs/specs/2026-09-25-assistant-design.md`):
+configuration, a client for any OpenAI-compatible model backend, and the
+capability probe (AS1); the fixed read-only lookups, the orchestrator that
+answers one question, and output sanitising (AS2). The operator commands
+(AS3) and the console routes and chat panel (AS4) build on it. It has no
+server and no database role of its own: the console calls it with the
+asking user's scope.
 
 ## Interface
 
@@ -23,6 +25,67 @@ on it. It has no server and no database role of its own.
   per second, whether native tool calls and JSON-schema output work, and
   the lookup mode to use (`auto`: native, then JSON schema, then prompted).
 - `STANDARD_FIELDS`: the only top-level request fields ever sent.
+- `answer(backend, &runner, Settings, history, question, events)` →
+  `Answer` (`segments`, `lookups` for audit, `usage`, `requests`,
+  `hit_lookup_limit`) or a fixed `AnswerError` (`EmptyQuestion`,
+  `QuestionTooLong`, `Backend`, `Deadline`, `NoAnswer`). `Settings::new`
+  takes the mode from the probe, the profile budget, `max_lookups`, and a
+  whole-question deadline of one backend deadline per possible request (at
+  most 15 minutes). `ChatBackend` is implemented by `BackendClient`; it is
+  called on a blocking thread. `events` streams `Lookup`, `Text` (native
+  mode), and `Reset`.
+- `StoreLookups::new(pool, AgentScope, now)` runs lookups through
+  `platform_store::assistant` with the user's scope; `LookupRunner` lets
+  tests substitute their own.
+- `sanitize(text, allowed)` → `Vec<Segment>` and `plain_text`: see below.
+
+## Lookups
+
+| Lookup | Arguments | Result |
+|---|---|---|
+| `search_findings` | `text?`, `min_severity?` (finding severity), `rule_set?`, `window_hours?` | Finding groups: severity, endpoints, versions, first/last observed, latest message |
+| `finding_endpoints` | `rule_set`, `rule`, `window_hours?` | Endpoints in the window, and how many were not seen in it |
+| `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents) |
+| `host_vulnerabilities` | `agent`, `min_severity?` (advisory severity) | Open vulnerabilities by priority; a host name matching several agents in scope is refused as ambiguous |
+| `vulnerability_hosts` | `id` (CVE or advisory) | Hosts where it is open |
+| `fleet_overview` | `window_hours?` | Agent counts, open and exploited vulnerabilities, top findings and advisories |
+| `rule_description` | `rule_set`, `rule` | Title, severity, message, and expression from the latest published JSON bundle |
+
+Arguments are parsed with unknown fields refused, strings trimmed and at most
+128 characters without control characters, windows 1–720 hours (default
+24), and severities from fixed lists. A refused request is answered with a
+fixed error message, counted against `max_lookups`, and recorded without
+the model's raw name or arguments. Results are JSON with at most the
+profile's `result_items`, a `cite` value per object, and `omitted`; the
+orchestrator drops trailing items to fit the prompt and counts them as
+omitted.
+
+## Answering a question
+
+Modes (from the probe): **native** offers the lookups as tools; **JSON
+schema** constrains each reply to `{"action":"lookup",...}` or
+`{"action":"answer","text":...}`; **prompted** asks for the same object in
+the system prompt and takes prose as the answer. At most `max_lookups`
+lookups run (several calls in one turn count one by one, and every call ID
+gets a result); after that the model is told to answer and offered no
+lookups, and a model that still asks gets a fixed "lookup limit" answer.
+Lookup results reach the model labelled as data, never instructions.
+
+Prompt budget: the profile's `prompt_tokens` at 3 characters per token.
+The system prompt, lookup definitions, and question must fit (else
+`QuestionTooLong`); older conversation turns are dropped first; each lookup
+result gets an equal share of the room left.
+
+## Output sanitising
+
+`sanitize` removes control characters (except newline and tab),
+bidirectional controls, and invisible formatting; writes `scheme://` as
+`scheme[:]//`; cuts the answer to 8,000 characters; and turns
+`[agent:ID]`, `[finding:SET/RULE]` (`~unknown` for no rule set), and
+`[advisory:ID]` into citations only when this question's lookups returned
+that object under a platform-written key (`cite`, `agent`, `finding`,
+`advisory`), never from host-chosen text such as a host name. Everything
+else stays plain text for the console to render as text.
 
 ## Configuration
 
@@ -88,4 +151,6 @@ text are returned unchecked: the orchestrator (AS2) validates them.
 
 `cargo test --locked -p platform-assistant` runs against a mock backend
 (`tests/support`) over plain HTTP and TLS 1.3 with a pinned CA and mutual
-TLS; no network or model is needed.
+TLS, a scripted model for the orchestrator, and PostgreSQL for
+`StoreLookups` (`OPENVIBES_TEST_DATABASE_URL`, see `scripts/test-db.sh`); no
+network or model is needed.
