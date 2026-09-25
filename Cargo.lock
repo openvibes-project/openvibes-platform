@@ -1183,13 +1183,17 @@ dependencies = [
  "axum",
  "chrono",
  "deadpool-postgres",
+ "platform-config",
  "platform-store",
  "quick-xml",
  "ruzstd",
+ "serde",
  "serde_json",
  "sha2",
  "tokio",
  "tokio-postgres",
+ "tracing",
+ "tracing-subscriber",
  "ureq",
 ]
 
