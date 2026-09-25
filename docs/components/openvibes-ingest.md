@@ -71,6 +71,12 @@ Shared with distribution: implemented in
   enabled collectors (`collector.processes`, `collector.packages`,
   `collector.ports`; protocol P7), and each list replaces the stored one.
   204.
+- `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
+  `agent_id` must be the authenticated agent's (else 400); at most 10,000
+  packages (else 400). The packages are put in canonical order and hashed
+  (SHA-256 with the OS); an unchanged inventory writes nothing, otherwise
+  the host's inventory is replaced in one transaction and the vulnerability
+  service is notified (`inventory_changed`). 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

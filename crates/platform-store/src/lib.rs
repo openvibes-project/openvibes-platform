@@ -12,6 +12,8 @@ pub mod audit;
 pub mod ca;
 /// Queries the ingest service runs.
 pub mod ingest;
+/// Host package inventories (vulnerability management).
+pub mod inventory;
 mod maintenance;
 mod migrate;
 /// Rule sets, trust keys, and published bundles.

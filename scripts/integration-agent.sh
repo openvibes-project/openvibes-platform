@@ -86,6 +86,11 @@ wait_for "findings delivered exactly once" 20 acked_equals_stored
 [[ "$(sql "SELECT count(*) FROM findings WHERE rule_set_id <> 'integration'")" == 0 ]] ||
     { echo "FAIL: a stored finding does not name its rule set"; exit 1; }
 echo "ok: findings name their rule set"
+inventory_stored() {
+    (($(sql "SELECT count(*) FROM host_packages WHERE agent_id = '$FIRST_AGENT'") > 100)) &&
+        [[ -n "$(sql "SELECT os_id FROM agents WHERE agent_id = '$FIRST_AGENT'")" ]]
+}
+wait_for "the agent's package inventory is stored (protocol P8)" 75 inventory_stored
 [[ "$(sql "SELECT count(*) FROM findings")" == 2 ]] || { echo "FAIL: expected 2 findings"; exit 1; }
 
 BEFORE=$(heartbeats_ok)
