@@ -51,6 +51,8 @@ use crate::{
         crate::router::create_authenticated_access_binding,
         crate::router::revoke_authenticated_access_binding,
         crate::router::session,
+        crate::router::authenticated_assistant_status,
+        crate::router::authenticated_assistant_message,
         crate::router::preauth,
         crate::router::login,
         crate::router::logout,
@@ -116,6 +118,12 @@ use crate::{
         FindingView,
         crate::api::FindingTriageView,
         crate::api::UpdateFindingTriageRequest,
+        crate::assistant::ClientTurn,
+        crate::assistant::AssistantMessageRequest,
+        crate::assistant::AssistantSegment,
+        crate::assistant::AssistantLookup,
+        crate::assistant::AssistantMessageResponse,
+        crate::assistant::AssistantStatusResponse,
         Permission,
         PermissionScope,
         PreauthResponse,
@@ -131,6 +139,7 @@ use crate::{
         (name = "authentication", description = "Local browser authentication"),
         (name = "agents", description = "Scope-filtered agent reads"),
         (name = "findings", description = "Scope-filtered observation reads"),
+        (name = "assistant", description = "Read-only local assistant"),
         (name = "audit", description = "Audit policy and event access")
     )
 )]

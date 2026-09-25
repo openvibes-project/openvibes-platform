@@ -19,7 +19,7 @@ to `openvibes-admin tui`.
 The design is approved. C0 and C1 are complete. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 18, and serves
+the executable connects to PostgreSQL, requires schema version 19, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -44,7 +44,13 @@ Enrollment-token listing, one-time secret creation with idempotent retries,
 and audited revocation are available through global `tokens.read`,
 `tokens.create`, and `tokens.revoke` capabilities. The token secret is stored
 only as the same SHA-256 digest used by ingest, and is never repeated on a
-replayed create response. The C1 seeded read slice is
+replayed create response. The opt-in local assistant uses the `assistant.use`
+capability plus the caller's current agent and finding read scopes. Its model
+can call only bounded agent and finding lookups; browser history is in memory
+and prompts and responses are omitted from audit and logs. See
+[`console-assistant.md`](console-assistant.md).
+
+The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, enforced security headers, locked
@@ -139,7 +145,7 @@ origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at 
 configuration"), and `run` refuses a listener that is not loopback even if
 bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
-1.3 only with a 10-second deadline. Startup checks that the database is already at schema 18; it
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 19; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -211,7 +217,7 @@ of local configuration, TLS files, the local account, and its active session.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 18; it does not migrate. The configured Host
+  schema version other than 19; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener; forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist

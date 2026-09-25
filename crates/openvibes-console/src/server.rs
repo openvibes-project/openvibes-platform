@@ -36,8 +36,7 @@ use tokio::{
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use crate::{
-    ConsoleConfig, ConsoleError, ConsoleTransportMode, Readiness, authenticated_router,
-    development_router, health_router,
+    ConsoleConfig, ConsoleError, ConsoleTransportMode, Readiness, development_router, health_router,
 };
 
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -498,8 +497,24 @@ pub async fn serve(
                 });
             }
             drop(client);
+            let assistant_runtime = config
+                .assistant
+                .as_ref()
+                .filter(|assistant| assistant.enabled)
+                .map(|assistant| {
+                    assistant
+                        .validate()
+                        .map_err(|_| ConsoleError::Config)
+                        .and_then(crate::assistant::AssistantRuntime::new)
+                })
+                .transpose()?
+                .flatten();
             (
-                authenticated_router(pool.clone(), public_origin.as_str()),
+                crate::router::authenticated_router_with_assistant(
+                    pool.clone(),
+                    public_origin.as_str(),
+                    assistant_runtime,
+                ),
                 Some(pool),
             )
         }

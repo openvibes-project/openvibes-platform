@@ -157,6 +157,9 @@ pub enum Permission {
     /// Change service accounts and their tokens.
     #[serde(rename = "service_accounts.manage")]
     ServiceAccountsManage,
+    /// Ask the read-only local assistant questions about permitted data.
+    #[serde(rename = "assistant.use")]
+    AssistantUse,
 }
 
 /// Effective object scope attached to one permission.

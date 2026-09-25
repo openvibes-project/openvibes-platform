@@ -708,6 +708,86 @@
         }
       }
     },
+    "/api/v1/assistant/messages": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "authenticated_assistant_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssistantMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Answer with verified citations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantMessageResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Local model is unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assistant/status": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "authenticated_assistant_status",
+        "responses": {
+          "200": {
+            "description": "Local assistant status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantStatusResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Assistant is disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-events": {
       "get": {
         "tags": [
@@ -2968,6 +3048,136 @@
         },
         "additionalProperties": false
       },
+      "AssistantLookup": {
+        "type": "object",
+        "required": [
+          "objects"
+        ],
+        "properties": {
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "objects": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "AssistantMessageRequest": {
+        "type": "object",
+        "required": [
+          "question"
+        ],
+        "properties": {
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClientTurn"
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssistantMessageResponse": {
+        "type": "object",
+        "required": [
+          "segments",
+          "lookups"
+        ],
+        "properties": {
+          "lookups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantLookup"
+            }
+          },
+          "segments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantSegment"
+            }
+          }
+        }
+      },
+      "AssistantSegment": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "text",
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "text"
+                ]
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "target_kind",
+              "id",
+              "path",
+              "kind"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "citation"
+                ]
+              },
+              "path": {
+                "type": "string"
+              },
+              "target_kind": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "AssistantStatusResponse": {
+        "type": "object",
+        "required": [
+          "available",
+          "location",
+          "model"
+        ],
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "location": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          }
+        }
+      },
       "AuditEventPage": {
         "type": "object",
         "description": "Bounded audit-event page with an opaque continuation cursor.",
@@ -3184,6 +3394,22 @@
             "description": "Certificate serial rendered as hexadecimal."
           }
         }
+      },
+      "ClientTurn": {
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "properties": {
+          "answer": {
+            "type": "string"
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
       },
       "CreateAccessBindingRequest": {
         "type": "object",
@@ -3889,7 +4115,8 @@
           "rbac.manage",
           "asset_groups.manage",
           "service_accounts.read",
-          "service_accounts.manage"
+          "service_accounts.manage",
+          "assistant.use"
         ]
       },
       "PermissionScope": {
@@ -4537,6 +4764,10 @@
     {
       "name": "findings",
       "description": "Scope-filtered observation reads"
+    },
+    {
+      "name": "assistant",
+      "description": "Read-only local assistant"
     },
     {
       "name": "audit",

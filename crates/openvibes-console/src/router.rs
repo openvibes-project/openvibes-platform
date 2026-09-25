@@ -31,6 +31,7 @@ use crate::{
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
 const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
+const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
 static AUDIT_EXPORT_SPOOL_ID: AtomicU64 = AtomicU64::new(1);
 // ponytail: one shared router cap; split API and asset budgets if one starves the other.
 
@@ -50,6 +51,7 @@ pub(crate) struct AuthHttpState {
     public_origin_valid: bool,
     dummy_password_phc: Option<String>,
     password_slots: Arc<Semaphore>,
+    assistant: Option<crate::assistant::AssistantRuntime>,
 }
 
 #[derive(Deserialize)]
@@ -191,6 +193,14 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
+    authenticated_router_with_assistant(pool, public_origin, None)
+}
+
+pub(crate) fn authenticated_router_with_assistant(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    assistant: Option<crate::assistant::AssistantRuntime>,
+) -> Router {
     let public_origin = public_origin.into();
     let state = AuthHttpState {
         pool,
@@ -198,6 +208,7 @@ pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> R
         public_origin,
         dummy_password_phc: dummy_password_phc(),
         password_slots: Arc::new(Semaphore::new(4)),
+        assistant,
     };
     let router = Router::new()
         .nest("/api", authenticated_api_router().with_state(state.clone()))
@@ -280,7 +291,12 @@ async fn request_limits(
             "The console is temporarily at capacity",
         ));
     };
-    match timeout(REQUEST_DEADLINE, next.run(request)).await {
+    let deadline = if request.uri().path().starts_with("/api/v1/assistant/") {
+        ASSISTANT_REQUEST_DEADLINE
+    } else {
+        REQUEST_DEADLINE
+    };
+    match timeout(deadline, next.run(request)).await {
         Ok(response) => response,
         Err(_) => problem_response(ProblemDetails::new(
             StatusCode::REQUEST_TIMEOUT,
@@ -300,6 +316,11 @@ fn api_router() -> Router {
 fn authenticated_api_router() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(authenticated_session))
+        .route("/v1/assistant/status", get(authenticated_assistant_status))
+        .route(
+            "/v1/assistant/messages",
+            axum::routing::post(authenticated_assistant_message),
+        )
         .route("/v1/agents/summary", get(authenticated_agent_summary))
         .route("/v1/agents", get(authenticated_agents))
         .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))
@@ -2340,6 +2361,10 @@ async fn authenticated_session(
         }
     }
     let idle_expiry = (now + Duration::minutes(30)).min(active.absolute_expires_at);
+    let mut capabilities = crate::resolve_capabilities(&resolved);
+    if state.assistant.is_none() {
+        capabilities.retain(|capability| capability.permission != crate::Permission::AssistantUse);
+    }
     let response = crate::SessionResponse {
         principal: crate::SessionPrincipal {
             id: active.user_id,
@@ -2348,7 +2373,7 @@ async fn authenticated_session(
         },
         authentication_method: crate::AuthenticationMethod::LocalPassword,
         authentication_level: crate::AuthenticationLevel::SingleFactor,
-        capabilities: crate::resolve_capabilities(&resolved),
+        capabilities,
         csrf_token: csrf,
         idle_expires_at: idle_expiry.to_rfc3339_opts(SecondsFormat::Secs, true),
         absolute_expires_at: active
@@ -2356,6 +2381,270 @@ async fn authenticated_session(
             .to_rfc3339_opts(SecondsFormat::Secs, true),
     };
     let mut response = (StatusCode::OK, axum::Json(response)).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+#[utoipa::path(get, path="/api/v1/assistant/status", tag="assistant", responses((status=200,description="Local assistant status",body=crate::assistant::AssistantStatusResponse),(status=404,description="Assistant is disabled",body=ProblemDetails)))]
+pub(crate) async fn authenticated_assistant_status(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let Some(runtime) = state.assistant.as_ref() else {
+        return problem_response(ProblemDetails::not_found(
+            "assistant_disabled",
+            "Assistant is disabled",
+        ));
+    };
+    if let Err(response) =
+        authenticated_permission(&state, &headers, crate::Permission::AssistantUse, false).await
+    {
+        return response;
+    }
+    let backend = runtime
+        .assistant
+        .backend
+        .as_ref()
+        .expect("enabled assistant has a backend");
+    let location = match backend.location {
+        platform_assistant::Location::Local => "local",
+        platform_assistant::Location::OwnNetwork => "own_network",
+        platform_assistant::Location::External => "external",
+    };
+    let body = crate::assistant::AssistantStatusResponse {
+        available: *runtime.available.read().await,
+        location,
+        model: backend.model.clone(),
+    };
+    let mut response = (StatusCode::OK, Json(body)).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+#[utoipa::path(post, path="/api/v1/assistant/messages", tag="assistant", request_body=crate::assistant::AssistantMessageRequest, responses((status=200,description="Answer with verified citations",body=crate::assistant::AssistantMessageResponse),(status=403,description="Permission denied",body=ProblemDetails),(status=503,description="Local model is unavailable",body=ProblemDetails)))]
+pub(crate) async fn authenticated_assistant_message(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Json(request): Json<crate::assistant::AssistantMessageRequest>,
+) -> Response {
+    use platform_assistant::{Settings, Turn};
+    use platform_store::console_read::AgentScope as ConsoleScope;
+    use std::time::Instant;
+
+    let Some(runtime) = state.assistant.as_ref() else {
+        return problem_response(ProblemDetails::not_found(
+            "assistant_disabled",
+            "Assistant is disabled",
+        ));
+    };
+    let (assistant_scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::AssistantUse, true)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
+    let (agent_scope, agent_actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::AgentsRead,
+        false,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    let (finding_scope, finding_actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::FindingsRead, false)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
+    if actor != agent_actor || actor != finding_actor || assistant_scope != ConsoleScope::Global {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    if request.question.len() > 4_000
+        || request.history.len() >= 20
+        || request
+            .history
+            .iter()
+            .any(|turn| turn.question.len() > 4_000 || turn.answer.len() > 8_000)
+        || request
+            .history
+            .iter()
+            .map(|turn| turn.question.len().saturating_add(turn.answer.len()))
+            .sum::<usize>()
+            .saturating_add(request.question.len())
+            > 164_000
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "assistant_input_too_large",
+            "The question or conversation is too long",
+        ));
+    }
+    if agent_scope != finding_scope {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Assistant access requires matching agent and finding scopes",
+        ));
+    }
+    let user_slot = runtime.principal_slot(&actor).await;
+    let Ok(_user_permit) = user_slot.try_acquire_owned() else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::CONFLICT,
+            "assistant_busy",
+            "An assistant answer is already running for your account",
+        ));
+    };
+    let Ok(_capacity_permit) = runtime.concurrency.clone().try_acquire_owned() else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "assistant_busy",
+            "The assistant is busy. Try again shortly",
+        ));
+    };
+    if !*runtime.available.read().await {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "assistant_unavailable",
+            "The local model is unavailable",
+        ));
+    }
+    let Some(mode) = *runtime.mode.read().await else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "assistant_unavailable",
+            "The local model is unavailable",
+        ));
+    };
+    let assistant_scope = match &agent_scope {
+        ConsoleScope::Global => platform_store::assistant::AgentScope::All,
+        ConsoleScope::AssetGroups(_) => {
+            let client = match state.pool.get().await {
+                Ok(client) => client,
+                Err(_) => return unavailable_auth(),
+            };
+            let ids = match platform_store::console_read::agent_ids_in_scope(&client, &agent_scope)
+                .await
+            {
+                Ok(ids) => ids,
+                Err(_) => return unavailable_auth(),
+            };
+            platform_store::assistant::AgentScope::Only(ids)
+        }
+    };
+    let backend = runtime
+        .assistant
+        .backend
+        .as_ref()
+        .expect("enabled assistant has a backend");
+    let settings = Settings::new(&runtime.assistant, backend, mode, Utc::now());
+    let history = request
+        .history
+        .into_iter()
+        .map(|turn| Turn {
+            question: turn.question,
+            answer: turn.answer,
+        })
+        .collect::<Vec<_>>();
+    let lookups = crate::assistant::ConsoleReadLookups::new(
+        platform_assistant::StoreLookups::new(state.pool.clone(), assistant_scope, settings.now),
+        state.pool.clone(),
+        agent_scope,
+        settings.now,
+    );
+    let backend: Arc<dyn platform_assistant::ChatBackend> = runtime.backend.clone();
+    let started = Instant::now();
+    let answer = tokio::time::timeout(
+        Duration::seconds(30).to_std().unwrap_or_default(),
+        platform_assistant::answer(
+            backend,
+            &lookups,
+            settings,
+            &history,
+            &request.question,
+            None,
+        ),
+    )
+    .await
+    .unwrap_or(Err(platform_assistant::AnswerError::Deadline));
+    let result_code = match &answer {
+        Ok(_) => "success",
+        Err(platform_assistant::AnswerError::EmptyQuestion) => "empty_question",
+        Err(platform_assistant::AnswerError::QuestionTooLong) => "question_too_long",
+        Err(platform_assistant::AnswerError::Backend(_)) => "backend_error",
+        Err(platform_assistant::AnswerError::Deadline) => "deadline",
+        Err(platform_assistant::AnswerError::NoAnswer) => "no_answer",
+    };
+    if let Ok(client) = state.pool.get().await {
+        let _ = platform_store::audit::record(
+            &client,
+            &actor,
+            "assistant.question",
+            Some("assistant"),
+            result_code,
+        )
+        .await;
+    }
+    tracing::info!(actor_id = %actor, elapsed_ms = started.elapsed().as_millis(), outcome = result_code, "assistant question completed");
+    let answer = match answer {
+        Ok(answer) => answer,
+        Err(error) => {
+            let (status, code, message) = match error {
+                platform_assistant::AnswerError::EmptyQuestion => (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "empty_question",
+                    "Enter a question",
+                ),
+                platform_assistant::AnswerError::QuestionTooLong => (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "question_too_long",
+                    "The question is too long for the local model",
+                ),
+                platform_assistant::AnswerError::Backend(_) => (
+                    StatusCode::BAD_GATEWAY,
+                    "assistant_backend_error",
+                    "The local model could not answer this question",
+                ),
+                platform_assistant::AnswerError::Deadline => (
+                    StatusCode::GATEWAY_TIMEOUT,
+                    "assistant_timeout",
+                    "The local model took too long to answer",
+                ),
+                platform_assistant::AnswerError::NoAnswer => (
+                    StatusCode::BAD_GATEWAY,
+                    "assistant_no_answer",
+                    "The local model returned no usable answer",
+                ),
+            };
+            return problem_response(ProblemDetails::new(status, code, message));
+        }
+    };
+    let response = crate::assistant::AssistantMessageResponse {
+        segments: answer.segments.iter().map(Into::into).collect(),
+        lookups: answer
+            .lookups
+            .iter()
+            .map(|lookup| crate::assistant::AssistantLookup {
+                name: lookup.name.map(str::to_owned),
+                objects: lookup.objects,
+                error: lookup.error.map(|error| error.message().to_owned()),
+            })
+            .collect(),
+    };
+    let mut response = (StatusCode::OK, Json(response)).into_response();
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

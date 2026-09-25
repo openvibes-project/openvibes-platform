@@ -113,7 +113,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
         BuiltInRole::Analyst => {
             matches!(
                 permission,
-                P::AgentsRead | P::FindingsRead | P::FindingsTriage
+                P::AgentsRead | P::FindingsRead | P::FindingsTriage | P::AssistantUse
             )
         }
         BuiltInRole::Operator => matches!(
@@ -158,6 +158,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::AssetGroupsManage,
     Permission::ServiceAccountsRead,
     Permission::ServiceAccountsManage,
+    Permission::AssistantUse,
 ];
 
 #[cfg(test)]

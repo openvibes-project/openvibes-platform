@@ -202,6 +202,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant/messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["authenticated_assistant_message"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_assistant_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-events": {
         parameters: {
             query?: never;
@@ -787,6 +819,35 @@ export interface components {
             /** @description Exact tag value. */
             value: string;
         };
+        AssistantLookup: {
+            error?: string | null;
+            name?: string | null;
+            objects: number;
+        };
+        AssistantMessageRequest: {
+            history?: components["schemas"]["ClientTurn"][];
+            question: string;
+        };
+        AssistantMessageResponse: {
+            lookups: components["schemas"]["AssistantLookup"][];
+            segments: components["schemas"]["AssistantSegment"][];
+        };
+        AssistantSegment: {
+            /** @enum {string} */
+            kind: "text";
+            text: string;
+        } | {
+            id: string;
+            /** @enum {string} */
+            kind: "citation";
+            path: string;
+            target_kind: string;
+        };
+        AssistantStatusResponse: {
+            available: boolean;
+            location: string;
+            model: string;
+        };
         /** @description Bounded audit-event page with an opaque continuation cursor. */
         AuditEventPage: {
             /** @description Events in descending timestamp order. */
@@ -869,6 +930,10 @@ export interface components {
             not_before: string;
             /** @description Certificate serial rendered as hexadecimal. */
             serial: string;
+        };
+        ClientTurn: {
+            answer: string;
+            question: string;
         };
         /** @description Request to assign a role to one local user with optional asset-group scope. */
         CreateAccessBindingRequest: {
@@ -1166,7 +1231,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "findings.read" | "findings.triage" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage";
+        Permission: "agents.read" | "agents.revoke" | "findings.read" | "findings.triage" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -1982,6 +2047,77 @@ export interface operations {
                 };
             };
             /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_assistant_message: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssistantMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Answer with verified citations */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantMessageResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Local model is unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_assistant_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Local assistant status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantStatusResponse"];
+                };
+            };
+            /** @description Assistant is disabled */
             404: {
                 headers: {
                     [name: string]: unknown;

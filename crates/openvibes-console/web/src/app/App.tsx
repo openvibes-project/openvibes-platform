@@ -10,6 +10,7 @@ import { canOpenPage, resolvePage, visibleNavigationGroups } from "./navigation"
 import { EnrollmentPage } from "./Enrollment";
 import { ServiceAccountsPage } from "./ServiceAccounts";
 import { RuleSetsPage } from "./RuleSets";
+import { AssistantPage } from "./Assistant";
 
 type AppProps = {
   path?: string;
@@ -181,6 +182,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               </header>
 
               {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
+              {path === "/assistant" ? <AssistantPage csrfToken={session?.csrf_token} /> : null}
               {path === "/agents" ? <AgentsReadPage seeded={seeded} csrfToken={session?.csrf_token} canManageTags={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} canRevoke={!seeded && session?.capabilities.some((capability) => capability.permission === "agents.revoke") === true} /> : null}
               {path === "/enrollment" ? <EnrollmentPage csrfToken={session?.csrf_token} canRead={seeded || session?.capabilities.some((capability) => capability.permission === "tokens.read" && capability.scope.kind === "global") === true} canCreate={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.create" && capability.scope.kind === "global") === true} canRevoke={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.revoke" && capability.scope.kind === "global") === true} /> : null}
               {path === "/service-accounts" ? <ServiceAccountsPage csrfToken={session?.csrf_token} canRead={!seeded && session?.capabilities.some((capability) => capability.permission === "service_accounts.read" && capability.scope.kind === "global") === true} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "service_accounts.manage" && capability.scope.kind === "global") === true} /> : null}
@@ -188,7 +190,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               {path === "/findings" ? <FindingsReadPage seeded={seeded} csrfToken={session?.csrf_token} canTriage={!seeded && session?.capabilities.some((capability) => capability.permission === "findings.triage") === true} /> : null}
               {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
               {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} canManageGroups={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
-              {!["/", "/agents", "/enrollment", "/service-accounts", "/rule-sets", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
+              {!["/", "/assistant", "/agents", "/enrollment", "/service-accounts", "/rule-sets", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
                   <p className="eyebrow">Interface foundation</p>

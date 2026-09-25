@@ -22,6 +22,7 @@ export type NavigationAccess = {
 
 const pageAccess: Readonly<Record<string, readonly NavigationAccess[]>> = {
   "/": [{ permission: "agents.read" }, { permission: "findings.read" }],
+  "/assistant": [{ permission: "assistant.use", global: true }],
   "/findings": [{ permission: "findings.read" }],
   "/agents": [{ permission: "agents.read" }],
   "/enrollment": [{ permission: "tokens.read", global: true }],
@@ -70,7 +71,7 @@ export function visibleNavigationGroups(capabilities: readonly NavigationCapabil
 export const navigationGroups: readonly NavigationGroup[] = [
   {
     label: "Workspace",
-    items: [{ label: "Overview", shortLabel: "Ov", path: "/" }],
+    items: [{ label: "Overview", shortLabel: "Ov", path: "/" }, { label: "Assistant", shortLabel: "As", path: "/assistant" }],
   },
   {
     label: "Investigate",
@@ -106,6 +107,11 @@ const pages: Readonly<Record<string, ConsolePage>> = {
     title: "Overview",
     group: "Workspace",
     description: "A permission-aware summary of fleet contact and latest observed matches.",
+  },
+  "/assistant": {
+    title: "Assistant",
+    group: "Workspace",
+    description: "Ask a read-only local model about agents and findings in your access scope.",
   },
   "/findings": {
     title: "Findings",

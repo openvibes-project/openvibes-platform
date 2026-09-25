@@ -1195,6 +1195,7 @@ dependencies = [
  "include_dir",
  "openvibes-core",
  "openvibes-rules",
+ "platform-assistant",
  "platform-config",
  "platform-store",
  "ring",

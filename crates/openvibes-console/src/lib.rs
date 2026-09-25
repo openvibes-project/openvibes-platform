@@ -12,6 +12,7 @@
 mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;
+mod assistant;
 mod auth;
 mod config;
 mod error;

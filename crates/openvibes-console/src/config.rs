@@ -53,6 +53,9 @@ pub struct ConsoleConfig {
     /// Exact Unix effective UIDs allowed to connect to `unix_socket_file`.
     #[serde(default)]
     pub trusted_proxy_uids: Vec<u32>,
+    /// Optional local model assistant. Omitted or disabled means no model connection.
+    #[serde(default)]
+    pub assistant: Option<platform_assistant::AssistantConfig>,
 }
 
 impl fmt::Debug for ConsoleConfig {
@@ -72,6 +75,10 @@ impl fmt::Debug for ConsoleConfig {
             .field("trusted_proxy_addresses", &self.trusted_proxy_addresses)
             .field("unix_socket_file", &self.unix_socket_file)
             .field("trusted_proxy_uids", &self.trusted_proxy_uids)
+            .field(
+                "assistant",
+                &self.assistant.as_ref().map(|_| "[CONFIGURED]"),
+            )
             .finish()
     }
 }
@@ -79,6 +86,18 @@ impl fmt::Debug for ConsoleConfig {
 impl ConsoleConfig {
     /// Rejects unsafe transport combinations and shared public/health binds.
     pub fn validate(&self) -> Result<(), ConsoleError> {
+        if let Some(config) = self.assistant.as_ref().filter(|config| config.enabled) {
+            let assistant = config.validate().map_err(|_| ConsoleError::Config)?;
+            if assistant.enabled
+                && assistant.backend.as_ref().is_some_and(|backend| {
+                    backend.location == platform_assistant::Location::External
+                        || backend.proxy_url.is_some()
+                })
+                || !config.backend.as_ref().is_some_and(private_backend_url)
+            {
+                return Err(ConsoleError::Config);
+            }
+        }
         let tls_configured = self.transport_mode == ConsoleTransportMode::DirectTls;
         let tls_paths_valid = match (&self.server_certificate_file, &self.server_key_file) {
             (None, None) if !tls_configured => true,
@@ -148,6 +167,25 @@ impl ConsoleConfig {
             _ => return Err(ConsoleError::Config),
         }
         Ok(())
+    }
+}
+
+fn private_backend_url(backend: &platform_assistant::BackendConfig) -> bool {
+    let Some((_, remainder)) = backend.url.split_once("://") else {
+        return false;
+    };
+    let authority = remainder.split('/').next().unwrap_or_default();
+    let host = if let Some(bracketed) = authority.strip_prefix('[') {
+        bracketed.split(']').next().unwrap_or_default()
+    } else {
+        authority.split(':').next().unwrap_or_default()
+    };
+    let Ok(address) = host.parse::<IpAddr>() else {
+        return false;
+    };
+    match address {
+        IpAddr::V4(ip) => ip.is_loopback() || ip.is_private(),
+        IpAddr::V6(ip) => ip.is_loopback() || ip.is_unique_local(),
     }
 }
 
@@ -224,6 +262,7 @@ mod tests {
             trusted_proxy_addresses: vec![],
             unix_socket_file: None,
             trusted_proxy_uids: vec![],
+            assistant: None,
         };
 
         assert!(config.validate().is_ok());
@@ -243,6 +282,7 @@ mod tests {
                 trusted_proxy_addresses: vec![],
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
+                assistant: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -255,6 +295,7 @@ mod tests {
                 trusted_proxy_addresses: vec![],
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
+                assistant: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -267,6 +308,7 @@ mod tests {
                 trusted_proxy_addresses: vec![],
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
+                assistant: None,
             },
         ] {
             assert!(config.validate().is_err());
@@ -286,6 +328,7 @@ mod tests {
             trusted_proxy_addresses: vec![],
             unix_socket_file: None,
             trusted_proxy_uids: vec![],
+            assistant: None,
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));
