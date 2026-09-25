@@ -530,3 +530,152 @@ async fn exploited_first_then_likely_exploited_then_severity() {
     assert_eq!(summary.exploited, 1);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn euvd_counts_as_exploited_and_cvss_breaks_ties() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let packages: Vec<PackageRow> = ["a", "b", "c"]
+        .iter()
+        .map(|n| pkg(n, 0, "1.0", "x86_64"))
+        .collect();
+    host(&mut admin, A, "44", &packages, 1).await;
+    let make = |id: &str, name: &str, cve: &str| {
+        let mut a = advisory(id, name, 0, "2.0", "x86_64");
+        a.cves = vec![cve.to_owned()];
+        a
+    };
+    load(
+        &mut vulns,
+        &[
+            make("FEDORA-LOW-CVSS", "a", "CVE-2026-1111"),
+            make("FEDORA-HIGH-CVSS", "b", "CVE-2026-2222"),
+            make("FEDORA-EUVD", "c", "CVE-2026-3333"),
+        ],
+        "44",
+    )
+    .await;
+    matching::match_release(&mut vulns, "fedora", "44", Utc::now())
+        .await
+        .unwrap();
+    let cvss = |id: &str, score: f32| {
+        format!(
+            r#"{{"cve":{{"id":"{id}","metrics":{{"cvssMetricV31":[{{"type":"Primary",
+            "cvssData":{{"baseScore":{score},"vectorString":"CVSS:3.1/AV:N"}}}}]}}}}}}"#
+        )
+    };
+    let nvd = format!(
+        r#"{{"totalResults":2,"startIndex":0,"vulnerabilities":[{},{}]}}"#,
+        cvss("CVE-2026-1111", 5.3),
+        cvss("CVE-2026-2222", 9.8)
+    );
+    enrich::import(&mut vulns, Source::Nvd, nvd.as_bytes(), Utc::now())
+        .await
+        .unwrap();
+    let euvd = br#"{"total":1,"items":[{"id":"EUVD-2026-1","aliases":"CVE-2026-3333"}]}"#;
+    enrich::import(&mut vulns, Source::Euvd, euvd, Utc::now())
+        .await
+        .unwrap();
+
+    let rows = vulns::list(&vulns, &vulns::ListFilter::default())
+        .await
+        .unwrap();
+    let order: Vec<&str> = rows.iter().map(|r| r.advisory_id.as_str()).collect();
+    assert_eq!(
+        order,
+        ["FEDORA-EUVD", "FEDORA-HIGH-CVSS", "FEDORA-LOW-CVSS"]
+    );
+    assert!(rows[0].exploited && rows[0].euvd && !rows[0].kev);
+    assert_eq!(rows[1].cvss, Some(9.8));
+    assert_eq!(vulns::summary(&vulns).await.unwrap().exploited, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_release_is_matched_in_batches_of_hosts() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let c = "agent.00000000-0000-4000-8000-00000000000c";
+    admin
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
+            &[&c],
+        )
+        .await
+        .unwrap();
+    for (i, agent) in [A, B, c].into_iter().enumerate() {
+        host(
+            &mut admin,
+            agent,
+            "44",
+            &[pkg("bash", 0, "5.0", "x86_64")],
+            u8::try_from(i).unwrap() + 1,
+        )
+        .await;
+    }
+    load(
+        &mut vulns,
+        &[advisory("FEDORA-B", "bash", 0, "5.1", "x86_64")],
+        "44",
+    )
+    .await;
+    let opened = matching::match_release_in_batches(&mut vulns, "fedora", "44", 2, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(opened, 3, "both batches matched");
+    for agent in [A, B, c] {
+        assert_eq!(open(&vulns, agent).await, ["FEDORA-B"]);
+    }
+    // The host in the second batch is fixed by a later run.
+    host(&mut admin, c, "44", &[pkg("bash", 0, "5.1", "x86_64")], 9).await;
+    matching::match_release_in_batches(&mut vulns, "fedora", "44", 2, Utc::now())
+        .await
+        .unwrap();
+    assert!(open(&vulns, c).await.is_empty());
+    assert_eq!(
+        open(&vulns, A).await,
+        ["FEDORA-B"],
+        "the first batch keeps its own"
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_feed_is_recorded_current_only_after_its_match_succeeds() {
+    let (db, mut admin, mut vulns) = setup().await;
+    host(&mut admin, A, "44", &[pkg("bash", 0, "5.0", "x86_64")], 1).await;
+    let content = std::fs::read(
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/updateinfo-f44.xml.zst"),
+    )
+    .unwrap();
+    let source: openvibes_vulns::feed::SourceId = "fedora-44-x86_64".parse().unwrap();
+    // Matching fails (as it did on timeouts at scale): nothing is recorded
+    // as current, so the next check downloads and imports it again.
+    admin
+        .batch_execute("REVOKE SELECT ON host_packages FROM openvibes_vulns")
+        .await
+        .unwrap();
+    let failed = openvibes_vulns::feed::import(&mut vulns, &source, &content, Utc::now()).await;
+    assert!(failed.is_err());
+    assert_eq!(
+        vulns::feed_digest(&vulns, "fedora-44-x86_64")
+            .await
+            .unwrap(),
+        None
+    );
+    let feed = vulns::feeds(&vulns).await.unwrap().remove(0);
+    assert!(feed.last_error.is_some());
+    admin
+        .batch_execute("GRANT SELECT ON host_packages TO openvibes_vulns")
+        .await
+        .unwrap();
+    openvibes_vulns::feed::import(&mut vulns, &source, &content, Utc::now())
+        .await
+        .unwrap();
+    assert!(
+        vulns::feed_digest(&vulns, "fedora-44-x86_64")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    db.drop().await;
+}

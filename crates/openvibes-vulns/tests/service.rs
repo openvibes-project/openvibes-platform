@@ -142,6 +142,9 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
         max_download_bytes: 64 << 20,
         kev_url,
         epss_url: String::new(),
+        nvd_url: String::new(),
+        nvd_api_key_file: None,
+        euvd_url: String::new(),
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(service::run(config, health, async {
@@ -215,6 +218,8 @@ fn unsafe_or_out_of_range_configuration_is_refused() {
     assert_eq!(config.health_listen.to_string(), "127.0.0.1:18483");
     assert_eq!(config.kev_url, openvibes_vulns::fetch::KEV_URL);
     assert_eq!(config.epss_url, openvibes_vulns::fetch::EPSS_URL);
+    assert_eq!(config.nvd_url, openvibes_vulns::sources::NVD_URL);
+    assert_eq!(config.euvd_url, openvibes_vulns::sources::EUVD_URL);
     assert!(
         load(base("kev_url = \"\"\nepss_url = \"\"\n")).is_ok(),
         "off"
@@ -227,6 +232,8 @@ fn unsafe_or_out_of_range_configuration_is_refused() {
         base("unknown = 1\n"),
         base("kev_url = \"http://www.cisa.gov/kev.json\"\n"),
         base("epss_url = \"ftp://example.org/epss.csv.gz\"\n"),
+        base("nvd_url = \"http://services.nvd.nist.gov/rest/json/cves/2.0\"\n"),
+        base("euvd_url = \"http://euvdservices.enisa.europa.eu/api/search\"\n"),
     ] {
         assert!(load(bad.clone()).is_err(), "{bad}");
     }

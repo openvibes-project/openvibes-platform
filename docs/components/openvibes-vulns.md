@@ -56,10 +56,31 @@ the offline core used by `openvibes-admin feeds import` and the
   Live: first run KEV 0.19 s, EPSS 4.2 s (378k rows upserted, 42 MB
   table); later runs 304 in under 0.1 s each, also through EPSS's
   redirect. The service checks both every interval, after the feeds.
+- `enrich::{parse_nvd, parse_euvd}` (VM5) — an NVD `cves/2.0` page: the
+  newest CVSS version scored (4.0, 3.1, 3.0, 2.0), within it NVD's own
+  over a CNA's; CWE ids deduplicated; the English description (4 KiB
+  cap). An EUVD search page: one record per CVE alias of each entry.
+  2,000 real NVD records parse in 98 ms.
+- `sources::sync_nvd(client, nvd, now)` — NVD is kept **only for CVEs
+  advisories name** (Fedora 44 names 944; a full mirror would be 1.8 GB):
+  each run asks for what changed since the last one (last-modified
+  windows of at most 120 days, 2,000 a page, each finished window saved
+  as the sync point), then one by one for named CVEs not yet seen (up to
+  1,000 a run; CVEs NVD does not know are asked again after 7 days).
+  Requests are 6 s apart, 0.6 s with an API key (NVD's limits); any error
+  (403, 429, network) stops the run, keeps what was done, and the next run
+  resumes. Runs in its own task, so pacing never delays re-matching. Live:
+  10 real CVEs backfilled in 56 s; the first fill of Fedora 44 takes about
+  95 min, 10 min with a key.
+- `sources::check_euvd(client, fetcher, url, page_size, now)` — EUVD's
+  exploited list, page by page (live: 1,735 CVEs, 18 pages, 6 s); an
+  unchanged list is not re-imported. Checked every interval with KEV and
+  EPSS.
 - **Priority** (spec §9), computed when read by `platform_store::vulns`:
-  exploited (a CVE on KEV) first, then the highest EPSS percentile among
-  the advisory's CVEs, then severity, then oldest first. Advisories
-  without a scored CVE come after scored ones.
+  exploited (a CVE on KEV or EUVD's list) first, then the highest EPSS
+  percentile among the advisory's CVEs, then severity, then the highest
+  CVSS, then oldest first. Advisories without a scored CVE come after
+  scored ones.
 
 ## Configuration
 
@@ -76,11 +97,16 @@ arch = "x86_64"                        # its feed lists every architecture's fix
 max_download_bytes = 67108864
 kev_url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 epss_url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+nvd_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+# nvd_api_key_file = "/etc/openvibes/nvd.key"   # mode 0600 or stricter
+euvd_url = "https://euvdservices.enisa.europa.eu/api/search"
 ```
 
-`kev_url` and `epss_url` must be HTTPS; an empty value turns that source
-off (offline platforms import the files with `openvibes-admin feeds
-import FILE --source kev|epss`).
+`kev_url`, `epss_url`, `nvd_url` and `euvd_url` must be HTTPS; an empty
+value turns that source off (offline platforms import files with
+`openvibes-admin feeds import FILE --source kev|epss|nvd|euvd`). The NVD
+key file must not be readable by group or others, holds one key, and the
+key is sent only in the `apiKey` header, never logged.
 
 Packaged as the `openvibes-vulns` RPM with its unit and user
 `openvibes_vulns` ([packaging.md](packaging.md)).
@@ -96,7 +122,17 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
 - A bad KEV or EPSS download (unreachable, not the expected format, a bad
   row, oversized) is recorded on its source; the stored enrichment is kept.
   A CVE that leaves the KEV catalog loses its mark on the next import;
-  EPSS scores are only added or updated.
+  EPSS scores are only added or updated. The same holds for EUVD (a CVE
+  leaving its exploited list loses the mark) and NVD (a failed run keeps
+  its sync point and resumes).
+- A release is matched in batches of 500 hosts (`MATCH_BATCH`; one query
+  and one transaction each; 10,000 hosts re-matched in 38 s). A feed is
+  recorded as current only after its match succeeds; a failed match is
+  recorded as the feed's error and retried by the next check.
+- After storing a feed's advisories the import runs `ANALYZE` on the
+  advisory tables, so matching right after it is planned with current
+  statistics (scale check, `docs/sizing.md`: 10,000 hosts imported and
+  matched in 32 s).
 - `/ready` is 503 while the database is unreachable or at another schema.
 - **Compared with `dnf`:** checked on this Fedora 44 host against the real
   feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
@@ -107,6 +143,10 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   kernel, and the installed fix counts for them.
 
 ## Test
+
+Scale check (`examples/scale.rs`, VM spec §10): N synthetic hosts with a
+real package list, stored and matched against a real feed; see the usage
+in the file and the results in `docs/sizing.md`.
 
 ```sh
 eval "$(scripts/test-db.sh)"

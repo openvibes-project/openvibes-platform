@@ -164,8 +164,49 @@ async fn exploited_and_likely_exploited_are_shown_with_the_reason() {
     assert!(status.contains("epss cves 1 checked "), "{status}");
     failed(
         &fixture,
-        &["feeds", "import", kev.to_str().unwrap(), "--source", "nvd"],
-        "use fedora-<release>-<arch>, kev, or epss",
+        &["feeds", "import", kev.to_str().unwrap(), "--source", "osv"],
+        "use fedora-<release>-<arch>, kev, epss, nvd, or euvd",
+    );
+
+    // NVD and EUVD (VM5): CVSS, weakness and description; EUVD's mark.
+    let nvd = dir.join("nvd.json");
+    std::fs::write(
+        &nvd,
+        r#"{"totalResults":1,"startIndex":0,"vulnerabilities":[{"cve":{"id":"CVE-2026-64638",
+            "lastModified":"2026-09-20T10:00:00.000","descriptions":[{"lang":"en",
+            "value":"Stored XSS in the block editor."}],"weaknesses":[{"description":
+            [{"lang":"en","value":"CWE-79"}]}],"metrics":{"cvssMetricV31":[{"type":"Primary",
+            "cvssData":{"baseScore":6.1,"vectorString":"CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N"}}]}}}]}"#,
+    )
+    .unwrap();
+    let euvd = dir.join("euvd.json");
+    std::fs::write(
+        &euvd,
+        r#"{"total":1,"items":[{"id":"EUVD-2026-64000","aliases":"CVE-2026-64638"}]}"#,
+    )
+    .unwrap();
+    let out = stdout(&fixture.run(&["feeds", "import", nvd.to_str().unwrap(), "--source", "nvd"]));
+    assert_eq!(out, "imported 1 CVEs from nvd\n");
+    stdout(&fixture.run(&[
+        "feeds",
+        "import",
+        euvd.to_str().unwrap(),
+        "--source",
+        "euvd",
+    ]));
+    let list = stdout(&fixture.run(&["vulns", "list"]));
+    assert!(
+        list.contains(
+            "exploited (KEV, due 2026-09-22, ransomware; EUVD) EPSS 94.0% (top 1%) CVSS 6.1"
+        ),
+        "{list}"
+    );
+    let advisory = stdout(&fixture.run(&["vulns", "show", "FEDORA-2026-dc0ff85b8b"]));
+    assert!(
+        advisory.contains(
+            "  CVE-2026-64638 CVSS 6.1 (3.1) CWE-79 KEV EUVD-2026-64000 EPSS 94.0%: Stored XSS in the block editor.\n"
+        ),
+        "{advisory}"
     );
     fixture.drop().await;
 }

@@ -16,6 +16,7 @@ use crate::{
     feed::SourceId,
     fetch::{self, Checked, Fetcher},
     matching,
+    sources::{self, NvdClient},
 };
 
 /// Runs until `shutdown`. Startup failures are returned as messages.
@@ -41,10 +42,22 @@ pub async fn run(
             .with_state(health_pool);
         let _ = axum::serve(health, app).await;
     });
+    let every = Duration::from_secs(config.check_interval_minutes * 60);
+    // NVD is paced to its rate limit, so it runs apart from the main loop.
+    let nvd_task = if config.nvd_url.is_empty() {
+        None
+    } else {
+        let key = config
+            .nvd_api_key_file
+            .as_deref()
+            .map(sources::read_api_key)
+            .transpose()?;
+        let nvd = NvdClient::new(&fetcher, &config.nvd_url, key, None)?;
+        Some(tokio::spawn(nvd_loop(pool.clone(), nvd, every)))
+    };
     let (changed, mut notifications) = mpsc::unbounded_channel();
     let listener = tokio::spawn(listen(config.database_url.clone(), changed));
-    let mut interval =
-        tokio::time::interval(Duration::from_secs(config.check_interval_minutes * 60));
+    let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(shutdown);
     loop {
@@ -59,6 +72,9 @@ pub async fn run(
     }
     listener.abort();
     health_task.abort();
+    if let Some(task) = nvd_task {
+        task.abort();
+    }
     Ok(())
 }
 
@@ -105,6 +121,28 @@ async fn check_all(pool: &Pool, fetcher: &Fetcher, arch: &str) {
     }
 }
 
+/// Runs NVD sync every interval (first at start).
+async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
+    let mut interval = tokio::time::interval(every);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        let Ok(mut client) = pool.get().await else {
+            tracing::warn!("database unavailable; nvd sync skipped");
+            continue;
+        };
+        match sources::sync_nvd(&mut client, &nvd, Utc::now()).await {
+            Ok(report) => tracing::info!(
+                updated = report.updated,
+                backfilled = report.backfilled,
+                unknown = report.unknown,
+                "nvd synced"
+            ),
+            Err(error) => tracing::warn!(%error, "nvd sync failed"),
+        }
+    }
+}
+
 /// Checks each enabled enrichment source; priority is computed when read,
 /// so nothing is re-matched.
 async fn enrich_all(pool: &Pool, fetcher: &Fetcher, config: &VulnsConfig) {
@@ -123,6 +161,13 @@ async fn enrich_all(pool: &Pool, fetcher: &Fetcher, config: &VulnsConfig) {
             Ok(None) => tracing::info!(%source, "enrichment unchanged"),
             Ok(Some(cves)) => tracing::info!(%source, cves, "enrichment imported"),
             Err(error) => tracing::warn!(%source, %error, "enrichment check failed"),
+        }
+    }
+    if !config.euvd_url.is_empty() {
+        match sources::check_euvd(&mut client, fetcher, &config.euvd_url, 100, Utc::now()).await {
+            Ok(None) => tracing::info!(source = "euvd", "enrichment unchanged"),
+            Ok(Some(cves)) => tracing::info!(source = "euvd", cves, "enrichment imported"),
+            Err(error) => tracing::warn!(source = "euvd", %error, "enrichment check failed"),
         }
     }
 }
