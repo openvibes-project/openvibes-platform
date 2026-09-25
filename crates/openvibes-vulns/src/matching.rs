@@ -7,7 +7,7 @@
 //! A kernel whose fix is installed still counts while the host runs an
 //! older one (protocol P9): open, flagged "fix installed, reboot needed".
 
-use std::collections::BTreeMap;
+use std::{cmp::Ordering, collections::BTreeMap};
 
 use chrono::{DateTime, Utc};
 use platform_store::{
@@ -16,7 +16,7 @@ use platform_store::{
 };
 use serde_json::json;
 
-use crate::rpmver::compare_evr;
+use crate::{dpkgver, rpmver::compare_evr};
 
 /// Hosts matched per query: one query over every host of a large fleet
 /// exceeded the 10 s statement timeout at 10,000 hosts (`docs/sizing.md`).
@@ -72,16 +72,44 @@ pub async fn match_host(
     vulns::apply(client, Scope::Host(agent_id), &found, now).await
 }
 
-fn evr(evr: &(i32, String, String)) -> String {
-    format!("{}:{}-{}", evr.0, evr.1, evr.2)
+/// `[E:]V-R` split as RPM compares it; a missing epoch is 0.
+fn rpm_parts(full: &str) -> (u32, &str, &str) {
+    let (epoch, rest) = match full.split_once(':') {
+        Some((epoch, rest)) if !epoch.is_empty() && epoch.bytes().all(|b| b.is_ascii_digit()) => {
+            (epoch.parse().unwrap_or(u32::MAX), rest)
+        }
+        _ => (0, full),
+    };
+    match rest.rsplit_once('-') {
+        Some((version, release)) => (epoch, version, release),
+        None => (epoch, rest, ""),
+    }
 }
 
-fn key(evr: &(i32, String, String)) -> (u32, &str, &str) {
-    (
-        u32::try_from(evr.0).unwrap_or(0),
-        evr.1.as_str(),
-        evr.2.as_str(),
-    )
+/// Version order of the package's scheme (`rpm` or `dpkg`).
+fn compare(scheme: &str, a: &str, b: &str) -> Ordering {
+    if scheme == "dpkg" {
+        dpkgver::compare(a, b)
+    } else {
+        compare_evr(rpm_parts(a), rpm_parts(b))
+    }
+}
+
+/// Whether `installed` falls in the candidate's affected range: from
+/// `introduced` (or the start) up to `fixed`, or through `last_affected`,
+/// or with neither, every later version (no fix known).
+fn in_range(candidate: &Candidate, installed: &str) -> bool {
+    let order = |a: &str, b: &str| compare(&candidate.scheme, a, b);
+    let started = candidate
+        .introduced
+        .as_deref()
+        .is_none_or(|from| from == "0" || order(installed, from).is_ge());
+    started
+        && match (&candidate.fixed, &candidate.last_affected) {
+            (Some(fixed), _) => order(installed, fixed).is_lt(),
+            (None, Some(last)) => order(installed, last).is_le(),
+            (None, None) => true,
+        }
 }
 
 /// Packages that are the running kernel: their fix counts once booted.
@@ -111,7 +139,7 @@ type Entry = (serde_json::Value, bool);
 #[must_use]
 pub fn evaluate(candidates: &[Candidate]) -> Vec<Found> {
     // Newest installed version per (host, advisory, package, fixed arch).
-    let mut newest: BTreeMap<(&str, &str, &str, &str), &Candidate> = BTreeMap::new();
+    let mut newest: BTreeMap<(&str, &str, &str, &str, &str), &Candidate> = BTreeMap::new();
     for candidate in candidates {
         let slot = newest
             .entry((
@@ -119,34 +147,38 @@ pub fn evaluate(candidates: &[Candidate]) -> Vec<Found> {
                 candidate.advisory_id.as_str(),
                 candidate.name.as_str(),
                 candidate.fixed_arch.as_str(),
+                candidate.introduced.as_deref().unwrap_or(""),
             ))
             .or_insert(candidate);
-        if compare_evr(key(&candidate.installed), key(&slot.installed)).is_gt() {
+        if compare(&candidate.scheme, &candidate.installed, &slot.installed).is_gt() {
             *slot = candidate;
         }
     }
     // Affected packages per (host, advisory), one entry per package name,
     // each with whether only a reboot is missing.
     let mut affected: BTreeMap<(&str, &str), BTreeMap<&str, Entry>> = BTreeMap::new();
-    for ((agent, advisory, name, _), candidate) in newest {
-        let fixed = key(&candidate.fixed);
-        let update = compare_evr(key(&candidate.installed), fixed).is_lt();
+    for ((agent, advisory, name, _, _), candidate) in newest {
+        let update = in_range(candidate, &candidate.installed);
+        // A kernel fix counts once it runs (protocol P9).
         let running = candidate
-            .running_kernel
+            .fixed
             .as_deref()
-            .filter(|_| is_kernel(name))
-            .and_then(running_evr)
-            .filter(|running| compare_evr(key(running), fixed).is_lt());
+            .filter(|_| is_kernel(name) && candidate.scheme == "rpm")
+            .and_then(|fixed| {
+                let running = running_evr(candidate.running_kernel.as_deref()?)?;
+                let running = format!("{}:{}-{}", running.0, running.1, running.2);
+                compare("rpm", &running, fixed).is_lt().then_some(running)
+            });
         if !update && running.is_none() {
             continue;
         }
         let mut entry = json!({
             "name": name,
-            "installed": evr(&candidate.installed),
-            "fixed": evr(&candidate.fixed),
+            "installed": candidate.installed,
+            "fixed": candidate.fixed,
         });
         if let Some(running) = &running {
-            entry["running"] = evr(running).into();
+            entry["running"] = running.clone().into();
         }
         affected
             .entry((agent, advisory))

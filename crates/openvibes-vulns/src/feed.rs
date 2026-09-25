@@ -124,12 +124,12 @@ pub fn to_store(advisory: &Advisory) -> NewAdvisory {
         packages: advisory
             .packages
             .iter()
-            .map(|p| FixedRow {
-                name: p.name.clone(),
-                arch: p.arch.clone(),
-                epoch: i32::try_from(p.epoch).unwrap_or(i32::MAX),
-                version: p.version.clone(),
-                release: p.release.clone(),
+            .map(|p| {
+                FixedRow::rpm(
+                    &p.name,
+                    &p.arch,
+                    &format!("{}:{}-{}", p.epoch, p.version, p.release),
+                )
             })
             .collect(),
     }

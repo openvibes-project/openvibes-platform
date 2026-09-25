@@ -86,13 +86,11 @@ fn advisory(id: &str, name: &str, epoch: i32, version: &str, arch: &str) -> NewA
         updated_at: Some(Utc::now() - Duration::days(1)),
         url: format!("https://bodhi.fedoraproject.org/updates/{id}"),
         cves: vec!["CVE-2026-0001".into()],
-        packages: vec![FixedRow {
-            name: name.into(),
-            arch: arch.into(),
-            epoch,
-            version: version.into(),
-            release: "1.fc44".into(),
-        }],
+        packages: vec![FixedRow::rpm(
+            name,
+            arch,
+            &format!("{epoch}:{version}-1.fc44"),
+        )],
     }
 }
 

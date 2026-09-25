@@ -12,19 +12,39 @@ mod summary;
 pub use feeds::*;
 pub use summary::{Summary, summary};
 
-/// A package version that fixes an advisory.
+/// A package an advisory affects, and the version range affected.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FixedRow {
-    /// Package name.
+    /// Package name: a binary package, or a Debian source package.
     pub name: String,
-    /// Architecture (`noarch` fixes every architecture).
+    /// Architecture (`noarch` fixes every architecture; empty for source).
     pub arch: String,
-    /// Epoch.
-    pub epoch: i32,
-    /// Version.
-    pub version: String,
-    /// Release.
-    pub release: String,
+    /// `rpm` (`[E:]V-R`) or `dpkg` (`[E:]upstream[-revision]`).
+    pub scheme: String,
+    /// `binary`, or `source` (matched against dpkg source packages).
+    pub match_on: String,
+    /// First affected version; `None` for every version before the fix.
+    pub introduced: Option<String>,
+    /// First fixed version; `None` when no fix is known.
+    pub fixed: Option<String>,
+    /// Last affected version, when no fix is named.
+    pub last_affected: Option<String>,
+}
+
+impl FixedRow {
+    /// A binary RPM fixed in `fixed` (`E:V-R`), affected before it.
+    #[must_use]
+    pub fn rpm(name: &str, arch: &str, fixed: &str) -> Self {
+        Self {
+            name: name.to_owned(),
+            arch: arch.to_owned(),
+            scheme: "rpm".to_owned(),
+            match_on: "binary".to_owned(),
+            introduced: None,
+            fixed: Some(fixed.to_owned()),
+            last_affected: None,
+        }
+    }
 }
 
 /// An advisory to store.
@@ -104,14 +124,10 @@ pub async fn replace_advisories(
         )
         .await?;
     let (mut cve_ids, mut cves) = (Vec::new(), Vec::new());
-    let (mut pkg_ids, mut names, mut arches, mut epochs, mut versions, mut releases) = (
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-    );
+    let mut pkg_ids = Vec::new();
+    let (mut names, mut arches, mut schemes, mut matches) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut introduced, mut fixed, mut last) = (Vec::new(), Vec::new(), Vec::new());
     for advisory in advisories {
         for cve in &advisory.cves {
             cve_ids.push(advisory.advisory_id.as_str());
@@ -121,9 +137,11 @@ pub async fn replace_advisories(
             pkg_ids.push(advisory.advisory_id.as_str());
             names.push(package.name.as_str());
             arches.push(package.arch.as_str());
-            epochs.push(package.epoch);
-            versions.push(package.version.as_str());
-            releases.push(package.release.as_str());
+            schemes.push(package.scheme.as_str());
+            matches.push(package.match_on.as_str());
+            introduced.push(package.introduced.as_deref());
+            fixed.push(package.fixed.as_deref());
+            last.push(package.last_affected.as_deref());
         }
     }
     transaction
@@ -135,10 +153,21 @@ pub async fn replace_advisories(
         .await?;
     transaction
         .execute(
-            "INSERT INTO advisory_packages (advisory_id, name, arch, epoch, version, release)
-             SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::int[], $5::text[], $6::text[])
+            "INSERT INTO advisory_packages (advisory_id, name, arch, scheme, match_on,
+                 introduced, fixed, last_affected)
+             SELECT * FROM unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::text[],
+                                  $6::text[], $7::text[], $8::text[])
              ON CONFLICT DO NOTHING",
-            &[&pkg_ids, &names, &arches, &epochs, &versions, &releases],
+            &[
+                &pkg_ids,
+                &names,
+                &arches,
+                &schemes,
+                &matches,
+                &introduced,
+                &fixed,
+                &last,
+            ],
         )
         .await?;
     transaction.commit().await?;
@@ -161,10 +190,16 @@ pub struct Candidate {
     pub name: String,
     /// Fixed package's architecture.
     pub fixed_arch: String,
-    /// Fixed epoch, version, release.
-    pub fixed: (i32, String, String),
-    /// Installed epoch, version, release.
-    pub installed: (i32, String, String),
+    /// `rpm` or `dpkg`: how the versions compare.
+    pub scheme: String,
+    /// First affected version, when the range starts later.
+    pub introduced: Option<String>,
+    /// First fixed version; `None` when no fix is known.
+    pub fixed: Option<String>,
+    /// Last affected version, when no fix is named.
+    pub last_affected: Option<String>,
+    /// Installed full version (`E:V-R` for rpm).
+    pub installed: String,
     /// The host's running kernel (`uname -r`), when reported.
     pub running_kernel: Option<String>,
 }
@@ -177,7 +212,7 @@ pub async fn release_hosts(
 ) -> Result<Vec<String>, StoreError> {
     Ok(client
         .query(
-            "SELECT agent_id FROM agents WHERE os_id = $1 AND os_version = $2 ORDER BY 1",
+            "SELECT agent_id FROM agents WHERE os_id = $1 AND os_release = $2 ORDER BY 1",
             &[&os_id, &os_version],
         )
         .await?
@@ -195,8 +230,9 @@ pub async fn candidates(
 ) -> Result<Vec<Candidate>, StoreError> {
     let rows = client
         .query(
-            "SELECT h.agent_id, ap.advisory_id, ap.name, ap.arch, ap.epoch, ap.version,
-                    ap.release, pv.epoch, pv.version, pv.release, g.running_kernel
+            "SELECT h.agent_id, ap.advisory_id, ap.name, ap.arch, ap.scheme, ap.introduced,
+                    ap.fixed, ap.last_affected,
+                    pv.epoch || ':' || pv.version || '-' || pv.release, g.running_kernel
              FROM advisories a
              JOIN advisory_packages ap ON ap.advisory_id = a.advisory_id
              JOIN package_versions pv ON pv.name = ap.name
@@ -204,7 +240,8 @@ pub async fn candidates(
              JOIN host_packages h ON h.package_version_id = pv.id
              JOIN agents g ON g.agent_id = h.agent_id
              WHERE a.os_id = $1 AND a.os_version = $2
-               AND g.os_id = $1 AND g.os_version = $2
+               AND g.os_id = $1 AND g.os_release = $2
+               AND ap.match_on = 'binary' AND ap.scheme = 'rpm'
                AND h.agent_id = ANY($3)",
             &[&os_id, &os_version, &agents],
         )
@@ -216,9 +253,12 @@ pub async fn candidates(
             advisory_id: row.get(1),
             name: row.get(2),
             fixed_arch: row.get(3),
-            fixed: (row.get(4), row.get(5), row.get(6)),
-            installed: (row.get(7), row.get(8), row.get(9)),
-            running_kernel: row.get(10),
+            scheme: row.get(4),
+            introduced: row.get(5),
+            fixed: row.get(6),
+            last_affected: row.get(7),
+            installed: row.get(8),
+            running_kernel: row.get(9),
         })
         .collect())
 }
@@ -230,8 +270,8 @@ pub async fn host_release(
 ) -> Result<Option<(String, String)>, StoreError> {
     let row = client
         .query_opt(
-            "SELECT os_id, os_version FROM agents WHERE agent_id = $1
-               AND os_id IS NOT NULL AND os_version IS NOT NULL",
+            "SELECT os_id, os_release FROM agents WHERE agent_id = $1
+               AND os_id IS NOT NULL AND os_release IS NOT NULL",
             &[&agent_id],
         )
         .await?;
