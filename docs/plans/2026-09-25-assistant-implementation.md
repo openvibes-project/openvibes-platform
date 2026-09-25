@@ -102,6 +102,11 @@ and GPU, then an own server in AS6). External providers and pseudonymization
   are ready for an operator to run.
 
 ### Task AS4: console integration (Codex, after C3)
+
+Detailed plan for Codex: `docs/plans/2026-09-25-assistant-as4-console.md`
+(AS4a storage, AS4b configuration and runtime, AS4c routes and audit, AS4d
+panel, AS4e end to end). The items below summarise it.
+
 - [ ] Migration: `assistant_conversations` and `assistant_messages`
   (owner principal, created, retention), private to their user; lookup
   records per message (name, arguments, object IDs).
