@@ -23,17 +23,18 @@
 - Over 5,000 changed records falls back to the release's `all.zip` (D4 test).
 
 ### D0: protocol P10 and the agent
-- [ ] Protocol: schema and spec for `source`, `source_version`; valid and invalid fixtures.
+- [x] (protocol #12, agent #11; amended for RPM: protocol #13, agent #12)
+- [x] Protocol: schema and spec for `source`, `source_version`; valid and invalid fixtures.
 - [ ] Agent: the dpkg collector reads `Source:` (name, and version in parentheses when present); tests on a real Debian status file excerpt; the report carries them; docs.
 
 ### D1: dpkg version order
-- [ ] `dpkgver::compare` with dpkg's own test vectors; cross-check of a few thousand real version pairs against `dpkg --compare-versions` in a Debian container; an example binary like `vercmp`.
+- [x] (platform #27) `dpkgver::compare` with dpkg's own test vectors; cross-check of a few thousand real version pairs against `dpkg --compare-versions` in a Debian container; an example binary like `vercmp`.
 
-### D2: OSV parser, store, Rocky and Alma
-- [ ] `osv::parse` over trimmed real Rocky, Alma, Debian and Ubuntu records; migration 0013 (`introduced`, `last_affected`, nullable fixed, name kind); advisory ids `ID/source`; import of an `all.zip` filtered to releases; Rocky and Alma matching through the RPM path; tests first.
+### D2: OSV parser, store, Rocky and Alma (with D3 in one change)
+- [x] `osv::parse` over trimmed real Rocky, Alma, Debian and Ubuntu records; migration 0013 (`introduced`, `last_affected`, nullable fixed, name kind); advisory ids `ID/source`; import of an `all.zip` filtered to releases; Rocky and Alma matching through the RPM path; tests first.
 
 ### D3: Debian and Ubuntu matching
-- [ ] Group installed binaries by source; newest source version; ranges with `introduced`, `fixed`, `last_affected`; "no fix available" rows; `vulns list`/`summary` show it; tests first; a real Debian 12 dump against a real status file.
+- [x] Group installed binaries by source; newest source version; ranges with `introduced`, `fixed`, `last_affected`; "no fix available" rows; `vulns list`/`summary` show it; tests first; a real Debian 12 dump against a real status file.
 
 ### D4: fetching, NVD scope, CLI, docs
 - [ ] First import from `all.zip`; hourly `modified_id.csv` (ETag) and changed records; fallback over 5,000; host release mapping; `feeds import FILE --source debian-12`; NVD backfill limited to open vulnerabilities' CVEs; local-server tests; a live check; component docs.

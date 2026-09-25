@@ -21,6 +21,10 @@ pub struct PackageRow {
     pub release: String,
     /// Architecture; empty when absent.
     pub arch: String,
+    /// Source package when it differs from the binary's name (protocol P10).
+    pub source: Option<String>,
+    /// dpkg: the source's full version when it differs (a binNMU).
+    pub source_version: Option<String>,
 }
 
 /// Outcome of [`replace`].
@@ -65,13 +69,29 @@ pub async fn replace(
     let releases = column(|p| &p.release);
     let arches = column(|p| &p.arch);
     let epochs: Vec<i32> = packages.iter().map(|p| p.epoch).collect();
+    let sources: Vec<Option<&str>> = packages.iter().map(|p| p.source.as_deref()).collect();
+    let source_versions: Vec<Option<&str>> = packages
+        .iter()
+        .map(|p| p.source_version.as_deref())
+        .collect();
     // Insert unknown versions, then link the host to every listed version.
     transaction
         .execute(
-            "INSERT INTO package_versions (manager, name, epoch, version, release, arch)
-             SELECT * FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[], $6::text[])
+            "INSERT INTO package_versions (manager, name, epoch, version, release, arch,
+                 source, source_version)
+             SELECT * FROM unnest($1::text[], $2::text[], $3::int[], $4::text[], $5::text[],
+                                  $6::text[], $7::text[], $8::text[])
              ON CONFLICT DO NOTHING",
-            &[&managers, &names, &epochs, &versions, &releases, &arches],
+            &[
+                &managers,
+                &names,
+                &epochs,
+                &versions,
+                &releases,
+                &arches,
+                &sources,
+                &source_versions,
+            ],
         )
         .await?;
     transaction
@@ -84,11 +104,22 @@ pub async fn replace(
         .execute(
             "INSERT INTO host_packages (agent_id, package_version_id)
              SELECT DISTINCT $1::text, v.id
-             FROM unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[])
-                 AS i(manager, name, epoch, version, release, arch)
-             JOIN package_versions v USING (manager, name, epoch, version, release, arch)",
+             FROM unnest($2::text[], $3::text[], $4::int[], $5::text[], $6::text[], $7::text[],
+                         $8::text[], $9::text[])
+                 AS i(manager, name, epoch, version, release, arch, source, source_version)
+             JOIN package_versions v USING (manager, name, epoch, version, release, arch)
+             WHERE v.source IS NOT DISTINCT FROM i.source
+               AND v.source_version IS NOT DISTINCT FROM i.source_version",
             &[
-                &agent_id, &managers, &names, &epochs, &versions, &releases, &arches,
+                &agent_id,
+                &managers,
+                &names,
+                &epochs,
+                &versions,
+                &releases,
+                &arches,
+                &sources,
+                &source_versions,
             ],
         )
         .await?;

@@ -60,6 +60,8 @@ fn package(name: &str, version: &str, release: &str) -> PackageRow {
         version: version.into(),
         release: release.into(),
         arch: "x86_64".into(),
+        source: None,
+        source_version: None,
     }
 }
 

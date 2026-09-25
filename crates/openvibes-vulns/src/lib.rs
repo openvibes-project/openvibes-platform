@@ -10,6 +10,7 @@ pub mod enrich;
 pub mod feed;
 pub mod fetch;
 pub mod matching;
+pub mod osv;
 pub mod repodata;
 pub mod rpmver;
 pub mod service;
