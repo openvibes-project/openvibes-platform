@@ -45,7 +45,7 @@ async fn migration_applies_once_and_is_idempotent() {
 }
 
 #[tokio::test]
-async fn schema_eleven_upgrades_to_sixteen() {
+async fn schema_eleven_upgrades_to_eighteen() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     client

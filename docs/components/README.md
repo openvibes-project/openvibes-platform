@@ -7,7 +7,7 @@ behaviour, and how to test. Updated in the same change as the component.
 |---|---|---|---|
 | `platform-config` | library | built (PM0) | [platform-config.md](platform-config.md) |
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
-| `platform-store` | library | schema 17, vulnerability data/enrichment, rule distribution, console identity/sessions, triage, partitions, status, tokens, agents, CA certificates (PM1, PM2, VM0–VM5, C2, C3) | [platform-store.md](platform-store.md) |
+| `platform-store` | library | schema 18, OSV packages, vulnerability data/enrichment, rule distribution, console identity/sessions, triage, partitions, status, tokens, agents, CA certificates (PM1, PM2, VM0–VM5, OSV D2–D3, C2, C3) | [platform-store.md](platform-store.md) |
 | `platform_store::console_auth` | module | local identity/session store, access inventory, asset-group/tag changes, enrollment tokens, and service-account bearer tokens (C3) | [console-auth-store.md](console-auth-store.md) |
 | `platform_store::console_read` | module | bounded, cursor-paginated console read models and SQL-enforced scoped agent reads (C2/C3) | [console-read.md](console-read.md) |
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |

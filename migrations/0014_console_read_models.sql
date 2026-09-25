@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 13: keep latest-finding display data
+-- OpenVIBES platform schema version 14: keep latest-finding display data
 -- independent of the retention window for partitioned history.
 ALTER TABLE current_findings
     ADD COLUMN last_observed_day date,

@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 17: retain triage assignments, risk
+-- OpenVIBES platform schema version 18: retain triage assignments, risk
 -- expiry, and detector version in the immutable transition history.
 ALTER TABLE console_finding_triage_history
     ADD COLUMN assigned_to uuid REFERENCES console_users,
