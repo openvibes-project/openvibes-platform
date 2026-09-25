@@ -189,6 +189,19 @@ release advisories use: the major version for Rocky and Alma. Candidates
 match a source entry against every binary built from it; the installed
 version is the binary's, or a dpkg binNMU's source version. `summary`
 counts open ones with no fix yet.
+## Assistant lookups (`assistant::…`)
+
+Read-only queries for the console's assistant (assistant spec §5). Each
+takes an `AgentScope` (`All`, or `Only(agent IDs)`, resolved by the console
+from the user's asset scope) that applies in SQL to items and counts alike,
+a `limit` (1–100), and returns the total so callers can say what was left
+out: `finding_groups` (one row per rule set and rule, console decision 18;
+text filter on rule, rule set, and latest message with `LIKE` wildcards
+escaped; minimum severity), `finding_endpoints` (in-window endpoints and the
+count not seen in the window), `agent_summaries` (by agent ID or
+case-insensitive host name), `host_vulnerabilities` (open, by priority),
+`vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
+unrecognised severity reports `unknown`. Nothing writes.
 
 ## Audit log
 

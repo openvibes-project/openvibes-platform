@@ -12,7 +12,8 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform_store::console_read` | module | bounded, cursor-paginated console read models and SQL-enforced scoped agent reads (C2/C3) | [console-read.md](console-read.md) |
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |
 | `platform-agent-server` | library | shared agent-facing server: TLS, auth, limits, logs, health, drain (SP2 DM0) | [platform-agent-server.md](platform-agent-server.md) |
-| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); local console user bootstrap and administration (C3) | [openvibes-admin.md](openvibes-admin.md) |
+| `platform-assistant` | library | assistant configuration, OpenAI-compatible backend client, capability probe (AS1); scoped lookups, orchestrator, output sanitising (AS2); evaluation fleet, question set, gate (AS3) | [platform-assistant.md](platform-assistant.md) |
+| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); assistant check, eval (AS3); local console user bootstrap and administration (C3) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |
 | `openvibes-vulns` | service (health 18483) and library | Fedora advisories fetched and verified hourly, exact RPM version matching, vulnerability lifecycle (VM2) | [openvibes-vulns.md](openvibes-vulns.md) |
