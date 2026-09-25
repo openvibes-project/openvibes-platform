@@ -21,6 +21,7 @@ ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
 quick-xml = "0.42.0"
 ruzstd = "0.9.0"
 flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate-flate2"] }
 
 [dev-dependencies]
 deadpool-postgres.workspace = true

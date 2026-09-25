@@ -9,7 +9,7 @@ rust-version = "1.95"
 license = "MIT"
 
 [workspace.dependencies]
-openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "b85d0699d5856bf298e73f221056be8f1d3a33e0" }
+openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "e1005ff7bba5b4d616a000d8996931c5b4b55293" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 toml = { version = "1.1.6", default-features = false, features = ["std", "serde", "parse"] }
@@ -31,8 +31,8 @@ rustls = { version = "0.23.45", default-features = false, features = ["ring", "s
 tower = { version = "0.5", default-features = false, features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }
-openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "b85d0699d5856bf298e73f221056be8f1d3a33e0" }
-openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "b85d0699d5856bf298e73f221056be8f1d3a33e0" }
+openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "e1005ff7bba5b4d616a000d8996931c5b4b55293" }
+openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "e1005ff7bba5b4d616a000d8996931c5b4b55293" }
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
 sha2 = { version = "0.11", default-features = false }
 

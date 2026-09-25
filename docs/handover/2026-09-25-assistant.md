@@ -33,8 +33,9 @@ Each branch contains the one before it. The PR is for the top one
 5. `as5-openvibes-llm`, 15ebd70 and this handover: `openvibes-llm` RPM,
    `assistant model install`, the pinned `llama-server` build
 
-`origin/main` (6544dab, schema 12) is merged into `as5-openvibes-llm`;
-the one conflict, `docs/components/platform-store.md`, keeps both sections.
+`origin/main` (b340fc6, schema 13) is merged into `as5-openvibes-llm`;
+the conflicts, both in `docs/components/platform-store.md`, keep both
+sections (the vulnerability schema paragraphs, then "## Assistant lookups").
 The lower branches are not updated; use the PR. The stack adds no
 migrations.
 
@@ -46,11 +47,9 @@ PostgreSQL 16 and cannot reach the PostgreSQL apt repository.
 
 - Read the AS4 plan first. It lists what `platform-assistant` gives you
   and the review focus.
-- **Migration numbers:** `main` is at **0012**, so the next free number is
-  **0013**. The AS4 plan and the console specs on `console-current` now say
-  so; `console-current` has `main` merged in.
-  **Collision:** the OSV plan (`docs/plans/2026-09-25-osv-distributions.md`,
-  task D2) also plans 0013. Whichever merges second renumbers.
+- **Migration numbers:** `main` is at **0013** (OSV D2+D3 merged), so the
+  next free number is **0014**. The AS4 plan and the console specs on
+  `console-current` say so.
 - `ConsoleConfig` denies unknown fields, so add
   `assistant: Option<AssistantConfig>`.
 - **Backend key with `openvibes-llm`:** add

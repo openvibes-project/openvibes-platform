@@ -81,6 +81,8 @@ fn wordpress() -> PackageRow {
         version: "6.9.6".into(),
         release: "1.fc44".into(),
         arch: "noarch".into(),
+        source: None,
+        source_version: None,
     }
 }
 

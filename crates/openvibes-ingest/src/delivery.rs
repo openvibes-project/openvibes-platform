@@ -190,6 +190,8 @@ pub(crate) async fn inventory(
             version: package.version.clone(),
             release: package.release.clone().unwrap_or_default(),
             arch: package.arch.clone().unwrap_or_default(),
+            source: package.source.clone(),
+            source_version: package.source_version.clone(),
         })
         .collect();
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;

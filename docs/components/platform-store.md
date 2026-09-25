@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 12; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 13; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -178,6 +178,17 @@ Schema 12 grants `openvibes_vulns` `MAINTAIN` on the tables it bulk-loads
 (PostgreSQL 17 or later), so `replace_advisories` can `ANALYZE` them.
 `vulns::list` combines each advisory's CVEs and enrichment once, then
 sorts and limits (0.63 s at 244,000 open vulnerabilities).
+
+Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
+each range as whole version strings with its `scheme` (`rpm` or `dpkg`),
+`match_on` (`binary`, or `source`), `introduced`, `fixed` (null: no fix
+known) and `last_affected`; Fedora's rows were converted. `package_versions`
+gains `source` and `source_version` (protocol P10), part of the unique key
+so ingest still only inserts. `agents.os_release` (generated) is the
+release advisories use: the major version for Rocky and Alma. Candidates
+match a source entry against every binary built from it; the installed
+version is the binary's, or a dpkg binNMU's source version. `summary`
+counts open ones with no fix yet.
 
 ## Assistant lookups (`assistant::…`)
 

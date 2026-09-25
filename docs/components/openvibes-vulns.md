@@ -15,6 +15,30 @@ the offline core used by `openvibes-admin feeds import` and the
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.
+- `osv::{Release, parse, advisory, advisories_from_zip, import}` (OSV spec
+  2026-09-25) — Rocky Linux, AlmaLinux, Debian and Ubuntu from OSV.dev.
+  `Release` is `rocky-9`, `almalinux-9`, `debian-12` or `ubuntu-24.04`
+  (hosts' os-release, RHEL rebuilds by major version); imports read the
+  whole ecosystem's `all.zip` (OSV's per-release files stopped in 2024)
+  and keep that release. One advisory per record and release
+  (`DEBIAN-CVE-2024-1234/debian-12`), from the distribution's own record
+  kind only (Debian `DEBIAN-CVE`, Ubuntu `UBUNTU-CVE`, Rocky `RLSA`, Alma
+  `ALSA`; repeating notices skipped); entries Debian marks `unimportant`
+  or Ubuntu `negligible` are skipped. Ranges keep `introduced`, `fixed`
+  and `last_affected`; no fixed version means "no fix available". Debian,
+  Ubuntu and Rocky name **source** packages (matched against the source
+  hosts report, protocol P10), Alma binaries. Records are read one by one
+  (4 MiB each, 8 GiB in total at most); an unreadable record is skipped
+  and counted. Real systems: Rocky 9.8, 40 of `dnf updateinfo
+  --security`'s 40 advisories; Debian 12, all 156 CVEs `debsecan` lists
+  plus 8 Debian's tracker marks vulnerable; Debian's full file (46,222
+  advisories for 12) imports and matches in 6 s.
+- `dpkgver::compare` — Debian version order, exactly dpkg's
+  (`[epoch:]upstream[-revision]`; `~` before everything, letters before
+  other symbols, digit runs numerically). The `dpkgcmp` example agrees with
+  `dpkg --compare-versions` (Debian 12) on 4,000 real version pairs from
+  Debian's OSV data and an installed system, malformed ones included. Used
+  for Debian and Ubuntu (OSV spec 2026-09-25).
 - `updateinfo::{read, read_zstd}` — streaming parse of Fedora's
   `updateinfo.xml[.zst]`: security advisories only; CVEs from reference
   titles and descriptions; severity (`None` → unrated); fixed binary
