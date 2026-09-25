@@ -6,7 +6,7 @@ import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
 import { AccessControlReadPage, AgentsReadPage, AuditEventsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
-import { navigationGroups, resolvePage } from "./navigation";
+import { canOpenPage, resolvePage, visibleNavigationGroups } from "./navigation";
 import { EnrollmentPage } from "./Enrollment";
 import { ServiceAccountsPage } from "./ServiceAccounts";
 import { RuleSetsPage } from "./RuleSets";
@@ -28,6 +28,9 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
     seeded ? "authenticated" : "checking",
   );
   const [logoutError, setLogoutError] = useState(false);
+  const capabilities = session?.capabilities ?? [];
+  const navigation = visibleNavigationGroups(capabilities, seeded);
+  const pageAllowed = page !== undefined && canOpenPage(path, capabilities, seeded);
 
   useEffect(() => {
     document.title = path === "/login"
@@ -103,7 +106,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
         </div>
 
         <nav id="primary-navigation" className="navigation" aria-label="Console">
-          {navigationGroups.map((group) => (
+          {navigation.map((group) => (
             <section className="navigation__group" key={group.label} aria-labelledby={`nav-${group.label}`}>
               <h2 id={`nav-${group.label}`} className="navigation__heading">
                 {group.label}
@@ -158,6 +161,13 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               <p className="eyebrow">Navigation</p>
               <h1 id="page-title">Page not found</h1>
               <p>The requested console page does not exist.</p>
+              <a className="button-link" href="/">Return to Overview</a>
+            </section>
+          ) : !pageAllowed ? (
+            <section className="page page--not-found" aria-labelledby="page-title">
+              <p className="eyebrow">Access restricted</p>
+              <h1 id="page-title">You do not have access to this page</h1>
+              <p>Your current role does not include permission to view {page.title.toLowerCase()}.</p>
               <a className="button-link" href="/">Return to Overview</a>
             </section>
           ) : (

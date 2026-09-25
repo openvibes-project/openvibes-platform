@@ -173,7 +173,7 @@ Verification:
 
 Goal: production local username/password login and server-enforced, auditable
 permissions. The console serves pre-auth, login, session, and logout against
-the database when paired auth configuration is present, checks for schema 16
+the database when paired auth configuration is present, checks for schema 17
 at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
 failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
 and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct
@@ -186,7 +186,7 @@ validation, and revokes the session on sign out. The health listener refreshes
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add append-only migrations starting at 0012 (main uses 0007–0011 for
+- add append-only migrations starting at 0013 (main uses 0007–0012 for
   vulnerability management, and 0006 remains sub-project 2's rule tables): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;

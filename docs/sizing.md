@@ -94,14 +94,16 @@ hosts, feed recorded current only after its match):
 Findings (second run first):
 - **Fixed:** matching in batches of 500 hosts re-matches all 10,000 in
   38 s, well inside the hourly interval.
-- **Still failing, first import only:** the import right after the feed's
-  first arrival timed out, while the re-match minutes later succeeded.
-  Likely cause (not confirmed): no planner statistics yet for the newly
-  inserted advisory rows. The failed import is now recorded as failed, so
-  the next check retries it.
-- **Still failing: `vulns list` without filters** at 244,000 open
-  vulnerabilities: the priority query aggregates every open row before
-  its limit. Filtered lists (`--host`) and `summary` (0.6 s) work.
+- **Fixed in a third run:** the first import after a feed's arrival had
+  timed out because the newly inserted advisory rows had no planner
+  statistics; the import now runs `ANALYZE` on the advisory tables
+  (schema 12 grants `openvibes_vulns` `MAINTAIN`). Third run: feed import
+  plus match of all 10,000 hosts in 31.6 s (244,000 open), re-match
+  29.7 s, `match_host` 14 ms.
+- **Fixed in a third run:** `vulns list` without filters had timed out at
+  244,000 open vulnerabilities because it combined every row's CVEs and
+  enrichment; it now combines each advisory's once. Third run: 0.63 s for
+  the first 10,000 by priority; `--host` 36 ms; `summary` 0.8 s.
 - **Found in the first run:** matching a whole release did not scale past a few thousand hosts.
   The candidates query covers every host at once and exceeds the 10 s
   statement timeout at 10,000 hosts. Per-host matching (after an inventory
@@ -173,11 +175,9 @@ the last one. Retention days scale the 90-day column linearly.
 
 ## Open questions
 
-- **Vulnerability management at fleet scale:** still open are the first
-  import's timeout (check whether an explicit `ANALYZE` of the advisory
-  tables after import fixes it) and `vulns list` without filters at
-  hundreds of thousands of open vulnerabilities (rank and limit before
-  aggregating). Storage (6.7 GB per 10,000 hosts) is accepted for now.
+- **Vulnerability management storage:** 6.7 GB per 10,000 hosts for
+  package links, accepted for now; a compact per-host form would cut it
+  about twentyfold.
 
 - **Real finding rate:** the rate of a real fleet is unknown. The disk table
   brackets it; measure it on the first real deployment.

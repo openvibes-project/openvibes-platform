@@ -19,7 +19,7 @@ to `openvibes-admin tui`.
 The design is approved. C0 and C1 are complete. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 16, and serves
+the executable connects to PostgreSQL, requires schema version 17, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -139,7 +139,7 @@ origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at 
 configuration"), and `run` refuses a listener that is not loopback even if
 bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
-1.3 only with a 10-second deadline. Startup checks that the database is already at schema 16; it
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 17; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -220,7 +220,11 @@ of local configuration, TLS files, the local account, and its active session.
 - The embedded UI requests the current session without caching, gates
   application routes unless that request succeeds, obtains one-use pre-auth
   state before enabling local login, and sends logout with the synchronizer
-  CSRF token. It never reads the opaque session cookie.
+  CSRF token. It never reads the opaque session cookie. Navigation entries are
+  shown only when the current session has a matching read capability (and
+  global scope where required); direct navigation to a restricted page shows
+  an access-denied screen. The loopback seeded demo applies the same visibility
+  rules to its selected persona. API handlers remain the authorization boundary.
 - The full Content Security Policy is enforced on every public response,
   including `frame-ancestors 'none'`; `X-Frame-Options: DENY` is also set.
 - A wrong method on an API route is a 405 Problem Details response with

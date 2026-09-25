@@ -761,20 +761,11 @@ async fn access_inventory(headers: HeaderMap) -> Response {
         })
     };
     let roles = vec![
-        role(
-            "viewer",
-            "Viewer",
-            &["agents.read", "findings.read", "rules.read"],
-        ),
+        role("viewer", "Viewer", &["agents.read", "findings.read"]),
         role(
             "analyst",
             "Analyst",
-            &[
-                "agents.read",
-                "findings.read",
-                "findings.triage",
-                "rules.read",
-            ],
+            &["agents.read", "findings.read", "findings.triage"],
         ),
         role(
             "operator",
@@ -783,7 +774,6 @@ async fn access_inventory(headers: HeaderMap) -> Response {
                 "agents.read",
                 "agents.revoke",
                 "findings.read",
-                "rules.read",
                 "rules.upload",
                 "tokens.read",
                 "tokens.create",

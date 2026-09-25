@@ -53,27 +53,11 @@ jobs:
           cache: npm
           cache-dependency-path: crates/openvibes-console/web/package-lock.json
 
-      # The agent (openvibes-core) and protocol (fixtures) repositories are
-      # private. Each has its own fine-grained, read-only token, used only
-      # for that repository's URL and verbatim, so GitHub's log masking holds.
-      # The tokens live in a temporary git config for this step alone: every
-      # fetch that needs them happens here, and later steps (whose build
-      # scripts and tests run third-party code) build offline without them.
-      - name: Fetch private dependencies
+      # Every fetch happens here; later steps (whose build scripts and tests
+      # run third-party code) build offline.
+      - name: Fetch dependencies
         shell: bash
-        env:
-          AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
-          PROTOCOL_TOKEN: ${{ secrets.OPENVIBEPROTOCOL }}
         run: |
-          if [ -z "$AGENT_TOKEN" ] || [ -z "$PROTOCOL_TOKEN" ]; then
-            echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
-            exit 1
-          fi
-          GIT_CONFIG_GLOBAL="$(mktemp)"
-          export GIT_CONFIG_GLOBAL
-          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
-          git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
-          git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
           cargo fetch --locked
 
@@ -159,26 +143,12 @@ jobs:
         with:
           node-version: 22.23.1
 
-      # As in the ubuntu job: the tokens exist only in this step's temporary
-      # git config; the pinned agent (a private git dependency) is built
-      # here too, and later steps build offline.
-      - name: Fetch private dependencies and build the pinned agent
+      # As in the ubuntu job, every fetch happens here; the pinned agent (a
+      # git dependency) is built here too, and later steps build offline.
+      - name: Fetch dependencies and build the pinned agent
         shell: bash
-        env:
-          AGENT_TOKEN: ${{ secrets.OPENVIBESAGENT }}
-          PROTOCOL_TOKEN: ${{ secrets.OPENVIBEPROTOCOL }}
         run: |
-          if [ -z "$AGENT_TOKEN" ] || [ -z "$PROTOCOL_TOKEN" ]; then
-            echo "::error::secrets OPENVIBESAGENT and OPENVIBEPROTOCOL must both be set"
-            exit 1
-          fi
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          GIT_CONFIG_GLOBAL="$(mktemp)"
-          export GIT_CONFIG_GLOBAL
-          trap 'rm -f "$GIT_CONFIG_GLOBAL"' EXIT
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          git config --global url."https://x-access-token:${AGENT_TOKEN}@github.com/openvibes-project/openvibes-agent".insteadOf "https://github.com/openvibes-project/openvibes-agent"
-          git config --global url."https://x-access-token:${PROTOCOL_TOKEN}@github.com/openvibes-project/openvibes-protocol".insteadOf "https://github.com/openvibes-project/openvibes-protocol"
           git submodule update --init
           cargo fetch --locked
           ROOT=$PWD; source scripts/integration-lib.sh

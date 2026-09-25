@@ -109,11 +109,11 @@ pub fn resolve_capabilities(bindings: &[RoleBinding]) -> Vec<EffectiveCapability
 fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
     use Permission as P;
     match role {
-        BuiltInRole::Viewer => matches!(permission, P::AgentsRead | P::FindingsRead | P::RulesRead),
+        BuiltInRole::Viewer => matches!(permission, P::AgentsRead | P::FindingsRead),
         BuiltInRole::Analyst => {
             matches!(
                 permission,
-                P::AgentsRead | P::FindingsRead | P::RulesRead | P::FindingsTriage
+                P::AgentsRead | P::FindingsRead | P::FindingsTriage
             )
         }
         BuiltInRole::Operator => matches!(
@@ -121,7 +121,6 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
             P::AgentsRead
                 | P::AgentsRevoke
                 | P::FindingsRead
-                | P::RulesRead
                 | P::TokensRead
                 | P::TokensCreate
                 | P::TokensRevoke

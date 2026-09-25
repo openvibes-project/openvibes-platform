@@ -169,7 +169,7 @@ Agents trust `root.crt` (their `platform_ca_file`).
 ## Console RPM setup
 
 The console RPM requires the platform database schema to be current through
-schema 16; those migrations create the least-privilege PostgreSQL role
+schema 17; those migrations create the least-privilege PostgreSQL role
 `openvibes_console`. Install the console RPM after the platform migrations so
 the matching operating-system user and database role can use PostgreSQL peer
 authentication. Its unit is disabled at install time.
