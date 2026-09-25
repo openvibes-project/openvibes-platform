@@ -1,10 +1,16 @@
 //! `/etc/openvibes/vulns.toml`.
 
-use std::{net::SocketAddr, path::Path};
+use std::{
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use serde::Deserialize;
 
-use crate::fetch::{self, EPSS_URL, FEDORA_METALINK, Fetcher, KEV_URL};
+use crate::{
+    fetch::{self, EPSS_URL, FEDORA_METALINK, Fetcher, KEV_URL},
+    sources::{EUVD_URL, NVD_URL},
+};
 
 fn default_health() -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], 18483))
@@ -23,6 +29,12 @@ fn default_kev() -> String {
 }
 fn default_epss() -> String {
     EPSS_URL.to_owned()
+}
+fn default_nvd() -> String {
+    NVD_URL.to_owned()
+}
+fn default_euvd() -> String {
+    EUVD_URL.to_owned()
 }
 fn default_download() -> u64 {
     64 << 20
@@ -59,6 +71,16 @@ pub struct VulnsConfig {
     /// FIRST EPSS scores URL (HTTPS); empty turns it off.
     #[serde(default = "default_epss")]
     pub epss_url: String,
+    /// NVD CVE API 2.0 URL (HTTPS); empty turns it off.
+    #[serde(default = "default_nvd")]
+    pub nvd_url: String,
+    /// File holding an NVD API key (raises the rate limit tenfold); must
+    /// not be readable by group or others.
+    #[serde(default)]
+    pub nvd_api_key_file: Option<PathBuf>,
+    /// ENISA EUVD search API URL (HTTPS); empty turns it off.
+    #[serde(default = "default_euvd")]
+    pub euvd_url: String,
 }
 
 impl VulnsConfig {
@@ -81,7 +103,7 @@ impl VulnsConfig {
         {
             return Err("arch must be an architecture name like x86_64".into());
         }
-        for url in [&self.kev_url, &self.epss_url] {
+        for url in [&self.kev_url, &self.epss_url, &self.nvd_url, &self.euvd_url] {
             if !url.is_empty() {
                 fetch::check_source_url(url)?;
             }

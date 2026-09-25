@@ -12,4 +12,5 @@ pub mod matching;
 pub mod repodata;
 pub mod rpmver;
 pub mod service;
+pub mod sources;
 pub mod updateinfo;

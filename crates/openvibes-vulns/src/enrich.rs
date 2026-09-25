@@ -11,6 +11,9 @@ use sha2::{Digest, Sha256};
 
 use crate::updateinfo::ParseError;
 
+mod nvd;
+pub use nvd::{Euvd, EuvdPage, Nvd, NvdPage, parse_euvd, parse_nvd};
+
 /// Largest EPSS file read once decompressed (the full file is 11 MB).
 pub const MAX_EPSS_OPEN: u64 = 128 << 20;
 
@@ -21,15 +24,21 @@ pub enum Source {
     Kev,
     /// FIRST Exploit Prediction Scoring System.
     Epss,
+    /// NIST National Vulnerability Database (CVSS, CWE, description).
+    Nvd,
+    /// ENISA EU Vulnerability Database (exploited list).
+    Euvd,
 }
 
 impl Source {
-    /// `kev` or `epss`.
+    /// `kev`, `epss`, `nvd`, or `euvd`.
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
             Self::Kev => "kev",
             Self::Epss => "epss",
+            Self::Nvd => "nvd",
+            Self::Euvd => "euvd",
         }
     }
 }
@@ -47,7 +56,9 @@ impl FromStr for Source {
         match value {
             "kev" => Ok(Self::Kev),
             "epss" => Ok(Self::Epss),
-            _ => Err("use kev or epss".into()),
+            "nvd" => Ok(Self::Nvd),
+            "euvd" => Ok(Self::Euvd),
+            _ => Err("use kev, epss, nvd, or euvd".into()),
         }
     }
 }
@@ -79,8 +90,9 @@ impl From<StoreError> for EnrichError {
     }
 }
 
-/// Imports a KEV or EPSS file and records the source's state. Returns the
-/// number of CVEs it lists. A failure is recorded on the source and changes
+/// Imports a KEV or EPSS file, an NVD response page, or an EUVD exploited
+/// list, and records the source's state. Returns the number of CVEs stored
+/// (for NVD, only CVEs advisories name are kept). A failure is recorded on the source and changes
 /// nothing else.
 pub async fn import(
     client: &mut Client,
@@ -101,6 +113,18 @@ pub async fn import(
             Ok(file) => enrichment::replace_epss(client, file.date, &file.scores)
                 .await
                 .map(|()| Ok(file.scores.len())),
+            Err(error) => Ok(Err(error)),
+        },
+        Source::Nvd => match parse_nvd(content) {
+            Ok(page) => enrichment::upsert_nvd(client, &page.entries, now)
+                .await
+                .map(|stored| Ok(usize::try_from(stored).unwrap_or(usize::MAX))),
+            Err(error) => Ok(Err(error)),
+        },
+        Source::Euvd => match parse_euvd(content) {
+            Ok(page) => enrichment::replace_euvd(client, &page.entries)
+                .await
+                .map(|()| Ok(page.entries.len())),
             Err(error) => Ok(Err(error)),
         },
     }?;

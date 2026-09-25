@@ -132,10 +132,15 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 8. Vulnerabilities (optional, `dnf install openvibes-vulns`): it needs no
    certificate. `openvibes-admin migrate` (schema 8) already created its
    database role. It reaches `mirrors.fedoraproject.org`, `www.cisa.gov`
-   (KEV) and `epss.empiricalsecurity.com` (EPSS) over HTTPS; behind a proxy
-   set `proxy_url` in `/etc/openvibes/vulns.toml`. Without network access,
-   set `kev_url = ""` and `epss_url = ""` and import files by hand
-   (`openvibes-admin feeds import FILE --source fedora-44-x86_64|kev|epss`,
+   (KEV), `epss.empiricalsecurity.com` (EPSS), `services.nvd.nist.gov`
+   (NVD) and `euvdservices.enisa.europa.eu` (EUVD) over HTTPS; behind a
+   proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. An NVD API key
+   (free) speeds the first NVD fill from about 95 to 10 minutes: put it in
+   `/etc/openvibes/nvd.key`, owned by `openvibes_vulns` with mode 0600
+   (a group- or world-readable key is refused), and set
+   `nvd_api_key_file`. Without network access, set the four `*_url` keys
+   to `""` and import files by hand (`openvibes-admin feeds import FILE
+   --source fedora-44-x86_64|kev|epss|nvd|euvd`,
    [openvibes-admin.md](openvibes-admin.md)).
    Then `systemctl enable --now openvibes-vulns` and check
    `curl http://127.0.0.1:18483/ready` → 200; `openvibes-admin feeds

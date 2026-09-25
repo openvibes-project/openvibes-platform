@@ -122,6 +122,37 @@ pub async fn set_feed_etag(
     Ok(())
 }
 
+/// A source's sync point (NVD: end of the last finished window).
+pub async fn feed_cursor(
+    client: &Client,
+    source: &str,
+) -> Result<Option<DateTime<Utc>>, StoreError> {
+    let row = client
+        .query_opt(
+            "SELECT cursor FROM feed_sources WHERE source = $1",
+            &[&source],
+        )
+        .await?;
+    Ok(row.and_then(|row| row.get(0)))
+}
+
+/// Sets a source's sync point, creating the source if needed.
+pub async fn set_feed_cursor(
+    client: &Client,
+    source: &str,
+    cursor: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "INSERT INTO feed_sources (source, os_id, os_version, arch, cursor)
+             VALUES ($1, 'cve', '', '', $2)
+             ON CONFLICT (source) DO UPDATE SET cursor = $2",
+            &[&source, &cursor],
+        )
+        .await?;
+    Ok(())
+}
+
 /// Records a check that found the content unchanged.
 pub async fn touch_feed(
     client: &Client,

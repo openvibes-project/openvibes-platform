@@ -107,8 +107,8 @@ wait_for "ingest ready" 30 'curl -fsS http://127.0.0.1:18480/ready'
 wait_for "distribution ready" 30 'curl -fsS http://127.0.0.1:18481/ready'
 
 # Vulnerabilities (VM): the service runs offline (its mirror list points at
-# a closed loopback port, so checks fail and are recorded, and KEV and EPSS
-# are turned off); an offline feed
+# a closed loopback port, so checks fail and are recorded, and KEV, EPSS,
+# NVD, EUVD are turned off); an offline feed
 # says bash is fixed in 999.0, above the container's bash. It is imported
 # before the agent enrolls, so the vulnerability can only open through the
 # service's re-match when the agent's inventory arrives.
@@ -130,7 +130,7 @@ cat > "$W/updateinfo-test.xml" <<'FEED'
 </updates>
 FEED
 in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' \
-             -e 's|^kev_url = .*|kev_url = \"\"|' -e 's|^epss_url = .*|epss_url = \"\"|' /etc/openvibes/vulns.toml &&
+             -e 's#^\(kev\|epss\|nvd\|euvd\)_url = .*#\1_url = \"\"#' /etc/openvibes/vulns.toml &&
       systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
 wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||

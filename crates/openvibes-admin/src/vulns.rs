@@ -9,7 +9,10 @@ use openvibes_vulns::{
     enrich,
     feed::{self, SourceId},
 };
-use platform_store::vulns::{self, ListFilter, VulnRow};
+use platform_store::{
+    enrichment::{self, CveDetail},
+    vulns::{self, ListFilter, VulnRow},
+};
 
 /// Largest feed file read (compressed or not).
 const MAX_FILE: u64 = 512 << 20;
@@ -21,7 +24,8 @@ pub enum FeedsCommand {
     Import {
         /// The feed file.
         file: PathBuf,
-        /// Source: fedora-RELEASE-ARCH (e.g. fedora-44-x86_64), kev, or epss.
+        /// Source: fedora-RELEASE-ARCH (e.g. fedora-44-x86_64), kev, epss,
+        /// nvd (an API response page), or euvd (its exploited list).
         #[arg(long)]
         source: String,
     },
@@ -89,7 +93,7 @@ pub async fn run_feeds(
             let fedora = source.parse::<SourceId>().ok();
             if enrichment.is_none() && fedora.is_none() {
                 return (
-                    Err("use fedora-<release>-<arch>, kev, or epss".into()),
+                    Err("use fedora-<release>-<arch>, kev, epss, nvd, or euvd".into()),
                     target,
                 );
             }
@@ -191,6 +195,31 @@ fn packages(row: &VulnRow) -> String {
         .unwrap_or_default()
 }
 
+/// One CVE of `vulns show ADVISORY`: what is known, then the description.
+fn cve_line(cve: &CveDetail) -> String {
+    let mut parts = vec![cve.cve_id.clone()];
+    if let Some(score) = cve.cvss_score {
+        let version = cve.cvss_version.as_deref().unwrap_or("?");
+        parts.push(format!("CVSS {score:.1} ({version})"));
+    }
+    parts.extend(cve.cwe.iter().cloned());
+    if cve.kev {
+        parts.push("KEV".into());
+    }
+    if let Some(euvd) = &cve.euvd_exploited {
+        parts.push(euvd.clone());
+    }
+    if let Some(epss) = cve.epss {
+        parts.push(format!("EPSS {:.1}%", f64::from(epss) * 100.0));
+    }
+    let description = cve.description.as_deref().map_or_else(String::new, |text| {
+        let short: String = text.chars().take(200).collect();
+        let more = if short.len() < text.len() { "…" } else { "" };
+        format!(": {short}{more}")
+    });
+    format!("  {}{description}\n", parts.join(" "))
+}
+
 fn line(row: &VulnRow) -> String {
     let fixed = row
         .fixed_at
@@ -201,14 +230,24 @@ fn line(row: &VulnRow) -> String {
         format!(" [{}]", row.cves.join(" "))
     };
     let exploited = if row.exploited {
-        let due = row
-            .kev_due
-            .map_or_else(String::new, |due| format!(", due {due}"));
-        let ransomware = if row.ransomware { ", ransomware" } else { "" };
-        format!(" exploited (KEV{due}{ransomware})")
+        let mut sources = Vec::new();
+        if row.kev {
+            let due = row
+                .kev_due
+                .map_or_else(String::new, |due| format!(", due {due}"));
+            let ransomware = if row.ransomware { ", ransomware" } else { "" };
+            sources.push(format!("KEV{due}{ransomware}"));
+        }
+        if row.euvd {
+            sources.push("EUVD".to_owned());
+        }
+        format!(" exploited ({})", sources.join("; "))
     } else {
         String::new()
     };
+    let cvss = row
+        .cvss
+        .map_or_else(String::new, |score| format!(" CVSS {score:.1}"));
     let epss = match (row.epss, row.epss_percentile) {
         (Some(score), Some(percentile)) => {
             let top = ((1.0 - f64::from(percentile)) * 100.0).ceil().max(1.0);
@@ -222,7 +261,7 @@ fn line(row: &VulnRow) -> String {
         ""
     };
     format!(
-        "{} {} {} since {}{fixed}: {}{cves}{exploited}{epss}{reboot}\n",
+        "{} {} {} since {}{fixed}: {}{cves}{exploited}{epss}{cvss}{reboot}\n",
         row.severity,
         row.advisory_id,
         host_label(row),
@@ -304,23 +343,37 @@ pub async fn run_vulns(
                 ..ListFilter::default()
             };
             let result = async {
-                let rows = vulns::list(client, &as_advisory).await.map_err(|e| e.to_string())?;
+                let rows = vulns::list(client, &as_advisory)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 if let Some(first) = rows.first() {
                     let mut out = format!(
-                        "{} {} {}\nhttps://bodhi.fedoraproject.org/updates/{}\nCVEs: {}\nopen on {} hosts:\n",
+                        "{} {} {}\nhttps://bodhi.fedoraproject.org/updates/{}\nCVEs:{}\n",
                         first.advisory_id,
                         first.severity,
                         first.title,
                         first.advisory_id,
-                        if first.cves.is_empty() { "none named".into() } else { first.cves.join(" ") },
-                        rows.len()
+                        if first.cves.is_empty() {
+                            " none named"
+                        } else {
+                            ""
+                        },
                     );
+                    let details = enrichment::cve_details(client, &first.advisory_id)
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    for cve in &details {
+                        out.push_str(&cve_line(cve));
+                    }
+                    out.push_str(&format!("open on {} hosts:\n", rows.len()));
                     for row in &rows {
                         out.push_str(&format!("  {}: {}\n", host_label(row), packages(row)));
                     }
                     return Ok(out);
                 }
-                let rows = vulns::list(client, &as_host).await.map_err(|e| e.to_string())?;
+                let rows = vulns::list(client, &as_host)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 if rows.is_empty() {
                     return Err("no advisory or host with open vulnerabilities by that name".into());
                 }
