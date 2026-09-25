@@ -142,6 +142,10 @@ pub async fn replace_advisories(
         )
         .await?;
     transaction.commit().await?;
+    // Fresh statistics for the matching that follows an import.
+    client
+        .batch_execute("ANALYZE advisories, advisory_cves, advisory_packages")
+        .await?;
     Ok(advisories.len())
 }
 
@@ -386,36 +390,37 @@ pub struct ListFilter<'a> {
 pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRow>, StoreError> {
     let rows = client
         .query(
-            "SELECT v.agent_id, g.hostname, v.advisory_id, a.severity, a.title,
-                    COALESCE(array_agg(c.cve_id ORDER BY c.cve_id)
-                        FILTER (WHERE c.cve_id IS NOT NULL), '{}'),
-                    v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
-                    COALESCE(e.kev, false), e.due, COALESCE(e.ransomware, false),
-                    e.epss, e.pct, COALESCE(e.euvd, false), e.cvss
-             FROM vulnerabilities v
-             JOIN advisories a ON a.advisory_id = v.advisory_id
-             JOIN agents g ON g.agent_id = v.agent_id
-             LEFT JOIN advisory_cves c ON c.advisory_id = v.advisory_id
-             LEFT JOIN LATERAL (
-                 SELECT bool_or(x.kev_added IS NOT NULL) AS kev, min(x.kev_due) AS due,
-                        bool_or(x.kev_ransomware) AS ransomware, max(x.epss) AS epss,
-                        max(x.epss_percentile) AS pct, bool_or(x.euvd_exploited) AS euvd,
+            // Each advisory's CVEs and enrichment are combined once (a few
+            // hundred advisories), not once per vulnerability: at 244,000
+            // open rows the per-row form exceeded the statement timeout.
+            "WITH adv AS (
+                 SELECT a.advisory_id, a.severity, a.title,
+                        COALESCE(array_agg(DISTINCT c.cve_id)
+                            FILTER (WHERE c.cve_id IS NOT NULL), '{}') AS cves,
+                        COALESCE(bool_or(x.kev_added IS NOT NULL), false) AS kev,
+                        min(x.kev_due) AS due,
+                        COALESCE(bool_or(x.kev_ransomware), false) AS ransomware,
+                        max(x.epss) AS epss, max(x.epss_percentile) AS pct,
+                        COALESCE(bool_or(x.euvd_exploited), false) AS euvd,
                         max(x.cvss_score) AS cvss
-                 FROM advisory_cves y JOIN cve_enrichment x ON x.cve_id = y.cve_id
-                 WHERE y.advisory_id = v.advisory_id) e ON true
+                 FROM advisories a
+                 LEFT JOIN advisory_cves c ON c.advisory_id = a.advisory_id
+                 LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
+                 WHERE ($3::text IS NULL OR a.advisory_id = $3)
+                   AND ($4::text IS NULL OR a.severity = $4)
+                 GROUP BY a.advisory_id, a.severity, a.title)
+             SELECT v.agent_id, g.hostname, v.advisory_id, e.severity, e.title, e.cves,
+                    v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
+                    e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss
+             FROM vulnerabilities v
+             JOIN adv e ON e.advisory_id = v.advisory_id
+             JOIN agents g ON g.agent_id = v.agent_id
              WHERE (v.fixed_at IS NOT NULL) = $1
                AND ($2::text IS NULL OR v.agent_id = $2 OR g.hostname = $2)
-               AND ($3::text IS NULL OR v.advisory_id = $3)
-               AND ($4::text IS NULL OR a.severity = $4)
-               AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM advisory_cves x
-                    WHERE x.advisory_id = v.advisory_id AND x.cve_id = $5))
-             GROUP BY v.agent_id, g.hostname, v.advisory_id, a.severity, a.title,
-                      v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
-                      e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss
-             ORDER BY (COALESCE(e.kev, false) OR COALESCE(e.euvd, false)) DESC,
-                      e.pct DESC NULLS LAST,
+               AND ($5::text IS NULL OR $5 = ANY(e.cves))
+             ORDER BY (e.kev OR e.euvd) DESC, e.pct DESC NULLS LAST,
                       array_position(ARRAY['critical','important','moderate','low','unrated'],
-                          a.severity), e.cvss DESC NULLS LAST, v.first_seen_at, v.agent_id
+                          e.severity), e.cvss DESC NULLS LAST, v.first_seen_at, v.agent_id
              LIMIT 10000",
             &[
                 &filter.fixed,
