@@ -31,4 +31,7 @@ with agent tag changes. The Access page provides create/edit forms; editing
 requires explicit confirmation because it can change membership and scoped
 visibility.
 
-Run `cargo test -p openvibes-console rbac::tests`.
+Run `cargo test -p openvibes-console rbac::tests` and
+`cargo test -p openvibes-console --test auth_http` (with the PostgreSQL test
+database configured) to cover authenticated group creation/update and the
+agent-tag preview, stale-preview rejection, apply, and audit journey.

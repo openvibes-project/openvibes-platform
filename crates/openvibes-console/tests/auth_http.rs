@@ -110,6 +110,32 @@ async fn new_preauth(router: &axum::Router) -> (String, String, String) {
     )
 }
 
+async fn api_json(
+    router: &axum::Router,
+    method: &str,
+    uri: &str,
+    cookie: &str,
+    csrf: &str,
+    body: &str,
+) -> axum::response::Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(method)
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", csrf)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_owned()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
@@ -318,6 +344,86 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .is_some_and(|bindings| !bindings.is_empty())
     );
     assert!(access.get("credentials").is_none());
+    let user_id = access["users"][0]["user_id"].as_str().unwrap();
+    let binding_response = api_json(
+        &router,
+        "POST",
+        "/api/v1/access-control/bindings",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        &format!(
+            "{{\"user_id\":\"{user_id}\",\"role_id\":\"viewer\",\"asset_group_id\":\"{group_id}\"}}"
+        ),
+    )
+    .await;
+    assert_eq!(
+        binding_response.status(),
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&to_bytes(binding_response.into_body(), 4096).await.unwrap())
+    );
+    let agent_id = "agent.00000000-0000-4000-8000-000000000101";
+    let proposal_a = r#"{"tags":[{"key":"env","value":"prod"},{"key":"region","value":"north"}]}"#;
+    let preview_a = api_json(
+        &router,
+        "POST",
+        &format!("/api/v1/agents/{agent_id}/tags/preview"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        proposal_a,
+    )
+    .await;
+    assert_eq!(preview_a.status(), StatusCode::OK);
+    let preview_a: Value =
+        serde_json::from_slice(&to_bytes(preview_a.into_body(), 16_384).await.unwrap()).unwrap();
+    assert_eq!(preview_a["gained_groups"][0]["name"], "Production Fleet");
+    assert_eq!(preview_a["gained_bindings"][0]["role_id"], "viewer");
+    let proposal_b = r#"{"tags":[{"key":"env","value":"test"}]}"#;
+    let preview_b = api_json(
+        &router,
+        "POST",
+        &format!("/api/v1/agents/{agent_id}/tags/preview"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        proposal_b,
+    )
+    .await;
+    assert_eq!(preview_b.status(), StatusCode::OK);
+    let preview_b: Value =
+        serde_json::from_slice(&to_bytes(preview_b.into_body(), 16_384).await.unwrap()).unwrap();
+    let apply_b = api_json(
+        &router,
+        "PUT",
+        &format!("/api/v1/agents/{agent_id}/tags"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        &format!(
+            "{{\"tags\":[{{\"key\":\"env\",\"value\":\"test\"}}],\"preview_token\":\"{}\"}}",
+            preview_b["preview_token"].as_str().unwrap()
+        ),
+    )
+    .await;
+    assert_eq!(apply_b.status(), StatusCode::NO_CONTENT);
+    let stale_a=api_json(&router,"PUT",&format!("/api/v1/agents/{agent_id}/tags"),&session_cookie,session["csrf_token"].as_str().unwrap(),&format!("{{\"tags\":[{{\"key\":\"env\",\"value\":\"prod\"}},{{\"key\":\"region\",\"value\":\"north\"}}],\"preview_token\":\"{}\"}}",preview_a["preview_token"].as_str().unwrap())).await;
+    assert_eq!(stale_a.status(), StatusCode::CONFLICT);
+    let refreshed: Value =
+        serde_json::from_slice(&to_bytes(stale_a.into_body(), 16_384).await.unwrap()).unwrap();
+    assert_eq!(refreshed["current"][0]["value"], "test");
+    let apply_a=api_json(&router,"PUT",&format!("/api/v1/agents/{agent_id}/tags"),&session_cookie,session["csrf_token"].as_str().unwrap(),&format!("{{\"tags\":[{{\"key\":\"env\",\"value\":\"prod\"}},{{\"key\":\"region\",\"value\":\"north\"}}],\"preview_token\":\"{}\"}}",refreshed["preview_token"].as_str().unwrap())).await;
+    assert_eq!(apply_a.status(), StatusCode::NO_CONTENT);
+    let audit_client = db.pool.get().await.unwrap();
+    let audited: i64 = audit_client
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action='agent.tags.changed' AND target_id=$1",
+            &[&agent_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(
+        audited >= 2,
+        "both successful tag replacements must be audited"
+    );
     let admin_binding_id = access["bindings"]
         .as_array()
         .unwrap()
@@ -399,7 +505,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap()
         .get::<_, i64>(0);
-    assert_eq!(binding_events, 2);
+    assert_eq!(binding_events, 3);
     let unauthenticated_summary = router
         .clone()
         .oneshot(

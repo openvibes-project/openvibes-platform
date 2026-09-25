@@ -419,8 +419,38 @@ pub async fn apply_agent_tags(
     for tag in proposed {
         tx.execute("INSERT INTO console_agent_tags(agent_id,tag_key,tag_value,changed_at,changed_by) VALUES($1,$2,$3,$4,$5)", &[&agent_id,&tag.key,&tag.value,&now,&actor_id]).await?;
     }
-    let detail = serde_json::json!({"current_tags":current,"proposed_tags":proposed,"gained_groups":groups.0,"lost_groups":groups.1,"gained_bindings":gained_bindings,"lost_bindings":lost_bindings}).to_string();
-    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'agent.tags.changed','agent','success',$2::jsonb,'user',$1,$1,'agent',$3)", &[&actor_id,&detail,&agent_id]).await?;
+    let current_values = current
+        .iter()
+        .map(|tag| format!("{}={}", tag.key, tag.value))
+        .collect::<Vec<_>>();
+    let proposed_values = proposed
+        .iter()
+        .map(|tag| format!("{}={}", tag.key, tag.value))
+        .collect::<Vec<_>>();
+    let gained_groups = groups
+        .0
+        .iter()
+        .map(|group| format!("{}={}", group.0, group.1))
+        .collect::<Vec<_>>();
+    let lost_groups = groups
+        .1
+        .iter()
+        .map(|group| format!("{}={}", group.0, group.1))
+        .collect::<Vec<_>>();
+    let binding_summary = |bindings: &[TagBindingImpact]| {
+        bindings
+            .iter()
+            .map(|binding| {
+                format!(
+                    "{}:{}:{}:{}",
+                    binding.binding_id, binding.username, binding.role_id, binding.asset_group_name
+                )
+            })
+            .collect::<Vec<_>>()
+    };
+    let gained_bindings = binding_summary(&gained_bindings);
+    let lost_bindings = binding_summary(&lost_bindings);
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'agent.tags.changed','agent','success',jsonb_build_object('current_tags',to_jsonb($2::text[]),'proposed_tags',to_jsonb($3::text[]),'gained_groups',to_jsonb($4::text[]),'lost_groups',to_jsonb($5::text[]),'gained_bindings',to_jsonb($6::text[]),'lost_bindings',to_jsonb($7::text[])),'user',$1,$1,'agent',$8)", &[&actor_id,&current_values,&proposed_values,&gained_groups,&lost_groups,&gained_bindings,&lost_bindings,&agent_id]).await?;
     tx.commit().await?;
     Ok(None)
 }
@@ -590,8 +620,8 @@ pub async fn create_user_role_binding(
              (binding_id, user_id, role_id, asset_group_id, created_at, created_by)
          SELECT gen_random_uuid(), u.user_id, r.role_id, g.asset_group_id, $4, $5
          FROM console_users u CROSS JOIN console_roles r
-         LEFT JOIN console_asset_groups g ON g.asset_group_id = $3::text::uuid
-         WHERE u.user_id = $1::text::uuid AND u.enabled AND r.role_id = $2
+         LEFT JOIN console_asset_groups g ON g.asset_group_id::text = $3
+         WHERE u.user_id::text = $1 AND u.enabled AND r.role_id = $2
            AND (($3::text IS NULL AND g.asset_group_id IS NULL) OR g.asset_group_id IS NOT NULL)
          ON CONFLICT DO NOTHING
          RETURNING binding_id::text, user_id::text, role_id, asset_group_id::text, created_at, created_by",
@@ -604,7 +634,7 @@ pub async fn create_user_role_binding(
     let group_id: Option<String> = row.get(3);
     let group_name: Option<String> = if let Some(id) = group_id.as_deref() {
         tx.query_opt(
-            "SELECT name FROM console_asset_groups WHERE asset_group_id = $1::uuid",
+            "SELECT name FROM console_asset_groups WHERE asset_group_id::text = $1",
             &[&id],
         )
         .await?

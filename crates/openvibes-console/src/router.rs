@@ -778,7 +778,7 @@ pub(crate) async fn preview_authenticated_agent_tags(
     Json(request): Json<crate::AgentTagChangeRequest>,
 ) -> Response {
     use platform_store::console_read::AgentScope;
-    if !valid_uuid(&agent_id) {
+    if !valid_agent_id(&agent_id) {
         return problem_response(ProblemDetails::new(
             StatusCode::BAD_REQUEST,
             "invalid_agent_id",
@@ -835,7 +835,7 @@ pub(crate) async fn apply_authenticated_agent_tags(
     Json(request): Json<crate::ApplyAgentTagsRequest>,
 ) -> Response {
     use platform_store::console_read::AgentScope;
-    if !valid_uuid(&agent_id)
+    if !valid_agent_id(&agent_id)
         || request.preview_token.len() != 64
         || !request.preview_token.bytes().all(|b| b.is_ascii_hexdigit())
     {
@@ -965,6 +965,10 @@ fn valid_uuid(value: &str) -> bool {
                 byte.is_ascii_hexdigit()
             }
         })
+}
+
+fn valid_agent_id(value: &str) -> bool {
+    !value.is_empty() && value.len() <= 256 && !value.chars().any(char::is_control)
 }
 
 fn invalid_access_binding() -> Response {
