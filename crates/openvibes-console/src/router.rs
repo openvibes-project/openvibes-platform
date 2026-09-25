@@ -2567,6 +2567,7 @@ pub(crate) async fn authenticated_assistant_message(
     );
     let backend: Arc<dyn platform_assistant::ChatBackend> = runtime.backend.clone();
     let started = Instant::now();
+    let request_id = next_request_id();
     let answer = tokio::time::timeout(
         Duration::seconds(30).to_std().unwrap_or_default(),
         platform_assistant::answer(
@@ -2588,17 +2589,46 @@ pub(crate) async fn authenticated_assistant_message(
         Err(platform_assistant::AnswerError::Deadline) => "deadline",
         Err(platform_assistant::AnswerError::NoAnswer) => "no_answer",
     };
-    if let Ok(client) = state.pool.get().await {
-        let _ = platform_store::audit::record(
+    let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let location = match runtime
+        .assistant
+        .backend
+        .as_ref()
+        .map(|backend| backend.location)
+    {
+        Some(platform_assistant::Location::Local) => "local",
+        Some(platform_assistant::Location::OwnNetwork) => "own_network",
+        Some(platform_assistant::Location::External) | None => "external",
+    };
+    let detail = serde_json::json!({
+        "model": runtime.assistant.backend.as_ref().map(|backend| backend.model.as_str()),
+        "location": location,
+        "elapsed_ms": elapsed_ms,
+    });
+    let audit_succeeded = match state.pool.get().await {
+        Ok(client) => platform_store::audit::record_with_detail(
             &client,
             &actor,
             "assistant.question",
-            Some("assistant"),
+            "assistant",
             result_code,
+            &request_id,
+            &detail,
         )
-        .await;
+        .await
+        .is_ok(),
+        Err(_) => false,
+    };
+    if !audit_succeeded {
+        let mut problem = ProblemDetails::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "assistant_audit_unavailable",
+            "The assistant answer could not be recorded",
+        );
+        problem.request_id = request_id;
+        return problem_response(problem);
     }
-    tracing::info!(actor_id = %actor, elapsed_ms = started.elapsed().as_millis(), outcome = result_code, "assistant question completed");
+    tracing::info!(request_id = %request_id, actor_id = %actor, elapsed_ms, outcome = result_code, "assistant question completed");
     let answer = match answer {
         Ok(answer) => answer,
         Err(error) => {
@@ -2629,7 +2659,9 @@ pub(crate) async fn authenticated_assistant_message(
                     "The local model returned no usable answer",
                 ),
             };
-            return problem_response(ProblemDetails::new(status, code, message));
+            let mut problem = ProblemDetails::new(status, code, message);
+            problem.request_id = request_id;
+            return problem_response(problem);
         }
     };
     let response = crate::assistant::AssistantMessageResponse {
@@ -2648,6 +2680,10 @@ pub(crate) async fn authenticated_assistant_message(
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response.headers_mut().insert(
+        HeaderName::from_static("x-request-id"),
+        HeaderValue::from_str(&request_id).expect("generated request IDs are valid headers"),
+    );
     response
 }
 
