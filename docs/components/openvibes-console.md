@@ -47,7 +47,7 @@ only as the same SHA-256 digest used by ingest, and is never repeated on a
 replayed create response. The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
-React shell, exact static-asset routing, report-only security headers, locked
+React shell, exact static-asset routing, enforced security headers, locked
 frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
 One checked frontend contract now supplies the browser-route and public-asset
 inventory to both Rust and TypeScript, and the production output carries a
@@ -191,9 +191,8 @@ banner are never included in the production RPM.
   application routes unless that request succeeds, obtains one-use pre-auth
   state before enabling local login, and sends logout with the synchronizer
   CSRF token. It never reads the opaque session cookie.
-- Framing is refused: `Content-Security-Policy: frame-ancestors 'none'` is
-  enforced (with `X-Frame-Options: DENY`) while the full policy is still
-  report-only.
+- The full Content Security Policy is enforced on every public response,
+  including `frame-ancestors 'none'`; `X-Frame-Options: DENY` is also set.
 - A wrong method on an API route is a 405 Problem Details response with
   `Cache-Control: no-store`, like every API error.
 - The public and development routers cap extractor request bodies at 1 MiB,

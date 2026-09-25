@@ -9,11 +9,8 @@ use serde_json::Value;
 use tower::ServiceExt;
 
 fn assert_public_security_headers(response: &axum::response::Response) {
-    assert!(
-        response
-            .headers()
-            .contains_key("content-security-policy-report-only")
-    );
+    let csp = response.headers().get("content-security-policy").unwrap();
+    assert!(csp.to_str().unwrap().contains("default-src 'none'"));
     assert_eq!(
         response.headers().get("referrer-policy").unwrap(),
         "no-referrer"
@@ -26,12 +23,7 @@ fn assert_public_security_headers(response: &axum::response::Response) {
         "nosniff"
     );
     assert!(response.headers().contains_key("permissions-policy"));
-    // Framing is refused now, not only reported: report-only does not block.
     assert_eq!(response.headers().get("x-frame-options").unwrap(), "DENY");
-    assert_eq!(
-        response.headers().get("content-security-policy").unwrap(),
-        "frame-ancestors 'none'"
-    );
 }
 
 #[tokio::test]

@@ -67,7 +67,7 @@ test("serves the accessible shell with the target security boundary", async ({ p
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
   const headers = response?.headers() ?? {};
-  const csp = headers["content-security-policy-report-only"] ?? "";
+  const csp = headers["content-security-policy"] ?? "";
   for (const directive of targetCsp) {
     expect(csp).toContain(directive);
   }

@@ -4910,29 +4910,20 @@ async fn browser_not_found() -> Response {
 }
 
 async fn public_security_headers(mut response: Response) -> Response {
-    const CSP_REPORT_ONLY: HeaderName =
-        HeaderName::from_static("content-security-policy-report-only");
     const REFERRER_POLICY: HeaderName = HeaderName::from_static("referrer-policy");
     const PERMISSIONS_POLICY: HeaderName = HeaderName::from_static("permissions-policy");
     const FRAME_OPTIONS: HeaderName = HeaderName::from_static("x-frame-options");
 
-    // Framing is refused now: the full policy below is report-only until C5,
-    // and report-only does not block, so frame-ancestors is also enforced on
-    // its own (with X-Frame-Options for older browsers).
+    // Enforce the complete browser policy on every public response.
     response.headers_mut().insert(
         header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static("frame-ancestors 'none'"),
-    );
-    response
-        .headers_mut()
-        .insert(FRAME_OPTIONS, HeaderValue::from_static("DENY"));
-
-    response.headers_mut().insert(
-        CSP_REPORT_ONLY,
         HeaderValue::from_static(
             "default-src 'none'; script-src 'self'; script-src-attr 'none'; style-src 'self'; style-src-attr 'none'; img-src 'self'; font-src 'none'; connect-src 'self'; form-action 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; worker-src 'none'; manifest-src 'self'",
         ),
     );
+    response
+        .headers_mut()
+        .insert(FRAME_OPTIONS, HeaderValue::from_static("DENY"));
     response
         .headers_mut()
         .insert(REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
