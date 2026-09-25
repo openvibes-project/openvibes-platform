@@ -6,8 +6,12 @@
 fixed set of read-only lookups, with the model backend running on the
 platform's CPU, its GPU, a separate server, or an external provider.
 
-**Spec:** `docs/specs/2026-09-25-assistant-design.md` (approve it and answer
-its section 11 questions before AS1 starts).
+**Spec:** `docs/specs/2026-09-25-assistant-design.md` (approved 2026-09-25;
+decisions in its section 12).
+
+**Priority (user, 2026-09-25):** local backends first (AS1–AS5: platform CPU
+and GPU, then an own server in AS6). External providers and pseudonymization
+(AS7) are supported but built last.
 
 ## Global Constraints
 
@@ -15,12 +19,14 @@ its section 11 questions before AS1 starts).
   Code's; routes, storage, and UI in `openvibes-console` are Codex's (AS4),
   built on the interfaces AS1–AS3 deliver.
 - AS1–AS3 need no console and can start now. AS4 needs console C3
-  (authentication, RBAC, scope) and the audit contract; AS5–AS6 follow AS3.
+  (authentication, RBAC, scope) and the audit contract; AS5–AS7 follow AS3.
 - New dependencies: none. The client uses `ureq` (already used by
   `openvibes-vulns`) over the workspace `rustls`, on a blocking thread from
   the async console, and `serde_json`.
 - Migrations: the conversation tables take the next free number at AS4 start.
 - Every task is tests first. Security controls get negative tests (spec §6).
+- Runtime and model stay replaceable (spec §10): standard Chat Completions
+  fields only, no model-specific prompts, recommended models as a data file.
 - Nothing runs or connects while `[assistant] enabled = false` (the default).
 
 ## Review Focus
@@ -33,8 +39,10 @@ its section 11 questions before AS1 starts).
   objects outside scope renders as inert text (AS2 and AS4 tests).
 - A remote backend over plain HTTP, without `allow_remote`, or without
   `data_location` is refused at startup (AS1 tests).
+- Requests carry only standard Chat Completions fields, so any compatible
+  runtime works (AS1 test on the mock's received bodies).
 - Pseudonymization round-trips: no real hostname or agent ID in any request
-  body sent to an `external` backend (AS6 test inspects the mock's received
+  body sent to an `external` backend (AS7 test inspects the mock's received
   bodies).
 
 ### Task AS1: backend client and configuration (`platform-assistant`)
@@ -54,8 +62,9 @@ its section 11 questions before AS1 starts).
   redirects, slow responses, and malformed tool calls.
 - [ ] Capability probe: model name, context size, which lookup modes work
   (a fixed probe prompt per mode), time to first token and tokens per second.
-- [ ] Spike (half a day, written up in the spec): mistral.rs against
-  `llama-server` on CPU with the same GGUF model; keep the result in the spec.
+- [ ] Standard-fields test: every request body the client sends is checked
+  against the standard Chat Completions field list; nothing
+  runtime-specific.
 
 ### Task AS2: lookups and orchestrator (`platform-assistant`)
 - [ ] `platform-store` read functions for the seven lookups (spec §5), each
@@ -77,10 +86,13 @@ its section 11 questions before AS1 starts).
 - [ ] `openvibes-admin assistant check`: runs the capability probe and prints
   what the backend supports and its measured speed. Audited.
 - [ ] Question set: ~50 questions over the console seed data with expected
-  lookups and facts, plus the injection cases (spec §10), as data files.
+  lookups and facts, plus the injection cases (spec §11), as data files.
 - [ ] `openvibes-admin assistant eval`: runs the set against the configured
   backend, prints accuracy, injection results, and latency percentiles;
   non-zero exit when the gate fails.
+- [ ] Recommended models as a data file (name, size, profile, SHA-256 of the
+  tested GGUF, date tested), shown by `assistant check`; updated per release
+  after the gate, never compiled in.
 - [ ] Run the gate on the minimum tier (4 cores, 8 GB, no GPU) with
   Qwen3.5-4B and Gemma 4 E4B, and on one GPU; record the measured numbers in
   the spec's profile table and in `docs/sizing.md`. Adjust `small` budgets if
@@ -116,18 +128,23 @@ its section 11 questions before AS1 starts).
   install with a tiny test model, `assistant check` through the console
   configuration, and the unit's sandbox assertions.
 
-### Task AS6: remote backends and pseudonymization (options C and D)
+### Task AS6: own server elsewhere (option C)
+- [ ] Documented, tested configurations: vLLM on a separate GPU server with
+  the operator's CA and mutual TLS; `llama-server` with a CUDA build on
+  localhost. The integration test uses the mock backend over TLS with mTLS.
+- [ ] Console notice for `own-network` backends (AS4 panel).
+
+### Task AS7: external providers and pseudonymization (option D, priority 2)
 - [ ] Pseudonymizer: stable per-conversation placeholders for hostnames,
   agent IDs, and IP addresses in lookup results and user questions; mapped
   back when rendering. Default on for `data_location = "external"`.
-- [ ] Documented, tested configurations: vLLM on a separate GPU server with
-  the operator's CA and mutual TLS; `llama-server` with a CUDA build on
-  localhost; a generic OpenAI-compatible provider. The integration test
-  uses the mock backend over TLS with mTLS.
-- [ ] Console notices for `own-network` and `external` backends (AS4 panel).
+- [ ] A documented generic OpenAI-compatible provider configuration, tested
+  against the mock backend.
+- [ ] Console notice for `external` backends (AS4 panel).
 
-### Task AS7: documentation
+### Task AS8: documentation
 - [ ] Component pages: `platform-assistant.md`, `openvibes-llm.md`, and the
   console's assistant section; `packaging.md` for the RPM; the operator
   guide "choosing where the model runs" (options A–D, hardware tiers, what
-  data leaves the host).
+  data leaves the host) and "replacing the runtime or the model" (spec §10,
+  checked with `assistant eval`).

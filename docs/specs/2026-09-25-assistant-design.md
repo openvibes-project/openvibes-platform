@@ -1,8 +1,9 @@
 # Assistant: Questions and Triage Help in the Console — Design
 
-**Status: draft for approval** (requested by the user on 2026-09-24 as "small
-built-in LLM"; research and direction discussed 2026-09-25). Open questions
-are in section 11. Implementation plan:
+**Status: design approved by the user in conversation on 2026-09-25**
+(requested 2026-09-24 as "small built-in LLM"; decisions in section 12:
+local backends first, external providers supported later, 30-day
+conversations, `llama-server` as a replaceable runtime). Implementation plan:
 `docs/plans/2026-09-25-assistant-implementation.md`.
 
 ## 1. Goal and Exit Criteria
@@ -59,7 +60,7 @@ the console has one client and the operator has free choice.
 | **A. Local CPU** (default) | Platform host, loopback | Small installs, no GPU | `openvibes-llm` RPM: pinned `llama-server` CPU build, hardened unit |
 | **B. Local GPU** | Platform host's graphics card, loopback | A host with an NVIDIA, AMD, or Intel GPU | Same RPM, Vulkan build (any GPU vendor); CUDA or ROCm servers are option C on localhost |
 | **C. Own server elsewhere** | A GPU server on the operator's network | Shared GPU, bigger models, many analysts | Nothing to install from us; docs and a tested config for vLLM and `llama-server` |
-| **D. External provider** | A third party's API | No local hardware at all | Nothing; explicit opt-in (section 7) |
+| **D. External provider** | A third party's API | No local hardware at all | Nothing; explicit opt-in (section 7). Supported, but built after A–C |
 
 The console classifies the backend from its configured URL:
 
@@ -198,7 +199,7 @@ the evaluation task on each tier, not assumed.
 - `openvibes-admin assistant check`: connects to the configured backend,
   reports model name, supported lookup mode, context size, and measured time
   to first token and tokens per second on a fixed prompt.
-- `openvibes-admin assistant eval`: runs the question set (section 10)
+- `openvibes-admin assistant eval`: runs the question set (section 11)
   against seeded data and the configured backend and prints accuracy and
   latency, so an operator can see whether their hardware is good enough
   before enabling it.
@@ -209,7 +210,26 @@ the evaluation task on each tier, not assumed.
   the backend is configuration, not a web action (like other platform
   configuration in the first console release).
 
-## 10. Quality Gate
+## 10. Replacing the Runtime or the Model
+
+Runtimes and models change quickly, so neither is built into the platform:
+
+- **Runtime.** The console speaks only the standard Chat Completions API: no
+  `llama-server`-specific request fields or endpoints. Chat templates,
+  quantization, and hardware are the runtime's business. Replacing
+  `llama-server` (in `openvibes-llm`, or by pointing at another server) is a
+  configuration change; a test pins that requests contain only standard
+  fields.
+- **Model.** The platform has no model-specific prompts or parsing. The
+  capability probe picks the lookup mode each model supports, and the
+  profile sets the budget. Recommended models are a data file shipped with
+  each release, not code, and any GGUF model can be installed with
+  `assistant model install`.
+- **The quality gate decides.** A new runtime or model is adopted when it
+  passes section 11's question set on the target tier; `assistant eval`
+  lets an operator check a candidate before switching.
+
+## 11. Quality Gate
 
 A fixed set of about 50 questions against the console's seeded data, each
 with the expected lookups and facts, plus injection cases: hostnames,
@@ -220,15 +240,13 @@ its lookup results, and every injection case passes (no out-of-scope data,
 no rendered link, no extra lookups). Every model, profile, or runtime change
 reruns it.
 
-## 11. Open Questions
+## 12. Decisions (user, 2026-09-25)
 
-1. **External providers and the "no vendor cloud" principle.** Workspace
-   `decisions.md` says no vendor cloud. This design allows an external
-   provider only as an explicit administrator choice (option D) with
-   pseudonymization on by default and a visible notice. Confirm, or restrict
-   to options A–C.
-2. **Conversation retention.** Proposed: conversations are private to their
-   user, kept 30 days, configurable; audit events follow the audit policy.
-3. **Local runtime.** `llama-server` is the proposal for options A/B (best CPU
-   speed, JSON-schema output). mistral.rs (Rust) gets a spike in AS1; if it
-   matches on CPU it may replace `llama-server` in `openvibes-llm`.
+1. **External providers are supported, priority 2.** Local backends (options
+   A–C) come first. Option D stays an explicit administrator choice with
+   pseudonymization on by default and a visible notice; it is the platform's
+   one deliberate exception to "no vendor cloud", and never a default.
+2. **Conversations** are private to their user and kept 30 days by default
+   (configurable); audit events follow the audit policy.
+3. **`llama-server`** runs options A and B, and must stay replaceable, as must
+   the model (section 10).
