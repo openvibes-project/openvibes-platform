@@ -8,6 +8,15 @@ and **openvibes-admin**.
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
 deployment, not for inclusion in Fedora itself.
 
+The web console has a separate `openvibes-console.spec` because its embedded
+frontend is built from a distinct, checksummed npm cache artefact. Build it
+with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256`; the expected
+digest must come from trusted release/source metadata independently of the
+archive and its checksum sidecar. The script verifies the cache, builds npm
+without network access, builds Cargo offline, and passes the cache as RPM
+`Source0`. The console unit ships disabled until the operator configures its
+database and TLS certificate.
+
 ```sh
 scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,admin}-*.rpm
 ```
@@ -30,6 +39,11 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
 | `/etc/openvibes/admin.toml` | 0640 root:openvibes_admin, `%config(noreplace)` | admin |
+| `/usr/bin/openvibes-console` | 0755 root | console |
+| `/usr/lib/systemd/system/openvibes-console.service` | 0644 root | console |
+| `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes_console` | console |
+| `/etc/openvibes/console.toml` | 0640 root:openvibes_console, `%config(noreplace)` | console |
+| `/var/lib/openvibes-console/` | 0700 openvibes_console | console |
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`
@@ -54,6 +68,10 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
+- `openvibes-console.service`: runs as `openvibes_console`, with the same
+  systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
+  HTTPS listener on port 443. It is disabled by the package preset until
+  configuration and certificate setup are complete.
 
 ## First install on Fedora
 
@@ -123,6 +141,30 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    agents set `distribution_url` and leave out `bundle_file`.
 
 Agents trust `root.crt` (their `platform_ca_file`).
+
+## Console RPM setup
+
+The console RPM requires the platform database schema to be current through
+schema 11; those migrations create the least-privilege PostgreSQL role
+`openvibes_console`. Install the console RPM after the platform migrations so
+the matching operating-system user and database role can use PostgreSQL peer
+authentication. Its unit is disabled at install time.
+
+Install a browser-trusted certificate chain and private key at the paths in
+`/etc/openvibes/console.toml`, with owner `root:openvibes_console`, mode 0640,
+and the TLS directory searchable by the service. Edit the file to replace
+`console.example.invalid` with the canonical HTTPS origin and set the public
+listen address. Then enable the service and allow the configured public port:
+
+```sh
+systemctl enable --now openvibes-console
+firewall-cmd --permanent --add-port=443/tcp && firewall-cmd --reload
+curl http://127.0.0.1:18482/ready
+```
+
+The service uses its narrow bind capability for port 443; it has no database
+password or signing-key access. Reverse-proxy deployments should change
+`transport_mode` and the trusted loopback proxy list before enabling the unit.
 
 ## Trying the whole system
 

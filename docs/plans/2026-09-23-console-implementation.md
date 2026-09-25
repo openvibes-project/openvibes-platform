@@ -1,12 +1,14 @@
 # OpenVIBES Console Implementation Plan
 
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
-3 are integrated. C0, C1, and the C2 read-store foundation are implemented;
-C3 local browser authentication is implemented through runtime wiring, and
-`openvibes-admin user` provides first-account bootstrap and audited local
-account administration. Remaining C3 work is authenticated SQL-scoped C2
-handlers, authorization/audit pages and operations, and C3 hardening and
-end-to-end coverage. The C2 store now has SQL-scoped agent and finding read
+3 are integrated. C0–C3 feature work is implemented, including authenticated
+SQL-scoped reads, access-control and audit operations, first-account bootstrap,
+and analyst triage. C5 is underway: direct TLS 1.3, trusted loopback proxy
+mode, enforced browser headers, a dedicated console RPM/service definition,
+and an offline cache-pinned packaging build path are implemented. The RPM and
+systemd installation have not yet been built or exercised. Remaining work
+includes Unix-socket proxy upstreams, package/runtime integration, and full
+C5 review. The C2 store has SQL-scoped agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
 latest/detail/history routes behind `findings.read`. The embedded login page,
@@ -21,10 +23,8 @@ in batches of at most 10,000 rows. Agent-tag changes now have a group and
 scoped-binding impact preview, stale-preview rejection, an audited transactional
 apply, and a global-admin agent-detail editor. Asset groups can be created and
 their exact selector conjunctions replaced through audited, CSRF-protected
-global-admin endpoints and the Access page. Remaining C3 work includes the rest
-of the control-plane routes, production TLS/proxy setup, final CSP/browser
-headers, broader end-to-end coverage, and dedicated agent-tag preview/apply
-integration coverage.
+global-admin endpoints and the Access page. All planned C3 control-plane
+routes are complete; C5 package and runtime work remains.
 
 Design inputs:
 
@@ -146,7 +146,7 @@ Goal: prove agents and findings read models against PostgreSQL with measured
 query plans. Public production data routes remain disabled until C3 supplies
 authentication and SQL-enforced asset scope.
 
-Work:
+Work (implemented unless noted):
 
 1. Resolve the latest-finding read model: extend `current_findings` with the
    complete display snapshot or retain a reliable partition key and fields.
@@ -267,9 +267,13 @@ Work:
 - direct TLS 1.3 server configuration by default; explicit proxy mode requires
   a canonical external HTTPS origin, trusted proxy allow-list, and loopback/
   Unix-socket plaintext or TLS-protected non-loopback upstream;
+- direct TLS 1.3 and explicit loopback-TCP proxy modes are implemented;
+  Unix-socket proxy upstreams remain open;
 - RPM build order including deterministic frontend assets;
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
+- console RPM spec/build script, service unit, sysuser, and disabled install
+  preset are drafted; RPM build and systemd integration remain unverified;
 - final CSP enforcement, HSTS, no-referrer, nosniff, Permissions Policy;
 - structured safe logs with request IDs and no finding/token body content;
 - readiness for database/schema and local-auth state;

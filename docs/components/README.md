@@ -15,9 +15,9 @@ behaviour, and how to test. Updated in the same change as the component.
 | `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); local console user bootstrap and administration (C3) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |
-| `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), hardened units, maintenance timer; the whole system end to end under systemd with the agent RPM (M6a) | [packaging.md](packaging.md) |
+| `packaging` | RPMs | ingest, distribution, admin, and console package definitions; offline console frontend cache pin, hardened units, maintenance timer; agent/platform systemd run (PM4, SP2, M6a, C5) | [packaging.md](packaging.md) |
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
-| `openvibes-console` | web application and `/api/v1` | seeded C1 read slice; C3 local auth runtime and readiness; request limits; offline build path | [openvibes-console.md](openvibes-console.md) |
+| `openvibes-console` | web application and `/api/v1` | C3 auth/control plane; TLS 1.3, trusted loopback proxy, enforced CSP/HSTS; offline RPM build path (C5, package not yet validated) | [openvibes-console.md](openvibes-console.md) |
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
 | `console-auth-http` | console module | pre-auth, local login/logout, scoped reads, token/service-account/rule APIs, bearer-read auth, and per-request capabilities (C3) | [console-auth-http.md](console-auth-http.md) |
 | `console-triage` | console module | latest-finding analyst workflow, stale-write protection, audit/history, and observation-triggered reopen (C3) | [console-triage.md](console-triage.md) |

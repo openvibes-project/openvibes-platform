@@ -276,9 +276,21 @@ independently pinned digest from trusted RPM source metadata:
 --offline-cache-dir CACHE_DIR` then checks the lock digest/platform again,
 verifies npm's cache, and runs every npm command with networking disabled by
 `unshare -rn`. The first package target is Fedora Linux x86_64, so caches for
-other platforms are deliberately distinct. The eventual RPM source metadata
+other platforms are deliberately distinct. Console RPM source metadata
 supplies the expected archive digest independently of the archive and its
 sidecar. The one-argument checker mode used in CI validates corruption only.
+
+Build the Fedora x86_64 console package with:
+
+```sh
+scripts/build-console-rpm.sh "$CACHE_ARCHIVE" "$EXPECTED_SHA256"
+```
+
+The script verifies the pinned source cache, runs the frontend package checks
+and build with networking disabled, builds the Rust binary with Cargo offline,
+and packages it through `packaging/rpm/openvibes-console.spec`. RPM `%check`
+verifies the expected cache digest again. The resulting service is disabled
+until the operator provisions its database and certificate.
 
 For a network-isolated package build, persist the validated cache and pass it
 to the frontend build:

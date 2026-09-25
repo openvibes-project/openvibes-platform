@@ -51,6 +51,7 @@ cd -- "${repository_root}"
 offline_cargo_args=()
 if [[ -n "${offline_cache_dir}" ]]; then
     offline_cargo_args=(--offline)
+    export CARGO_NET_OFFLINE=true
 fi
 cargo run --quiet --locked "${offline_cargo_args[@]}" \
     -p openvibes-console --bin export_openapi -- \
