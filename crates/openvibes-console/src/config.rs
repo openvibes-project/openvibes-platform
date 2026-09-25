@@ -25,7 +25,7 @@ pub enum ConsoleTransportMode {
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConsoleConfig {
-    /// Public console listener. Without TLS files, loopback-only development mode.
+    /// TCP listener for development, direct TLS, or TCP proxy mode; unused with a Unix socket.
     pub development_listen: SocketAddr,
     /// Separate loopback-only process health listener.
     pub health_listen: SocketAddr,
@@ -47,6 +47,12 @@ pub struct ConsoleConfig {
     /// Exact loopback IP addresses allowed to connect in reverse-proxy mode.
     #[serde(default)]
     pub trusted_proxy_addresses: Vec<IpAddr>,
+    /// Absolute Unix socket path used instead of `development_listen` in proxy mode.
+    #[serde(default)]
+    pub unix_socket_file: Option<PathBuf>,
+    /// Exact Unix effective UIDs allowed to connect to `unix_socket_file`.
+    #[serde(default)]
+    pub trusted_proxy_uids: Vec<u32>,
 }
 
 impl fmt::Debug for ConsoleConfig {
@@ -64,6 +70,8 @@ impl fmt::Debug for ConsoleConfig {
             .field("server_certificate_file", &self.server_certificate_file)
             .field("server_key_file", &self.server_key_file)
             .field("trusted_proxy_addresses", &self.trusted_proxy_addresses)
+            .field("unix_socket_file", &self.unix_socket_file)
+            .field("trusted_proxy_uids", &self.trusted_proxy_uids)
             .finish()
     }
 }
@@ -83,7 +91,7 @@ impl ConsoleConfig {
         };
         let proxy_mode = self.transport_mode == ConsoleTransportMode::ReverseProxy;
         let proxy_addresses_valid = if proxy_mode {
-            !self.trusted_proxy_addresses.is_empty()
+            let tcp_valid = !self.trusted_proxy_addresses.is_empty()
                 && self.trusted_proxy_addresses.len() <= 64
                 && self
                     .trusted_proxy_addresses
@@ -95,14 +103,33 @@ impl ConsoleConfig {
                     .collect::<std::collections::HashSet<_>>()
                     .len()
                     == self.trusted_proxy_addresses.len()
+                && self.unix_socket_file.is_none()
+                && self.trusted_proxy_uids.is_empty();
+            let unix_valid = self.trusted_proxy_addresses.is_empty()
+                && self
+                    .unix_socket_file
+                    .as_ref()
+                    .is_some_and(|path| path.is_absolute())
+                && !self.trusted_proxy_uids.is_empty()
+                && self.trusted_proxy_uids.len() <= 64
+                && self
+                    .trusted_proxy_uids
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    == self.trusted_proxy_uids.len();
+            tcp_valid || unix_valid
         } else {
             self.trusted_proxy_addresses.is_empty()
+                && self.unix_socket_file.is_none()
+                && self.trusted_proxy_uids.is_empty()
         };
         if !tls_paths_valid
             || !proxy_addresses_valid
             || !self.health_listen.ip().is_loopback()
-            || self.development_listen == self.health_listen
+            || (self.unix_socket_file.is_none() && self.development_listen == self.health_listen)
             || (self.transport_mode != ConsoleTransportMode::DirectTls
+                && self.unix_socket_file.is_none()
                 && !self.development_listen.ip().is_loopback())
         {
             return Err(ConsoleError::Config);
@@ -195,6 +222,8 @@ mod tests {
             server_certificate_file: None,
             server_key_file: None,
             trusted_proxy_addresses: vec![],
+            unix_socket_file: None,
+            trusted_proxy_uids: vec![],
         };
 
         assert!(config.validate().is_ok());
@@ -212,6 +241,8 @@ mod tests {
                 server_certificate_file: None,
                 server_key_file: None,
                 trusted_proxy_addresses: vec![],
+                unix_socket_file: None,
+                trusted_proxy_uids: vec![],
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -222,6 +253,8 @@ mod tests {
                 server_certificate_file: None,
                 server_key_file: None,
                 trusted_proxy_addresses: vec![],
+                unix_socket_file: None,
+                trusted_proxy_uids: vec![],
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -232,6 +265,8 @@ mod tests {
                 server_certificate_file: None,
                 server_key_file: None,
                 trusted_proxy_addresses: vec![],
+                unix_socket_file: None,
+                trusted_proxy_uids: vec![],
             },
         ] {
             assert!(config.validate().is_err());
@@ -249,6 +284,8 @@ mod tests {
             server_certificate_file: None,
             server_key_file: None,
             trusted_proxy_addresses: vec![],
+            unix_socket_file: None,
+            trusted_proxy_uids: vec![],
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));

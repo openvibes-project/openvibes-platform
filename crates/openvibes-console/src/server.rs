@@ -3,7 +3,7 @@ use std::{
     fs::File,
     future::{Future, IntoFuture},
     io::{self, Read},
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::Path,
     pin::Pin,
     task::{Context, Poll},
@@ -19,6 +19,13 @@ use axum::{
     serve::{IncomingStream, Listener},
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
+#[cfg(unix)]
+use std::{
+    fs,
+    os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt},
+};
+#[cfg(unix)]
+use tokio::net::{UnixListener, UnixStream};
 use tokio::{
     io::{AsyncRead, AsyncWrite, ReadBuf},
     net::{TcpListener, TcpStream},
@@ -91,19 +98,38 @@ struct CappedListener {
     handshakes: JoinSet<(io::Result<TlsStream<CappedStream>>, TrustedPeer)>,
 }
 
-/// Socket peer address supplied by the console's capped TCP listener.
+/// Socket peer identity supplied by a capped console listener.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct TrustedPeer(SocketAddr);
+pub struct TrustedPeer(PeerIdentity);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum PeerIdentity {
+    Tcp(SocketAddr),
+    #[cfg(unix)]
+    UnixUid(u32),
+}
 
 impl TrustedPeer {
     /// Wraps a peer address when constructing an in-process router request.
     pub fn new(address: SocketAddr) -> Self {
-        Self(address)
+        Self(PeerIdentity::Tcp(address))
     }
 
-    /// Returns the remote IP address.
-    pub fn ip(self) -> std::net::IpAddr {
-        self.0.ip()
+    /// Returns a stable source label for throttling and audit metadata.
+    pub fn source_label(self) -> String {
+        match self.0 {
+            PeerIdentity::Tcp(address) => address.ip().to_string(),
+            #[cfg(unix)]
+            PeerIdentity::UnixUid(uid) => format!("unix-uid:{uid}"),
+        }
+    }
+
+    fn is_allowed(self, addresses: &HashSet<IpAddr>, uids: &HashSet<u32>) -> bool {
+        match self.0 {
+            PeerIdentity::Tcp(address) => addresses.contains(&address.ip()),
+            #[cfg(unix)]
+            PeerIdentity::UnixUid(uid) => uids.contains(&uid),
+        }
     }
 }
 
@@ -166,6 +192,14 @@ impl AsyncWrite for CappedStream {
 enum CappedIo {
     Plain(CappedStream),
     Tls(TlsStream<CappedStream>),
+    #[cfg(unix)]
+    Unix(CappedUnixStream),
+}
+
+#[cfg(unix)]
+struct CappedUnixStream {
+    stream: UnixStream,
+    _permit: OwnedSemaphorePermit,
 }
 
 impl AsyncRead for CappedIo {
@@ -177,6 +211,8 @@ impl AsyncRead for CappedIo {
         match &mut *self {
             Self::Plain(stream) => Pin::new(stream).poll_read(context, buffer),
             Self::Tls(stream) => Pin::new(stream).poll_read(context, buffer),
+            #[cfg(unix)]
+            Self::Unix(stream) => Pin::new(&mut stream.stream).poll_read(context, buffer),
         }
     }
 }
@@ -190,6 +226,8 @@ impl AsyncWrite for CappedIo {
         match &mut *self {
             Self::Plain(stream) => Pin::new(stream).poll_write(context, buffer),
             Self::Tls(stream) => Pin::new(stream).poll_write(context, buffer),
+            #[cfg(unix)]
+            Self::Unix(stream) => Pin::new(&mut stream.stream).poll_write(context, buffer),
         }
     }
 
@@ -197,6 +235,8 @@ impl AsyncWrite for CappedIo {
         match &mut *self {
             Self::Plain(stream) => Pin::new(stream).poll_flush(context),
             Self::Tls(stream) => Pin::new(stream).poll_flush(context),
+            #[cfg(unix)]
+            Self::Unix(stream) => Pin::new(&mut stream.stream).poll_flush(context),
         }
     }
 
@@ -204,6 +244,8 @@ impl AsyncWrite for CappedIo {
         match &mut *self {
             Self::Plain(stream) => Pin::new(stream).poll_shutdown(context),
             Self::Tls(stream) => Pin::new(stream).poll_shutdown(context),
+            #[cfg(unix)]
+            Self::Unix(stream) => Pin::new(&mut stream.stream).poll_shutdown(context),
         }
     }
 }
@@ -228,7 +270,7 @@ impl Listener for CappedListener {
                                 stream,
                                 _permit: permit,
                             }),
-                            TrustedPeer(address),
+                            TrustedPeer(PeerIdentity::Tcp(address)),
                         );
                     }
                     Err(error) => {
@@ -254,7 +296,7 @@ impl Listener for CappedListener {
                                     Ok(result) => result,
                                     Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "TLS handshake timed out")),
                                 };
-                                (result, TrustedPeer(address))
+                                (result, TrustedPeer(PeerIdentity::Tcp(address)))
                             });
                         }
                         Err(error) => {
@@ -276,7 +318,9 @@ impl Listener for CappedListener {
     }
 
     fn local_addr(&self) -> io::Result<Self::Addr> {
-        self.listener.local_addr().map(TrustedPeer)
+        self.listener
+            .local_addr()
+            .map(|address| TrustedPeer(PeerIdentity::Tcp(address)))
     }
 }
 
@@ -286,8 +330,152 @@ impl Connected<IncomingStream<'_, CappedListener>> for TrustedPeer {
     }
 }
 
-/// Binds the C0 development and health listeners and serves them until
-/// `shutdown` resolves.
+#[cfg(unix)]
+struct CappedUnixListener {
+    listener: UnixListener,
+    capacity: std::sync::Arc<Semaphore>,
+    owner_uid: u32,
+}
+
+#[cfg(unix)]
+impl Listener for CappedUnixListener {
+    type Io = CappedIo;
+    type Addr = TrustedPeer;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        loop {
+            let permit = self
+                .capacity
+                .clone()
+                .acquire_owned()
+                .await
+                .expect("connection permits stay open for the listener lifetime");
+            match self.listener.accept().await {
+                Ok((stream, _)) => match stream.peer_cred() {
+                    Ok(credentials) => {
+                        return (
+                            CappedIo::Unix(CappedUnixStream {
+                                stream,
+                                _permit: permit,
+                            }),
+                            TrustedPeer(PeerIdentity::UnixUid(credentials.uid())),
+                        );
+                    }
+                    Err(error) => {
+                        tracing::debug!(%error, "console Unix peer credentials unavailable");
+                        drop(stream);
+                        drop(permit);
+                    }
+                },
+                Err(error) => {
+                    tracing::error!(%error, "console Unix listener accept failed");
+                    sleep(Duration::from_millis(50)).await;
+                }
+            }
+        }
+    }
+
+    fn local_addr(&self) -> io::Result<Self::Addr> {
+        Ok(TrustedPeer(PeerIdentity::UnixUid(self.owner_uid)))
+    }
+}
+
+#[cfg(unix)]
+impl Connected<IncomingStream<'_, CappedUnixListener>> for TrustedPeer {
+    fn connect_info(stream: IncomingStream<'_, CappedUnixListener>) -> Self {
+        *stream.remote_addr()
+    }
+}
+
+enum PublicListener {
+    Tcp(CappedListener),
+    #[cfg(unix)]
+    Unix(CappedUnixListener),
+}
+
+#[cfg(unix)]
+struct UnixSocketGuard {
+    path: std::path::PathBuf,
+    device: u64,
+    inode: u64,
+}
+
+#[cfg(unix)]
+impl Drop for UnixSocketGuard {
+    fn drop(&mut self) {
+        if let Ok(metadata) = fs::symlink_metadata(&self.path)
+            && metadata.file_type().is_socket()
+            && metadata.dev() == self.device
+            && metadata.ino() == self.inode
+        {
+            let _ = fs::remove_file(&self.path);
+        }
+    }
+}
+
+#[cfg(unix)]
+fn bind_unix_listener(path: &Path) -> Result<(CappedUnixListener, UnixSocketGuard), ConsoleError> {
+    if !path.is_absolute() {
+        return Err(ConsoleError::Config);
+    }
+    let parent = path.parent().ok_or(ConsoleError::Config)?;
+    let parent_metadata = fs::metadata(parent)?;
+    if !parent_metadata.is_dir() || parent_metadata.mode() & 0o022 != 0 {
+        return Err(ConsoleError::Config);
+    }
+    if let Ok(existing) = fs::symlink_metadata(path) {
+        if !existing.file_type().is_socket() || existing.uid() != parent_metadata.uid() {
+            return Err(ConsoleError::Config);
+        }
+        fs::remove_file(path)?;
+    }
+
+    let listener = UnixListener::bind(path)?;
+    let metadata = fs::symlink_metadata(path)?;
+    let guard = UnixSocketGuard {
+        path: path.to_path_buf(),
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    };
+    fs::set_permissions(path, fs::Permissions::from_mode(0o660))?;
+    Ok((
+        CappedUnixListener {
+            listener,
+            capacity: std::sync::Arc::new(Semaphore::new(MAX_PUBLIC_CONNECTIONS)),
+            owner_uid: metadata.uid(),
+        },
+        guard,
+    ))
+}
+
+impl Listener for PublicListener {
+    type Io = CappedIo;
+    type Addr = TrustedPeer;
+
+    async fn accept(&mut self) -> (Self::Io, Self::Addr) {
+        match self {
+            Self::Tcp(listener) => listener.accept().await,
+            #[cfg(unix)]
+            Self::Unix(listener) => listener.accept().await,
+        }
+    }
+
+    fn local_addr(&self) -> io::Result<Self::Addr> {
+        match self {
+            Self::Tcp(listener) => listener.local_addr(),
+            #[cfg(unix)]
+            Self::Unix(listener) => listener.local_addr(),
+        }
+    }
+}
+
+impl Connected<IncomingStream<'_, PublicListener>> for TrustedPeer {
+    fn connect_info(stream: IncomingStream<'_, PublicListener>) -> Self {
+        *stream.remote_addr()
+    }
+}
+
+/// Binds the configured public and health listeners and serves until shutdown.
 pub async fn serve(
     config: ConsoleConfig,
     shutdown: impl Future<Output = ()>,
@@ -316,7 +504,6 @@ pub async fn serve(
         (None, None) => (development_router(), None),
         _ => return Err(ConsoleError::Config),
     };
-    let public_listener = TcpListener::bind(config.development_listen).await?;
     let health_listener = TcpListener::bind(config.health_listen).await?;
     let tls = if config.transport_mode == ConsoleTransportMode::DirectTls {
         config
@@ -328,17 +515,43 @@ pub async fn serve(
     } else {
         None
     };
-    run_with_router(
+
+    #[cfg(not(unix))]
+    if config.unix_socket_file.is_some() {
+        return Err(ConsoleError::Config);
+    }
+    #[cfg(unix)]
+    let (public_listener, socket_guard) = if let Some(path) = config.unix_socket_file.as_deref() {
+        let (listener, guard) = bind_unix_listener(path)?;
+        (PublicListener::Unix(listener), Some(guard))
+    } else {
+        let listener = TcpListener::bind(config.development_listen).await?;
+        (
+            PublicListener::Tcp(CappedListener::new(listener, MAX_PUBLIC_CONNECTIONS, tls)),
+            None,
+        )
+    };
+    #[cfg(not(unix))]
+    let public_listener = PublicListener::Tcp(CappedListener::new(
+        TcpListener::bind(config.development_listen).await?,
+        MAX_PUBLIC_CONNECTIONS,
+        tls,
+    ));
+
+    let result = run_with_router(
         public_listener,
         health_listener,
-        tls,
         config.transport_mode,
         config.trusted_proxy_addresses,
+        config.trusted_proxy_uids,
         public_router,
         readiness_pool,
         shutdown,
     )
-    .await
+    .await;
+    #[cfg(unix)]
+    drop(socket_guard);
+    result
 }
 
 /// Serves already-bound listeners. This is exposed for process-level and
@@ -349,10 +562,14 @@ pub async fn run(
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     run_with_router(
-        public_listener,
+        PublicListener::Tcp(CappedListener::new(
+            public_listener,
+            MAX_PUBLIC_CONNECTIONS,
+            None,
+        )),
         health_listener,
-        None,
         ConsoleTransportMode::Development,
+        vec![],
         vec![],
         development_router(),
         None,
@@ -362,24 +579,37 @@ pub async fn run(
 }
 
 async fn run_with_router(
-    public_listener: TcpListener,
+    public_listener: PublicListener,
     health_listener: TcpListener,
-    tls: Option<TlsAcceptor>,
     transport_mode: ConsoleTransportMode,
     trusted_proxy_addresses: Vec<std::net::IpAddr>,
+    trusted_proxy_uids: Vec<u32>,
     public_router: Router,
     readiness_pool: Option<platform_store::Pool>,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
-    if (tls.is_none() && !public_listener.local_addr()?.ip().is_loopback())
-        || !health_listener.local_addr()?.ip().is_loopback()
-    {
+    let public_transport_safe = match &public_listener {
+        PublicListener::Tcp(listener) => {
+            if listener.tls.is_some() {
+                transport_mode == ConsoleTransportMode::DirectTls
+            } else {
+                transport_mode != ConsoleTransportMode::DirectTls
+                    && listener.listener.local_addr()?.ip().is_loopback()
+            }
+        }
+        #[cfg(unix)]
+        PublicListener::Unix(_) => transport_mode == ConsoleTransportMode::ReverseProxy,
+    };
+    if !public_transport_safe || !health_listener.local_addr()?.ip().is_loopback() {
         return Err(ConsoleError::Config);
     }
 
     let public_router = if transport_mode == ConsoleTransportMode::ReverseProxy {
         public_router.layer(middleware::from_fn_with_state(
-            std::sync::Arc::new(trusted_proxy_addresses.into_iter().collect::<HashSet<_>>()),
+            std::sync::Arc::new(TrustedProxyPeers {
+                addresses: trusted_proxy_addresses.into_iter().collect(),
+                uids: trusted_proxy_uids.into_iter().collect(),
+            }),
             trusted_proxy_only,
         ))
     } else {
@@ -416,7 +646,7 @@ async fn run_with_router(
         })
     });
     let public = axum::serve(
-        CappedListener::new(public_listener, MAX_PUBLIC_CONNECTIONS, tls),
+        public_listener,
         public_router.into_make_service_with_connect_info::<TrustedPeer>(),
     )
     .with_graceful_shutdown(stop_requested(public_stop))
@@ -488,15 +718,20 @@ async fn hsts_header(mut response: Response) -> Response {
     response
 }
 
+struct TrustedProxyPeers {
+    addresses: HashSet<IpAddr>,
+    uids: HashSet<u32>,
+}
+
 async fn trusted_proxy_only(
-    State(allowed): State<std::sync::Arc<HashSet<std::net::IpAddr>>>,
+    State(allowed): State<std::sync::Arc<TrustedProxyPeers>>,
     request: axum::extract::Request,
     next: middleware::Next,
 ) -> Response {
     let trusted = request
         .extensions()
         .get::<ConnectInfo<TrustedPeer>>()
-        .is_some_and(|ConnectInfo(peer)| allowed.contains(&peer.ip()));
+        .is_some_and(|ConnectInfo(peer)| peer.is_allowed(&allowed.addresses, &allowed.uids));
     if trusted {
         next.run(request).await
     } else {

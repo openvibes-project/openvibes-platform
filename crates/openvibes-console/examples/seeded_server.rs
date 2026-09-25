@@ -30,6 +30,8 @@ async fn main() -> ExitCode {
             server_certificate_file: None,
             server_key_file: None,
             trusted_proxy_addresses: vec![],
+            unix_socket_file: None,
+            trusted_proxy_uids: vec![],
         },
         Some(config_path) => match openvibes_console::load_config(&config_path) {
             Ok(config) => config,

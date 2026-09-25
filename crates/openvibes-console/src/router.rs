@@ -2238,7 +2238,7 @@ fn invalid_access_binding() -> Response {
     tag = "session",
     responses(
         (status = 200, description = "Current authenticated browser session", body = crate::SessionResponse),
-        (status = 503, description = "Authentication is not implemented until C3", body = crate::ProblemDetails, content_type = "application/problem+json")
+        (status = 503, description = "Authentication store is unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub(crate) async fn session() -> Response {
@@ -4524,7 +4524,7 @@ async fn login(
     }
 
     let username = canonical_username(&body.username);
-    let source = peer.ip().to_string();
+    let source = peer.source_label();
     let account_bucket = throttle_digest(
         b"account",
         username.as_deref().unwrap_or("invalid").as_bytes(),
@@ -4760,7 +4760,7 @@ async fn logout(State(state): State<AuthHttpState>, request: axum::extract::Requ
     let source = request
         .extensions()
         .get::<ConnectInfo<crate::TrustedPeer>>()
-        .map(|ConnectInfo(address)| address.ip().to_string());
+        .map(|ConnectInfo(address)| address.source_label());
     let user_agent = bounded_user_agent(headers);
     let audit = console_auth::AuditContext {
         request_id: None,

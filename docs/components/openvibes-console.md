@@ -143,9 +143,13 @@ never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
 
-Reverse-proxy mode requires authenticated database configuration, a canonical
-HTTPS `public_origin`, a loopback public listener, and 1–64 unique loopback
-`trusted_proxy_addresses`. Requests from other peers are rejected. Forwarded
+Reverse-proxy mode requires authenticated database configuration and a
+canonical HTTPS `public_origin`. It uses either a loopback TCP listener with
+1–64 unique loopback `trusted_proxy_addresses`, or a Unix socket with an
+absolute `unix_socket_file` and 1–64 unique `trusted_proxy_uids`. The TCP and
+Unix trust lists are mutually exclusive. Requests from other peers are
+rejected. Unix sockets are created mode 0660; the proxy user must be able to
+traverse the parent directory and belong to the socket's group. Forwarded
 headers are ignored; the proxy must preserve the configured Host authority.
 HSTS is set for both direct TLS and reverse-proxy responses.
 
@@ -172,8 +176,8 @@ are:
 - direct TLS 1.3 termination is available with a configured server certificate
   chain and private key; TLS responses include HSTS;
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
-  origin plus an allow-list of trusted proxy addresses (loopback TCP is
-  implemented);
+  origin plus an allow-list of trusted proxy peers (loopback TCP addresses or
+  Unix effective UIDs);
 - forwarded headers are ignored; Host/Origin checks use the configured
   external origin;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
@@ -184,10 +188,11 @@ are:
 - session lifetimes, request limits, password hashing, export limits, and the
   private CSV spool are bounded configuration rather than browser choices.
 
-The current configuration has no Unix-socket listener; reverse-proxy
-upstreams therefore use loopback TCP. Development uses a loopback-only seeded
-server; the `dev-seed` implementation and its conspicuous banner are never
-included in the production RPM.
+The systemd unit creates `/run/openvibes-console` as a service-owned runtime
+directory and removes it when the service stops. In Unix proxy mode, the
+configured peer UIDs are checked using kernel peer credentials. Development
+uses a loopback-only seeded server; the `dev-seed` implementation and its
+conspicuous banner are never included in the production RPM.
 
 The offline RPM build script validates the caller-supplied cache digest,
 builds the embedded UI and release binary without network access, creates an
@@ -217,9 +222,9 @@ isolated `target/rpm-console` rpmbuild tree, and emits the package there.
   `Cache-Control: no-store`, like every API error.
 - The public and development routers cap extractor request bodies at 1 MiB,
   request handling at 15 seconds, and in-flight requests at 128 per process.
-  The public listener accepts at most 256 concurrent TCP connections and the
-  health listener accepts at most 16; excess connections wait in the OS
-  accept queue until a slot opens.
+  The public TCP or Unix listener accepts at most 256 concurrent connections
+  and the health listener accepts at most 16; excess connections wait in the
+  OS accept queue until a slot opens.
 - Problem Details errors log their request ID, stable code, and HTTP status;
   request fields and secret values are not logged.
 - An `embedded-ui` build fails if the shared route/public-asset contract,
@@ -248,9 +253,9 @@ isolated `target/rpm-console` rpmbuild tree, and emits the package there.
   and pagination. An object outside the caller's asset scope looks absent.
 - A mutation whose audit append fails rolls back. Token plaintext is shown
   once and cannot be recovered afterward.
-- Direct TLS 1.3 and trusted loopback-TCP reverse-proxy modes are available;
-  other proxy peers are rejected. Forwarded headers are ignored. Unix-socket
-  proxy mode and package/systemd integration validation remain incomplete.
+- Direct TLS 1.3, trusted loopback-TCP proxying, and UID-allow-listed Unix
+  socket proxying are available. Other proxy peers are rejected. Forwarded
+  headers are ignored; package/systemd integration validation remains open.
 
 ## Build and test
 

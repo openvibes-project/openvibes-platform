@@ -2235,7 +2235,7 @@
             }
           },
           "503": {
-            "description": "Authentication is not implemented until C3",
+            "description": "Authentication store is unavailable",
             "content": {
               "application/problem+json": {
                 "schema": {

@@ -3077,7 +3077,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
-            /** @description Authentication is not implemented until C3 */
+            /** @description Authentication store is unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

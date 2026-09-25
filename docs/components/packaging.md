@@ -185,9 +185,15 @@ trusted_proxy_addresses = ["127.0.0.1"]
 The proxy must connect from an allow-listed loopback address and preserve the
 configured `Host` authority. Forwarded headers are ignored. Public TLS
 terminates at the proxy; the console sends HSTS and uses the external HTTPS
-origin for authentication checks. Unix-socket proxy listeners are not
-implemented yet. Keep the health port loopback-only and expose only the
-proxy's public HTTPS port in the firewall.
+origin for authentication checks. For a Unix socket, configure
+`unix_socket_file = "/run/openvibes-console/console.sock"` and set
+`trusted_proxy_uids` to the numeric UID reported by `id -u <proxy-user>`;
+leave `trusted_proxy_addresses` empty. Add the proxy user to the
+`openvibes_console` group so it can traverse the runtime directory and connect
+to the mode-0660 socket. The listener verifies the peer UID with kernel
+credentials and removes only its own socket inode at shutdown. Keep the health
+port loopback-only and expose only the proxy's public HTTPS port in the
+firewall.
 
 ## Trying the whole system
 

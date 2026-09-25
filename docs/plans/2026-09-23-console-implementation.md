@@ -3,13 +3,13 @@
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
 3 are integrated. C0–C3 feature work is implemented, including authenticated
 SQL-scoped reads, access-control and audit operations, first-account bootstrap,
-and analyst triage. C5 is underway: direct TLS 1.3, trusted loopback proxy
-mode, enforced browser headers, a dedicated console RPM/service definition,
-and an offline cache-pinned packaging build path are implemented. The RPM and
+and analyst triage. C5 is underway: direct TLS 1.3, trusted TCP and Unix
+socket proxy modes, enforced browser headers, a dedicated console RPM/service
+definition, and an offline cache-pinned packaging build path are implemented. The RPM and
 systemd installation have not yet been built or exercised. The RPM build
 script now creates its private rpmbuild directory tree before invoking
-rpmbuild. Remaining work includes Unix-socket proxy upstreams,
-package/runtime integration, and full C5 review. The C2 store has SQL-scoped
+rpmbuild. Remaining work includes package/runtime integration and full C5
+review. The C2 store has SQL-scoped
 agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
@@ -178,8 +178,8 @@ the database when paired auth configuration is present, checks for schema 11
 at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
 failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
 and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct
-TLS and explicit trusted loopback proxy modes are wired; the proxy's Unix
-socket transport remains open. The embedded UI requests one-use
+TLS and explicit trusted loopback TCP/Unix proxy modes are wired. The embedded
+UI requests one-use
 pre-auth state, submits local credentials, gates the workspace on session
 validation, and revokes the session on sign out. The health listener refreshes
 `/ready` every five seconds from a bounded database/schema check.
@@ -267,9 +267,8 @@ Work:
 - direct TLS 1.3 server configuration by default; explicit proxy mode requires
   a canonical external HTTPS origin, trusted proxy allow-list, and loopback/
   Unix-socket plaintext or TLS-protected non-loopback upstream;
-- direct TLS 1.3 and explicit loopback-TCP proxy modes are implemented;
-  Unix-socket proxy upstreams remain open and need an explicit peer-identity
-  allow-list before they can accept forwarded authentication context;
+- direct TLS 1.3 and explicit loopback-TCP/Unix-socket proxy modes are
+  implemented; Unix peers are checked against a bounded UID allow-list;
 - RPM build order including deterministic frontend assets;
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
