@@ -15,6 +15,7 @@ when you next sync.
 | AS6 (own server elsewhere), AS7 (external provider) | plan | Not started; the user has not asked yet |
 | Console fleet grouping (X-M7), specs only | branch `console-current` (00dcd7f, `main` merged in) | Replaces `console-fixes`, which the user will close |
 | Assistant AS1–AS5 | openvibes-project/openvibes-platform#28 | Open, CI running; Claude Code watches it |
+| READMEs with the logotype, repositories, capabilities, plans | agent: on PR #9's branch; platform and protocol: branch `readme` (no PRs yet) | Pushed |
 | Agent security fixes for running as root/SYSTEM | agent repo, openvibes-project/openvibes-agent#9 | Open; macOS CI fix pushed (05325fc); check CI |
 
 ## Branches: a linear stack, one PR
@@ -48,6 +49,8 @@ PostgreSQL 16 and cannot reach the PostgreSQL apt repository.
 - **Migration numbers:** `main` is at **0012**, so the next free number is
   **0013**. The AS4 plan and the console specs on `console-current` now say
   so; `console-current` has `main` merged in.
+  **Collision:** the OSV plan (`docs/plans/2026-09-25-osv-distributions.md`,
+  task D2) also plans 0013. Whichever merges second renumbers.
 - `ConsoleConfig` denies unknown fields, so add
   `assistant: Option<AssistantConfig>`.
 - **Backend key with `openvibes-llm`:** add
