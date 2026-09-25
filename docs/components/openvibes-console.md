@@ -102,14 +102,15 @@ the stored schema, including optional hostname/heartbeat data and multiple
 certificate records. Finding fields include confidence, evidence, scan ID,
 receive time, and authenticated origin. Implemented agent and finding reads
 resolve current permission scopes for each request and apply asset-group
-selectors in SQL before pagination or aggregation. Control-plane reads and
-audit operations remain unavailable.
+selectors in SQL before pagination or aggregation. Access-control, audit,
+enrollment, service-account, rule-set, triage, and agent-revocation operations
+use authenticated, permission-checked routes with transactional audit records.
 
 The implemented production UI covers sign-in, overview, agents, findings,
-enrollment, service accounts, rule sets, and latest-finding analyst triage with
-version-checked updates. Some remaining production deployment hardening is
-still planned. CA and rule-trust-key
-administration remain CLI-only.
+enrollment, service accounts, rule sets, access control, audit, and
+latest-finding analyst triage with version-checked updates. RPM installation
+and C5 deployment behavior still need integration validation. CA and
+rule-trust-key administration remain CLI-only.
 
 ## Configuration
 
@@ -225,20 +226,17 @@ included in the production RPM.
 - Frontend tests refuse brand SVGs with scripts, animation, embedded raster,
   external references, text/fonts, or background rectangles, and verify the
   PNG signatures, alpha channel, and declared dimensions.
-**Still planned (C2 to C5):**
+**Implemented runtime behavior:**
 
-- Missing or invalid security configuration, a wildcard plaintext proxy bind,
-  a non-loopback health listener, or an untrusted forwarded-header setup makes
-  startup fail rather than weakening the trust boundary.
-- In authenticated mode, `/ready` is refreshed every five seconds from a
+- In authenticated mode, `/ready` is refreshed every five seconds using a
   bounded database connection and schema-version check. It returns 503 on
   timeout, database failure, or schema drift; `/health` remains a
   process-liveness check.
-- Production data routes remain unavailable until their owning milestones
-  are complete. The loopback seeded API is synthetic and cannot access
-  production state. There is no permissive production authentication mode.
-- In C0 mode, `GET /api/v1/session` returns a no-store, bounded 503 Problem
-  Details response. In authenticated mode it validates the DB session and
+- Development mode and its synthetic seeded routes remain loopback-only. They
+  cannot access production state. Production data and control-plane routes
+  require database-backed authentication; there is no permissive production
+  authentication mode.
+- In authenticated mode, `/api/v1/session` validates the database session and
   resolves active role bindings on every request.
 - API failures are bounded Problem Details responses and never expose SQL,
   credentials, tokens, certificates, IdP payloads, or authorisation detail.
@@ -246,6 +244,9 @@ included in the production RPM.
   and pagination. An object outside the caller's asset scope looks absent.
 - A mutation whose audit append fails rolls back. Token plaintext is shown
   once and cannot be recovered afterward.
+- Direct TLS 1.3 and trusted loopback-TCP reverse-proxy modes are available;
+  other proxy peers are rejected. Forwarded headers are ignored. Unix-socket
+  proxy mode and package/systemd integration validation remain incomplete.
 
 ## Build and test
 
