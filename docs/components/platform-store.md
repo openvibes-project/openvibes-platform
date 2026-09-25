@@ -117,6 +117,23 @@ mutable pointer.
   published), `UpToDate`, or `Envelope(bytes)`. One primary-key query, read
   backwards; the bytes are fetched only when the agent's version is older.
 
+## Inventories (`inventory::…`, schema 7)
+
+Distinct package versions are stored once for the fleet in
+`package_versions` (manager, name, epoch, version, release, arch; unique),
+and `host_packages` links each host to the versions it has, so 10,000
+Fedora hosts need about 36M two-key rows rather than full package rows.
+`agents` gains `os_id`, `os_version`, `inventory_sha256`, and
+`inventory_at`. `openvibes_ingest` may add versions and replace a host's
+links, never edit or delete versions (a test checks it).
+
+- `replace(&mut client, agent_id, os_id, os_version, packages, sha256, now)`
+  locks the agent row; an equal digest is `Unchanged` (nothing written, no
+  notification); otherwise it inserts unknown versions, replaces the host's
+  links, records OS and digest, and sends `NOTIFY inventory_changed` with
+  the agent id (delivered at commit) → `Stored`. Several installed versions
+  of one package (kernels) are all kept.
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.

@@ -3,10 +3,13 @@ use std::collections::BTreeSet;
 
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use openvibes_core::{
-    DeliveryAcknowledgement, Finding, FindingBatch, Heartbeat, Identifier, RejectedFinding,
-    SchemaVersion, Severity,
+    DeliveryAcknowledgement, Finding, FindingBatch, Heartbeat, Identifier, InventoryReport,
+    PackageManager, RejectedFinding, SchemaVersion, Severity,
 };
-use platform_store::ingest::{self, StoredFinding};
+use platform_store::{
+    ingest::{self, StoredFinding},
+    inventory::{self, PackageRow},
+};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
@@ -147,4 +150,58 @@ pub(crate) async fn findings(
         acknowledged_at_unix_ms: now.timestamp_millis(),
         rejected_findings: rejected,
     }))
+}
+
+/// `POST /v1/inventory` (protocol P8): replaces the authenticated agent's
+/// package inventory, unless it is unchanged, for vulnerability matching.
+pub(crate) async fn inventory(
+    State(state): State<AppState>,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let mut report: InventoryReport = parse(&body)?;
+    if report.agent_id.as_str() != agent_id {
+        return Err(ApiError::BadRequest);
+    }
+    // Canonical order, so the digest ignores how the agent listed them.
+    report
+        .packages
+        .sort_by_cached_key(|package| serde_json::to_string(package).unwrap_or_default());
+    let digest: [u8; 32] = {
+        use sha2::Digest;
+        let bytes = serde_json::to_vec(&(&report.os, &report.packages))
+            .map_err(|_| ApiError::BadRequest)?;
+        sha2::Sha256::digest(&bytes).into()
+    };
+    let rows: Vec<PackageRow> = report
+        .packages
+        .iter()
+        .map(|package| PackageRow {
+            manager: match package.manager {
+                PackageManager::Rpm => "rpm",
+                PackageManager::Dpkg => "dpkg",
+            }
+            .to_owned(),
+            name: package.name.clone(),
+            epoch: package
+                .epoch
+                .and_then(|e| i32::try_from(e).ok())
+                .unwrap_or(0),
+            version: package.version.clone(),
+            release: package.release.clone().unwrap_or_default(),
+            arch: package.arch.clone().unwrap_or_default(),
+        })
+        .collect();
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    inventory::replace(
+        &mut client,
+        &agent_id,
+        report.os.id.as_str(),
+        report.os.version_id.as_str(),
+        &rows,
+        digest,
+        Utc::now(),
+    )
+    .await?;
+    Ok(StatusCode::NO_CONTENT)
 }
