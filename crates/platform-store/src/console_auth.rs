@@ -351,6 +351,153 @@ pub enum EnrollmentTokenCreation {
     Conflict,
 }
 
+/// Creates a service account and records its creation atomically.
+pub async fn create_service_account(
+    client: &mut Client,
+    name: &str,
+    role_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<String>, StoreError> {
+    let tx = client.transaction().await?;
+    let row = tx.query_opt(
+        "INSERT INTO console_service_accounts(service_account_id,name,enabled,created_at,created_by) SELECT gen_random_uuid(),$1,true,$2,$3 WHERE EXISTS(SELECT 1 FROM console_roles WHERE role_id=$4) ON CONFLICT(name) DO NOTHING RETURNING service_account_id::text",
+        &[&name, &now, &actor_id, &role_id],
+    ).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let id: String = row.get(0);
+    tx.execute("INSERT INTO console_role_bindings(binding_id,service_account_id,role_id,created_at,created_by) VALUES(gen_random_uuid(),$1::text::uuid,$2,$3,$4)", &[&id,&role_id,&now,&actor_id]).await?;
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_account.created','service_account','success',jsonb_build_object('name',$2::text,'role_id',$3::text),'user',$1,$1,'service_account',$4)", &[&actor_id, &name, &role_id, &id]).await?;
+    tx.commit().await?;
+    Ok(Some(id))
+}
+
+/// Lists service accounts without token digests or plaintext.
+pub async fn list_service_accounts(client: &Client) -> Result<Vec<ServiceAccountInfo>, StoreError> {
+    let rows = client.query("SELECT a.service_account_id::text,a.name,a.enabled,a.created_at,(SELECT count(*) FROM console_service_tokens t WHERE t.service_account_id=a.service_account_id AND t.revoked_at IS NULL AND t.expires_at>now()),COALESCE((SELECT array_agg(b.role_id ORDER BY b.role_id) FROM console_role_bindings b WHERE b.service_account_id=a.service_account_id AND b.revoked_at IS NULL),'{}') FROM console_service_accounts a ORDER BY a.name,a.service_account_id", &[]).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| ServiceAccountInfo {
+            service_account_id: row.get(0),
+            name: row.get(1),
+            enabled: row.get(2),
+            created_at: row.get(3),
+            active_tokens: row.get(4),
+            role_ids: row.get(5),
+        })
+        .collect())
+}
+
+/// Disables one service account and revokes all its active tokens atomically.
+pub async fn disable_service_account(
+    client: &mut Client,
+    service_account_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let row = tx.query_opt("UPDATE console_service_accounts SET enabled=false,disabled_at=$2 WHERE service_account_id=$1::text::uuid AND enabled RETURNING name", &[&service_account_id,&now]).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    tx.execute("UPDATE console_service_tokens SET revoked_at=$2 WHERE service_account_id=$1::text::uuid AND revoked_at IS NULL", &[&service_account_id,&now]).await?;
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_account.disabled','service_account','success',jsonb_build_object('name',$2::text),'user',$1,$1,'service_account',$3)", &[&actor_id,&row.get::<_,String>(0),&service_account_id]).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Lists secret-free token metadata for one service account.
+pub async fn list_service_tokens(
+    client: &Client,
+    service_account_id: &str,
+) -> Result<Option<Vec<ServiceTokenInfo>>, StoreError> {
+    if client
+        .query_opt(
+            "SELECT 1 FROM console_service_accounts WHERE service_account_id=$1::text::uuid",
+            &[&service_account_id],
+        )
+        .await?
+        .is_none()
+    {
+        return Ok(None);
+    }
+    let rows = client.query("SELECT token_id::text,label,created_at,expires_at,revoked_at IS NOT NULL FROM console_service_tokens WHERE service_account_id=$1::text::uuid ORDER BY created_at DESC,token_id", &[&service_account_id]).await?;
+    Ok(Some(
+        rows.into_iter()
+            .map(|row| ServiceTokenInfo {
+                token_id: row.get(0),
+                label: row.get(1),
+                created_at: row.get(2),
+                expires_at: row.get(3),
+                revoked: row.get(4),
+            })
+            .collect(),
+    ))
+}
+
+/// Creates a hashed, expiring service token and audits the issuance atomically.
+pub async fn create_service_token(
+    client: &mut Client,
+    request: &NewServiceToken<'_>,
+) -> Result<ServiceTokenCreation, StoreError> {
+    let tx = client.transaction().await?;
+    let operation = format!("service_token.create:{}", request.service_account_id);
+    let lock_key = format!(
+        "{operation}:{}:{}",
+        request.actor_id,
+        encode_hex(request.idempotency_key_sha256)
+    );
+    tx.query_one(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        &[&lock_key],
+    )
+    .await?;
+    tx.execute("DELETE FROM console_idempotency WHERE actor_id=$1 AND operation=$2 AND key_sha256=$3 AND expires_at<=$4",&[&request.actor_id,&operation,&&request.idempotency_key_sha256[..],&request.now]).await?;
+    if let Some(existing)=tx.query_opt("SELECT request_sha256,response_body->>'token_id',response_body->>'expires_at' FROM console_idempotency WHERE actor_id=$1 AND operation=$2 AND key_sha256=$3 AND expires_at>$4",&[&request.actor_id,&operation,&&request.idempotency_key_sha256[..],&request.now]).await? {
+        let old_hash:Vec<u8>=existing.get(0);
+        if old_hash.as_slice()!=*request.request_sha256 { tx.rollback().await?; return Ok(ServiceTokenCreation::Conflict); }
+        let token_id:String=existing.get(1);
+        let expiry:String=existing.get(2);
+        let expires_at=DateTime::parse_from_rfc3339(&expiry).map_err(|_|StoreError::Query)?.with_timezone(&Utc);
+        tx.rollback().await?;
+        return Ok(ServiceTokenCreation::Replayed{token_id,expires_at});
+    }
+    let row = tx.query_opt("INSERT INTO console_service_tokens(token_id,service_account_id,token_sha256,label,created_at,expires_at,created_by) SELECT gen_random_uuid(),service_account_id,$2,$3,$4,$5,$6 FROM console_service_accounts WHERE service_account_id=$1::text::uuid AND enabled RETURNING token_id::text", &[&request.service_account_id,&&request.secret_sha256[..],&request.label,&request.now,&request.expires_at,&request.actor_id]).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(ServiceTokenCreation::MissingAccount);
+    };
+    let id: String = row.get(0);
+    let expiry_text = request.expires_at.to_rfc3339();
+    tx.execute("INSERT INTO console_idempotency(actor_id,operation,key_sha256,request_sha256,response_status,response_body,created_at,expires_at) VALUES($1,$2,$3,$4,201,jsonb_build_object('token_id',$5::text,'expires_at',$6::text),$7,$7::timestamptz+interval '24 hours')",&[&request.actor_id,&operation,&&request.idempotency_key_sha256[..],&&request.request_sha256[..],&id,&expiry_text,&request.now]).await?;
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_token.created','service_token','success',jsonb_build_object('label',$2::text,'expires_at',$3::text),'user',$1,$1,'service_token',$4)", &[&request.actor_id,&request.label,&expiry_text,&id]).await?;
+    tx.commit().await?;
+    Ok(ServiceTokenCreation::Created { token_id: id })
+}
+
+/// Revokes one active service token and records the change atomically.
+pub async fn revoke_service_token(
+    client: &mut Client,
+    service_account_id: &str,
+    token_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let row = tx.query_opt("UPDATE console_service_tokens SET revoked_at=$3 WHERE service_account_id=$1::text::uuid AND token_id=$2::text::uuid AND revoked_at IS NULL RETURNING token_id::text", &[&service_account_id,&token_id,&now]).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'service_token.revoked','service_token','success','{}'::jsonb,'user',$1,$1,'service_token',$2)", &[&actor_id,&row.get::<_,String>(0)]).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
 /// Inputs for one idempotent enrollment-token creation transaction.
 pub struct NewConsoleEnrollmentToken<'a> {
     /// SHA-256 of the decoded one-time token secret.
@@ -369,6 +516,118 @@ pub struct NewConsoleEnrollmentToken<'a> {
     pub idempotency_key_sha256: &'a [u8; 32],
     /// SHA-256 of the normalized request body.
     pub request_sha256: &'a [u8; 32],
+}
+
+/// Non-secret service-account inventory row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ServiceAccountInfo {
+    /// Stable service-account UUID.
+    pub service_account_id: String,
+    /// Operator-selected name.
+    pub name: String,
+    /// Whether the identity can authenticate.
+    pub enabled: bool,
+    /// Creation instant.
+    pub created_at: DateTime<Utc>,
+    /// Number of currently unrevoked tokens.
+    pub active_tokens: i64,
+    /// Active role identifiers granted to this identity.
+    pub role_ids: Vec<String>,
+}
+
+/// Non-secret service-token metadata row.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ServiceTokenInfo {
+    /// Stable token UUID.
+    pub token_id: String,
+    /// Operator-selected label.
+    pub label: String,
+    /// Creation instant.
+    pub created_at: DateTime<Utc>,
+    /// Expiry instant.
+    pub expires_at: DateTime<Utc>,
+    /// Whether the token was revoked.
+    pub revoked: bool,
+}
+
+/// Active service-token identity and current role bindings.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ActiveServiceToken {
+    /// Token UUID for audit actor context.
+    pub token_id: String,
+    /// Service-account UUID.
+    pub service_account_id: String,
+    /// Service-account name.
+    pub name: String,
+    /// Assigned roles and optional asset-group scopes.
+    pub bindings: Vec<UserRoleBinding>,
+}
+
+/// Result of idempotent service-token issuance.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ServiceTokenCreation {
+    /// The new plaintext is retained only by the HTTP caller.
+    Created {
+        /// Stable token UUID.
+        token_id: String,
+    },
+    /// Retry metadata; the original secret cannot be recovered.
+    Replayed {
+        /// Stable token UUID.
+        token_id: String,
+        /// Expiry instant.
+        expires_at: DateTime<Utc>,
+    },
+    /// Target account is missing or disabled.
+    MissingAccount,
+    /// An idempotency key was reused for different settings.
+    Conflict,
+}
+
+/// Inputs for one idempotent service-token issue transaction.
+pub struct NewServiceToken<'a> {
+    /// Target service-account UUID.
+    pub service_account_id: &'a str,
+    /// SHA-256 of the one-time secret.
+    pub secret_sha256: &'a [u8; 32],
+    /// Operator label.
+    pub label: &'a str,
+    /// Human actor UUID.
+    pub actor_id: &'a str,
+    /// Request instant.
+    pub now: DateTime<Utc>,
+    /// Token expiry.
+    pub expires_at: DateTime<Utc>,
+    /// SHA-256 of Idempotency-Key.
+    pub idempotency_key_sha256: &'a [u8; 32],
+    /// SHA-256 of normalized request values.
+    pub request_sha256: &'a [u8; 32],
+}
+
+/// Looks up a bearer token digest only when its identity and expiry are active.
+pub async fn active_service_token(
+    client: &Client,
+    token_sha256: &[u8; 32],
+    now: DateTime<Utc>,
+) -> Result<Option<ActiveServiceToken>, StoreError> {
+    let row = client.query_opt("SELECT t.token_id::text,a.service_account_id::text,a.name FROM console_service_tokens t JOIN console_service_accounts a USING(service_account_id) WHERE t.token_sha256=$1 AND t.revoked_at IS NULL AND t.expires_at>$2 AND a.enabled", &[&&token_sha256[..],&now]).await?;
+    let Some(row) = row else {
+        return Ok(None);
+    };
+    let service_account_id: String = row.get(1);
+    let bindings = client.query("SELECT role_id,asset_group_id::text FROM console_role_bindings WHERE service_account_id=$1::text::uuid AND revoked_at IS NULL ORDER BY role_id,asset_group_id NULLS FIRST", &[&service_account_id]).await?;
+    Ok(Some(ActiveServiceToken {
+        token_id: row.get(0),
+        service_account_id,
+        name: row.get(2),
+        bindings: bindings
+            .into_iter()
+            .map(|binding| UserRoleBinding {
+                role_id: binding.get(0),
+                asset_group_id: binding.get(1),
+            })
+            .collect(),
+    }))
 }
 
 /// Creates a hashed enrollment token and its idempotency/audit rows atomically.

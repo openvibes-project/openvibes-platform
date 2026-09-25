@@ -26,7 +26,9 @@ serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes, plus finding summary, latest, and history reads. Access
 control has a global read inventory for roles, bindings, and asset groups,
 plus CSRF-protected local-user role binding changes and audited asset-group
-selector management. Enrollment, rule, and service-account reads remain pending.
+selector management. Enrollment and service-account management are available
+through the console API and UI; pre-signed rule-bundle browsing/upload remains
+pending.
 Global audit event search and retention-policy
 reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
@@ -104,8 +106,8 @@ selectors in SQL before pagination or aggregation. Control-plane reads and
 audit operations remain unavailable.
 
 The implemented production UI covers sign-in, overview, agents, findings,
-and enrollment tokens. Analyst triage, pre-signed rule bundles, access control and
-exact agent tags, service accounts, and the audit log, retention policy, and
+and enrollment and service accounts. Analyst triage, pre-signed rule bundles,
+and the audit log, retention policy, and
 bounded CSV export are still planned. CA and rule-trust-key administration
 remain CLI-only.
 

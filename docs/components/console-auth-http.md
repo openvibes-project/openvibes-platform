@@ -36,6 +36,17 @@ permission-checked read models, enrollment-token management, and audit routes.
   `GET /api/v1/enrollment-tokens/{token_id}` returns one secret-free record.
   `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.revoke`
   and audits the revocation. These responses are `Cache-Control: no-store`.
+- `/api/v1/service-accounts` lists safe account metadata and creates an account
+  with one global built-in role. Per-account token routes list metadata, issue
+  an expiring `ovc_` bearer secret once, revoke a token, or disable the account
+  (which also revokes all its tokens). Token issue requires an
+  `Idempotency-Key`; a matching retry returns metadata without the original
+  secret and a mismatched retry returns 409. These mutations require
+  `service_accounts.manage`; reads require `service_accounts.read`.
+  Service-account bearer credentials are accepted for scoped read routes, and
+  are rejected when mixed with a browser cookie. The first-release adapter
+  refuses bearer-authenticated mutations; those require a browser session and
+  CSRF checks.
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived

@@ -548,6 +548,165 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     )
     .await;
     assert_eq!(revoked_token.status(), StatusCode::NO_CONTENT);
+    let service_account = api_json(
+        &router,
+        "POST",
+        "/api/v1/service-accounts",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        r#"{"name":"http-read-integration","role_id":"viewer"}"#,
+    )
+    .await;
+    assert_eq!(service_account.status(), StatusCode::CREATED);
+    let service_account: Value =
+        serde_json::from_slice(&to_bytes(service_account.into_body(), 8192).await.unwrap())
+            .unwrap();
+    let service_account_id = service_account["service_account_id"].as_str().unwrap();
+    let service_token_body = r#"{"label":"http read token","expires_in_hours":24}"#;
+    let service_token_key = "console-http-service-token-issue-key-01";
+    let service_token = api_json_idempotent(
+        &router,
+        &format!("/api/v1/service-accounts/{service_account_id}/tokens"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        service_token_key,
+        service_token_body,
+    )
+    .await;
+    assert_eq!(service_token.status(), StatusCode::CREATED);
+    assert_eq!(
+        service_token.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let service_token: Value =
+        serde_json::from_slice(&to_bytes(service_token.into_body(), 8192).await.unwrap()).unwrap();
+    let service_secret = service_token["token"].as_str().unwrap();
+    assert!(service_secret.starts_with("ovc_"));
+    let service_token_id = service_token["token_id"].as_str().unwrap();
+    let service_token_replay = api_json_idempotent(
+        &router,
+        &format!("/api/v1/service-accounts/{service_account_id}/tokens"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        service_token_key,
+        service_token_body,
+    )
+    .await;
+    assert_eq!(service_token_replay.status(), StatusCode::OK);
+    let service_token_replay: Value = serde_json::from_slice(
+        &to_bytes(service_token_replay.into_body(), 8192)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(service_token_replay["token_id"], service_token_id);
+    assert_eq!(service_token_replay["secret_available"], false);
+    assert!(service_token_replay["token"].is_null());
+    let service_token_conflict = api_json_idempotent(
+        &router,
+        &format!("/api/v1/service-accounts/{service_account_id}/tokens"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        service_token_key,
+        r#"{"label":"changed","expires_in_hours":24}"#,
+    )
+    .await;
+    assert_eq!(service_token_conflict.status(), StatusCode::CONFLICT);
+    let bearer_read = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .header(header::AUTHORIZATION, format!("Bearer {service_secret}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(bearer_read.status(), StatusCode::OK);
+    let mixed_credentials = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::AUTHORIZATION, format!("Bearer {service_secret}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(mixed_credentials.status(), StatusCode::UNAUTHORIZED);
+    let token_revoked = api_json(
+        &router,
+        "POST",
+        &format!("/api/v1/service-accounts/{service_account_id}/tokens/{service_token_id}/revoke"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        "",
+    )
+    .await;
+    assert_eq!(token_revoked.status(), StatusCode::NO_CONTENT);
+    let revoked_bearer = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .header(header::AUTHORIZATION, format!("Bearer {service_secret}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(revoked_bearer.status(), StatusCode::UNAUTHORIZED);
+    let second_service_token = api_json_idempotent(
+        &router,
+        &format!("/api/v1/service-accounts/{service_account_id}/tokens"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        "console-http-service-token-issue-key-02",
+        r#"{"label":"disable check","expires_in_hours":24}"#,
+    )
+    .await;
+    assert_eq!(second_service_token.status(), StatusCode::CREATED);
+    let second_service_token: Value = serde_json::from_slice(
+        &to_bytes(second_service_token.into_body(), 8192)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    let second_service_secret = second_service_token["token"].as_str().unwrap();
+    let account_disabled = api_json(
+        &router,
+        "POST",
+        &format!("/api/v1/service-accounts/{service_account_id}/disable"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        "",
+    )
+    .await;
+    assert_eq!(account_disabled.status(), StatusCode::NO_CONTENT);
+    let disabled_bearer = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/agents/summary")
+                .header(
+                    header::AUTHORIZATION,
+                    format!("Bearer {second_service_secret}"),
+                )
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(disabled_bearer.status(), StatusCode::UNAUTHORIZED);
+    let service_audit = db.pool.get().await.unwrap();
+    let account_events: i64=service_audit.query_one("SELECT count(*) FROM audit_log WHERE target_id=$1 AND action IN ('service_account.created','service_account.disabled')",&[&service_account_id]).await.unwrap().get(0);
+    let second_service_token_id = second_service_token["token_id"].as_str().unwrap();
+    let token_events: i64=service_audit.query_one("SELECT count(*) FROM audit_log WHERE target_id IN ($1,$2) AND action IN ('service_token.created','service_token.revoked')",&[&service_token_id,&second_service_token_id]).await.unwrap().get(0);
+    assert_eq!(account_events, 2);
+    assert_eq!(token_events, 3);
     let admin_binding_id = access["bindings"]
         .as_array()
         .unwrap()

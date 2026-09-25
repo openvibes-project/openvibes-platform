@@ -350,6 +350,22 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             axum::routing::post(revoke_authenticated_enrollment_token),
         )
         .route(
+            "/v1/service-accounts",
+            get(authenticated_service_accounts).post(create_authenticated_service_account),
+        )
+        .route(
+            "/v1/service-accounts/{service_account_id}/disable",
+            axum::routing::post(disable_authenticated_service_account),
+        )
+        .route(
+            "/v1/service-accounts/{service_account_id}/tokens",
+            get(authenticated_service_tokens).post(create_authenticated_service_token),
+        )
+        .route(
+            "/v1/service-accounts/{service_account_id}/tokens/{token_id}/revoke",
+            axum::routing::post(revoke_authenticated_service_token),
+        )
+        .route(
             "/v1/access-control/asset-groups",
             axum::routing::post(create_authenticated_asset_group),
         )
@@ -1295,6 +1311,469 @@ pub(crate) async fn revoke_authenticated_enrollment_token(
         Ok(false) => problem_response(ProblemDetails::not_found(
             "token_not_found",
             "Token not found or already revoked",
+        )),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+/// Lists service accounts without secret material.
+#[utoipa::path(get,path="/api/v1/service-accounts",tag="service_accounts",responses((status=200,description="Service-account metadata",body=crate::ServiceAccountPage)))]
+pub(crate) async fn authenticated_service_accounts(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    use chrono::SecondsFormat;
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsRead,
+        false,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    let accounts = match console_auth::list_service_accounts(&client).await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    if platform_store::audit::record(
+        &client,
+        &actor,
+        "service_accounts.viewed",
+        Some("service_accounts"),
+        "success",
+    )
+    .await
+    .is_err()
+    {
+        return unavailable_auth();
+    }
+    no_store(
+        Json(crate::ServiceAccountPage {
+            items: accounts
+                .into_iter()
+                .map(|account| crate::ServiceAccountView {
+                    service_account_id: account.service_account_id,
+                    name: account.name,
+                    enabled: account.enabled,
+                    created_at: account
+                        .created_at
+                        .to_rfc3339_opts(SecondsFormat::Millis, true),
+                    active_tokens: account.active_tokens,
+                    role_ids: account.role_ids,
+                })
+                .collect(),
+        })
+        .into_response(),
+    )
+}
+
+/// Creates a named service identity with one initial global built-in role.
+#[utoipa::path(post,path="/api/v1/service-accounts",tag="service_accounts",request_body=crate::CreateServiceAccountRequest,responses((status=201,description="Service account created",body=crate::ServiceAccountView),(status=409,description="Name already exists",body=ProblemDetails)))]
+pub(crate) async fn create_authenticated_service_account(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Json(request): Json<crate::CreateServiceAccountRequest>,
+) -> Response {
+    let name = request.name.trim();
+    if name.is_empty()
+        || name.chars().count() > 128
+        || name.chars().any(char::is_control)
+        || !matches!(
+            request.role_id.as_str(),
+            "viewer" | "analyst" | "operator" | "admin"
+        )
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_service_account",
+            "Provide a valid name and built-in global role",
+        ));
+    }
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsManage,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let mut client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    let id = match console_auth::create_service_account(
+        &mut client,
+        name,
+        &request.role_id,
+        &actor,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(Some(id)) => id,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::CONFLICT,
+                "service_account_conflict",
+                "A service account with this name already exists",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    let response = Json(crate::ServiceAccountView {
+        service_account_id: id,
+        name: name.to_owned(),
+        enabled: true,
+        created_at: Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        active_tokens: 0,
+        role_ids: vec![request.role_id],
+    })
+    .into_response();
+    let mut response = response;
+    *response.status_mut() = StatusCode::CREATED;
+    no_store(response)
+}
+
+/// Disables an account and revokes its issued tokens.
+#[utoipa::path(post,path="/api/v1/service-accounts/{service_account_id}/disable",tag="service_accounts",params(("service_account_id"=String,Path)),responses((status=204,description="Service account disabled"),(status=404,description="Unknown or already disabled",body=ProblemDetails)))]
+pub(crate) async fn disable_authenticated_service_account(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(service_account_id): Path<String>,
+) -> Response {
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsManage,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let mut client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    match console_auth::disable_service_account(
+        &mut client,
+        &service_account_id,
+        &actor,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => problem_response(ProblemDetails::new(
+            StatusCode::NOT_FOUND,
+            "service_account_not_found",
+            "Service account not found or already disabled",
+        )),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+/// Lists a service account's secret-free token metadata.
+#[utoipa::path(get,path="/api/v1/service-accounts/{service_account_id}/tokens",tag="service_accounts",params(("service_account_id"=String,Path)),responses((status=200,description="Service-token metadata",body=crate::ServiceTokenPage),(status=404,description="Service account not found",body=ProblemDetails)))]
+pub(crate) async fn authenticated_service_tokens(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(service_account_id): Path<String>,
+) -> Response {
+    use chrono::SecondsFormat;
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsRead,
+        false,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    let tokens = match console_auth::list_service_tokens(&client, &service_account_id).await {
+        Ok(Some(value)) => value,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::NOT_FOUND,
+                "service_account_not_found",
+                "Service account not found",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    if platform_store::audit::record(
+        &client,
+        &actor,
+        "service_tokens.viewed",
+        Some(&service_account_id),
+        "success",
+    )
+    .await
+    .is_err()
+    {
+        return unavailable_auth();
+    }
+    no_store(
+        Json(crate::ServiceTokenPage {
+            items: tokens
+                .into_iter()
+                .map(|token| crate::ServiceTokenView {
+                    token_id: token.token_id,
+                    label: token.label,
+                    created_at: token
+                        .created_at
+                        .to_rfc3339_opts(SecondsFormat::Millis, true),
+                    expires_at: token
+                        .expires_at
+                        .to_rfc3339_opts(SecondsFormat::Millis, true),
+                    revoked: token.revoked,
+                })
+                .collect(),
+        })
+        .into_response(),
+    )
+}
+
+/// Issues an expiring service bearer secret once.
+#[utoipa::path(
+    post,
+    path="/api/v1/service-accounts/{service_account_id}/tokens",
+    tag="service_accounts",
+    params(("service_account_id"=String,Path),("Idempotency-Key"=String,Header,description="Required retry key; a replay never returns the secret")),
+    request_body=crate::CreateServiceTokenRequest,
+    responses(
+        (status=201,description="Token secret shown once",body=crate::CreatedServiceToken),
+        (status=200,description="Idempotent replay; secret unavailable",body=crate::CreatedServiceToken),
+        (status=404,description="Service account is missing or disabled",body=ProblemDetails),
+        (status=409,description="Idempotency key was reused with different settings",body=ProblemDetails)
+    )
+)]
+pub(crate) async fn create_authenticated_service_token(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(service_account_id): Path<String>,
+    Json(request): Json<crate::CreateServiceTokenRequest>,
+) -> Response {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use chrono::Duration;
+    use ring::{
+        digest,
+        rand::{SecureRandom, SystemRandom},
+    };
+    use zeroize::Zeroize;
+    let label = request.label.trim();
+    if !(1..=8760).contains(&request.expires_in_hours)
+        || label.chars().count() > 128
+        || label.chars().any(char::is_control)
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_service_token",
+            "Provide a label of at most 128 characters and expiry from 1 to 8760 hours",
+        ));
+    }
+    let Some(idempotency_key) = headers
+        .get("idempotency-key")
+        .and_then(|value| value.to_str().ok())
+        .filter(|key| {
+            (16..=128).contains(&key.len()) && key.bytes().all(|byte| byte.is_ascii_graphic())
+        })
+    else {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "idempotency_key_required",
+            "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters",
+        ));
+    };
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsManage,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let mut secret = [0u8; 32];
+    if SystemRandom::new().fill(&mut secret).is_err() {
+        return unavailable_auth();
+    }
+    let token = zeroize::Zeroizing::new(format!("ovc_{}", URL_SAFE_NO_PAD.encode(secret)));
+    let hash = crate::auth::session_digest(token.as_str());
+    secret.zeroize();
+    let now = Utc::now();
+    let expires_at = now + Duration::hours(i64::from(request.expires_in_hours));
+    let mut idempotency_hash = [0u8; 32];
+    idempotency_hash
+        .copy_from_slice(digest::digest(&digest::SHA256, idempotency_key.as_bytes()).as_ref());
+    let request_bytes =
+        serde_json::to_vec(&(service_account_id.as_str(), label, request.expires_in_hours))
+            .unwrap_or_default();
+    let mut request_hash = [0u8; 32];
+    request_hash.copy_from_slice(digest::digest(&digest::SHA256, &request_bytes).as_ref());
+    let mut client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    let creation = match console_auth::create_service_token(
+        &mut client,
+        &console_auth::NewServiceToken {
+            service_account_id: &service_account_id,
+            secret_sha256: &hash,
+            label,
+            actor_id: &actor,
+            now,
+            expires_at,
+            idempotency_key_sha256: &idempotency_hash,
+            request_sha256: &request_hash,
+        },
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    let (status, token_id, expiry, secret, replayed) = match creation {
+        console_auth::ServiceTokenCreation::Created { token_id } => (
+            StatusCode::CREATED,
+            token_id,
+            expires_at,
+            Some(token.to_string()),
+            false,
+        ),
+        console_auth::ServiceTokenCreation::Replayed {
+            token_id,
+            expires_at,
+        } => (StatusCode::OK, token_id, expires_at, None, true),
+        console_auth::ServiceTokenCreation::Conflict => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::CONFLICT,
+                "idempotency_conflict",
+                "This Idempotency-Key was already used with different token settings",
+            ));
+        }
+        console_auth::ServiceTokenCreation::MissingAccount => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::NOT_FOUND,
+                "service_account_not_found",
+                "Service account not found or disabled",
+            ));
+        }
+    };
+    let mut response = (
+        status,
+        Json(crate::CreatedServiceToken {
+            token_id,
+            token: secret,
+            replayed,
+            secret_available: !replayed,
+            expires_at: expiry.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        }),
+    )
+        .into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    response
+}
+
+/// Revokes one service bearer token.
+#[utoipa::path(post,path="/api/v1/service-accounts/{service_account_id}/tokens/{token_id}/revoke",tag="service_accounts",params(("service_account_id"=String,Path),("token_id"=String,Path)),responses((status=204,description="Service token revoked"),(status=404,description="Token not found",body=ProblemDetails)))]
+pub(crate) async fn revoke_authenticated_service_token(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path((service_account_id, token_id)): Path<(String, String)>,
+) -> Response {
+    let (scope, actor) = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::ServiceAccountsManage,
+        true,
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(response) => return response,
+    };
+    if !matches!(scope, platform_store::console_read::AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let mut client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    match console_auth::revoke_service_token(
+        &mut client,
+        &service_account_id,
+        &token_id,
+        &actor,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(true) => StatusCode::NO_CONTENT.into_response(),
+        Ok(false) => problem_response(ProblemDetails::new(
+            StatusCode::NOT_FOUND,
+            "service_token_not_found",
+            "Service token not found or already revoked",
         )),
         Err(_) => unavailable_auth(),
     }
@@ -3131,13 +3610,63 @@ async fn authenticated_permission(
     use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
     use platform_store::console_read::AgentScope;
 
+    let now = Utc::now();
     let secret = match presented_credentials(headers) {
         Ok(PresentedCredentials::Session(secret)) => secret,
+        Ok(PresentedCredentials::Bearer(secret)) => {
+            if csrf_required {
+                // Browser mutations require a session-bound CSRF value; bearer
+                // mutations are not enabled by this first API adapter.
+                return Err(problem_response(ProblemDetails::new(
+                    StatusCode::FORBIDDEN,
+                    "permission_denied",
+                    "Access is not available",
+                )));
+            }
+            let digest = session_digest(secret.expose_secret());
+            let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
+            let token = console_auth::active_service_token(&client, &digest, now)
+                .await
+                .map_err(|_| unavailable_auth())?
+                .ok_or_else(authentication_required)?;
+            let mut resolved = Vec::with_capacity(token.bindings.len());
+            for binding in token.bindings {
+                let Some(role) = built_in_role(&binding.role_id) else {
+                    continue;
+                };
+                let resolved_binding = match binding.asset_group_id {
+                    Some(group_id) => crate::RoleBinding::scoped(role, [group_id]),
+                    None => Ok(crate::RoleBinding::global(role)),
+                };
+                if let Ok(binding) = resolved_binding {
+                    resolved.push(binding);
+                }
+            }
+            let capabilities = crate::resolve_capabilities(&resolved);
+            return match capabilities
+                .iter()
+                .find(|capability| capability.permission == permission)
+            {
+                Some(capability) => match &capability.scope {
+                    crate::PermissionScope::Global => {
+                        Ok((AgentScope::Global, token.service_account_id))
+                    }
+                    crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
+                        AgentScope::AssetGroups(asset_group_ids.clone()),
+                        token.service_account_id,
+                    )),
+                },
+                None => Err(problem_response(ProblemDetails::new(
+                    StatusCode::FORBIDDEN,
+                    "permission_denied",
+                    "Access is not available",
+                ))),
+            };
+        }
         _ => return Err(authentication_required()),
     };
     let digest = session_digest(secret.expose_secret());
     let csrf = session_csrf(secret.expose_secret()).0;
-    let now = Utc::now();
     let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
     let active = console_auth::session(&client, &digest, now)
         .await

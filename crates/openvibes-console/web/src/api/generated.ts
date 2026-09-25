@@ -382,6 +382,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/service-accounts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists service accounts without secret material. */
+        get: operations["authenticated_service_accounts"];
+        put?: never;
+        /** Creates a named service identity with one initial global built-in role. */
+        post: operations["create_authenticated_service_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-accounts/{service_account_id}/disable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Disables an account and revokes its issued tokens. */
+        post: operations["disable_authenticated_service_account"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-accounts/{service_account_id}/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists a service account's secret-free token metadata. */
+        get: operations["authenticated_service_tokens"];
+        put?: never;
+        /** Issues an expiring service bearer secret once. */
+        post: operations["create_authenticated_service_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/service-accounts/{service_account_id}/tokens/{token_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes one service bearer token. */
+        post: operations["revoke_authenticated_service_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/session": {
         parameters: {
             query?: never;
@@ -740,6 +810,23 @@ export interface components {
              */
             max_uses: number;
         };
+        /** @description Request to create a service identity with one initial global role. */
+        CreateServiceAccountRequest: {
+            /** @description Unique operator name, at most 128 characters. */
+            name: string;
+            /** @description Initial built-in global role. */
+            role_id: string;
+        };
+        /** @description Request to issue one expiring service bearer token. */
+        CreateServiceTokenRequest: {
+            /**
+             * Format: int32
+             * @description Lifetime from one through 8760 hours.
+             */
+            expires_in_hours: number;
+            /** @description Operator label, 1 to 128 characters. */
+            label: string;
+        };
         /** @description Enrollment token secret, returned only at creation time. */
         CreatedEnrollmentToken: {
             /** @description RFC3339 expiry instant. */
@@ -751,6 +838,19 @@ export interface components {
             /** @description Secret token. Never returned by list or revoke operations. */
             token?: string | null;
             /** @description Stable token identifier. */
+            token_id: string;
+        };
+        /** @description Newly issued service token, whose secret appears only in this response. */
+        CreatedServiceToken: {
+            /** @description Expiry instant. */
+            expires_at: string;
+            /** @description Whether this response is a safe replay of an earlier issuance. */
+            replayed: boolean;
+            /** @description Whether the plaintext secret is included. */
+            secret_available: boolean;
+            /** @description Bearer secret; never returned after creation. */
+            token?: string | null;
+            /** @description Stable token UUID. */
             token_id: string;
         };
         /** @description Validated cursor and limit accepted by cursor-paginated collection routes. */
@@ -1004,6 +1104,47 @@ export interface components {
             name: string;
             /** @description Complete conjunction of exact selectors, from one through 32. */
             selectors: components["schemas"]["AssetGroupSelectorInput"][];
+        };
+        /** @description Bounded service-account inventory. */
+        ServiceAccountPage: {
+            /** @description Accounts sorted by name. */
+            items: components["schemas"]["ServiceAccountView"][];
+        };
+        /** @description Safe service-account inventory row. */
+        ServiceAccountView: {
+            /**
+             * Format: int64
+             * @description Active token count.
+             */
+            active_tokens: number;
+            /** @description Creation instant. */
+            created_at: string;
+            /** @description Whether the account can authenticate. */
+            enabled: boolean;
+            /** @description Operator-selected name. */
+            name: string;
+            /** @description Active assigned role identifiers. */
+            role_ids: string[];
+            /** @description Stable service-account UUID. */
+            service_account_id: string;
+        };
+        /** @description Token metadata for one service account. */
+        ServiceTokenPage: {
+            /** @description Tokens newest first, without secret material. */
+            items: components["schemas"]["ServiceTokenView"][];
+        };
+        /** @description Safe service-token metadata row. */
+        ServiceTokenView: {
+            /** @description Creation instant. */
+            created_at: string;
+            /** @description Expiry instant. */
+            expires_at: string;
+            /** @description Operator label. */
+            label: string;
+            /** @description Whether the token was revoked. */
+            revoked: boolean;
+            /** @description Stable token UUID. */
+            token_id: string;
         };
         /** @description Human principal represented by an authenticated browser session. */
         SessionPrincipal: {
@@ -2252,6 +2393,205 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_service_accounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service-account metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAccountPage"];
+                };
+            };
+        };
+    };
+    create_authenticated_service_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateServiceAccountRequest"];
+            };
+        };
+        responses: {
+            /** @description Service account created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceAccountView"];
+                };
+            };
+            /** @description Name already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    disable_authenticated_service_account: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service account disabled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unknown or already disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_service_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service-token metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceTokenPage"];
+                };
+            };
+            /** @description Service account not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_authenticated_service_token: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required retry key; a replay never returns the secret */
+                "Idempotency-Key": string;
+            };
+            path: {
+                service_account_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateServiceTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent replay; secret unavailable */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedServiceToken"];
+                };
+            };
+            /** @description Token secret shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedServiceToken"];
+                };
+            };
+            /** @description Service account is missing or disabled */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Idempotency key was reused with different settings */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_authenticated_service_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                service_account_id: string;
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Service token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -1647,6 +1647,261 @@
         }
       }
     },
+    "/api/v1/service-accounts": {
+      "get": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Lists service accounts without secret material.",
+        "operationId": "authenticated_service_accounts",
+        "responses": {
+          "200": {
+            "description": "Service-account metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Creates a named service identity with one initial global built-in role.",
+        "operationId": "create_authenticated_service_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServiceAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Service account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountView"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/disable": {
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Disables an account and revokes its issued tokens.",
+        "operationId": "disable_authenticated_service_account",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Service account disabled"
+          },
+          "404": {
+            "description": "Unknown or already disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/tokens": {
+      "get": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Lists a service account's secret-free token metadata.",
+        "operationId": "authenticated_service_tokens",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Service-token metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTokenPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Issues an expiring service bearer secret once.",
+        "operationId": "create_authenticated_service_token",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required retry key; a replay never returns the secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServiceTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay; secret unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedServiceToken"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Token secret shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedServiceToken"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service account is missing or disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was reused with different settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/tokens/{token_id}/revoke": {
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Revokes one service bearer token.",
+        "operationId": "revoke_authenticated_service_token",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Service token revoked"
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/session": {
       "get": {
         "tags": [
@@ -2677,6 +2932,46 @@
         },
         "additionalProperties": false
       },
+      "CreateServiceAccountRequest": {
+        "type": "object",
+        "description": "Request to create a service identity with one initial global role.",
+        "required": [
+          "name",
+          "role_id"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique operator name, at most 128 characters."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Initial built-in global role."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateServiceTokenRequest": {
+        "type": "object",
+        "description": "Request to issue one expiring service bearer token.",
+        "required": [
+          "label",
+          "expires_in_hours"
+        ],
+        "properties": {
+          "expires_in_hours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Lifetime from one through 8760 hours.",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "description": "Operator label, 1 to 128 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "CreatedEnrollmentToken": {
         "type": "object",
         "description": "Enrollment token secret, returned only at creation time.",
@@ -2709,6 +3004,41 @@
           "token_id": {
             "type": "string",
             "description": "Stable token identifier."
+          }
+        }
+      },
+      "CreatedServiceToken": {
+        "type": "object",
+        "description": "Newly issued service token, whose secret appears only in this response.",
+        "required": [
+          "token_id",
+          "replayed",
+          "secret_available",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "Whether this response is a safe replay of an earlier issuance."
+          },
+          "secret_available": {
+            "type": "boolean",
+            "description": "Whether the plaintext secret is included."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bearer secret; never returned after creation."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token UUID."
           }
         }
       },
@@ -3334,6 +3664,113 @@
           }
         },
         "additionalProperties": false
+      },
+      "ServiceAccountPage": {
+        "type": "object",
+        "description": "Bounded service-account inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccountView"
+            },
+            "description": "Accounts sorted by name."
+          }
+        }
+      },
+      "ServiceAccountView": {
+        "type": "object",
+        "description": "Safe service-account inventory row.",
+        "required": [
+          "service_account_id",
+          "name",
+          "enabled",
+          "created_at",
+          "active_tokens",
+          "role_ids"
+        ],
+        "properties": {
+          "active_tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active token count."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the account can authenticate."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-selected name."
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Active assigned role identifiers."
+          },
+          "service_account_id": {
+            "type": "string",
+            "description": "Stable service-account UUID."
+          }
+        }
+      },
+      "ServiceTokenPage": {
+        "type": "object",
+        "description": "Token metadata for one service account.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceTokenView"
+            },
+            "description": "Tokens newest first, without secret material."
+          }
+        }
+      },
+      "ServiceTokenView": {
+        "type": "object",
+        "description": "Safe service-token metadata row.",
+        "required": [
+          "token_id",
+          "label",
+          "created_at",
+          "expires_at",
+          "revoked"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "label": {
+            "type": "string",
+            "description": "Operator label."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the token was revoked."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token UUID."
+          }
+        }
       },
       "SessionPrincipal": {
         "type": "object",

@@ -24,6 +24,11 @@ session cookie.
   an idempotency key for a retry after a failed request and clearly reports
   when the server confirms creation but cannot return the original secret.
   Users with `tokens.revoke` can revoke usable tokens after confirmation.
+- `/service-accounts` exposes identity and token controls only to global
+  `service_accounts.read` and `service_accounts.manage` capabilities. It shows
+  safe metadata, supports account disable and token revocation, and presents
+  each expiring bearer secret once with a copy action. Token issuance retains
+  its idempotency key for a retry during the current page session.
 - The production Overview, Agents, and Findings pages use the authenticated
   C2 read routes. Demo persona headers and unsupported free-text filters are
   only used in the explicitly seeded development experience.

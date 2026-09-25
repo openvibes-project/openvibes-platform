@@ -31,6 +31,13 @@ tokens, and CSRF values stay in the console process.
   under the same key conflicts. `list_enrollment_tokens` returns bounded
   secret-free metadata; `revoke_enrollment_token` commits its audit row with
   the revocation.
+- Service-account operations create identities with an initial built-in role,
+  issue and list expiring hash-only bearer tokens, revoke individual tokens,
+  and atomically disable an identity with all of its tokens. Issuance is
+  idempotent for 24 hours and never stores the token secret in its replay row.
+  Active bearer
+  authentication checks token expiry/revocation and account enabled state on
+  each request, then resolves the account's current role bindings.
 - `preview_agent_tags` reports group and scoped-binding membership changes for
   a proposed tag set. `apply_agent_tags` verifies the preview token under a
   transaction lock, then replaces tags and records detailed impact atomically.

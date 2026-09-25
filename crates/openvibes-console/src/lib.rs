@@ -31,13 +31,14 @@ pub use api::{
     AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest,
     AssetGroupSelectorInput, AuditEventPage, AuditEventView, AuditRetentionPolicy,
     AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
-    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreatedEnrollmentToken, CursorPage,
+    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
+    CreateServiceTokenRequest, CreatedEnrollmentToken, CreatedServiceToken, CursorPage,
     CursorPagination, DEFAULT_PAGE_SIZE, EffectiveCapability, EnrollmentTokenPage,
     EnrollmentTokenView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
     FindingSummary, FindingView, LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
     PaginationError, Permission, PermissionScope, PreauthResponse, RevokeAgentRequest,
-    SaveAssetGroupRequest, SessionPrincipal, SessionResponse, Severity,
-    UpdateAuditRetentionRequest,
+    SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
+    ServiceTokenView, SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
