@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 10; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 12; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -173,6 +173,11 @@ Schema 11 (VM5) adds NVD columns (`cvss_score`, `cvss_version`,
 `mark_nvd_checked`, `nvd_known`, `replace_euvd`, `cve_details`;
 `feed_cursor`/`set_feed_cursor` hold NVD's sync point. `vulns::summary`
 moved to `vulns/summary.rs` (same path).
+
+Schema 12 grants `openvibes_vulns` `MAINTAIN` on the tables it bulk-loads
+(PostgreSQL 17 or later), so `replace_advisories` can `ANALYZE` them.
+`vulns::list` combines each advisory's CVEs and enrichment once, then
+sorts and limits (0.63 s at 244,000 open vulnerabilities).
 
 ## Assistant lookups (`assistant::…`)
 
