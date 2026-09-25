@@ -8,6 +8,16 @@
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
 deployment, not for inclusion in Fedora itself.
 
+The web console has a separate `openvibes-console.spec` because its embedded
+frontend is built from a distinct, checksummed npm cache artefact. Build it
+with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256`; the expected
+digest must come from trusted release/source metadata independently of the
+archive and its checksum sidecar. The script verifies the cache, installs npm
+dependencies in offline mode (and uses `unshare -rn` when supported to isolate
+build scripts), builds Cargo offline, and passes the cache as RPM `Source0`.
+The console unit ships disabled until the operator configures its
+database and TLS certificate.
+
 ```sh
 scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin}-*.rpm
 ```
@@ -34,6 +44,11 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
 | `/etc/openvibes/admin.toml` | 0640 root:openvibes_admin, `%config(noreplace)` | admin |
+| `/usr/bin/openvibes-console` | 0755 root | console |
+| `/usr/lib/systemd/system/openvibes-console.service` | 0644 root | console |
+| `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes_console` | console |
+| `/etc/openvibes/console.toml` | 0640 root:openvibes_console, `%config(noreplace)` | console |
+| `/var/lib/openvibes-console/` | 0700 openvibes_console | console |
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`
@@ -62,6 +77,10 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
+- `openvibes-console.service`: runs as `openvibes_console`, with the same
+  systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
+  HTTPS listener on port 443. It is disabled by the package preset until
+  configuration and certificate setup are complete.
 
 ## First install on Fedora
 
@@ -148,12 +167,115 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 
 Agents trust `root.crt` (their `platform_ca_file`).
 
+## Console RPM setup
+
+The console RPM requires the platform database schema to be current through
+schema 18; those migrations create the least-privilege PostgreSQL role
+`openvibes_console`. Install the console RPM after the platform migrations so
+the matching operating-system user and database role can use PostgreSQL peer
+authentication. Its unit is disabled at install time.
+
+Install a browser-trusted certificate chain and private key at the paths in
+`/etc/openvibes/console.toml`, with owner `root:openvibes_console`, mode 0640,
+and the TLS directory searchable by the service. Edit the file to replace
+`console.example.invalid` with the canonical HTTPS origin and set the public
+listen address. For example, install the chain and key like this:
+
+```sh
+install -o root -g openvibes_console -m 0640 console-chain.pem /etc/openvibes/tls/console-chain.pem
+install -o root -g openvibes_console -m 0640 console-key.pem /etc/openvibes/tls/console-key.pem
+```
+
+Then enable the service and allow the configured public port:
+
+```sh
+systemctl enable --now openvibes-console
+firewall-cmd --permanent --add-port=443/tcp && firewall-cmd --reload
+curl http://127.0.0.1:18482/ready
+```
+
+The service uses its narrow bind capability for port 443; it has no database
+password or signing-key access. Reverse-proxy deployments should change
+`transport_mode` and the trusted loopback proxy list before enabling the unit.
+For a local TCP proxy, replace the public listener and transport fields with
+the following values, keeping the database URL and canonical HTTPS origin:
+
+```toml
+development_listen = "127.0.0.1:8443"
+health_listen = "127.0.0.1:18482"
+transport_mode = "reverse_proxy"
+trusted_proxy_addresses = ["127.0.0.1"]
+```
+
+The proxy must connect from an allow-listed loopback address and preserve the
+configured `Host` authority. Forwarded headers are ignored. Public TLS
+terminates at the proxy; the console sends HSTS and uses the external HTTPS
+origin for authentication checks. For a Unix socket, configure
+`trusted_proxy_uids` to the numeric UID reported by `id -u <proxy-user>`;
+leave `trusted_proxy_addresses` empty. Keep `development_listen` present but
+unused. For example, with proxy UID 1001:
+
+```toml
+development_listen = "127.0.0.1:0"
+transport_mode = "reverse_proxy"
+unix_socket_file = "/run/openvibes-console/console.sock"
+trusted_proxy_addresses = []
+trusted_proxy_uids = [1001]
+```
+
+Keep the existing `health_listen`, database URL, and HTTPS `public_origin`.
+Add the proxy user to the
+`openvibes_console` group so it can traverse the runtime directory and connect
+to the mode-0660 socket. The listener verifies the peer UID with kernel
+credentials and removes only its own socket inode at shutdown. Keep the health
+port loopback-only and expose only the proxy's public HTTPS port in the
+firewall.
+
+## Console update and recovery
+
+The console refuses to start unless the database is at its exact supported
+schema version. The console RPM does not run migrations, and schema migrations
+are forward-only. For an update, take a consistent platform database backup
+using the site's PostgreSQL backup procedure, including global role
+definitions. Keep a separate protected copy of `/etc/openvibes/console.toml`
+and the TLS certificate/key files; the database backup does not contain
+those files.
+
+Stop `openvibes-console`, `openvibes-ingest`, `openvibes-distribution`, the
+maintenance timer/service, and `openvibes-vulns` if installed before
+upgrading. This keeps version-exact
+services from restarting against either side of the schema change; in
+particular, the console RPM's restart hook must not start the new binary
+against the old schema. Upgrade the coordinated platform packages, run
+`openvibes-admin migrate` as `openvibes_admin`, then start the previously
+active services and confirm the console `/ready` endpoint returns 200. The
+console does not modify the schema during startup.
+
+Do not downgrade only the console binary after applying a newer schema: an
+older binary can refuse the database or misread newer data. To return to a
+previous release, stop platform services, restore the complete pre-upgrade
+database and its role definitions, restore the matching console config and
+TLS files, install the matching platform packages, and start the services
+after PostgreSQL is ready. A database restore can reinstate sessions and
+credentials as they existed at the backup time, making post-backup account
+disables, password resets, and token revocations disappear. Invalidate
+sessions and review, revoke, or rotate credentials whose state may have
+changed after the backup before exposing the restored instance.
+
 ## Trying the whole system
 
 From an empty Fedora 44 host to agent findings in PostgreSQL, with every
 component from its RPM under systemd. `scripts/systemd-e2e.sh` runs exactly
 these steps (in a podman container with systemd as PID 1), so they are
-tested on every change. For a single test host, the platform and the agent
+tested on every change. CI also supplies the console RPM, configures a
+temporary TLS certificate, and checks the HTTPS shell, readiness endpoint,
+security headers, and systemd sandbox. It installs a lower-version console
+RPM, creates an admin account and browser session, upgrades to the release RPM,
+and verifies that config, TLS files, account, active database session, and
+authenticated access survive. The RPM install also proves Node.js is not a
+runtime dependency. It restarts the console in Unix proxy mode and checks that
+an allowed peer UID succeeds while the console's own service UID is rejected.
+For a single test host, the platform and the agent
 can share the machine, as below; normally the agent runs on the endpoints.
 
 1. **Platform:** "First install on Fedora" steps 1–8 above, with
@@ -274,8 +396,9 @@ five units, that the ingest, distribution, and vulns units stop with
 SIGINT (an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 
-CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds
-the agent RPM from the pinned agent revision, installs the platform RPMs,
-and runs `check-rpm.sh`; the `systemd-e2e` job runs `scripts/systemd-e2e.sh`
-on those RPMs under a real systemd; the integration test then runs against
-the installed binaries ([integration-agent.md](integration-agent.md)).
+CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds the
+console RPM from its offline npm cache, and builds the agent RPM from the
+pinned agent revision. The `systemd-e2e` job runs
+`scripts/systemd-e2e.sh` on those RPMs under a real systemd; the integration
+test then runs against the installed binaries
+([integration-agent.md](integration-agent.md)).

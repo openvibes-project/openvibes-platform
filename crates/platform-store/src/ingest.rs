@@ -336,7 +336,7 @@ pub async fn store_findings(
     let mut stored = 0;
     for finding in findings {
         let day = finding.observed_at.date_naive();
-        stored += transaction
+        let inserted = transaction
             .execute(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
@@ -360,11 +360,14 @@ pub async fn store_findings(
                 ],
             )
             .await?;
+        stored += u64::from(inserted == 1);
         transaction
             .execute(
                 "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
-                     severity, first_observed_at, last_observed_at, rule_set_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7)
+                     severity, first_observed_at, last_observed_at, rule_set_id,
+                     last_observed_day, scan_id, confidence, message, evidence, received_at,
+                     origin, authenticated)
+                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, 'online', true)
                  ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET
                      last_finding_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.last_finding_id ELSE current_findings.last_finding_id END,
@@ -372,6 +375,22 @@ pub async fn store_findings(
                          THEN EXCLUDED.rule_version ELSE current_findings.rule_version END,
                      severity = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.severity ELSE current_findings.severity END,
+                     last_observed_day = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.last_observed_day ELSE current_findings.last_observed_day END,
+                     scan_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.scan_id ELSE current_findings.scan_id END,
+                     confidence = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.confidence ELSE current_findings.confidence END,
+                     message = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.message ELSE current_findings.message END,
+                     evidence = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.evidence ELSE current_findings.evidence END,
+                     received_at = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.received_at ELSE current_findings.received_at END,
+                     origin = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.origin ELSE current_findings.origin END,
+                     authenticated = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.authenticated ELSE current_findings.authenticated END,
                      first_observed_at = LEAST(current_findings.first_observed_at, EXCLUDED.first_observed_at),
                      last_observed_at = GREATEST(current_findings.last_observed_at, EXCLUDED.last_observed_at)",
                 &[
@@ -382,9 +401,27 @@ pub async fn store_findings(
                     &finding.severity,
                     &finding.observed_at,
                     &finding.rule_set_id,
+                    &day,
+                    &finding.scan_id,
+                    &finding.confidence,
+                    &finding.message,
+                    &finding.evidence,
+                    &now,
                 ],
             )
             .await?;
+        if inserted == 1 {
+            crate::console_triage::reopen_on_observation(
+                &transaction,
+                agent_id,
+                &finding.rule_set_id,
+                &finding.rule_id,
+                &finding.finding_id,
+                finding.observed_at,
+                now,
+            )
+            .await?;
+        }
     }
     transaction.commit().await?;
     Ok(stored)

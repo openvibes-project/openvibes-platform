@@ -136,4 +136,3 @@ Checked against real systems; each changes the design above.
   - Debian 12 (136 packages): all 156 CVEs `debsecan` lists, plus 8 more
     that Debian's security tracker marks vulnerable in bookworm (`no-dsa`)
     and `debsecan` omits.
-

@@ -46,6 +46,13 @@ jobs:
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
+      - name: Install pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: crates/openvibes-console/web/package-lock.json
+
       # Every fetch happens here; later steps (whose build scripts and tests
       # run third-party code) build offline.
       - name: Fetch dependencies
@@ -53,6 +60,32 @@ jobs:
         run: |
           git submodule update --init
           cargo fetch --locked
+
+      - name: Install console brand renderer
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends imagemagick librsvg2-bin
+
+      - name: Build and validate console frontend
+        run: bash scripts/build-console.sh
+
+      # Separate from the build so a new advisory fails CI loudly without
+      # making the build itself depend on the day it runs.
+      - name: Audit console npm dependencies
+        run: npm --prefix crates/openvibes-console/web audit --audit-level=low
+
+      - name: Prove console npm dependencies install offline
+        run: |
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          bash scripts/check-console-npm-cache.sh "$archive"
+
+      - name: Install pinned console browsers
+        run: >-
+          npm --prefix crates/openvibes-console/web exec --
+          playwright install --with-deps chromium firefox webkit
+
+      - name: Test console in real browsers
+        run: bash scripts/test-console-e2e.sh
 
       - name: Format
         run: cargo fmt --all --check
@@ -97,13 +130,18 @@ jobs:
       # git first, so checkout makes a real repository (submodules need it).
       - name: Install build and test packages
         run: >-
-          dnf -q -y install git gcc cargo rust rpm-build systemd-rpm-macros systemd
+          dnf -q -y install git gcc cargo rust rpm-build systemd-rpm-macros systemd ImageMagick
           postgresql-server sqlite jq curl procps-ng util-linux
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Install pinned Node.js for console RPM
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
 
       # As in the ubuntu job, every fetch happens here; the pinned agent (a
       # git dependency) is built here too, and later steps build offline.
@@ -126,6 +164,18 @@ jobs:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
+      - name: Build offline console RPM
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          digest=$(sha256sum "$archive" | cut -d ' ' -f1)
+          # The lower-version package exercises a genuine RPM upgrade in the
+          # systemd job; it uses the same binary and schemas because the
+          # console package itself owns neither database migrations nor data.
+          bash scripts/build-console-rpm.sh "$archive" "$digest" 0.0.9
+          bash scripts/build-console-rpm.sh "$archive" "$digest"
+
       - name: Build the agent RPM and signing tool (pinned revision)
         env:
           CARGO_NET_OFFLINE: "true"
@@ -136,6 +186,7 @@ jobs:
           mkdir -p dist
           cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
+          cp target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
 
       - name: Upload RPMs for the systemd end to end
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -188,10 +239,11 @@ jobs:
             bash scripts/load/run.sh 50 1000 10
 
   # The documented install, scripted, under a real systemd (podman fedora:44,
-  # systemd as PID 1): PostgreSQL, ingest, distribution, and the agent from
-  # their RPMs; the agent enrolls, fetches its rules, and delivers findings.
+  # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the
+  # agent enrolls/fetches rules/delivers findings; the console serves TLS and
+  # validates the Unix proxy peer UID.
   systemd-e2e:
-    name: End to end under systemd (platform and agent RPMs)
+    name: End to end under systemd (platform, agent, and console RPMs)
     needs: fedora
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -210,4 +262,8 @@ jobs:
       - name: End to end
         run: |
           chmod +x dist/sign_bundle
-          bash scripts/systemd-e2e.sh dist dist/sign_bundle
+          console_version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
+          console_old_rpm=$(find dist -maxdepth 1 -name 'openvibes-console-0.0.9-*.rpm' -type f -print -quit)
+          console_rpm=$(find dist -maxdepth 1 -name "openvibes-console-${console_version}-*.rpm" -type f -print -quit)
+          bash scripts/systemd-e2e.sh dist dist/sign_bundle \
+            "$console_old_rpm" "$console_rpm"

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin", "crates/platform-pki", "scripts/load"]
+members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin", "crates/platform-pki", "scripts/load", "crates/openvibes-console"]
 
 [workspace.package]
 version = "0.1.0"
@@ -35,6 +35,7 @@ openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-ag
 openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "e1005ff7bba5b4d616a000d8996931c5b4b55293" }
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
 sha2 = { version = "0.11", default-features = false }
+include_dir = { version = "0.7.4", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -10,6 +10,12 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// Local console credentials, throttles, pre-authentication, and sessions.
+pub mod console_auth;
+/// Bounded global read models for the human console.
+pub mod console_read;
+/// Versioned analyst workflow state and history for current findings.
+pub mod console_triage;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
 /// Queries the ingest service runs.

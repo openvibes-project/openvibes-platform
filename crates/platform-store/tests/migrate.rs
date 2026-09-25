@@ -9,6 +9,11 @@ async fn migration_applies_once_and_is_idempotent() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     assert_eq!(platform_store::schema_version(&client).await.unwrap(), None);
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
     assert_eq!(
         platform_store::migrate(&mut client).await.unwrap(),
         platform_store::SCHEMA_VERSION
@@ -21,6 +26,64 @@ async fn migration_applies_once_and_is_idempotent() {
         platform_store::schema_version(&client).await.unwrap(),
         Some(platform_store::SCHEMA_VERSION)
     );
+    assert!(
+        platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
+    client
+        .execute("UPDATE schema_version SET version = 6", &[])
+        .await
+        .unwrap();
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn schema_eleven_upgrades_to_eighteen() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    client
+        .batch_execute("CREATE TABLE schema_version (version integer NOT NULL)")
+        .await
+        .unwrap();
+    for migration in [
+        include_str!("../../../migrations/0001_initial.sql"),
+        include_str!("../../../migrations/0002_ca_tokens_agents.sql"),
+        include_str!("../../../migrations/0003_agent_hostname.sql"),
+        include_str!("../../../migrations/0004_ingest_least_privilege.sql"),
+        include_str!("../../../migrations/0005_finding_rule_set.sql"),
+        include_str!("../../../migrations/0006_rule_distribution.sql"),
+        include_str!("../../../migrations/0007_inventory.sql"),
+        include_str!("../../../migrations/0008_vulnerabilities.sql"),
+        include_str!("../../../migrations/0009_running_kernel.sql"),
+        include_str!("../../../migrations/0010_cve_enrichment.sql"),
+        include_str!("../../../migrations/0011_nvd_euvd.sql"),
+    ] {
+        client.batch_execute(migration).await.unwrap();
+    }
+    client
+        .execute("INSERT INTO schema_version VALUES (11)", &[])
+        .await
+        .unwrap();
+    assert_eq!(
+        platform_store::migrate(&mut client).await.unwrap(),
+        platform_store::SCHEMA_VERSION
+    );
+    let retention_days: i32 = client
+        .query_one(
+            "SELECT retention_days FROM console_audit_retention WHERE singleton",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(retention_days, 365);
     drop(client);
     db.drop().await;
 }
@@ -34,6 +97,11 @@ async fn a_newer_schema_is_refused() {
         .execute("UPDATE schema_version SET version = 99", &[])
         .await
         .unwrap();
+    assert!(
+        !platform_store::console_read::schema_is_current(&client)
+            .await
+            .unwrap()
+    );
     assert!(matches!(
         platform_store::migrate(&mut client).await,
         Err(platform_store::StoreError::NewerSchema(99))
@@ -56,6 +124,45 @@ async fn the_ingest_role_can_read_the_schema_version() {
         .unwrap()
         .get(0);
     assert!(allowed, "ingest's /ready check reads schema_version");
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_console_role_has_only_its_declared_schema_rights() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let row = client
+        .query_one(
+            "SELECT has_table_privilege('openvibes_console', 'console_sessions', 'SELECT'),
+                    has_table_privilege('openvibes_console', 'console_sessions', 'UPDATE'),
+                    has_table_privilege('openvibes_console', 'agents', 'UPDATE'),
+                    has_table_privilege('openvibes_console', 'certificates', 'SELECT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'SELECT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'INSERT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'UPDATE'),
+                    has_table_privilege('openvibes_console', 'audit_log', 'INSERT'),
+                    has_table_privilege('openvibes_console', 'audit_log', 'UPDATE')",
+            &[],
+        )
+        .await
+        .unwrap();
+    let rights = (
+        row.get::<_, bool>(0),
+        row.get::<_, bool>(1),
+        row.get::<_, bool>(2),
+        row.get::<_, bool>(3),
+        row.get::<_, bool>(4),
+        row.get::<_, bool>(5),
+        row.get::<_, bool>(6),
+        row.get::<_, bool>(7),
+        row.get::<_, bool>(8),
+    );
+    assert_eq!(
+        rights,
+        (true, true, false, true, true, false, false, true, false)
+    );
     drop(client);
     db.drop().await;
 }

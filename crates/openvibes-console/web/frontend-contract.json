@@ -1,0 +1,47 @@
+{
+  "browserRoutes": [
+    "/",
+    "/login",
+    "/findings",
+    "/agents",
+    "/enrollment",
+    "/rule-sets",
+    "/access",
+    "/service-accounts",
+    "/audit"
+  ],
+  "publicAssets": [
+    {
+      "route": "/app.webmanifest",
+      "file": "app.webmanifest"
+    },
+    {
+      "route": "/theme-bootstrap.js",
+      "file": "theme-bootstrap.js"
+    },
+    {
+      "route": "/brand/openvibes-mark.svg",
+      "file": "brand/openvibes-mark.svg"
+    },
+    {
+      "route": "/brand/openvibes-wordmark-light.svg",
+      "file": "brand/openvibes-wordmark-light.svg"
+    },
+    {
+      "route": "/brand/openvibes-wordmark-dark.svg",
+      "file": "brand/openvibes-wordmark-dark.svg"
+    },
+    {
+      "route": "/brand/openvibes-favicon-32.png",
+      "file": "brand/openvibes-favicon-32.png"
+    },
+    {
+      "route": "/brand/openvibes-mark-192.png",
+      "file": "brand/openvibes-mark-192.png"
+    },
+    {
+      "route": "/brand/openvibes-mark-512.png",
+      "file": "brand/openvibes-mark-512.png"
+    }
+  ]
+}

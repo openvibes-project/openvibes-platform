@@ -27,12 +27,32 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
 | `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
-| `maintenance [--retention-days 90]` | creates any missing partition from the retention cutoff to today + 7 days, so late or backlogged findings always have a partition; drops older ones, never today's. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M` |
+| `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
+| `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo |
+| `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |
+| `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
+| `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
+| `user reset-password USERNAME` | replaces the password and revokes all sessions atomically; does not enable a disabled account | prompts twice without terminal echo |
+
+Usernames are normalized to lowercase ASCII and limited to 64 characters.
+Passwords use the same console NFC normalization, 15–128 Unicode-character
+policy, Argon2id parameters, and local common-passphrase blocklist as browser
+login. Passwords are never accepted as command-line arguments or written to
+the audit log. The built-in common-passphrase list is a small seed list, not a
+full compromised-password corpus.
 
 Commands other than `migrate` refuse to run on an outdated schema ("run
 openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
+
+## User commands
+
+The user commands are audited, including failed attempts. Creation provisions
+the user, credential, initial role binding, and user-created audit event in one
+store transaction. Disable and password reset invalidate all browser sessions.
+Unlock clears only an active account bucket; IP/source throttles still protect
+the service. The first account can be created after schema 15 is applied.
 
 ## Agent commands
 

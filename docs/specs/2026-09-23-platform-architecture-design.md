@@ -40,7 +40,7 @@ whole platform. Each module is then designed and built as its own sub-project.
 | Module | Binary | Port | Role | Sub-project |
 |---|---|---|---|---|
 | Ingest | `openvibes-ingest` | 18423 | Enrollment, renewal, heartbeats and health, finding delivery; later file import | 1 |
-| Admin CLI | `openvibes-admin` | none | Local operator tool: CA, tokens, agents, rules, migrations, maintenance | 1 |
+| Admin CLI/TUI | `openvibes-admin` | none | Local operator tool: CA, tokens, agents, rules, configuration, service lifecycle, diagnostics, migrations, maintenance | 1 |
 | Distribution | `openvibes-distribution` | 18424 | Serves offline-signed rule bundles (`/v1/rule-bundle`) | 2 |
 | Admin API and web UI | `openvibes-console` | 443 | Human access, RBAC, deployment packages | later |
 | Correlation | `openvibes-correlation` | none | Works from stored findings and inventory | later |
@@ -70,7 +70,9 @@ an unknown schema version.
 - Agent health: the latest health report per agent.
 - Distribution: rule bundles exactly as signed, plus the public keys trusted
   for each rule set.
-- Audit log: append-only record of every privileged action and login.
+- Audit log: append-only record of every privileged action and login, retained
+  for 365 days by default under an administrator-configurable global policy;
+  the first release includes permission-gated, audited CSV export.
 
 Expected volume with today's agent (every scan re-reports its matches): up to
 1 M findings per hour at 50,000 hosts, about 10 GB/day. Planned mitigation, a
@@ -104,14 +106,16 @@ database state change visible to every ingest replica at once; no CRL or OCSP.
 
 Rule-signing keys never reach the platform. Distribution serves envelopes
 signed offline; the admin CLI verifies them against the rule set's trusted
-public keys before storing.
+public keys before storing. Rule trust-key management remains CLI-only in the
+first release.
 
 ## 6. Human Access and RBAC (planned sub-project)
 
-- Authentication: OIDC first (Entra ID, Okta, Keycloak, Authentik, Google
-  Workspace, ADFS), a SAML 2.0 adapter, and local username and password for
-  small deployments: off by default, argon2id, rate limiting and lockout,
-  TOTP or WebAuthn second factor that can be made mandatory. Service accounts
+- Authentication: local username and password first, provisioned and recovered
+  through the audited local CLI, with Argon2id, generic failures, rate limiting,
+  and temporary lockout. OIDC (Entra ID, Okta, Keycloak, Authentik, Google
+  Workspace, ADFS), SAML 2.0, and TOTP/WebAuthn are later adapters over the
+  same server-side session and RBAC boundary. First-release service accounts
   use hashed, expiring API tokens bound to a role.
 - Authorisation: deny by default. Fine-grained permissions (for example
   `agents.read`, `agents.revoke`, `tokens.create`, `rules.upload`,
@@ -120,13 +124,48 @@ public keys before storing.
   bindings attach a role to a user or an identity-provider group, scoped to
   the whole platform or to an asset group of hosts selected by tag. One
   middleware enforces the permission each endpoint declares.
+- Manual exact tags provide first-release asset grouping. CMDB integration may
+  automate the source later without changing the access semantics.
+- Analyst triage is a first-release, audited human workflow kept separate from
+  immutable detector observations and detector truth. Its states are Open,
+  Investigating, Mitigated, Accepted Risk, and False Positive; re-observation
+  reopens completed states according to the version/expiry contract.
 - Every privileged action and login is written to the audit log.
-- Until the admin API exists, `openvibes-admin` is local break-glass access:
-  running it on a platform host grants full rights, and every command is
-  audited with the OS user that ran it.
+- Alongside the web console, `openvibes-admin` remains local break-glass
+  access: running it on a platform host uses OS privilege rather than web RBAC,
+  and every command is audited with the OS user that ran it.
+
+### 6.1 Local administration TUI
+
+`openvibes-admin tui` is the local interface for operating the underlying
+platform host. It is distinct from `openvibes-console`: it opens no port and
+does not authenticate through browser sessions or console RBAC.
+
+The systemd-first TUI may:
+
+- show the status and recent bounded journal output of known OpenVIBES units;
+- start, stop, restart, and reload only allow-listed OpenVIBES services;
+- inspect and edit supported configuration through typed forms, validate the
+  complete candidate configuration, show a redacted diff, and write atomically
+  with a recoverable backup before offering a reload/restart;
+- run the existing migration, maintenance, certificate-status, and diagnostic
+  operations through shared Rust functions rather than shelling out or parsing
+  CLI text.
+
+It never provides an arbitrary shell, arbitrary unit name, raw SQL editor, or
+general filesystem editor. OS privilege remains with sudo/polkit and systemd;
+the TUI does not become a privileged daemon. Actions record the real uid,
+target, and result in the system journal and in the platform audit log when the
+database is available. Database unavailability must not prevent a local
+break-glass service restart, but the TUI makes the journal-only audit state
+explicit. Container and Kubernetes lifecycle adapters are later and do not
+pretend to be systemd.
 
 ## 7. Planned Capabilities with Design Hooks
 
+- **Hostname label.** Authenticated heartbeats carry an optional OS-reported
+  hostname. Ingest stores/indexes the latest present value through migration
+  3; it is mutable and spoofable, and never identity or authorisation input.
 - **Agent health reporting.** Heartbeats gain an optional `health` object
   (queue depth and oldest age, dropped counts, local storage errors, last
   scan and collector errors, rule-set versions and expiry). Compatible within

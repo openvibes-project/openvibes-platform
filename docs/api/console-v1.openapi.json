@@ -1,0 +1,4546 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "OpenVIBES Console API",
+    "description": "Versioned human and service-account API for the OpenVIBES console.",
+    "license": {
+      "name": "MIT"
+    },
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/v1/access-control": {
+      "get": {
+        "tags": [
+          "access control"
+        ],
+        "operationId": "authenticated_access_inventory",
+        "responses": {
+          "200": {
+            "description": "Roles, active bindings, and asset groups",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessInventory"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/asset-groups": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Creates an asset group from a bounded conjunction of exact tag selectors.",
+        "operationId": "create_authenticated_asset_group",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAssetGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Asset group created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessAssetGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/asset-groups/{group_id}": {
+      "put": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Replaces an asset group's name and complete selector conjunction.",
+        "operationId": "update_authenticated_asset_group",
+        "parameters": [
+          {
+            "name": "group_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveAssetGroupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Asset group updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessAssetGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid selector set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Asset group not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/bindings": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Adds one active local-user role binding.",
+        "operationId": "create_authenticated_access_binding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Role binding created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid binding request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Binding conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/bindings/{binding_id}": {
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "operationId": "revoke_authenticated_access_binding",
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "description": "Role binding UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Role binding revoked"
+          },
+          "404": {
+            "description": "Binding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "authenticated_agents",
+        "parameters": [
+          {
+            "name": "state",
+            "in": "query",
+            "description": "active, stale, or revoked",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size from 1 to 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scope-filtered agent page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/summary": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "authenticated_agent_summary",
+        "responses": {
+          "200": {
+            "description": "Agent counts visible to the current user",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "authenticated_agent_detail",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Stable agent identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Visible agent detail",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentDetail"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/certificates": {
+      "get": {
+        "tags": [
+          "agents"
+        ],
+        "operationId": "authenticated_agent_certificates",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Stable agent identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size from 1 to 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Visible certificate metadata page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificatePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/revoke": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Revokes one visible agent and records an operator reason.",
+        "operationId": "revoke_authenticated_agent",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeAgentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Agent revoked"
+          },
+          "400": {
+            "description": "Invalid reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found in the current scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/tags": {
+      "put": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Applies an agent tag set only while its membership preview remains current.",
+        "operationId": "apply_authenticated_agent_tags",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyAgentTagsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Tags changed and impact audited"
+          },
+          "400": {
+            "description": "Invalid tag set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Preview is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agents/{agent_id}/tags/preview": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Previews asset group membership changes for an agent's complete tag set.",
+        "operationId": "preview_authenticated_agent_tags",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentTagChangeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Membership impact preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentTagPreviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid tag set",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit-events": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_events",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive RFC3339 lower bound",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Exclusive RFC3339 upper bound",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe audit event page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditEventPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit-export.csv": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_export",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive RFC3339 lower bound",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Exclusive RFC3339 upper bound",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered audit events as CSV",
+            "content": {
+              "text/csv": {}
+            }
+          },
+          "413": {
+            "description": "Export exceeds the row or byte limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audit-retention": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_retention",
+        "responses": {
+          "200": {
+            "description": "Current audit retention policy",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Policy version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRetentionPolicy"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "update_authenticated_audit_retention",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Quoted policy version from ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAuditRetentionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated retention policy",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New policy version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditRetentionPolicy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid retention value or request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Policy version is stale",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Lists bounded, secret-free enrollment-token metadata.",
+        "operationId": "authenticated_enrollment_tokens",
+        "responses": {
+          "200": {
+            "description": "Newest 100 enrollment tokens without secret material",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Creates an enrollment token, returning the secret once and storing only its hash.",
+        "operationId": "create_authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required retry key; same key and request replays metadata without the secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay; secret unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Token secret shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid token settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was used with different settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens/{token_id}": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Reads one enrollment-token record without revealing its secret.",
+        "operationId": "authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Secret-free token metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens/{token_id}/revoke": {
+      "post": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Revokes one enrollment token under the global `tokens.revoke` permission.",
+        "operationId": "revoke_authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Token revoked"
+          },
+          "404": {
+            "description": "Token not found or already revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/history": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_history",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Required RFC 3339 lower bound for partition pruning",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "query",
+            "description": "Exact agent filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "query",
+            "description": "Exact rule-set filter; ~unknown selects legacy rows",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "query",
+            "description": "Exact rule filter",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size from 1 to 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scope-filtered finding history page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingHistoryPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/history/{observed_day}/{finding_id}": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_event",
+        "parameters": [
+          {
+            "name": "observed_day",
+            "in": "path",
+            "description": "UTC partition date",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "finding_id",
+            "in": "path",
+            "description": "Stable finding identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Visible immutable finding event",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingHistoryEntry"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid partition date",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Finding event not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/latest": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_latest_findings",
+        "parameters": [
+          {
+            "name": "severity",
+            "in": "query",
+            "description": "critical, high, medium, or low",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "Opaque continuation cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size from 1 to 100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scope-filtered latest finding page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_latest_finding",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Stable agent identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "description": "Rule set id or reserved ~unknown",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Rule identifier",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Visible latest observation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Finding not found",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_triage",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current finding triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingTriageView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Finding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "update_authenticated_finding_triage",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateFindingTriageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated finding triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingTriageView"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale triage version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/summary": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_summary",
+        "responses": {
+          "200": {
+            "description": "Scope-filtered latest finding counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingSummary"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-bundles/preview": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Verifies an uploaded signed bundle and returns an exact-bytes confirmation token.",
+        "operationId": "preview_authenticated_rule_bundle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedRuleEnvelopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Verified bundle preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleBundlePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Envelope signature or trust validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-bundles/publish": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Re-verifies a previewed envelope before publishing its exact signed bytes.",
+        "operationId": "publish_authenticated_rule_bundle",
+        "parameters": [
+          {
+            "name": "X-Rule-Preview-Token",
+            "in": "header",
+            "description": "SHA-256 confirmation token returned by preview",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedRuleEnvelopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Bundle stored"
+          },
+          "204": {
+            "description": "Identical bundle already stored"
+          },
+          "409": {
+            "description": "Stale version, retired set, or issuer no longer trusted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-sets": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Lists rule sets and safe current-version metadata.",
+        "operationId": "authenticated_rule_sets",
+        "responses": {
+          "200": {
+            "description": "Rule-set summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-sets/{rule_set_id}/bundles": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Lists a rule set's published bundle metadata.",
+        "operationId": "authenticated_rule_bundles",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bundle history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleBundlePage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rule set not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts": {
+      "get": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Lists service accounts without secret material.",
+        "operationId": "authenticated_service_accounts",
+        "responses": {
+          "200": {
+            "description": "Service-account metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Creates a named service identity with one initial global built-in role.",
+        "operationId": "create_authenticated_service_account",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServiceAccountRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Service account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceAccountView"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Name already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/disable": {
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Disables an account and revokes its issued tokens.",
+        "operationId": "disable_authenticated_service_account",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Service account disabled"
+          },
+          "404": {
+            "description": "Unknown or already disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/tokens": {
+      "get": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Lists a service account's secret-free token metadata.",
+        "operationId": "authenticated_service_tokens",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Service-token metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceTokenPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Issues an expiring service bearer secret once.",
+        "operationId": "create_authenticated_service_token",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required retry key; a replay never returns the secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateServiceTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay; secret unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedServiceToken"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Token secret shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedServiceToken"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Service account is missing or disabled",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was reused with different settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/service-accounts/{service_account_id}/tokens/{token_id}/revoke": {
+      "post": {
+        "tags": [
+          "service_accounts"
+        ],
+        "summary": "Revokes one service bearer token.",
+        "operationId": "revoke_authenticated_service_token",
+        "parameters": [
+          {
+            "name": "service_account_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Service token revoked"
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/session": {
+      "get": {
+        "tags": [
+          "session"
+        ],
+        "operationId": "session",
+        "responses": {
+          "200": {
+            "description": "Current authenticated browser session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication store is unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/v1/login": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match the configured public origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "One-use token returned by pre-authentication",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cookie",
+            "in": "header",
+            "description": "Pre-auth and browser-binding cookies",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Authenticated; sets an opaque session cookie",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LoginResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed authentication request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Generic invalid credentials response",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin or CSRF check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable or busy",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/v1/logout": {
+      "post": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "logout",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match the configured public origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Synchronizer token returned by the session route",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Cookie",
+            "in": "header",
+            "description": "Opaque browser session cookie",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Session revoked and cookie cleared"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin or CSRF check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/v1/preauth": {
+      "get": {
+        "tags": [
+          "authentication"
+        ],
+        "operationId": "preauth",
+        "responses": {
+          "200": {
+            "description": "One-use login challenge",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreauthResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AccessAssetGroup": {
+        "type": "object",
+        "description": "Manual asset group and exact selectors.",
+        "required": [
+          "asset_group_id",
+          "name",
+          "selectors"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "Stable group identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-facing group name."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Exact `key=value` selectors, all of which must match."
+          }
+        }
+      },
+      "AccessBinding": {
+        "type": "object",
+        "description": "Active local-user role assignment.",
+        "required": [
+          "binding_id",
+          "user_id",
+          "username",
+          "display_name",
+          "role_id",
+          "created_at",
+          "created_by"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset group id; null denotes global scope."
+          },
+          "asset_group_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset group name, when scoped."
+          },
+          "binding_id": {
+            "type": "string",
+            "description": "Stable binding identifier."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339 creation time."
+          },
+          "created_by": {
+            "type": "string",
+            "description": "Actor who created the binding."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Display label."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role identifier."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local user identifier."
+          },
+          "username": {
+            "type": "string",
+            "description": "Local username."
+          }
+        }
+      },
+      "AccessInventory": {
+        "type": "object",
+        "description": "Read-only review of roles, bindings, and asset groups.",
+        "required": [
+          "roles",
+          "bindings",
+          "asset_groups",
+          "users"
+        ],
+        "properties": {
+          "asset_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessAssetGroup"
+            },
+            "description": "Manual asset groups and their exact tag selectors."
+          },
+          "bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessBinding"
+            },
+            "description": "Active local-user role bindings."
+          },
+          "roles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessRole"
+            },
+            "description": "All available roles and granted permission identifiers."
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            },
+            "description": "Enabled users who can receive role bindings."
+          }
+        }
+      },
+      "AccessRole": {
+        "type": "object",
+        "description": "Role and permission mapping.",
+        "required": [
+          "role_id",
+          "display_name",
+          "builtin",
+          "permissions"
+        ],
+        "properties": {
+          "builtin": {
+            "type": "boolean",
+            "description": "Whether this is a built-in role."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing name."
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Permission identifiers."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Stable role identifier."
+          }
+        }
+      },
+      "AccessUser": {
+        "type": "object",
+        "description": "Enabled local user in the access-management picker.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing display name."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local user UUID."
+          },
+          "username": {
+            "type": "string",
+            "description": "Canonical username."
+          }
+        }
+      },
+      "AgentDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AgentView",
+            "description": "Operator-facing agent fields."
+          },
+          {
+            "type": "object",
+            "required": [
+              "certificates"
+            ],
+            "properties": {
+              "certificates": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CertificateView"
+                },
+                "description": "Certificate metadata for the agent."
+              }
+            }
+          }
+        ],
+        "description": "Agent and current certificate metadata."
+      },
+      "AgentPage": {
+        "type": "object",
+        "description": "A page of agents using the shared cursor response shape.",
+        "required": [
+          "items",
+          "generated_at"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 instant when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentView"
+            },
+            "description": "Records in stable server-defined order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, or `null` at the end."
+          }
+        }
+      },
+      "AgentStatus": {
+        "type": "string",
+        "description": "Lifecycle state reported for an enrolled agent.",
+        "enum": [
+          "active",
+          "stale",
+          "revoked"
+        ]
+      },
+      "AgentSummary": {
+        "type": "object",
+        "description": "Fleet counts visible to the current principal.",
+        "required": [
+          "total",
+          "active",
+          "stale",
+          "revoked"
+        ],
+        "properties": {
+          "active": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible active agents.",
+            "minimum": 0
+          },
+          "revoked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible revoked agents.",
+            "minimum": 0
+          },
+          "stale": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible stale agents.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible enrolled agents.",
+            "minimum": 0
+          }
+        }
+      },
+      "AgentTagBindingImpact": {
+        "type": "object",
+        "description": "Binding affected by a proposed agent tag change.",
+        "required": [
+          "binding_id",
+          "username",
+          "role_id",
+          "asset_group_name"
+        ],
+        "properties": {
+          "asset_group_name": {
+            "type": "string",
+            "description": "Asset group name."
+          },
+          "binding_id": {
+            "type": "string",
+            "description": "Binding UUID."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Role identifier."
+          },
+          "username": {
+            "type": "string",
+            "description": "Username."
+          }
+        }
+      },
+      "AgentTagChangeRequest": {
+        "type": "object",
+        "description": "Proposed exact agent tag set.",
+        "required": [
+          "tags"
+        ],
+        "properties": {
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Complete replacement tag set."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentTagGroupImpact": {
+        "type": "object",
+        "description": "Asset group affected by a proposed tag change.",
+        "required": [
+          "asset_group_id",
+          "name"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": "string",
+            "description": "Group identifier."
+          },
+          "name": {
+            "type": "string",
+            "description": "Group name."
+          }
+        }
+      },
+      "AgentTagInput": {
+        "type": "object",
+        "description": "Exact tag key and value proposed for an agent.",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Tag key."
+          },
+          "value": {
+            "type": "string",
+            "description": "Tag value."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AgentTagPreviewResponse": {
+        "type": "object",
+        "description": "Exact-tag impact preview.",
+        "required": [
+          "current",
+          "proposed",
+          "gained_groups",
+          "lost_groups",
+          "gained_bindings",
+          "lost_bindings",
+          "preview_token"
+        ],
+        "properties": {
+          "current": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Existing tags."
+          },
+          "gained_bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagBindingImpact"
+            },
+            "description": "Active scoped bindings gained."
+          },
+          "gained_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagGroupImpact"
+            },
+            "description": "Groups the agent will enter."
+          },
+          "lost_bindings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagBindingImpact"
+            },
+            "description": "Active scoped bindings lost."
+          },
+          "lost_groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagGroupImpact"
+            },
+            "description": "Groups the agent will leave."
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "Token required to apply this proposal."
+          },
+          "proposed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Proposed tags."
+          }
+        }
+      },
+      "AgentView": {
+        "type": "object",
+        "description": "Operator-facing agent fields shared by the read API and seeded server.",
+        "required": [
+          "id",
+          "status",
+          "enrolled_at",
+          "capabilities"
+        ],
+        "properties": {
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Reported agent capabilities."
+          },
+          "enrolled_at": {
+            "type": "string",
+            "description": "RFC 3339 enrollment time."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest hostname reported by an authenticated heartbeat; this is an operator label."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable platform agent identifier."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time of the latest heartbeat, if present."
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 revocation time, if revoked."
+          },
+          "scanner_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Reported scanner version, if present."
+          },
+          "status": {
+            "$ref": "#/components/schemas/AgentStatus",
+            "description": "Current lifecycle state."
+          }
+        }
+      },
+      "ApplyAgentTagsRequest": {
+        "type": "object",
+        "description": "Confirmed tag update request, bound to an impact preview.",
+        "required": [
+          "tags",
+          "preview_token"
+        ],
+        "properties": {
+          "preview_token": {
+            "type": "string",
+            "description": "Opaque preview token."
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentTagInput"
+            },
+            "description": "Complete replacement tag set."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AssetGroupSelectorInput": {
+        "type": "object",
+        "description": "Exact tag selector used to define asset-group membership.",
+        "required": [
+          "key",
+          "value"
+        ],
+        "properties": {
+          "key": {
+            "type": "string",
+            "description": "Tag key."
+          },
+          "value": {
+            "type": "string",
+            "description": "Exact tag value."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AuditEventPage": {
+        "type": "object",
+        "description": "Bounded audit-event page with an opaque continuation cursor.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEventView"
+            },
+            "description": "Events in descending timestamp order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, if present."
+          }
+        }
+      },
+      "AuditEventView": {
+        "type": "object",
+        "description": "One safe audit event in a bounded audit search.",
+        "required": [
+          "id",
+          "at",
+          "actor",
+          "action",
+          "result"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "description": "Stable action code."
+          },
+          "actor": {
+            "type": "string",
+            "description": "Operator-facing actor label."
+          },
+          "actor_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable actor id."
+          },
+          "actor_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Actor kind and stable id."
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339 event timestamp."
+          },
+          "authentication_method": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Authentication method, when present."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable database event identifier."
+          },
+          "reason_code": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Safe reason code."
+          },
+          "request_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Request correlation id, when present."
+          },
+          "result": {
+            "type": "string",
+            "description": "Event result code."
+          },
+          "target": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Safe target label, when present."
+          },
+          "target_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Stable target id."
+          },
+          "target_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Target kind and stable id."
+          }
+        }
+      },
+      "AuditRetentionPolicy": {
+        "type": "object",
+        "description": "Current administrator-controlled audit retention policy.",
+        "required": [
+          "retention_days",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of days kept after the next maintenance run.",
+            "minimum": 0
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC 3339 update instant."
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Local user id that last changed the policy."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for conditional updates.",
+            "minimum": 0
+          }
+        }
+      },
+      "AuthenticationLevel": {
+        "type": "string",
+        "description": "Authentication assurance reached by the current browser session.",
+        "enum": [
+          "single_factor",
+          "multi_factor"
+        ]
+      },
+      "AuthenticationMethod": {
+        "type": "string",
+        "description": "Authentication mechanism that established a browser session.",
+        "enum": [
+          "local_password",
+          "oidc",
+          "saml"
+        ]
+      },
+      "CertificatePage": {
+        "type": "object",
+        "description": "A page of certificate metadata using the shared cursor response shape.",
+        "required": [
+          "items",
+          "generated_at"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 instant when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CertificateView"
+            },
+            "description": "Records in stable server-defined order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, or `null` at the end."
+          }
+        }
+      },
+      "CertificateView": {
+        "type": "object",
+        "description": "Certificate metadata exposed in an agent detail response.",
+        "required": [
+          "serial",
+          "not_before",
+          "not_after",
+          "issued_at"
+        ],
+        "properties": {
+          "issued_at": {
+            "type": "string",
+            "description": "RFC 3339 certificate issuance time."
+          },
+          "not_after": {
+            "type": "string",
+            "description": "RFC 3339 certificate expiry time."
+          },
+          "not_before": {
+            "type": "string",
+            "description": "RFC 3339 certificate validity start."
+          },
+          "serial": {
+            "type": "string",
+            "description": "Certificate serial rendered as hexadecimal."
+          }
+        }
+      },
+      "CreateAccessBindingRequest": {
+        "type": "object",
+        "description": "Request to assign a role to one local user with optional asset-group scope.",
+        "required": [
+          "user_id",
+          "role_id"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset-group UUID; omitted means global scope.",
+            "maxLength": 36,
+            "minLength": 36
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Built-in role identifier.",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local-user UUID.",
+            "maxLength": 36,
+            "minLength": 36
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateEnrollmentTokenRequest": {
+        "type": "object",
+        "description": "Bounded one-time enrollment-token creation request.",
+        "required": [
+          "expires_in_hours",
+          "max_uses"
+        ],
+        "properties": {
+          "expires_in_hours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Validity in hours, from one through 8760.",
+            "minimum": 0
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional operator label."
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of enrollments, from one through 100000.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateServiceAccountRequest": {
+        "type": "object",
+        "description": "Request to create a service identity with one initial global role.",
+        "required": [
+          "name",
+          "role_id"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique operator name, at most 128 characters."
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Initial built-in global role."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateServiceTokenRequest": {
+        "type": "object",
+        "description": "Request to issue one expiring service bearer token.",
+        "required": [
+          "label",
+          "expires_in_hours"
+        ],
+        "properties": {
+          "expires_in_hours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Lifetime from one through 8760 hours.",
+            "minimum": 0
+          },
+          "label": {
+            "type": "string",
+            "description": "Operator label, 1 to 128 characters."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedEnrollmentToken": {
+        "type": "object",
+        "description": "Enrollment token secret, returned only at creation time.",
+        "required": [
+          "token_id",
+          "replayed",
+          "secret_available",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "RFC3339 expiry instant."
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "True when this response replays creation metadata for the same key."
+          },
+          "secret_available": {
+            "type": "boolean",
+            "description": "Whether the plaintext is present in this response."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Secret token. Never returned by list or revoke operations."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token identifier."
+          }
+        }
+      },
+      "CreatedServiceToken": {
+        "type": "object",
+        "description": "Newly issued service token, whose secret appears only in this response.",
+        "required": [
+          "token_id",
+          "replayed",
+          "secret_available",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "Whether this response is a safe replay of an earlier issuance."
+          },
+          "secret_available": {
+            "type": "boolean",
+            "description": "Whether the plaintext secret is included."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Bearer secret; never returned after creation."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token UUID."
+          }
+        }
+      },
+      "CursorPagination": {
+        "type": "object",
+        "description": "Validated cursor and limit accepted by cursor-paginated collection routes.",
+        "required": [
+          "limit"
+        ],
+        "properties": {
+          "cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 2048
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "default": 50,
+            "maximum": 100,
+            "minimum": 1
+          }
+        }
+      },
+      "EffectiveCapability": {
+        "type": "object",
+        "description": "One effective capability returned to the browser.",
+        "required": [
+          "permission",
+          "scope"
+        ],
+        "properties": {
+          "permission": {
+            "$ref": "#/components/schemas/Permission",
+            "description": "Permission granted to the current principal."
+          },
+          "scope": {
+            "$ref": "#/components/schemas/PermissionScope",
+            "description": "Effective global or asset-group scope for the permission."
+          }
+        }
+      },
+      "EnrollmentTokenPage": {
+        "type": "object",
+        "description": "Full bounded enrollment-token inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnrollmentTokenView"
+            },
+            "description": "Tokens newest first, without secret material."
+          }
+        }
+      },
+      "EnrollmentTokenView": {
+        "type": "object",
+        "description": "Safe enrollment-token listing row.",
+        "required": [
+          "token_id",
+          "created_at",
+          "expires_at",
+          "max_uses",
+          "uses",
+          "revoked"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator label."
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum enrollments."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the token was revoked."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token identifier."
+          },
+          "uses": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Completed enrollments."
+          }
+        }
+      },
+      "FieldError": {
+        "type": "object",
+        "description": "Safe validation detail for one request field.",
+        "required": [
+          "field",
+          "code",
+          "message"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable validation code."
+          },
+          "field": {
+            "type": "string",
+            "description": "Stable JSON field name or dotted field path."
+          },
+          "message": {
+            "type": "string",
+            "description": "Bounded operator-facing explanation."
+          }
+        }
+      },
+      "FindingHistoryEntry": {
+        "type": "object",
+        "description": "One historical observation event.",
+        "required": [
+          "id",
+          "observed_day",
+          "agent_id",
+          "rule_set_id",
+          "rule_id",
+          "rule_version",
+          "severity",
+          "confidence",
+          "message",
+          "evidence",
+          "scan_id",
+          "authenticated",
+          "origin",
+          "observed_at",
+          "received_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent associated with this event."
+          },
+          "authenticated": {
+            "type": "boolean",
+            "description": "Whether the observation was received through an authenticated agent."
+          },
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Confidence as a percentage from 0 through 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence key/value strings from the observation."
+          },
+          "id": {
+            "type": "string",
+            "description": "Finding identifier from the partitioned event table."
+          },
+          "message": {
+            "type": "string",
+            "description": "Message recorded for this observation."
+          },
+          "observed_at": {
+            "type": "string",
+            "description": "RFC 3339 time the agent or importer observed this finding."
+          },
+          "observed_day": {
+            "type": "string",
+            "description": "UTC partition day used for stable event lookup."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FindingOrigin",
+            "description": "Observation provenance."
+          },
+          "received_at": {
+            "type": "string",
+            "description": "RFC 3339 time the platform received this observation."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule identifier within the rule set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set that produced the event, or `~unknown` for legacy data."
+          },
+          "rule_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed rule version.",
+            "minimum": 0
+          },
+          "scan_id": {
+            "type": "string",
+            "description": "Scan that produced the observation."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity",
+            "description": "Severity recorded for this observation."
+          }
+        }
+      },
+      "FindingHistoryPage": {
+        "type": "object",
+        "description": "A page of historical observation events using the shared cursor response shape.",
+        "required": [
+          "items",
+          "generated_at"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 instant when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindingHistoryEntry"
+            },
+            "description": "Records in stable server-defined order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, or `null` at the end."
+          }
+        }
+      },
+      "FindingOrigin": {
+        "type": "string",
+        "description": "Provenance of a stored observation.",
+        "enum": [
+          "online",
+          "import"
+        ]
+      },
+      "FindingPage": {
+        "type": "object",
+        "description": "A page of latest observations using the shared cursor response shape.",
+        "required": [
+          "items",
+          "generated_at"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 instant when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindingView"
+            },
+            "description": "Records in stable server-defined order."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page, or `null` at the end."
+          }
+        }
+      },
+      "FindingSummary": {
+        "type": "object",
+        "description": "Counts for the latest observation rows visible to the current principal.",
+        "required": [
+          "total",
+          "impacted_agents",
+          "critical",
+          "high",
+          "medium",
+          "low"
+        ],
+        "properties": {
+          "critical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible critical latest observations.",
+            "minimum": 0
+          },
+          "high": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible high latest observations.",
+            "minimum": 0
+          },
+          "impacted_agents": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible agents with at least one latest observation.",
+            "minimum": 0
+          },
+          "low": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible low latest observations.",
+            "minimum": 0
+          },
+          "medium": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible medium latest observations.",
+            "minimum": 0
+          },
+          "total": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible latest observation rows.",
+            "minimum": 0
+          }
+        }
+      },
+      "FindingTriageView": {
+        "type": "object",
+        "description": "Human workflow state attached to the latest finding.",
+        "required": [
+          "state",
+          "rule_version",
+          "version"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Accepted risk expiry, if applicable."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assigned analyst username."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator note."
+          },
+          "rule_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rule version this state covers."
+          },
+          "state": {
+            "type": "string",
+            "description": "Workflow state."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonic update version used with ETag and If-Match."
+          }
+        }
+      },
+      "FindingView": {
+        "type": "object",
+        "description": "Latest observation state for one agent, rule set, and rule.",
+        "required": [
+          "id",
+          "agent_id",
+          "rule_set_id",
+          "rule_id",
+          "rule_version",
+          "severity",
+          "confidence",
+          "message",
+          "evidence",
+          "scan_id",
+          "authenticated",
+          "origin",
+          "first_observed_at",
+          "last_observed_at",
+          "received_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent associated with this observation."
+          },
+          "authenticated": {
+            "type": "boolean",
+            "description": "Whether the observation was received through an authenticated agent."
+          },
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Confidence as a percentage from 0 through 100.",
+            "maximum": 100,
+            "minimum": 0
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Evidence key/value strings from the observation."
+          },
+          "first_observed_at": {
+            "type": "string",
+            "description": "RFC 3339 time of the first observation."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest hostname reported by the agent; this is an operator label."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable latest-finding identifier."
+          },
+          "last_observed_at": {
+            "type": "string",
+            "description": "RFC 3339 time of the latest observation."
+          },
+          "message": {
+            "type": "string",
+            "description": "Latest observation message."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FindingOrigin",
+            "description": "Observation provenance."
+          },
+          "received_at": {
+            "type": "string",
+            "description": "RFC 3339 time the platform received this observation."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule identifier within the rule set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set that produced the finding, or `~unknown` for legacy data."
+          },
+          "rule_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed rule version.",
+            "minimum": 0
+          },
+          "scan_id": {
+            "type": "string",
+            "description": "Scan that produced the observation."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity",
+            "description": "Latest observed severity."
+          }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "description": "One-use local login request. The password is never echoed by the API.",
+        "required": [
+          "username",
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Password supplied over the configured secure transport.",
+            "writeOnly": true,
+            "maxLength": 4096
+          },
+          "username": {
+            "type": "string",
+            "description": "Canonical local username (case is normalized by the server).",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false
+      },
+      "LoginResponse": {
+        "type": "object",
+        "description": "Acknowledgement returned after a local password login succeeds.",
+        "required": [
+          "authenticated"
+        ],
+        "properties": {
+          "authenticated": {
+            "type": "boolean",
+            "description": "Always true for the successful response; the session cookie is set separately."
+          }
+        }
+      },
+      "Permission": {
+        "type": "string",
+        "description": "Stable console permission identifiers.",
+        "enum": [
+          "agents.read",
+          "agents.revoke",
+          "findings.read",
+          "findings.triage",
+          "tokens.read",
+          "tokens.create",
+          "tokens.revoke",
+          "rules.read",
+          "rules.upload",
+          "audit.read",
+          "audit.export",
+          "audit.retention.manage",
+          "rbac.read",
+          "rbac.manage",
+          "asset_groups.manage",
+          "service_accounts.read",
+          "service_accounts.manage"
+        ]
+      },
+      "PermissionScope": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "The permission applies globally.",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "global"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "The permission applies only to the listed asset groups.",
+            "required": [
+              "asset_group_ids",
+              "kind"
+            ],
+            "properties": {
+              "asset_group_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Stable asset-group identifiers selected by the binding resolver."
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "asset_groups"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Effective object scope attached to one permission."
+      },
+      "PreauthResponse": {
+        "type": "object",
+        "description": "CSRF challenge returned before local password login.",
+        "required": [
+          "csrf_token"
+        ],
+        "properties": {
+          "csrf_token": {
+            "type": "string",
+            "description": "One-use value required in `X-CSRF-Token` on the login request."
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "description": "Stable RFC Problem Details-style error response used by the console API.",
+        "required": [
+          "code",
+          "title",
+          "status",
+          "request_id"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable machine-readable error code."
+          },
+          "field_errors": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/FieldError"
+            },
+            "description": "Bounded request-field errors when validation can safely identify them.",
+            "maxItems": 32
+          },
+          "request_id": {
+            "type": "string",
+            "description": "Process-local correlation identifier."
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "description": "HTTP status code.",
+            "maximum": 599,
+            "minimum": 400
+          },
+          "title": {
+            "type": "string",
+            "description": "Short human-readable error title."
+          }
+        }
+      },
+      "RevokeAgentRequest": {
+        "type": "object",
+        "description": "Reason supplied by an operator when revoking an agent.",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Short operator reason recorded in the audit event."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuleBundlePage": {
+        "type": "object",
+        "description": "Published bundle history for one set.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleBundleView"
+            },
+            "description": "Bundles newest first."
+          }
+        }
+      },
+      "RuleBundlePreview": {
+        "type": "object",
+        "description": "Signature and version details returned by upload preview.",
+        "required": [
+          "rule_set_id",
+          "version",
+          "issuer_key_id",
+          "expires_at_ms",
+          "envelope_sha256",
+          "preview_token"
+        ],
+        "properties": {
+          "current_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Current version at preview time."
+          },
+          "envelope_sha256": {
+            "type": "string",
+            "description": "SHA-256 of exact envelope bytes."
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed expiry instant, in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted issuer key id."
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "Token to send with the exact same bytes to publish."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule-set identifier."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed version."
+          }
+        }
+      },
+      "RuleBundleView": {
+        "type": "object",
+        "description": "A published signed-bundle metadata row.",
+        "required": [
+          "version",
+          "envelope_sha256",
+          "issuer_key_id",
+          "created_at_ms",
+          "expires_at_ms",
+          "published_at",
+          "published_by",
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stored envelope bytes."
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed creation and expiry instants, in Unix milliseconds."
+          },
+          "envelope_sha256": {
+            "type": "string",
+            "description": "SHA-256 of exact signed bytes, lower-case hexadecimal."
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed expiry instant, in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted issuer key id at publish time."
+          },
+          "published_at": {
+            "type": "string",
+            "description": "Server-side publish instant."
+          },
+          "published_by": {
+            "type": "string",
+            "description": "Operator who published it."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonically increasing version."
+          }
+        }
+      },
+      "RuleSetPage": {
+        "type": "object",
+        "description": "Published rule-set inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleSetView"
+            },
+            "description": "Rule sets sorted by identifier."
+          }
+        }
+      },
+      "RuleSetView": {
+        "type": "object",
+        "description": "Published rule-set summary for the console.",
+        "required": [
+          "rule_set_id",
+          "current_signer_removed",
+          "trusted_keys",
+          "retired"
+        ],
+        "properties": {
+          "current_expires_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Current signed expiry, in Unix milliseconds."
+          },
+          "current_issuer_key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Issuer of the current bundle."
+          },
+          "current_signer_removed": {
+            "type": "boolean",
+            "description": "True when the current bundle's signer has been removed from trust."
+          },
+          "current_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Highest published version, when present."
+          },
+          "retired": {
+            "type": "boolean",
+            "description": "Whether operators retired this set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule-set identifier."
+          },
+          "trusted_keys": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of currently trusted public keys."
+          }
+        }
+      },
+      "SaveAssetGroupRequest": {
+        "type": "object",
+        "description": "Request to create or replace an asset group's complete selector set.",
+        "required": [
+          "name",
+          "selectors"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Operator-facing group name."
+          },
+          "selectors": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssetGroupSelectorInput"
+            },
+            "description": "Complete conjunction of exact selectors, from one through 32."
+          }
+        },
+        "additionalProperties": false
+      },
+      "ServiceAccountPage": {
+        "type": "object",
+        "description": "Bounded service-account inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceAccountView"
+            },
+            "description": "Accounts sorted by name."
+          }
+        }
+      },
+      "ServiceAccountView": {
+        "type": "object",
+        "description": "Safe service-account inventory row.",
+        "required": [
+          "service_account_id",
+          "name",
+          "enabled",
+          "created_at",
+          "active_tokens",
+          "role_ids"
+        ],
+        "properties": {
+          "active_tokens": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active token count."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "enabled": {
+            "type": "boolean",
+            "description": "Whether the account can authenticate."
+          },
+          "name": {
+            "type": "string",
+            "description": "Operator-selected name."
+          },
+          "role_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Active assigned role identifiers."
+          },
+          "service_account_id": {
+            "type": "string",
+            "description": "Stable service-account UUID."
+          }
+        }
+      },
+      "ServiceTokenPage": {
+        "type": "object",
+        "description": "Token metadata for one service account.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceTokenView"
+            },
+            "description": "Tokens newest first, without secret material."
+          }
+        }
+      },
+      "ServiceTokenView": {
+        "type": "object",
+        "description": "Safe service-token metadata row.",
+        "required": [
+          "token_id",
+          "label",
+          "created_at",
+          "expires_at",
+          "revoked"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "label": {
+            "type": "string",
+            "description": "Operator label."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the token was revoked."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token UUID."
+          }
+        }
+      },
+      "SessionPrincipal": {
+        "type": "object",
+        "description": "Human principal represented by an authenticated browser session.",
+        "required": [
+          "id",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing display label."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable local or federated user identifier."
+          },
+          "username": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Local username when the identity has one."
+          }
+        }
+      },
+      "SessionResponse": {
+        "type": "object",
+        "description": "Successful response from `GET /api/v1/session` for an active session.",
+        "required": [
+          "principal",
+          "authentication_method",
+          "authentication_level",
+          "capabilities",
+          "csrf_token",
+          "idle_expires_at",
+          "absolute_expires_at"
+        ],
+        "properties": {
+          "absolute_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 absolute session expiry instant."
+          },
+          "authentication_level": {
+            "$ref": "#/components/schemas/AuthenticationLevel",
+            "description": "Assurance reached by the current session."
+          },
+          "authentication_method": {
+            "$ref": "#/components/schemas/AuthenticationMethod",
+            "description": "Mechanism that established the session."
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectiveCapability"
+            },
+            "description": "Effective permissions and their scopes, resolved for this request."
+          },
+          "csrf_token": {
+            "type": "string",
+            "description": "Per-session value required in `X-CSRF-Token` on unsafe browser requests.",
+            "maxLength": 256,
+            "minLength": 32
+          },
+          "idle_expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 instant when idle expiry occurs if the session is not used."
+          },
+          "principal": {
+            "$ref": "#/components/schemas/SessionPrincipal",
+            "description": "Current human principal. Service-account tokens cannot call this route."
+          }
+        }
+      },
+      "Severity": {
+        "type": "string",
+        "description": "Severity attached to the latest observation for a rule.",
+        "enum": [
+          "critical",
+          "high",
+          "medium",
+          "low"
+        ]
+      },
+      "SignedRuleEnvelopeRequest": {
+        "type": "object",
+        "description": "Accepted signed-envelope JSON shape for preview and publish requests.",
+        "required": [
+          "schema_version",
+          "rule_set_id",
+          "rule_set_version",
+          "issuer_key_id",
+          "created_at_unix_ms",
+          "expires_at_unix_ms",
+          "payload_encoding",
+          "payload",
+          "payload_sha256_hex",
+          "signature_base64url"
+        ],
+        "properties": {
+          "created_at_unix_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Creation time in Unix milliseconds."
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expiry time in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted Ed25519 issuer identifier."
+          },
+          "payload": {
+            "type": "string",
+            "description": "Exact UTF-8 signed payload."
+          },
+          "payload_encoding": {
+            "type": "string",
+            "description": "Payload encoding (`json` or `yaml`)."
+          },
+          "payload_sha256_hex": {
+            "type": "string",
+            "description": "Lowercase SHA-256 digest of the payload."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Stable rule-set identifier."
+          },
+          "rule_set_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonically increasing version.",
+            "minimum": 0
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Envelope schema version (currently 1).",
+            "minimum": 0
+          },
+          "signature_base64url": {
+            "type": "string",
+            "description": "Base64url Ed25519 signature."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateAuditRetentionRequest": {
+        "type": "object",
+        "description": "Request body for changing audit retention.",
+        "required": [
+          "retention_days"
+        ],
+        "properties": {
+          "retention_days": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Retention window in days, from 1 through 36500.",
+            "maximum": 36500,
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateFindingTriageRequest": {
+        "type": "object",
+        "description": "Requested human workflow update for a latest finding.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for accepted risk."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Analyst username; omit or null to unassign."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required when moving to a completed state."
+          },
+          "state": {
+            "type": "string",
+            "description": "Workflow state."
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "session",
+      "description": "Current browser session"
+    },
+    {
+      "name": "authentication",
+      "description": "Local browser authentication"
+    },
+    {
+      "name": "agents",
+      "description": "Scope-filtered agent reads"
+    },
+    {
+      "name": "findings",
+      "description": "Scope-filtered observation reads"
+    },
+    {
+      "name": "audit",
+      "description": "Audit policy and event access"
+    }
+  ]
+}
