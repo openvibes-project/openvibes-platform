@@ -9,6 +9,7 @@ license.workspace = true
 chrono.workspace = true
 clap.workspace = true
 platform-assistant = { path = "../platform-assistant" }
+openvibes-llm = { path = "../openvibes-llm" }
 platform-config = { path = "../platform-config" }
 platform-pki = { path = "../platform-pki" }
 ring.workspace = true

@@ -1105,6 +1105,7 @@ dependencies = [
  "clap",
  "ed25519-dalek",
  "openvibes-core",
+ "openvibes-llm",
  "openvibes-rules",
  "openvibes-vulns",
  "platform-assistant",
@@ -1171,6 +1172,13 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "openvibes-llm"
+version = "0.1.0"
+dependencies = [
+ "sha2",
 ]
 
 [[package]]

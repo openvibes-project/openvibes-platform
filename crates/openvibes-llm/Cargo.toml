@@ -1,0 +1,16 @@
+[package]
+name = "openvibes-llm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "openvibes-llm-check"
+path = "src/main.rs"
+
+[dependencies]
+sha2.workspace = true
+
+[lints]
+workspace = true

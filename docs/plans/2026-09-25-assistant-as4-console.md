@@ -106,6 +106,10 @@ Events are `Lookup(name)`, `Text(piece)` (native mode only), and `Reset`.
   of `backend.concurrency`, and the set of principals with a question in
   flight. The probe runs at startup in the background and again every 5
   minutes while unavailable; the console never waits for it.
+- [ ] With `openvibes-llm` (AS5), the console unit gets the backend key as a
+  credential, `LoadCredential=llm-api-key:/etc/openvibes/llm-api-key`, and
+  `api_key_file = "/run/credentials/openvibes-console.service/llm-api-key"`.
+  The key file stays root's (docs/components/openvibes-llm.md).
 - [ ] Tests: disabled → routes 404 and no connection attempt (mock backend
   records none); invalid section → startup error; backend down → status
   `unavailable`, then `available` after the mock starts.

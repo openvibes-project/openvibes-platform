@@ -8,6 +8,7 @@ mod agent;
 mod assistant;
 mod ca;
 mod files;
+mod model;
 mod rules;
 mod token;
 mod vulns;

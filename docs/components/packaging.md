@@ -1,15 +1,17 @@
 # packaging (RPM)
 
-`packaging/rpm/` builds four Fedora packages from one spec,
+`packaging/rpm/` builds Fedora packages from one spec,
 `openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
-**openvibes-vulns**, and **openvibes-admin**.
+**openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
+(the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
+`OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**).
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
 deployment, not for inclusion in Fedora itself.
 
 ```sh
-scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin}-*.rpm
+scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm}-*.rpm
 ```
 
 ## Contents
@@ -34,6 +36,12 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
 | `/etc/openvibes/admin.toml` | 0640 root:openvibes_admin, `%config(noreplace)` | admin |
+| `/usr/libexec/openvibes-llm/{llama-server,openvibes-llm-check}` | 0755 root | llm |
+| `/usr/lib/systemd/system/openvibes-llm.service` | 0644 root | llm |
+| `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes_llm` | llm |
+| `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
+| `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
+| `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes_admin | llm |
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`
@@ -62,6 +70,11 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
+- `openvibes-llm.service`: `llama-server` on loopback as `openvibes_llm`,
+  after `openvibes-llm-check`. It has the same hardening plus
+  `IPAddressDeny=any`/`IPAddressAllow=localhost`, `NoExecPaths=/`, the API
+  key as a credential, and resource shares
+  ([openvibes-llm.md](openvibes-llm.md)).
 
 ## First install on Fedora
 
@@ -270,7 +283,8 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
-five units, that the ingest, distribution, and vulns units stop with
+six units, the generated `llm-api-key`, the `openvibes-llm` sandbox lines
+and its pre-start check's refusals, that the ingest, distribution, and vulns units stop with
 SIGINT (an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 
