@@ -83,8 +83,9 @@ A copied view therefore shares the query, not a caller-specific position.
 |---|---|---|
 | Sign in and password change | Local username/password first; OIDC, SAML, and MFA are later adapters | Public/session |
 | Overview | Permission-aware fleet and observation summary | Each panel is independently gated |
-| Findings list | Browse latest observed matches and bounded history; filter by triage state and assignee | `findings.read` |
-| Finding detail | Exact observation, provenance, and first-release analyst triage | `findings.read`; triage uses `findings.triage` |
+| Findings list | One row per rule set and rule, however many endpoints report it (section 15); bounded history; filter by triage state and assignee | `findings.read` |
+| Finding detail | The rule's latest observation and every endpoint reporting it, each with its own observation and triage (section 15) | `findings.read`; triage uses `findings.triage` |
+| Endpoint observation | Exact observation for one endpoint, provenance, and first-release analyst triage | `findings.read`; triage uses `findings.triage` |
 | Agents list | Browse Seen recently, Offline, Never seen, and Revoked agents | `agents.read` |
 | Agent detail | Identity, contact, versions, certificate metadata, latest observed matches | `agents.read`; revoke uses `agents.revoke` |
 | Enrollment tokens | List safe metadata; create and revoke tokens | `tokens.read`, `tokens.create`, `tokens.revoke` |
@@ -115,9 +116,12 @@ console database request is not a monitoring system.
 3. The analyst opens Findings with the relevant filters already applied.
 4. They refine by severity, confidence, last-observed window, rule, agent,
    origin, or authentication state.
-5. Detail shows the message, exact times, evidence keys, rule version, scan ID,
-   and provenance.
-6. The analyst pivots to the related agent or rule set.
+5. Each row is one finding (a rule set and rule) with the number of
+   endpoints that reported it in the window. Opening it lists those
+   endpoints.
+6. An endpoint's observation shows the message, exact times, evidence keys,
+   rule version, scan ID, and provenance.
+7. The analyst pivots to the related agent or rule set.
 
 Finding detail always includes: "This is the latest observed match, not a
 remediation status."
@@ -394,13 +398,34 @@ runtime CDN dependencies.
 │ Origin [All ▾] Auth [All ▾]                             [Clear filters]  │
 │                                                                          │
 │ 50 shown · more available · Production scope           Sort: Recent ▾     │
-│ ┌─────────┬────────────────────┬─────────────┬──────────┬──────┬────────┐ │
-│ │Severity │Message / rule      │Agent        │Last seen │Conf. │Origin  │ │
-│ ├─────────┼────────────────────┼─────────────┼──────────┼──────┼────────┤ │
-│ │Critical │SSH exposed         │agent…91ad   │4 min ago │ 95%  │Online  │ │
-│ │High     │Unexpected process  │agent…0e12   │11 min ago│ 82%  │Import* │ │
-│ └─────────┴────────────────────┴─────────────┴──────────┴──────┴────────┘ │
+│ ┌─────────┬────────────────────┬──────────┬──────────┬──────────────────┐ │
+│ │Severity │Message / rule      │Endpoints │Last seen │Triage            │ │
+│ ├─────────┼────────────────────┼──────────┼──────────┼──────────────────┤ │
+│ │Critical │SSH exposed         │37        │4 min ago │33 open · 4 acc.  │ │
+│ │High     │Unexpected process  │2 (1 imp*)│11 min ago│2 open            │ │
+│ └─────────┴────────────────────┴──────────┴──────────┴──────────────────┘ │
 │ * Imported observations are unauthenticated.              [Next page →] │
+└──────────────────────────────────────────────────────────────────────────┘
+```
+
+### Finding detail
+
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│ Findings / SSH exposed                     baseline-linux · ssh.exposed  │
+│ Critical · rule versions 3 (35), 2 (2)                                   │
+│ 37 endpoints with a latest observed match in the last 24 hours           │
+│ This is the latest observed match per endpoint, not a remediation status.│
+│                                                                          │
+│ [Select all] [Set triage for selected…]     Show endpoints not seen in   │
+│                                             the window: 5 [Show]         │
+│ ┌───┬─────────────┬───────────┬──────────┬──────────┬────────┬─────────┐ │
+│ │ ☐ │Hostname     │Agent      │First seen│Last seen │Rule v. │Triage   │ │
+│ ├───┼─────────────┼───────────┼──────────┼──────────┼────────┼─────────┤ │
+│ │ ☐ │web-01       │agent…91ad │12 Sep    │4 min ago │3       │Open     │ │
+│ │ ☐ │db-02        │agent…0e12 │18 Sep    │1 h ago   │3       │Accepted │ │
+│ └───┴─────────────┴───────────┴──────────┴──────────┴────────┴─────────┘ │
+│                                                           [Next page →] │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -529,3 +554,40 @@ The effective period and calculated cutoff are visible on the Audit log page.
 Retention cleanup runs asynchronously in bounded maintenance batches; events
 at or newer than the cutoff remain immutable. The first release also includes
 permission-gated CSV audit export.
+
+## 15. Approved Fleet Grouping of Findings (X-M7, 2026-09-25)
+
+When several endpoints report the same finding, the console shows it once.
+Opening it lists every endpoint that reported it.
+
+- **Same finding** means the same rule set and rule. Findings stored before
+  protocol P6 have no rule set and form their own "rule set unknown (earlier
+  agent)" group, never merged with a known rule set, because rule IDs are
+  unique only within a rule set.
+- **The list row** counts the endpoints in the viewer's scope whose latest
+  observed match falls inside the Last observed window (default 24 hours).
+  It shows the highest severity among them, the latest message, the rule
+  versions present, the earliest first observation, the latest last
+  observation, and the triage states by count ("33 open · 4 accepted").
+- **The detail page** lists those endpoints: hostname (a label, never
+  identity), agent or imported installation, first and last observed, rule
+  version, and triage state. Endpoints whose latest match is older than the
+  window are counted and shown only on request, labelled "not seen in the
+  window", never "resolved": the platform cannot yet tell a fixed endpoint
+  from one that stopped reporting.
+- **Scope** applies before grouping. Counts, severities, and states include
+  only endpoints the viewer may see, and a finding with no endpoint in scope
+  does not appear at all, so grouping never reveals out-of-scope hosts.
+- **Triage stays per endpoint** (section 13): accepting the risk on one
+  host never hides the finding on the others. From the detail page an
+  analyst may apply one transition to selected endpoints; each endpoint's
+  transition is checked, versioned, and audited as if made alone, and the
+  whole selection fails if any endpoint changed since it was loaded.
+- **Imported observations** are grouped with the rest, marked unauthenticated,
+  and listed by `install_id` and optional hostname.
+- The History tab is unchanged: one row per stored observation.
+
+A later protocol addition, a per-scan summary of the rules each agent
+evaluated, would let the platform show an endpoint as no longer matching
+once a scan runs the rule without a match. Until then the window is the
+honest bound.

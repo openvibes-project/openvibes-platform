@@ -232,6 +232,10 @@ boundaries.
 | `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}` | `findings.read` |
 | `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.read` |
 | `PUT /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.triage` |
+| `GET /api/v1/findings/groups` | `findings.read` |
+| `GET /api/v1/findings/groups/{rule_set_id}/{rule_id}` | `findings.read` |
+| `GET /api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints` | `findings.read` |
+| `POST /api/v1/findings/groups/{rule_set_id}/{rule_id}/triage` | `findings.triage` |
 
 A latest finding is identified by agent, rule set, and rule (migration 5,
 protocol P6): rule IDs are unique only within a rule set. Findings stored
@@ -241,6 +245,23 @@ an agent upgrades, its old `''` row stays beside the new one; the UI labels
 it "rule set unknown (earlier agent)", and it ages out with retention.
 | `GET /api/v1/findings/history` | `findings.read` |
 | `GET /api/v1/findings/history/{observed_day}/{finding_id}` | `findings.read` |
+
+**Fleet grouping (product section 15, approved 2026-09-25).** The findings
+list reads `groups`: one row per (`rule_set_id`, `rule_id`) over
+`current_findings`, after the SQL-level scope filter and within the required
+`last_observed` window. Each row carries the in-scope endpoint count, highest
+severity, the message of the most recent observation, the distinct rule
+versions, `min(first_observed_at)`, `max(last_observed_at)`, the count of
+endpoints last observed before the window, and triage counts by state. A
+group with no in-scope endpoint is absent (404 on its detail route, like any
+out-of-scope object). The pre-P6 `''` rule set is its own group under the
+reserved `~unknown` segment. `groups/.../endpoints` pages the group's
+subjects (the same tagged union of `agent` and imported `installation`)
+with a link to each subject's `latest` resource, which remains the unit of
+detail and triage. `POST .../triage` applies one transition to up to 100
+listed subjects, each with its own `If-Match` version: all or nothing,
+refused with 412 naming the stale subjects, and one audit event per subject
+sharing a request correlation ID.
 
 The latest-detail resource requires `current_findings` to retain a complete
 latest snapshot. The composite history URL matches the current partitioned
@@ -496,6 +517,10 @@ Stable sorts:
 
 - agents: `last_seen_at DESC NULLS LAST, agent_id ASC`;
 - latest findings: `last_observed_at DESC, agent_id ASC, rule_set_id ASC, rule_id ASC`;
+- finding groups: `max(last_observed_at) DESC, rule_set_id ASC, rule_id ASC`
+  (aggregates move between requests, so group pages are live views like the
+  latest list);
+- group endpoints: `last_observed_at DESC, agent_id ASC`;
 - history: `observed_at DESC, observed_day DESC, finding_id ASC`;
 - tokens: `created_at DESC, token_id ASC`;
 - rule versions: version descending;
@@ -691,12 +716,20 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 5 must add or extend. Main
-now has migration 4 (the ingest role keeps only the rights it uses) and 5
+Append-only migrations after the current schema 10 must add or extend. Main
+has migration 4 (the ingest role keeps only the rights it uses), 5
 (`rule_set_id` on `findings` and `current_findings`, current state keyed by
-agent, rule set, and rule); 0006 is reserved for sub-project 2's rule tables.
-Main now uses migrations 0007–0012 for vulnerability management and its scale
-follow-up. **Console migrations start at 0013**, after rechecking main.
+ agent, rule set, and rule), 6 (sub-project 2's rule tables), 7–13
+ (inventory, vulnerability management, and OSV), and 14 (per-version
+ vulnerability storage). **Console migrations start at 0015**; assistant
+ permission is 0020 on the current Codex branch.
+The first adds an index on
+`current_findings (rule_set_id, rule_id, last_observed_at DESC, agent_id)`
+for fleet grouping and group endpoint pages (the primary key leads with
+`agent_id`). Measure the grouped list at the 50,000-agent sizing target
+before release; if the on-request aggregate is too slow, a summary
+maintained by the ingest upsert is a shared-store change agreed with the
+ingest side first. The rest must add or extend:
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -744,9 +777,9 @@ Existing schema facts and gaps:
 - enrollment-token creator is free text, so console issuance needs a nullable
   stable principal reference while retaining CLI history.
 
-All schema and SQL stay in `platform-store`. Schema 5 is integrated in the
-console branch (via `console-fixes`, 2026-09-24); the console migrations were
-renumbered to 0013–0017 after main added migration 0012.
+All schema and SQL stay in `platform-store`. Schema 14 is integrated in the
+current main branch; console migrations are 0015–0020, with numbering
+rechecked whenever the shared platform base changes.
 
 ## 15. Security Acceptance Tests
 
@@ -841,3 +874,8 @@ arbitrary redirect/metadata, and incomplete/stale IdP group failure paths.
 17. **Approved:** `openvibes-console` terminates TLS 1.3 directly by default.
     Reverse-proxy mode is explicit, trusts only configured proxy peers, and
     never permits a wildcard plaintext upstream listener.
+18. **Approved (X-M7, 2026-09-25):** the findings list shows each finding
+    (rule set and rule) once, with the in-scope endpoints that reported it
+    in the window; its detail lists those endpoints. Scope applies before
+    grouping, and triage stays per endpoint with an all-or-nothing bulk
+    transition. See product design section 15.
