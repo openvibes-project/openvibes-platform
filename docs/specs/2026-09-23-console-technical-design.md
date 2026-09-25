@@ -719,6 +719,8 @@ agent, rule set, and rule), 6 (sub-project 2's rule tables), and 7 to 12
 (inventory, vulnerabilities, running kernel, CVE enrichment, NVD and EUVD,
 `MAINTAIN` for the vulnerability tables).
 **Console migrations are numbered 0013 or later**, rechecked at merge time.
+The OSV plan on `main` (`2026-09-25-osv-distributions.md`, task D2) also
+plans 0013; whichever merges second renumbers.
 Schema 12 needs PostgreSQL 17 or later (`GRANT MAINTAIN`).
 The first adds an index on
 `current_findings (rule_set_id, rule_id, last_observed_at DESC, agent_id)`
