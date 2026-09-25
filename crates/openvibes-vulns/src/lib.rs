@@ -11,6 +11,7 @@ pub mod feed;
 pub mod fetch;
 pub mod matching;
 pub mod osv;
+pub mod osv_fetch;
 pub mod repodata;
 pub mod rpmver;
 pub mod service;
