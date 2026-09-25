@@ -96,6 +96,32 @@ pub async fn feed_digest(client: &Client, source: &str) -> Result<Option<[u8; 32
         .and_then(|bytes| bytes.try_into().ok()))
 }
 
+/// The ETag a source last served with good content, if any.
+pub async fn feed_etag(client: &Client, source: &str) -> Result<Option<String>, StoreError> {
+    let row = client
+        .query_opt(
+            "SELECT etag FROM feed_sources WHERE source = $1",
+            &[&source],
+        )
+        .await?;
+    Ok(row.and_then(|row| row.get(0)))
+}
+
+/// Stores the ETag served with a source's current content.
+pub async fn set_feed_etag(
+    client: &Client,
+    source: &str,
+    etag: Option<&str>,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "UPDATE feed_sources SET etag = $2 WHERE source = $1",
+            &[&source, &etag],
+        )
+        .await?;
+    Ok(())
+}
+
 /// Records a check that found the content unchanged.
 pub async fn touch_feed(
     client: &Client,

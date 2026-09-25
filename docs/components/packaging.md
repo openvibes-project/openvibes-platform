@@ -131,10 +131,12 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    agents set `distribution_url` and leave out `bundle_file`.
 8. Vulnerabilities (optional, `dnf install openvibes-vulns`): it needs no
    certificate. `openvibes-admin migrate` (schema 8) already created its
-   database role. It reaches `mirrors.fedoraproject.org` over HTTPS; behind
-   a proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. Without network
-   access, import feeds by hand (`openvibes-admin feeds import FILE
-   --source fedora-44-x86_64`, [openvibes-admin.md](openvibes-admin.md)).
+   database role. It reaches `mirrors.fedoraproject.org`, `www.cisa.gov`
+   (KEV) and `epss.empiricalsecurity.com` (EPSS) over HTTPS; behind a proxy
+   set `proxy_url` in `/etc/openvibes/vulns.toml`. Without network access,
+   set `kev_url = ""` and `epss_url = ""` and import files by hand
+   (`openvibes-admin feeds import FILE --source fedora-44-x86_64|kev|epss`,
+   [openvibes-admin.md](openvibes-admin.md)).
    Then `systemctl enable --now openvibes-vulns` and check
    `curl http://127.0.0.1:18483/ready` → 200; `openvibes-admin feeds
    status` shows each Fedora release your agents report once it is checked.

@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 9; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 10; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -155,6 +155,14 @@ Schema 9 adds `agents.running_kernel` (protocol P9) and
 `vulnerabilities.reboot_needed`: the fix is installed and only a reboot
 is missing. The row stays unfixed (it closes after the reboot), but
 `summary` counts it as its own state, not as open.
+
+Schema 10 (VM4) adds `cve_enrichment` (`cve_id`; KEV `kev_added`,
+`kev_due`, `kev_ransomware`; EPSS `epss`, `epss_percentile`,
+`epss_date`) and `feed_sources.etag`. `enrichment::{replace_kev,
+replace_epss}` write it in bulk (KEV clears CVEs no longer listed);
+`vulns::list` sorts by priority and returns each advisory's strongest KEV
+and EPSS values; `summary` counts open ones on KEV;
+`feed_etag`/`set_feed_etag` keep a source's ETag.
 
 ## Audit log
 

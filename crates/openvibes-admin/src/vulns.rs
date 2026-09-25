@@ -5,7 +5,10 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, SecondsFormat, Utc};
 use clap::Subcommand;
-use openvibes_vulns::feed::{self, SourceId};
+use openvibes_vulns::{
+    enrich,
+    feed::{self, SourceId},
+};
 use platform_store::vulns::{self, ListFilter, VulnRow};
 
 /// Largest feed file read (compressed or not).
@@ -13,11 +16,12 @@ const MAX_FILE: u64 = 512 << 20;
 
 #[derive(Subcommand)]
 pub enum FeedsCommand {
-    /// Import a downloaded updateinfo.xml or .xml.zst (offline platforms).
+    /// Import a downloaded feed file (offline platforms): Fedora
+    /// updateinfo.xml[.zst], CISA KEV JSON, or EPSS CSV[.gz].
     Import {
         /// The feed file.
         file: PathBuf,
-        /// Source, e.g. fedora-44-x86_64.
+        /// Source: fedora-<release>-<arch> (e.g. fedora-44-x86_64), kev, or epss.
         #[arg(long)]
         source: String,
     },
@@ -81,10 +85,14 @@ pub async fn run_feeds(
     match command {
         FeedsCommand::Import { file, source } => {
             let target = Some(source.clone());
-            let source: SourceId = match source.parse() {
-                Ok(source) => source,
-                Err(error) => return (Err(error), target),
-            };
+            let enrichment = source.parse::<enrich::Source>().ok();
+            let fedora = source.parse::<SourceId>().ok();
+            if enrichment.is_none() && fedora.is_none() {
+                return (
+                    Err("use fedora-<release>-<arch>, kev, or epss".into()),
+                    target,
+                );
+            }
             let content = match std::fs::metadata(file) {
                 Ok(meta) if meta.len() > MAX_FILE => {
                     return (
@@ -97,6 +105,16 @@ pub async fn run_feeds(
                     Err(_) => return (Err("cannot read the feed file".into()), target),
                 },
                 Err(_) => return (Err("cannot read the feed file".into()), target),
+            };
+            if let Some(source) = enrichment {
+                let result = enrich::import(client, source, &content, Utc::now())
+                    .await
+                    .map(|count| format!("imported {count} CVEs from {source}\n"))
+                    .map_err(|error| error.to_string());
+                return (result, target);
+            }
+            let Some(source) = fedora else {
+                return (Err("unreachable".into()), target);
             };
             let result = feed::import(client, &source, &content, Utc::now())
                 .await
@@ -130,8 +148,13 @@ pub async fn run_feeds(
                                 .last_error
                                 .as_deref()
                                 .map_or_else(String::new, |e| format!(" error: {e}"));
+                            let unit = if f.os_id == "cve" {
+                                "cves"
+                            } else {
+                                "advisories"
+                            };
                             format!(
-                                "{} advisories {} checked {checked} changed {changed}{error}\n",
+                                "{} {unit} {} checked {checked} changed {changed}{error}\n",
                                 f.source, f.advisories
                             )
                         })
@@ -177,13 +200,29 @@ fn line(row: &VulnRow) -> String {
     } else {
         format!(" [{}]", row.cves.join(" "))
     };
+    let exploited = if row.exploited {
+        let due = row
+            .kev_due
+            .map_or_else(String::new, |due| format!(", due {due}"));
+        let ransomware = if row.ransomware { ", ransomware" } else { "" };
+        format!(" exploited (KEV{due}{ransomware})")
+    } else {
+        String::new()
+    };
+    let epss = match (row.epss, row.epss_percentile) {
+        (Some(score), Some(percentile)) => {
+            let top = ((1.0 - f64::from(percentile)) * 100.0).ceil().max(1.0);
+            format!(" EPSS {:.1}% (top {top}%)", f64::from(score) * 100.0)
+        }
+        _ => String::new(),
+    };
     let reboot = if row.reboot_needed {
         " (fix installed, reboot needed)"
     } else {
         ""
     };
     format!(
-        "{} {} {} since {}{fixed}: {}{cves}{reboot}\n",
+        "{} {} {} since {}{fixed}: {}{cves}{exploited}{epss}{reboot}\n",
         row.severity,
         row.advisory_id,
         host_label(row),
@@ -214,6 +253,12 @@ pub async fn run_vulns(
                         parts.join(", ")
                     };
                     let mut out = format!("open {total} on {} hosts: {parts}\n", s.hosts);
+                    if s.exploited > 0 {
+                        out.push_str(&format!(
+                            "exploited in the wild (CISA KEV): {}\n",
+                            s.exploited
+                        ));
+                    }
                     if s.reboot_hosts > 0 {
                         out.push_str(&format!(
                             "fix installed, reboot needed on {} hosts\n",

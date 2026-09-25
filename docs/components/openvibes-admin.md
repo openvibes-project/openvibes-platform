@@ -92,9 +92,10 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 | Command | Does |
 |---|---|
 | `feeds import FILE --source fedora-<rel>-<arch>` | imports a downloaded `updateinfo.xml` or `.xml.zst` (offline platforms), re-matches that release: `imported N advisories into SOURCE; M open on fedora REL` |
-| `feeds status` | per source: advisories, last check, last change, last error |
-| `vulns summary` | open count by severity and host count; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
-| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability, most severe first: severity, advisory, host, since, packages `installed -> fixed` (with `(running …)` for a kernel), CVEs, and `(fix installed, reboot needed)` when only a reboot is missing |
+| `feeds import FILE --source kev\|epss` | imports a CISA KEV JSON or EPSS CSV (`.gz` or plain): `imported N CVEs from kev` |
+| `feeds status` | per source: advisories (or CVEs for `kev`, `epss`), last check, last change, last error |
+| `vulns summary` | open count by severity and host count; open ones exploited in the wild (CISA KEV), when any; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
+| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then oldest): severity, advisory, host, since, packages `installed -> fixed` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware)`, `EPSS 94.0% (top 1%)`, and `(fix installed, reboot needed)` when only a reboot is missing |
 | `vulns show ADVISORY\|HOST` | an advisory with its link, CVEs, and hosts; or a host with its open vulnerabilities |
 
 All are audited; `feeds import` with the source as target.

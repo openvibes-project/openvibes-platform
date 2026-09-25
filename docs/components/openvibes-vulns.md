@@ -4,7 +4,9 @@
 
 Vulnerability management (spec
 `docs/specs/2026-09-25-vulnerability-management-design.md`): Fedora security
-advisories matched against the package inventories agents report. The crate is
+advisories matched against the package inventories agents report, and each
+CVE enriched with CISA KEV (exploited in the wild) and FIRST EPSS (likelihood
+of exploitation) so the vulnerabilities to patch first come first. The crate is
 the offline core used by `openvibes-admin feeds import` and the
 `openvibes-vulns` service that fetches feeds.
 
@@ -42,6 +44,22 @@ the offline core used by `openvibes-admin feeds import` and the
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.
+- `enrich::{parse_kev, parse_epss, import}` (VM4) — KEV catalog JSON
+  (entries without a valid CVE id or date skipped; `Known` ransomware use)
+  and EPSS CSV, gzip or plain (score date from the header comment; any bad
+  row refuses the file; 128 MiB open cap). `import` stores them in
+  `cve_enrichment` and records the source (`kev`, `epss`) in
+  `feed_sources`. Real files (2026-09-24): KEV 1,723 entries parse in 3 ms;
+  EPSS 378,567 scores parse in 95 ms (`examples/enrich_parse.rs`).
+- `fetch::check_enrichment(client, fetcher, source, url, now)` — sends the
+  stored ETag: a 304 or a body identical to the last import is unchanged.
+  Live: first run KEV 0.19 s, EPSS 4.2 s (378k rows upserted, 42 MB
+  table); later runs 304 in under 0.1 s each, also through EPSS's
+  redirect. The service checks both every interval, after the feeds.
+- **Priority** (spec §9), computed when read by `platform_store::vulns`:
+  exploited (a CVE on KEV) first, then the highest EPSS percentile among
+  the advisory's CVEs, then severity, then oldest first. Advisories
+  without a scored CVE come after scored ones.
 
 ## Configuration
 
@@ -56,7 +74,13 @@ metalink_url = "https://mirrors.fedoraproject.org/metalink?repo=updates-released
 arch = "x86_64"                        # its feed lists every architecture's fixes
 # proxy_url = "http://proxy.example:3128"
 max_download_bytes = 67108864
+kev_url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+epss_url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
 ```
+
+`kev_url` and `epss_url` must be HTTPS; an empty value turns that source
+off (offline platforms import the files with `openvibes-admin feeds
+import FILE --source kev|epss`).
 
 Packaged as the `openvibes-vulns` RPM with its unit and user
 `openvibes_vulns` ([packaging.md](packaging.md)).
@@ -69,6 +93,10 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
 - A failed check (network, digest mismatch, unreadable content) is logged
   and recorded as the feed's `last_error`; other releases are still
   checked and the next interval retries.
+- A bad KEV or EPSS download (unreachable, not the expected format, a bad
+  row, oversized) is recorded on its source; the stored enrichment is kept.
+  A CVE that leaves the KEV catalog loses its mark on the next import;
+  EPSS scores are only added or updated.
 - `/ready` is 503 while the database is unreachable or at another schema.
 - **Compared with `dnf`:** checked on this Fedora 44 host against the real
   feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
@@ -82,5 +110,6 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
 
 ```sh
 eval "$(scripts/test-db.sh)"
-cargo test -p openvibes-vulns   # rpmvercmp, parser (real trimmed F44 fixture), matching and lifecycle
+cargo test -p openvibes-vulns   # rpmvercmp, parser (real trimmed F44 fixture), matching and lifecycle,
+                                # KEV/EPSS parsing (trimmed real files), import, conditional fetch, priority
 ```

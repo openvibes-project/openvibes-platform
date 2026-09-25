@@ -107,10 +107,12 @@ wait_for "ingest ready" 30 'curl -fsS http://127.0.0.1:18480/ready'
 wait_for "distribution ready" 30 'curl -fsS http://127.0.0.1:18481/ready'
 
 # Vulnerabilities (VM): the service runs offline (its mirror list points at
-# a closed loopback port, so checks fail and are recorded); an offline feed
+# a closed loopback port, so checks fail and are recorded, and KEV and EPSS
+# are turned off); an offline feed
 # says bash is fixed in 999.0, above the container's bash. It is imported
 # before the agent enrolls, so the vulnerability can only open through the
 # service's re-match when the agent's inventory arrives.
+# An offline KEV file then marks the advisory's CVE as exploited.
 cat > "$W/updateinfo-test.xml" <<'FEED'
 <?xml version="1.0" encoding="UTF-8"?>
 <updates>
@@ -127,12 +129,17 @@ cat > "$W/updateinfo-test.xml" <<'FEED'
   </update>
 </updates>
 FEED
-in_c "sed -i 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' /etc/openvibes/vulns.toml &&
+in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' \
+             -e 's|^kev_url = .*|kev_url = \"\"|' -e 's|^epss_url = .*|epss_url = \"\"|' /etc/openvibes/vulns.toml &&
       systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
 wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||
     fail "feeds import"
-ok "offline feed imported"
+printf '{"vulnerabilities":[{"cveID":"CVE-2026-99999","dateAdded":"2026-09-25","knownRansomwareCampaignUse":"Known"}]}' \
+    > "$W/kev-test.json"
+in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/kev-test.json --source kev' >/dev/null ||
+    fail "kev import"
+ok "offline feed and KEV imported"
 
 # Rules: trust the signing key and publish the signed bundle.
 in_c "runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules $KEY &&
@@ -183,5 +190,7 @@ wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
     "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
 in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
     fail "vulns list does not show the bash vulnerability"
-ok "openvibes-admin vulns list shows it"
+in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*exploited (KEV, ransomware)' ||
+    fail "vulns list does not show the KEV mark"
+ok "openvibes-admin vulns list shows it, marked exploited (KEV)"
 echo "systemd-e2e: all checks passed"

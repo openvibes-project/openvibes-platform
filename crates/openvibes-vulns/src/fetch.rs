@@ -9,9 +9,20 @@ use platform_store::{Client, vulns};
 use sha2::{Digest, Sha256};
 
 use crate::{
+    enrich,
     feed::{self, ImportReport, SourceId},
     repodata,
 };
+
+/// CISA's Known Exploited Vulnerabilities catalog.
+pub const KEV_URL: &str =
+    "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json";
+/// FIRST EPSS scores for every CVE, current day (redirects to the dated file).
+pub const EPSS_URL: &str = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz";
+/// A downloaded body with the ETag it was served with.
+type Download = (Vec<u8>, Option<String>);
+/// Longest ETag stored and sent back.
+const MAX_ETAG: usize = 256;
 
 /// Default Fedora mirror list, per release and architecture.
 pub const FEDORA_METALINK: &str =
@@ -87,6 +98,100 @@ impl Fetcher {
             .limit(limit)
             .read_to_vec()
             .map_err(|error| format!("{}: {error}", host_of(url)))
+    }
+}
+
+impl Fetcher {
+    /// GETs `url` unless its ETag still equals `etag` (`None` for a 304),
+    /// with the ETag served.
+    fn get_if_changed(&self, url: &str, etag: Option<&str>) -> Result<Option<Download>, String> {
+        let mut request = self.agent.get(url);
+        if let Some(etag) = etag {
+            request = request.header("If-None-Match", etag);
+        }
+        let mut response = request
+            .call()
+            .map_err(|error| format!("{}: {error}", host_of(url)))?;
+        if response.status() == 304 {
+            return Ok(None);
+        }
+        let etag = response
+            .headers()
+            .get("etag")
+            .and_then(|value| value.to_str().ok())
+            .filter(|tag| tag.len() <= MAX_ETAG && tag.bytes().all(|b| (0x21..=0x7e).contains(&b)))
+            .map(str::to_owned);
+        let body = response
+            .body_mut()
+            .with_config()
+            .limit(self.max_bytes)
+            .read_to_vec()
+            .map_err(|error| format!("{}: {error}", host_of(url)))?;
+        Ok(Some((body, etag)))
+    }
+}
+
+/// An enrichment source URL must be HTTPS (plain HTTP only on loopback,
+/// for tests): nothing else vouches for its content.
+pub fn check_source_url(url: &str) -> Result<(), String> {
+    if url.starts_with("https://") || loopback(url) {
+        Ok(())
+    } else {
+        Err("enrichment source URLs must use https".into())
+    }
+}
+
+/// Checks an enrichment source: sends the stored ETag, and imports only new
+/// content (a 304, or a body identical to the last import, is unchanged).
+/// Returns the CVEs imported, or `None` when unchanged. A failure is
+/// recorded on the source; stored enrichment is kept.
+pub async fn check_enrichment(
+    client: &mut Client,
+    fetcher: &Fetcher,
+    source: enrich::Source,
+    url: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<usize>, String> {
+    let name = source.name();
+    let etag = vulns::feed_etag(client, name)
+        .await
+        .map_err(|e| e.to_string())?;
+    let known = vulns::feed_digest(client, name)
+        .await
+        .map_err(|e| e.to_string())?;
+    let (network, owned) = (fetcher.clone(), url.to_owned());
+    let found =
+        tokio::task::spawn_blocking(move || network.get_if_changed(&owned, etag.as_deref()))
+            .await
+            .map_err(|_| "download task failed".to_owned())?;
+    let store = |e: platform_store::StoreError| e.to_string();
+    match found {
+        Ok(None) => {
+            vulns::touch_feed(client, name, now).await.map_err(store)?;
+            Ok(None)
+        }
+        Ok(Some((body, etag))) if known == Some(digest(&body)) => {
+            vulns::touch_feed(client, name, now).await.map_err(store)?;
+            vulns::set_feed_etag(client, name, etag.as_deref())
+                .await
+                .map_err(store)?;
+            Ok(None)
+        }
+        Ok(Some((body, etag))) => {
+            let count = enrich::import(client, source, &body, now)
+                .await
+                .map_err(|e| e.to_string())?;
+            vulns::set_feed_etag(client, name, etag.as_deref())
+                .await
+                .map_err(store)?;
+            Ok(Some(count))
+        }
+        Err(error) => {
+            vulns::record_feed(client, (name, "cve", "", ""), Err(&error), now)
+                .await
+                .map_err(store)?;
+            Err(error)
+        }
     }
 }
 

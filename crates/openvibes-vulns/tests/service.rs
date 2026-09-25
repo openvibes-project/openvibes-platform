@@ -25,7 +25,9 @@ use sha2::{Digest, Sha256};
 
 type Files = Arc<Mutex<HashMap<String, Vec<u8>>>>;
 
-async fn mirror(content: Vec<u8>) -> String {
+/// Serves the feed chain and a KEV file; returns the metalink template and
+/// the KEV URL.
+async fn mirror(content: Vec<u8>) -> (String, String) {
     let sha = |b: &[u8]| hex(&Sha256::digest(b));
     let files: Files = Arc::default();
     let app = Router::new()
@@ -63,7 +65,12 @@ async fn mirror(content: Vec<u8>) -> String {
     map.insert("metalink".into(), metalink.into_bytes());
     map.insert("m/repodata/repomd.xml".into(), repomd.into_bytes());
     map.insert(format!("m/{href}"), content);
-    format!("http://{addr}/metalink?release={{release}}&arch={{arch}}")
+    let kev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/kev.json");
+    map.insert("kev.json".into(), std::fs::read(kev).unwrap());
+    (
+        format!("http://{addr}/metalink?release={{release}}&arch={{arch}}"),
+        format!("http://{addr}/kev.json"),
+    )
 }
 
 fn wordpress() -> PackageRow {
@@ -122,7 +129,7 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/updateinfo-f44.xml.zst"),
     )
     .unwrap();
-    let template = mirror(content).await;
+    let (template, kev_url) = mirror(content).await;
     let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let health_addr = health.local_addr().unwrap();
     let config = VulnsConfig {
@@ -133,6 +140,8 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
         arch: "x86_64".into(),
         proxy_url: None,
         max_download_bytes: 64 << 20,
+        kev_url,
+        epss_url: String::new(),
     };
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(service::run(config, health, async {
@@ -140,8 +149,15 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
     }));
     wait_for(
         &db,
-        "SELECT coalesce(max(advisories), 0)::bigint FROM feed_sources",
+        "SELECT coalesce(max(advisories), 0)::bigint FROM feed_sources WHERE source LIKE 'fedora-%'",
         3,
+    )
+    .await;
+    // Enrichment is checked with the feeds; EPSS is turned off here.
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        5,
     )
     .await;
     // A new inventory is matched at once, not at the next hourly check.
@@ -197,12 +213,20 @@ fn unsafe_or_out_of_range_configuration_is_refused() {
     let config = load(base("")).unwrap();
     assert_eq!(config.check_interval_minutes, 60);
     assert_eq!(config.health_listen.to_string(), "127.0.0.1:18483");
+    assert_eq!(config.kev_url, openvibes_vulns::fetch::KEV_URL);
+    assert_eq!(config.epss_url, openvibes_vulns::fetch::EPSS_URL);
+    assert!(
+        load(base("kev_url = \"\"\nepss_url = \"\"\n")).is_ok(),
+        "off"
+    );
     for bad in [
         base("health_listen = \"0.0.0.0:18483\"\n"),
         base("check_interval_minutes = 14\n"),
         base("check_interval_minutes = 1441\n"),
         base("metalink_url = \"http://mirrors.example.org/metalink\"\n"),
         base("unknown = 1\n"),
+        base("kev_url = \"http://www.cisa.gov/kev.json\"\n"),
+        base("epss_url = \"ftp://example.org/epss.csv.gz\"\n"),
     ] {
         assert!(load(bad.clone()).is_err(), "{bad}");
     }

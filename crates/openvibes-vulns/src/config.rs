@@ -4,7 +4,7 @@ use std::{net::SocketAddr, path::Path};
 
 use serde::Deserialize;
 
-use crate::fetch::{FEDORA_METALINK, Fetcher};
+use crate::fetch::{self, EPSS_URL, FEDORA_METALINK, Fetcher, KEV_URL};
 
 fn default_health() -> SocketAddr {
     SocketAddr::from(([127, 0, 0, 1], 18483))
@@ -17,6 +17,12 @@ fn default_metalink() -> String {
 }
 fn default_arch() -> String {
     "x86_64".to_owned()
+}
+fn default_kev() -> String {
+    KEV_URL.to_owned()
+}
+fn default_epss() -> String {
+    EPSS_URL.to_owned()
 }
 fn default_download() -> u64 {
     64 << 20
@@ -47,6 +53,12 @@ pub struct VulnsConfig {
     /// Largest feed download (compressed), in bytes.
     #[serde(default = "default_download")]
     pub max_download_bytes: u64,
+    /// CISA KEV catalog URL (HTTPS); empty turns it off.
+    #[serde(default = "default_kev")]
+    pub kev_url: String,
+    /// FIRST EPSS scores URL (HTTPS); empty turns it off.
+    #[serde(default = "default_epss")]
+    pub epss_url: String,
 }
 
 impl VulnsConfig {
@@ -68,6 +80,11 @@ impl VulnsConfig {
                 .all(|b| b.is_ascii_alphanumeric() || b == b'_')
         {
             return Err("arch must be an architecture name like x86_64".into());
+        }
+        for url in [&self.kev_url, &self.epss_url] {
+            if !url.is_empty() {
+                fetch::check_source_url(url)?;
+            }
         }
         Fetcher::new(
             &self.metalink_url,
