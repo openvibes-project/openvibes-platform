@@ -107,3 +107,33 @@ Red Hat and SUSE (OSV has them; later, same adapter).
 - **`last_affected` without `fixed`:** versions up to it are affected and
   no fixed version is named, so such a vulnerability is open and labelled
   "no fix available"; a newer installed version is not affected.
+
+## 7. Amendments found while building D2 (2026-09-25)
+
+Checked against real systems; each changes the design above.
+
+- **OSV's per-release files are frozen.** `Debian:12/all.zip`,
+  `Ubuntu:24.04:LTS/all.zip`, `Alpine:v3.20/all.zip` and the rest were last
+  modified in October 2024. Only the whole-ecosystem files are current
+  (Debian 73 MB, Ubuntu 757 MB, Rocky 5 MB, Alma 6 MB), so imports read
+  those and keep the host's release. Ubuntu's first import is therefore a
+  757 MB download (streamed, not stored); later checks use the change
+  list (D4).
+- **Rocky Linux names source RPMs** (`systemd` for `systemd-libs`);
+  AlmaLinux names binaries. Protocol P10 is amended so RPM packages report
+  their `SOURCERPM` name too, and Rocky is matched by source like Debian
+  and Ubuntu (RPM order).
+- **One record kind per distribution:** Debian `DEBIAN-CVE-*`, Ubuntu
+  `UBUNTU-CVE-*`, Rocky `RLSA-*`, Alma `ALSA-*`. Notices that repeat them
+  (DSA, DLA, DTSA, USN), legacy `CVE-*` ids and bug-fix advisories are
+  skipped, so nothing is listed twice.
+- **`unimportant` (Debian) and `negligible` (Ubuntu) are skipped:** the
+  distributions mean "not a security problem in practice", and their own
+  tools hide them. Quiet by default.
+- **Results on real systems:**
+  - Rocky 9.8 (151 packages): 40 of `dnf updateinfo --security`'s 40
+    advisories, none extra.
+  - Debian 12 (136 packages): all 156 CVEs `debsecan` lists, plus 8 more
+    that Debian's security tracker marks vulnerable in bookworm (`no-dsa`)
+    and `debsecan` omits.
+

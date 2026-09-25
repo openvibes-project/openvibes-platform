@@ -24,3 +24,6 @@ tokio.workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+zip = { version = "8.6.0", default-features = false }

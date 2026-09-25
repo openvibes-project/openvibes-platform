@@ -41,6 +41,8 @@ fn package(name: &str, version: &str) -> InstalledPackage {
         epoch: None,
         arch: Some("x86_64".into()),
         vendor: None,
+        source: None,
+        source_version: None,
     }
 }
 

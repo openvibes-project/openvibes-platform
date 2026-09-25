@@ -73,7 +73,7 @@ impl fmt::Display for ImportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Parse(ParseError::TooLarge) => f.write_str("feed larger than the size cap"),
-            Self::Parse(ParseError::Malformed) => f.write_str("not a readable updateinfo feed"),
+            Self::Parse(ParseError::Malformed) => f.write_str("not a readable feed file"),
             Self::Store(error) => write!(f, "{error}"),
         }
     }
@@ -165,10 +165,23 @@ pub async fn import(
         }
     };
     let rows: Vec<NewAdvisory> = advisories.iter().map(to_store).collect();
-    vulns::replace_advisories(client, &name, &source.os_id, &source.os_version, &rows, now).await?;
-    // Recorded as current only once matched: a failed match is retried by
-    // the next check, which then sees the feed as changed.
-    let open = match matching::match_release(client, &source.os_id, &source.os_version, now).await {
+    store_and_match(client, key, &rows, Sha256::digest(content).into(), now).await
+}
+
+/// Stores a release's advisories, re-matches the release, and only then
+/// records the feed as current (`key`: source, os id, release, arch), so a
+/// failed match is retried by the next check, which sees the feed as
+/// changed. Shared by the Fedora and OSV imports.
+pub(crate) async fn store_and_match(
+    client: &mut Client,
+    key: (&str, &str, &str, &str),
+    rows: &[NewAdvisory],
+    sha256: [u8; 32],
+    now: DateTime<Utc>,
+) -> Result<ImportReport, ImportError> {
+    let (name, os_id, os_version, _) = key;
+    vulns::replace_advisories(client, name, os_id, os_version, rows, now).await?;
+    let open = match matching::match_release(client, os_id, os_version, now).await {
         Ok(open) => open,
         Err(error) => {
             let message = format!("matching failed: {error}");
@@ -176,7 +189,6 @@ pub async fn import(
             return Err(ImportError::Store(error));
         }
     };
-    let sha256: [u8; 32] = Sha256::digest(content).into();
     let count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
     vulns::record_feed(client, key, Ok((sha256, count)), now).await?;
     Ok(ImportReport {

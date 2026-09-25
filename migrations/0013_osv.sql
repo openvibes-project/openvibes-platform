@@ -24,3 +24,12 @@ CREATE UNIQUE INDEX advisory_packages_key
 ALTER TABLE agents ADD COLUMN os_release text GENERATED ALWAYS AS (
     CASE WHEN os_id IN ('rocky', 'almalinux') THEN split_part(os_version, '.', 1)
          ELSE os_version END) STORED;
+-- Installed packages name their source package when it differs (protocol
+-- P10). Part of a version's identity, so ingest keeps only inserting.
+ALTER TABLE package_versions
+    ADD COLUMN source text,
+    ADD COLUMN source_version text,
+    DROP CONSTRAINT package_versions_manager_name_epoch_version_release_arch_key,
+    ADD CONSTRAINT package_versions_key UNIQUE NULLS NOT DISTINCT
+        (manager, name, epoch, version, release, arch, source, source_version);
+CREATE INDEX package_versions_source ON package_versions (source) WHERE source IS NOT NULL;

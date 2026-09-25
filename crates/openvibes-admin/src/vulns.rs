@@ -8,6 +8,7 @@ use clap::Subcommand;
 use openvibes_vulns::{
     enrich,
     feed::{self, SourceId},
+    osv,
 };
 use platform_store::{
     enrichment::{self, CveDetail},
@@ -20,12 +21,14 @@ const MAX_FILE: u64 = 512 << 20;
 #[derive(Subcommand)]
 pub enum FeedsCommand {
     /// Import a downloaded feed file (offline platforms): Fedora
-    /// updateinfo.xml[.zst], CISA KEV JSON, or EPSS CSV[.gz].
+    /// updateinfo.xml[.zst], an OSV all.zip, CISA KEV JSON, EPSS CSV[.gz],
+    /// an NVD response page, or EUVD's exploited list.
     Import {
         /// The feed file.
         file: PathBuf,
-        /// Source: fedora-RELEASE-ARCH (e.g. fedora-44-x86_64), kev, epss,
-        /// nvd (an API response page), or euvd (its exploited list).
+        /// Source: fedora-RELEASE-ARCH (e.g. fedora-44-x86_64); an OSV all.zip
+        /// for rocky-N, almalinux-N, debian-N or ubuntu-YY.MM; kev, epss, nvd
+        /// (an API response page), or euvd (its exploited list).
         #[arg(long)]
         source: String,
     },
@@ -91,9 +94,14 @@ pub async fn run_feeds(
             let target = Some(source.clone());
             let enrichment = source.parse::<enrich::Source>().ok();
             let fedora = source.parse::<SourceId>().ok();
-            if enrichment.is_none() && fedora.is_none() {
+            let release = source.parse::<osv::Release>().ok();
+            if enrichment.is_none() && fedora.is_none() && release.is_none() {
                 return (
-                    Err("use fedora-<release>-<arch>, kev, epss, nvd, or euvd".into()),
+                    Err(
+                        "use fedora-<release>-<arch>, rocky-N, almalinux-N, debian-N, \
+                         ubuntu-YY.MM, kev, epss, nvd, or euvd"
+                            .into(),
+                    ),
                     target,
                 );
             }
@@ -114,6 +122,23 @@ pub async fn run_feeds(
                 let result = enrich::import(client, source, &content, Utc::now())
                     .await
                     .map(|count| format!("imported {count} CVEs from {source}\n"))
+                    .map_err(|error| error.to_string());
+                return (result, target);
+            }
+            if let Some(release) = release {
+                let result = osv::import(client, &release, content, Utc::now())
+                    .await
+                    .map(|(report, skipped)| {
+                        let skipped = if skipped > 0 {
+                            format!(" ({skipped} unreadable records skipped)")
+                        } else {
+                            String::new()
+                        };
+                        format!(
+                            "imported {} advisories into {release}{skipped}; {} open\n",
+                            report.advisories, report.open
+                        )
+                    })
                     .map_err(|error| error.to_string());
                 return (result, target);
             }
@@ -182,11 +207,13 @@ fn packages(row: &VulnRow) -> String {
                     let running = p["running"]
                         .as_str()
                         .map_or_else(String::new, |r| format!(" (running {r})"));
+                    let fixed = p["fixed"]
+                        .as_str()
+                        .map_or_else(|| " (no fix available)".to_owned(), |f| format!(" -> {f}"));
                     format!(
-                        "{} {} -> {}{running}",
+                        "{} {}{fixed}{running}",
                         p["name"].as_str().unwrap_or("?"),
                         p["installed"].as_str().unwrap_or("?"),
-                        p["fixed"].as_str().unwrap_or("?")
                     )
                 })
                 .collect::<Vec<_>>()
@@ -298,6 +325,9 @@ pub async fn run_vulns(
                             s.exploited
                         ));
                     }
+                    if s.no_fix > 0 {
+                        out.push_str(&format!("no fix available yet: {}\n", s.no_fix));
+                    }
                     if s.reboot_hosts > 0 {
                         out.push_str(&format!(
                             "fix installed, reboot needed on {} hosts\n",
@@ -348,11 +378,11 @@ pub async fn run_vulns(
                     .map_err(|e| e.to_string())?;
                 if let Some(first) = rows.first() {
                     let mut out = format!(
-                        "{} {} {}\nhttps://bodhi.fedoraproject.org/updates/{}\nCVEs:{}\n",
+                        "{} {} {}\n{}\nCVEs:{}\n",
                         first.advisory_id,
                         first.severity,
                         first.title,
-                        first.advisory_id,
+                        first.url,
                         if first.cves.is_empty() {
                             " none named"
                         } else {

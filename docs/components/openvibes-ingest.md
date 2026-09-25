@@ -77,7 +77,8 @@ Shared with distribution: implemented in
   (SHA-256 with the OS and the optional `running_kernel`, protocol P9, so a
   reboot alone is stored); an unchanged inventory writes nothing, otherwise
   the host's inventory is replaced in one transaction and the vulnerability
-  service is notified (`inventory_changed`). 204.
+  service is notified (`inventory_changed`). Each package's `source` and
+  `source_version` (protocol P10) are stored with it. 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

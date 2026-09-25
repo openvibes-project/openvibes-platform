@@ -48,6 +48,8 @@ fn pkg(name: &str, epoch: i32, version: &str, arch: &str) -> PackageRow {
         version: version.into(),
         release: "1.fc44".into(),
         arch: arch.into(),
+        source: None,
+        source_version: None,
     }
 }
 
