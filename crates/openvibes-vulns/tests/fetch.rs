@@ -123,6 +123,8 @@ async fn setup() -> (TestDb, platform_store::Client) {
         version: "6.9.6".into(),
         release: "1.fc44".into(),
         arch: "noarch".into(),
+        source: None,
+        source_version: None,
     };
     inventory::replace(
         &mut admin,

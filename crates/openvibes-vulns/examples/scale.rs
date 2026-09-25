@@ -80,6 +80,8 @@ async fn main() {
                 version: (*f.get(2)?).into(),
                 release: (*f.get(3)?).into(),
                 arch: (*f.get(4)?).into(),
+                source: None,
+                source_version: None,
             })
         })
         .collect();
