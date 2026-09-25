@@ -62,6 +62,13 @@ const targetCsp = [
 
 test("serves the accessible shell with the target security boundary", async ({ page }) => {
   const cspViolations = await recordCspViolations(page);
+  const thirdPartyRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if ((url.protocol === "http:" || url.protocol === "https:") && url.origin !== "http://127.0.0.1:18490") {
+      thirdPartyRequests.push(url.origin);
+    }
+  });
   await mockAuthenticatedSession(page);
 
   const response = await page.goto("/");
@@ -91,6 +98,7 @@ test("serves the accessible shell with the target security boundary", async ({ p
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
   expect(await cspViolations()).toEqual([]);
+  expect(thirdPartyRequests).toEqual([]);
 });
 
 test("serves the local sign-in page and obtains one-use pre-auth state", async ({ page }) => {

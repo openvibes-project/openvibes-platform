@@ -3,13 +3,12 @@
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
 3 are integrated. C0–C3 feature work is implemented, including authenticated
 SQL-scoped reads, access-control and audit operations, first-account bootstrap,
-and analyst triage. C5 is underway: direct TLS 1.3, trusted TCP and Unix
-socket proxy modes, enforced browser headers, a dedicated console RPM/service
-definition, and an offline cache-pinned packaging build path are implemented. The RPM and
-systemd installation have not yet been built or exercised. The RPM build
-script now creates its private rpmbuild directory tree before invoking
-rpmbuild. Remaining work includes package/runtime integration and full C5
-review. The C2 store has SQL-scoped
+and analyst triage. C5 is complete: direct TLS 1.3, trusted TCP and Unix
+socket proxy modes, enforced browser headers, offline RPM packaging, and a
+hardened systemd service pass Fedora 44 package and runtime integration. The
+full browser matrix and both dependency audits pass. RPM upgrades preserve the
+local account, active database session, config, TLS files, and service state.
+The C2 store has SQL-scoped
 agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
@@ -25,8 +24,8 @@ in batches of at most 10,000 rows. Agent-tag changes now have a group and
 scoped-binding impact preview, stale-preview rejection, an audited transactional
 apply, and a global-admin agent-detail editor. Asset groups can be created and
 their exact selector conjunctions replaced through audited, CSRF-protected
-global-admin endpoints and the Access page. All planned C3 control-plane
-routes are complete; C5 package and runtime work remains.
+global-admin endpoints and the Access page. C3 control-plane routes and C5
+packaging/runtime work are complete.
 
 Design inputs:
 
@@ -273,7 +272,7 @@ Work:
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
 - console RPM spec/build script, service unit, sysuser, and disabled install
-  preset are drafted; RPM build and systemd integration remain unverified;
+  preset build and install successfully under Fedora 44 systemd;
 - final CSP enforcement, HSTS, no-referrer, nosniff, Permissions Policy;
 - structured safe logs with request IDs and no finding/token body content;
 - readiness for database/schema and local-auth state;
@@ -284,12 +283,15 @@ Work:
 
 Verification:
 
-- clean RPM build installs without Node runtime;
-- service starts, serves local login and assets/API over HTTPS, and has expected
-  headers;
-- upgrade preserves sessions/data according to migration policy;
-- browser matrix and accessibility review pass;
-- Cargo and npm dependency audits pass;
+- [x] clean RPM build installs without a Node runtime;
+- [x] service starts, serves local login and assets/API over HTTPS, and has
+  expected headers;
+- [x] upgrade preserves the local user, active session, config, TLS files, and
+  service state; console packages do not run or own database migrations;
+- [x] Chromium, Firefox, and WebKit Playwright matrix passes, including axe,
+  CSP, keyboard, menu, dialog, combobox, theme, and bounded-rendering checks;
+- [x] Cargo RustSec and npm dependency audits pass;
+- [x] component and operator documentation is current.
 - no CDN or runtime third-party resource request occurs.
 
 ## 8. Later Capabilities

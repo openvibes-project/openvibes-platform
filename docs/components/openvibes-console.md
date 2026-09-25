@@ -108,9 +108,10 @@ use authenticated, permission-checked routes with transactional audit records.
 
 The implemented production UI covers sign-in, overview, agents, findings,
 enrollment, service accounts, rule sets, access control, audit, and
-latest-finding analyst triage with version-checked updates. RPM installation
-and C5 deployment behavior still need integration validation. CA and
-rule-trust-key administration remain CLI-only.
+latest-finding analyst triage with version-checked updates. Fedora 44 RPM
+installation, upgrade preservation, direct TLS, Unix proxy peer enforcement,
+and systemd sandboxing pass the C5 integration run. CA and rule-trust-key
+administration remain CLI-only.
 
 ## Configuration
 
@@ -167,11 +168,10 @@ returns bounded pages and never loads all rows into the browser. These
 temporary routes are intentionally absent from the production OpenAPI
 contract until the database-backed C2/C3 routes exist.
 
-### Planned (C2 to C5)
+### Deployment and packaging (C5)
 
-The remaining service configuration is strict, bounded TOML with unknown keys
-and relative key/certificate paths refused. Its approved deployment constraints
-are:
+The production service uses strict, bounded TOML; unknown keys and relative
+key/certificate paths are refused. Its deployment constraints are:
 
 - direct TLS 1.3 termination is available with a configured server certificate
   chain and private key; TLS responses include HSTS;
@@ -200,8 +200,8 @@ isolated `target/rpm-console` rpmbuild tree, and emits the package there. CI
 installs that RPM after platform migrations inside Fedora 44 with systemd as
 PID 1, then checks readiness, HTTPS delivery, response security headers, the
 systemd seccomp and `NoNewPrivs` settings, Unix proxy access for allowed and
-disallowed peer UIDs, and reinstall preservation of local configuration, TLS
-files, and service state.
+disallowed peer UIDs, no Node.js runtime dependency, and upgrade preservation
+of local configuration, TLS files, the local account, and its active session.
 
 ## Failure behaviour
 

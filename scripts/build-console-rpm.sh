@@ -5,8 +5,8 @@ set -euo pipefail
 readonly script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 
-if [[ $# -ne 2 ]]; then
-    printf 'usage: %s CACHE_ARCHIVE EXPECTED_SHA256\n' "$0" >&2
+if [[ $# -lt 2 || $# -gt 3 ]]; then
+    printf 'usage: %s CACHE_ARCHIVE EXPECTED_SHA256 [RPM_VERSION]\n' "$0" >&2
     exit 2
 fi
 
@@ -27,7 +27,12 @@ if [[ ! "${cache_name}" =~ ^openvibes-console-npm-cache-linux-x64-[0-9a-f]{64}\.
     exit 1
 fi
 
-readonly version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "${repository_root}/Cargo.toml" | head -n 1)"
+readonly default_version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "${repository_root}/Cargo.toml" | head -n 1)"
+readonly version="${3:-${default_version}}"
+if [[ ! "${version}" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.]+)?$ ]]; then
+    printf 'error: RPM_VERSION must be a numeric dotted release, optionally with a prerelease suffix\n' >&2
+    exit 2
+fi
 mkdir -p -- "${repository_root}/target"
 build_dir="$(mktemp -d "${repository_root}/target/console-rpm.XXXXXX")"
 trap 'rm -rf -- "${build_dir}"' EXIT

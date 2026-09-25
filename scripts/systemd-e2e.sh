@@ -3,18 +3,19 @@
 # fedora:44 with systemd as PID 1. The platform, agent, and optional console
 # RPMs are installed and run as their dedicated service users. The agent
 # enrolls, fetches signed rules, and delivers findings and inventory.
-# Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN [CONSOLE_RPM]
+# Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN [CONSOLE_OLD_RPM CONSOLE_RPM]
 #   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin} RPMs and one
 #            openvibes-agent RPM (built from the pinned agent revision)
 #   SIGN_BIN the agent repository's sign_bundle example, built
-#   CONSOLE_RPM optional production console RPM
+#   CONSOLE_OLD_RPM optional prior-version console RPM for upgrade validation
+#   CONSOLE_RPM newer production console RPM
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PODMAN=${PODMAN:-podman}
 C=ov-platform-e2e
 IMAGE=ov-e2e:44
 W=$ROOT/target/systemd-e2e
-[[ $# == 2 || $# == 3 ]] || { echo "usage: $0 RPM_DIR SIGN_BIN [CONSOLE_RPM]" >&2; exit 2; }
+[[ $# == 2 || $# == 4 ]] || { echo "usage: $0 RPM_DIR SIGN_BIN [CONSOLE_OLD_RPM CONSOLE_RPM]" >&2; exit 2; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 in_c() { "$PODMAN" exec "$C" bash -c "$1"; }
@@ -51,7 +52,7 @@ cat > "$W/rules.json" <<'RULES'
 RULES
 "$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 7 "$W/bundle.json" >/dev/null
 
-printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl openssl && dnf clean all\n' |
+printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux util-linux-script curl openssl && dnf clean all\n' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" rm -f "$C" >/dev/null 2>&1 || true
 # Rootless --privileged: privileged only inside the container's user
@@ -75,9 +76,12 @@ ok "platform installed, schema migrated"
 
 # Optional C5 package validation. Install only after the platform migrations
 # create the least-privilege console database role and schema.
-if [[ $# == 3 ]]; then
-    cp "$3" "$W/openvibes-console.rpm"
-    in_c 'dnf -q -y install /test/openvibes-console.rpm' >/dev/null 2>&1 || fail "install console RPM"
+if [[ $# == 4 ]]; then
+    cp "$3" "$W/openvibes-console-old.rpm"
+    cp "$4" "$W/openvibes-console.rpm"
+    in_c '! command -v node >/dev/null && ! command -v npm >/dev/null' || fail "test container unexpectedly has Node.js"
+    in_c 'dnf -q -y install /test/openvibes-console-old.rpm' >/dev/null 2>&1 || fail "install prior console RPM"
+    in_c 'test "$(rpm -q --qf "%{VERSION}" openvibes-console)" = "$(rpm -qp --qf "%{VERSION}" /test/openvibes-console-old.rpm)" && ! command -v node >/dev/null && ! command -v npm >/dev/null' || fail "console RPM version or runtime dependencies"
     in_c 'set -e
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
               -subj "/CN=console.example.invalid" \
@@ -110,15 +114,49 @@ TOML
           grep -q "^NoNewPrivs:[[:space:]]*1$" /proc/$pid/status' || fail "console headers or systemd sandbox"
     ok "console RPM serves hardened TLS with production headers"
 
+    in_c 'set -e
+          password="C5-systemd-upgrade-check-2026!"
+          printf "%s\n%s\n" "$password" "$password" |
+            script -q -c "runuser -u openvibes_admin -- openvibes-admin user create --username c5-upgrade --display-name C5Upgrade --role admin" /dev/null >/dev/null
+          curl -ksS --resolve console.example.invalid:443:127.0.0.1 \
+            -c /tmp/c5-cookies -o /tmp/c5-preauth.json \
+            https://console.example.invalid/auth/v1/preauth
+          csrf=$(sed -n "s/.*\"csrf_token\":\"\\([^\"]*\\)\".*/\\1/p" /tmp/c5-preauth.json)
+          test -n "$csrf"
+          status=$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 \
+            -b /tmp/c5-cookies -c /tmp/c5-cookies \
+            -H "Origin: https://console.example.invalid" \
+            -H "Sec-Fetch-Site: same-origin" -H "X-CSRF-Token: $csrf" \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"c5-upgrade\",\"password\":\"$password\"}" \
+            -o /tmp/c5-login.json -w "%{http_code}" \
+            https://console.example.invalid/auth/v1/login)
+          test "$status" = 200
+          session_hash=$(runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+            "SELECT encode(s.session_sha256, '\''hex'\'') FROM console_sessions s JOIN console_users u USING (user_id) WHERE u.username = '\''c5-upgrade'\'' AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1")
+          test -n "$session_hash"
+          printf "%s" "$session_hash" > /tmp/c5-session-hash' || fail "create authenticated upgrade fixture"
     in_c 'touch /var/lib/openvibes-console/c5-upgrade-sentinel &&
-          dnf -q -y reinstall /test/openvibes-console.rpm' >/dev/null 2>&1 || fail "reinstall console RPM"
+          dnf -q -y upgrade /test/openvibes-console.rpm' >/dev/null 2>&1 || fail "upgrade console RPM"
+    in_c 'test "$(rpm -q --qf "%{VERSION}" openvibes-console)" = "$(rpm -qp --qf "%{VERSION}" /test/openvibes-console.rpm)" && ! command -v node >/dev/null && ! command -v npm >/dev/null' || fail "console RPM version or runtime dependencies after upgrade"
     in_c 'test -f /var/lib/openvibes-console/c5-upgrade-sentinel &&
           grep -q direct_tls /etc/openvibes/console.toml &&
           test -r /etc/openvibes/tls/console-key.pem' || fail "console upgrade changed local state"
-    wait_for "console remains ready after RPM reinstall" 30 '[[ "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18482/ready)" == 204 ]]'
-    wait_for "console remains available over TLS after RPM reinstall" 30 \
+    in_c 'set -e
+          session_hash=$(cat /tmp/c5-session-hash)
+          session_hash_after=$(runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+            "SELECT encode(s.session_sha256, '\''hex'\'') FROM console_sessions s JOIN console_users u USING (user_id) WHERE u.username = '\''c5-upgrade'\'' AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1")
+          test "$session_hash_after" = "$session_hash"
+          runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+            "SELECT 1 FROM console_users WHERE username = '\''c5-upgrade'\''" | grep -qx 1
+          status=$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 \
+            -b /tmp/c5-cookies -o /tmp/c5-session.json -w "%{http_code}" \
+            https://console.example.invalid/api/v1/session)
+          test "$status" = 200' || fail "console RPM upgrade lost authenticated database state"
+    wait_for "console remains ready after RPM upgrade" 30 '[[ "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18482/ready)" == 204 ]]'
+    wait_for "console remains available over TLS after RPM upgrade" 30 \
         '[[ "$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 -o /dev/null -w "%{http_code}" https://console.example.invalid/)" == 200 ]]'
-    ok "console RPM reinstall preserves local config, TLS files, and state"
+    ok "console RPM upgrade preserves config, TLS, local account, database session, and authenticated access"
 
     in_c 'cat > /etc/openvibes/console.toml <<TOML
 development_listen = "0.0.0.0:443"
@@ -207,8 +245,9 @@ in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/kev-test.
 ok "offline feed and KEV imported"
 
 # Rules: trust the signing key and publish the signed bundle.
-in_c "runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules $KEY &&
-      runuser -u openvibes_admin -- openvibes-admin rules publish /test/bundle.json" >/dev/null 2>&1 ||
+in_c "set -e
+      runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules $KEY
+      runuser -u openvibes_admin -- openvibes-admin rules publish /test/bundle.json" ||
     fail "publish rules"
 ok "rules trusted and published"
 

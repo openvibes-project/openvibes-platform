@@ -200,6 +200,10 @@ jobs:
         run: |
           archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
           digest=$(sha256sum "$archive" | cut -d ' ' -f1)
+          # The lower-version package exercises a genuine RPM upgrade in the
+          # systemd job; it uses the same binary and schemas because the
+          # console package itself owns neither database migrations nor data.
+          bash scripts/build-console-rpm.sh "$archive" "$digest" 0.0.9
           bash scripts/build-console-rpm.sh "$archive" "$digest"
 
       - name: Build the agent RPM and signing tool (pinned revision)
@@ -288,4 +292,8 @@ jobs:
       - name: End to end
         run: |
           chmod +x dist/sign_bundle
-          bash scripts/systemd-e2e.sh dist dist/sign_bundle dist/openvibes-console-*.rpm
+          console_version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
+          console_old_rpm=$(find dist -maxdepth 1 -name 'openvibes-console-0.0.9-*.rpm' -type f -print -quit)
+          console_rpm=$(find dist -maxdepth 1 -name "openvibes-console-${console_version}-*.rpm" -type f -print -quit)
+          bash scripts/systemd-e2e.sh dist dist/sign_bundle \
+            "$console_old_rpm" "$console_rpm"

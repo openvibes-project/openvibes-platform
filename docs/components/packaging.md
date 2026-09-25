@@ -268,10 +268,12 @@ component from its RPM under systemd. `scripts/systemd-e2e.sh` runs exactly
 these steps (in a podman container with systemd as PID 1), so they are
 tested on every change. CI also supplies the console RPM, configures a
 temporary TLS certificate, and checks the HTTPS shell, readiness endpoint,
-security headers, and systemd sandbox. It reinstalls the console RPM over
-local config, TLS files, and a state sentinel, then verifies the service
-remains ready. It restarts the console in Unix proxy mode and checks that an
-allowed peer UID succeeds while the console's own service UID is rejected.
+security headers, and systemd sandbox. It installs a lower-version console
+RPM, creates an admin account and browser session, upgrades to the release RPM,
+and verifies that config, TLS files, account, active database session, and
+authenticated access survive. The RPM install also proves Node.js is not a
+runtime dependency. It restarts the console in Unix proxy mode and checks that
+an allowed peer UID succeeds while the console's own service UID is rejected.
 For a single test host, the platform and the agent
 can share the machine, as below; normally the agent runs on the endpoints.
 
