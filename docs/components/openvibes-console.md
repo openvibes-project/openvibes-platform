@@ -196,7 +196,10 @@ conspicuous banner are never included in the production RPM.
 
 The offline RPM build script validates the caller-supplied cache digest,
 builds the embedded UI and release binary without network access, creates an
-isolated `target/rpm-console` rpmbuild tree, and emits the package there.
+isolated `target/rpm-console` rpmbuild tree, and emits the package there. CI
+installs that RPM after platform migrations inside Fedora 44 with systemd as
+PID 1, then checks readiness, HTTPS delivery, response security headers, and
+the systemd seccomp and `NoNewPrivs` settings.
 
 ## Failure behaviour
 
@@ -255,7 +258,8 @@ isolated `target/rpm-console` rpmbuild tree, and emits the package there.
   once and cannot be recovered afterward.
 - Direct TLS 1.3, trusted loopback-TCP proxying, and UID-allow-listed Unix
   socket proxying are available. Other proxy peers are rejected. Forwarded
-  headers are ignored; package/systemd integration validation remains open.
+  headers are ignored; the Fedora systemd integration now covers the direct
+  TLS package path. Unix-socket proxy runtime integration remains open.
 
 ## Build and test
 

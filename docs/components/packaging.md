@@ -242,8 +242,11 @@ changed after the backup before exposing the restored instance.
 From an empty Fedora 44 host to agent findings in PostgreSQL, with every
 component from its RPM under systemd. `scripts/systemd-e2e.sh` runs exactly
 these steps (in a podman container with systemd as PID 1), so they are
-tested on every change. For a single test host, the platform and the agent
-can share the machine, as below; normally the agent runs on the endpoints.
+tested on every change. CI also supplies the console RPM, configures a
+temporary TLS certificate, and checks the HTTPS shell, readiness endpoint,
+security headers, and systemd sandbox. For a single test host, the platform
+and the agent can share the machine, as below; normally the agent runs on the
+endpoints.
 
 1. **Platform:** "First install on Fedora" steps 1–7 above, with
    distribution. On a test host, `issue-server localhost --san 127.0.0.1`
@@ -359,8 +362,9 @@ four units, that the ingest and distribution units stop with SIGINT (the
 signal they drain on; an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 
-CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds
-the agent RPM from the pinned agent revision, installs the platform RPMs,
-and runs `check-rpm.sh`; the `systemd-e2e` job runs `scripts/systemd-e2e.sh`
-on those RPMs under a real systemd; the integration test then runs against
-the installed binaries ([integration-agent.md](integration-agent.md)).
+CI: the `fedora` job (container `fedora:44`) runs `build-rpm.sh`, builds the
+console RPM from its offline npm cache, and builds the agent RPM from the
+pinned agent revision. The `systemd-e2e` job runs
+`scripts/systemd-e2e.sh` on those RPMs under a real systemd; the integration
+test then runs against the installed binaries
+([integration-agent.md](integration-agent.md)).

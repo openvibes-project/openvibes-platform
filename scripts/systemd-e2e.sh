@@ -5,17 +5,18 @@
 # distribution, and the agent all run from their RPMs as their own units;
 # the agent enrolls, fetches its signed rules from distribution, and its
 # findings reach PostgreSQL.
-# Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN
+# Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN [CONSOLE_RPM]
 #   RPM_DIR  the openvibes-{ingest,distribution,admin} RPMs and one
 #            openvibes-agent RPM (built from the pinned agent revision)
 #   SIGN_BIN the agent repository's sign_bundle example, built
+#   CONSOLE_RPM optional production console RPM
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 PODMAN=${PODMAN:-podman}
 C=ov-platform-e2e
 IMAGE=ov-e2e:44
 W=$ROOT/target/systemd-e2e
-[[ $# == 2 ]] || { echo "usage: $0 RPM_DIR SIGN_BIN" >&2; exit 2; }
+[[ $# == 2 || $# == 3 ]] || { echo "usage: $0 RPM_DIR SIGN_BIN [CONSOLE_RPM]" >&2; exit 2; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
 in_c() { "$PODMAN" exec "$C" bash -c "$1"; }
@@ -30,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-agent; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-agent openvibes-console; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -52,7 +53,7 @@ cat > "$W/rules.json" <<'RULES'
 RULES
 "$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 7 "$W/bundle.json" >/dev/null
 
-printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux && dnf clean all\n' |
+printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux curl openssl && dnf clean all\n' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" rm -f "$C" >/dev/null 2>&1 || true
 # Rootless --privileged: privileged only inside the container's user
@@ -73,6 +74,44 @@ in_c 'runuser -u postgres -- createuser --createrole openvibes_admin &&
       runuser -u openvibes_admin -- openvibes-admin migrate &&
       runuser -u openvibes_admin -- openvibes-admin maintenance' >/dev/null || fail "database"
 ok "platform installed, schema migrated"
+
+# Optional C5 package validation. Install only after the platform migrations
+# create the least-privilege console database role and schema.
+if [[ $# == 3 ]]; then
+    cp "$3" "$W/openvibes-console.rpm"
+    in_c 'dnf -q -y install /test/openvibes-console.rpm' >/dev/null 2>&1 || fail "install console RPM"
+    in_c 'set -e
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+              -subj "/CN=console.example.invalid" \
+              -addext "subjectAltName=DNS:console.example.invalid" \
+              -keyout /etc/openvibes/tls/console-key.pem \
+              -out /etc/openvibes/tls/console-chain.pem >/dev/null 2>&1
+          chown root:openvibes_console /etc/openvibes/tls/console-{key,chain}.pem
+          chmod 0640 /etc/openvibes/tls/console-{key,chain}.pem
+          cat > /etc/openvibes/console.toml <<TOML
+development_listen = "0.0.0.0:443"
+health_listen = "127.0.0.1:18482"
+transport_mode = "direct_tls"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_console"
+public_origin = "https://console.example.invalid"
+server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
+server_key_file = "/etc/openvibes/tls/console-key.pem"
+TOML
+          chown root:openvibes_console /etc/openvibes/console.toml
+          chmod 0640 /etc/openvibes/console.toml
+          systemctl enable --now openvibes-console' >/dev/null 2>&1 || fail "configure/start console"
+    wait_for "console ready over loopback health" 30 '[[ "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18482/ready)" == 204 ]]'
+    wait_for "console serves over TLS" 30 '[[ "$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 -o /dev/null -w "%{http_code}" https://console.example.invalid/)" == 200 ]]'
+    in_c 'set -e
+          curl -ksS --resolve console.example.invalid:443:127.0.0.1 -D /tmp/console.headers -o /dev/null https://console.example.invalid/
+          grep -qi "^strict-transport-security: max-age=31536000" /tmp/console.headers
+          grep -qi "^content-security-policy:.*frame-ancestors '\''none'\''" /tmp/console.headers
+          grep -qi "^x-content-type-options: nosniff" /tmp/console.headers
+          pid=$(systemctl show -p MainPID --value openvibes-console)
+          grep -q "^Seccomp:[[:space:]]*2$" /proc/$pid/status
+          grep -q "^NoNewPrivs:[[:space:]]*1$" /proc/$pid/status' || fail "console headers or systemd sandbox"
+    ok "console RPM serves hardened TLS with production headers"
+fi
 
 # 3-4, 7. CA: the root (here in the container, normally offline), the
 # intermediate, and one server certificate each for ingest and distribution.

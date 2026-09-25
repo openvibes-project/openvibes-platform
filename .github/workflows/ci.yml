@@ -154,6 +154,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install pinned Node.js for console RPM
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+
       # As in the ubuntu job: the tokens exist only in this step's temporary
       # git config; the pinned agent (a private git dependency) is built
       # here too, and later steps build offline.
@@ -189,6 +194,14 @@ jobs:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
+      - name: Build offline console RPM
+        env:
+          CARGO_NET_OFFLINE: "true"
+        run: |
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          digest=$(sha256sum "$archive" | cut -d ' ' -f1)
+          bash scripts/build-console-rpm.sh "$archive" "$digest"
+
       - name: Build the agent RPM and signing tool (pinned revision)
         env:
           CARGO_NET_OFFLINE: "true"
@@ -199,6 +212,7 @@ jobs:
           mkdir -p dist
           cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
+          cp target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
 
       - name: Upload RPMs for the systemd end to end
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -251,10 +265,10 @@ jobs:
             bash scripts/load/run.sh 50 1000 10
 
   # The documented install, scripted, under a real systemd (podman fedora:44,
-  # systemd as PID 1): PostgreSQL, ingest, distribution, and the agent from
-  # their RPMs; the agent enrolls, fetches its rules, and delivers findings.
+  # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the
+  # agent enrolls, fetches rules, delivers findings, and the console serves TLS.
   systemd-e2e:
-    name: End to end under systemd (platform and agent RPMs)
+    name: End to end under systemd (platform, agent, and console RPMs)
     needs: fedora
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -273,4 +287,4 @@ jobs:
       - name: End to end
         run: |
           chmod +x dist/sign_bundle
-          bash scripts/systemd-e2e.sh dist dist/sign_bundle
+          bash scripts/systemd-e2e.sh dist dist/sign_bundle dist/openvibes-console-*.rpm
