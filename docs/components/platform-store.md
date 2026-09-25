@@ -134,6 +134,22 @@ links, never edit or delete versions (a test checks it).
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
 
+## Vulnerabilities (`vulns::…`, schema 8)
+
+`advisories` (id, source, release, severity, title, times, url),
+`advisory_cves`, `advisory_packages` (fixed name, arch, EVR),
+`vulnerabilities` (host × advisory: affected packages as JSON, first seen,
+fixed at — kept after fixing), and `feed_sources` (last check, last change,
+content digest, advisories, last error). Role `openvibes_vulns` writes only
+these and reads `agents`, `package_versions`, `host_packages`.
+
+- `replace_advisories` upserts in bulk and never deletes advisories.
+- `candidates(release, host?)` joins advisories to installed versions of the
+  same name with a compatible arch; `openvibes-vulns` decides.
+- `apply(scope, found, now)` opens or updates found ones (reopening keeps
+  `first_seen_at`) and fixes open ones in scope that were not found.
+- `record_feed`, `feeds`, `list(filter)`, `summary` (aggregated in SQL).
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.

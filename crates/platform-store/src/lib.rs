@@ -21,6 +21,8 @@ pub mod rules;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
+/// Advisories, vulnerabilities, and feed state (vulnerability management).
+pub mod vulns;
 
 use std::{fmt, str::FromStr, time::Duration};
 

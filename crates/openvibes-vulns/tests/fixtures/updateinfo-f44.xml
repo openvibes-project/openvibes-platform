@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<updates>
+  <update from="updates@fedoraproject.org" status="stable" type="security" version="2.0">
+    <id>FEDORA-2026-2c6e5be623</id>
+    <title>perl-Data-Entropy-0.010-1.fc44</title>
+    <issued date="2026-09-06 15:46:14"/>
+    <updated date="2026-09-15 00:40:55"/>
+    <rights>Copyright (C) 2026 Red Hat, Inc. and others.</rights>
+    <release>Fedora 44</release>
+    <severity>Low</severity>
+    <summary>perl-Data-Entropy-0.010-1.fc44 security update</summary>
+    <description>Data::Entropy versions before 0.010 for Perl read remote entropy sources over plain HTTP. This update fixes that issue (CVE-2026-18536).</description>
+    <references>
+      <reference href="https://bugzilla.redhat.com/show_bug.cgi?id=2514600" id="2514600" type="bugzilla" title="CVE-2026-18536 perl-Data-Entropy: Data-Entropy: Predictable random numbers due to unencrypted remote entropy sources [fedora-all]"/>
+    </references>
+    <pkglist>
+      <collection short="F44">
+        <name>Fedora 44</name>
+        <package name="perl-Data-Entropy" version="0.010" release="1.fc44" epoch="0" arch="src" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/SRPMS/p/perl-Data-Entropy-0.010-1.fc44.src.rpm">
+          <filename>perl-Data-Entropy-0.010-1.fc44.src.rpm</filename>
+        </package>
+        <package name="perl-Data-Entropy" version="0.010" release="1.fc44" epoch="0" arch="noarch" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/i386/p/perl-Data-Entropy-0.010-1.fc44.noarch.rpm">
+          <filename>perl-Data-Entropy-0.010-1.fc44.noarch.rpm</filename>
+        </package>
+      </collection>
+    </pkglist>
+  </update>
+  <update from="updates@fedoraproject.org" status="stable" type="security" version="2.0">
+    <id>FEDORA-2026-dc0ff85b8b</id>
+    <title>wordpress-6.9.7-1.fc44</title>
+    <issued date="2026-08-13 04:29:13"/>
+    <updated date="2026-08-21 05:18:12"/>
+    <rights>Copyright (C) 2026 Red Hat, Inc. and others.</rights>
+    <release>Fedora 44</release>
+    <severity>Important</severity>
+    <summary>wordpress-6.9.7-1.fc44 security update</summary>
+    <description>## WordPress 6.9.7 Release
+
+**Security update included in this release**
+
+- Authenticated Author+ remote code execution via malicious file upload on sites that use Imagick and Ghostscript. **CVE-2026-65640**
+
+
+----
+
+## WordPress 6.9.6 Release
+
+**Security update included in this release**
+
+
+-    Pre-auth reflected cross-site scripting (XSS) on the login screen with potential to lead to PHP code execution reported by the team at pwn.ai. **CVE-2026-64638**
+-    Contributor+ stored cross-site scripting (XSS) in posts via the emoji settings element reported by Asaf Mozes (amosec)
+-    Contributor+ stored cross-site scripting (XSS) in the Post Content block reported by n05ec
+-    Contributor+ stored cross-site scripting (XSS) in Quick Edit on sites with a large number of users reported by Naveen S and Ajmal Moochingal
+-    Contributor+ stored cross-site scripting (XSS) in the Post Date block reported by Alex Concha of the WordPress Security Team
+-    A privilege escalation issue on multisite networks with user registration enabled, allowing a user to create a new site reported by Aikido Security
+-    An information disclosure issue in the Latest Comments block exposing comments on password-protected posts reported by Ehtisham Siddiqui of the WordPress Security Team
+-    Enumeration of post slugs reported by HDWSec
+-    Disclosure of notes in comment feeds reported by Elio Gubser
+-    Author+ CSS injection via a bypass of the safe CSS attribute filter reported by Anthropic
+-    Bypass of the email address confirmation flow reported by 0ways
+-    A server-side request forgery (SSRF) issue in URL validation allowing requests to link-local ranges reported by Andrew Mohawk and multiple independent reporters
+
+</description>
+    <references/>
+    <pkglist>
+      <collection short="F44">
+        <name>Fedora 44</name>
+        <package name="wordpress" version="6.9.7" release="1.fc44" epoch="0" arch="src" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/SRPMS/w/wordpress-6.9.7-1.fc44.src.rpm">
+          <filename>wordpress-6.9.7-1.fc44.src.rpm</filename>
+        </package>
+        <package name="wordpress" version="6.9.7" release="1.fc44" epoch="0" arch="noarch" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/i386/w/wordpress-6.9.7-1.fc44.noarch.rpm">
+          <filename>wordpress-6.9.7-1.fc44.noarch.rpm</filename>
+        </package>
+      </collection>
+    </pkglist>
+  </update>
+  <update from="updates@fedoraproject.org" status="stable" type="security" version="2.0">
+    <id>FEDORA-2026-9781489c3a</id>
+    <title>google-osconfig-agent-20260717.00-1.fc44</title>
+    <issued date="2026-07-17 15:29:32"/>
+    <updated date="2026-07-26 00:57:16"/>
+    <rights>Copyright (C) 2026 Red Hat, Inc. and others.</rights>
+    <release>Fedora 44</release>
+    <severity>None</severity>
+    <summary>google-osconfig-agent-20260717.00-1.fc44 security update</summary>
+    <description>Update to 20260717</description>
+    <references>
+      <reference href="https://bugzilla.redhat.com/show_bug.cgi?id=2434630" id="2434630" type="bugzilla" title="google-osconfig-agent: FTBFS in Fedora rawhide/f44"/>
+      <reference href="https://bugzilla.redhat.com/show_bug.cgi?id=2486287" id="2486287" type="bugzilla" title="CVE-2026-45287 google-osconfig-agent: OpenTelemetry-Go: Denial of Service due to file descriptor leak [fedora-all]"/>
+    </references>
+    <pkglist>
+      <collection short="F44">
+        <name>Fedora 44</name>
+        <package name="google-osconfig-agent" version="20260717.00" release="1.fc44" epoch="0" arch="src" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/SRPMS/g/google-osconfig-agent-20260717.00-1.fc44.src.rpm">
+          <filename>google-osconfig-agent-20260717.00-1.fc44.src.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent-debuginfo" version="20260717.00" release="1.fc44" epoch="0" arch="x86_64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/x86_64/g/google-osconfig-agent-debuginfo-20260717.00-1.fc44.x86_64.rpm">
+          <filename>google-osconfig-agent-debuginfo-20260717.00-1.fc44.x86_64.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent" version="20260717.00" release="1.fc44" epoch="0" arch="x86_64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/x86_64/g/google-osconfig-agent-20260717.00-1.fc44.x86_64.rpm">
+          <filename>google-osconfig-agent-20260717.00-1.fc44.x86_64.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent-debugsource" version="20260717.00" release="1.fc44" epoch="0" arch="x86_64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/x86_64/g/google-osconfig-agent-debugsource-20260717.00-1.fc44.x86_64.rpm">
+          <filename>google-osconfig-agent-debugsource-20260717.00-1.fc44.x86_64.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent-debuginfo" version="20260717.00" release="1.fc44" epoch="0" arch="aarch64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/aarch64/g/google-osconfig-agent-debuginfo-20260717.00-1.fc44.aarch64.rpm">
+          <filename>google-osconfig-agent-debuginfo-20260717.00-1.fc44.aarch64.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent" version="20260717.00" release="1.fc44" epoch="0" arch="aarch64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/aarch64/g/google-osconfig-agent-20260717.00-1.fc44.aarch64.rpm">
+          <filename>google-osconfig-agent-20260717.00-1.fc44.aarch64.rpm</filename>
+        </package>
+        <package name="google-osconfig-agent-debugsource" version="20260717.00" release="1.fc44" epoch="0" arch="aarch64" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/aarch64/g/google-osconfig-agent-debugsource-20260717.00-1.fc44.aarch64.rpm">
+          <filename>google-osconfig-agent-debugsource-20260717.00-1.fc44.aarch64.rpm</filename>
+        </package>
+      </collection>
+    </pkglist>
+  </update>
+  <update from="updates@fedoraproject.org" status="stable" type="bugfix" version="2.0">
+    <id>FEDORA-2026-75eba8e3c3</id>
+    <title>pre-commit-4.6.2-1.fc44</title>
+    <issued date="2026-08-12 07:10:29"/>
+    <updated date="2026-08-21 05:18:12"/>
+    <rights>Copyright (C) 2026 Red Hat, Inc. and others.</rights>
+    <release>Fedora 44</release>
+    <severity>None</severity>
+    <summary>pre-commit-4.6.2-1.fc44 bugfix update</summary>
+    <description>Update to 4.6.2: Fix `language: node` hooks that contain
+`"scripts": {"build": ...}` with npm 11.x.</description>
+    <references>
+      <reference href="https://bugzilla.redhat.com/show_bug.cgi?id=2513712" id="2513712" type="bugzilla" title="pre-commit-4.6.2 is available"/>
+    </references>
+    <pkglist>
+      <collection short="F44">
+        <name>Fedora 44</name>
+        <package name="pre-commit" version="4.6.2" release="1.fc44" epoch="0" arch="src" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/SRPMS/p/pre-commit-4.6.2-1.fc44.src.rpm">
+          <filename>pre-commit-4.6.2-1.fc44.src.rpm</filename>
+        </package>
+        <package name="pre-commit" version="4.6.2" release="1.fc44" epoch="0" arch="noarch" src="https://download.fedoraproject.org/pub/fedora/linux/updates/44/i386/p/pre-commit-4.6.2-1.fc44.noarch.rpm">
+          <filename>pre-commit-4.6.2-1.fc44.noarch.rpm</filename>
+        </package>
+      </collection>
+    </pkglist>
+  </update>
+</updates>

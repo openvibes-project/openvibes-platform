@@ -1071,6 +1071,7 @@ dependencies = [
  "ed25519-dalek",
  "openvibes-core",
  "openvibes-rules",
+ "openvibes-vulns",
  "platform-config",
  "platform-pki",
  "platform-store",
@@ -1173,6 +1174,21 @@ dependencies = [
  "serde_json",
  "ureq",
  "zeroize",
+]
+
+[[package]]
+name = "openvibes-vulns"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "deadpool-postgres",
+ "platform-store",
+ "quick-xml",
+ "ruzstd",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -1325,6 +1341,8 @@ dependencies = [
  "chrono",
  "fallible-iterator",
  "postgres-protocol",
+ "serde_core",
+ "serde_json",
 ]
 
 [[package]]
@@ -1340,6 +1358,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "quick-xml"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41b1177fdf999d2321d3fb46ff47159d9c1fb9ad66a4879f8c50a0b504615e9b"
+dependencies = [
+ "memchr",
 ]
 
 [[package]]
@@ -1469,6 +1496,15 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "ruzstd"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a252f5e20f038fe7b4ea53e073e65398d652c864cc162fc77c56c2f13717b888"
+dependencies = [
+ "twox-hash",
+]
 
 [[package]]
 name = "scopeguard"
@@ -1960,6 +1996,12 @@ dependencies = [
  "tracing-core",
  "tracing-serde",
 ]
+
+[[package]]
+name = "twox-hash"
+version = "2.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5283634e518fe9e82c7b20520bb4bc209009fd16c82077c802f8111ecbb0117a"
 
 [[package]]
 name = "typed-arena"

@@ -9,6 +9,7 @@ mod ca;
 mod files;
 mod rules;
 mod token;
+mod vulns;
 
 use std::{path::PathBuf, process::ExitCode};
 
@@ -62,6 +63,16 @@ enum Command {
         #[command(subcommand)]
         command: rules::RulesCommand,
     },
+    /// Vulnerability feeds: import (offline) and status.
+    Feeds {
+        #[command(subcommand)]
+        command: vulns::FeedsCommand,
+    },
+    /// Vulnerabilities found on hosts.
+    Vulns {
+        #[command(subcommand)]
+        command: vulns::VulnsCommand,
+    },
 }
 
 impl Command {
@@ -74,6 +85,8 @@ impl Command {
             Self::Token { command } => command.name(),
             Self::Agent { command } => command.name(),
             Self::Rules { command } => command.name(),
+            Self::Feeds { command } => command.name(),
+            Self::Vulns { command } => command.name(),
         }
     }
 }
@@ -140,6 +153,14 @@ async fn main() -> ExitCode {
         },
         Command::Rules { command } => match require_current_schema(&client).await {
             Ok(()) => rules::run(command, &mut client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Feeds { command } => match require_current_schema(&client).await {
+            Ok(()) => vulns::run_feeds(command, &mut client).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Vulns { command } => match require_current_schema(&client).await {
+            Ok(()) => vulns::run_vulns(command, &client).await,
             Err(error) => (Err(error), None),
         },
         other => (run(other, &mut client).await, None),
@@ -233,7 +254,9 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Ca { .. }
         | Command::Token { .. }
         | Command::Agent { .. }
-        | Command::Rules { .. } => {
+        | Command::Rules { .. }
+        | Command::Feeds { .. }
+        | Command::Vulns { .. } => {
             unreachable!("handled by the caller")
         }
         Command::Status => {
