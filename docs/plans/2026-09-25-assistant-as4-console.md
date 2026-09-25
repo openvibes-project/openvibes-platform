@@ -29,8 +29,8 @@ persisted-history, and streaming choices for this first console release.
   and metadata-only audit record.
 - [x] Add the Assistant page with a local-model notice, in-memory conversation,
   text-only rendering, citations, lookup disclosure, stop, and reset controls.
-- [ ] Generate and review the OpenAPI snapshot and TypeScript client.
-- [ ] Complete component/operator documentation and final security review.
+- [x] Generate the OpenAPI snapshot and TypeScript client.
+- [x] Add component/operator documentation; final security review remains.
 - [ ] Manual browser verification and project acceptance review.
 
 ## Review focus
