@@ -11,58 +11,63 @@ use rustls::{
     },
 };
 
-use crate::{IngestConfig, IngestError};
+use crate::ServerError;
 
 /// Largest certificate or key file read.
 const MAX_PEM_BYTES: u64 = 1024 * 1024;
 
-pub(crate) fn read_pem(path: &Path) -> Result<String, IngestError> {
+/// Reads a PEM file of at most 1 MiB.
+pub fn read_pem(path: &Path) -> Result<String, ServerError> {
     let mut text = String::new();
     let read = File::open(path)
         .and_then(|file| file.take(MAX_PEM_BYTES + 1).read_to_string(&mut text))
-        .map_err(|_| IngestError::Tls)?;
+        .map_err(|_| ServerError::Tls)?;
     if read as u64 > MAX_PEM_BYTES {
-        return Err(IngestError::Tls);
+        return Err(ServerError::Tls);
     }
     Ok(text)
 }
 
-fn certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>, IngestError> {
+fn certificates(path: &Path) -> Result<Vec<CertificateDer<'static>>, ServerError> {
     let pem = read_pem(path)?;
     let certs: Vec<_> = CertificateDer::pem_slice_iter(pem.as_bytes())
         .collect::<Result<_, _>>()
-        .map_err(|_| IngestError::Tls)?;
+        .map_err(|_| ServerError::Tls)?;
     if certs.is_empty() {
-        return Err(IngestError::Tls);
+        return Err(ServerError::Tls);
     }
     Ok(certs)
 }
 
 /// TLS 1.3 only; a client certificate is optional at the handshake (for
 /// enrollment) but must chain to `client_ca_file` when presented.
-pub(crate) fn server_config(config: &IngestConfig) -> Result<Arc<ServerConfig>, IngestError> {
+pub(crate) fn server_config(
+    certificate: &Path,
+    key: &Path,
+    client_ca: &Path,
+) -> Result<Arc<ServerConfig>, ServerError> {
     let mut provider = rustls::crypto::ring::default_provider();
     provider
         .cipher_suites
         .retain(|suite| matches!(suite, SupportedCipherSuite::Tls13(_)));
     let provider = Arc::new(provider);
     let mut roots = RootCertStore::empty();
-    for cert in certificates(&config.client_ca_file)? {
-        roots.add(cert).map_err(|_| IngestError::Tls)?;
+    for cert in certificates(client_ca)? {
+        roots.add(cert).map_err(|_| ServerError::Tls)?;
     }
     let inner = WebPkiClientVerifier::builder_with_provider(Arc::new(roots), provider.clone())
         .allow_unauthenticated()
         .build()
-        .map_err(|_| IngestError::Tls)?;
+        .map_err(|_| ServerError::Tls)?;
     let verifier = Arc::new(ExpiryTolerant { inner });
-    let key = PrivateKeyDer::from_pem_slice(read_pem(&config.server_key_file)?.as_bytes())
-        .map_err(|_| IngestError::Tls)?;
+    let key =
+        PrivateKeyDer::from_pem_slice(read_pem(key)?.as_bytes()).map_err(|_| ServerError::Tls)?;
     let mut server = ServerConfig::builder_with_provider(provider)
         .with_protocol_versions(&[&rustls::version::TLS13])
-        .map_err(|_| IngestError::Tls)?
+        .map_err(|_| ServerError::Tls)?
         .with_client_cert_verifier(verifier)
-        .with_single_cert(certificates(&config.server_certificate_file)?, key)
-        .map_err(|_| IngestError::Tls)?;
+        .with_single_cert(certificates(certificate)?, key)
+        .map_err(|_| ServerError::Tls)?;
     server.alpn_protocols = vec![b"http/1.1".to_vec()];
     Ok(Arc::new(server))
 }

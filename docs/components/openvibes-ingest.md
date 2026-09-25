@@ -34,6 +34,9 @@ Strict TOML (unknown keys refused), absolute paths only:
 
 ## TLS and authentication
 
+Shared with distribution: implemented in
+[platform-agent-server](platform-agent-server.md).
+
 - TLS 1.3 only (ring). ALPN `http/1.1`. No redirects anywhere.
 - A client certificate is optional at the handshake (enrollment has none),
   but one that does not chain to `client_ca_file` fails the handshake. An
@@ -63,8 +66,18 @@ Strict TOML (unknown keys refused), absolute paths only:
 - `POST /v1/heartbeat` (authenticated): `Heartbeat`; its `agent_id` must be
   the authenticated agent's (else 400). Stores version, capabilities, and the
   optional `hostname` (a spoofable operator label, never identity), writing
-  at most every 5 minutes unless the hostname changed; an absent hostname
-  keeps the stored one. 204.
+  at most every 5 minutes unless the hostname or the capabilities changed;
+  an absent hostname keeps the stored one. Capabilities name the agent's
+  enabled collectors (`collector.processes`, `collector.packages`,
+  `collector.ports`; protocol P7), and each list replaces the stored one.
+  204.
+- `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
+  `agent_id` must be the authenticated agent's (else 400); at most 10,000
+  packages (else 400). The packages are put in canonical order and hashed
+  (SHA-256 with the OS and the optional `running_kernel`, protocol P9, so a
+  reboot alone is stored); an unchanged inventory writes nothing, otherwise
+  the host's inventory is replaced in one transaction and the vulnerability
+  service is notified (`inventory_changed`). 204.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so
@@ -87,6 +100,9 @@ Strict TOML (unknown keys refused), absolute paths only:
 
 ## Load control and logging
 
+Shared with distribution: implemented in
+[platform-agent-server](platform-agent-server.md).
+
 - Accepted sockets set `TCP_NODELAY`: without it every request waited about
   40 ms for the client's delayed ACK (found by the PM5 load test).
 - Bodies over 1 MiB → 400 (never read past the limit).
@@ -100,7 +116,7 @@ Strict TOML (unknown keys refused), absolute paths only:
   off instead of spinning.
 - Database waits, connects, and recycles are bounded to 5 s and every
   statement to 10 s, so a hung database yields 503, not hangs.
-- One JSON log line per request on stderr: `endpoint` (the route, or
+- One JSON log line per request on stderr: `endpoint` (the matched route, or
   `other` for any unknown path, which is never copied), `status`,
   `latency_ms`, and (inside the request span) `agent_id` once
   authenticated. Bodies, tokens, CSRs, and certificates are never logged.
@@ -111,6 +127,9 @@ About 1,000 req/s (the spec target) holds at p99 under 10 ms on a
 12-core desktop; see [load.md](load.md) for the measured results.
 
 ## Health
+
+Shared with distribution: implemented in
+[platform-agent-server](platform-agent-server.md).
 
 On `health_listen` (plain HTTP, loopback): `/health` → 200 while the process
 runs; `/ready` → 200 only if the database is reachable at the expected

@@ -1,8 +1,14 @@
-use axum::{extract::FromRequestParts, http::request::Parts};
-use platform_store::ingest::{self, Authenticated};
+use axum::{
+    extract::{FromRef, FromRequestParts},
+    http::request::Parts,
+};
+use platform_store::{
+    Pool,
+    ingest::{self, Authenticated},
+};
 use rustls::pki_types::CertificateDer;
 
-use crate::{error::ApiError, server::AppState};
+use crate::ApiError;
 
 /// The client's leaf certificate, attached per connection.
 #[derive(Clone)]
@@ -10,18 +16,24 @@ pub(crate) struct Peer(pub Option<CertificateDer<'static>>);
 
 /// An agent authenticated by a recorded certificate (serial and key hash)
 /// whose status is active.
-pub(crate) struct AuthenticatedAgent(pub String);
+pub struct AuthenticatedAgent(pub String);
 
-impl FromRequestParts<AppState> for AuthenticatedAgent {
+impl<S: Send + Sync> FromRequestParts<S> for AuthenticatedAgent
+where
+    Pool: FromRef<S>,
+{
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, ApiError> {
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, ApiError> {
         let Some(Peer(Some(leaf))) = parts.extensions.get::<Peer>().cloned() else {
             return Err(ApiError::Unauthorized);
         };
         let (serial, spki) =
             platform_pki::leaf_identity(&leaf).map_err(|_| ApiError::Unauthorized)?;
-        let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+        let client = Pool::from_ref(state)
+            .get()
+            .await
+            .map_err(|_| ApiError::Unavailable)?;
         match ingest::authenticate(&client, &serial, spki).await? {
             // The handshake tolerates expiry so revoked agents still hear it;
             // an expired certificate of an active agent is refused here.

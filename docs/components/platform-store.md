@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 3; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 10; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -28,7 +28,8 @@ revokes UPDATE on `findings`, `certificates`, and `token_uses` from
 refused every write, read, or DDL it does not use. Migration 5 adds `rule_set_id`
 to `findings` and `current_findings` (`''` = unknown sender) and keys
 current state by agent, rule set, and rule: rule ids are unique only within
-a rule set. `migrate` runs
+a rule set. Migration 6 adds rule distribution (below) and the role
+`openvibes_distribution`. `migrate` runs
 in one transaction that first takes an advisory lock (before even creating
 `schema_version`), so concurrent runs serialize and both succeed;
 already-applied migrations are skipped. A database at a
@@ -75,13 +76,93 @@ All run within the `openvibes_ingest` role's grants (the tests use
   Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
   hash must match a recorded certificate.
 - `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
-  at most every 5 minutes, or at once when the hostname changes; an absent
+  at most every 5 minutes, or at once when the hostname or the capabilities
+  change; an absent
   hostname keeps the stored one (migration 3 adds `agents.hostname`,
   indexed). Returns whether it wrote.
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
   transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
   keeping the newest observation and the first-seen time.
 - Certificate chains are stored as a JSON array in `certificates.chain_pem`.
+
+## Rule distribution (`rules::…`, schema 6)
+
+Tables: `rule_sets` (id, `created_at`, `retired_at`), `rule_trust_keys`
+(per set and issuer key id: 32-byte Ed25519 key, `added_at`, `removed_at`),
+and `rule_bundles` (per set and version: the exact envelope bytes, at most
+1 MiB, its SHA-256, issuer, signed creation and expiry, `published_at`,
+`published_by`). The current bundle is the highest version; there is no
+mutable pointer.
+
+`openvibes_distribution` may only read `agents`, `certificates`,
+`rule_sets`, `rule_bundles`, and `schema_version`; it cannot see trust keys.
+`openvibes_ingest` has no rights on the rule tables. A test checks both.
+
+- `add_trust_key(set, issuer, key)` creates the set if needed →
+  `Added`, `AlreadyTrusted` (same key), `Conflict` (different key, or the id
+  was removed: ids are never re-used), `Retired`. It runs in one transaction
+  holding the set row `FOR SHARE`, so a concurrent `retire` waits and no key
+  lands on a set retired mid-add.
+- `trust_keys(set?)`, `active_trust_keys(set)`, `remove_trust_key(set, issuer)`.
+- `publish(&mut client, &NewBundle)` takes a per-set advisory lock, so
+  concurrent publishers serialize → `Stored`, `Unchanged` (same version and
+  bytes), `VersionConflict`, `NotAboveCurrent(v)`, `Retired`, `UnknownSet`,
+  `UntrustedIssuer`. The caller verifies the signature first
+  (`openvibes-admin rules publish`); the store then re-checks, under
+  `FOR SHARE`, that the issuer is still trusted, so a key removed between
+  verification and commit cannot get a bundle stored.
+- `list()` (with the current bundle's issuer and whether that key has since
+  been removed), `bundles(set)` (newest first), `retire(set)` (bundles are kept).
+- `serve(set, current_version?)` → `Unknown` (unknown, retired, or nothing
+  published), `UpToDate`, or `Envelope(bytes)`. One primary-key query, read
+  backwards; the bytes are fetched only when the agent's version is older.
+
+## Inventories (`inventory::…`, schema 7)
+
+Distinct package versions are stored once for the fleet in
+`package_versions` (manager, name, epoch, version, release, arch; unique),
+and `host_packages` links each host to the versions it has, so 10,000
+Fedora hosts need about 36M two-key rows rather than full package rows.
+`agents` gains `os_id`, `os_version`, `inventory_sha256`, and
+`inventory_at`. `openvibes_ingest` may add versions and replace a host's
+links, never edit or delete versions (a test checks it).
+
+- `replace(&mut client, agent_id, os_id, os_version, running_kernel,
+  packages, sha256, now)` locks the agent row; an equal digest is `Unchanged` (nothing written, no
+  notification); otherwise it inserts unknown versions, replaces the host's
+  links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
+  the agent id (delivered at commit) → `Stored`. Several installed versions
+  of one package (kernels) are all kept.
+
+## Vulnerabilities (`vulns::…`, schema 8)
+
+`advisories` (id, source, release, severity, title, times, url),
+`advisory_cves`, `advisory_packages` (fixed name, arch, EVR),
+`vulnerabilities` (host × advisory: affected packages as JSON, first seen,
+fixed at — kept after fixing; `reboot_needed` since schema 9), and
+`feed_sources` (last check, last change,
+content digest, advisories, last error). Role `openvibes_vulns` writes only
+these and reads `agents`, `package_versions`, `host_packages`.
+
+- `replace_advisories` upserts in bulk and never deletes advisories.
+- `candidates(release, host?)` joins advisories to installed versions of the
+  same name with a compatible arch; `openvibes-vulns` decides.
+- `apply(scope, found, now)` opens or updates found ones (reopening keeps
+  `first_seen_at`) and fixes open ones in scope that were not found.
+- `record_feed`, `feeds`, `list(filter)`, `summary` (aggregated in SQL).
+
+Schema 9 adds `agents.running_kernel` (protocol P9) and
+`vulnerabilities.reboot_needed`: the fix is installed and only a reboot
+is missing. The row stays unfixed (it closes after the reboot), but
+`summary` counts it as its own state, not as open.
+
+Schema 10 (VM4) adds `cve_enrichment` (`cve_id`; KEV `kev_added`,
+`kev_due`, `kev_ransomware`; EPSS `epss`, `epss_percentile`,
+`epss_date`) and `feed_sources.etag`. `enrichment::{replace_kev,
+replace_epss}` write it in bulk (KEV clears CVEs no longer listed);
+`vulns::list` sorts by priority and returns each advisory's strongest KEV
+and EPSS values; `summary` counts open ones on KEV;
+`feed_etag`/`set_feed_etag` keep a source's ETag.
 
 ## Audit log
 

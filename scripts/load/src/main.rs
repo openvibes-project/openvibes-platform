@@ -3,6 +3,9 @@
 //! `openvibes-load`: simulates N enrolled agents against openvibes-ingest with
 //! the agent's own transport. Every tick opens a fresh client (as the agent
 //! does), sends a heartbeat, and on the agent's findings ticks one batch.
+//! With `--distribution-url`, each tick instead fetches one rule bundle from
+//! openvibes-distribution without a current version: the full envelope every
+//! time, the worst case after a publish.
 //! Ticks are due on a fixed schedule (open loop); the summary reports how far
 //! execution lagged behind it. Test tool, never shipped.
 
@@ -19,11 +22,12 @@ use std::{
 
 use clap::Parser;
 use openvibes_core::{
-    Confidence, EnrollmentToken, Finding, Heartbeat, Identifier, ResourceLimits, SchemaVersion,
-    Severity,
+    Confidence, EnrollmentToken, Finding, Heartbeat, Identifier, ResourceLimits, RuleBundleRequest,
+    SchemaVersion, Severity,
 };
 use openvibes_transport::{
-    ClientIdentity, DEFAULT_PLATFORM_PORT, HostKey, PlatformClient, TransportConfig,
+    ClientIdentity, DEFAULT_DISTRIBUTION_PORT, DEFAULT_PLATFORM_PORT, HostKey, PlatformClient,
+    TransportConfig,
 };
 
 #[derive(Parser)]
@@ -56,6 +60,15 @@ struct Args {
     postmaster_pid: Option<u32>,
     #[arg(long, default_value_t = 100)]
     clk_tck: u64,
+    /// Fetch rule bundles from this distribution URL instead of sending
+    /// heartbeats and findings (agents still enroll through `--url`).
+    #[arg(long)]
+    distribution_url: Option<String>,
+    /// Rule set fetched in distribution mode.
+    #[arg(long, default_value = "integration")]
+    rule_set: String,
+    #[arg(long)]
+    distribution_pid: Option<u32>,
 }
 
 struct Agent {
@@ -67,6 +80,7 @@ struct Agent {
 enum Kind {
     Heartbeat,
     Findings,
+    Bundle,
 }
 
 struct Sample {
@@ -76,6 +90,8 @@ struct Sample {
     done: Instant,
     micros: u64,
     error: Option<String>,
+    /// Response bytes (bundles only).
+    bytes: usize,
 }
 
 fn now_ms() -> i64 {
@@ -159,10 +175,36 @@ fn tick(
                 done: Instant::now(),
                 micros: 0,
                 error: Some(format!("client: {error}")),
+                bytes: 0,
             });
             return samples;
         }
     };
+    if args.distribution_url.is_some() {
+        let request = RuleBundleRequest {
+            schema_version: SchemaVersion::V1,
+            rule_set_id: id(args.rule_set.clone()),
+            current_version: None,
+        };
+        let started = Instant::now();
+        let result = client.fetch_rule_bundle(&request);
+        let micros = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        let (error, bytes) = match result {
+            Ok(Some(bytes)) => (None, bytes.len()),
+            // Without a current version the service must always send it.
+            Ok(None) => (Some("bundle: unexpected 204".to_owned()), 0),
+            Err(error) => (Some(format!("bundle: {error}")), 0),
+        };
+        samples.push(Sample {
+            kind: Kind::Bundle,
+            due,
+            done: Instant::now(),
+            micros,
+            error,
+            bytes,
+        });
+        return samples;
+    }
     let heartbeat = Heartbeat {
         schema_version: SchemaVersion::V1,
         agent_id: agent.id.clone(),
@@ -179,6 +221,7 @@ fn tick(
         done: Instant::now(),
         micros: u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
         error: result.err().map(|e| format!("heartbeat: {e}")),
+        bytes: 0,
     });
     if plan::delivers_findings(index, tick, args.findings_every) {
         let observed = now_ms();
@@ -208,6 +251,7 @@ fn tick(
             done: Instant::now(),
             micros: u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX),
             error: result.err().map(|e| format!("findings: {e}")),
+            bytes: 0,
         });
     }
     samples
@@ -282,11 +326,12 @@ fn memory(args: &Args) -> serde_json::Value {
     })
 }
 
-fn snapshot(args: &Args) -> [u64; 3] {
+fn snapshot(args: &Args) -> [u64; 4] {
     [
         cpu_ticks(std::process::id(), false),
         args.ingest_pid.map_or(0, |pid| cpu_ticks(pid, false)),
         args.postmaster_pid.map_or(0, postgres_ticks),
+        args.distribution_pid.map_or(0, |pid| cpu_ticks(pid, false)),
     ]
 }
 
@@ -329,6 +374,15 @@ fn main() -> ExitCode {
         }
     };
     let enroll_seconds = enroll_started.elapsed().as_secs_f64();
+    // Ticks go to distribution in that mode, with the same roots and limits.
+    let config = match &args.distribution_url {
+        Some(url) => TransportConfig {
+            base_url: url.clone(),
+            default_port: DEFAULT_DISTRIBUTION_PORT,
+            ..config
+        },
+        None => config,
+    };
     let interval = Duration::from_millis(args.interval_ms);
     let args = Arc::new(args);
     let start = Instant::now() + Duration::from_millis(100);
@@ -429,7 +483,7 @@ fn main() -> ExitCode {
     let per_second = 1000.0 / args.interval_ms as f64 * count as f64;
     let target_rps = per_second
         * (1.0
-            + if args.findings_every > 0 {
+            + if args.findings_every > 0 && args.distribution_url.is_none() {
                 1.0 / args.findings_every as f64
             } else {
                 0.0
@@ -456,8 +510,15 @@ fn main() -> ExitCode {
             "all": stats(latencies(None)),
             "heartbeat": stats(latencies(Some(Kind::Heartbeat))),
             "findings": stats(latencies(Some(Kind::Findings))),
+            "bundle": stats(latencies(Some(Kind::Bundle))),
         },
-        "cpu_cores": { "generator": cores(0), "ingest": cores(1), "postgres": cores(2) },
+        "bundle_bytes": samples.iter().map(|s| s.bytes).max().unwrap_or(0),
+        "cpu_cores": {
+            "generator": cores(0),
+            "ingest": cores(1),
+            "postgres": cores(2),
+            "distribution": cores(3),
+        },
         "memory_mib": memory_mib,
         "enroll": { "agents": count, "seconds": enroll_seconds },
         "pass": pass,

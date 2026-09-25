@@ -10,13 +10,21 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// CVE enrichment: KEV and EPSS (vulnerability management).
+pub mod enrichment;
 /// Queries the ingest service runs.
 pub mod ingest;
+/// Host package inventories (vulnerability management).
+pub mod inventory;
 mod maintenance;
 mod migrate;
+/// Rule sets, trust keys, and published bundles.
+pub mod rules;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
+/// Advisories, vulnerabilities, and feed state (vulnerability management).
+pub mod vulns;
 
 use std::{fmt, str::FromStr, time::Duration};
 
