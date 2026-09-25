@@ -191,7 +191,7 @@ impl AsyncWrite for CappedStream {
 
 enum CappedIo {
     Plain(CappedStream),
-    Tls(TlsStream<CappedStream>),
+    Tls(Box<TlsStream<CappedStream>>),
     #[cfg(unix)]
     Unix(CappedUnixStream),
 }
@@ -307,7 +307,9 @@ impl Listener for CappedListener {
                 }
                 completed = self.handshakes.join_next(), if !self.handshakes.is_empty() => {
                     match completed {
-                        Some(Ok((Ok(stream), peer))) => return (CappedIo::Tls(stream), peer),
+                        Some(Ok((Ok(stream), peer))) => {
+                            return (CappedIo::Tls(Box::new(stream)), peer);
+                        }
                         Some(Ok((Err(error), _))) => tracing::debug!(%error, "console TLS handshake failed"),
                         Some(Err(error)) => tracing::error!(%error, "console TLS handshake task failed"),
                         None => {}
@@ -578,6 +580,7 @@ pub async fn run(
     .await
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn run_with_router(
     public_listener: PublicListener,
     health_listener: TcpListener,

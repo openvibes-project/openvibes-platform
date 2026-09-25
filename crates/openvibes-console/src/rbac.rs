@@ -193,6 +193,20 @@ mod tests {
             })
         );
 
+        let viewer_capabilities = resolve_capabilities(&[RoleBinding::global(BuiltInRole::Viewer)]);
+        assert!(
+            !viewer_capabilities
+                .iter()
+                .any(|item| item.permission == Permission::RulesRead)
+        );
+        let operator_capabilities =
+            resolve_capabilities(&[RoleBinding::global(BuiltInRole::Operator)]);
+        assert!(
+            !operator_capabilities
+                .iter()
+                .any(|item| item.permission == Permission::RulesRead)
+        );
+
         let global_viewer = RoleBinding::global(BuiltInRole::Viewer);
         let scoped_admin = RoleBinding::scoped(BuiltInRole::Admin, ["group-a".to_owned()]).unwrap();
         let mixed = resolve_capabilities(&[global_viewer, scoped_admin]);
@@ -214,6 +228,11 @@ mod tests {
             global_admin
                 .iter()
                 .any(|item| item.permission == Permission::RbacManage)
+        );
+        assert!(
+            global_admin
+                .iter()
+                .any(|item| item.permission == Permission::RulesRead)
         );
     }
 

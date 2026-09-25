@@ -1,9 +1,18 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 
+function renderAsSeededPersona(path: string, persona: string) {
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => key === "openvibes.dev.persona" ? persona : null,
+  });
+  return renderToStaticMarkup(<App path={path} seeded />);
+}
+
 describe("console shell", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("renders navigation landmarks, the skip link, and seeded warning", () => {
     const markup = renderToStaticMarkup(<App path="/findings" seeded />);
 
@@ -38,7 +47,7 @@ describe("console shell", () => {
   });
 
   it("renders the bounded audit search screen", () => {
-    const markup = renderToStaticMarkup(<App path="/audit" seeded />);
+    const markup = renderAsSeededPersona("/audit", "admin");
 
     expect(markup).toContain("Privileged activity");
     expect(markup).toContain('name="actor"');
@@ -48,9 +57,23 @@ describe("console shell", () => {
   });
 
   it("renders the access-control inventory screen", () => {
-    const markup = renderToStaticMarkup(<App path="/access" seeded />);
+    const markup = renderAsSeededPersona("/access", "admin");
     expect(markup).toContain("Roles and access bindings");
     expect(markup).toContain("Loading current data");
     expect(markup).not.toContain("Workspace ready for bounded console data");
+  });
+
+  it("hides Rule sets from Viewer and denies direct navigation", () => {
+    const navigation = renderAsSeededPersona("/", "viewer");
+    expect(navigation).not.toContain('href="/rule-sets"');
+
+    const restrictedPage = renderAsSeededPersona("/rule-sets", "viewer");
+    expect(restrictedPage).toContain("You do not have access to this page");
+    expect(restrictedPage).not.toContain('id="rules-title"');
+  });
+
+  it("shows Rule sets to Admin", () => {
+    const markup = renderAsSeededPersona("/", "admin");
+    expect(markup).toContain('href="/rule-sets"');
   });
 });

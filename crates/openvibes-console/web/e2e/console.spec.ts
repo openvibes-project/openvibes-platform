@@ -37,7 +37,10 @@ async function mockAuthenticatedSession(page: Page): Promise<void> {
       principal: { id: "test-user", display_name: "Test Operator" },
       authentication_method: "local_password",
       authentication_level: "single_factor",
-      capabilities: [],
+      capabilities: [
+        { permission: "agents.read", scope: { kind: "global" } },
+        { permission: "findings.read", scope: { kind: "global" } },
+      ],
       csrf_token: "c".repeat(43),
       idle_expires_at: "2026-09-24T23:59:00Z",
       absolute_expires_at: "2026-09-25T07:29:00Z",
@@ -159,7 +162,10 @@ test("completes the browser login, session check, and sign-out journey", async (
       principal: { id: "test-user", display_name: "Test Operator" },
       authentication_method: "local_password",
       authentication_level: "single_factor",
-      capabilities: [],
+      capabilities: [
+        { permission: "agents.read", scope: { kind: "global" } },
+        { permission: "findings.read", scope: { kind: "global" } },
+      ],
       csrf_token: sessionToken,
       idle_expires_at: "2026-09-24T23:59:00Z",
       absolute_expires_at: "2026-09-25T07:29:00Z",
@@ -334,7 +340,7 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
 
   await page.goto("/agents");
   await selectDemoOption(page, "Data scenario", "permission_removed");
-  await expect(page.getByRole("heading", { name: "Access unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You do not have access to this page" })).toBeVisible();
 
   await page.goto("/findings");
   await selectDemoOption(page, "Data scenario", "expired_session");

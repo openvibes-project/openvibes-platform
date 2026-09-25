@@ -881,6 +881,10 @@ mod tests {
 
     #[test]
     fn seeded_personas_use_the_approved_builtin_role_permissions() {
+        assert!(!Persona::Viewer.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(!Persona::Analyst.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));
