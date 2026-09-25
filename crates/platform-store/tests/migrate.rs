@@ -135,6 +135,9 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
                     has_table_privilege('openvibes_console', 'console_sessions', 'UPDATE'),
                     has_table_privilege('openvibes_console', 'agents', 'UPDATE'),
                     has_table_privilege('openvibes_console', 'certificates', 'SELECT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'SELECT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'INSERT'),
+                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'UPDATE'),
                     has_table_privilege('openvibes_console', 'audit_log', 'INSERT'),
                     has_table_privilege('openvibes_console', 'audit_log', 'UPDATE')",
             &[],
@@ -148,8 +151,14 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
         row.get::<_, bool>(3),
         row.get::<_, bool>(4),
         row.get::<_, bool>(5),
+        row.get::<_, bool>(6),
+        row.get::<_, bool>(7),
+        row.get::<_, bool>(8),
     );
-    assert_eq!(rights, (true, true, false, true, true, false));
+    assert_eq!(
+        rights,
+        (true, true, false, true, true, false, false, true, false)
+    );
     drop(client);
     db.drop().await;
 }

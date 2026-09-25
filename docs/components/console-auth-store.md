@@ -38,6 +38,11 @@ tokens, and CSRF values stay in the console process.
   Active bearer
   authentication checks token expiry/revocation and account enabled state on
   each request, then resolves the account's current role bindings.
+- Rule-bundle publication uses the shared rule store to recheck set lifecycle,
+  monotonic version, exact-byte replay, and active issuer trust under the set
+  advisory lock. Console publication writes the bundle and a redacted audit
+  row in the same transaction. Migration 10 grants the console role `SELECT`
+  on public trust keys only; trust-key changes remain local CLI operations.
 - `preview_agent_tags` reports group and scoped-binding membership changes for
   a proposed tag set. `apply_agent_tags` verifies the preview token under a
   transaction lock, then replaces tags and records detailed impact atomically.

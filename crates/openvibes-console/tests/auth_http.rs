@@ -8,15 +8,62 @@ use axum::{
     extract::ConnectInfo,
     http::{Request, StatusCode, header},
 };
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
+use ed25519_dalek::{Signer, SigningKey};
 use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
+use openvibes_core::{
+    Confidence, Identifier, PayloadEncoding, ResourceLimits, Rule, RuleSet, SchemaVersion,
+    Severity, SignedRuleEnvelope,
+};
 use platform_store::{
     self,
     console_auth::{NewLocalUser, create_local_user},
     ingest::{self, StoredFinding},
 };
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use tower::ServiceExt;
+
+fn signed_rule_envelope(version: u64) -> (Vec<u8>, [u8; 32]) {
+    const DAY_MS: i64 = 86_400_000;
+    let payload = serde_json::to_string(&RuleSet {
+        schema_version: SchemaVersion::V1,
+        rules: vec![Rule {
+            id: Identifier::new("baseline.rule").unwrap(),
+            version: 1,
+            title: "HTTP integration rule".into(),
+            severity: Severity::Info,
+            confidence: Confidence::new(100).unwrap(),
+            expression: "facts['process.count'] >= 1".into(),
+            finding_message: format!("version {version}"),
+        }],
+    })
+    .unwrap();
+    let now = Utc::now().timestamp_millis();
+    let mut envelope = SignedRuleEnvelope {
+        schema_version: SchemaVersion::V1,
+        rule_set_id: Identifier::new("baseline").unwrap(),
+        rule_set_version: version,
+        issuer_key_id: Identifier::new("org.rules").unwrap(),
+        created_at_unix_ms: now - DAY_MS,
+        expires_at_unix_ms: now + 30 * DAY_MS,
+        payload_encoding: PayloadEncoding::Json,
+        payload_sha256_hex: Sha256::digest(payload.as_bytes())
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect(),
+        payload,
+        signature_base64url: String::new(),
+    };
+    let key = SigningKey::from_bytes(&[7; 32]);
+    let preimage = openvibes_rules::signing_preimage(&envelope, ResourceLimits::V1).unwrap();
+    envelope.signature_base64url = URL_SAFE_NO_PAD.encode(key.sign(&preimage).to_bytes());
+    (
+        serde_json::to_vec(&envelope).unwrap(),
+        key.verifying_key().to_bytes(),
+    )
+}
 
 struct TestDb {
     pool: platform_store::Pool,
@@ -647,6 +694,113 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     )
     .await;
     assert_eq!(token_revoked.status(), StatusCode::NO_CONTENT);
+    let (signed_envelope, public_key) = signed_rule_envelope(1);
+    let mut rules_client = db.pool.get().await.unwrap();
+    assert_eq!(
+        platform_store::rules::add_trust_key(
+            &mut rules_client,
+            "baseline",
+            "org.rules",
+            public_key
+        )
+        .await
+        .unwrap(),
+        platform_store::rules::TrustAdded::Added
+    );
+    drop(rules_client);
+    let preview = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/rule-bundles/preview")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(signed_envelope.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let preview_body: Value =
+        serde_json::from_slice(&to_bytes(preview.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(preview_body["rule_set_id"], "baseline");
+    assert_eq!(preview_body["version"], 1);
+    let preview_token = preview_body["preview_token"].as_str().unwrap();
+    let publish = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/rule-bundles/publish")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header("x-rule-preview-token", preview_token)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(signed_envelope.clone()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(publish.status(), StatusCode::CREATED);
+    let publish_replay = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/rule-bundles/publish")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header("x-rule-preview-token", preview_token)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(signed_envelope))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(publish_replay.status(), StatusCode::NO_CONTENT);
+    let rule_sets = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/rule-sets")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rule_sets.status(), StatusCode::OK);
+    let rule_sets: Value =
+        serde_json::from_slice(&to_bytes(rule_sets.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(rule_sets["items"][0]["current_version"], 1);
+    let rule_history = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/rule-sets/baseline/bundles")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(rule_history.status(), StatusCode::OK);
+    let rule_history: Value =
+        serde_json::from_slice(&to_bytes(rule_history.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(rule_history["items"].as_array().unwrap().len(), 1);
+    let rule_audit = db.pool.get().await.unwrap();
+    let previews:i64=rule_audit.query_one("SELECT count(*) FROM audit_log WHERE action='rule_bundle.previewed' AND target='baseline v1'",&[]).await.unwrap().get(0);
+    let publishes:i64=rule_audit.query_one("SELECT count(*) FROM audit_log WHERE action='rule_bundle.published' AND target_id='baseline v1'",&[]).await.unwrap().get(0);
+    assert_eq!(previews, 1);
+    assert_eq!(publishes, 2);
     let revoked_bearer = router
         .clone()
         .oneshot(

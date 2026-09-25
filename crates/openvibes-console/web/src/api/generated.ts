@@ -382,6 +382,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rule-bundles/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Verifies an uploaded signed bundle and returns an exact-bytes confirmation token. */
+        post: operations["preview_authenticated_rule_bundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-bundles/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Re-verifies a previewed envelope before publishing its exact signed bytes. */
+        post: operations["publish_authenticated_rule_bundle"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-sets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists rule sets and safe current-version metadata. */
+        get: operations["authenticated_rule_sets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-sets/{rule_set_id}/bundles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists a rule set's published bundle metadata. */
+        get: operations["authenticated_rule_bundles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/service-accounts": {
         parameters: {
             query?: never;
@@ -1098,6 +1166,99 @@ export interface components {
             /** @description Short operator reason recorded in the audit event. */
             reason: string;
         };
+        /** @description Published bundle history for one set. */
+        RuleBundlePage: {
+            /** @description Bundles newest first. */
+            items: components["schemas"]["RuleBundleView"][];
+        };
+        /** @description Signature and version details returned by upload preview. */
+        RuleBundlePreview: {
+            /**
+             * Format: int64
+             * @description Current version at preview time.
+             */
+            current_version?: number | null;
+            /** @description SHA-256 of exact envelope bytes. */
+            envelope_sha256: string;
+            /**
+             * Format: int64
+             * @description Signed expiry instant, in Unix milliseconds.
+             */
+            expires_at_ms: number;
+            /** @description Trusted issuer key id. */
+            issuer_key_id: string;
+            /** @description Token to send with the exact same bytes to publish. */
+            preview_token: string;
+            /** @description Rule-set identifier. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Signed version.
+             */
+            version: number;
+        };
+        /** @description A published signed-bundle metadata row. */
+        RuleBundleView: {
+            /**
+             * Format: int32
+             * @description Stored envelope bytes.
+             */
+            bytes: number;
+            /**
+             * Format: int64
+             * @description Signed creation and expiry instants, in Unix milliseconds.
+             */
+            created_at_ms: number;
+            /** @description SHA-256 of exact signed bytes, lower-case hexadecimal. */
+            envelope_sha256: string;
+            /**
+             * Format: int64
+             * @description Signed expiry instant, in Unix milliseconds.
+             */
+            expires_at_ms: number;
+            /** @description Trusted issuer key id at publish time. */
+            issuer_key_id: string;
+            /** @description Server-side publish instant. */
+            published_at: string;
+            /** @description Operator who published it. */
+            published_by: string;
+            /**
+             * Format: int64
+             * @description Monotonically increasing version.
+             */
+            version: number;
+        };
+        /** @description Published rule-set inventory. */
+        RuleSetPage: {
+            /** @description Rule sets sorted by identifier. */
+            items: components["schemas"]["RuleSetView"][];
+        };
+        /** @description Published rule-set summary for the console. */
+        RuleSetView: {
+            /**
+             * Format: int64
+             * @description Current signed expiry, in Unix milliseconds.
+             */
+            current_expires_at_ms?: number | null;
+            /** @description Issuer of the current bundle. */
+            current_issuer_key_id?: string | null;
+            /** @description True when the current bundle's signer has been removed from trust. */
+            current_signer_removed: boolean;
+            /**
+             * Format: int64
+             * @description Highest published version, when present.
+             */
+            current_version?: number | null;
+            /** @description Whether operators retired this set. */
+            retired: boolean;
+            /** @description Rule-set identifier. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Number of currently trusted public keys.
+             */
+            trusted_keys: number;
+        };
         /** @description Request to create or replace an asset group's complete selector set. */
         SaveAssetGroupRequest: {
             /** @description Operator-facing group name. */
@@ -1183,6 +1344,41 @@ export interface components {
          * @enum {string}
          */
         Severity: "critical" | "high" | "medium" | "low";
+        /** @description Accepted signed-envelope JSON shape for preview and publish requests. */
+        SignedRuleEnvelopeRequest: {
+            /**
+             * Format: int64
+             * @description Creation time in Unix milliseconds.
+             */
+            created_at_unix_ms: number;
+            /**
+             * Format: int64
+             * @description Expiry time in Unix milliseconds.
+             */
+            expires_at_unix_ms: number;
+            /** @description Trusted Ed25519 issuer identifier. */
+            issuer_key_id: string;
+            /** @description Exact UTF-8 signed payload. */
+            payload: string;
+            /** @description Payload encoding (`json` or `yaml`). */
+            payload_encoding: string;
+            /** @description Lowercase SHA-256 digest of the payload. */
+            payload_sha256_hex: string;
+            /** @description Stable rule-set identifier. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Monotonically increasing version.
+             */
+            rule_set_version: number;
+            /**
+             * Format: int32
+             * @description Envelope schema version (currently 1).
+             */
+            schema_version: number;
+            /** @description Base64url Ed25519 signature. */
+            signature_base64url: string;
+        };
         /** @description Request body for changing audit retention. */
         UpdateAuditRetentionRequest: {
             /**
@@ -2393,6 +2589,131 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    preview_authenticated_rule_bundle: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignedRuleEnvelopeRequest"];
+            };
+        };
+        responses: {
+            /** @description Verified bundle preview */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleBundlePreview"];
+                };
+            };
+            /** @description Envelope signature or trust validation failed */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    publish_authenticated_rule_bundle: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description SHA-256 confirmation token returned by preview */
+                "X-Rule-Preview-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignedRuleEnvelopeRequest"];
+            };
+        };
+        responses: {
+            /** @description Bundle stored */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Identical bundle already stored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stale version, retired set, or issuer no longer trusted */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_rule_sets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rule-set summaries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleSetPage"];
+                };
+            };
+        };
+    };
+    authenticated_rule_bundles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bundle history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleBundlePage"];
+                };
+            };
+            /** @description Rule set not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -47,6 +47,12 @@ permission-checked read models, enrollment-token management, and audit routes.
   are rejected when mixed with a browser cookie. The first-release adapter
   refuses bearer-authenticated mutations; those require a browser session and
   CSRF checks.
+- `/api/v1/rule-sets` and per-set bundle history are global `rules.read`
+  reads. Rule upload preview verifies the Ed25519 signature, envelope digest,
+  expiry, parser limits, and currently trusted issuer against read-only public
+  trust keys. Publish repeats verification, binds the confirmation token to
+  the exact bytes, and stores the bundle plus its audit row atomically. The
+  console never manages private signing keys or trust-key changes.
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -57,8 +63,8 @@ permission-checked read models, enrollment-token management, and audit routes.
 
 The router constructor accepts a `platform_store::Pool` and canonical public
 origin. The executable constructs it when strict config supplies both
-`database_url` and `public_origin`, and requires that migrations have already
-advanced the database to schema 9. Startup never runs migrations. The current
+  `database_url` and `public_origin`, and requires that migrations have already
+advanced the database to schema 10. Startup never runs migrations. The current
 listener is loopback-only and config accepts only canonical HTTP loopback
 origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
 are ignored. When auth settings are absent, the executable serves the C0

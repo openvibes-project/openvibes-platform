@@ -1647,6 +1647,157 @@
         }
       }
     },
+    "/api/v1/rule-bundles/preview": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Verifies an uploaded signed bundle and returns an exact-bytes confirmation token.",
+        "operationId": "preview_authenticated_rule_bundle",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedRuleEnvelopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Verified bundle preview",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleBundlePreview"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Envelope signature or trust validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-bundles/publish": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Re-verifies a previewed envelope before publishing its exact signed bytes.",
+        "operationId": "publish_authenticated_rule_bundle",
+        "parameters": [
+          {
+            "name": "X-Rule-Preview-Token",
+            "in": "header",
+            "description": "SHA-256 confirmation token returned by preview",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignedRuleEnvelopeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Bundle stored"
+          },
+          "204": {
+            "description": "Identical bundle already stored"
+          },
+          "409": {
+            "description": "Stale version, retired set, or issuer no longer trusted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-sets": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Lists rule sets and safe current-version metadata.",
+        "operationId": "authenticated_rule_sets",
+        "responses": {
+          "200": {
+            "description": "Rule-set summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleSetPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-sets/{rule_set_id}/bundles": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "summary": "Lists a rule set's published bundle metadata.",
+        "operationId": "authenticated_rule_bundles",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bundle history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleBundlePage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Rule set not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-accounts": {
       "get": {
         "tags": [
@@ -3643,6 +3794,190 @@
         },
         "additionalProperties": false
       },
+      "RuleBundlePage": {
+        "type": "object",
+        "description": "Published bundle history for one set.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleBundleView"
+            },
+            "description": "Bundles newest first."
+          }
+        }
+      },
+      "RuleBundlePreview": {
+        "type": "object",
+        "description": "Signature and version details returned by upload preview.",
+        "required": [
+          "rule_set_id",
+          "version",
+          "issuer_key_id",
+          "expires_at_ms",
+          "envelope_sha256",
+          "preview_token"
+        ],
+        "properties": {
+          "current_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Current version at preview time."
+          },
+          "envelope_sha256": {
+            "type": "string",
+            "description": "SHA-256 of exact envelope bytes."
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed expiry instant, in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted issuer key id."
+          },
+          "preview_token": {
+            "type": "string",
+            "description": "Token to send with the exact same bytes to publish."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule-set identifier."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed version."
+          }
+        }
+      },
+      "RuleBundleView": {
+        "type": "object",
+        "description": "A published signed-bundle metadata row.",
+        "required": [
+          "version",
+          "envelope_sha256",
+          "issuer_key_id",
+          "created_at_ms",
+          "expires_at_ms",
+          "published_at",
+          "published_by",
+          "bytes"
+        ],
+        "properties": {
+          "bytes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Stored envelope bytes."
+          },
+          "created_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed creation and expiry instants, in Unix milliseconds."
+          },
+          "envelope_sha256": {
+            "type": "string",
+            "description": "SHA-256 of exact signed bytes, lower-case hexadecimal."
+          },
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed expiry instant, in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted issuer key id at publish time."
+          },
+          "published_at": {
+            "type": "string",
+            "description": "Server-side publish instant."
+          },
+          "published_by": {
+            "type": "string",
+            "description": "Operator who published it."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonically increasing version."
+          }
+        }
+      },
+      "RuleSetPage": {
+        "type": "object",
+        "description": "Published rule-set inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleSetView"
+            },
+            "description": "Rule sets sorted by identifier."
+          }
+        }
+      },
+      "RuleSetView": {
+        "type": "object",
+        "description": "Published rule-set summary for the console.",
+        "required": [
+          "rule_set_id",
+          "current_signer_removed",
+          "trusted_keys",
+          "retired"
+        ],
+        "properties": {
+          "current_expires_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Current signed expiry, in Unix milliseconds."
+          },
+          "current_issuer_key_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Issuer of the current bundle."
+          },
+          "current_signer_removed": {
+            "type": "boolean",
+            "description": "True when the current bundle's signer has been removed from trust."
+          },
+          "current_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Highest published version, when present."
+          },
+          "retired": {
+            "type": "boolean",
+            "description": "Whether operators retired this set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule-set identifier."
+          },
+          "trusted_keys": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of currently trusted public keys."
+          }
+        }
+      },
       "SaveAssetGroupRequest": {
         "type": "object",
         "description": "Request to create or replace an asset group's complete selector set.",
@@ -3856,6 +4191,71 @@
           "medium",
           "low"
         ]
+      },
+      "SignedRuleEnvelopeRequest": {
+        "type": "object",
+        "description": "Accepted signed-envelope JSON shape for preview and publish requests.",
+        "required": [
+          "schema_version",
+          "rule_set_id",
+          "rule_set_version",
+          "issuer_key_id",
+          "created_at_unix_ms",
+          "expires_at_unix_ms",
+          "payload_encoding",
+          "payload",
+          "payload_sha256_hex",
+          "signature_base64url"
+        ],
+        "properties": {
+          "created_at_unix_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Creation time in Unix milliseconds."
+          },
+          "expires_at_unix_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expiry time in Unix milliseconds."
+          },
+          "issuer_key_id": {
+            "type": "string",
+            "description": "Trusted Ed25519 issuer identifier."
+          },
+          "payload": {
+            "type": "string",
+            "description": "Exact UTF-8 signed payload."
+          },
+          "payload_encoding": {
+            "type": "string",
+            "description": "Payload encoding (`json` or `yaml`)."
+          },
+          "payload_sha256_hex": {
+            "type": "string",
+            "description": "Lowercase SHA-256 digest of the payload."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Stable rule-set identifier."
+          },
+          "rule_set_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonically increasing version.",
+            "minimum": 0
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Envelope schema version (currently 1).",
+            "minimum": 0
+          },
+          "signature_base64url": {
+            "type": "string",
+            "description": "Base64url Ed25519 signature."
+          }
+        },
+        "additionalProperties": false
       },
       "UpdateAuditRetentionRequest": {
         "type": "object",

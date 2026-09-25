@@ -184,6 +184,13 @@ use counts. The console stores only the SHA-256 digest of the token's decoded
 24-hour request/response replay record, and audit event together; listing
 never exposes secret material.
 
+## Console rule verification reads (schema 10)
+
+Migration 10 grants `openvibes_console` `SELECT` on `rule_trust_keys` so the
+console can verify uploaded signed envelopes against the active public keys.
+It grants no trust-key mutation rights; adding/removing keys remains an audited
+local `openvibes-admin` operation.
+
 ## Test
 
 ```sh

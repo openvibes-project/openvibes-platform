@@ -7,7 +7,7 @@ behaviour, and how to test. Updated in the same change as the component.
 |---|---|---|---|
 | `platform-config` | library | built (PM0) | [platform-config.md](platform-config.md) |
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
-| `platform-store` | library | schema 9, rule distribution, console identity/sessions, partitions, status, tokens, agents, CA certificates (PM1, PM2, C2, C3) | [platform-store.md](platform-store.md) |
+| `platform-store` | library | schema 10, rule distribution, console identity/sessions, partitions, status, tokens, agents, CA certificates (PM1, PM2, C2, C3) | [platform-store.md](platform-store.md) |
 | `platform_store::console_auth` | module | local identity/session store, access inventory, asset-group/tag changes, enrollment tokens, and service-account bearer tokens (C3) | [console-auth-store.md](console-auth-store.md) |
 | `platform_store::console_read` | module | bounded, cursor-paginated console read models and SQL-enforced scoped agent reads (C2/C3) | [console-read.md](console-read.md) |
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |
@@ -19,8 +19,8 @@ behaviour, and how to test. Updated in the same change as the component.
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
 | `openvibes-console` | web application and `/api/v1` | seeded C1 read slice; C3 local auth runtime and readiness; request limits; offline build path | [openvibes-console.md](openvibes-console.md) |
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
-| `console-auth-http` | console module | pre-auth, local login/logout, scoped reads, enrollment/service-account APIs, bearer-read auth, and per-request capabilities (C3) | [console-auth-http.md](console-auth-http.md) |
-| `console-auth-ui` | web module | local login page, session gate, logout action, enrollment, and service-account management (C3) | [console-auth-ui.md](console-auth-ui.md) |
+| `console-auth-http` | console module | pre-auth, local login/logout, scoped reads, token/service-account/rule APIs, bearer-read auth, and per-request capabilities (C3) | [console-auth-http.md](console-auth-http.md) |
+| `console-auth-ui` | web module | local login page, session gate, logout action, enrollment, service-account, and signed rule-bundle management (C3) | [console-auth-ui.md](console-auth-ui.md) |
 | `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 

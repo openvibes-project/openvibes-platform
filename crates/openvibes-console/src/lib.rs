@@ -37,8 +37,10 @@ pub use api::{
     EnrollmentTokenView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
     FindingSummary, FindingView, LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE,
     PaginationError, Permission, PermissionScope, PreauthResponse, RevokeAgentRequest,
+    RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
     SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
-    ServiceTokenView, SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
+    ServiceTokenView, SessionPrincipal, SessionResponse, Severity, SignedRuleEnvelopeRequest,
+    UpdateAuditRetentionRequest,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
