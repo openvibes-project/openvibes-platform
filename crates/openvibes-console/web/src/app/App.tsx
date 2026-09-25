@@ -7,6 +7,7 @@ import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
 import { AccessControlReadPage, AgentsReadPage, AuditEventsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
 import { navigationGroups, resolvePage } from "./navigation";
+import { EnrollmentPage } from "./Enrollment";
 
 type AppProps = {
   path?: string;
@@ -169,10 +170,11 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
 
               {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
               {path === "/agents" ? <AgentsReadPage seeded={seeded} csrfToken={session?.csrf_token} canManageTags={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} canRevoke={!seeded && session?.capabilities.some((capability) => capability.permission === "agents.revoke") === true} /> : null}
+              {path === "/enrollment" ? <EnrollmentPage csrfToken={session?.csrf_token} canRead={seeded || session?.capabilities.some((capability) => capability.permission === "tokens.read" && capability.scope.kind === "global") === true} canCreate={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.create" && capability.scope.kind === "global") === true} canRevoke={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.revoke" && capability.scope.kind === "global") === true} /> : null}
               {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
               {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
               {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} canManageGroups={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
-              {!["/", "/agents", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
+              {!["/", "/agents", "/enrollment", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
                   <p className="eyebrow">Interface foundation</p>

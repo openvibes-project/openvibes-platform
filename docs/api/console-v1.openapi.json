@@ -1043,6 +1043,172 @@
         }
       }
     },
+    "/api/v1/enrollment-tokens": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Lists bounded, secret-free enrollment-token metadata.",
+        "operationId": "authenticated_enrollment_tokens",
+        "responses": {
+          "200": {
+            "description": "Newest 100 enrollment tokens without secret material",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenPage"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Creates an enrollment token, returning the secret once and storing only its hash.",
+        "operationId": "create_authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Required retry key; same key and request replays metadata without the secret",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEnrollmentTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent replay; secret unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Token secret shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedEnrollmentToken"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid token settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was used with different settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens/{token_id}": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Reads one enrollment-token record without revealing its secret.",
+        "operationId": "authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Secret-free token metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EnrollmentTokenView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Token not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/enrollment-tokens/{token_id}/revoke": {
+      "post": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Revokes one enrollment token under the global `tokens.revoke` permission.",
+        "operationId": "revoke_authenticated_enrollment_token",
+        "parameters": [
+          {
+            "name": "token_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Token revoked"
+          },
+          "404": {
+            "description": "Token not found or already revoked",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/findings/history": {
       "get": {
         "tags": [
@@ -2481,6 +2647,71 @@
         },
         "additionalProperties": false
       },
+      "CreateEnrollmentTokenRequest": {
+        "type": "object",
+        "description": "Bounded one-time enrollment-token creation request.",
+        "required": [
+          "expires_in_hours",
+          "max_uses"
+        ],
+        "properties": {
+          "expires_in_hours": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Validity in hours, from one through 8760.",
+            "minimum": 0
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Optional operator label."
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Number of enrollments, from one through 100000.",
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreatedEnrollmentToken": {
+        "type": "object",
+        "description": "Enrollment token secret, returned only at creation time.",
+        "required": [
+          "token_id",
+          "replayed",
+          "secret_available",
+          "expires_at"
+        ],
+        "properties": {
+          "expires_at": {
+            "type": "string",
+            "description": "RFC3339 expiry instant."
+          },
+          "replayed": {
+            "type": "boolean",
+            "description": "True when this response replays creation metadata for the same key."
+          },
+          "secret_available": {
+            "type": "boolean",
+            "description": "Whether the plaintext is present in this response."
+          },
+          "token": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Secret token. Never returned by list or revoke operations."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token identifier."
+          }
+        }
+      },
       "CursorPagination": {
         "type": "object",
         "description": "Validated cursor and limit accepted by cursor-paginated collection routes.",
@@ -2519,6 +2750,69 @@
           "scope": {
             "$ref": "#/components/schemas/PermissionScope",
             "description": "Effective global or asset-group scope for the permission."
+          }
+        }
+      },
+      "EnrollmentTokenPage": {
+        "type": "object",
+        "description": "Full bounded enrollment-token inventory.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EnrollmentTokenView"
+            },
+            "description": "Tokens newest first, without secret material."
+          }
+        }
+      },
+      "EnrollmentTokenView": {
+        "type": "object",
+        "description": "Safe enrollment-token listing row.",
+        "required": [
+          "token_id",
+          "created_at",
+          "expires_at",
+          "max_uses",
+          "uses",
+          "revoked"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "string",
+            "description": "Creation instant."
+          },
+          "expires_at": {
+            "type": "string",
+            "description": "Expiry instant."
+          },
+          "label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator label."
+          },
+          "max_uses": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Maximum enrollments."
+          },
+          "revoked": {
+            "type": "boolean",
+            "description": "Whether the token was revoked."
+          },
+          "token_id": {
+            "type": "string",
+            "description": "Stable token identifier."
+          },
+          "uses": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Completed enrollments."
           }
         }
       },

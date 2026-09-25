@@ -176,6 +176,14 @@ and update console-owned state; it cannot update agent/finding source data or
 modify/delete audit rows. This migration establishes tables and grants;
 bounded transactional store operations follow in C3 work.
 
+## Console enrollment-token administration (schema 9)
+
+Migration 9 grants the console role access to enrollment-token metadata and
+use counts. The console stores only the SHA-256 digest of the token's decoded
+32-byte secret. Its idempotent creation transaction stores the token,
+24-hour request/response replay record, and audit event together; listing
+never exposes secret material.
+
 ## Test
 
 ```sh

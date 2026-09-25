@@ -1,9 +1,8 @@
 # Console authentication HTTP adapter
 
 The C3 HTTP adapter validates a browser session against `platform_store::console_auth`
-and builds the stable `GET /api/v1/session` response. It exposes no data routes;
-the C2 global read models remain unavailable through this router until their
-queries enforce the caller's asset-group scope.
+and builds the stable `GET /api/v1/session` response. It also exposes
+permission-checked read models, enrollment-token management, and audit routes.
 
 ## Interface
 
@@ -29,6 +28,14 @@ queries enforce the caller's asset-group scope.
 - `POST /auth/v1/logout` enforces the same Origin and synchronizer-token checks,
   revokes only the presented session, records the logout in the audit log, and
   clears the session cookie. Repeating logout remains safe.
+- `GET /api/v1/enrollment-tokens` returns at most 100 newest token metadata
+  rows and never returns token hashes or plaintext. `POST` requires
+  `tokens.create`, CSRF, and an `Idempotency-Key`; successful creation returns
+  the secret once, while a same-key/same-request retry returns metadata with
+  `secret_available=false`. Reusing a key for different settings returns 409.
+  `GET /api/v1/enrollment-tokens/{token_id}` returns one secret-free record.
+  `POST /api/v1/enrollment-tokens/{token_id}/revoke` requires `tokens.revoke`
+  and audits the revocation. These responses are `Cache-Control: no-store`.
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
@@ -40,7 +47,7 @@ queries enforce the caller's asset-group scope.
 The router constructor accepts a `platform_store::Pool` and canonical public
 origin. The executable constructs it when strict config supplies both
 `database_url` and `public_origin`, and requires that migrations have already
-advanced the database to schema 8. Startup never runs migrations. The current
+advanced the database to schema 9. Startup never runs migrations. The current
 listener is loopback-only and config accepts only canonical HTTP loopback
 origins. Login throttling uses trusted socket `ConnectInfo`; forwarded headers
 are ignored. When auth settings are absent, the executable serves the C0

@@ -594,3 +594,5 @@ h2 {
 .agent-revoke { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 .agent-revoke form { display: grid; gap: 0.75rem; max-width: 38rem; }
 .agent-revoke label { display: grid; gap: 0.35rem; }
+.one-time-secret { display: grid; gap: 0.75rem; margin: 1rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: var(--radius-md); }
+.one-time-secret code { overflow-wrap: anywhere; }

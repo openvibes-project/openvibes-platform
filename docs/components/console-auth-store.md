@@ -24,6 +24,13 @@ tokens, and CSRF values stay in the console process.
 - `save_asset_group` creates or replaces a complete bounded selector set and
   its audit detail atomically. Selector writes share a transaction advisory
   lock with tag mutations so a tag impact preview cannot race selector edits.
+- `create_enrollment_token` stores only the SHA-256 digest of the decoded
+  32-byte secret. It serializes each actor/idempotency-key pair and atomically
+  stores token metadata, a 24-hour request/response idempotency record, and
+  the audit event. A matching retry returns metadata only; a different request
+  under the same key conflicts. `list_enrollment_tokens` returns bounded
+  secret-free metadata; `revoke_enrollment_token` commits its audit row with
+  the revocation.
 - `preview_agent_tags` reports group and scoped-binding membership changes for
   a proposed tag set. `apply_agent_tags` verifies the preview token under a
   transaction lock, then replaces tags and records detailed impact atomically.

@@ -136,6 +136,33 @@ async fn api_json(
         .unwrap()
 }
 
+async fn api_json_idempotent(
+    router: &axum::Router,
+    uri: &str,
+    cookie: &str,
+    csrf: &str,
+    key: &str,
+    body: &str,
+) -> axum::response::Response {
+    router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header(header::COOKIE, cookie)
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", csrf)
+                .header("idempotency-key", key)
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(body.to_owned()))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+}
+
 #[tokio::test]
 async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
@@ -424,6 +451,103 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         audited >= 2,
         "both successful tag replacements must be audited"
     );
+    let token_creation_body = r#"{"label":"http journey","expires_in_hours":24,"max_uses":2}"#;
+    let idempotency_key = "console-http-token-create-key-01";
+    let created_token = api_json_idempotent(
+        &router,
+        "/api/v1/enrollment-tokens",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        idempotency_key,
+        token_creation_body,
+    )
+    .await;
+    assert_eq!(created_token.status(), StatusCode::CREATED);
+    assert_eq!(
+        created_token.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let created_token: Value =
+        serde_json::from_slice(&to_bytes(created_token.into_body(), 8192).await.unwrap()).unwrap();
+    let token_secret = created_token["token"].as_str().unwrap();
+    assert_eq!(token_secret.len(), 43);
+    let token_id = created_token["token_id"].as_str().unwrap();
+    let replay = api_json_idempotent(
+        &router,
+        "/api/v1/enrollment-tokens",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        idempotency_key,
+        token_creation_body,
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay: Value =
+        serde_json::from_slice(&to_bytes(replay.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(replay["replayed"], true);
+    assert_eq!(replay["secret_available"], false);
+    assert!(replay["token"].is_null());
+    assert_eq!(replay["token_id"], token_id);
+    let conflict = api_json_idempotent(
+        &router,
+        "/api/v1/enrollment-tokens",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        idempotency_key,
+        r#"{"label":"other","expires_in_hours":24,"max_uses":2}"#,
+    )
+    .await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let token_list = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/enrollment-tokens")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(token_list.status(), StatusCode::OK);
+    assert_eq!(
+        token_list.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let token_list: Value =
+        serde_json::from_slice(&to_bytes(token_list.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(token_list["items"][0]["token_id"], token_id);
+    assert!(token_list["items"][0].get("token").is_none());
+    let token_detail = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("/api/v1/enrollment-tokens/{token_id}"))
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(token_detail.status(), StatusCode::OK);
+    assert_eq!(
+        token_detail.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    let token_detail: Value =
+        serde_json::from_slice(&to_bytes(token_detail.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(token_detail["token_id"], token_id);
+    assert!(token_detail.get("token").is_none());
+    let revoked_token = api_json(
+        &router,
+        "POST",
+        &format!("/api/v1/enrollment-tokens/{token_id}/revoke"),
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        "",
+    )
+    .await;
+    assert_eq!(revoked_token.status(), StatusCode::NO_CONTENT);
     let admin_binding_id = access["bindings"]
         .as_array()
         .unwrap()

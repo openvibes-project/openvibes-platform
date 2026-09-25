@@ -6,10 +6,11 @@ use chrono::{Duration, Utc};
 use common::TestDb;
 use platform_store::console_auth::{
     AgentTag, NewLocalUser, NewPreauth, NewSession, clear_login_throttle, consume_preauth,
-    create_local_user, create_preauth, create_session, credential_by_username, disable_local_user,
-    list_local_users, login_is_throttled, record_login_failure, rehash_password, replace_password,
-    revoke_user_sessions, save_asset_group, session, touch_session, unlock_local_user,
-    user_role_bindings,
+    create_enrollment_token, create_local_user, create_preauth, create_session,
+    credential_by_username, disable_local_user, list_enrollment_tokens, list_local_users,
+    login_is_throttled, record_login_failure, rehash_password, replace_password,
+    revoke_enrollment_token, revoke_user_sessions, save_asset_group, session, touch_session,
+    unlock_local_user, user_role_bindings,
 };
 use sha2::{Digest, Sha256};
 
@@ -61,6 +62,103 @@ async fn asset_group_selector_replacement_and_audit_are_atomic() {
     assert_eq!(updated.selectors, ["environment=prod", "region=north"]);
     let audits: i64=client.query_one("SELECT count(*) FROM audit_log WHERE action IN ('asset_group.created','asset_group.updated') AND target_id=$1",&[&created.asset_group_id]).await.unwrap().get(0);
     assert_eq!(audits, 2);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn enrollment_token_changes_are_audited_and_listing_is_secret_free() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    let hash = [7u8; 32];
+    let key_hash = [1u8; 32];
+    let request_hash = [2u8; 32];
+    let expiry = now + Duration::days(2);
+    let creation = create_enrollment_token(
+        &mut client,
+        &platform_store::console_auth::NewConsoleEnrollmentToken {
+            secret_sha256: &hash,
+            label: Some("staging"),
+            actor_id: "operator",
+            now,
+            expires_at: expiry,
+            max_uses: 3,
+            idempotency_key_sha256: &key_hash,
+            request_sha256: &request_hash,
+        },
+    )
+    .await
+    .unwrap();
+    let id = match creation {
+        platform_store::console_auth::EnrollmentTokenCreation::Created { token_id } => token_id,
+        other => panic!("unexpected creation result: {other:?}"),
+    };
+    let listed = list_enrollment_tokens(&client, 100).await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].token_id, id);
+    assert_eq!(listed[0].label.as_deref(), Some("staging"));
+    assert!(!format!("{listed:?}").contains("070707"));
+    let stored: Vec<u8> = client
+        .query_one(
+            "SELECT token_sha256 FROM enrollment_tokens WHERE token_id::text=$1",
+            &[&id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(stored, hash);
+    let replay_secret_hash = [9u8; 32];
+    assert!(matches!(
+        create_enrollment_token(
+            &mut client,
+            &platform_store::console_auth::NewConsoleEnrollmentToken {
+                secret_sha256: &replay_secret_hash,
+                label: Some("staging"),
+                actor_id: "operator",
+                now,
+                expires_at: expiry,
+                max_uses: 3,
+                idempotency_key_sha256: &key_hash,
+                request_sha256: &request_hash,
+            },
+        )
+        .await
+        .unwrap(),
+        platform_store::console_auth::EnrollmentTokenCreation::Replayed{token_id,..} if token_id==id
+    ));
+    let different_secret_hash = [8u8; 32];
+    let different_request_hash = [3u8; 32];
+    assert_eq!(
+        create_enrollment_token(
+            &mut client,
+            &platform_store::console_auth::NewConsoleEnrollmentToken {
+                secret_sha256: &different_secret_hash,
+                label: Some("different"),
+                actor_id: "operator",
+                now,
+                expires_at: expiry,
+                max_uses: 3,
+                idempotency_key_sha256: &key_hash,
+                request_sha256: &different_request_hash,
+            },
+        )
+        .await
+        .unwrap(),
+        platform_store::console_auth::EnrollmentTokenCreation::Conflict
+    );
+    assert!(
+        revoke_enrollment_token(&mut client, &id, "operator", now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !revoke_enrollment_token(&mut client, &id, "operator", now)
+            .await
+            .unwrap()
+    );
+    let events:i64=client.query_one("SELECT count(*) FROM audit_log WHERE target_id=$1 AND action IN ('enrollment_token.created','enrollment_token.revoked')",&[&id]).await.unwrap().get(0);
+    assert_eq!(events, 2);
     db.drop().await;
 }
 

@@ -332,6 +332,144 @@ pub async fn revoke_agent_in_scope(
     })
 }
 
+/// Outcome of idempotent enrollment-token creation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EnrollmentTokenCreation {
+    /// Newly created token. The plaintext exists only in the caller.
+    Created {
+        /// Stable token UUID.
+        token_id: String,
+    },
+    /// Previously created metadata; the token secret cannot be recovered.
+    Replayed {
+        /// Stable token UUID.
+        token_id: String,
+        /// Expiry instant.
+        expires_at: DateTime<Utc>,
+    },
+    /// The idempotency key was already used for a different request.
+    Conflict,
+}
+
+/// Inputs for one idempotent enrollment-token creation transaction.
+pub struct NewConsoleEnrollmentToken<'a> {
+    /// SHA-256 of the decoded one-time token secret.
+    pub secret_sha256: &'a [u8; 32],
+    /// Optional operator label.
+    pub label: Option<&'a str>,
+    /// Authenticated actor identifier.
+    pub actor_id: &'a str,
+    /// Creation instant.
+    pub now: DateTime<Utc>,
+    /// Expiry instant.
+    pub expires_at: DateTime<Utc>,
+    /// Maximum successful enrollments.
+    pub max_uses: i32,
+    /// SHA-256 of the caller-provided idempotency key.
+    pub idempotency_key_sha256: &'a [u8; 32],
+    /// SHA-256 of the normalized request body.
+    pub request_sha256: &'a [u8; 32],
+}
+
+/// Creates a hashed enrollment token and its idempotency/audit rows atomically.
+pub async fn create_enrollment_token(
+    client: &mut Client,
+    request: &NewConsoleEnrollmentToken<'_>,
+) -> Result<EnrollmentTokenCreation, StoreError> {
+    let NewConsoleEnrollmentToken {
+        secret_sha256,
+        label,
+        actor_id,
+        now,
+        expires_at,
+        max_uses,
+        idempotency_key_sha256,
+        request_sha256,
+    } = request;
+    let tx = client.transaction().await?;
+    let lock_key = format!(
+        "enrollment_token.create:{actor_id}:{}",
+        encode_hex(*idempotency_key_sha256)
+    );
+    tx.query_one(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        &[&lock_key],
+    )
+    .await?;
+    tx.execute("DELETE FROM console_idempotency WHERE actor_id=$1 AND operation='enrollment_token.create' AND key_sha256=$2 AND expires_at<=$3",&[&actor_id,&&idempotency_key_sha256[..],&now]).await?;
+    if let Some(existing)=tx.query_opt("SELECT request_sha256,response_body->>'token_id',response_body->>'expires_at' FROM console_idempotency WHERE actor_id=$1 AND operation='enrollment_token.create' AND key_sha256=$2 AND expires_at>$3",&[&actor_id,&&idempotency_key_sha256[..],&now]).await? {
+        let old_hash:Vec<u8>=existing.get(0);
+        if old_hash.as_slice()!=*request_sha256 { tx.rollback().await?; return Ok(EnrollmentTokenCreation::Conflict); }
+        let token_id:String=existing.get(1);let expiry:String=existing.get(2);
+        let expires_at=DateTime::parse_from_rfc3339(&expiry).map_err(|_|StoreError::Query)?.with_timezone(&Utc);
+        tx.rollback().await?;
+        return Ok(EnrollmentTokenCreation::Replayed{token_id,expires_at});
+    }
+    let row=tx.query_one("INSERT INTO enrollment_tokens(token_id,token_sha256,label,created_at,created_by,expires_at,max_uses) VALUES(gen_random_uuid(),$1,$2,$3,$4,$5,$6) RETURNING token_id::text",&[&&secret_sha256[..],&label,&now,&actor_id,&expires_at,&max_uses]).await?;
+    let id: String = row.get(0);
+    let expiry_text = expires_at.to_rfc3339();
+    tx.execute("INSERT INTO console_idempotency(actor_id,operation,key_sha256,request_sha256,response_status,response_body,created_at,expires_at) VALUES($1,'enrollment_token.create',$2,$3,201,jsonb_build_object('token_id',$4::text,'expires_at',$5::text),$6,$6::timestamptz+interval '24 hours')",&[&actor_id,&&idempotency_key_sha256[..],&&request_sha256[..],&id,&expiry_text,&now]).await?;
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'enrollment_token.created','enrollment_token','success',jsonb_build_object('label',$2::text,'expires_at',$3::text,'max_uses',$4::integer),'user',$1,$1,'enrollment_token',$5)",&[&actor_id,&label,&expires_at.to_rfc3339(),&max_uses,&id]).await?;
+    tx.commit().await?;
+    Ok(EnrollmentTokenCreation::Created { token_id: id })
+}
+
+/// Revokes an enrollment token and audits a successful change atomically.
+pub async fn revoke_enrollment_token(
+    client: &mut Client,
+    token_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let tx = client.transaction().await?;
+    let row=tx.query_opt("UPDATE enrollment_tokens SET revoked_at=$2 WHERE token_id::text=$1 AND revoked_at IS NULL RETURNING token_id::text",&[&token_id,&now]).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(false);
+    };
+    let id: String = row.get(0);
+    tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'enrollment_token.revoked','enrollment_token','success','{}'::jsonb,'user',$1,$1,'enrollment_token',$2)",&[&actor_id,&id]).await?;
+    tx.commit().await?;
+    Ok(true)
+}
+
+/// Lists the newest `limit` safe enrollment-token metadata rows.
+pub async fn list_enrollment_tokens(
+    client: &Client,
+    limit: i64,
+) -> Result<Vec<crate::tokens::TokenInfo>, StoreError> {
+    let rows=client.query("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL FROM enrollment_tokens t ORDER BY t.created_at DESC,t.token_id ASC LIMIT $1",&[&limit]).await?;
+    Ok(rows
+        .into_iter()
+        .map(|row| crate::tokens::TokenInfo {
+            token_id: row.get(0),
+            label: row.get(1),
+            created_at: row.get(2),
+            expires_at: row.get(3),
+            max_uses: row.get(4),
+            uses: row.get(5),
+            revoked: row.get(6),
+        })
+        .collect())
+}
+
+/// Returns safe metadata for one enrollment token, without secret material.
+pub async fn enrollment_token(
+    client: &Client,
+    token_id: &str,
+) -> Result<Option<crate::tokens::TokenInfo>, StoreError> {
+    let row = client.query_opt("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL FROM enrollment_tokens t WHERE t.token_id::text=$1", &[&token_id]).await?;
+    Ok(row.map(|row| crate::tokens::TokenInfo {
+        token_id: row.get(0),
+        label: row.get(1),
+        created_at: row.get(2),
+        expires_at: row.get(3),
+        max_uses: row.get(4),
+        uses: row.get(5),
+        revoked: row.get(6),
+    }))
+}
+
 /// Previews exact-tag membership changes without modifying the database.
 pub async fn preview_agent_tags(
     client: &Client,

@@ -250,6 +250,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/enrollment-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists bounded, secret-free enrollment-token metadata. */
+        get: operations["authenticated_enrollment_tokens"];
+        put?: never;
+        /** Creates an enrollment token, returning the secret once and storing only its hash. */
+        post: operations["create_authenticated_enrollment_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enrollment-tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Reads one enrollment-token record without revealing its secret. */
+        get: operations["authenticated_enrollment_token"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enrollment-tokens/{token_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes one enrollment token under the global `tokens.revoke` permission. */
+        post: operations["revoke_authenticated_enrollment_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/history": {
         parameters: {
             query?: never;
@@ -673,6 +725,34 @@ export interface components {
             /** @description Stable local-user UUID. */
             user_id: string;
         };
+        /** @description Bounded one-time enrollment-token creation request. */
+        CreateEnrollmentTokenRequest: {
+            /**
+             * Format: int32
+             * @description Validity in hours, from one through 8760.
+             */
+            expires_in_hours: number;
+            /** @description Optional operator label. */
+            label?: string | null;
+            /**
+             * Format: int32
+             * @description Number of enrollments, from one through 100000.
+             */
+            max_uses: number;
+        };
+        /** @description Enrollment token secret, returned only at creation time. */
+        CreatedEnrollmentToken: {
+            /** @description RFC3339 expiry instant. */
+            expires_at: string;
+            /** @description True when this response replays creation metadata for the same key. */
+            replayed: boolean;
+            /** @description Whether the plaintext is present in this response. */
+            secret_available: boolean;
+            /** @description Secret token. Never returned by list or revoke operations. */
+            token?: string | null;
+            /** @description Stable token identifier. */
+            token_id: string;
+        };
         /** @description Validated cursor and limit accepted by cursor-paginated collection routes. */
         CursorPagination: {
             cursor?: string | null;
@@ -688,6 +768,34 @@ export interface components {
             permission: components["schemas"]["Permission"];
             /** @description Effective global or asset-group scope for the permission. */
             scope: components["schemas"]["PermissionScope"];
+        };
+        /** @description Full bounded enrollment-token inventory. */
+        EnrollmentTokenPage: {
+            /** @description Tokens newest first, without secret material. */
+            items: components["schemas"]["EnrollmentTokenView"][];
+        };
+        /** @description Safe enrollment-token listing row. */
+        EnrollmentTokenView: {
+            /** @description Creation instant. */
+            created_at: string;
+            /** @description Expiry instant. */
+            expires_at: string;
+            /** @description Operator label. */
+            label?: string | null;
+            /**
+             * Format: int32
+             * @description Maximum enrollments.
+             */
+            max_uses: number;
+            /** @description Whether the token was revoked. */
+            revoked: boolean;
+            /** @description Stable token identifier. */
+            token_id: string;
+            /**
+             * Format: int64
+             * @description Completed enrollments.
+             */
+            uses: number;
         };
         /** @description Safe validation detail for one request field. */
         FieldError: {
@@ -1698,6 +1806,140 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_enrollment_tokens: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Newest 100 enrollment tokens without secret material */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentTokenPage"];
+                };
+            };
+        };
+    };
+    create_authenticated_enrollment_token: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Required retry key; same key and request replays metadata without the secret */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEnrollmentTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Idempotent replay; secret unavailable */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedEnrollmentToken"];
+                };
+            };
+            /** @description Token secret shown once */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedEnrollmentToken"];
+                };
+            };
+            /** @description Invalid token settings */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Idempotency key was used with different settings */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_enrollment_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Secret-free token metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnrollmentTokenView"];
+                };
+            };
+            /** @description Token not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_authenticated_enrollment_token: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Token revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Token not found or already revoked */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -19,7 +19,7 @@ to `openvibes-admin tui`.
 The design is approved. C0 and C1 are complete. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 8, and serves
+the executable connects to PostgreSQL, requires schema version 9, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -38,7 +38,11 @@ sign-out action, and its production Overview, Agents, Findings, Audit, and
 Access control pages use authenticated APIs. Agent detail also provides a
 reason-required revoke operation; the store enforces the effective global or
 asset-group scope in SQL and commits revocation with its audit row.
-The C1 seeded read slice is
+Enrollment-token listing, one-time secret creation with idempotent retries,
+and audited revocation are available through global `tokens.read`,
+`tokens.create`, and `tokens.revoke` capabilities. The token secret is stored
+only as the same SHA-256 digest used by ingest, and is never repeated on a
+replayed create response. The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
 React shell, exact static-asset routing, report-only security headers, locked
@@ -99,8 +103,8 @@ resolve current permission scopes for each request and apply asset-group
 selectors in SQL before pagination or aggregation. Control-plane reads and
 audit operations remain unavailable.
 
-The implemented production UI covers sign-in, overview, agents, and findings.
-Analyst triage, enrollment tokens, pre-signed rule bundles, access control and
+The implemented production UI covers sign-in, overview, agents, findings,
+and enrollment tokens. Analyst triage, pre-signed rule bundles, access control and
 exact agent tags, service accounts, and the audit log, retention policy, and
 bounded CSV export are still planned. CA and rule-trust-key administration
 remain CLI-only.
@@ -124,7 +128,7 @@ public_origin = "http://localhost:8443" # required with database_url
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
 origin, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if
-bound elsewhere. Startup checks that the database is already at schema 8; it
+bound elsewhere. Startup checks that the database is already at schema 9; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -175,7 +179,7 @@ banner are never included in the production RPM.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 8; it does not migrate. The configured Host
+  schema version other than 9; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener; forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist

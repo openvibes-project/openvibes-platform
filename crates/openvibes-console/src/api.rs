@@ -367,6 +367,59 @@ pub struct RevokeAgentRequest {
     pub reason: String,
 }
 
+/// Bounded one-time enrollment-token creation request.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateEnrollmentTokenRequest {
+    /// Validity in hours, from one through 8760.
+    pub expires_in_hours: u32,
+    /// Number of enrollments, from one through 100000.
+    pub max_uses: u32,
+    /// Optional operator label.
+    pub label: Option<String>,
+}
+
+/// Enrollment token secret, returned only at creation time.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct CreatedEnrollmentToken {
+    /// Stable token identifier.
+    pub token_id: String,
+    /// Secret token. Never returned by list or revoke operations.
+    pub token: Option<String>,
+    /// True when this response replays creation metadata for the same key.
+    pub replayed: bool,
+    /// Whether the plaintext is present in this response.
+    pub secret_available: bool,
+    /// RFC3339 expiry instant.
+    pub expires_at: String,
+}
+
+/// Safe enrollment-token listing row.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct EnrollmentTokenView {
+    /// Stable token identifier.
+    pub token_id: String,
+    /// Operator label.
+    pub label: Option<String>,
+    /// Creation instant.
+    pub created_at: String,
+    /// Expiry instant.
+    pub expires_at: String,
+    /// Maximum enrollments.
+    pub max_uses: i32,
+    /// Completed enrollments.
+    pub uses: i64,
+    /// Whether the token was revoked.
+    pub revoked: bool,
+}
+
+/// Full bounded enrollment-token inventory.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct EnrollmentTokenPage {
+    /// Tokens newest first, without secret material.
+    pub items: Vec<EnrollmentTokenView>,
+}
+
 /// Request to assign a role to one local user with optional asset-group scope.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

@@ -18,6 +18,12 @@ session cookie.
   synthetic personas.
 - The application shell's Sign out action POSTs /auth/v1/logout with the
   current session CSRF token.
+- `/enrollment` lists the latest 100 enrollment-token metadata rows for users
+  with global `tokens.read`. Users with `tokens.create` can issue bounded
+  tokens; the UI displays the secret once and provides a copy action. It keeps
+  an idempotency key for a retry after a failed request and clearly reports
+  when the server confirms creation but cannot return the original secret.
+  Users with `tokens.revoke` can revoke usable tokens after confirmation.
 - The production Overview, Agents, and Findings pages use the authenticated
   C2 read routes. Demo persona headers and unsupported free-text filters are
   only used in the explicitly seeded development experience.
