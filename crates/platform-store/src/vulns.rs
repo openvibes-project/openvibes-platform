@@ -7,6 +7,9 @@ use serde_json::Value;
 
 use crate::{Client, StoreError};
 
+mod feeds;
+pub use feeds::*;
+
 /// A package version that fixes an advisory.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FixedRow {
@@ -156,6 +159,8 @@ pub struct Candidate {
     pub fixed: (i32, String, String),
     /// Installed epoch, version, release.
     pub installed: (i32, String, String),
+    /// The host's running kernel (`uname -r`), when reported.
+    pub running_kernel: Option<String>,
 }
 
 /// Candidates on one release, optionally for one host only.
@@ -168,7 +173,7 @@ pub async fn candidates(
     let rows = client
         .query(
             "SELECT h.agent_id, ap.advisory_id, ap.name, ap.arch, ap.epoch, ap.version,
-                    ap.release, pv.epoch, pv.version, pv.release
+                    ap.release, pv.epoch, pv.version, pv.release, g.running_kernel
              FROM advisories a
              JOIN advisory_packages ap ON ap.advisory_id = a.advisory_id
              JOIN package_versions pv ON pv.name = ap.name
@@ -190,6 +195,7 @@ pub async fn candidates(
             fixed_arch: row.get(3),
             fixed: (row.get(4), row.get(5), row.get(6)),
             installed: (row.get(7), row.get(8), row.get(9)),
+            running_kernel: row.get(10),
         })
         .collect())
 }
@@ -210,7 +216,7 @@ pub async fn host_release(
 }
 
 /// A vulnerability found by matching: the affected packages as JSON
-/// (`[{name, installed, fixed}]`).
+/// (`[{name, installed, fixed, running?}]`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Found {
     /// Host.
@@ -219,6 +225,9 @@ pub struct Found {
     pub advisory_id: String,
     /// Affected packages.
     pub packages: Value,
+    /// Every affected package is a kernel whose fix is installed but not
+    /// running: a reboot, not an update, closes it.
+    pub reboot_needed: bool,
 }
 
 /// Which hosts a matching run covered.
@@ -248,14 +257,17 @@ pub async fn apply(
     let agents: Vec<&str> = found.iter().map(|f| f.agent_id.as_str()).collect();
     let advisories: Vec<&str> = found.iter().map(|f| f.advisory_id.as_str()).collect();
     let packages: Vec<&Value> = found.iter().map(|f| &f.packages).collect();
+    let reboots: Vec<bool> = found.iter().map(|f| f.reboot_needed).collect();
     transaction
         .execute(
-            "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
-                 last_evaluated_at)
-             SELECT a, v, p, $4, $4 FROM unnest($1::text[], $2::text[], $3::jsonb[]) AS x(a, v, p)
+            "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, reboot_needed,
+                 first_seen_at, last_evaluated_at)
+             SELECT a, v, p, r, $4, $4
+             FROM unnest($1::text[], $2::text[], $3::jsonb[], $5::bool[]) AS x(a, v, p, r)
              ON CONFLICT (agent_id, advisory_id) DO UPDATE SET packages = EXCLUDED.packages,
+                 reboot_needed = EXCLUDED.reboot_needed,
                  last_evaluated_at = EXCLUDED.last_evaluated_at, fixed_at = NULL",
-            &[&agents, &advisories, &packages, &now],
+            &[&agents, &advisories, &packages, &now, &reboots],
         )
         .await?;
     let fixed = "UPDATE vulnerabilities SET fixed_at = $3, last_evaluated_at = $3
@@ -288,85 +300,6 @@ pub async fn apply(
     Ok(found.len())
 }
 
-/// A feed's state after a check or import.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FeedState {
-    /// e.g. `fedora-44-x86_64`.
-    pub source: String,
-    /// e.g. `fedora`.
-    pub os_id: String,
-    /// e.g. `44`.
-    pub os_version: String,
-    /// e.g. `x86_64`.
-    pub arch: String,
-    /// Last check (download or import attempt).
-    pub last_checked_at: Option<DateTime<Utc>>,
-    /// Last time the content changed.
-    pub last_changed_at: Option<DateTime<Utc>>,
-    /// Advisories in the last good content.
-    pub advisories: i32,
-    /// Last error, cleared by a good check.
-    pub last_error: Option<String>,
-}
-
-/// Records a check: `Ok((sha256, advisories))` for new good content, or an
-/// error message (the previous content and advisories are kept).
-pub async fn record_feed(
-    client: &Client,
-    source: (&str, &str, &str, &str),
-    outcome: Result<([u8; 32], i32), &str>,
-    now: DateTime<Utc>,
-) -> Result<(), StoreError> {
-    let (source, os_id, os_version, arch) = source;
-    match outcome {
-        Ok((sha256, advisories)) => client
-            .execute(
-                "INSERT INTO feed_sources (source, os_id, os_version, arch, last_checked_at,
-                     last_changed_at, content_sha256, advisories, last_error)
-                 VALUES ($1, $2, $3, $4, $5, $5, $6, $7, NULL)
-                 ON CONFLICT (source) DO UPDATE SET last_checked_at = $5,
-                     last_changed_at = CASE WHEN feed_sources.content_sha256 IS DISTINCT FROM $6
-                         THEN $5 ELSE feed_sources.last_changed_at END,
-                     content_sha256 = $6, advisories = $7, last_error = NULL",
-                &[&source, &os_id, &os_version, &arch, &now, &sha256.as_slice(), &advisories],
-            )
-            .await?,
-        Err(error) => client
-            .execute(
-                "INSERT INTO feed_sources (source, os_id, os_version, arch, last_checked_at, last_error)
-                 VALUES ($1, $2, $3, $4, $5, $6)
-                 ON CONFLICT (source) DO UPDATE SET last_checked_at = $5, last_error = $6",
-                &[&source, &os_id, &os_version, &arch, &now, &error],
-            )
-            .await?,
-    };
-    Ok(())
-}
-
-/// Every feed's state.
-pub async fn feeds(client: &Client) -> Result<Vec<FeedState>, StoreError> {
-    let rows = client
-        .query(
-            "SELECT source, os_id, os_version, arch, last_checked_at, last_changed_at,
-                    advisories, last_error FROM feed_sources ORDER BY source",
-            &[],
-        )
-        .await?;
-    Ok(rows
-        .iter()
-        .map(|row| FeedState {
-            source: row.get(0),
-            os_id: row.get(1),
-            os_version: row.get(2),
-            arch: row.get(3),
-            last_checked_at: row.get(4),
-            last_changed_at: row.get(5),
-            advisories: row.get(6),
-            last_error: row.get(7),
-        })
-        .collect())
-}
-
 /// One vulnerability as operators see it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VulnRow {
@@ -388,6 +321,8 @@ pub struct VulnRow {
     pub first_seen_at: DateTime<Utc>,
     /// Fixed, or `None` while open.
     pub fixed_at: Option<DateTime<Utc>>,
+    /// Fix installed, reboot needed.
+    pub reboot_needed: bool,
 }
 
 /// Filters for [`list`].
@@ -412,7 +347,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
             "SELECT v.agent_id, g.hostname, v.advisory_id, a.severity, a.title,
                     COALESCE(array_agg(c.cve_id ORDER BY c.cve_id)
                         FILTER (WHERE c.cve_id IS NOT NULL), '{}'),
-                    v.packages, v.first_seen_at, v.fixed_at
+                    v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed
              FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
              JOIN agents g ON g.agent_id = v.agent_id
@@ -424,7 +359,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                AND ($5::text IS NULL OR EXISTS (SELECT 1 FROM advisory_cves x
                     WHERE x.advisory_id = v.advisory_id AND x.cve_id = $5))
              GROUP BY v.agent_id, g.hostname, v.advisory_id, a.severity, a.title,
-                      v.packages, v.first_seen_at, v.fixed_at
+                      v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed
              ORDER BY array_position(ARRAY['critical','important','moderate','low','unrated'],
                           a.severity), v.first_seen_at, v.agent_id
              LIMIT 10000",
@@ -449,6 +384,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
             packages: row.get(6),
             first_seen_at: row.get(7),
             fixed_at: row.get(8),
+            reboot_needed: row.get(9),
         })
         .collect())
 }
@@ -462,6 +398,9 @@ pub struct Summary {
     pub hosts: i64,
     /// Hosts with the most open: (agent id, hostname, open, critical+important).
     pub top_hosts: Vec<(String, Option<String>, i64, i64)>,
+    /// Hosts whose only missing step is a reboot into an installed kernel
+    /// fix; those are a state of their own, not counted as open.
+    pub reboot_hosts: i64,
 }
 
 /// Counts open vulnerabilities (aggregated in SQL, so any fleet size).
@@ -470,7 +409,7 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .query(
             "SELECT a.severity, count(*) FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
-             WHERE v.fixed_at IS NULL GROUP BY a.severity
+             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed GROUP BY a.severity
              ORDER BY array_position(ARRAY['critical','important','moderate','low','unrated'],
                           a.severity)",
             &[],
@@ -479,13 +418,14 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .iter()
         .map(|row| (row.get(0), row.get(1)))
         .collect();
-    let hosts: i64 = client
+    let hosts = client
         .query_one(
-            "SELECT count(DISTINCT agent_id) FROM vulnerabilities WHERE fixed_at IS NULL",
+            "SELECT count(DISTINCT agent_id) FILTER (WHERE NOT reboot_needed),
+                    count(DISTINCT agent_id) FILTER (WHERE reboot_needed)
+             FROM vulnerabilities WHERE fixed_at IS NULL",
             &[],
         )
-        .await?
-        .get(0);
+        .await?;
     let top_hosts = client
         .query(
             "SELECT v.agent_id, g.hostname, count(*),
@@ -493,7 +433,7 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
              FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
              JOIN agents g ON g.agent_id = v.agent_id
-             WHERE v.fixed_at IS NULL
+             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
              GROUP BY v.agent_id, g.hostname ORDER BY 4 DESC, 3 DESC, 1 LIMIT 10",
             &[],
         )
@@ -503,49 +443,8 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .collect();
     Ok(Summary {
         by_severity,
-        hosts,
+        hosts: hosts.get(0),
         top_hosts,
+        reboot_hosts: hosts.get(1),
     })
-}
-
-/// The digest of a feed's last good content, if any.
-pub async fn feed_digest(client: &Client, source: &str) -> Result<Option<[u8; 32]>, StoreError> {
-    let row = client
-        .query_opt(
-            "SELECT content_sha256 FROM feed_sources WHERE source = $1",
-            &[&source],
-        )
-        .await?;
-    Ok(row
-        .and_then(|row| row.get::<_, Option<Vec<u8>>>(0))
-        .and_then(|bytes| bytes.try_into().ok()))
-}
-
-/// Records a check that found the content unchanged.
-pub async fn touch_feed(
-    client: &Client,
-    source: &str,
-    now: DateTime<Utc>,
-) -> Result<(), StoreError> {
-    client
-        .execute(
-            "UPDATE feed_sources SET last_checked_at = $2, last_error = NULL WHERE source = $1",
-            &[&source, &now],
-        )
-        .await?;
-    Ok(())
-}
-
-/// The Fedora releases hosts report, e.g. `["43", "44"]`.
-pub async fn fedora_releases(client: &Client) -> Result<Vec<String>, StoreError> {
-    Ok(client
-        .query(
-            "SELECT DISTINCT os_version FROM agents WHERE os_id = 'fedora'
-               AND os_version IS NOT NULL ORDER BY 1",
-            &[],
-        )
-        .await?
-        .iter()
-        .map(|row| row.get(0))
-        .collect())
 }

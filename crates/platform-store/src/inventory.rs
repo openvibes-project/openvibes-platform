@@ -35,11 +35,14 @@ pub enum InventoryOutcome {
 
 /// Replaces a host's inventory in one transaction, unless its digest equals
 /// the stored one, and notifies `inventory_changed` with the agent id.
+/// `running_kernel` is the `uname -r` release (protocol P9), when reported.
+#[allow(clippy::too_many_arguments)]
 pub async fn replace(
     client: &mut Client,
     agent_id: &str,
     os_id: &str,
     os_version: &str,
+    running_kernel: Option<&str>,
     packages: &[PackageRow],
     sha256: [u8; 32],
     now: DateTime<Utc>,
@@ -92,8 +95,15 @@ pub async fn replace(
     transaction
         .execute(
             "UPDATE agents SET os_id = $2, os_version = $3, inventory_sha256 = $4,
-                 inventory_at = $5 WHERE agent_id = $1",
-            &[&agent_id, &os_id, &os_version, &sha256.as_slice(), &now],
+                 inventory_at = $5, running_kernel = $6 WHERE agent_id = $1",
+            &[
+                &agent_id,
+                &os_id,
+                &os_version,
+                &sha256.as_slice(),
+                &now,
+                &running_kernel,
+            ],
         )
         .await?;
     transaction

@@ -4,6 +4,8 @@
 //! the host's **newest** installed version of that name with a compatible
 //! architecture (same, or either side `noarch`) is lower in RPM order. So an
 //! old kernel kept beside a fixed one does not count, as `dnf` decides.
+//! A kernel whose fix is installed still counts while the host runs an
+//! older one (protocol P9): open, flagged "fix installed, reboot needed".
 
 use std::collections::BTreeMap;
 
@@ -55,6 +57,29 @@ fn key(evr: &(i32, String, String)) -> (u32, &str, &str) {
     )
 }
 
+/// Packages that are the running kernel: their fix counts once booted.
+fn is_kernel(name: &str) -> bool {
+    matches!(name, "kernel" | "kernel-core") || name.starts_with("kernel-modules")
+}
+
+/// A `uname -r` release (`6.17.4-300.fc44.x86_64`, optionally `+debug`) as
+/// epoch, version, release. Fedora kernels have epoch 0.
+fn running_evr(uname: &str) -> Option<(i32, String, String)> {
+    const ARCHES: [&str; 7] = [
+        "x86_64", "aarch64", "ppc64le", "s390x", "i686", "armv7hl", "riscv64",
+    ];
+    let uname = uname.split('+').next()?;
+    let uname = match uname.rsplit_once('.') {
+        Some((rest, arch)) if ARCHES.contains(&arch) => rest,
+        _ => uname,
+    };
+    let (version, release) = uname.split_once('-')?;
+    Some((0, version.to_owned(), release.to_owned()))
+}
+
+/// An affected package's JSON entry, and whether only a reboot is missing.
+type Entry = (serde_json::Value, bool);
+
 /// Decides which candidates are vulnerable; pure, so it is unit tested.
 #[must_use]
 pub fn evaluate(candidates: &[Candidate]) -> Vec<Found> {
@@ -73,29 +98,64 @@ pub fn evaluate(candidates: &[Candidate]) -> Vec<Found> {
             *slot = candidate;
         }
     }
-    // Affected packages per (host, advisory), one entry per package name.
-    let mut affected: BTreeMap<(&str, &str), BTreeMap<&str, serde_json::Value>> = BTreeMap::new();
+    // Affected packages per (host, advisory), one entry per package name,
+    // each with whether only a reboot is missing.
+    let mut affected: BTreeMap<(&str, &str), BTreeMap<&str, Entry>> = BTreeMap::new();
     for ((agent, advisory, name, _), candidate) in newest {
-        if compare_evr(key(&candidate.installed), key(&candidate.fixed)).is_lt() {
-            affected
-                .entry((agent, advisory))
-                .or_default()
-                .entry(name)
-                .or_insert_with(|| {
-                    json!({
-                        "name": name,
-                        "installed": evr(&candidate.installed),
-                        "fixed": evr(&candidate.fixed),
-                    })
-                });
+        let fixed = key(&candidate.fixed);
+        let update = compare_evr(key(&candidate.installed), fixed).is_lt();
+        let running = candidate
+            .running_kernel
+            .as_deref()
+            .filter(|_| is_kernel(name))
+            .and_then(running_evr)
+            .filter(|running| compare_evr(key(running), fixed).is_lt());
+        if !update && running.is_none() {
+            continue;
         }
+        let mut entry = json!({
+            "name": name,
+            "installed": evr(&candidate.installed),
+            "fixed": evr(&candidate.fixed),
+        });
+        if let Some(running) = &running {
+            entry["running"] = evr(running).into();
+        }
+        affected
+            .entry((agent, advisory))
+            .or_default()
+            .entry(name)
+            .or_insert((entry, !update));
     }
     affected
         .into_iter()
         .map(|((agent, advisory), packages)| Found {
             agent_id: agent.to_owned(),
             advisory_id: advisory.to_owned(),
-            packages: serde_json::Value::Array(packages.into_values().collect()),
+            reboot_needed: packages.values().all(|(_, reboot)| *reboot),
+            packages: serde_json::Value::Array(
+                packages.into_values().map(|(entry, _)| entry).collect(),
+            ),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::running_evr;
+
+    #[test]
+    fn reads_uname_releases() {
+        let evr = |v: &str, r: &str| Some((0, v.to_owned(), r.to_owned()));
+        assert_eq!(
+            running_evr("6.17.4-300.fc44.x86_64"),
+            evr("6.17.4", "300.fc44")
+        );
+        assert_eq!(
+            running_evr("6.17.4-300.fc44.x86_64+debug"),
+            evr("6.17.4", "300.fc44")
+        );
+        assert_eq!(running_evr("6.17.4-300.fc44"), evr("6.17.4", "300.fc44"));
+        assert_eq!(running_evr("6.17.4"), None);
+    }
 }

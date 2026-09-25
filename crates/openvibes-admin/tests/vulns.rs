@@ -55,6 +55,7 @@ async fn ready() -> Fixture {
         HOST,
         "fedora",
         "44",
+        None,
         &packages,
         [1; 32],
         Utc::now(),
@@ -121,6 +122,37 @@ async fn an_imported_feed_opens_vulnerabilities_operators_can_read() {
         .map(|(action, _, _)| action)
         .collect();
     assert!(actions.contains(&"feeds import".to_owned()), "{actions:?}");
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn a_kernel_awaiting_reboot_is_shown_as_such() {
+    let fixture = ready().await;
+    stdout(&fixture.run(&["feeds", "import", &feed(), "--source", "fedora-44-x86_64"]));
+    // As matching records it (protocol P9); the fixture feed has no kernel.
+    let pool = platform_store::connect(&fixture.url).await.unwrap();
+    pool.get()
+        .await
+        .unwrap()
+        .execute(
+            r#"UPDATE vulnerabilities SET reboot_needed = true, packages =
+                 '[{"name":"kernel-core","installed":"0:6.17.7-1.fc44","fixed":"0:6.17.6-1.fc44","running":"0:6.17.4-1.fc44"}]'"#,
+            &[],
+        )
+        .await
+        .unwrap();
+    let list = stdout(&fixture.run(&["vulns", "list"]));
+    assert!(
+        list.contains("kernel-core 0:6.17.7-1.fc44 -> 0:6.17.6-1.fc44 (running 0:6.17.4-1.fc44)"),
+        "{list}"
+    );
+    assert!(list.contains("fix installed, reboot needed"), "{list}");
+    // A separate state: not counted as open (the user's decision).
+    let summary = stdout(&fixture.run(&["vulns", "summary"]));
+    assert!(
+        summary.starts_with("open 0 on 0 hosts: none\nfix installed, reboot needed on 1 hosts\n"),
+        "{summary}"
+    );
     fixture.drop().await;
 }
 

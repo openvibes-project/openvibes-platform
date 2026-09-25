@@ -129,6 +129,7 @@ async fn setup() -> (TestDb, platform_store::Client) {
         agent,
         "fedora",
         "44",
+        None,
         &[wordpress],
         [1; 32],
         Utc::now(),

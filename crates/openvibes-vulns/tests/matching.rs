@@ -49,11 +49,23 @@ fn pkg(name: &str, epoch: i32, version: &str, arch: &str) -> PackageRow {
 }
 
 async fn host(admin: &mut Client, agent: &str, release: &str, packages: &[PackageRow], digest: u8) {
+    booted(admin, agent, release, packages, None, digest).await;
+}
+
+async fn booted(
+    admin: &mut Client,
+    agent: &str,
+    release: &str,
+    packages: &[PackageRow],
+    kernel: Option<&str>,
+    digest: u8,
+) {
     inventory::replace(
         admin,
         agent,
         "fedora",
         release,
+        kernel,
         packages,
         [digest; 32],
         Utc::now(),
@@ -244,6 +256,97 @@ async fn several_installed_versions_count_by_the_newest() {
         packages[0]["installed"], "0:6.17.5-1.fc44",
         "the newest installed"
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn an_installed_kernel_fix_counts_once_it_runs() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let kernels = [
+        pkg("kernel-core", 0, "6.17.4", "x86_64"),
+        pkg("kernel-core", 0, "6.17.7", "x86_64"),
+    ];
+    // A: fix installed, old kernel running. B: fix running. Neither host
+    // reported a kernel before P9: B's twin without one counts as fixed.
+    booted(
+        &mut admin,
+        A,
+        "44",
+        &kernels,
+        Some("6.17.4-1.fc44.x86_64"),
+        1,
+    )
+    .await;
+    booted(
+        &mut admin,
+        B,
+        "44",
+        &kernels,
+        Some("6.17.7-1.fc44.x86_64"),
+        2,
+    )
+    .await;
+    load(
+        &mut vulns,
+        &[advisory("FEDORA-K", "kernel-core", 0, "6.17.6", "x86_64")],
+        "44",
+    )
+    .await;
+    matching::match_release(&mut vulns, "fedora", "44", Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(open(&vulns, A).await, ["FEDORA-K"]);
+    assert!(open(&vulns, B).await.is_empty());
+    let row = vulns
+        .query_one(
+            "SELECT packages, reboot_needed FROM vulnerabilities WHERE agent_id = $1",
+            &[&A],
+        )
+        .await
+        .unwrap();
+    let packages: serde_json::Value = row.get(0);
+    assert_eq!(packages[0]["installed"], "0:6.17.7-1.fc44");
+    assert_eq!(packages[0]["running"], "0:6.17.4-1.fc44");
+    assert!(row.get::<_, bool>(1), "fix installed, reboot needed");
+
+    // A reboots into the fix: its next inventory closes it.
+    booted(
+        &mut admin,
+        A,
+        "44",
+        &kernels,
+        Some("6.17.7-1.fc44.x86_64"),
+        3,
+    )
+    .await;
+    matching::match_host(&mut vulns, A, Utc::now())
+        .await
+        .unwrap();
+    assert!(open(&vulns, A).await.is_empty());
+
+    // Other packages ignore the running kernel; a kernel still to install
+    // is open without the reboot flag.
+    booted(
+        &mut admin,
+        B,
+        "44",
+        &[pkg("kernel-core", 0, "6.17.4", "x86_64")],
+        Some("6.17.4-1.fc44.x86_64"),
+        4,
+    )
+    .await;
+    matching::match_host(&mut vulns, B, Utc::now())
+        .await
+        .unwrap();
+    let reboot: bool = vulns
+        .query_one(
+            "SELECT reboot_needed FROM vulnerabilities WHERE agent_id = $1 AND fixed_at IS NULL",
+            &[&B],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(!reboot, "an update is needed first");
     db.drop().await;
 }
 

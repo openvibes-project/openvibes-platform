@@ -152,8 +152,11 @@ fn packages(row: &VulnRow) -> String {
         .map(|list| {
             list.iter()
                 .map(|p| {
+                    let running = p["running"]
+                        .as_str()
+                        .map_or_else(String::new, |r| format!(" (running {r})"));
                     format!(
-                        "{} {} -> {}",
+                        "{} {} -> {}{running}",
                         p["name"].as_str().unwrap_or("?"),
                         p["installed"].as_str().unwrap_or("?"),
                         p["fixed"].as_str().unwrap_or("?")
@@ -174,8 +177,13 @@ fn line(row: &VulnRow) -> String {
     } else {
         format!(" [{}]", row.cves.join(" "))
     };
+    let reboot = if row.reboot_needed {
+        " (fix installed, reboot needed)"
+    } else {
+        ""
+    };
     format!(
-        "{} {} {} since {}{fixed}: {}{cves}\n",
+        "{} {} {} since {}{fixed}: {}{cves}{reboot}\n",
         row.severity,
         row.advisory_id,
         host_label(row),
@@ -200,8 +208,18 @@ pub async fn run_vulns(
                         .iter()
                         .map(|(sev, n)| format!("{sev} {n}"))
                         .collect();
-                    let mut out =
-                        format!("open {total} on {} hosts: {}\n", s.hosts, parts.join(", "));
+                    let parts = if parts.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        parts.join(", ")
+                    };
+                    let mut out = format!("open {total} on {} hosts: {parts}\n", s.hosts);
+                    if s.reboot_hosts > 0 {
+                        out.push_str(&format!(
+                            "fix installed, reboot needed on {} hosts\n",
+                            s.reboot_hosts
+                        ));
+                    }
                     for (agent, hostname, open, serious) in &s.top_hosts {
                         out.push_str(&format!(
                             "  {} {open} open ({serious} critical or important)\n",

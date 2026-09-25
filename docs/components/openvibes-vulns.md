@@ -20,7 +20,11 @@ the offline core used by `openvibes-admin feeds import` and the
 - `matching::{match_release, match_host, evaluate}` — a host is affected
   when its **newest** installed version of a fixed package's name, with a
   compatible architecture (same, or either side `noarch`), is lower than the
-  fixed version.
+  fixed version. For the running kernel (`kernel`, `kernel-core`,
+  `kernel-modules*`), when the host reports it (protocol P9): an installed
+  fix that is not yet running keeps the vulnerability open with
+  `reboot_needed` and the running version in its package entry; a reboot
+  into the fix closes it with the next inventory.
 - `repodata::{metalink, updateinfo_location}` — Fedora's mirror list (the
   current `repomd.xml` digest first, then alternates for lagging mirrors;
   https then http mirrors) and repository index (updateinfo location under
@@ -66,14 +70,13 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   and recorded as the feed's `last_error`; other releases are still
   checked and the next interval retries.
 - `/ready` is 503 while the database is unreachable or at another schema.
-- **Known difference from `dnf`:** checked on this Fedora 44 host against
-  the real feed (385 advisories, 3,622 packages, import and match 0.47 s),
-  matching found 2 of the 3 advisories `dnf advisory list --security`
-  lists. The third is a kernel update whose fixed version is installed
-  while the host still runs the previous kernel (no reboot yet); `dnf`
-  flags it because older kernels remain installed, this crate counts the
-  fix as installed. Reporting "fix installed, reboot needed" needs the
-  agent to report the running kernel (planned).
+- **Compared with `dnf`:** checked on this Fedora 44 host against the real
+  feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
+  found 2 of the 3 advisories `dnf advisory list --security` lists. The
+  third was a kernel whose fix was installed while the host still ran the
+  previous kernel. With the running kernel reported (protocol P9) it is
+  open as "fix installed, reboot needed". Agents before P9 report no
+  kernel, and the installed fix counts for them.
 
 ## Test
 

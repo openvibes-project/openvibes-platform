@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 6; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 9; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -127,10 +127,10 @@ Fedora hosts need about 36M two-key rows rather than full package rows.
 `inventory_at`. `openvibes_ingest` may add versions and replace a host's
 links, never edit or delete versions (a test checks it).
 
-- `replace(&mut client, agent_id, os_id, os_version, packages, sha256, now)`
-  locks the agent row; an equal digest is `Unchanged` (nothing written, no
+- `replace(&mut client, agent_id, os_id, os_version, running_kernel,
+  packages, sha256, now)` locks the agent row; an equal digest is `Unchanged` (nothing written, no
   notification); otherwise it inserts unknown versions, replaces the host's
-  links, records OS and digest, and sends `NOTIFY inventory_changed` with
+  links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
 
@@ -139,7 +139,8 @@ links, never edit or delete versions (a test checks it).
 `advisories` (id, source, release, severity, title, times, url),
 `advisory_cves`, `advisory_packages` (fixed name, arch, EVR),
 `vulnerabilities` (host × advisory: affected packages as JSON, first seen,
-fixed at — kept after fixing), and `feed_sources` (last check, last change,
+fixed at — kept after fixing; `reboot_needed` since schema 9), and
+`feed_sources` (last check, last change,
 content digest, advisories, last error). Role `openvibes_vulns` writes only
 these and reads `agents`, `package_versions`, `host_packages`.
 
@@ -149,6 +150,11 @@ these and reads `agents`, `package_versions`, `host_packages`.
 - `apply(scope, found, now)` opens or updates found ones (reopening keeps
   `first_seen_at`) and fixes open ones in scope that were not found.
 - `record_feed`, `feeds`, `list(filter)`, `summary` (aggregated in SQL).
+
+Schema 9 adds `agents.running_kernel` (protocol P9) and
+`vulnerabilities.reboot_needed`: the fix is installed and only a reboot
+is missing. The row stays unfixed (it closes after the reboot), but
+`summary` counts it as its own state, not as open.
 
 ## Audit log
 
