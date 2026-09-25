@@ -152,8 +152,9 @@ these and reads `agents`, `package_versions`, `host_packages`.
 - `record_feed`, `feeds`, `list(filter)`, `summary` (aggregated in SQL).
 
 Schema 9 adds `agents.running_kernel` (protocol P9) and
-`vulnerabilities.reboot_needed`: open, but the fix is installed and only a
-reboot is missing.
+`vulnerabilities.reboot_needed`: the fix is installed and only a reboot
+is missing. The row stays unfixed (it closes after the reboot), but
+`summary` counts it as its own state, not as open.
 
 ## Audit log
 

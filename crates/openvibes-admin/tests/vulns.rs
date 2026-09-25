@@ -147,6 +147,12 @@ async fn a_kernel_awaiting_reboot_is_shown_as_such() {
         "{list}"
     );
     assert!(list.contains("fix installed, reboot needed"), "{list}");
+    // A separate state: not counted as open (the user's decision).
+    let summary = stdout(&fixture.run(&["vulns", "summary"]));
+    assert!(
+        summary.starts_with("open 0 on 0 hosts: none\nfix installed, reboot needed on 1 hosts\n"),
+        "{summary}"
+    );
     fixture.drop().await;
 }
 

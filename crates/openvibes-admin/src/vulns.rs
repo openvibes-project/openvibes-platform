@@ -208,8 +208,18 @@ pub async fn run_vulns(
                         .iter()
                         .map(|(sev, n)| format!("{sev} {n}"))
                         .collect();
-                    let mut out =
-                        format!("open {total} on {} hosts: {}\n", s.hosts, parts.join(", "));
+                    let parts = if parts.is_empty() {
+                        "none".to_owned()
+                    } else {
+                        parts.join(", ")
+                    };
+                    let mut out = format!("open {total} on {} hosts: {parts}\n", s.hosts);
+                    if s.reboot_hosts > 0 {
+                        out.push_str(&format!(
+                            "fix installed, reboot needed on {} hosts\n",
+                            s.reboot_hosts
+                        ));
+                    }
                     for (agent, hostname, open, serious) in &s.top_hosts {
                         out.push_str(&format!(
                             "  {} {open} open ({serious} critical or important)\n",

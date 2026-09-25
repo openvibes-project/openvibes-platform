@@ -398,6 +398,9 @@ pub struct Summary {
     pub hosts: i64,
     /// Hosts with the most open: (agent id, hostname, open, critical+important).
     pub top_hosts: Vec<(String, Option<String>, i64, i64)>,
+    /// Hosts whose only missing step is a reboot into an installed kernel
+    /// fix; those are a state of their own, not counted as open.
+    pub reboot_hosts: i64,
 }
 
 /// Counts open vulnerabilities (aggregated in SQL, so any fleet size).
@@ -406,7 +409,7 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .query(
             "SELECT a.severity, count(*) FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
-             WHERE v.fixed_at IS NULL GROUP BY a.severity
+             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed GROUP BY a.severity
              ORDER BY array_position(ARRAY['critical','important','moderate','low','unrated'],
                           a.severity)",
             &[],
@@ -415,13 +418,14 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .iter()
         .map(|row| (row.get(0), row.get(1)))
         .collect();
-    let hosts: i64 = client
+    let hosts = client
         .query_one(
-            "SELECT count(DISTINCT agent_id) FROM vulnerabilities WHERE fixed_at IS NULL",
+            "SELECT count(DISTINCT agent_id) FILTER (WHERE NOT reboot_needed),
+                    count(DISTINCT agent_id) FILTER (WHERE reboot_needed)
+             FROM vulnerabilities WHERE fixed_at IS NULL",
             &[],
         )
-        .await?
-        .get(0);
+        .await?;
     let top_hosts = client
         .query(
             "SELECT v.agent_id, g.hostname, count(*),
@@ -429,7 +433,7 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
              FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
              JOIN agents g ON g.agent_id = v.agent_id
-             WHERE v.fixed_at IS NULL
+             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
              GROUP BY v.agent_id, g.hostname ORDER BY 4 DESC, 3 DESC, 1 LIMIT 10",
             &[],
         )
@@ -439,7 +443,8 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .collect();
     Ok(Summary {
         by_severity,
-        hosts,
+        hosts: hosts.get(0),
         top_hosts,
+        reboot_hosts: hosts.get(1),
     })
 }
