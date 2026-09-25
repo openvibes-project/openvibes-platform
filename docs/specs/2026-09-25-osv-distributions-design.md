@@ -1,6 +1,6 @@
 # Other distributions via OSV.dev — design
 
-Status: draft for review, 2026-09-25. Extends the vulnerability management
+Status: approved by the user, 2026-09-25. Extends the vulnerability management
 spec (`2026-09-25-vulnerability-management-design.md`) beyond Fedora.
 
 ## 1. Decisions (the user, 2026-09-25)
