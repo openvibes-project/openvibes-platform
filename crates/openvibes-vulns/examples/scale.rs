@@ -44,7 +44,11 @@ fn hash(parts: &[&[u8]]) -> u64 {
 }
 
 fn quantile(sorted: &[Duration], q: f64) -> Duration {
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss, clippy::cast_precision_loss)]
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss
+    )]
     sorted[((sorted.len() - 1) as f64 * q).round() as usize]
 }
 
@@ -80,20 +84,21 @@ async fn main() {
         })
         .collect();
     let content = std::fs::read(&args[2]).unwrap();
-    let advisories = updateinfo::read_zstd(BufReader::new(&content[..]), feed::MAX_OPEN_BYTES).unwrap();
+    let advisories =
+        updateinfo::read_zstd(BufReader::new(&content[..]), feed::MAX_OPEN_BYTES).unwrap();
     // The first fixed version per package name.
     let mut fixed: HashMap<&str, (u32, &str)> = HashMap::new();
     for advisory in &advisories {
         for p in &advisory.packages {
-            fixed.entry(p.name.as_str()).or_insert((p.epoch, p.version.as_str()));
+            fixed
+                .entry(p.name.as_str())
+                .or_insert((p.epoch, p.version.as_str()));
         }
     }
     let generation = |g: usize| -> Vec<PackageRow> {
         base.iter()
             .map(|p| match fixed.get(p.name.as_str()) {
-                Some((epoch, version))
-                    if hash(&[p.name.as_bytes(), &[1]]) % 100 < g as u64 =>
-                {
+                Some((epoch, version)) if hash(&[p.name.as_bytes(), &[1]]) % 100 < g as u64 => {
                     PackageRow {
                         epoch: i32::try_from(*epoch).unwrap_or(0),
                         version: (*version).to_owned(),
@@ -116,10 +121,18 @@ async fn main() {
     let url = std::env::var("OPENVIBES_TEST_DATABASE_URL").unwrap();
     let server = platform_store::connect(&url).await.unwrap();
     let admin = server.get().await.unwrap();
-    admin.batch_execute("DROP DATABASE IF EXISTS ov_scale").await.unwrap();
-    admin.batch_execute("CREATE DATABASE ov_scale").await.unwrap();
+    admin
+        .batch_execute("DROP DATABASE IF EXISTS ov_scale")
+        .await
+        .unwrap();
+    admin
+        .batch_execute("CREATE DATABASE ov_scale")
+        .await
+        .unwrap();
     let url = url.replace("/postgres?", "/ov_scale?");
-    let pool = platform_store::connect_sized(&url, workers + 2).await.unwrap();
+    let pool = platform_store::connect_sized(&url, workers + 2)
+        .await
+        .unwrap();
     let mut owner = pool.get().await.unwrap();
     platform_store::migrate(&mut owner).await.unwrap();
     let ids: Vec<String> = (0..hosts)
@@ -146,7 +159,10 @@ async fn main() {
             (pool.clone(), generations.clone(), ids.clone(), next.clone());
         tasks.push(tokio::spawn(async move {
             let mut client = pool.get().await.unwrap();
-            client.batch_execute("SET ROLE openvibes_ingest").await.unwrap();
+            client
+                .batch_execute("SET ROLE openvibes_ingest")
+                .await
+                .unwrap();
             let mut times = Vec::new();
             loop {
                 let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -191,6 +207,9 @@ async fn main() {
         times[times.len() - 1]
     );
 
+    // Housekeeping only: VACUUM of 36 M rows outlasts the services' 10 s
+    // statement timeout, which every measured step below keeps.
+    owner.batch_execute("SET statement_timeout = 0").await.unwrap();
     owner.batch_execute("VACUUM ANALYZE").await.unwrap();
     for table in ["host_packages", "package_versions", "agents"] {
         let row = owner
@@ -212,19 +231,30 @@ async fn main() {
     // Matching: the real feed imported as openvibes_vulns, which matches the
     // whole release (every host).
     let mut vulns_client = pool.get().await.unwrap();
-    vulns_client.batch_execute("SET ROLE openvibes_vulns").await.unwrap();
+    vulns_client
+        .batch_execute("SET ROLE openvibes_vulns")
+        .await
+        .unwrap();
     let source: SourceId = "fedora-44-x86_64".parse().unwrap();
     let start = Instant::now();
     let report = feed::import(&mut vulns_client, &source, &content, Utc::now()).await;
-    println!("feed import + match of all hosts: {report:?} in {:.1?}", start.elapsed());
+    println!(
+        "feed import + match of all hosts: {report:?} in {:.1?}",
+        start.elapsed()
+    );
     let start = Instant::now();
     let open = matching::match_release(&mut vulns_client, "fedora", "44", Utc::now()).await;
-    println!("re-match of all hosts (nothing changed): {open:?} in {:.1?}", start.elapsed());
+    println!(
+        "re-match of all hosts (nothing changed): {open:?} in {:.1?}",
+        start.elapsed()
+    );
 
     let mut one = Vec::new();
     for i in (0..hosts).step_by((hosts / 20).max(1)) {
         let t = Instant::now();
-        matching::match_host(&mut vulns_client, &ids[i], Utc::now()).await.unwrap();
+        matching::match_host(&mut vulns_client, &ids[i], Utc::now())
+            .await
+            .unwrap();
         one.push(t.elapsed());
     }
     one.sort();
@@ -243,8 +273,14 @@ async fn main() {
         summary.by_severity
     );
     let t = Instant::now();
-    let listed = vulns::list(&vulns_client, &vulns::ListFilter::default()).await.unwrap();
-    println!("list (first 10,000 by priority) in {:.1?}: {} rows", t.elapsed(), listed.len());
+    let listed = vulns::list(&vulns_client, &vulns::ListFilter::default())
+        .await
+        .unwrap();
+    println!(
+        "list (first 10,000 by priority) in {:.1?}: {} rows",
+        t.elapsed(),
+        listed.len()
+    );
     let t = Instant::now();
     let host = vulns::ListFilter {
         host: Some("host-10"),
@@ -252,7 +288,10 @@ async fn main() {
     };
     let listed = vulns::list(&vulns_client, &host).await.unwrap();
     println!("list --host in {:.1?}: {} rows", t.elapsed(), listed.len());
-    owner.batch_execute("VACUUM ANALYZE vulnerabilities").await.unwrap();
+    owner
+        .batch_execute("VACUUM ANALYZE vulnerabilities")
+        .await
+        .unwrap();
     let row = owner
         .query_one(
             "SELECT count(*), count(*) FILTER (WHERE fixed_at IS NULL),
@@ -273,5 +312,8 @@ async fn main() {
         .await
         .unwrap()
         .get(0);
-    println!("database: {size}; generator peak RSS {} MiB", peak_rss_mib());
+    println!(
+        "database: {size}; generator peak RSS {} MiB",
+        peak_rss_mib()
+    );
 }

@@ -76,19 +76,33 @@ timeout the services use. Setup:
 - The feed is the real Fedora 44 updateinfo (385 advisories), matched as
   `openvibes_vulns`.
 
-| Step | 500 hosts | 10,000 hosts |
-|---|---|---|
-| Ingest, all inventories | 7.9 s (64 hosts/s) | 151 s (66 hosts/s) |
-| Ingest, per host p50 / p99 | 231 / 594 ms | 221 / 597 ms |
-| `host_packages` | 1.8 M rows, 347 MB | 36.1 M rows, 6.7 GB (691 KiB per host) |
-| `package_versions` | 3,686 rows, 1 MB | 3,686 rows, 1 MB |
-| Feed import + match of every host | 1.6 s, 12,200 open | **fails: statement timeout (10 s)** |
-| Re-match of every host | 0.9 s | **fails: statement timeout (10 s)** |
-| `match_host`, one host p50 / max | 43 / 44 ms | 45 / 86 ms |
-| `vulns summary` / `vulns list` | 50 ms / 0.76 s (10,000 rows) | not meaningful (matching failed) |
+First run (before the fixes) and second run (matching in batches of 500
+hosts, feed recorded current only after its match):
 
-Findings:
-- **Matching a whole release does not scale past a few thousand hosts.**
+| Step | 500 hosts | 10,000 hosts, first run | 10,000 hosts, second run |
+|---|---|---|---|
+| Ingest, all inventories | 7.9 s (64 hosts/s) | 151 s (66 hosts/s) | 149 s (67 hosts/s) |
+| Ingest, per host p50 / p99 | 231 / 594 ms | 221 / 597 ms | 219 / 585 ms |
+| `host_packages` | 1.8 M rows, 347 MB | 36.1 M rows, 6.7 GB (691 KiB per host) | same |
+| `package_versions` | 3,686 rows, 1 MB | 3,686 rows, 1 MB | same |
+| Feed import + match of every host | 1.6 s, 12,200 open | **fails: statement timeout (10 s)** | **fails: statement timeout (10.5 s)**; recorded as failed, so the next check retries |
+| Re-match of every host | 0.9 s | **fails: statement timeout (10 s)** | **38 s, 244,000 open** |
+| `match_host`, one host p50 / max | 43 / 44 ms | 45 / 86 ms | 19 / 22 ms |
+| `vulns summary` | 50 ms | not meaningful | 632 ms |
+| `vulns list` (no filter) | 0.76 s (10,000 rows) | not meaningful | **fails: statement timeout** |
+
+Findings (second run first):
+- **Fixed:** matching in batches of 500 hosts re-matches all 10,000 in
+  38 s, well inside the hourly interval.
+- **Still failing, first import only:** the import right after the feed's
+  first arrival timed out, while the re-match minutes later succeeded.
+  Likely cause (not confirmed): no planner statistics yet for the newly
+  inserted advisory rows. The failed import is now recorded as failed, so
+  the next check retries it.
+- **Still failing: `vulns list` without filters** at 244,000 open
+  vulnerabilities: the priority query aggregates every open row before
+  its limit. Filtered lists (`--host`) and `summary` (0.6 s) work.
+- **Found in the first run:** matching a whole release did not scale past a few thousand hosts.
   The candidates query covers every host at once and exceeds the 10 s
   statement timeout at 10,000 hosts. Per-host matching (after an inventory
   change) stays at about 45 ms.
@@ -159,9 +173,11 @@ the last one. Retention days scale the 90-day column linearly.
 
 ## Open questions
 
-- **Vulnerability matching at fleet scale:** the two failures above need
-  fixing (planned: match a release in batches of hosts, and record a feed
-  as current only after its match succeeds), then this table re-run.
+- **Vulnerability management at fleet scale:** still open are the first
+  import's timeout (check whether an explicit `ANALYZE` of the advisory
+  tables after import fixes it) and `vulns list` without filters at
+  hundreds of thousands of open vulnerabilities (rank and limit before
+  aggregating). Storage (6.7 GB per 10,000 hosts) is accepted for now.
 
 - **Real finding rate:** the rate of a real fleet is unknown. The disk table
   brackets it; measure it on the first real deployment.

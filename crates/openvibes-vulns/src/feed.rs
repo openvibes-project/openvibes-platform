@@ -166,10 +166,19 @@ pub async fn import(
     };
     let rows: Vec<NewAdvisory> = advisories.iter().map(to_store).collect();
     vulns::replace_advisories(client, &name, &source.os_id, &source.os_version, &rows, now).await?;
+    // Recorded as current only once matched: a failed match is retried by
+    // the next check, which then sees the feed as changed.
+    let open = match matching::match_release(client, &source.os_id, &source.os_version, now).await {
+        Ok(open) => open,
+        Err(error) => {
+            let message = format!("matching failed: {error}");
+            vulns::record_feed(client, key, Err(&message), now).await?;
+            return Err(ImportError::Store(error));
+        }
+    };
     let sha256: [u8; 32] = Sha256::digest(content).into();
     let count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
     vulns::record_feed(client, key, Ok((sha256, count)), now).await?;
-    let open = matching::match_release(client, &source.os_id, &source.os_version, now).await?;
     Ok(ImportReport {
         advisories: rows.len(),
         open,

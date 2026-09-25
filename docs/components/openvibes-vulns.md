@@ -125,10 +125,14 @@ Packaged as the `openvibes-vulns` RPM with its unit and user
   EPSS scores are only added or updated. The same holds for EUVD (a CVE
   leaving its exploited list loses the mark) and NVD (a failed run keeps
   its sync point and resumes).
-- **Known limit (scale check, `docs/sizing.md`):** matching a whole
-  release in one query exceeds the 10 s statement timeout at 10,000 hosts,
-  and the feed is recorded as current before matching, so a failed match
-  is not retried. Per-host matching (45 ms) is unaffected.
+- A release is matched in batches of 500 hosts (`MATCH_BATCH`; one query
+  and one transaction each; 10,000 hosts re-matched in 38 s). A feed is
+  recorded as current only after its match succeeds; a failed match is
+  recorded as the feed's error and retried by the next check.
+- **Known limits (scale check, `docs/sizing.md`):** at 10,000 hosts the
+  first import after a feed's arrival can still time out (then succeeds on
+  retry), and `vulns list` without filters times out at 244,000 open
+  vulnerabilities.
 - `/ready` is 503 while the database is unreachable or at another schema.
 - **Compared with `dnf`:** checked on this Fedora 44 host against the real
   feed (385 advisories, 3,622 packages, import and match 0.47 s), matching
