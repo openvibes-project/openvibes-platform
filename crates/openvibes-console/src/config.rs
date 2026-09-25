@@ -1,4 +1,8 @@
-use std::{fmt, net::SocketAddr, path::Path};
+use std::{
+    fmt,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+};
 
 use serde::Deserialize;
 
@@ -12,7 +16,7 @@ use crate::ConsoleError;
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConsoleConfig {
-    /// Loopback-only, cleartext listener for C0 development.
+    /// Public console listener. Without TLS files, loopback-only development mode.
     pub development_listen: SocketAddr,
     /// Separate loopback-only process health listener.
     pub health_listen: SocketAddr,
@@ -22,6 +26,12 @@ pub struct ConsoleConfig {
     /// Canonical HTTP origin on loopback for local authentication development.
     #[serde(default)]
     pub public_origin: Option<String>,
+    /// Absolute PEM server certificate chain for direct TLS 1.3.
+    #[serde(default)]
+    pub server_certificate_file: Option<PathBuf>,
+    /// Absolute PEM server private key for direct TLS 1.3.
+    #[serde(default)]
+    pub server_key_file: Option<PathBuf>,
 }
 
 impl fmt::Debug for ConsoleConfig {
@@ -35,6 +45,8 @@ impl fmt::Debug for ConsoleConfig {
                 &self.database_url.as_ref().map(|_| "[REDACTED]"),
             )
             .field("public_origin", &self.public_origin)
+            .field("server_certificate_file", &self.server_certificate_file)
+            .field("server_key_file", &self.server_key_file)
             .finish()
     }
 }
@@ -43,7 +55,14 @@ impl ConsoleConfig {
     /// Rejects any configuration that would expose a C0 listener or bind the
     /// two routers to the same address.
     pub fn validate(&self) -> Result<(), ConsoleError> {
-        if !self.development_listen.ip().is_loopback()
+        let tls_configured = match (&self.server_certificate_file, &self.server_key_file) {
+            (None, None) => false,
+            (Some(certificate), Some(key)) if certificate.is_absolute() && key.is_absolute() => {
+                true
+            }
+            _ => return Err(ConsoleError::Config),
+        };
+        if (!tls_configured && !self.development_listen.ip().is_loopback())
             || !self.health_listen.ip().is_loopback()
             || self.development_listen == self.health_listen
         {
@@ -52,7 +71,11 @@ impl ConsoleConfig {
         match (&self.database_url, &self.public_origin) {
             (None, None) => {}
             (Some(database_url), Some(public_origin))
-                if !database_url.trim().is_empty() && valid_local_origin(public_origin) => {}
+                if !database_url.trim().is_empty()
+                    && (valid_local_origin(public_origin)
+                        || (tls_configured
+                            && valid_public_origin(public_origin)
+                            && public_origin.starts_with("https://"))) => {}
             _ => return Err(ConsoleError::Config),
         }
         Ok(())
@@ -126,6 +149,8 @@ mod tests {
             health_listen: "127.0.0.1:18481".parse().unwrap(),
             database_url: None,
             public_origin: None,
+            server_certificate_file: None,
+            server_key_file: None,
         };
 
         assert!(config.validate().is_ok());
@@ -139,18 +164,24 @@ mod tests {
                 health_listen: "127.0.0.1:18481".parse().unwrap(),
                 database_url: None,
                 public_origin: None,
+                server_certificate_file: None,
+                server_key_file: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
                 health_listen: "[::]:18481".parse().unwrap(),
                 database_url: None,
                 public_origin: None,
+                server_certificate_file: None,
+                server_key_file: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
                 health_listen: "127.0.0.1:8443".parse().unwrap(),
                 database_url: None,
                 public_origin: None,
+                server_certificate_file: None,
+                server_key_file: None,
             },
         ] {
             assert!(config.validate().is_err());
@@ -164,6 +195,8 @@ mod tests {
             health_listen: "127.0.0.1:18481".parse().unwrap(),
             database_url: Some("postgresql://user:secret@localhost/console".into()),
             public_origin: Some("http://localhost:8443".into()),
+            server_certificate_file: None,
+            server_key_file: None,
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));

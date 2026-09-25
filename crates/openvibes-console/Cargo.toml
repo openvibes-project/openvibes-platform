@@ -22,11 +22,13 @@ include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
 platform-store = { path = "../platform-store" }
 ring.workspace = true
+rustls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
 subtle = "=2.6.1"
 tokio.workspace = true
+tokio-rustls.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 unicode-normalization = "=0.1.25"

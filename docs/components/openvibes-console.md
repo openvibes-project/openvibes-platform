@@ -113,24 +113,32 @@ administration remain CLI-only.
 
 ## Configuration
 
-### Current (C0)
+### Current
 
 `openvibes-console [--config PATH]` reads `/etc/openvibes/console.toml` by
-default: strict TOML (unknown keys refused). Both listeners must be distinct
-loopback addresses. Optional `database_url` and `public_origin` must be
-provided together; the origin must be canonical HTTP on loopback. For example:
+default: strict TOML (unknown keys refused). The health listener must be a
+distinct loopback address. Without TLS files, the public listener is also
+loopback-only. Setting both absolute `server_certificate_file` and
+`server_key_file` enables direct TLS 1.3 and permits a non-loopback public
+listener. Optional `database_url` and `public_origin` must be provided
+together; HTTP origins must be loopback, while HTTPS origins require direct
+TLS. For example:
 
 ```toml
 development_listen = "127.0.0.1:8443"   # the development web listener
 health_listen = "127.0.0.1:18482"       # /health and /ready
 database_url = "postgresql:///openvibes?host=/run/postgresql" # optional
 public_origin = "http://localhost:8443" # required with database_url
+# server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
+# server_key_file = "/etc/openvibes/tls/console-key.pem"
 ```
 
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
-origin, or malformed file is refused at startup ("invalid console
+origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if
-bound elsewhere. Startup checks that the database is already at schema 11; it
+bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
+certificate chain and key, and are checked before serving; handshakes are TLS
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 11; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -151,12 +159,12 @@ contract until the database-backed C2/C3 routes exist.
 
 ### Planned (C2 to C5)
 
-The final service configuration is strict, bounded TOML with unknown keys and
-relative key/certificate paths refused. Its approved deployment constraints
+The remaining service configuration is strict, bounded TOML with unknown keys
+and relative key/certificate paths refused. Its approved deployment constraints
 are:
 
-- direct TLS 1.3 termination is the default and requires a server certificate
-  chain and private key;
+- direct TLS 1.3 termination is available with a configured server certificate
+  chain and private key; TLS responses include HSTS;
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
   origin plus an allow-list of trusted proxy addresses;
 - forwarded headers are ignored unless the immediate peer is trusted;

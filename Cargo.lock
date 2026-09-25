@@ -1141,6 +1141,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-rustls",
  "zeroize",
 ]
 
@@ -1160,11 +1161,13 @@ dependencies = [
  "platform-config",
  "platform-store",
  "ring",
+ "rustls",
  "serde",
  "serde_json",
  "sha2",
  "subtle",
  "tokio",
+ "tokio-rustls",
  "tower",
  "tracing",
  "tracing-subscriber",
