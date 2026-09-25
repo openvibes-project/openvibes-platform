@@ -24,9 +24,10 @@ the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes, plus finding summary, latest, and history reads. Access
-control has a global read inventory for roles, bindings, and asset groups;
-editing those records and enrollment, rule, and service-account reads remain
-pending. Global audit event search and retention-policy
+control has a global read inventory for roles, bindings, and asset groups,
+plus CSRF-protected local-user role binding changes. Asset-group selector
+management and enrollment, rule, and service-account reads remain pending.
+Global audit event search and retention-policy
 reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
 Global `audit.export` users can download the exact visible filters as bounded

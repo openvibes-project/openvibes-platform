@@ -196,6 +196,19 @@ pub struct AccessInventory {
     pub bindings: Vec<BindingSummary>,
     /// Manual asset groups and selectors.
     pub asset_groups: Vec<AssetGroupSummary>,
+    /// Enabled local users available for role assignment.
+    pub users: Vec<LocalUserSummary>,
+}
+
+/// Outcome of revoking an active local-user role binding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BindingRevocation {
+    /// Binding was revoked and audited.
+    Revoked,
+    /// Binding did not exist or was already revoked.
+    NotFound,
+    /// This is the final global Admin binding and cannot be revoked.
+    LastGlobalAdmin,
 }
 
 /// Lists the current roles, active user bindings, and asset group selectors.
@@ -228,6 +241,11 @@ pub async fn access_inventory(client: &Client) -> Result<AccessInventory, StoreE
          FROM console_asset_groups g LEFT JOIN console_asset_group_selectors s USING (asset_group_id)
          GROUP BY g.asset_group_id ORDER BY g.name", &[],
     ).await?;
+    let users = list_local_users(client)
+        .await?
+        .into_iter()
+        .filter(|user| user.enabled)
+        .collect();
     Ok(AccessInventory {
         roles: role_rows
             .iter()
@@ -260,7 +278,153 @@ pub async fn access_inventory(client: &Client) -> Result<AccessInventory, StoreE
                 selectors: row.get(2),
             })
             .collect(),
+        users,
     })
+}
+
+/// Creates a local-user role binding and its audit row atomically. Returns
+/// `None` when the user, role, group, or unique active binding is unavailable.
+pub async fn create_user_role_binding(
+    client: &mut Client,
+    user_id: &str,
+    role_id: &str,
+    asset_group_id: Option<&str>,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<BindingSummary>, StoreError> {
+    let tx = client.transaction().await?;
+    let row = tx.query_opt(
+        "INSERT INTO console_role_bindings
+             (binding_id, user_id, role_id, asset_group_id, created_at, created_by)
+         SELECT gen_random_uuid(), u.user_id, r.role_id, g.asset_group_id, $4, $5
+         FROM console_users u CROSS JOIN console_roles r
+         LEFT JOIN console_asset_groups g ON g.asset_group_id = $3::text::uuid
+         WHERE u.user_id = $1::text::uuid AND u.enabled AND r.role_id = $2
+           AND (($3::text IS NULL AND g.asset_group_id IS NULL) OR g.asset_group_id IS NOT NULL)
+         ON CONFLICT DO NOTHING
+         RETURNING binding_id::text, user_id::text, role_id, asset_group_id::text, created_at, created_by",
+        &[&user_id, &role_id, &asset_group_id, &now, &actor_id],
+    ).await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+    let group_id: Option<String> = row.get(3);
+    let group_name: Option<String> = if let Some(id) = group_id.as_deref() {
+        tx.query_opt(
+            "SELECT name FROM console_asset_groups WHERE asset_group_id = $1::uuid",
+            &[&id],
+        )
+        .await?
+        .map(|row| row.get(0))
+    } else {
+        None
+    };
+    let binding = tx
+        .query_one(
+            "SELECT $1::text, u.user_id::text, u.username, u.display_name, $2::text,
+                $3::text, $4::text, $5::timestamptz, $6::text
+         FROM console_users u WHERE u.user_id = $7::text::uuid",
+            &[
+                &row.get::<_, String>(0),
+                &row.get::<_, String>(2),
+                &group_id,
+                &group_name,
+                &row.get::<_, DateTime<Utc>>(4),
+                &row.get::<_, String>(5),
+                &user_id,
+            ],
+        )
+        .await?;
+    tx.execute(
+        "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
+             actor_display, target_kind, target_id)
+         VALUES ($1, 'rbac.binding.created', 'role_binding', 'success',
+             jsonb_build_object('role_id', $2::text, 'asset_group_id', $3::text),
+             'user', $1, $1, 'role_binding', $4::text)",
+        &[
+            &actor_id,
+            &role_id,
+            &asset_group_id,
+            &row.get::<_, String>(0),
+        ],
+    )
+    .await?;
+    let result = BindingSummary {
+        binding_id: binding.get(0),
+        user_id: binding.get(1),
+        username: binding.get(2),
+        display_name: binding.get(3),
+        role_id: binding.get(4),
+        asset_group_id: binding.get(5),
+        asset_group_name: binding.get(6),
+        created_at: binding.get(7),
+        created_by: binding.get(8),
+    };
+    tx.commit().await?;
+    Ok(Some(result))
+}
+
+/// Revokes one active local-user role binding and audits the change atomically.
+pub async fn revoke_user_role_binding(
+    client: &mut Client,
+    binding_id: &str,
+    actor_id: &str,
+    now: DateTime<Utc>,
+) -> Result<BindingRevocation, StoreError> {
+    let tx = client.transaction().await?;
+    const ACCESS_BINDING_LOCK: i64 = 0x6f76_6962_6573;
+    tx.query_one("SELECT pg_advisory_xact_lock($1)", &[&ACCESS_BINDING_LOCK])
+        .await?;
+    let row = tx
+        .query_opt(
+            "SELECT b.role_id, b.asset_group_id::text, u.enabled
+             FROM console_role_bindings b JOIN console_users u USING (user_id)
+             WHERE b.binding_id = $1::text::uuid AND b.user_id IS NOT NULL AND b.revoked_at IS NULL
+             FOR UPDATE",
+            &[&binding_id],
+        )
+        .await?;
+    let Some(row) = row else {
+        tx.rollback().await?;
+        return Ok(BindingRevocation::NotFound);
+    };
+    let role_id: String = row.get(0);
+    let group_id: Option<String> = row.get(1);
+    let target_enabled: bool = row.get(2);
+    if role_id == "admin" && group_id.is_none() && target_enabled {
+        let global_admins: i64 = tx
+            .query_one(
+                "SELECT count(*) FROM console_role_bindings b
+                 JOIN console_users u USING (user_id)
+                 WHERE u.enabled AND b.role_id = 'admin' AND b.asset_group_id IS NULL
+                   AND b.revoked_at IS NULL",
+                &[],
+            )
+            .await?
+            .get(0);
+        if global_admins <= 1 {
+            tx.rollback().await?;
+            return Ok(BindingRevocation::LastGlobalAdmin);
+        }
+    }
+    tx.execute(
+        "UPDATE console_role_bindings SET revoked_at = $2, revoked_by = $3
+         WHERE binding_id = $1::text::uuid",
+        &[&binding_id, &now, &actor_id],
+    )
+    .await?;
+    tx.execute(
+        "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
+             actor_display, target_kind, target_id)
+         VALUES ($1, 'rbac.binding.revoked', 'role_binding', 'success',
+             jsonb_build_object('role_id', $2::text, 'asset_group_id', $3::text),
+             'user', $1, $1, 'role_binding', $4::text)",
+        &[&actor_id, &role_id, &group_id, &binding_id],
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(BindingRevocation::Revoked)
 }
 
 /// Lists local users without credentials, session secrets, or throttle hashes.

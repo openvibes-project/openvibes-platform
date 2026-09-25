@@ -19,6 +19,11 @@ tokens, and CSRF values stay in the console process.
   effect.
 - `user_role_bindings` returns active bindings for per-request capability
   resolution. It does not cache effective permission state.
+- `access_inventory` lists roles/permission ids, enabled local users, active
+  local-user bindings, and exact asset-group selectors without credential data.
+- `create_user_role_binding` and `revoke_user_role_binding` commit binding
+  changes with their audit events atomically. Revocation serializes through an
+  advisory lock and preserves the final global Admin binding.
 - `create_session` accepts only a currently enabled account at the generation
   observed after password verification and can revoke the prior session in the
   same transaction during login rotation. Session lookups require matching

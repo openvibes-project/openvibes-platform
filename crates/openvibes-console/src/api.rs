@@ -208,6 +208,19 @@ pub struct AccessInventory {
     pub bindings: Vec<AccessBinding>,
     /// Manual asset groups and their exact tag selectors.
     pub asset_groups: Vec<AccessAssetGroup>,
+    /// Enabled users who can receive role bindings.
+    pub users: Vec<AccessUser>,
+}
+
+/// Enabled local user in the access-management picker.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AccessUser {
+    /// Stable local user UUID.
+    pub user_id: String,
+    /// Canonical username.
+    pub username: String,
+    /// Operator-facing display name.
+    pub display_name: String,
 }
 
 /// Role and permission mapping.
@@ -255,6 +268,21 @@ pub struct AccessAssetGroup {
     pub name: String,
     /// Exact `key=value` selectors, all of which must match.
     pub selectors: Vec<String>,
+}
+
+/// Request to assign a role to one local user with optional asset-group scope.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateAccessBindingRequest {
+    /// Stable local-user UUID.
+    #[schema(min_length = 36, max_length = 36)]
+    pub user_id: String,
+    /// Built-in role identifier.
+    #[schema(min_length = 1, max_length = 64)]
+    pub role_id: String,
+    /// Asset-group UUID; omitted means global scope.
+    #[schema(min_length = 36, max_length = 36)]
+    pub asset_group_id: Option<String>,
 }
 
 /// Request body for changing audit retention.

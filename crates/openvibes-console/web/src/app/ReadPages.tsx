@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { components } from "../api/generated";
 
 type AgentDetail = components["schemas"]["AgentDetail"];
@@ -298,18 +298,58 @@ export function AuditEventsReadPage({ seeded = false, canExport = false }: { see
   </section>;
 }
 
-export function AccessControlReadPage({ seeded = false }: { seeded?: boolean }) {
+export function AccessControlReadPage({ seeded = false, canManage = false, csrfToken }: { seeded?: boolean; canManage?: boolean; csrfToken?: string | undefined }) {
+  const [mutationError, setMutationError] = useState(false);
   const inventory = useRead<AccessInventory>("/api/v1/access-control", seeded);
+  async function createBinding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMutationError(false);
+    const values = new FormData(event.currentTarget);
+    const headers = requestHeaders(seeded);
+    headers.set("Content-Type", "application/json");
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    try {
+      const response = await fetch("/api/v1/access-control/bindings", {
+        method: "POST", cache: "no-store", credentials: "same-origin", headers,
+        body: JSON.stringify({ user_id: values.get("user_id"), role_id: values.get("role_id"), asset_group_id: values.get("asset_group_id") || null }),
+      });
+      if (response.status !== 201) throw new Error("binding failed");
+      window.location.reload();
+    } catch {
+      setMutationError(true);
+    }
+  }
+  async function revokeBinding(bindingId: string) {
+    if (!window.confirm("Revoke this role binding? The user may lose access immediately.")) return;
+    const headers = requestHeaders(seeded);
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    try {
+      const response = await fetch(`/api/v1/access-control/bindings/${encodeURIComponent(bindingId)}`, {
+        method: "DELETE", cache: "no-store", credentials: "same-origin", headers,
+      });
+      if (response.status !== 204) throw new Error("binding revoke failed");
+      window.location.reload();
+    } catch {
+      setMutationError(true);
+    }
+  }
   return <section className="read-card" aria-labelledby="access-control-title">
     <div className="read-card__heading"><div><p className="eyebrow">Authorization</p><h2 id="access-control-title">Roles and access bindings</h2></div></div>
     <ReadStatus state={inventory}>{(access) => <>
+      {mutationError && <p className="auth-inline-error" role="alert">The access change could not be completed. Reload the page and try again.</p>}
+      {canManage && <form className="filter-form" onSubmit={(event) => void createBinding(event)}>
+        <label>User<select name="user_id" required>{access.users.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name} ({user.username})</option>)}</select></label>
+        <label>Role<select name="role_id" required>{access.roles.map((role) => <option key={role.role_id} value={role.role_id}>{role.display_name}</option>)}</select></label>
+        <label>Scope<select name="asset_group_id"><option value="">Global</option>{access.asset_groups.map((group) => <option key={group.asset_group_id} value={group.asset_group_id}>{group.name}</option>)}</select></label>
+        <button type="submit" disabled={access.users.length === 0}>Add role binding</button>
+      </form>}
       <h3>Roles</h3>
       <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">Role</th><th scope="col">Type</th><th scope="col">Permissions</th></tr></thead>
         <tbody>{access.roles.map((role) => <tr key={role.role_id}><th scope="row">{role.display_name}<span className="table-subtext">{role.role_id}</span></th><td>{role.builtin ? "Built in" : "Custom"}</td><td>{role.permissions.join(", ") || "None"}</td></tr>)}</tbody>
       </table></div>
       <h3>Active bindings</h3>
-      {access.bindings.length === 0 ? <p className="read-state">No active local-user bindings.</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col">Added by</th></tr></thead>
-        <tbody>{access.bindings.map((binding) => <tr key={binding.binding_id}><th scope="row">{binding.display_name}<span className="table-subtext">{binding.username}</span></th><td>{binding.role_id}</td><td>{binding.asset_group_name ?? "Global"}</td><td>{binding.created_by}</td></tr>)}</tbody>
+      {access.bindings.length === 0 ? <p className="read-state">No active local-user bindings.</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col">Added by</th>{canManage && <th scope="col">Actions</th>}</tr></thead>
+        <tbody>{access.bindings.map((binding) => <tr key={binding.binding_id}><th scope="row">{binding.display_name}<span className="table-subtext">{binding.username}</span></th><td>{binding.role_id}</td><td>{binding.asset_group_name ?? "Global"}</td><td>{binding.created_by}</td>{canManage && <td><button type="button" onClick={() => void revokeBinding(binding.binding_id)}>Revoke</button></td>}</tr>)}</tbody>
       </table></div>}
       <h3>Asset groups</h3>
       {access.asset_groups.length === 0 ? <p className="read-state">No manual asset groups are configured.</p> : <ul>{access.asset_groups.map((group) => <li key={group.asset_group_id}><strong>{group.name}</strong>: {group.selectors.join(" AND ")}</li>)}</ul>}

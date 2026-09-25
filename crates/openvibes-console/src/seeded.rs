@@ -823,7 +823,14 @@ async fn access_inventory(headers: HeaderMap) -> Response {
     } else {
         Vec::new()
     };
-    Json(serde_json::json!({ "roles": roles, "bindings": bindings, "asset_groups": [] }))
+    let users = if matches!(persona, Persona::Admin) {
+        vec![serde_json::json!({
+            "user_id": "seeded-admin", "username": "admin", "display_name": "Seeded administrator"
+        })]
+    } else {
+        Vec::new()
+    };
+    Json(serde_json::json!({ "roles": roles, "bindings": bindings, "asset_groups": [], "users": users }))
         .into_response()
 }
 

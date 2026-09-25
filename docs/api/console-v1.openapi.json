@@ -29,6 +29,91 @@
         }
       }
     },
+    "/api/v1/access-control/bindings": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Adds one active local-user role binding.",
+        "operationId": "create_authenticated_access_binding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAccessBindingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Role binding created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AccessBinding"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid binding request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Binding conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/access-control/bindings/{binding_id}": {
+      "delete": {
+        "tags": [
+          "access control"
+        ],
+        "operationId": "revoke_authenticated_access_binding",
+        "parameters": [
+          {
+            "name": "binding_id",
+            "in": "path",
+            "description": "Role binding UUID",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Role binding revoked"
+          },
+          "404": {
+            "description": "Binding not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents": {
       "get": {
         "tags": [
@@ -1110,8 +1195,6 @@
         "tags": [
           "session"
         ],
-        "summary": "Reports the current authenticated browser session.",
-        "description": "The C0 router deliberately returns a bounded failure instead of creating a\ntemporary unauthenticated or implicitly privileged session.",
         "operationId": "session",
         "responses": {
           "200": {
@@ -1430,7 +1513,8 @@
         "required": [
           "roles",
           "bindings",
-          "asset_groups"
+          "asset_groups",
+          "users"
         ],
         "properties": {
           "asset_groups": {
@@ -1453,6 +1537,13 @@
               "$ref": "#/components/schemas/AccessRole"
             },
             "description": "All available roles and granted permission identifiers."
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AccessUser"
+            },
+            "description": "Enabled users who can receive role bindings."
           }
         }
       },
@@ -1484,6 +1575,29 @@
           "role_id": {
             "type": "string",
             "description": "Stable role identifier."
+          }
+        }
+      },
+      "AccessUser": {
+        "type": "object",
+        "description": "Enabled local user in the access-management picker.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing display name."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local user UUID."
+          },
+          "username": {
+            "type": "string",
+            "description": "Canonical username."
           }
         }
       },
@@ -1859,6 +1973,38 @@
             "description": "Certificate serial rendered as hexadecimal."
           }
         }
+      },
+      "CreateAccessBindingRequest": {
+        "type": "object",
+        "description": "Request to assign a role to one local user with optional asset-group scope.",
+        "required": [
+          "user_id",
+          "role_id"
+        ],
+        "properties": {
+          "asset_group_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Asset-group UUID; omitted means global scope.",
+            "maxLength": 36,
+            "minLength": 36
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Built-in role identifier.",
+            "maxLength": 64,
+            "minLength": 1
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable local-user UUID.",
+            "maxLength": 36,
+            "minLength": 36
+          }
+        },
+        "additionalProperties": false
       },
       "CursorPagination": {
         "type": "object",

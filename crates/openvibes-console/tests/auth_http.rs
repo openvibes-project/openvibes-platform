@@ -286,6 +286,88 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .is_some_and(|bindings| !bindings.is_empty())
     );
     assert!(access.get("credentials").is_none());
+    let admin_binding_id = access["bindings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|binding| binding["role_id"] == "admin" && binding["asset_group_id"].is_null())
+        .unwrap()["binding_id"]
+        .as_str()
+        .unwrap();
+    let last_admin_revoke = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!(
+                    "/api/v1/access-control/bindings/{admin_binding_id}"
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(last_admin_revoke.status(), StatusCode::CONFLICT);
+    let new_binding = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/access-control/bindings")
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(Body::from(format!(
+                    r#"{{"user_id":"{}","role_id":"viewer"}}"#,
+                    session["principal"]["id"].as_str().unwrap()
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(new_binding.status(), StatusCode::CREATED);
+    let new_binding: Value =
+        serde_json::from_slice(&to_bytes(new_binding.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(new_binding["role_id"], "viewer");
+    assert_eq!(new_binding["asset_group_id"], Value::Null);
+    let revoke_binding = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("DELETE")
+                .uri(format!(
+                    "/api/v1/access-control/bindings/{}",
+                    new_binding["binding_id"].as_str().unwrap()
+                ))
+                .header(header::COOKIE, session_cookie.clone())
+                .header(header::ORIGIN, "https://console.example")
+                .header("sec-fetch-site", "same-origin")
+                .header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(revoke_binding.status(), StatusCode::NO_CONTENT);
+    let binding_events = db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action IN ('rbac.binding.created', 'rbac.binding.revoked')",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get::<_, i64>(0);
+    assert_eq!(binding_events, 2);
     let unauthenticated_summary = router
         .clone()
         .oneshot(

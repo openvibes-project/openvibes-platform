@@ -20,6 +20,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/access-control/bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Adds one active local-user role binding. */
+        post: operations["create_authenticated_access_binding"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/access-control/bindings/{binding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["revoke_authenticated_access_binding"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -219,11 +252,6 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * Reports the current authenticated browser session.
-         * @description The C0 router deliberately returns a bounded failure instead of creating a
-         *     temporary unauthenticated or implicitly privileged session.
-         */
         get: operations["session"];
         put?: never;
         post?: never;
@@ -323,6 +351,8 @@ export interface components {
             bindings: components["schemas"]["AccessBinding"][];
             /** @description All available roles and granted permission identifiers. */
             roles: components["schemas"]["AccessRole"][];
+            /** @description Enabled users who can receive role bindings. */
+            users: components["schemas"]["AccessUser"][];
         };
         /** @description Role and permission mapping. */
         AccessRole: {
@@ -334,6 +364,15 @@ export interface components {
             permissions: string[];
             /** @description Stable role identifier. */
             role_id: string;
+        };
+        /** @description Enabled local user in the access-management picker. */
+        AccessUser: {
+            /** @description Operator-facing display name. */
+            display_name: string;
+            /** @description Stable local user UUID. */
+            user_id: string;
+            /** @description Canonical username. */
+            username: string;
         };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
@@ -478,6 +517,15 @@ export interface components {
             not_before: string;
             /** @description Certificate serial rendered as hexadecimal. */
             serial: string;
+        };
+        /** @description Request to assign a role to one local user with optional asset-group scope. */
+        CreateAccessBindingRequest: {
+            /** @description Asset-group UUID; omitted means global scope. */
+            asset_group_id?: string | null;
+            /** @description Built-in role identifier. */
+            role_id: string;
+            /** @description Stable local-user UUID. */
+            user_id: string;
         };
         /** @description Validated cursor and limit accepted by cursor-paginated collection routes. */
         CursorPagination: {
@@ -761,6 +809,78 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessInventory"];
+                };
+            };
+        };
+    };
+    create_authenticated_access_binding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAccessBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Role binding created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessBinding"];
+                };
+            };
+            /** @description Invalid binding request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Binding conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_authenticated_access_binding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Role binding UUID */
+                binding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Role binding revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Binding not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

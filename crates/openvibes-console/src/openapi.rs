@@ -4,13 +4,13 @@ use utoipa::OpenApi;
 
 use crate::{
     api::{
-        AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AgentDetail, AgentPage,
-        AgentStatus, AgentSummary, AgentView, AuditEventPage, AuditEventView, AuditRetentionPolicy,
-        AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
-        CursorPagination, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage,
-        FindingOrigin, FindingPage, FindingSummary, FindingView, LoginRequest, LoginResponse,
-        Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse, Severity,
-        UpdateAuditRetentionRequest,
+        AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
+        AgentPage, AgentStatus, AgentSummary, AgentView, AuditEventPage, AuditEventView,
+        AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, CertificatePage,
+        CertificateView, CreateAccessBindingRequest, CursorPagination, EffectiveCapability,
+        FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+        FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
+        SessionPrincipal, SessionResponse, Severity, UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
 };
@@ -25,6 +25,8 @@ use crate::{
     ),
     paths(
         crate::router::authenticated_access_inventory,
+        crate::router::create_authenticated_access_binding,
+        crate::router::revoke_authenticated_access_binding,
         crate::router::session,
         crate::router::preauth,
         crate::router::login,
@@ -48,6 +50,8 @@ use crate::{
         AccessBinding,
         AccessInventory,
         AccessRole,
+        AccessUser,
+        CreateAccessBindingRequest,
         AuthenticationLevel,
         AuthenticationMethod,
         AuditRetentionPolicy,
