@@ -106,9 +106,18 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
             .unwrap();
     }
     // One Fedora 44 host exists before start, so release 44 is checked.
-    inventory::replace(&mut admin, first, "fedora", "44", &[], [1; 32], Utc::now())
-        .await
-        .unwrap();
+    inventory::replace(
+        &mut admin,
+        first,
+        "fedora",
+        "44",
+        None,
+        &[],
+        [1; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
     let content = std::fs::read(
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/updateinfo-f44.xml.zst"),
     )
@@ -141,6 +150,7 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
         second,
         "fedora",
         "44",
+        None,
         &[wordpress()],
         [2; 32],
         Utc::now(),

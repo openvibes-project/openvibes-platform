@@ -169,7 +169,7 @@ pub(crate) async fn inventory(
         .sort_by_cached_key(|package| serde_json::to_string(package).unwrap_or_default());
     let digest: [u8; 32] = {
         use sha2::Digest;
-        let bytes = serde_json::to_vec(&(&report.os, &report.packages))
+        let bytes = serde_json::to_vec(&(&report.os, &report.running_kernel, &report.packages))
             .map_err(|_| ApiError::BadRequest)?;
         sha2::Sha256::digest(&bytes).into()
     };
@@ -198,6 +198,7 @@ pub(crate) async fn inventory(
         &agent_id,
         report.os.id.as_str(),
         report.os.version_id.as_str(),
+        report.running_kernel.as_deref(),
         &rows,
         digest,
         Utc::now(),

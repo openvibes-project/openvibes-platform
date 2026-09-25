@@ -52,6 +52,7 @@ fn report(agent_id: &str, packages: Vec<InstalledPackage>) -> InventoryReport {
             id: Identifier::new("fedora").unwrap(),
             version_id: Identifier::new("44").unwrap(),
         },
+        running_kernel: None,
         collected_at_unix_ms: 1_790_000_000_000,
         packages,
     }
@@ -144,6 +145,39 @@ async fn an_inventory_report_is_stored_and_replaced() {
         (row.get(0), row.get(1))
     };
     assert_eq!(os, ("fedora".into(), "44".into()));
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn a_reboot_alone_updates_the_running_kernel() {
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let kernel = |release: &str| {
+        let mut report = report(&agent, vec![package("kernel-core", "6.17.7")]);
+        report.running_kernel = Some(release.into());
+        report
+    };
+    let running = || async {
+        world
+            .db()
+            .await
+            .query_one(
+                "SELECT running_kernel FROM agents WHERE agent_id = $1",
+                &[&agent],
+            )
+            .await
+            .unwrap()
+            .get::<_, Option<String>>(0)
+    };
+    send(&world, &chain, &key, kernel("6.17.4-1.fc44.x86_64"))
+        .await
+        .unwrap();
+    assert_eq!(running().await.as_deref(), Some("6.17.4-1.fc44.x86_64"));
+    // Same packages, new kernel: stored, not skipped as unchanged (P9).
+    send(&world, &chain, &key, kernel("6.17.7-1.fc44.x86_64"))
+        .await
+        .unwrap();
+    assert_eq!(running().await.as_deref(), Some("6.17.7-1.fc44.x86_64"));
     world.stop().await;
 }
 

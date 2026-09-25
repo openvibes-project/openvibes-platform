@@ -152,8 +152,11 @@ fn packages(row: &VulnRow) -> String {
         .map(|list| {
             list.iter()
                 .map(|p| {
+                    let running = p["running"]
+                        .as_str()
+                        .map_or_else(String::new, |r| format!(" (running {r})"));
                     format!(
-                        "{} {} -> {}",
+                        "{} {} -> {}{running}",
                         p["name"].as_str().unwrap_or("?"),
                         p["installed"].as_str().unwrap_or("?"),
                         p["fixed"].as_str().unwrap_or("?")
@@ -174,8 +177,13 @@ fn line(row: &VulnRow) -> String {
     } else {
         format!(" [{}]", row.cves.join(" "))
     };
+    let reboot = if row.reboot_needed {
+        " (fix installed, reboot needed)"
+    } else {
+        ""
+    };
     format!(
-        "{} {} {} since {}{fixed}: {}{cves}\n",
+        "{} {} {} since {}{fixed}: {}{cves}{reboot}\n",
         row.severity,
         row.advisory_id,
         host_label(row),
