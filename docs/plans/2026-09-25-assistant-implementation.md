@@ -46,7 +46,7 @@ and GPU, then an own server in AS6). External providers and pseudonymization
   bodies).
 
 ### Task AS1: backend client and configuration (`platform-assistant`)
-- [ ] `[assistant]` section in `platform-config`: `enabled`, `backend.url`,
+- [x] `[assistant]` section in `platform-config`: `enabled`, `backend.url`,
   `backend.api_key_file`, `backend.ca_file`, `backend.client_cert_file` and
   `key_file`, `backend.model`, `profile` (`small|medium|large`),
   `lookup_mode` (`auto|native|json_schema|prompted`), `allow_remote`,
@@ -54,15 +54,15 @@ and GPU, then an own server in AS6). External providers and pseudonymization
   (`max_lookups`, deadlines, concurrency, rate limit). Tests first: loopback
   HTTP accepted; non-loopback requires HTTPS, `allow_remote`, and
   `data_location`; secrets read from files with owner-only permissions.
-- [ ] OpenAI-compatible client: chat completions with streaming (SSE parser
+- [x] OpenAI-compatible client: chat completions with streaming (SSE parser
   bounded by line and total size), tool calls and `response_format`
   JSON schema, TLS 1.3 with the pinned CA and optional mTLS, no redirects,
   explicit proxy only, deadlines. Tests against a mock backend in the crate's
   tests covering streaming, split SSE frames, oversized responses,
   redirects, slow responses, and malformed tool calls.
-- [ ] Capability probe: model name, context size, which lookup modes work
+- [x] Capability probe: model name, context size, which lookup modes work
   (a fixed probe prompt per mode), time to first token and tokens per second.
-- [ ] Standard-fields test: every request body the client sends is checked
+- [x] Standard-fields test: every request body the client sends is checked
   against the standard Chat Completions field list; nothing
   runtime-specific.
 

@@ -1325,6 +1325,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "platform-assistant"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "platform-pki",
+ "rcgen",
+ "rustls",
+ "serde",
+ "serde_json",
+ "toml",
+ "ureq",
+]
+
+[[package]]
 name = "platform-config"
 version = "0.1.0"
 dependencies = [
