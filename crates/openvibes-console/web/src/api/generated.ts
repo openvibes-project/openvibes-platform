@@ -151,6 +151,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/revoke": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Revokes one visible agent and records an operator reason. */
+        post: operations["revoke_authenticated_agent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/tags": {
         parameters: {
             query?: never;
@@ -868,6 +885,11 @@ export interface components {
             /** @description Short human-readable error title. */
             title: string;
         };
+        /** @description Reason supplied by an operator when revoking an agent. */
+        RevokeAgentRequest: {
+            /** @description Short operator reason recorded in the audit event. */
+            reason: string;
+        };
         /** @description Request to create or replace an asset group's complete selector set. */
         SaveAssetGroupRequest: {
             /** @description Operator-facing group name. */
@@ -1345,6 +1367,48 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    revoke_authenticated_agent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevokeAgentRequest"];
+            };
+        };
+        responses: {
+            /** @description Agent revoked */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid reason */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Agent not found in the current scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -294,6 +294,44 @@ pub struct TagBindingImpact {
     pub asset_group_name: String,
 }
 
+/// Revokes an agent only if it is visible in the caller's SQL-enforced scope.
+/// The successful state change and audit row share one transaction.
+pub async fn revoke_agent_in_scope(
+    client: &mut Client,
+    agent_id: &str,
+    scope: &crate::console_read::AgentScope,
+    actor_id: &str,
+    reason: &str,
+    now: DateTime<Utc>,
+) -> Result<crate::agents::Revoke, StoreError> {
+    let tx = client.transaction().await?;
+    let (global, groups) = match scope {
+        crate::console_read::AgentScope::Global => (true, Vec::new()),
+        crate::console_read::AgentScope::AssetGroups(ids) => (false, ids.clone()),
+    };
+    let visible = "($2::boolean OR EXISTS (SELECT 1 FROM console_asset_group_selectors s WHERE s.asset_group_id::text=ANY($3::text[]) AND NOT EXISTS (SELECT 1 FROM console_asset_group_selectors required WHERE required.asset_group_id=s.asset_group_id AND NOT EXISTS (SELECT 1 FROM console_agent_tags t WHERE t.agent_id=a.agent_id AND t.tag_key=required.tag_key AND t.tag_value=required.tag_value))))";
+    let update = format!(
+        "UPDATE agents a SET status='revoked',revoked_at=$4 WHERE a.agent_id=$1 AND a.status='active' AND {visible} RETURNING a.agent_id"
+    );
+    let changed = tx
+        .query_opt(&update, &[&agent_id, &global, &groups, &now])
+        .await?;
+    if changed.is_some() {
+        tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id,reason_code) VALUES($1,'agent.revoked','agent','success',jsonb_build_object('reason',$2::text),'user',$1,$1,'agent',$3,'operator_request')",&[&actor_id,&reason,&agent_id]).await?;
+        tx.commit().await?;
+        return Ok(crate::agents::Revoke::Revoked);
+    }
+    let select = format!("SELECT a.status FROM agents a WHERE a.agent_id=$1 AND {visible}");
+    let status = tx
+        .query_opt(&select, &[&agent_id, &global, &groups])
+        .await?;
+    tx.rollback().await?;
+    Ok(match status {
+        None => crate::agents::Revoke::Unknown,
+        Some(_) => crate::agents::Revoke::AlreadyRevoked,
+    })
+}
+
 /// Previews exact-tag membership changes without modifying the database.
 pub async fn preview_agent_tags(
     client: &Client,

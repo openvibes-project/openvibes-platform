@@ -359,6 +359,14 @@ pub struct SaveAssetGroupRequest {
     pub selectors: Vec<AssetGroupSelectorInput>,
 }
 
+/// Reason supplied by an operator when revoking an agent.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RevokeAgentRequest {
+    /// Short operator reason recorded in the audit event.
+    pub reason: String,
+}
+
 /// Request to assign a role to one local user with optional asset-group scope.
 #[derive(Clone, Debug, Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

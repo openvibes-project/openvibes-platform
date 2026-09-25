@@ -591,3 +591,6 @@ h2 {
 .asset-group-form label { display: grid; gap: 0.35rem; }
 .asset-group-form textarea { font: inherit; }
 .asset-group-item { margin: 0.75rem 0; }
+.agent-revoke { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid var(--line); }
+.agent-revoke form { display: grid; gap: 0.75rem; max-width: 38rem; }
+.agent-revoke label { display: grid; gap: 0.35rem; }

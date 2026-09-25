@@ -12,7 +12,7 @@ use crate::{
         CertificateView, CreateAccessBindingRequest, CursorPagination, EffectiveCapability,
         FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
         FindingView, LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse,
-        SaveAssetGroupRequest, SessionPrincipal, SessionResponse, Severity,
+        RevokeAgentRequest, SaveAssetGroupRequest, SessionPrincipal, SessionResponse, Severity,
         UpdateAuditRetentionRequest,
     },
     problem::{FieldError, ProblemDetails},
@@ -29,6 +29,7 @@ use crate::{
     paths(
         crate::router::create_authenticated_asset_group,
         crate::router::update_authenticated_asset_group,
+        crate::router::revoke_authenticated_agent,
         crate::router::preview_authenticated_agent_tags,
         crate::router::apply_authenticated_agent_tags,
         crate::router::authenticated_access_inventory,
@@ -55,6 +56,7 @@ use crate::{
     components(schemas(
         AssetGroupSelectorInput,
         SaveAssetGroupRequest,
+        RevokeAgentRequest,
         AgentTagBindingImpact,
         AgentTagChangeRequest,
         AgentTagGroupImpact,

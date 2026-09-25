@@ -442,6 +442,47 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
         .unwrap()
         .is_none()
     );
+    assert_eq!(
+        platform_store::console_auth::revoke_agent_in_scope(
+            &mut client,
+            ids[2],
+            &scope,
+            "operator",
+            "outside scope",
+            now
+        )
+        .await
+        .unwrap(),
+        platform_store::agents::Revoke::Unknown
+    );
+    assert_eq!(
+        platform_store::console_auth::revoke_agent_in_scope(
+            &mut client,
+            ids[0],
+            &scope,
+            "operator",
+            "in scope",
+            now
+        )
+        .await
+        .unwrap(),
+        platform_store::agents::Revoke::Revoked
+    );
+    let hidden_status: String = client
+        .query_one("SELECT status FROM agents WHERE agent_id=$1", &[&ids[2]])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(hidden_status, "active");
+    let revoke_audit: i64 = client
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action='agent.revoked'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(revoke_audit, 1);
     drop(client);
     db.drop().await;
 }

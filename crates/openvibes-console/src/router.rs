@@ -312,6 +312,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             axum::routing::put(apply_authenticated_agent_tags),
         )
         .route(
+            "/v1/agents/{agent_id}/revoke",
+            axum::routing::post(revoke_authenticated_agent),
+        )
+        .route(
             "/v1/agents/{agent_id}/certificates",
             get(authenticated_agent_certificates),
         )
@@ -890,6 +894,58 @@ pub(crate) async fn apply_authenticated_agent_tags(
             Json(agent_tag_preview_response(preview)),
         )
             .into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+/// Revokes one visible agent and records an operator reason.
+#[utoipa::path(post,path="/api/v1/agents/{agent_id}/revoke",tag="agents",params(("agent_id"=String,Path)),request_body=crate::RevokeAgentRequest,responses((status=204,description="Agent revoked"),(status=404,description="Agent not found in the current scope",body=ProblemDetails),(status=400,description="Invalid reason",body=ProblemDetails)))]
+pub(crate) async fn revoke_authenticated_agent(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(agent_id): Path<String>,
+    Json(request): Json<crate::RevokeAgentRequest>,
+) -> Response {
+    if !valid_agent_id(&agent_id)
+        || request.reason.trim().is_empty()
+        || request.reason.chars().count() > 500
+        || request.reason.chars().any(char::is_control)
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_revoke_reason",
+            "Provide a non-empty reason up to 500 characters",
+        ));
+    }
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::AgentsRevoke, true)
+            .await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
+    let mut client = match state.pool.get().await {
+        Ok(value) => value,
+        Err(_) => return unavailable_auth(),
+    };
+    match platform_store::console_auth::revoke_agent_in_scope(
+        &mut client,
+        &agent_id,
+        &scope,
+        &actor,
+        request.reason.trim(),
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(
+            platform_store::agents::Revoke::Revoked
+            | platform_store::agents::Revoke::AlreadyRevoked,
+        ) => StatusCode::NO_CONTENT.into_response(),
+        Ok(platform_store::agents::Revoke::Unknown) => problem_response(ProblemDetails::not_found(
+            "agent_not_found",
+            "Agent not found",
+        )),
         Err(_) => unavailable_auth(),
     }
 }

@@ -25,8 +25,8 @@ where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes, plus finding summary, latest, and history reads. Access
 control has a global read inventory for roles, bindings, and asset groups,
-plus CSRF-protected local-user role binding changes. Asset-group selector
-management and enrollment, rule, and service-account reads remain pending.
+plus CSRF-protected local-user role binding changes and audited asset-group
+selector management. Enrollment, rule, and service-account reads remain pending.
 Global audit event search and retention-policy
 reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
@@ -35,7 +35,9 @@ CSV; the export audit event records only filters, row count, and digest.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, Findings, Audit, and
-Access control pages use authenticated APIs.
+Access control pages use authenticated APIs. Agent detail also provides a
+reason-required revoke operation; the store enforces the effective global or
+asset-group scope in SQL and commits revocation with its audit row.
 The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded

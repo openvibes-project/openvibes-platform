@@ -539,6 +539,60 @@
         }
       }
     },
+    "/api/v1/agents/{agent_id}/revoke": {
+      "post": {
+        "tags": [
+          "agents"
+        ],
+        "summary": "Revokes one visible agent and records an operator reason.",
+        "operationId": "revoke_authenticated_agent",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RevokeAgentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Agent revoked"
+          },
+          "400": {
+            "description": "Invalid reason",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Agent not found in the current scope",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents/{agent_id}/tags": {
       "put": {
         "tags": [
@@ -2950,6 +3004,20 @@
             "description": "Short human-readable error title."
           }
         }
+      },
+      "RevokeAgentRequest": {
+        "type": "object",
+        "description": "Reason supplied by an operator when revoking an agent.",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "description": "Short operator reason recorded in the audit event."
+          }
+        },
+        "additionalProperties": false
       },
       "SaveAssetGroupRequest": {
         "type": "object",

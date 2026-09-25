@@ -1020,6 +1020,30 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let session: Value =
         serde_json::from_slice(&to_bytes(response.into_body(), 16_384).await.unwrap()).unwrap();
 
+    let revoke_agent = api_json(
+        &router,
+        "POST",
+        "/api/v1/agents/agent.00000000-0000-4000-8000-000000000101/revoke",
+        &session_cookie,
+        session["csrf_token"].as_str().unwrap(),
+        r#"{"reason":"retired by operator"}"#,
+    )
+    .await;
+    assert_eq!(revoke_agent.status(), StatusCode::NO_CONTENT);
+    let revoke_audit: i64 = db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action='agent.revoked' AND target_id=$1",
+            &[&"agent.00000000-0000-4000-8000-000000000101"],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(revoke_audit, 1);
+
     let logout = router
         .clone()
         .oneshot(
