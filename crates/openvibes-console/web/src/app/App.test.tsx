@@ -44,6 +44,7 @@ describe("console shell", () => {
     expect(markup).toContain('name="actor"');
     expect(markup).toContain('name="action"');
     expect(markup).toContain("Apply filters");
+    expect(markup).toContain("Download filtered CSV");
   });
 
   it("renders the access-control inventory screen", () => {

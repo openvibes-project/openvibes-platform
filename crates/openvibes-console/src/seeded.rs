@@ -827,6 +827,29 @@ async fn access_inventory(headers: HeaderMap) -> Response {
         .into_response()
 }
 
+async fn audit_export(headers: HeaderMap) -> Response {
+    let (_, mode) = match context(&headers, Permission::AuditExport) {
+        Ok(context) => context,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    let mut response = (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/csv; charset=utf-8",
+        )],
+        "event_id,at,actor,action,target,result\r\n1,2026-09-24T12:00:00Z,admin@example.test,user.login,console,success\r\n",
+    )
+        .into_response();
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        axum::http::HeaderValue::from_static("attachment; filename=\"openvibes-audit.csv\""),
+    );
+    response
+}
+
 pub(crate) fn router() -> Router {
     let repository: Arc<dyn ConsoleRepository> = Arc::new(SeededRepository::default());
     Router::new()
@@ -835,6 +858,7 @@ pub(crate) fn router() -> Router {
         .route("/api/v1/agents/{id}", get(agent))
         .route("/api/v1/findings/summary", get(finding_summary))
         .route("/api/v1/audit-events", get(audit_events))
+        .route("/api/v1/audit-export.csv", get(audit_export))
         .route("/api/v1/access-control", get(access_inventory))
         .route("/api/v1/findings/latest", get(findings))
         .route(

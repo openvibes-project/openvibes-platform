@@ -15,6 +15,7 @@ argon2 = { version = "=0.6.0", features = ["zeroize"] }
 axum = { workspace = true, features = ["matched-path", "query"] }
 base64.workspace = true
 chrono.workspace = true
+futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
 platform-store = { path = "../platform-store" }

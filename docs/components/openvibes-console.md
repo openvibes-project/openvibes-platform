@@ -29,6 +29,8 @@ editing those records and enrollment, rule, and service-account reads remain
 pending. Global audit event search and retention-policy
 reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
+Global `audit.export` users can download the exact visible filters as bounded
+CSV; the export audit event records only filters, row count, and digest.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, Findings, Audit, and

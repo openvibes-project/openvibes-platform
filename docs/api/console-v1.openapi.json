@@ -414,6 +414,76 @@
         }
       }
     },
+    "/api/v1/audit-export.csv": {
+      "get": {
+        "tags": [
+          "audit"
+        ],
+        "operationId": "authenticated_audit_export",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "description": "Inclusive RFC3339 lower bound",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "description": "Exclusive RFC3339 upper bound",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "result",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered audit events as CSV",
+            "content": {
+              "text/csv": {}
+            }
+          },
+          "413": {
+            "description": "Export exceeds the row or byte limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-retention": {
       "get": {
         "tags": [

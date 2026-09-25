@@ -259,7 +259,7 @@ export function FindingsReadPage({ seeded = false }: { seeded?: boolean }) {
   );
 }
 
-export function AuditEventsReadPage({ seeded = false }: { seeded?: boolean }) {
+export function AuditEventsReadPage({ seeded = false, canExport = false }: { seeded?: boolean; canExport?: boolean }) {
   const [defaultSince] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
   const search = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
   const since = search.get("since") ?? defaultSince;
@@ -273,8 +273,12 @@ export function AuditEventsReadPage({ seeded = false }: { seeded?: boolean }) {
   const cursor = search.get("cursor");
   if (cursor) params.set("cursor", cursor);
   const page = useRead<AuditEventPage>(`/api/v1/audit-events?${params.toString()}`, seeded);
+  const exportParams = new URLSearchParams(params);
+  exportParams.delete("cursor");
+  exportParams.delete("limit");
   return <section className="read-card" aria-labelledby="audit-events-title">
     <div className="read-card__heading"><div><p className="eyebrow">Audit trail</p><h2 id="audit-events-title">Privileged activity</h2></div></div>
+    {canExport && <p><a className="button-link" href={`/api/v1/audit-export.csv?${exportParams.toString()}`}>Download filtered CSV</a></p>}
     <form className="filter-form" action="/audit" method="get">
       <label>Actor<input name="actor" defaultValue={actor} maxLength={128} /></label>
       <label>Action<input name="action" defaultValue={action} maxLength={128} /></label>

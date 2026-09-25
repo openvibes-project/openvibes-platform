@@ -40,6 +40,7 @@ use crate::{
         crate::router::authenticated_finding_event,
         crate::router::authenticated_audit_retention,
         crate::router::authenticated_audit_events,
+        crate::router::authenticated_audit_export,
         crate::router::update_authenticated_audit_retention
     ),
     components(schemas(

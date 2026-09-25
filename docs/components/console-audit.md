@@ -11,6 +11,9 @@ policy and appending its audit event happen in one transaction.
 - `events` performs exact-filtered, bounded keyset reads ordered by timestamp
   and event id. A mandatory lower time bound keeps queries indexable. Its safe
   view omits detail JSON, source address, and user agent.
+- `export_events` performs the same exact filters and checks row and
+  conservative byte estimates before loading the result; `record_export`
+  commits filter metadata, row count, and digest without exported content.
 - `retention_policy` reads the current day limit, version, update timestamp,
   and actor.
 - `update_retention_policy` accepts 1–36500 days and an expected version. It
@@ -28,6 +31,14 @@ operation and must use the effective policy cutoff.
 `until`, exact `actor`/`action`/`result` filters, and a limit from 1 to 100.
 Opaque cursors bind all filters. Successful reads append `audit.accessed`; the
 response does not include event details or request source metadata.
+`GET /api/v1/audit-export.csv` accepts the same exact filters and requires the
+global `audit.export` capability. Exports are capped at 10,000 rows and 5 MiB;
+oversized requests fail before response bytes are sent. CSV cells are quoted,
+embedded quotes are doubled, and formula-leading values are prefixed with an
+apostrophe. The private mode-0600 temporary spool is removed on every return
+path before the response is released. The export is hashed with SHA-256, then
+`audit.exported` commits the filters, row count, and digest before CSV bytes are
+returned. Exported event contents are never copied into that audit record.
 The local `openvibes-admin maintenance` command also calls
 `cleanup_expired_events`, which reads the policy cutoff itself and deletes at
 most 10,000 rows per run; another scheduled run drains any remaining backlog.

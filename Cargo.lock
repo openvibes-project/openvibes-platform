@@ -1152,6 +1152,7 @@ dependencies = [
  "axum",
  "base64 0.23.1",
  "chrono",
+ "futures-util",
  "include_dir",
  "platform-config",
  "platform-store",

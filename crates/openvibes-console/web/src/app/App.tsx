@@ -170,7 +170,7 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               {path === "/" ? <OverviewReadPage seeded={seeded} /> : null}
               {path === "/agents" ? <AgentsReadPage seeded={seeded} /> : null}
               {path === "/findings" ? <FindingsReadPage seeded={seeded} /> : null}
-              {path === "/audit" ? <AuditEventsReadPage seeded={seeded} /> : null}
+              {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
               {path === "/access" ? <AccessControlReadPage seeded={seeded} /> : null}
               {!["/", "/agents", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>

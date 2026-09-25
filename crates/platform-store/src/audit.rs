@@ -1,6 +1,11 @@
 use crate::{Client, StoreError, console_read::PageLimit};
 use chrono::{DateTime, Duration, Utc};
 
+/// Hard maximum number of rows in one audit CSV download.
+pub const MAX_EXPORT_ROWS: usize = 10_000;
+/// Hard maximum size of one audit CSV download.
+pub const MAX_EXPORT_BYTES: usize = 5 * 1024 * 1024;
+
 /// Administrator-controlled audit-log retention policy.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RetentionPolicy {
@@ -81,6 +86,138 @@ pub struct AuditPage {
     pub items: Vec<AuditEvent>,
     /// Cursor for the next page, if one exists.
     pub next: Option<AuditCursor>,
+}
+
+/// Exact audit export filters; lower bound is mandatory.
+#[derive(Clone, Debug)]
+pub struct AuditExportQuery {
+    /// Inclusive lower timestamp.
+    pub since: DateTime<Utc>,
+    /// Exclusive upper timestamp.
+    pub until: Option<DateTime<Utc>>,
+    /// Optional exact actor filter.
+    pub actor: Option<String>,
+    /// Optional exact action filter.
+    pub action: Option<String>,
+    /// Optional exact result filter.
+    pub result: Option<String>,
+}
+
+/// Rows or a limit decision from an audit export request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AuditExportData {
+    /// Safe event fields, empty when a limit is exceeded.
+    pub items: Vec<AuditEvent>,
+    /// True when row or conservative byte estimation exceeds export bounds.
+    pub too_large: bool,
+}
+
+/// Selects the exact filtered export result, rejecting oversized sets before
+/// loading event bodies into the application process.
+pub async fn export_events(
+    client: &Client,
+    query: &AuditExportQuery,
+) -> Result<AuditExportData, StoreError> {
+    let estimate = client
+        .query_one(
+            "WITH measured AS (
+             SELECT (2 * (
+                 octet_length(id::text) + octet_length(at::text) + octet_length(actor) +
+                 octet_length(action) + octet_length(COALESCE(target, '')) +
+                 octet_length(result) + octet_length(COALESCE(request_id, '')) +
+                 octet_length(COALESCE(actor_kind, '')) + octet_length(COALESCE(actor_id, '')) +
+                 octet_length(COALESCE(authentication_method, '')) +
+                 octet_length(COALESCE(target_kind, '')) + octet_length(COALESCE(target_id, '')) +
+                 octet_length(COALESCE(reason_code, '')) + 64
+             ))::bigint AS bytes
+             FROM audit_log WHERE at >= $1 AND ($2::timestamptz IS NULL OR at < $2)
+               AND ($3::text IS NULL OR actor = $3)
+               AND ($4::text IS NULL OR action = $4)
+               AND ($5::text IS NULL OR result = $5)
+             ORDER BY at DESC, id DESC LIMIT 10001
+         )
+         SELECT count(*)::bigint, COALESCE(sum(bytes), 0)::bigint FROM measured",
+            &[
+                &query.since,
+                &query.until,
+                &query.actor,
+                &query.action,
+                &query.result,
+            ],
+        )
+        .await?;
+    let row_count: i64 = estimate.get(0);
+    let estimated_bytes: i64 = estimate.get(1);
+    if row_count > MAX_EXPORT_ROWS as i64 || estimated_bytes > MAX_EXPORT_BYTES as i64 {
+        return Ok(AuditExportData {
+            items: Vec::new(),
+            too_large: true,
+        });
+    }
+    let rows = client
+        .query(
+            "SELECT id, at, actor, action, target, result, request_id, actor_kind,
+                actor_id, authentication_method, target_kind, target_id, reason_code
+         FROM audit_log WHERE at >= $1 AND ($2::timestamptz IS NULL OR at < $2)
+           AND ($3::text IS NULL OR actor = $3)
+           AND ($4::text IS NULL OR action = $4)
+           AND ($5::text IS NULL OR result = $5)
+         ORDER BY at DESC, id DESC LIMIT $6",
+            &[
+                &query.since,
+                &query.until,
+                &query.actor,
+                &query.action,
+                &query.result,
+                &(MAX_EXPORT_ROWS as i64 + 1),
+            ],
+        )
+        .await?;
+    if rows.len() > MAX_EXPORT_ROWS {
+        return Ok(AuditExportData {
+            items: Vec::new(),
+            too_large: true,
+        });
+    }
+    Ok(AuditExportData {
+        items: rows.iter().map(audit_event_from_row).collect(),
+        too_large: false,
+    })
+}
+
+/// Records a completed audit export without embedding any exported row data.
+pub async fn record_export(
+    client: &Client,
+    actor: &str,
+    query: &AuditExportQuery,
+    row_count: usize,
+    sha256: &str,
+) -> Result<(), StoreError> {
+    let since = query.since.to_rfc3339();
+    let until = query.until.map(|value| value.to_rfc3339());
+    let row_count = row_count as i64;
+    client
+        .execute(
+            "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind,
+             actor_id, actor_display, target_kind, target_id)
+         VALUES ($1, 'audit.exported', 'audit_log', 'success',
+             jsonb_build_object('since', $2::text, 'until', $3::text, 'actor', $4::text,
+                 'action', $5::text, 'result', $6::text, 'row_count', $7::bigint,
+                 'sha256', $8::text),
+             'user', $1, $1, 'audit_log', 'filtered_export')",
+            &[
+                &actor,
+                &since,
+                &until,
+                &query.actor,
+                &query.action,
+                &query.result,
+                &row_count,
+                &sha256,
+            ],
+        )
+        .await?;
+    Ok(())
 }
 
 /// Lists a bounded set of audit events using exact filters and keyset paging.

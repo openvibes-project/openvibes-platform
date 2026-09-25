@@ -11,11 +11,15 @@ variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
 latest/detail/history routes behind `findings.read`. The embedded login page,
 session gate, sign-out action, and production Overview/Agents/Findings data
-views are implemented against the authenticated routes.
+views are implemented against the authenticated routes. The Access control
+inventory and Audit pages use authenticated APIs; bounded CSV export is
+permission-gated and commits export metadata before its download response.
 Audit-retention reads and versioned updates now use the global `audit.read` and
 `audit.retention.manage` permissions and commit policy changes with their audit
-event. Access-control/audit event pages and export, retention cleanup, and the
-rest of the control-plane routes remain outstanding.
+event. `openvibes-admin maintenance` applies the stored audit-retention cutoff
+in batches of at most 10,000 rows. Remaining C3 work includes access-control
+mutations, the rest of the control-plane routes, production TLS/proxy setup,
+final CSP/browser headers, and broader end-to-end coverage.
 
 Design inputs:
 
@@ -196,13 +200,13 @@ Work:
 - implement permission middleware plus handler-level object scope;
 - extend the C2 store queries so asset scope is enforced inside SQL before
   aggregation, facets, sorting, filtering, and pagination;
-- add access-control and audit read pages, including the effective 365-day
-  default retention policy and its globally authorised, audited update flow;
-- add a permission-gated CSV audit export of the exact filtered result set,
+- [x] add access-control inventory and audit read pages, including the 365-day
+  default retention policy and globally authorised, audited update flow;
+- [x] add a permission-gated CSV audit export of the exact filtered result set,
   with a private bounded spool, formula neutralisation, no caching, and an
   audit record committed before download begins;
-- extend bounded maintenance to delete audit events older than the effective
-  cutoff without granting the console unrestricted audit deletion;
+- [x] extend bounded maintenance to delete audit events older than the
+  effective cutoff without granting console-role audit deletion;
 - enforce the final CSP and browser headers.
 
 OIDC, SAML, TOTP, and WebAuthn are later adapters over this identity/session

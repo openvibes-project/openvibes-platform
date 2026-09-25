@@ -6,7 +6,8 @@ use chrono::Utc;
 use common::TestDb;
 use platform_store::{
     audit::{
-        AuditQuery, cleanup_expired_events, events, retention_policy, update_retention_policy,
+        AuditExportQuery, AuditQuery, cleanup_expired_events, events, export_events, record_export,
+        retention_policy, update_retention_policy,
     },
     console_read::PageLimit,
 };
@@ -102,6 +103,19 @@ async fn audit_event_reads_are_filtered_keyset_paged_and_safe() {
     assert!(second.next.is_none());
     assert_eq!(first.items[0].actor, "alice");
     assert!(first.items[0].action == "logout" || first.items[0].action == "login.success");
+    let export_query = AuditExportQuery {
+        since,
+        until: None,
+        actor: Some("alice".into()),
+        action: None,
+        result: Some("success".into()),
+    };
+    let export = export_events(&client, &export_query).await.unwrap();
+    assert!(!export.too_large);
+    assert_eq!(export.items.len(), 2);
+    record_export(&client, "operator", &export_query, 2, &"a".repeat(64))
+        .await
+        .unwrap();
     drop(client);
     db.drop().await;
 }
@@ -128,6 +142,61 @@ async fn audit_cleanup_uses_policy_and_deletes_expired_rows() {
         .unwrap()
         .get(0);
     assert_eq!(remaining, 1);
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn audit_export_refuses_row_and_byte_overflows_before_loading_events() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let since = Utc::now() - chrono::Duration::seconds(1);
+    client
+        .execute(
+            "INSERT INTO audit_log(actor, action, result)
+             SELECT 'many', 'audit.test', 'success' FROM generate_series(1, 10001)",
+            &[],
+        )
+        .await
+        .unwrap();
+    let row_overflow = export_events(
+        &client,
+        &AuditExportQuery {
+            since,
+            until: None,
+            actor: Some("many".into()),
+            action: None,
+            result: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(row_overflow.too_large);
+    assert!(row_overflow.items.is_empty());
+
+    client
+        .execute(
+            "INSERT INTO audit_log(actor, action, result)
+             VALUES (repeat('x', 3 * 1024 * 1024), 'audit.large', 'success')",
+            &[],
+        )
+        .await
+        .unwrap();
+    let byte_overflow = export_events(
+        &client,
+        &AuditExportQuery {
+            since,
+            until: None,
+            actor: None,
+            action: Some("audit.large".into()),
+            result: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(byte_overflow.too_large);
+    assert!(byte_overflow.items.is_empty());
     drop(client);
     db.drop().await;
 }

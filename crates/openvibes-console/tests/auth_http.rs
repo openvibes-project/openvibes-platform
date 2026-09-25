@@ -611,6 +611,67 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     assert!(audit_events["items"][0].get("source_address").is_none());
     assert!(audit_events["items"][0].get("user_agent").is_none());
     assert!(audit_events["next_cursor"].is_string());
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "INSERT INTO audit_log(actor, action, target, result, detail)
+         VALUES ('=1+1', 'audit.test', 'csv-check', 'success', '{\"private\":true}'::jsonb)",
+            &[],
+        )
+        .await
+        .unwrap();
+    let spool_prefix = format!("openvibes-audit-{}-", std::process::id());
+    let export = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/audit-export.csv?since=2000-01-01T00%3A00%3A00Z&actor=%3D1%2B1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(export.status(), StatusCode::OK);
+    assert_eq!(
+        export.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
+    assert_eq!(
+        export.headers().get(header::CONTENT_TYPE).unwrap(),
+        "text/csv; charset=utf-8"
+    );
+    let csv = to_bytes(export.into_body(), 1024 * 1024).await.unwrap();
+    assert!(
+        std::fs::read_dir(std::env::temp_dir())
+            .unwrap()
+            .filter_map(Result::ok)
+            .all(|entry| !entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(&spool_prefix))
+    );
+    let csv_text = std::str::from_utf8(&csv).unwrap();
+    assert!(csv_text.contains("\"'=1+1\""));
+    assert!(!csv_text.contains("private"));
+    let export_audit = db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT detail->>'actor', detail->>'row_count', detail->>'sha256', detail::text
+         FROM audit_log WHERE action = 'audit.exported'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(export_audit.get::<_, &str>(0), "=1+1");
+    assert_eq!(export_audit.get::<_, &str>(1), "1");
+    assert_eq!(export_audit.get::<_, &str>(2).len(), 64);
+    assert!(!export_audit.get::<_, &str>(3).contains("private"));
     let retention_update = router
         .clone()
         .oneshot(
