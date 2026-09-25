@@ -530,3 +530,62 @@ async fn exploited_first_then_likely_exploited_then_severity() {
     assert_eq!(summary.exploited, 1);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn euvd_counts_as_exploited_and_cvss_breaks_ties() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let packages: Vec<PackageRow> = ["a", "b", "c"]
+        .iter()
+        .map(|n| pkg(n, 0, "1.0", "x86_64"))
+        .collect();
+    host(&mut admin, A, "44", &packages, 1).await;
+    let make = |id: &str, name: &str, cve: &str| {
+        let mut a = advisory(id, name, 0, "2.0", "x86_64");
+        a.cves = vec![cve.to_owned()];
+        a
+    };
+    load(
+        &mut vulns,
+        &[
+            make("FEDORA-LOW-CVSS", "a", "CVE-2026-1111"),
+            make("FEDORA-HIGH-CVSS", "b", "CVE-2026-2222"),
+            make("FEDORA-EUVD", "c", "CVE-2026-3333"),
+        ],
+        "44",
+    )
+    .await;
+    matching::match_release(&mut vulns, "fedora", "44", Utc::now())
+        .await
+        .unwrap();
+    let cvss = |id: &str, score: f32| {
+        format!(
+            r#"{{"cve":{{"id":"{id}","metrics":{{"cvssMetricV31":[{{"type":"Primary",
+            "cvssData":{{"baseScore":{score},"vectorString":"CVSS:3.1/AV:N"}}}}]}}}}}}"#
+        )
+    };
+    let nvd = format!(
+        r#"{{"totalResults":2,"startIndex":0,"vulnerabilities":[{},{}]}}"#,
+        cvss("CVE-2026-1111", 5.3),
+        cvss("CVE-2026-2222", 9.8)
+    );
+    enrich::import(&mut vulns, Source::Nvd, nvd.as_bytes(), Utc::now())
+        .await
+        .unwrap();
+    let euvd = br#"{"total":1,"items":[{"id":"EUVD-2026-1","aliases":"CVE-2026-3333"}]}"#;
+    enrich::import(&mut vulns, Source::Euvd, euvd, Utc::now())
+        .await
+        .unwrap();
+
+    let rows = vulns::list(&vulns, &vulns::ListFilter::default())
+        .await
+        .unwrap();
+    let order: Vec<&str> = rows.iter().map(|r| r.advisory_id.as_str()).collect();
+    assert_eq!(
+        order,
+        ["FEDORA-EUVD", "FEDORA-HIGH-CVSS", "FEDORA-LOW-CVSS"]
+    );
+    assert!(rows[0].exploited && rows[0].euvd && !rows[0].kev);
+    assert_eq!(rows[1].cvss, Some(9.8));
+    assert_eq!(vulns::summary(&vulns).await.unwrap().exploited, 1);
+    db.drop().await;
+}

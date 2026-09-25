@@ -1,5 +1,5 @@
-//! Parses real KEV and EPSS files and prints counts and timings:
-//! `cargo run --release --example enrich_parse -- kev.json epss.csv.gz`.
+//! Parses real enrichment files and prints counts and timings:
+//! `cargo run --release --example enrich_parse -- kev.json epss.csv.gz [nvd.json]`.
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let start = std::time::Instant::now();
@@ -19,4 +19,19 @@ fn main() {
         epss.date,
         start.elapsed()
     );
+    if let Some(path) = args.get(3) {
+        let start = std::time::Instant::now();
+        let page = openvibes_vulns::enrich::parse_nvd(&std::fs::read(path).unwrap()).unwrap();
+        let scored = page
+            .entries
+            .iter()
+            .filter(|e| e.cvss_score.is_some())
+            .count();
+        println!(
+            "nvd {} of {} ({scored} scored) in {:?}",
+            page.entries.len(),
+            page.total,
+            start.elapsed()
+        );
+    }
 }

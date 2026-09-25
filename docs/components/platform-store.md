@@ -164,6 +164,16 @@ replace_epss}` write it in bulk (KEV clears CVEs no longer listed);
 and EPSS values; `summary` counts open ones on KEV;
 `feed_etag`/`set_feed_etag` keep a source's ETag.
 
+Schema 11 (VM5) adds NVD columns (`cvss_score`, `cvss_version`,
+`cvss_vector`, `cwe`, `description`, `nvd_modified_at`,
+`nvd_checked_at`), EUVD columns (`euvd_id`, `euvd_exploited`,
+`euvd_exploited_since`) and `feed_sources.cursor`.
+`enrichment::upsert_nvd` keeps only CVEs `advisory_cves` names;
+`nvd_pending` lists named CVEs never asked (or unknown for 7 days);
+`mark_nvd_checked`, `nvd_known`, `replace_euvd`, `cve_details`;
+`feed_cursor`/`set_feed_cursor` hold NVD's sync point. `vulns::summary`
+moved to `vulns/summary.rs` (same path).
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.

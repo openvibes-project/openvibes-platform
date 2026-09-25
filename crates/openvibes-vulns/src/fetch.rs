@@ -131,6 +131,25 @@ impl Fetcher {
     }
 }
 
+impl Fetcher {
+    /// GETs `url` with extra request headers, up to the download cap.
+    pub(crate) fn get_with(&self, url: &str, headers: &[(&str, &str)]) -> Result<Vec<u8>, String> {
+        let mut request = self.agent.get(url);
+        for (name, value) in headers {
+            request = request.header(*name, *value);
+        }
+        let mut response = request
+            .call()
+            .map_err(|error| format!("{}: {error}", host_of(url)))?;
+        response
+            .body_mut()
+            .with_config()
+            .limit(self.max_bytes)
+            .read_to_vec()
+            .map_err(|error| format!("{}: {error}", host_of(url)))
+    }
+}
+
 /// An enrichment source URL must be HTTPS (plain HTTP only on loopback,
 /// for tests): nothing else vouches for its content.
 pub fn check_source_url(url: &str) -> Result<(), String> {

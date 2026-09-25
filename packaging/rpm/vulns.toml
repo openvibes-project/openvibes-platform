@@ -10,3 +10,8 @@ metalink_url = "https://mirrors.fedoraproject.org/metalink?repo=updates-released
 # a source off, e.g. offline: openvibes-admin feeds import FILE --source kev.
 kev_url = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
 epss_url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
+# NVD (CVSS, weakness, description) only for CVEs advisories name, paced to
+# its rate limit; a free key raises it tenfold (file mode 0600).
+nvd_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
+# nvd_api_key_file = "/etc/openvibes/nvd.key"
+euvd_url = "https://euvdservices.enisa.europa.eu/api/search"

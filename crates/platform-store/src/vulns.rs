@@ -8,7 +8,9 @@ use serde_json::Value;
 use crate::{Client, StoreError};
 
 mod feeds;
+mod summary;
 pub use feeds::*;
+pub use summary::{Summary, summary};
 
 /// A package version that fixes an advisory.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -323,8 +325,12 @@ pub struct VulnRow {
     pub fixed_at: Option<DateTime<Utc>>,
     /// Fix installed, reboot needed.
     pub reboot_needed: bool,
-    /// One of its CVEs is on CISA KEV: exploited in the wild.
+    /// Exploited in the wild: one of its CVEs is on KEV or EUVD's list.
     pub exploited: bool,
+    /// One of its CVEs is on CISA KEV.
+    pub kev: bool,
+    /// One of its CVEs is on EUVD's exploited list.
+    pub euvd: bool,
     /// Earliest KEV due date among its CVEs.
     pub kev_due: Option<NaiveDate>,
     /// One of its CVEs is known to be used by ransomware.
@@ -333,6 +339,8 @@ pub struct VulnRow {
     pub epss: Option<f32>,
     /// Highest EPSS percentile among its CVEs.
     pub epss_percentile: Option<f32>,
+    /// Highest CVSS base score among its CVEs (NVD).
+    pub cvss: Option<f32>,
 }
 
 /// Filters for [`list`].
@@ -350,9 +358,9 @@ pub struct ListFilter<'a> {
     pub fixed: bool,
 }
 
-/// Vulnerabilities by priority (VM spec §9): exploited (KEV) first, then
-/// the highest EPSS percentile among the advisory's CVEs, then severity,
-/// then oldest first.
+/// Vulnerabilities by priority (VM spec §9): exploited (KEV or EUVD) first,
+/// then the highest EPSS percentile among the advisory's CVEs, then
+/// severity, then the highest CVSS, then oldest first.
 pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRow>, StoreError> {
     let rows = client
         .query(
@@ -360,16 +368,17 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                     COALESCE(array_agg(c.cve_id ORDER BY c.cve_id)
                         FILTER (WHERE c.cve_id IS NOT NULL), '{}'),
                     v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
-                    COALESCE(e.exploited, false), e.due, COALESCE(e.ransomware, false),
-                    e.epss, e.pct
+                    COALESCE(e.kev, false), e.due, COALESCE(e.ransomware, false),
+                    e.epss, e.pct, COALESCE(e.euvd, false), e.cvss
              FROM vulnerabilities v
              JOIN advisories a ON a.advisory_id = v.advisory_id
              JOIN agents g ON g.agent_id = v.agent_id
              LEFT JOIN advisory_cves c ON c.advisory_id = v.advisory_id
              LEFT JOIN LATERAL (
-                 SELECT bool_or(x.kev_added IS NOT NULL) AS exploited, min(x.kev_due) AS due,
+                 SELECT bool_or(x.kev_added IS NOT NULL) AS kev, min(x.kev_due) AS due,
                         bool_or(x.kev_ransomware) AS ransomware, max(x.epss) AS epss,
-                        max(x.epss_percentile) AS pct
+                        max(x.epss_percentile) AS pct, bool_or(x.euvd_exploited) AS euvd,
+                        max(x.cvss_score) AS cvss
                  FROM advisory_cves y JOIN cve_enrichment x ON x.cve_id = y.cve_id
                  WHERE y.advisory_id = v.advisory_id) e ON true
              WHERE (v.fixed_at IS NOT NULL) = $1
@@ -380,10 +389,11 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                     WHERE x.advisory_id = v.advisory_id AND x.cve_id = $5))
              GROUP BY v.agent_id, g.hostname, v.advisory_id, a.severity, a.title,
                       v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
-                      e.exploited, e.due, e.ransomware, e.epss, e.pct
-             ORDER BY COALESCE(e.exploited, false) DESC, e.pct DESC NULLS LAST,
+                      e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss
+             ORDER BY (COALESCE(e.kev, false) OR COALESCE(e.euvd, false)) DESC,
+                      e.pct DESC NULLS LAST,
                       array_position(ARRAY['critical','important','moderate','low','unrated'],
-                          a.severity), v.first_seen_at, v.agent_id
+                          a.severity), e.cvss DESC NULLS LAST, v.first_seen_at, v.agent_id
              LIMIT 10000",
             &[
                 &filter.fixed,
@@ -407,85 +417,14 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
             first_seen_at: row.get(7),
             fixed_at: row.get(8),
             reboot_needed: row.get(9),
-            exploited: row.get(10),
+            exploited: row.get::<_, bool>(10) || row.get::<_, bool>(15),
+            kev: row.get(10),
+            euvd: row.get(15),
+            cvss: row.get(16),
             kev_due: row.get(11),
             ransomware: row.get(12),
             epss: row.get(13),
             epss_percentile: row.get(14),
         })
         .collect())
-}
-
-/// Open vulnerabilities across the fleet.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct Summary {
-    /// Open count per severity, most severe first.
-    pub by_severity: Vec<(String, i64)>,
-    /// Hosts with at least one open.
-    pub hosts: i64,
-    /// Hosts with the most open: (agent id, hostname, open, critical+important).
-    pub top_hosts: Vec<(String, Option<String>, i64, i64)>,
-    /// Hosts whose only missing step is a reboot into an installed kernel
-    /// fix; those are a state of their own, not counted as open.
-    pub reboot_hosts: i64,
-    /// Open ones (reboot-needed excluded) with a CVE on CISA KEV.
-    pub exploited: i64,
-}
-
-/// Counts open vulnerabilities (aggregated in SQL, so any fleet size).
-pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
-    let by_severity = client
-        .query(
-            "SELECT a.severity, count(*) FROM vulnerabilities v
-             JOIN advisories a ON a.advisory_id = v.advisory_id
-             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed GROUP BY a.severity
-             ORDER BY array_position(ARRAY['critical','important','moderate','low','unrated'],
-                          a.severity)",
-            &[],
-        )
-        .await?
-        .iter()
-        .map(|row| (row.get(0), row.get(1)))
-        .collect();
-    let hosts = client
-        .query_one(
-            "SELECT count(DISTINCT agent_id) FILTER (WHERE NOT reboot_needed),
-                    count(DISTINCT agent_id) FILTER (WHERE reboot_needed)
-             FROM vulnerabilities WHERE fixed_at IS NULL",
-            &[],
-        )
-        .await?;
-    let top_hosts = client
-        .query(
-            "SELECT v.agent_id, g.hostname, count(*),
-                    count(*) FILTER (WHERE a.severity IN ('critical', 'important'))
-             FROM vulnerabilities v
-             JOIN advisories a ON a.advisory_id = v.advisory_id
-             JOIN agents g ON g.agent_id = v.agent_id
-             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
-             GROUP BY v.agent_id, g.hostname ORDER BY 4 DESC, 3 DESC, 1 LIMIT 10",
-            &[],
-        )
-        .await?
-        .iter()
-        .map(|row| (row.get(0), row.get(1), row.get(2), row.get(3)))
-        .collect();
-    let exploited: i64 = client
-        .query_one(
-            "SELECT count(*) FROM vulnerabilities v
-             WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
-               AND EXISTS (SELECT 1 FROM advisory_cves c
-                   JOIN cve_enrichment x ON x.cve_id = c.cve_id
-                   WHERE c.advisory_id = v.advisory_id AND x.kev_added IS NOT NULL)",
-            &[],
-        )
-        .await?
-        .get(0);
-    Ok(Summary {
-        by_severity,
-        hosts: hosts.get(0),
-        top_hosts,
-        reboot_hosts: hosts.get(1),
-        exploited,
-    })
 }

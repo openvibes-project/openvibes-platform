@@ -9,6 +9,7 @@ use chrono::{NaiveDate, Utc};
 use common::TestDb;
 use openvibes_vulns::enrich::{self, Source};
 use platform_store::Client;
+use platform_store::enrichment;
 
 fn fixture(name: &str) -> Vec<u8> {
     std::fs::read(
@@ -146,4 +147,124 @@ async fn bad_content_is_recorded_and_changes_nothing() {
     assert_eq!(feed.last_error.as_deref(), Some("not a readable kev feed"));
     assert!(row(&vulns, "CVE-2026-59310").await.unwrap().0.is_some());
     db.drop().await;
+}
+
+/// Stores an advisory naming `cves`, so NVD data for them is kept.
+async fn name_cves(vulns: &mut Client, cves: &[&str]) {
+    platform_store::vulns::replace_advisories(
+        vulns,
+        "fedora-44-x86_64",
+        "fedora",
+        "44",
+        &[platform_store::vulns::NewAdvisory {
+            advisory_id: "FEDORA-2026-test".into(),
+            severity: "important".into(),
+            title: "test".into(),
+            issued_at: None,
+            updated_at: None,
+            url: "https://bodhi.fedoraproject.org/updates/FEDORA-2026-test".into(),
+            cves: cves.iter().map(|c| (*c).to_owned()).collect(),
+            packages: vec![],
+        }],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn nvd_data_is_kept_only_for_cves_our_advisories_name() {
+    let (db, mut vulns) = setup().await;
+    name_cves(
+        &mut vulns,
+        &["CVE-2021-44228", "CVE-2026-75432", "CVE-2099-99999"],
+    )
+    .await;
+    let now = Utc::now();
+    let stored = enrich::import(&mut vulns, Source::Nvd, &fixture("nvd.json"), now)
+        .await
+        .unwrap();
+    assert_eq!(stored, 2, "the fixture's other two CVEs are nobody's");
+    let row = vulns
+        .query_one(
+            "SELECT cvss_score, cvss_version, cwe, nvd_checked_at IS NOT NULL
+             FROM cve_enrichment WHERE cve_id = 'CVE-2021-44228'",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(row.get::<_, Option<f32>>(0), Some(10.0));
+    assert_eq!(row.get::<_, Option<String>>(1).as_deref(), Some("3.1"));
+    assert_eq!(
+        row.get::<_, Vec<String>>(2),
+        ["CWE-20", "CWE-400", "CWE-502", "CWE-917"]
+    );
+    assert!(row.get::<_, bool>(3));
+    assert!(row_count(&vulns, "CVE-2025-0108").await == 0);
+
+    // Still pending: the named CVE NVD did not return.
+    let pending = enrichment::nvd_pending(&vulns, now, 100).await.unwrap();
+    assert_eq!(pending, ["CVE-2099-99999"]);
+    // Asked and not found: not asked again for 7 days.
+    enrichment::mark_nvd_checked(&vulns, &["CVE-2099-99999".into()], now)
+        .await
+        .unwrap();
+    assert!(
+        enrichment::nvd_pending(&vulns, now, 100)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    let later = now + chrono::Duration::days(8);
+    assert_eq!(
+        enrichment::nvd_pending(&vulns, later, 100).await.unwrap(),
+        ["CVE-2099-99999"]
+    );
+    db.drop().await;
+}
+
+async fn row_count(client: &Client, cve: &str) -> i64 {
+    client
+        .query_one(
+            "SELECT count(*) FROM cve_enrichment WHERE cve_id = $1",
+            &[&cve],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
+#[tokio::test]
+async fn euvd_marks_exploited_cves_and_clears_dropped_ones() {
+    let (db, mut vulns) = setup().await;
+    let now = Utc::now();
+    assert_eq!(
+        enrich::import(&mut vulns, Source::Euvd, &fixture("euvd.json"), now)
+            .await
+            .unwrap(),
+        3
+    );
+    assert_eq!(marked(&vulns).await.len(), 3);
+    let one = br#"{"total":1,"items":[{"id":"EUVD-2026-53822","aliases":"CVE-2026-5430\n"}]}"#;
+    enrich::import(&mut vulns, Source::Euvd, one, now)
+        .await
+        .unwrap();
+    assert_eq!(
+        marked(&vulns).await,
+        [("CVE-2026-5430".to_owned(), "EUVD-2026-53822".to_owned())]
+    );
+    db.drop().await;
+}
+
+async fn marked(client: &Client) -> Vec<(String, String)> {
+    client
+        .query(
+            "SELECT cve_id, euvd_id FROM cve_enrichment WHERE euvd_exploited ORDER BY 1",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|r| (r.get(0), r.get(1)))
+        .collect()
 }
