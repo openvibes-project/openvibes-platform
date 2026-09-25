@@ -9,6 +9,10 @@ Type=exec
 User=openvibes_vulns
 Group=openvibes_vulns
 ExecStart=/usr/bin/openvibes-vulns --config /etc/openvibes/vulns.toml
+# OSV downloads (up to ~760 MB for Ubuntu) land here and are removed after
+# import; the rest of the file system stays read-only (ProtectSystem=strict).
+StateDirectory=openvibes-vulns
+StateDirectoryMode=0700
 # On SIGINT the service stops; an interrupted check is simply redone
 KillSignal=SIGINT
 Restart=on-failure

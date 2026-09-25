@@ -56,8 +56,10 @@ directory itself, so no tmpfiles.d entry is needed.
   as `openvibes_distribution`; it writes nothing, so it has no state
   directory.
 - `openvibes-vulns.service`: the same unit and hardening, as
-  `openvibes_vulns`; it connects out to Fedora's mirrors (or `proxy_url`)
-  and writes only to PostgreSQL. On SIGINT it stops; an interrupted feed
+  `openvibes_vulns`; it connects out to its feeds (or `proxy_url`) and
+  writes to PostgreSQL and its state directory `/var/lib/openvibes-vulns`
+  (0700, `StateDirectory`), where OSV downloads (Ubuntu's is ~760 MB) stay
+  only until imported. On SIGINT it stops; an interrupted feed
   check is redone at the next start.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
@@ -133,12 +135,14 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    certificate. `openvibes-admin migrate` (schema 8) already created its
    database role. It reaches `mirrors.fedoraproject.org`, `www.cisa.gov`
    (KEV), `epss.empiricalsecurity.com` (EPSS), `services.nvd.nist.gov`
-   (NVD) and `euvdservices.enisa.europa.eu` (EUVD) over HTTPS; behind a
+   (NVD), `euvdservices.enisa.europa.eu` (EUVD) and
+   `osv-vulnerabilities.storage.googleapis.com` (Debian, Ubuntu, Rocky,
+   Alma) over HTTPS; behind a
    proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. An NVD API key
    (free) speeds the first NVD fill from about 95 to 10 minutes: put it in
    `/etc/openvibes/nvd.key`, owned by `openvibes_vulns` with mode 0600
    (a group- or world-readable key is refused), and set
-   `nvd_api_key_file`. Without network access, set the four `*_url` keys
+   `nvd_api_key_file`. Without network access, set the five `*_url` keys
    to `""` and import files by hand (`openvibes-admin feeds import FILE
    --source fedora-44-x86_64|kev|epss|nvd|euvd`,
    [openvibes-admin.md](openvibes-admin.md)).

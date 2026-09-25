@@ -43,7 +43,7 @@ impl Release {
     /// The record kind each distribution publishes its vulnerabilities as;
     /// others (notices that repeat them, bug-fix advisories, legacy ids)
     /// are skipped so nothing is listed twice.
-    fn accepts(&self, id: &str) -> bool {
+    pub(crate) fn accepts(&self, id: &str) -> bool {
         let prefix = match self.os_id {
             "rocky" => "RLSA-",
             "almalinux" => "ALSA-",
@@ -345,10 +345,26 @@ pub fn advisories_from_zip(
     release: &Release,
     max_open: u64,
 ) -> Result<ZipAdvisories, ParseError> {
+    read_zip(
+        std::io::Cursor::new(content),
+        std::slice::from_ref(release),
+        max_open,
+    )
+    .map(|mut found| found.remove(0))
+}
+
+/// Reads an OSV `all.zip` once for several releases (one result each, in
+/// order): a whole ecosystem's file is read once however many of its
+/// releases hosts run.
+pub fn read_zip<R: std::io::Read + std::io::Seek>(
+    reader: R,
+    releases: &[Release],
+    max_open: u64,
+) -> Result<Vec<ZipAdvisories>, ParseError> {
     use std::io::Read;
-    let mut archive =
-        zip::ZipArchive::new(std::io::Cursor::new(content)).map_err(|_| ParseError::Malformed)?;
-    let (mut found, mut total) = (ZipAdvisories::default(), 0u64);
+    let mut archive = zip::ZipArchive::new(reader).map_err(|_| ParseError::Malformed)?;
+    let mut found = vec![ZipAdvisories::default(); releases.len()];
+    let mut total = 0u64;
     for index in 0..archive.len() {
         let mut entry = archive.by_index(index).map_err(|_| ParseError::Malformed)?;
         if !entry.name().ends_with(".json") {
@@ -364,12 +380,13 @@ pub fn advisories_from_zip(
         if total > max_open {
             return Err(ParseError::TooLarge);
         }
-        found.records += 1;
-        match parse(&bytes) {
-            Ok(record) if read as u64 <= MAX_RECORD => {
-                found.advisories.extend(advisory(&record, release));
+        let record = parse(&bytes).ok().filter(|_| read as u64 <= MAX_RECORD);
+        for (release, found) in releases.iter().zip(found.iter_mut()) {
+            found.records += 1;
+            match &record {
+                Some(record) => found.advisories.extend(advisory(record, release)),
+                None => found.skipped += 1,
             }
-            _ => found.skipped += 1,
         }
     }
     Ok(found)
