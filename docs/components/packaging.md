@@ -12,9 +12,10 @@ The web console has a separate `openvibes-console.spec` because its embedded
 frontend is built from a distinct, checksummed npm cache artefact. Build it
 with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256`; the expected
 digest must come from trusted release/source metadata independently of the
-archive and its checksum sidecar. The script verifies the cache, builds npm
-without network access, builds Cargo offline, and passes the cache as RPM
-`Source0`. The console unit ships disabled until the operator configures its
+archive and its checksum sidecar. The script verifies the cache, installs npm
+dependencies in offline mode (and uses `unshare -rn` when supported to isolate
+build scripts), builds Cargo offline, and passes the cache as RPM `Source0`.
+The console unit ships disabled until the operator configures its
 database and TLS certificate.
 
 ```sh

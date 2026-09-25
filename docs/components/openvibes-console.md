@@ -294,9 +294,11 @@ independently pinned digest from trusted RPM source metadata:
 `scripts/check-console-npm-cache.sh ARCHIVE CACHE_DIR EXPECTED_SHA256`.
 `scripts/build-console.sh
 --offline-cache-dir CACHE_DIR` then checks the lock digest/platform again,
-verifies npm's cache, and runs every npm command with networking disabled by
-`unshare -rn`. The first package target is Fedora Linux x86_64, so caches for
-other platforms are deliberately distinct. Console RPM source metadata
+verifies npm's cache, and runs npm in offline mode. When the host permits an
+unprivileged network namespace, npm commands also run under `unshare -rn`;
+restricted CI kernels may only enforce npm's offline cache. The first package
+target is Fedora Linux x86_64, so caches for other platforms are deliberately
+distinct. Console RPM source metadata
 supplies the expected archive digest independently of the archive and its
 sidecar. The one-argument checker mode used in CI validates corruption only.
 

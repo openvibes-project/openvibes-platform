@@ -74,11 +74,11 @@ if [[ -n "${offline_cache_dir}" ]]; then
         printf 'or contains special paths\n' >&2
         exit 1
     fi
-    if ! command -v unshare >/dev/null 2>&1 || ! unshare -rn true 2>/dev/null; then
-        printf 'error: offline build requires unshare -rn to block network access\n' >&2
-        exit 1
+    if command -v unshare >/dev/null 2>&1 && unshare -rn true 2>/dev/null; then
+        npm_network_namespace=(unshare -rn)
+    else
+        printf 'warning: network namespace unavailable; relying on npm --offline and the validated cache\n' >&2
     fi
-    npm_network_namespace=(unshare -rn)
     "${npm_network_namespace[@]}" npm cache verify --cache "${offline_cache_dir}"
     "${npm_network_namespace[@]}" npm ci --offline --no-audit --no-fund --cache "${offline_cache_dir}"
 else
