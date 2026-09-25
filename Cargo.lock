@@ -1179,8 +1179,14 @@ dependencies = [
 name = "openvibes-vulns"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "deadpool-postgres",
+ "platform-store",
  "quick-xml",
  "ruzstd",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
 ]
 
 [[package]]
@@ -1333,6 +1339,8 @@ dependencies = [
  "chrono",
  "fallible-iterator",
  "postgres-protocol",
+ "serde_core",
+ "serde_json",
 ]
 
 [[package]]
