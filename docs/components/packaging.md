@@ -154,7 +154,14 @@ Install a browser-trusted certificate chain and private key at the paths in
 `/etc/openvibes/console.toml`, with owner `root:openvibes_console`, mode 0640,
 and the TLS directory searchable by the service. Edit the file to replace
 `console.example.invalid` with the canonical HTTPS origin and set the public
-listen address. Then enable the service and allow the configured public port:
+listen address. For example, install the chain and key like this:
+
+```sh
+install -o root -g openvibes_console -m 0640 console-chain.pem /etc/openvibes/tls/console-chain.pem
+install -o root -g openvibes_console -m 0640 console-key.pem /etc/openvibes/tls/console-key.pem
+```
+
+Then enable the service and allow the configured public port:
 
 ```sh
 systemctl enable --now openvibes-console
@@ -165,6 +172,22 @@ curl http://127.0.0.1:18482/ready
 The service uses its narrow bind capability for port 443; it has no database
 password or signing-key access. Reverse-proxy deployments should change
 `transport_mode` and the trusted loopback proxy list before enabling the unit.
+For a local TCP proxy, replace the public listener and transport fields with
+the following values, keeping the database URL and canonical HTTPS origin:
+
+```toml
+development_listen = "127.0.0.1:8443"
+health_listen = "127.0.0.1:18482"
+transport_mode = "reverse_proxy"
+trusted_proxy_addresses = ["127.0.0.1"]
+```
+
+The proxy must connect from an allow-listed loopback address and preserve the
+configured `Host` authority. Forwarded headers are ignored. Public TLS
+terminates at the proxy; the console sends HSTS and uses the external HTTPS
+origin for authentication checks. Unix-socket proxy listeners are not
+implemented yet. Keep the health port loopback-only and expose only the
+proxy's public HTTPS port in the firewall.
 
 ## Trying the whole system
 
