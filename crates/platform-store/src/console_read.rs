@@ -31,6 +31,26 @@ impl AgentScope {
     }
 }
 
+/// Resolves a console asset-group scope to the visible agent IDs expected by
+/// the assistant's read-only lookup interface. The matching conjunction and
+/// group union are identical to the console's scoped read predicate.
+pub async fn agent_ids_in_scope(
+    client: &Client,
+    scope: &AgentScope,
+) -> Result<Vec<String>, StoreError> {
+    let AgentScope::AssetGroups(groups) = scope else {
+        return Ok(Vec::new());
+    };
+    if groups.is_empty() {
+        return Ok(Vec::new());
+    }
+    let predicate = agent_visibility("a.agent_id", "FALSE", "$1");
+    let query =
+        format!("SELECT a.agent_id::text FROM agents a WHERE {predicate} ORDER BY a.agent_id");
+    let rows = client.query(&query, &[groups]).await?;
+    Ok(rows.into_iter().map(|row| row.get(0)).collect())
+}
+
 /// Builds the SQL predicate shared by finding reads; its only interpolated
 /// values are internal aliases and positional parameter numbers.
 fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
@@ -529,6 +549,36 @@ pub async fn agent_in_scope(
         )
         .await?;
     Ok(row.as_ref().map(agent_from_row))
+}
+
+/// Finds up to two agents by exact ID or case-insensitive hostname within the
+/// supplied console scope. Returning at most two lets callers distinguish a
+/// unique result from an ambiguous label without materializing the fleet.
+pub async fn agent_matches_in_scope(
+    client: &Client,
+    key: &str,
+    now: DateTime<Utc>,
+    scope: &AgentScope,
+) -> Result<Vec<Agent>, StoreError> {
+    let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$2", "$3");
+    let query = format!(
+        "SELECT a.agent_id, a.hostname,
+                CASE WHEN a.status = 'revoked' THEN 'revoked'
+                     WHEN a.last_seen_at IS NULL OR a.last_seen_at < $4 THEN 'stale'
+                     ELSE 'active' END AS state,
+                a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
+         FROM agents a
+         WHERE (a.agent_id::text = $1 OR lower(a.hostname) = lower($1))
+           AND {visible}
+         ORDER BY a.agent_id LIMIT 2"
+    );
+    let rows = client
+        .query(&query, &[&key, &global, &groups, &threshold])
+        .await?;
+    Ok(rows.iter().map(agent_from_row).collect())
 }
 
 /// Returns one page of certificate metadata, never certificate chains.

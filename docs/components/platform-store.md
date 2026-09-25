@@ -203,6 +203,12 @@ case-insensitive host name), `host_vulnerabilities` (open, by priority),
 `vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
 unrecognised severity reports `unknown`. Nothing writes.
 
+`console_read::agent_ids_in_scope` resolves an authorized asset-group scope
+to the exact agent IDs used by finding lookups. Global scope stays `All` and
+does not materialize the fleet ID list. `agent_matches_in_scope` performs a
+bounded exact-ID or hostname lookup for assistant agent summaries without
+reading vulnerability tables.
+
 ## Audit log
 
 `audit::record(&client, actor, action, target, result)` appends one row.
