@@ -126,6 +126,51 @@ async fn an_imported_feed_opens_vulnerabilities_operators_can_read() {
 }
 
 #[tokio::test]
+async fn exploited_and_likely_exploited_are_shown_with_the_reason() {
+    let fixture = ready().await;
+    stdout(&fixture.run(&["feeds", "import", &feed(), "--source", "fedora-44-x86_64"]));
+    let dir = scratch_dir("enrich");
+    let kev = dir.join("kev.json");
+    std::fs::write(
+        &kev,
+        r#"{"vulnerabilities":[{"cveID":"CVE-2026-64638","dateAdded":"2026-09-01",
+            "dueDate":"2026-09-22","knownRansomwareCampaignUse":"Known"}]}"#,
+    )
+    .unwrap();
+    let epss = dir.join("epss.csv");
+    std::fs::write(&epss, "cve,epss,percentile\nCVE-2026-64638,0.94,0.995\n").unwrap();
+    let out = stdout(&fixture.run(&["feeds", "import", kev.to_str().unwrap(), "--source", "kev"]));
+    assert_eq!(out, "imported 1 CVEs from kev\n");
+    stdout(&fixture.run(&[
+        "feeds",
+        "import",
+        epss.to_str().unwrap(),
+        "--source",
+        "epss",
+    ]));
+
+    let list = stdout(&fixture.run(&["vulns", "list"]));
+    assert!(
+        list.contains("exploited (KEV, due 2026-09-22, ransomware) EPSS 94.0% (top 1%)"),
+        "{list}"
+    );
+    let summary = stdout(&fixture.run(&["vulns", "summary"]));
+    assert!(
+        summary.contains("exploited in the wild (CISA KEV): 1\n"),
+        "{summary}"
+    );
+    let status = stdout(&fixture.run(&["feeds", "status"]));
+    assert!(status.contains("kev cves 1 checked "), "{status}");
+    assert!(status.contains("epss cves 1 checked "), "{status}");
+    failed(
+        &fixture,
+        &["feeds", "import", kev.to_str().unwrap(), "--source", "nvd"],
+        "use fedora-<release>-<arch>, kev, or epss",
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
 async fn a_kernel_awaiting_reboot_is_shown_as_such() {
     let fixture = ready().await;
     stdout(&fixture.run(&["feeds", "import", &feed(), "--source", "fedora-44-x86_64"]));

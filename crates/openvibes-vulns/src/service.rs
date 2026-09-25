@@ -1,5 +1,5 @@
 //! The `openvibes-vulns` service: checks each Fedora release its hosts run
-//! at start and every interval, re-matches a host when ingest notifies
+//! and the KEV and EPSS sources at start and every interval, re-matches a host when ingest notifies
 //! `inventory_changed`, and serves loopback `/health` and `/ready`.
 
 use std::{future::Future, time::Duration};
@@ -12,6 +12,7 @@ use tokio_postgres::{AsyncMessage, NoTls};
 
 use crate::{
     config::VulnsConfig,
+    enrich::Source,
     feed::SourceId,
     fetch::{self, Checked, Fetcher},
     matching,
@@ -49,7 +50,10 @@ pub async fn run(
     loop {
         tokio::select! {
             () = &mut shutdown => break,
-            _ = interval.tick() => check_all(&pool, &fetcher, &config.arch).await,
+            _ = interval.tick() => {
+                check_all(&pool, &fetcher, &config.arch).await;
+                enrich_all(&pool, &fetcher, &config).await;
+            }
             Some(agent) = notifications.recv() => rematch(&pool, &agent).await,
         }
     }
@@ -97,6 +101,28 @@ async fn check_all(pool: &Pool, fetcher: &Fetcher, arch: &str) {
                 "feed imported"
             ),
             Err(error) => tracing::warn!(source = %source.name(), %error, "feed check failed"),
+        }
+    }
+}
+
+/// Checks each enabled enrichment source; priority is computed when read,
+/// so nothing is re-matched.
+async fn enrich_all(pool: &Pool, fetcher: &Fetcher, config: &VulnsConfig) {
+    let Ok(mut client) = pool.get().await else {
+        tracing::warn!("database unavailable; enrichment check skipped");
+        return;
+    };
+    for (source, url) in [
+        (Source::Kev, &config.kev_url),
+        (Source::Epss, &config.epss_url),
+    ] {
+        if url.is_empty() {
+            continue;
+        }
+        match fetch::check_enrichment(&mut client, fetcher, source, url, Utc::now()).await {
+            Ok(None) => tracing::info!(%source, "enrichment unchanged"),
+            Ok(Some(cves)) => tracing::info!(%source, cves, "enrichment imported"),
+            Err(error) => tracing::warn!(%source, %error, "enrichment check failed"),
         }
     }
 }

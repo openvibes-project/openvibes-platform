@@ -10,6 +10,8 @@ pub mod agents;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// CVE enrichment: KEV and EPSS (vulnerability management).
+pub mod enrichment;
 /// Queries the ingest service runs.
 pub mod ingest;
 /// Host package inventories (vulnerability management).

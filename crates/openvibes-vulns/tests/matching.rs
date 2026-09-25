@@ -5,7 +5,10 @@ mod common;
 
 use chrono::{Duration, Utc};
 use common::TestDb;
-use openvibes_vulns::matching;
+use openvibes_vulns::{
+    enrich::{self, Source},
+    matching,
+};
 use platform_store::{
     Client,
     inventory::{self, PackageRow},
@@ -454,5 +457,76 @@ async fn a_reloaded_feed_keeps_history_and_the_role_is_limited() {
             "{denied}"
         );
     }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn exploited_first_then_likely_exploited_then_severity() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let names = ["a", "b", "c", "d"];
+    let packages: Vec<PackageRow> = names.iter().map(|n| pkg(n, 0, "1.0", "x86_64")).collect();
+    host(&mut admin, A, "44", &packages, 1).await;
+    let make = |id: &str, name: &str, severity: &str, cves: &[&str]| {
+        let mut a = advisory(id, name, 0, "2.0", "x86_64");
+        a.severity = severity.into();
+        a.cves = cves.iter().map(|c| (*c).to_owned()).collect();
+        a
+    };
+    load(
+        &mut vulns,
+        &[
+            make("FEDORA-CRIT", "a", "critical", &[]),
+            make(
+                "FEDORA-KEV",
+                "b",
+                "low",
+                &["CVE-2026-1111", "CVE-2026-2222"],
+            ),
+            make("FEDORA-LIKELY", "c", "important", &["CVE-2026-3333"]),
+            make("FEDORA-UNLIKELY", "d", "important", &["CVE-2026-4444"]),
+        ],
+        "44",
+    )
+    .await;
+    matching::match_release(&mut vulns, "fedora", "44", Utc::now())
+        .await
+        .unwrap();
+    let kev = br#"{"vulnerabilities":[{"cveID":"CVE-2026-2222","dateAdded":"2026-09-01",
+        "dueDate":"2026-09-22","knownRansomwareCampaignUse":"Known"}]}"#;
+    enrich::import(&mut vulns, Source::Kev, kev, Utc::now())
+        .await
+        .unwrap();
+    let epss = b"cve,epss,percentile\nCVE-2026-1111,0.001,0.1\nCVE-2026-3333,0.9,0.995\nCVE-2026-4444,0.1,0.9\n";
+    enrich::import(&mut vulns, Source::Epss, epss, Utc::now())
+        .await
+        .unwrap();
+
+    let rows = vulns::list(&vulns, &vulns::ListFilter::default())
+        .await
+        .unwrap();
+    let order: Vec<&str> = rows.iter().map(|r| r.advisory_id.as_str()).collect();
+    assert_eq!(
+        order,
+        [
+            "FEDORA-KEV",
+            "FEDORA-LIKELY",
+            "FEDORA-UNLIKELY",
+            "FEDORA-CRIT"
+        ]
+    );
+    let exploited = &rows[0];
+    assert!(exploited.exploited && exploited.ransomware);
+    assert_eq!(exploited.kev_due, "2026-09-22".parse().ok());
+    assert_eq!(
+        exploited.epss_percentile,
+        Some(0.1),
+        "the advisory's other CVE"
+    );
+    assert_eq!(rows[1].epss, Some(0.9));
+    assert!(!rows[1].exploited);
+    assert_eq!(rows[3].epss, None);
+
+    let summary = vulns::summary(&vulns).await.unwrap();
+    assert_eq!(summary.exploited, 1);
     db.drop().await;
 }
