@@ -6,7 +6,7 @@
 # the agent enrolls, fetches its signed rules from distribution, and its
 # findings reach PostgreSQL.
 # Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN
-#   RPM_DIR  the openvibes-{ingest,distribution,admin} RPMs and one
+#   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin} RPMs and one
 #            openvibes-agent RPM (built from the pinned agent revision)
 #   SIGN_BIN the agent repository's sign_bundle example, built
 set -euo pipefail
@@ -30,7 +30,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-agent; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -41,7 +41,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$W"; mkdir -p "$W"
-cp "$1"/openvibes-{ingest,distribution,admin,agent}-*.rpm "$W/"
+cp "$1"/openvibes-{ingest,distribution,vulns,admin,agent}-*.rpm "$W/"
 (($(ls "$W"/openvibes-agent-*.rpm | wc -l) == 1)) || fail "want exactly one agent RPM in $1"
 cp "$2" "$W/sign_bundle"
 KEY=$("$W/sign_bundle" keygen "$W/signing.key" | tail -1)
@@ -66,7 +66,7 @@ ok "systemd enforces unit sandboxes in this container"
 
 # 1-2. PostgreSQL, the platform RPMs, database and schema.
 in_c 'postgresql-setup --initdb && systemctl enable --now postgresql' >/dev/null 2>&1 || fail "postgresql"
-in_c 'dnf -q -y install /test/openvibes-ingest-*.rpm /test/openvibes-distribution-*.rpm /test/openvibes-admin-*.rpm' \
+in_c 'dnf -q -y install /test/openvibes-ingest-*.rpm /test/openvibes-distribution-*.rpm /test/openvibes-vulns-*.rpm /test/openvibes-admin-*.rpm' \
     >/dev/null 2>&1 || fail "install platform RPMs"
 in_c 'runuser -u postgres -- createuser --createrole openvibes_admin &&
       runuser -u postgres -- createdb -O openvibes_admin openvibes &&
@@ -106,6 +106,34 @@ in_c 'systemctl enable --now openvibes-ingest openvibes-distribution' >/dev/null
 wait_for "ingest ready" 30 'curl -fsS http://127.0.0.1:18480/ready'
 wait_for "distribution ready" 30 'curl -fsS http://127.0.0.1:18481/ready'
 
+# Vulnerabilities (VM): the service runs offline (its mirror list points at
+# a closed loopback port, so checks fail and are recorded); an offline feed
+# says bash is fixed in 999.0, above the container's bash. It is imported
+# before the agent enrolls, so the vulnerability can only open through the
+# service's re-match when the agent's inventory arrives.
+cat > "$W/updateinfo-test.xml" <<'FEED'
+<?xml version="1.0" encoding="UTF-8"?>
+<updates>
+  <update from="test" status="stable" type="security" version="2.0">
+    <id>FEDORA-TEST-bash</id>
+    <title>bash-999.0-1.fc44</title>
+    <issued date="2026-09-25 00:00:00"/>
+    <severity>Important</severity>
+    <description>Test advisory for CVE-2026-99999.</description>
+    <references/>
+    <pkglist><collection short="F44"><name>Fedora 44</name>
+      <package name="bash" version="999.0" release="1.fc44" epoch="0" arch="x86_64"><filename>bash-999.0-1.fc44.x86_64.rpm</filename></package>
+    </collection></pkglist>
+  </update>
+</updates>
+FEED
+in_c "sed -i 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' /etc/openvibes/vulns.toml &&
+      systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
+wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
+in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||
+    fail "feeds import"
+ok "offline feed imported"
+
 # Rules: trust the signing key and publish the signed bundle.
 in_c "runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules $KEY &&
       runuser -u openvibes_admin -- openvibes-admin rules publish /test/bundle.json" >/dev/null 2>&1 ||
@@ -136,17 +164,24 @@ TOML
 systemctl enable --now openvibes-agent" >/dev/null 2>&1 || fail "start agent"
 
 # Every service runs sandboxed: seccomp filter and no_new_privs in force.
-for unit in openvibes-ingest openvibes-distribution openvibes-agent; do
+for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent; do
     in_c "pid=\$(systemctl show -p MainPID --value $unit);
           grep -q '^Seccomp:[[:space:]]*2\$' /proc/\$pid/status &&
           grep -q '^NoNewPrivs:[[:space:]]*1\$' /proc/\$pid/status" ||
         fail "$unit: seccomp filter or no_new_privs not in force"
 done
-ok "ingest, distribution, and agent run with seccomp and no_new_privs"
+ok "ingest, distribution, vulns, and agent run with seccomp and no_new_privs"
 SQL='runuser -u openvibes_admin -- psql -d openvibes -AtX -c'
 wait_for "agent enrolled" 60 "[[ \$($SQL \"SELECT count(*) FROM agents WHERE status = 'active'\") == 1 ]]"
 wait_for "agent fetched its rules from distribution (200)" 120 \
     'journalctl -u openvibes-distribution -o cat | grep -q "\"endpoint\":\"/v1/rule-bundle\".*\"status\":200"'
 wait_for "findings from the published rule set in PostgreSQL" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM findings WHERE rule_set_id = 'baseline' AND rule_id = 'host.has.processes'\") -ge 1 ]]"
+wait_for "the agent's inventory is stored (protocol P8)" 120 \
+    "[[ \$($SQL \"SELECT count(*) FROM host_packages\") -gt 100 ]]"
+wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
+    "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
+in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
+    fail "vulns list does not show the bash vulnerability"
+ok "openvibes-admin vulns list shows it"
 echo "systemd-e2e: all checks passed"

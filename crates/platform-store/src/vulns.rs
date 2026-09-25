@@ -507,3 +507,45 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         top_hosts,
     })
 }
+
+/// The digest of a feed's last good content, if any.
+pub async fn feed_digest(client: &Client, source: &str) -> Result<Option<[u8; 32]>, StoreError> {
+    let row = client
+        .query_opt(
+            "SELECT content_sha256 FROM feed_sources WHERE source = $1",
+            &[&source],
+        )
+        .await?;
+    Ok(row
+        .and_then(|row| row.get::<_, Option<Vec<u8>>>(0))
+        .and_then(|bytes| bytes.try_into().ok()))
+}
+
+/// Records a check that found the content unchanged.
+pub async fn touch_feed(
+    client: &Client,
+    source: &str,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "UPDATE feed_sources SET last_checked_at = $2, last_error = NULL WHERE source = $1",
+            &[&source, &now],
+        )
+        .await?;
+    Ok(())
+}
+
+/// The Fedora releases hosts report, e.g. `["43", "44"]`.
+pub async fn fedora_releases(client: &Client) -> Result<Vec<String>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT DISTINCT os_version FROM agents WHERE os_id = 'fedora'
+               AND os_version IS NOT NULL ORDER BY 1",
+            &[],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect())
+}
