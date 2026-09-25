@@ -5,6 +5,7 @@
 //! stored package inventories (VM spec 2026-09-25).
 
 pub mod config;
+pub mod dpkgver;
 pub mod enrich;
 pub mod feed;
 pub mod fetch;
