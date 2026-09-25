@@ -5,3 +5,4 @@
 //! stored package inventories (VM spec 2026-09-25).
 
 pub mod rpmver;
+pub mod updateinfo;
