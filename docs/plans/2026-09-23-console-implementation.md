@@ -6,9 +6,11 @@ SQL-scoped reads, access-control and audit operations, first-account bootstrap,
 and analyst triage. C5 is underway: direct TLS 1.3, trusted loopback proxy
 mode, enforced browser headers, a dedicated console RPM/service definition,
 and an offline cache-pinned packaging build path are implemented. The RPM and
-systemd installation have not yet been built or exercised. Remaining work
-includes Unix-socket proxy upstreams, package/runtime integration, and full
-C5 review. The C2 store has SQL-scoped agent and finding read
+systemd installation have not yet been built or exercised. The RPM build
+script now creates its private rpmbuild directory tree before invoking
+rpmbuild. Remaining work includes Unix-socket proxy upstreams,
+package/runtime integration, and full C5 review. The C2 store has SQL-scoped
+agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
 latest/detail/history routes behind `findings.read`. The embedded login page,

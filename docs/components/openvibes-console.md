@@ -189,6 +189,10 @@ upstreams therefore use loopback TCP. Development uses a loopback-only seeded
 server; the `dev-seed` implementation and its conspicuous banner are never
 included in the production RPM.
 
+The offline RPM build script validates the caller-supplied cache digest,
+builds the embedded UI and release binary without network access, creates an
+isolated `target/rpm-console` rpmbuild tree, and emits the package there.
+
 ## Failure behaviour
 
 **Now (C0, C1, and the C3 local-auth slice):**
@@ -197,7 +201,7 @@ included in the production RPM.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 9; it does not migrate. The configured Host
+  schema version other than 11; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener; forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist

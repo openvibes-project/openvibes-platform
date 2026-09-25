@@ -39,8 +39,17 @@ cd -- "${repository_root}"
 scripts/build-console.sh --offline-cache-dir "${cache_dir}"
 env CARGO_NET_OFFLINE=true cargo build --release --locked -p openvibes-console --features embedded-ui
 
+readonly rpm_topdir="${repository_root}/target/rpm-console"
+mkdir -p -- \
+    "${rpm_topdir}/BUILD" \
+    "${rpm_topdir}/BUILDROOT" \
+    "${rpm_topdir}/RPMS" \
+    "${rpm_topdir}/SOURCES" \
+    "${rpm_topdir}/SPECS" \
+    "${rpm_topdir}/SRPMS"
+
 rpmbuild -bb packaging/rpm/openvibes-console.spec \
-    --define "_topdir ${repository_root}/target/rpm-console" \
+    --define "_topdir ${rpm_topdir}" \
     --define "_sourcedir $(dirname -- "${cache_archive}")" \
     --define "console_repo_root ${repository_root}" \
     --define "console_npm_cache_name ${cache_name}" \
