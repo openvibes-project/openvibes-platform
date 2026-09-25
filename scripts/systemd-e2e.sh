@@ -111,6 +111,24 @@ TOML
           grep -q "^Seccomp:[[:space:]]*2$" /proc/$pid/status
           grep -q "^NoNewPrivs:[[:space:]]*1$" /proc/$pid/status' || fail "console headers or systemd sandbox"
     ok "console RPM serves hardened TLS with production headers"
+
+    in_c 'cat > /etc/openvibes/console.toml <<TOML
+development_listen = "0.0.0.0:443"
+health_listen = "127.0.0.1:18482"
+transport_mode = "reverse_proxy"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_console"
+public_origin = "https://console.example.invalid"
+unix_socket_file = "/run/openvibes-console/console.sock"
+trusted_proxy_uids = [0]
+TOML
+          systemctl restart openvibes-console' >/dev/null 2>&1 || fail "configure Unix proxy mode"
+    wait_for "console Unix proxy socket" 30 '[[ -S /run/openvibes-console/console.sock ]]'
+    wait_for "allowed Unix proxy UID serves shell" 30 \
+        '[[ "$(curl -sS --unix-socket /run/openvibes-console/console.sock -H "Host: console.example.invalid" -o /dev/null -w "%{http_code}" http://localhost/)" == 200 ]]'
+    in_c 'set -e
+          status=$(runuser -u openvibes_console -- curl -sS --unix-socket /run/openvibes-console/console.sock -H "Host: console.example.invalid" -o /dev/null -w "%{http_code}" http://localhost/)
+          [[ "$status" == 403 ]]' || fail "reject untrusted Unix proxy UID"
+    ok "console Unix proxy accepts only the configured peer UID"
 fi
 
 # 3-4, 7. CA: the root (here in the container, normally offline), the

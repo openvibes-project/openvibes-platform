@@ -266,7 +266,8 @@ jobs:
 
   # The documented install, scripted, under a real systemd (podman fedora:44,
   # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the
-  # agent enrolls, fetches rules, delivers findings, and the console serves TLS.
+  # agent enrolls/fetches rules/delivers findings; the console serves TLS and
+  # validates the Unix proxy peer UID.
   systemd-e2e:
     name: End to end under systemd (platform, agent, and console RPMs)
     needs: fedora

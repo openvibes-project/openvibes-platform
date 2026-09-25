@@ -244,9 +244,10 @@ component from its RPM under systemd. `scripts/systemd-e2e.sh` runs exactly
 these steps (in a podman container with systemd as PID 1), so they are
 tested on every change. CI also supplies the console RPM, configures a
 temporary TLS certificate, and checks the HTTPS shell, readiness endpoint,
-security headers, and systemd sandbox. For a single test host, the platform
-and the agent can share the machine, as below; normally the agent runs on the
-endpoints.
+security headers, and systemd sandbox. It restarts the console in Unix proxy
+mode and checks that an allowed peer UID succeeds while the console's own
+service UID is rejected. For a single test host, the platform and the agent
+can share the machine, as below; normally the agent runs on the endpoints.
 
 1. **Platform:** "First install on Fedora" steps 1–7 above, with
    distribution. On a test host, `issue-server localhost --san 127.0.0.1`
