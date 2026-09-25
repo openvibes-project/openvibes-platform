@@ -87,6 +87,18 @@ Audit targets: `SET vN sha256:HEX` for `publish` (none if the file is not
 an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 `retire`, and `trust list RULE_SET`.
 
+## Vulnerability commands
+
+| Command | Does |
+|---|---|
+| `feeds import FILE --source fedora-<rel>-<arch>` | imports a downloaded `updateinfo.xml` or `.xml.zst` (offline platforms), re-matches that release: `imported N advisories into SOURCE; M open on fedora REL` |
+| `feeds status` | per source: advisories, last check, last change, last error |
+| `vulns summary` | open count by severity and host count; the ten most affected hosts |
+| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability, most severe first: severity, advisory, host, since, packages `installed -> fixed`, CVEs |
+| `vulns show ADVISORY\|HOST` | an advisory with its link, CVEs, and hosts; or a host with its open vulnerabilities |
+
+All are audited; `feeds import` with the source as target.
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,

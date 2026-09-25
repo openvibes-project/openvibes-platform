@@ -9,6 +9,7 @@ license.workspace = true
 chrono.workspace = true
 platform-store = { path = "../platform-store" }
 serde_json.workspace = true
+sha2.workspace = true
 quick-xml = "0.42.0"
 ruzstd = "0.9.0"
 

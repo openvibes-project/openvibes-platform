@@ -1071,6 +1071,7 @@ dependencies = [
  "ed25519-dalek",
  "openvibes-core",
  "openvibes-rules",
+ "openvibes-vulns",
  "platform-config",
  "platform-pki",
  "platform-store",
@@ -1185,6 +1186,7 @@ dependencies = [
  "quick-xml",
  "ruzstd",
  "serde_json",
+ "sha2",
  "tokio",
  "tokio-postgres",
 ]
