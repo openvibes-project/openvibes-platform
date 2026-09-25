@@ -195,8 +195,8 @@ validation, and revokes the session on sign out. The health listener refreshes
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add append-only migrations starting at 0013 (main uses 0007–0012 for
-  vulnerability management, and 0006 remains sub-project 2's rule tables): local users,
+- add append-only migrations starting at 0015 (main has schema 14; console
+  migrations are renumbered after the per-version vulnerability migration): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;

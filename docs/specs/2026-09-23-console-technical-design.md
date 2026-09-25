@@ -716,13 +716,13 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 10 must add or extend. Main
+Append-only migrations after the current schema 14 must add or extend. Main
 has migration 4 (the ingest role keeps only the rights it uses), 5
 (`rule_set_id` on `findings` and `current_findings`, current state keyed by
- agent, rule set, and rule), 6 (sub-project 2's rule tables), 7–13
- (inventory, vulnerability management, and OSV), and 14 (per-version
- vulnerability storage). **Console migrations start at 0015**; assistant
- permission is 0020 on the current Codex branch.
+agent, rule set, and rule), 6 (sub-project 2's rule tables), 7–13
+(inventory, vulnerability management, and OSV), and 14 (per-version
+vulnerability storage). **Console migrations start at 0015**; assistant
+permission is 0020 on the current Codex branch.
 The first adds an index on
 `current_findings (rule_set_id, rule_id, last_observed_at DESC, agent_id)`
 for fleet grouping and group endpoint pages (the primary key leads with
