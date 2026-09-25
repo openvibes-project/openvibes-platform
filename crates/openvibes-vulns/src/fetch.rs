@@ -119,7 +119,7 @@ fn download(
         .replace("{release}", &source.os_version)
         .replace("{arch}", &source.arch);
     let metalink = repodata::metalink(&fetcher.get(&url, MAX_INDEX)?)
-        .map_err(|()| "unreadable mirror list".to_owned())?;
+        .map_err(|_| "unreadable mirror list".to_owned())?;
     let mut last = "no usable mirror".to_owned();
     // The current index first; an older one a lagging mirror still serves
     // (an alternate) only when no mirror has the current one, so checks do
@@ -147,7 +147,7 @@ fn download(
             continue;
         }
         let location = repodata::updateinfo_location(&repomd)
-            .map_err(|()| "repomd.xml has no usable updateinfo".to_owned())?;
+            .map_err(|_| "repomd.xml has no usable updateinfo".to_owned())?;
         if known == Some(location.sha256) {
             return Ok(Found::Same);
         }

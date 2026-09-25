@@ -27,6 +27,10 @@ pub struct Location {
     pub size: u64,
 }
 
+/// The metadata could not be read (malformed, or missing what is needed).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct Unreadable;
+
 /// Lowercase hex of a digest.
 #[must_use]
 pub fn hex(bytes: &[u8]) -> String {
@@ -56,14 +60,14 @@ fn attr(element: &BytesStart<'_>, name: &str) -> Option<String> {
 
 /// Parses a metalink: every SHA-256 in document order (the file's own
 /// digest precedes its alternates) and the https and http mirror URLs.
-pub fn metalink(bytes: &[u8]) -> Result<Metalink, ()> {
+pub fn metalink(bytes: &[u8]) -> Result<Metalink, Unreadable> {
     let mut reader = Reader::from_reader(bytes);
     let mut buf = Vec::new();
     let (mut sha256, mut https, mut http) = (Vec::new(), Vec::new(), Vec::new());
     let mut collecting: Option<(bool, Option<String>)> = None; // (is hash, url protocol)
     let mut text = String::new();
     loop {
-        match reader.read_event_into(&mut buf).map_err(drop)? {
+        match reader.read_event_into(&mut buf).map_err(|_| Unreadable)? {
             Event::Eof => break,
             Event::Start(element) => match element.local_name().as_ref() {
                 "hash" if attr(&element, "type").as_deref() == Some("sha256") => {
@@ -77,15 +81,13 @@ pub fn metalink(bytes: &[u8]) -> Result<Metalink, ()> {
                 _ => {}
             },
             Event::Text(t) if collecting.is_some() => text.push_str(&t.xml10_content()),
-            Event::GeneralRef(r) if collecting.is_some() => {
-                if r.xml10_content() == "amp" {
-                    text.push('&');
-                }
+            Event::GeneralRef(r) if collecting.is_some() && r.xml10_content() == "amp" => {
+                text.push('&');
             }
             Event::End(element) => {
                 let name = element.local_name();
                 match (collecting.take(), name.as_ref()) {
-                    (Some((true, _)), "hash") => sha256.push(unhex(&text).ok_or(())?),
+                    (Some((true, _)), "hash") => sha256.push(unhex(&text).ok_or(Unreadable)?),
                     (Some((false, protocol)), "url") => match protocol.as_deref() {
                         Some("https") => https.push(text.trim().to_owned()),
                         Some("http") => http.push(text.trim().to_owned()),
@@ -99,7 +101,7 @@ pub fn metalink(bytes: &[u8]) -> Result<Metalink, ()> {
         buf.clear();
     }
     if sha256.is_empty() || (https.is_empty() && http.is_empty()) {
-        return Err(());
+        return Err(Unreadable);
     }
     https.extend(http);
     Ok(Metalink {
@@ -110,7 +112,7 @@ pub fn metalink(bytes: &[u8]) -> Result<Metalink, ()> {
 
 /// Finds the `updateinfo` entry (not `updateinfo_zck`) in `repomd.xml`.
 /// Its location must stay under `repodata/`.
-pub fn updateinfo_location(bytes: &[u8]) -> Result<Location, ()> {
+pub fn updateinfo_location(bytes: &[u8]) -> Result<Location, Unreadable> {
     let mut reader = Reader::from_reader(bytes);
     let mut buf = Vec::new();
     let mut inside = false;
@@ -118,7 +120,7 @@ pub fn updateinfo_location(bytes: &[u8]) -> Result<Location, ()> {
     let mut field: Option<&str> = None;
     let mut text = String::new();
     loop {
-        match reader.read_event_into(&mut buf).map_err(drop)? {
+        match reader.read_event_into(&mut buf).map_err(|_| Unreadable)? {
             Event::Eof => break,
             Event::Start(element) | Event::Empty(element) => match element.local_name().as_ref() {
                 "data" => inside = attr(&element, "type").as_deref() == Some("updateinfo"),
@@ -150,17 +152,17 @@ pub fn updateinfo_location(bytes: &[u8]) -> Result<Location, ()> {
         }
         buf.clear();
     }
-    let href = href.ok_or(())?;
+    let href = href.ok_or(Unreadable)?;
     let safe = href.starts_with("repodata/")
         && !href.contains("..")
         && !href.contains("//")
         && !href.contains(['\\', '?', '#']);
     if !safe {
-        return Err(());
+        return Err(Unreadable);
     }
     Ok(Location {
         href,
-        sha256: sha256.ok_or(())?,
-        size: size.ok_or(())?,
+        sha256: sha256.ok_or(Unreadable)?,
+        size: size.ok_or(Unreadable)?,
     })
 }
