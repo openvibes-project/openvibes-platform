@@ -21,7 +21,7 @@ pub enum FeedsCommand {
     Import {
         /// The feed file.
         file: PathBuf,
-        /// Source: fedora-<release>-<arch> (e.g. fedora-44-x86_64), kev, or epss.
+        /// Source: fedora-RELEASE-ARCH (e.g. fedora-44-x86_64), kev, or epss.
         #[arg(long)]
         source: String,
     },
