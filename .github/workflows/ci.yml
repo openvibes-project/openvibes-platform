@@ -130,7 +130,7 @@ jobs:
       # git first, so checkout makes a real repository (submodules need it).
       - name: Install build and test packages
         run: >-
-          dnf -q -y install git gcc cargo rust rpm-build systemd-rpm-macros systemd
+          dnf -q -y install git gcc cargo rust rpm-build systemd-rpm-macros systemd ImageMagick
           postgresql-server sqlite jq curl procps-ng util-linux
 
       - name: Checkout repository

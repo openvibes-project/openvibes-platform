@@ -401,8 +401,8 @@ fn current_argon2_params() -> Result<Params, argon2::Error> {
 
 /// Newly generated opaque session secret and its database-safe SHA-256 digest.
 ///
-/// The raw value is only for setting the browser cookie. Persist [`hash`]
-/// instead. Debug output intentionally omits both values.
+/// The raw value is only for setting the browser cookie. Persist the `hash`
+/// field instead. Debug output intentionally omits both values.
 pub struct SessionSecret {
     value: String,
     hash: String,
