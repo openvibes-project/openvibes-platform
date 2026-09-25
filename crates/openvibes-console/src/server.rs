@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs::File,
     future::{Future, IntoFuture},
     io::{self, Read},
@@ -11,10 +12,10 @@ use std::{
 
 use axum::{
     Router,
-    extract::connect_info::Connected,
-    http::HeaderValue,
+    extract::{ConnectInfo, State, connect_info::Connected},
+    http::{HeaderValue, StatusCode},
     middleware,
-    response::Response,
+    response::{IntoResponse, Response},
     serve::{IncomingStream, Listener},
 };
 use rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject};
@@ -28,7 +29,8 @@ use tokio::{
 use tokio_rustls::{TlsAcceptor, server::TlsStream};
 
 use crate::{
-    ConsoleConfig, ConsoleError, Readiness, authenticated_router, development_router, health_router,
+    ConsoleConfig, ConsoleError, ConsoleTransportMode, Readiness, authenticated_router,
+    development_router, health_router,
 };
 
 const GRACEFUL_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
@@ -316,16 +318,22 @@ pub async fn serve(
     };
     let public_listener = TcpListener::bind(config.development_listen).await?;
     let health_listener = TcpListener::bind(config.health_listen).await?;
-    let tls = config
-        .server_certificate_file
-        .as_deref()
-        .zip(config.server_key_file.as_deref())
-        .map(|(certificate, key)| load_tls_acceptor(certificate, key))
-        .transpose()?;
+    let tls = if config.transport_mode == ConsoleTransportMode::DirectTls {
+        config
+            .server_certificate_file
+            .as_deref()
+            .zip(config.server_key_file.as_deref())
+            .map(|(certificate, key)| load_tls_acceptor(certificate, key))
+            .transpose()?
+    } else {
+        None
+    };
     run_with_router(
         public_listener,
         health_listener,
         tls,
+        config.transport_mode,
+        config.trusted_proxy_addresses,
         public_router,
         readiness_pool,
         shutdown,
@@ -344,6 +352,8 @@ pub async fn run(
         public_listener,
         health_listener,
         None,
+        ConsoleTransportMode::Development,
+        vec![],
         development_router(),
         None,
         shutdown,
@@ -355,6 +365,8 @@ async fn run_with_router(
     public_listener: TcpListener,
     health_listener: TcpListener,
     tls: Option<TlsAcceptor>,
+    transport_mode: ConsoleTransportMode,
+    trusted_proxy_addresses: Vec<std::net::IpAddr>,
     public_router: Router,
     readiness_pool: Option<platform_store::Pool>,
     shutdown: impl Future<Output = ()>,
@@ -365,7 +377,15 @@ async fn run_with_router(
         return Err(ConsoleError::Config);
     }
 
-    let public_router = if tls.is_some() {
+    let public_router = if transport_mode == ConsoleTransportMode::ReverseProxy {
+        public_router.layer(middleware::from_fn_with_state(
+            std::sync::Arc::new(trusted_proxy_addresses.into_iter().collect::<HashSet<_>>()),
+            trusted_proxy_only,
+        ))
+    } else {
+        public_router
+    };
+    let public_router = if transport_mode != ConsoleTransportMode::Development {
         public_router.layer(middleware::map_response(hsts_header))
     } else {
         public_router
@@ -466,6 +486,26 @@ async fn hsts_header(mut response: Response) -> Response {
         HeaderValue::from_static("max-age=31536000"),
     );
     response
+}
+
+async fn trusted_proxy_only(
+    State(allowed): State<std::sync::Arc<HashSet<std::net::IpAddr>>>,
+    request: axum::extract::Request,
+    next: middleware::Next,
+) -> Response {
+    let trusted = request
+        .extensions()
+        .get::<ConnectInfo<TrustedPeer>>()
+        .is_some_and(|ConnectInfo(peer)| allowed.contains(&peer.ip()));
+    if trusted {
+        next.run(request).await
+    } else {
+        let mut response = StatusCode::FORBIDDEN.into_response();
+        response
+            .headers_mut()
+            .insert("cache-control", HeaderValue::from_static("no-store"));
+        response
+    }
 }
 
 async fn database_is_ready(pool: &platform_store::Pool) -> bool {

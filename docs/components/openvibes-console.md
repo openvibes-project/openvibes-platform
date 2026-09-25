@@ -117,20 +117,19 @@ administration remain CLI-only.
 
 `openvibes-console [--config PATH]` reads `/etc/openvibes/console.toml` by
 default: strict TOML (unknown keys refused). The health listener must be a
-distinct loopback address. Without TLS files, the public listener is also
-loopback-only. Setting both absolute `server_certificate_file` and
-`server_key_file` enables direct TLS 1.3 and permits a non-loopback public
-listener. Optional `database_url` and `public_origin` must be provided
-together; HTTP origins must be loopback, while HTTPS origins require direct
-TLS. For example:
+distinct loopback address. `transport_mode` explicitly selects `development`,
+`direct_tls`, or `reverse_proxy`. Development mode is loopback-only. Direct TLS
+requires both absolute `server_certificate_file` and `server_key_file` paths
+and permits a non-loopback public listener. Optional `database_url` and
+`public_origin` must be provided together; HTTP origins must be loopback, while
+HTTPS origins are required for direct TLS and reverse proxy. For example:
 
 ```toml
 development_listen = "127.0.0.1:8443"   # the development web listener
 health_listen = "127.0.0.1:18482"       # /health and /ready
+transport_mode = "development"
 database_url = "postgresql:///openvibes?host=/run/postgresql" # optional
 public_origin = "http://localhost:8443" # required with database_url
-# server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
-# server_key_file = "/etc/openvibes/tls/console-key.pem"
 ```
 
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
@@ -142,6 +141,12 @@ certificate chain and key, and are checked before serving; handshakes are TLS
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
+
+Reverse-proxy mode requires authenticated database configuration, a canonical
+HTTPS `public_origin`, a loopback public listener, and 1–64 unique loopback
+`trusted_proxy_addresses`. Requests from other peers are rejected. Forwarded
+headers are ignored; the proxy must preserve the configured Host authority.
+HSTS is set for both direct TLS and reverse-proxy responses.
 
 ### Development seed (C1)
 
@@ -166,8 +171,10 @@ are:
 - direct TLS 1.3 termination is available with a configured server certificate
   chain and private key; TLS responses include HSTS;
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
-  origin plus an allow-list of trusted proxy addresses;
-- forwarded headers are ignored unless the immediate peer is trusted;
+  origin plus an allow-list of trusted proxy addresses (loopback TCP is
+  implemented);
+- forwarded headers are ignored; Host/Origin checks use the configured
+  external origin;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
   non-loopback upstreams remain TLS protected;
 - the health listener must be loopback-only;
@@ -176,10 +183,10 @@ are:
 - session lifetimes, request limits, password hashing, export limits, and the
   private CSV spool are bounded configuration rather than browser choices.
 
-The exact TOML keys and defaults for production TLS land with the runtime
-configuration milestone. Development uses a
-loopback-only seeded server; the `dev-seed` implementation and its conspicuous
-banner are never included in the production RPM.
+The current configuration has no Unix-socket listener; reverse-proxy
+upstreams therefore use loopback TCP. Development uses a loopback-only seeded
+server; the `dev-seed` implementation and its conspicuous banner are never
+included in the production RPM.
 
 ## Failure behaviour
 

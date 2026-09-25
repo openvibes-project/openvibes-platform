@@ -30,6 +30,7 @@ async fn main() -> ExitCode {
     tracing::info!(
         development_listen = %config.development_listen,
         health_listen = %config.health_listen,
+        transport_mode = ?config.transport_mode,
         "openvibes-console starting"
     );
     let shutdown = async {

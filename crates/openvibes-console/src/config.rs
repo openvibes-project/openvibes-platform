@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    net::SocketAddr,
+    net::{IpAddr, SocketAddr},
     path::{Path, PathBuf},
 };
 
@@ -8,11 +8,20 @@ use serde::Deserialize;
 
 use crate::ConsoleError;
 
-/// The deliberately limited C0 configuration.
-///
-/// Production TLS and trusted-proxy transports are added in the hardening
-/// milestone. Until then, the public development listener is restricted to
-/// loopback so an unfinished authentication stack cannot be exposed.
+/// Public-listener transport selected by the operator.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ConsoleTransportMode {
+    /// Loopback-only cleartext mode for local development.
+    #[default]
+    Development,
+    /// TLS 1.3 terminates in the console process.
+    DirectTls,
+    /// Cleartext loopback upstream behind explicitly trusted local proxies.
+    ReverseProxy,
+}
+
+/// Strict configuration for the console public and health listeners.
 #[derive(Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ConsoleConfig {
@@ -20,6 +29,9 @@ pub struct ConsoleConfig {
     pub development_listen: SocketAddr,
     /// Separate loopback-only process health listener.
     pub health_listen: SocketAddr,
+    /// Explicit public listener transport.
+    #[serde(default)]
+    pub transport_mode: ConsoleTransportMode,
     /// Optional PostgreSQL pool URL; when paired, enables local C3 authentication.
     #[serde(default)]
     pub database_url: Option<String>,
@@ -32,6 +44,9 @@ pub struct ConsoleConfig {
     /// Absolute PEM server private key for direct TLS 1.3.
     #[serde(default)]
     pub server_key_file: Option<PathBuf>,
+    /// Exact loopback IP addresses allowed to connect in reverse-proxy mode.
+    #[serde(default)]
+    pub trusted_proxy_addresses: Vec<IpAddr>,
 }
 
 impl fmt::Debug for ConsoleConfig {
@@ -40,6 +55,7 @@ impl fmt::Debug for ConsoleConfig {
             .debug_struct("ConsoleConfig")
             .field("development_listen", &self.development_listen)
             .field("health_listen", &self.health_listen)
+            .field("transport_mode", &self.transport_mode)
             .field(
                 "database_url",
                 &self.database_url.as_ref().map(|_| "[REDACTED]"),
@@ -47,35 +63,61 @@ impl fmt::Debug for ConsoleConfig {
             .field("public_origin", &self.public_origin)
             .field("server_certificate_file", &self.server_certificate_file)
             .field("server_key_file", &self.server_key_file)
+            .field("trusted_proxy_addresses", &self.trusted_proxy_addresses)
             .finish()
     }
 }
 
 impl ConsoleConfig {
-    /// Rejects any configuration that would expose a C0 listener or bind the
-    /// two routers to the same address.
+    /// Rejects unsafe transport combinations and shared public/health binds.
     pub fn validate(&self) -> Result<(), ConsoleError> {
-        let tls_configured = match (&self.server_certificate_file, &self.server_key_file) {
-            (None, None) => false,
-            (Some(certificate), Some(key)) if certificate.is_absolute() && key.is_absolute() => {
+        let tls_configured = self.transport_mode == ConsoleTransportMode::DirectTls;
+        let tls_paths_valid = match (&self.server_certificate_file, &self.server_key_file) {
+            (None, None) if !tls_configured => true,
+            (Some(certificate), Some(key))
+                if tls_configured && certificate.is_absolute() && key.is_absolute() =>
+            {
                 true
             }
-            _ => return Err(ConsoleError::Config),
+            _ => false,
         };
-        if (!tls_configured && !self.development_listen.ip().is_loopback())
+        let proxy_mode = self.transport_mode == ConsoleTransportMode::ReverseProxy;
+        let proxy_addresses_valid = if proxy_mode {
+            !self.trusted_proxy_addresses.is_empty()
+                && self.trusted_proxy_addresses.len() <= 64
+                && self
+                    .trusted_proxy_addresses
+                    .iter()
+                    .all(|address| address.is_loopback())
+                && self
+                    .trusted_proxy_addresses
+                    .iter()
+                    .collect::<std::collections::HashSet<_>>()
+                    .len()
+                    == self.trusted_proxy_addresses.len()
+        } else {
+            self.trusted_proxy_addresses.is_empty()
+        };
+        if !tls_paths_valid
+            || !proxy_addresses_valid
             || !self.health_listen.ip().is_loopback()
             || self.development_listen == self.health_listen
+            || (self.transport_mode != ConsoleTransportMode::DirectTls
+                && !self.development_listen.ip().is_loopback())
         {
             return Err(ConsoleError::Config);
         }
         match (&self.database_url, &self.public_origin) {
-            (None, None) => {}
+            (None, None) if self.transport_mode == ConsoleTransportMode::Development => {}
             (Some(database_url), Some(public_origin))
                 if !database_url.trim().is_empty()
-                    && (valid_local_origin(public_origin)
-                        || (tls_configured
-                            && valid_public_origin(public_origin)
-                            && public_origin.starts_with("https://"))) => {}
+                    && match self.transport_mode {
+                        ConsoleTransportMode::Development => valid_local_origin(public_origin),
+                        ConsoleTransportMode::DirectTls | ConsoleTransportMode::ReverseProxy => {
+                            valid_public_origin(public_origin)
+                                && public_origin.starts_with("https://")
+                        }
+                    } => {}
             _ => return Err(ConsoleError::Config),
         }
         Ok(())
@@ -140,17 +182,19 @@ pub fn load_config(path: &Path) -> Result<ConsoleConfig, ConsoleError> {
 
 #[cfg(test)]
 mod tests {
-    use super::ConsoleConfig;
+    use super::{ConsoleConfig, ConsoleTransportMode};
 
     #[test]
     fn accepts_separate_loopback_listeners() {
         let config = ConsoleConfig {
             development_listen: "127.0.0.1:8443".parse().unwrap(),
             health_listen: "127.0.0.1:18481".parse().unwrap(),
+            transport_mode: ConsoleTransportMode::Development,
             database_url: None,
             public_origin: None,
             server_certificate_file: None,
             server_key_file: None,
+            trusted_proxy_addresses: vec![],
         };
 
         assert!(config.validate().is_ok());
@@ -162,26 +206,32 @@ mod tests {
             ConsoleConfig {
                 development_listen: "0.0.0.0:8443".parse().unwrap(),
                 health_listen: "127.0.0.1:18481".parse().unwrap(),
+                transport_mode: ConsoleTransportMode::Development,
                 database_url: None,
                 public_origin: None,
                 server_certificate_file: None,
                 server_key_file: None,
+                trusted_proxy_addresses: vec![],
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
                 health_listen: "[::]:18481".parse().unwrap(),
+                transport_mode: ConsoleTransportMode::Development,
                 database_url: None,
                 public_origin: None,
                 server_certificate_file: None,
                 server_key_file: None,
+                trusted_proxy_addresses: vec![],
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
                 health_listen: "127.0.0.1:8443".parse().unwrap(),
+                transport_mode: ConsoleTransportMode::Development,
                 database_url: None,
                 public_origin: None,
                 server_certificate_file: None,
                 server_key_file: None,
+                trusted_proxy_addresses: vec![],
             },
         ] {
             assert!(config.validate().is_err());
@@ -193,10 +243,12 @@ mod tests {
         let valid = ConsoleConfig {
             development_listen: "127.0.0.1:8443".parse().unwrap(),
             health_listen: "127.0.0.1:18481".parse().unwrap(),
+            transport_mode: ConsoleTransportMode::Development,
             database_url: Some("postgresql://user:secret@localhost/console".into()),
             public_origin: Some("http://localhost:8443".into()),
             server_certificate_file: None,
             server_key_file: None,
+            trusted_proxy_addresses: vec![],
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));

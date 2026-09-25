@@ -48,7 +48,7 @@ pub use auth::{
     browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
     session_cookie, verify_password,
 };
-pub use config::{ConsoleConfig, load_config};
+pub use config::{ConsoleConfig, ConsoleTransportMode, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
