@@ -13,13 +13,14 @@ when you next sync.
 | Implementation plan AS1–AS8 | `docs/plans/2026-09-25-assistant-implementation.md` | AS1–AS3 and AS5 ticked |
 | AS4 plan (console chat panel), **for Codex** | `docs/plans/2026-09-25-assistant-as4-console.md` | Written, not started |
 | AS6 (own server elsewhere), AS7 (external provider) | plan | Not started; the user has not asked yet |
-| Console fleet grouping (X-M7), specs only | branch `console-current` (e83a551) | Replaces `console-fixes`, which the user will close |
+| Console fleet grouping (X-M7), specs only | branch `console-current` (00dcd7f, `main` merged in) | Replaces `console-fixes`, which the user will close |
+| Assistant AS1–AS5 | openvibes-project/openvibes-platform#28 | Open, CI running; Claude Code watches it |
 | Agent security fixes for running as root/SYSTEM | agent repo, openvibes-project/openvibes-agent#9 | Open; macOS CI fix pushed (05325fc); check CI |
 
-## Branches: a linear stack, no PRs yet
+## Branches: a linear stack, one PR
 
-Each branch contains the one before it. Merge them in this order, or merge
-only the top one (`as5-openvibes-llm`), which contains everything:
+Each branch contains the one before it. The PR is for the top one
+(`as5-openvibes-llm`), which contains everything:
 
 1. `assistant-design`, 9fdccd8: spec and plan
 2. `as1-assistant-client`, 4ff3478: crate `platform-assistant` (config,
@@ -31,19 +32,22 @@ only the top one (`as5-openvibes-llm`), which contains everything:
 5. `as5-openvibes-llm`, 15ebd70 and this handover: `openvibes-llm` RPM,
    `assistant model install`, the pinned `llama-server` build
 
-The stack is based on `main` at 2eed95b. `main` has moved on since then
-(6544dab, schema 12). Merging `origin/main` conflicts in one file only,
-`docs/components/platform-store.md`: keep both sections (main's "Schema
-12 grants …" paragraph, then "## Assistant lookups"). The stack adds no
+`origin/main` (6544dab, schema 12) is merged into `as5-openvibes-llm`;
+the one conflict, `docs/components/platform-store.md`, keeps both sections.
+The lower branches are not updated; use the PR. The stack adds no
 migrations.
+
+**PostgreSQL 17 or later is now required for tests:** migration 0012 uses
+`GRANT MAINTAIN`. CI uses `postgres:18`. A cloud session's local cluster is
+PostgreSQL 16 and cannot reach the PostgreSQL apt repository.
 
 ## For Codex: AS4
 
 - Read the AS4 plan first. It lists what `platform-assistant` gives you
   and the review focus.
 - **Migration numbers:** `main` is at **0012**, so the next free number is
-  **0013**. (The AS4 plan and the console specs on `console-current` still
-  say 0011; that is outdated.)
+  **0013**. The AS4 plan and the console specs on `console-current` now say
+  so; `console-current` has `main` merged in.
 - `ConsoleConfig` denies unknown fields, so add
   `assistant: Option<AssistantConfig>`.
 - **Backend key with `openvibes-llm`:** add
