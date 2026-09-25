@@ -17,7 +17,7 @@ pub enum ConsoleTransportMode {
     Development,
     /// TLS 1.3 terminates in the console process.
     DirectTls,
-    /// Cleartext loopback upstream behind explicitly trusted local proxies.
+    /// Cleartext loopback TCP or Unix socket upstream behind trusted proxies.
     ReverseProxy,
 }
 

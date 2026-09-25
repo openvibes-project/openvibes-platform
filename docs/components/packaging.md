@@ -186,9 +186,20 @@ The proxy must connect from an allow-listed loopback address and preserve the
 configured `Host` authority. Forwarded headers are ignored. Public TLS
 terminates at the proxy; the console sends HSTS and uses the external HTTPS
 origin for authentication checks. For a Unix socket, configure
-`unix_socket_file = "/run/openvibes-console/console.sock"` and set
 `trusted_proxy_uids` to the numeric UID reported by `id -u <proxy-user>`;
-leave `trusted_proxy_addresses` empty. Add the proxy user to the
+leave `trusted_proxy_addresses` empty. Keep `development_listen` present but
+unused. For example, with proxy UID 1001:
+
+```toml
+development_listen = "127.0.0.1:0"
+transport_mode = "reverse_proxy"
+unix_socket_file = "/run/openvibes-console/console.sock"
+trusted_proxy_addresses = []
+trusted_proxy_uids = [1001]
+```
+
+Keep the existing `health_listen`, database URL, and HTTPS `public_origin`.
+Add the proxy user to the
 `openvibes_console` group so it can traverse the runtime directory and connect
 to the mode-0660 socket. The listener verifies the peer UID with kernel
 credentials and removes only its own socket inode at shutdown. Keep the health
