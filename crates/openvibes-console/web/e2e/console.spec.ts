@@ -29,6 +29,25 @@ async function selectDemoOption(page: Page, label: string, value: string): Promi
   ]);
 }
 
+async function mockAuthenticatedSession(page: Page): Promise<void> {
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      principal: { id: "test-user", display_name: "Test Operator" },
+      authentication_method: "local_password",
+      authentication_level: "single_factor",
+      capabilities: [
+        { permission: "agents.read", scope: { kind: "global" } },
+        { permission: "findings.read", scope: { kind: "global" } },
+      ],
+      csrf_token: "c".repeat(43),
+      idle_expires_at: "2026-09-24T23:59:00Z",
+      absolute_expires_at: "2026-09-25T07:29:00Z",
+    }),
+  }));
+}
+
 const targetCsp = [
   "default-src 'none'",
   "script-src 'self'",
@@ -46,11 +65,19 @@ const targetCsp = [
 
 test("serves the accessible shell with the target security boundary", async ({ page }) => {
   const cspViolations = await recordCspViolations(page);
+  const thirdPartyRequests: string[] = [];
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if ((url.protocol === "http:" || url.protocol === "https:") && url.origin !== "http://127.0.0.1:18490") {
+      thirdPartyRequests.push(url.origin);
+    }
+  });
+  await mockAuthenticatedSession(page);
 
   const response = await page.goto("/");
   expect(response?.status()).toBe(200);
   const headers = response?.headers() ?? {};
-  const csp = headers["content-security-policy-report-only"] ?? "";
+  const csp = headers["content-security-policy"] ?? "";
   for (const directive of targetCsp) {
     expect(csp).toContain(directive);
   }
@@ -74,9 +101,112 @@ test("serves the accessible shell with the target security boundary", async ({ p
   const accessibility = await new AxeBuilder({ page }).analyze();
   expect(accessibility.violations).toEqual([]);
   expect(await cspViolations()).toEqual([]);
+  expect(thirdPartyRequests).toEqual([]);
+});
+
+test("serves the local sign-in page and obtains one-use pre-auth state", async ({ page }) => {
+  await page.route("**/auth/v1/preauth", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ csrf_token: "p".repeat(43), expires_at: "2026-09-24T23:59:00Z" }),
+  }));
+
+  const response = await page.goto("/login");
+  expect(response?.status()).toBe(200);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  await expect(page.getByLabel("Username")).toBeEnabled();
+  await expect(page.getByLabel("Password")).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  const accessibility = await new AxeBuilder({ page }).analyze();
+  expect(accessibility.violations).toEqual([]);
+});
+
+test("gates the workspace when there is no authenticated session", async ({ page }) => {
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 401,
+    contentType: "application/problem+json",
+    body: JSON.stringify({
+      type: "about:blank",
+      title: "Authentication required",
+      status: 401,
+      code: "authentication_required",
+      request_id: "test-request",
+    }),
+  }));
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Your session" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/login");
+});
+
+test("completes the browser login, session check, and sign-out journey", async ({ page }) => {
+  const preauthToken = "p".repeat(43);
+  const sessionToken = "s".repeat(43);
+  await page.route("**/auth/v1/preauth", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ csrf_token: preauthToken, expires_at: "2026-09-24T23:59:00Z" }),
+  }));
+  await page.route("**/auth/v1/login", async (route) => {
+    expect(route.request().headers()["x-csrf-token"]).toBe(preauthToken);
+    expect(JSON.parse(route.request().postData() ?? "{}")).toEqual({
+      username: "alice",
+      password: "violet-satellite-mountain-otter-2026",
+    });
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.route("**/api/v1/session", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      principal: { id: "test-user", display_name: "Test Operator" },
+      authentication_method: "local_password",
+      authentication_level: "single_factor",
+      capabilities: [
+        { permission: "agents.read", scope: { kind: "global" } },
+        { permission: "findings.read", scope: { kind: "global" } },
+      ],
+      csrf_token: sessionToken,
+      idle_expires_at: "2026-09-24T23:59:00Z",
+      absolute_expires_at: "2026-09-25T07:29:00Z",
+    }),
+  }));
+  await page.route("**/api/v1/agents/summary", (route) => {
+    expect(route.request().headers()).not.toHaveProperty("x-openvibes-dev-persona");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 12, active: 10, stale: 2, revoked: 0 }),
+    });
+  });
+  await page.route("**/api/v1/findings/summary", (route) => {
+    expect(route.request().headers()).not.toHaveProperty("x-openvibes-dev-persona");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ total: 4, impacted_agents: 3, critical: 1, high: 2, medium: 1, low: 0 }),
+    });
+  });
+  await page.route("**/auth/v1/logout", async (route) => {
+    expect(route.request().headers()["x-csrf-token"]).toBe(sessionToken);
+    await route.fulfill({ status: 204 });
+  });
+
+  await page.goto("/login");
+  await page.getByLabel("Username").fill("alice");
+  await page.getByLabel("Password").fill("violet-satellite-mountain-otter-2026");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
+  await expect(page.getByText("Enrolled")).toBeVisible();
+  await expect(page.getByText("12", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL("/login");
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
 });
 
 test("applies and persists an explicit theme before application startup", async ({ page }) => {
+  await mockAuthenticatedSession(page);
   await page.addInitScript(() => {
     if (localStorage.getItem("openvibes.theme") === null) {
       localStorage.setItem("openvibes.theme", "dark");
@@ -114,7 +244,9 @@ test("keeps reserved route families out of SPA fallback", async ({ request }) =>
 });
 
 test("supports keyboard entry and the compact-navigation control", async ({ page }) => {
+  await mockAuthenticatedSession(page);
   await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   await page.keyboard.press("Tab");
   await expect(page.getByRole("link", { name: "Skip to main content" })).toBeFocused();
   await page.keyboard.press("Enter");
@@ -135,6 +267,7 @@ test("supports keyboard entry and the compact-navigation control", async ({ page
 test("keeps native menu, dialog, and combobox primitives keyboard accessible", async ({ page }) => {
   const cspViolations = await recordCspViolations(page);
 
+  await mockAuthenticatedSession(page);
   await page.goto("/");
   await expect(page.getByRole("combobox", { name: "Theme" })).toBeVisible();
 
@@ -207,7 +340,7 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
 
   await page.goto("/agents");
   await selectDemoOption(page, "Data scenario", "permission_removed");
-  await expect(page.getByRole("heading", { name: "Access unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "You do not have access to this page" })).toBeVisible();
 
   await page.goto("/findings");
   await selectDemoOption(page, "Data scenario", "expired_session");

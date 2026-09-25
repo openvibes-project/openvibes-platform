@@ -1,7 +1,31 @@
 # OpenVIBES Console Implementation Plan
 
 Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
-3 are integrated in the `console` worktree; C0 implementation may proceed.
+3 are integrated. C0–C3 feature work is implemented, including authenticated
+SQL-scoped reads, access-control and audit operations, first-account bootstrap,
+and analyst triage. C5 is complete: direct TLS 1.3, trusted TCP and Unix
+socket proxy modes, enforced browser headers, offline RPM packaging, and a
+hardened systemd service pass Fedora 44 package and runtime integration. The
+full browser matrix and both dependency audits pass. RPM upgrades preserve the
+local account, active database session, config, TLS files, and service state.
+The C2 store has SQL-scoped
+agent and finding read
+variants; the authenticated router now serves scope-filtered agent summary,
+list, detail, and certificate routes behind `agents.read`, and finding summary
+latest/detail/history routes behind `findings.read`. The embedded login page,
+session gate, sign-out action, and production Overview/Agents/Findings data
+views are implemented against the authenticated routes. The Access control
+inventory and Audit pages use authenticated APIs; bounded CSV export is
+permission-gated and commits export metadata before its download response.
+Audit-retention reads and versioned updates now use the global `audit.read` and
+`audit.retention.manage` permissions and commit policy changes with their audit
+event. `openvibes-admin maintenance` applies the stored audit-retention cutoff
+in batches of at most 10,000 rows. Agent-tag changes now have a group and
+scoped-binding impact preview, stale-preview rejection, an audited transactional
+apply, and a global-admin agent-detail editor. Asset groups can be created and
+their exact selector conjunctions replaced through audited, CSRF-protected
+global-admin endpoints and the Access page. C3 control-plane routes and C5
+packaging/runtime work are complete.
 
 Design inputs:
 
@@ -49,7 +73,7 @@ Deliverables:
 - add explicit `scripts/build-console.sh` build sequence;
 - embed the Vite build output in the Rust binary;
 - route API/auth/assets/browser paths without SPA fall-through leaks;
-- apply no-store/immutable cache rules and report-only target security headers;
+- apply no-store/immutable cache rules and the target security headers;
 - add `/health` and `/ready` on a separate loopback-only listener, absent from
   the public TLS router;
 - configure Vite manifest output and disable asset inlining;
@@ -116,30 +140,25 @@ No shared migration is required.
 
 ## 4. Milestone C2 — PostgreSQL Read Adapter
 
-Prerequisite satisfied: SP2 and platform schema 6 are integrated in the
-console branch. The shared C2 read-store change adds schema migration 7.
+Prerequisite satisfied: PM4 and platform schema 3 are integrated in the
+console branch.
 
 Goal: prove agents and findings read models against PostgreSQL with measured
 query plans. Public production data routes remain disabled until C3 supplies
 authentication and SQL-enforced asset scope.
 
-Work:
+Work (implemented unless noted):
 
 1. Resolve the latest-finding read model: extend `current_findings` with the
    complete display snapshot or retain a reliable partition key and fields.
-   **Done in shared platform migration 7**: the latest snapshot and partition
-   day are retained in `current_findings` and populated by ingest.
 2. Use the existing indexed `agents.hostname` read model. Ingest already
    stores the latest present authenticated-heartbeat value through migration
    3; the console treats it only as a mutable, spoofable operator label.
 3. Add small typed `platform-store` query modules for summaries, agents,
-   certificates, latest observations, and history. **Done in
-   `console_read`.**
-4. Add indexes only from representative query plans. **Done in migration 7.**
+   certificates, latest observations, and history.
+4. Add indexes only from representative query plans.
 5. Run the same global read-model cases against PostgreSQL behind a test-only
-   harness; do not expose an unauthenticated production path. **Done:** the
-   `platform-store` PostgreSQL integration suite covers the read models and a
-   50,000-agent page plan/latency case.
+   harness; do not expose an unauthenticated production path.
 
 Verification:
 
@@ -153,19 +172,28 @@ Verification:
 ## 5. Milestone C3 — Authentication, Sessions, and RBAC
 
 Goal: production local username/password login and server-enforced, auditable
-permissions.
+permissions. The console serves pre-auth, login, session, and logout against
+the database when paired auth configuration is present, checks for schema 18
+at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
+failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
+and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct
+TLS and explicit trusted loopback TCP/Unix proxy modes are wired. The embedded
+UI requests one-use
+pre-auth state, submits local credentials, gates the workspace on session
+validation, and revokes the session on sign out. The health listener refreshes
+`/ready` every five seconds from a bounded database/schema check.
 
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add the next available append-only migration (0008 or later: schema 6 is
-  SP2's rule tables and schema 7 is the C2 read model): local users,
+- add append-only migrations starting at 0013 (main uses 0007–0012 for
+  vulnerability management, and 0006 remains sub-project 2's rule tables): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;
-- add audited, interactive `openvibes-admin user` commands for create, list,
-  disable, unlock, and reset-password; this is first-Admin bootstrap and
-  lockout recovery;
+- audited, interactive `openvibes-admin user` commands now cover create, list,
+  disable, unlock, and reset-password; create provides first-Admin bootstrap
+  and supports lockout recovery without a secret CLI argument;
 - implement local login with generic failures, reviewed Argon2id parameters,
   common-password blocklist, per-account and per-source throttling, and
   temporary lockout;
@@ -176,13 +204,13 @@ Work:
 - implement permission middleware plus handler-level object scope;
 - extend the C2 store queries so asset scope is enforced inside SQL before
   aggregation, facets, sorting, filtering, and pagination;
-- add access-control and audit read pages, including the effective 365-day
-  default retention policy and its globally authorised, audited update flow;
-- add a permission-gated CSV audit export of the exact filtered result set,
+- [x] add access-control inventory and audit read pages, including the 365-day
+  default retention policy and globally authorised, audited update flow;
+- [x] add a permission-gated CSV audit export of the exact filtered result set,
   with a private bounded spool, formula neutralisation, no caching, and an
   audit record committed before download begins;
-- extend bounded maintenance to delete audit events older than the effective
-  cutoff without granting the console unrestricted audit deletion;
+- [x] extend bounded maintenance to delete audit events older than the
+  effective cutoff without granting console-role audit deletion;
 - enforce the final CSP and browser headers.
 
 OIDC, SAML, TOTP, and WebAuthn are later adapters over this identity/session
@@ -238,23 +266,32 @@ Work:
 - direct TLS 1.3 server configuration by default; explicit proxy mode requires
   a canonical external HTTPS origin, trusted proxy allow-list, and loopback/
   Unix-socket plaintext or TLS-protected non-loopback upstream;
+- direct TLS 1.3 and explicit loopback-TCP/Unix-socket proxy modes are
+  implemented; Unix peers are checked against a bounded UID allow-list;
 - RPM build order including deterministic frontend assets;
 - network-free `npm ci --offline` against the verified source cache;
 - hardened systemd unit and dedicated service/database roles;
+- console RPM spec/build script, service unit, sysuser, and disabled install
+  preset build and install successfully under Fedora 44 systemd;
 - final CSP enforcement, HSTS, no-referrer, nosniff, Permissions Policy;
 - structured safe logs with request IDs and no finding/token body content;
 - readiness for database/schema and local-auth state;
-- upgrade, rollback-safety, backup/restore notes, and operator documentation;
+- [x] upgrade, rollback-safety, backup/restore notes, and operator
+  documentation; the runbook covers exact-schema startup, the RPM restart
+  hook, coordinated migrations, and credential state restored from backups;
 - final `docs/components/openvibes-console.md` and component index update.
 
 Verification:
 
-- clean RPM build installs without Node runtime;
-- service starts, serves local login and assets/API over HTTPS, and has expected
-  headers;
-- upgrade preserves sessions/data according to migration policy;
-- browser matrix and accessibility review pass;
-- Cargo and npm dependency audits pass;
+- [x] clean RPM build installs without a Node runtime;
+- [x] service starts, serves local login and assets/API over HTTPS, and has
+  expected headers;
+- [x] upgrade preserves the local user, active session, config, TLS files, and
+  service state; console packages do not run or own database migrations;
+- [x] Chromium, Firefox, and WebKit Playwright matrix passes, including axe,
+  CSP, keyboard, menu, dialog, combobox, theme, and bounded-rendering checks;
+- [x] Cargo RustSec and npm dependency audits pass;
+- [x] component and operator documentation is current.
 - no CDN or runtime third-party resource request occurs.
 
 ## 8. Later Capabilities

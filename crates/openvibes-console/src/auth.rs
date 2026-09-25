@@ -145,6 +145,15 @@ impl NormalizedPassword {
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_bytes()
     }
+
+    /// NFC-normalizes a bounded password for verification without applying
+    /// registration policy to existing credentials.
+    pub(crate) fn for_verification(password: &str) -> Result<Self, PasswordError> {
+        if password.chars().count() > MAX_RAW_PASSWORD_CODE_POINTS {
+            return Err(PasswordError::TooLong);
+        }
+        Ok(Self(password.nfc().collect()))
+    }
 }
 
 impl Drop for NormalizedPassword {
@@ -199,6 +208,52 @@ impl PresentedSecret {
     pub fn expose_secret(&self) -> &str {
         &self.0
     }
+}
+
+/// Computes the byte digest used by the console store for a presented session.
+pub(crate) fn session_digest(secret: &str) -> [u8; 32] {
+    let digest = digest::digest(&digest::SHA256, secret.as_bytes());
+    let mut output = [0; 32];
+    output.copy_from_slice(digest.as_ref());
+    output
+}
+
+/// Derives a stable, session-bound synchronizer token and its storage digest.
+/// The token is reproducible from the high-entropy session cookie so it never
+/// needs to be stored in plaintext.
+pub(crate) fn session_csrf(secret: &str) -> (String, [u8; 32]) {
+    let mut input = b"openvibes-console-csrf-v1\0".to_vec();
+    input.extend_from_slice(secret.as_bytes());
+    let token = URL_SAFE_NO_PAD.encode(digest::digest(&digest::SHA256, &input).as_ref());
+    let token_digest = session_digest(&token);
+    input.zeroize();
+    (token, token_digest)
+}
+
+pub(crate) fn named_cookie(
+    headers: &HeaderMap,
+    name: &str,
+) -> Result<Option<PresentedSecret>, CredentialParseError> {
+    let mut secret = None;
+    for cookie_header in headers.get_all(header::COOKIE).iter() {
+        let cookie_header = cookie_header
+            .to_str()
+            .map_err(|_| CredentialParseError::Invalid)?;
+        for pair in cookie_header.split(';') {
+            let Some((cookie_name, value)) = pair.trim().split_once('=') else {
+                continue;
+            };
+            if cookie_name.trim() != name {
+                continue;
+            }
+            let value = value.trim();
+            if secret.is_some() || !valid_session_token(value) {
+                return Err(CredentialParseError::Invalid);
+            }
+            secret = Some(PresentedSecret(value.to_owned()));
+        }
+    }
+    Ok(secret)
 }
 
 impl Drop for PresentedSecret {
@@ -256,25 +311,7 @@ pub fn presented_credentials(
 fn session_cookie_from_headers(
     headers: &HeaderMap,
 ) -> Result<Option<PresentedSecret>, CredentialParseError> {
-    let mut secret = None;
-    for cookie_header in headers.get_all(header::COOKIE).iter() {
-        let cookie_header = cookie_header
-            .to_str()
-            .map_err(|_| CredentialParseError::Invalid)?;
-        for pair in cookie_header.split(';') {
-            let Some((name, value)) = pair.trim().split_once('=') else {
-                continue;
-            };
-            if name.trim() != "__Host-openvibes-session" {
-                continue;
-            }
-            if secret.is_some() || !valid_session_token(value.trim()) {
-                return Err(CredentialParseError::Invalid);
-            }
-            secret = Some(PresentedSecret(value.trim().to_owned()));
-        }
-    }
-    Ok(secret)
+    named_cookie(headers, "__Host-openvibes-session")
 }
 
 fn valid_session_token(value: &str) -> bool {
@@ -364,8 +401,8 @@ fn current_argon2_params() -> Result<Params, argon2::Error> {
 
 /// Newly generated opaque session secret and its database-safe SHA-256 digest.
 ///
-/// The raw value is only for setting the browser cookie. Persist [`hash`]
-/// instead. Debug output intentionally omits both values.
+/// The raw value is only for setting the browser cookie. Persist the `hash`
+/// field instead. Debug output intentionally omits both values.
 pub struct SessionSecret {
     value: String,
     hash: String,
@@ -389,6 +426,13 @@ impl SessionSecret {
     /// Returns the lowercase SHA-256 digest to persist instead of the secret.
     pub fn hash(&self) -> &str {
         &self.hash
+    }
+}
+
+impl Drop for SessionSecret {
+    fn drop(&mut self) {
+        self.value.zeroize();
+        self.hash.zeroize();
     }
 }
 
@@ -454,7 +498,7 @@ mod tests {
         CredentialParseError, NormalizedPassword, PasswordError, PresentedCredentials,
         SESSION_ABSOLUTE_TIMEOUT_MS, SESSION_IDLE_TIMEOUT_MS, SessionLifetime, SessionSecret,
         browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
-        session_cookie, verify_password,
+        session_cookie, session_csrf, session_digest, verify_password,
     };
 
     #[test]
@@ -502,6 +546,20 @@ mod tests {
         assert!(csrf_token_matches(&headers, &expected));
         headers.append("x-csrf-token", HeaderValue::from_str(&expected).unwrap());
         assert!(!csrf_token_matches(&headers, &expected));
+    }
+
+    #[test]
+    fn session_csrf_is_stable_and_bound_to_one_cookie_secret() {
+        let (token, stored_digest) = session_csrf("high-entropy-cookie-value");
+        let (same_token, same_digest) = session_csrf("high-entropy-cookie-value");
+        let (other_token, _) = session_csrf("another-cookie-value");
+        assert_eq!(token, same_token);
+        assert_eq!(stored_digest, same_digest);
+        assert_ne!(token, other_token);
+        assert_eq!(stored_digest, session_digest(&token));
+        let mut headers = HeaderMap::new();
+        headers.insert("x-csrf-token", HeaderValue::from_str(&token).unwrap());
+        assert!(csrf_token_matches(&headers, &token));
     }
 
     #[test]

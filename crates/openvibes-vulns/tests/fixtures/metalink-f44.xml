@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<metalink version="3.0" xmlns="http://www.metalinker.org/" type="dynamic" pubdate="Fri, 25 Sep 2026 06:21:19 GMT" generator="mirrormanager" xmlns:mm0="http://fedorahosted.org/mirrormanager">
+ <files>
+  <file name="repomd.xml">
+   <mm0:timestamp>1790298507</mm0:timestamp>
+   <size>7055</size>
+   <verification>
+    <hash type="md5">5f651b9d8c09fca04d453e6c96920b76</hash>
+    <hash type="sha1">4c63b191fd2f78a8a13d4c0b0280aae378f9ec2c</hash>
+    <hash type="sha256">d843ccef8d1aa4aedfccf8004815459ccd7913bc47060bf7a54082064120e911</hash>
+    <hash type="sha512">75f9c7a19d7e2c1789e49cd495951d09748bd232844fd6565e937646674eab0912c19647f321694e26abe39b907d62fd44f28bf4da940fda50ea5cf182a01c5a</hash>
+   </verification>
+   <mm0:alternates>
+    <mm0:alternate>
+      <mm0:timestamp>1790211301</mm0:timestamp>
+      <size>7055</size>
+      <verification>
+       <hash type="md5">3e060e1b8fa8e1d669eb6ef026e54fd9</hash>
+       <hash type="sha1">1024b534217ea53ab4a857af4129b2ea062c80e1</hash>
+       <hash type="sha256">cb0c2e9d097b66102033295c144cabb71a09679853c1e9640e8af4e9b0d80208</hash>
+       <hash type="sha512">d688add3ed05082025b455cbda18891393902deff4d7bd1c630153204981c7b9b9d4c7479705822dc7b392baf948556a62bb5ca3f38cf7d8894bd1fe6b59cf1d</hash>
+      </verification>
+    </mm0:alternate>
+    <mm0:alternate>
+      <mm0:timestamp>1790125508</mm0:timestamp>
+      <size>7055</size>
+      <verification>
+       <hash type="md5">26a5496a69d4059eb3b3ae49a93713b1</hash>
+       <hash type="sha1">b834b246968fec38810835972ec06f7587b59372</hash>
+       <hash type="sha256">78bfb4fdae0a178530e5bf624f4815d546fc28672b839edbb6f67ad31ccfd518</hash>
+       <hash type="sha512">d57d865ad609ef1f622ba4d506e90aa59d318a486406ac4f9f4525d3e2b22734a77d021950bcea151f618bbf80f2505c6f0f6d47b6050cdb1b7c173b12ff6ef5</hash>
+      </verification>
+    </mm0:alternate>
+    <mm0:alternate>
+      <mm0:timestamp>1790038210</mm0:timestamp>
+      <size>7055</size>
+      <verification>
+       <hash type="md5">ba1442ad848ab8f444dea50776d0a76d</hash>
+       <hash type="sha1">e31ad84c09c93c8613b37f3ae9dd578ee4d6edd0</hash>
+       <hash type="sha256">fd112e5be5128f18efcdc5064f26d0ecc0989259f85d6cfa2071798a0a07899c</hash>
+       <hash type="sha512">160be0da227c4f0a3de1de2759f5c21446b0822e1c38414e79a5c0e2979ef0e1a6fa1a75b5a4cd8a206d595b170731beb31984f9a683c09aeac6b8770d63d136</hash>
+      </verification>
+    </mm0:alternate>
+   </mm0:alternates>
+   <resources maxconnections="1">
+    <url protocol="rsync" type="rsync" location="CZ" preference="100">rsync://mirror.karneval.cz/fedora/linux/updates/44/Everything/x86_64/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="CZ" preference="100">https://mirror.karneval.cz/pub/linux/fedora/linux/updates/44/Everything/x86_64/repodata/repomd.xml</url>
+    <url protocol="https" type="https" location="GB" preference="99">https://ask4.mm.fcix.net/fedora/linux/updates/44/Everything/x86_64/repodata/repomd.xml</url>
+    <url protocol="http" type="http" location="GB" preference="99">http://ask4.mm.fcix.net/fedora/linux/updates/44/Everything/x86_64/repodata/repomd.xml</url>
+   </resources>
+  </file>
+ </files>
+</metalink>

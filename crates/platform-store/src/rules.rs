@@ -247,6 +247,23 @@ pub async fn remove_trust_key(
 
 /// Stores a verified envelope as the set's new current version.
 pub async fn publish(client: &mut Client, bundle: &NewBundle<'_>) -> Result<Published, StoreError> {
+    publish_inner(client, bundle, None).await
+}
+
+/// Publishes a console bundle and its audit event in one transaction.
+pub async fn publish_and_audit(
+    client: &mut Client,
+    bundle: &NewBundle<'_>,
+    actor_id: &str,
+) -> Result<Published, StoreError> {
+    publish_inner(client, bundle, Some(actor_id)).await
+}
+
+async fn publish_inner(
+    client: &mut Client,
+    bundle: &NewBundle<'_>,
+    audit_actor: Option<&str>,
+) -> Result<Published, StoreError> {
     let transaction = client.transaction().await?;
     // Serializes publishers of one set, so check-then-insert is atomic.
     transaction
@@ -275,11 +292,17 @@ pub async fn publish(client: &mut Client, bundle: &NewBundle<'_>) -> Result<Publ
         .await?
     {
         let stored: &[u8] = row.get(0);
-        return Ok(if stored == bundle.envelope {
-            Published::Unchanged
-        } else {
-            Published::VersionConflict
-        });
+        if stored != bundle.envelope {
+            return Ok(Published::VersionConflict);
+        }
+        if let Some(actor) = audit_actor {
+            transaction.execute(
+                "INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'rule_bundle.published','rule_bundle','unchanged',jsonb_build_object('rule_set_id',$2::text,'version',$3::bigint),'user',$1,$1,'rule_bundle',$4)",
+                &[&actor,&bundle.rule_set_id,&bundle.version,&format!("{} v{}",bundle.rule_set_id,bundle.version)],
+            ).await?;
+        }
+        transaction.commit().await?;
+        return Ok(Published::Unchanged);
     }
     let current: Option<i64> = transaction
         .query_one(
@@ -321,6 +344,12 @@ pub async fn publish(client: &mut Client, bundle: &NewBundle<'_>) -> Result<Publ
             ],
         )
         .await?;
+    if let Some(actor) = audit_actor {
+        transaction.execute(
+            "INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES($1,'rule_bundle.published','rule_bundle','success',jsonb_build_object('rule_set_id',$2::text,'version',$3::bigint,'envelope_sha256',$4::text),'user',$1,$1,'rule_bundle',$5)",
+            &[&actor,&bundle.rule_set_id,&bundle.version,&bundle.envelope_sha256.iter().map(|byte|format!("{byte:02x}")).collect::<String>(),&format!("{} v{}",bundle.rule_set_id,bundle.version)],
+        ).await?;
+    }
     transaction.commit().await?;
     Ok(Published::Stored)
 }

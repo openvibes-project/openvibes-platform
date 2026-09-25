@@ -1,0 +1,7 @@
+development_listen = "0.0.0.0:443"
+health_listen = "127.0.0.1:18482"
+transport_mode = "direct_tls"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_console"
+public_origin = "https://console.example.invalid"
+server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
+server_key_file = "/etc/openvibes/tls/console-key.pem"

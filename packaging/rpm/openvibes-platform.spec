@@ -27,6 +27,14 @@ Summary:        OpenVIBES rule distribution service
 %description -n openvibes-distribution
 Serves operator-published, offline-signed rule bundles to enrolled OpenVIBES agents over mTLS.
 
+%package -n openvibes-vulns
+Summary:        OpenVIBES vulnerability feeds and matching
+%{?systemd_requires}
+
+%description -n openvibes-vulns
+Fetches Fedora security advisories and matches them against the package
+inventories OpenVIBES agents report.
+
 %package -n openvibes-admin
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
@@ -43,6 +51,11 @@ install -D -m 0644 $S/packaging/rpm/openvibes-distribution.service %{buildroot}%
 install -D -m 0644 $S/packaging/rpm/openvibes-distribution.sysusers %{buildroot}%{_sysusersdir}/openvibes-distribution.conf
 install -D -m 0640 $S/packaging/rpm/distribution.toml %{buildroot}%{_sysconfdir}/openvibes/distribution.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-distribution/LICENSE
+install -D -m 0755 $S/target/release/openvibes-vulns %{buildroot}%{_bindir}/openvibes-vulns
+install -D -m 0644 $S/packaging/rpm/openvibes-vulns.service %{buildroot}%{_unitdir}/openvibes-vulns.service
+install -D -m 0644 $S/packaging/rpm/openvibes-vulns.sysusers %{buildroot}%{_sysusersdir}/openvibes-vulns.conf
+install -D -m 0640 $S/packaging/rpm/vulns.toml %{buildroot}%{_sysconfdir}/openvibes/vulns.toml
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-vulns/LICENSE
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unitdir}/openvibes-ingest.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
@@ -68,6 +81,13 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %systemd_preun openvibes-distribution.service
 %postun -n openvibes-distribution
 %systemd_postun_with_restart openvibes-distribution.service
+
+%post -n openvibes-vulns
+%systemd_post openvibes-vulns.service
+%preun -n openvibes-vulns
+%systemd_preun openvibes-vulns.service
+%postun -n openvibes-vulns
+%systemd_postun_with_restart openvibes-vulns.service
 
 %post -n openvibes-admin
 %systemd_post openvibes-maintenance.timer
@@ -97,6 +117,14 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %dir %{_sysconfdir}/openvibes/pki
 %config(noreplace) %attr(0640, root, openvibes_distribution) %{_sysconfdir}/openvibes/distribution.toml
 
+%files -n openvibes-vulns
+%license %{_licensedir}/openvibes-vulns/LICENSE
+%{_bindir}/openvibes-vulns
+%{_unitdir}/openvibes-vulns.service
+%{_sysusersdir}/openvibes-vulns.conf
+%dir %{_sysconfdir}/openvibes
+%config(noreplace) %attr(0640, root, openvibes_vulns) %{_sysconfdir}/openvibes/vulns.toml
+
 %files -n openvibes-admin
 %license %{_licensedir}/openvibes-admin/LICENSE
 %{_bindir}/openvibes-admin
@@ -109,4 +137,5 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 %changelog
 * Thu Sep 24 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1
 - First package: openvibes-ingest, openvibes-distribution (rule bundles for
-  agents, port 18424), and openvibes-admin.
+  agents, port 18424), openvibes-vulns (vulnerability feeds and matching),
+  and openvibes-admin.

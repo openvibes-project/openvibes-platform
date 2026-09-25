@@ -31,11 +31,11 @@ passphrases after normalization. This list is only an initial seed and must be
 replaced or expanded from a reviewed local compromised-password corpus before
 production login is enabled.
 
-This module does not authenticate users or manage sessions. Those operations
-remain unavailable until C3's database schema and store boundary are integrated.
-The origin checker receives a canonical origin from validated runtime config;
-it does not interpret forwarded headers. The blocklist is not a comprehensive
-compromised-password corpus, and production login throttling is not implemented.
+The C3 HTTP adapter and database operations are documented in
+[`console-auth-http.md`](console-auth-http.md) and
+[`console-auth-store.md`](console-auth-store.md). The origin checker receives a
+canonical origin from validated runtime config; it does not interpret forwarded
+headers. The blocklist is not a comprehensive compromised-password corpus.
 Callers must run the synchronous Argon2 operation under bounded blocking
 capacity. Random-source failure returns an error so callers can fail closed.
 

@@ -1,6 +1,7 @@
 {
   "browserRoutes": [
     "/",
+    "/login",
     "/findings",
     "/agents",
     "/enrollment",

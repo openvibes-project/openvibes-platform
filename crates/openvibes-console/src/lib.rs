@@ -4,9 +4,9 @@
 //! Human-facing OpenVIBES console HTTP skeleton.
 //!
 //! C0 provides strict route separation and loopback-only development and
-//! health listeners. Production authentication, TLS, data access, and
-//! production data access remain intentionally unavailable until their
-//! implementation milestones. Production frontend assets are included only
+//! health listeners. Optional C3 local authentication uses database-backed
+//! sessions on the same loopback listener. TLS and authenticated data access
+//! remain unavailable until their implementation milestones. Production frontend assets are included only
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
 mod api;
@@ -26,11 +26,21 @@ mod seeded;
 mod server;
 
 pub use api::{
-    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, AuthenticationLevel,
-    AuthenticationMethod, CertificatePage, CertificateView, CursorPage, CursorPagination,
-    DEFAULT_PAGE_SIZE, EffectiveCapability, FindingHistoryEntry, FindingHistoryPage, FindingOrigin,
-    FindingPage, FindingSummary, FindingView, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
-    Permission, PermissionScope, SessionPrincipal, SessionResponse, Severity,
+    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
+    AgentPage, AgentStatus, AgentSummary, AgentTagBindingImpact, AgentTagChangeRequest,
+    AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest,
+    AssetGroupSelectorInput, AuditEventPage, AuditEventView, AuditRetentionPolicy,
+    AuthenticationLevel, AuthenticationMethod, CertificatePage, CertificateView,
+    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
+    CreateServiceTokenRequest, CreatedEnrollmentToken, CreatedServiceToken, CursorPage,
+    CursorPagination, DEFAULT_PAGE_SIZE, EffectiveCapability, EnrollmentTokenPage,
+    EnrollmentTokenView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
+    FindingSummary, FindingTriageView, FindingView, LoginRequest, LoginResponse, MAX_CURSOR_LENGTH,
+    MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope, PreauthResponse,
+    RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage,
+    RuleSetView, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
+    ServiceTokenView, SessionPrincipal, SessionResponse, Severity, SignedRuleEnvelopeRequest,
+    UpdateAuditRetentionRequest, UpdateFindingTriageRequest,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
@@ -38,10 +48,12 @@ pub use auth::{
     browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
     session_cookie, verify_password,
 };
-pub use config::{ConsoleConfig, load_config};
+pub use config::{ConsoleConfig, ConsoleTransportMode, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
 pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
-pub use router::{Readiness, development_router, health_router, public_router};
-pub use server::{run, serve};
+pub use router::{
+    Readiness, authenticated_router, development_router, health_router, public_router,
+};
+pub use server::{TrustedPeer, run, serve};

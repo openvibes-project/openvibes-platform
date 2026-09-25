@@ -27,12 +27,32 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
 | `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
-| `maintenance [--retention-days 90]` | creates any missing partition from the retention cutoff to today + 7 days, so late or backlogged findings always have a partition; drops older ones, never today's. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M` |
+| `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
+| `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo |
+| `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |
+| `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
+| `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
+| `user reset-password USERNAME` | replaces the password and revokes all sessions atomically; does not enable a disabled account | prompts twice without terminal echo |
+
+Usernames are normalized to lowercase ASCII and limited to 64 characters.
+Passwords use the same console NFC normalization, 15–128 Unicode-character
+policy, Argon2id parameters, and local common-passphrase blocklist as browser
+login. Passwords are never accepted as command-line arguments or written to
+the audit log. The built-in common-passphrase list is a small seed list, not a
+full compromised-password corpus.
 
 Commands other than `migrate` refuse to run on an outdated schema ("run
 openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
+
+## User commands
+
+The user commands are audited, including failed attempts. Creation provisions
+the user, credential, initial role binding, and user-created audit event in one
+store transaction. Disable and password reset invalidate all browser sessions.
+Unlock clears only an active account bucket; IP/source throttles still protect
+the service. The first account can be created after schema 15 is applied.
 
 ## Agent commands
 
@@ -86,6 +106,20 @@ of one set are serialized, so concurrent identical publishes store one row.
 Audit targets: `SET vN sha256:HEX` for `publish` (none if the file is not
 an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 `retire`, and `trust list RULE_SET`.
+
+## Vulnerability commands
+
+| Command | Does |
+|---|---|
+| `feeds import FILE --source fedora-<rel>-<arch>` | imports a downloaded `updateinfo.xml` or `.xml.zst` (offline platforms), re-matches that release: `imported N advisories into SOURCE; M open on fedora REL` |
+| `feeds import FILE --source rocky-N\|almalinux-N\|debian-N\|ubuntu-YY.MM` | imports an OSV `all.zip` (the ecosystem's, from `osv-vulnerabilities.storage.googleapis.com/<Ecosystem>/all.zip`) for that release and re-matches it: `imported N advisories into debian-12; M open` (unreadable records are counted and skipped) |
+| `feeds import FILE --source kev\|epss\|nvd\|euvd` | imports a CISA KEV JSON, an EPSS CSV (`.gz` or plain), an NVD API response page (only CVEs advisories name are kept), or an EUVD exploited list (the whole list: CVEs missing from it lose the mark): `imported N CVEs from kev` |
+| `feeds status` | per source: advisories (or CVEs for `kev`, `epss`, `nvd`, `euvd`), last check, last change, last error |
+| `vulns summary` | open count by severity and host count; open ones exploited in the wild (CISA KEV or EUVD), and open ones with no fix available yet, when any; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
+| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed`, or `installed (no fix available)` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
+| `vulns show ADVISORY\|HOST` | an advisory with its link, one line per CVE (`CVE-… CVSS 6.1 (3.1) CWE-79 KEV EUVD-… EPSS 94.0%: description`, first 200 characters), and hosts; or a host with its open vulnerabilities |
+
+All are audited; `feeds import` with the source as target.
 
 ## CA commands
 

@@ -83,7 +83,7 @@ tails of the ingest, distribution, and agent logs, and stops every process it st
 ## Requirements
 
 `postgresql-server` (`initdb`, `pg_ctl`, `createdb`, `psql`), `sqlite`,
-`jq`, `curl`, a Rust toolchain, and git access to the private agent
+`jq`, `curl`, a Rust toolchain, and git access to the (public) agent
 repository (`CARGO_NET_GIT_FETCH_WITH_CLI=true` is set by the script).
 `scripts/integration-lib.sh` holds the shared helpers: `agent_rev`,
 `build_agent`, `wait_for`, and `start_platform` (PostgreSQL, schema, CA,

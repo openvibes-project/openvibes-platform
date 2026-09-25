@@ -16,10 +16,38 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved. C0 is complete, and the C1 seeded read slice is
+The design is approved. C0 and C1 are complete. C3 local authentication is
+implemented through pre-auth, login, session validation/refresh, logout, and
+password hash upgrade. When both `database_url` and `public_origin` are set,
+the executable connects to PostgreSQL, requires schema version 18, and serves
+the authenticated router. Otherwise it serves the C0 development router,
+where `/api/v1/session` remains fail-closed. The authenticated router now
+serves permission-checked, SQL-scoped agent summary, list, detail, and
+certificate routes, plus finding summary, latest, and history reads. Access
+control has a global read inventory for roles, bindings, and asset groups,
+plus CSRF-protected local-user role binding changes and audited asset-group
+selector management. Enrollment-token, service-account, and signed rule-bundle
+read/preview/publish flows are available through the console API and UI;
+private signing and trust-key management remain local CLI operations.
+Global audit event search and retention-policy
+reads/updates are available; `/audit` provides a filtered, cursor-paginated
+activity screen without exposing event details or request source metadata.
+Global `audit.export` users can download the exact visible filters as bounded
+CSV; the export audit event records only filters, row count, and digest.
+The first-account bootstrap and account recovery CLI is available through
+`openvibes-admin user`. The embedded UI has a login form, session gate, and
+sign-out action, and its production Overview, Agents, Findings, Audit, and
+Access control pages use authenticated APIs. Agent detail also provides a
+reason-required revoke operation; the store enforces the effective global or
+asset-group scope in SQL and commits revocation with its audit row.
+Enrollment-token listing, one-time secret creation with idempotent retries,
+and audited revocation are available through global `tokens.read`,
+`tokens.create`, and `tokens.revoke` capabilities. The token secret is stored
+only as the same SHA-256 digest used by ingest, and is never repeated on a
+replayed create response. The C1 seeded read slice is
 implemented: a
 loopback-only Axum process with separate public and health routers, an embedded
-React shell, exact static-asset routing, report-only security headers, locked
+React shell, exact static-asset routing, enforced security headers, locked
 frontend tooling, checked Rust-generated OpenAPI, and CI build validation.
 One checked frontend contract now supplies the browser-route and public-asset
 inventory to both Rust and TypeScript, and the production output carries a
@@ -33,9 +61,8 @@ transparent SVG paths: a compact mark and light- and dark-surface wordmarks.
 The expanded shell follows the active theme while the compact shell, favicon,
 and application manifest use the mark. ImageMagick deterministically renders
 the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
-Production authentication and data routes remain fail-closed until their
-later milestones provide the required database-backed sessions and
-authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
+Production data routes remain unavailable until their later milestones
+provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
 OpenAPI snapshot or package.
 
@@ -60,44 +87,72 @@ before Vite runs.
 
 `GET /api/v1/session` defines the current-human-session contract: principal,
 authentication method and level, effective permission/scope pairs, CSRF value,
-and idle/absolute expiry. Until C3 supplies authenticated sessions, the route
-returns `503 authentication_unavailable`; it never manufactures an anonymous
-or implicitly privileged session. Service-account bearer tokens cannot use
-this browser-session route.
+and idle/absolute expiry. In C0 mode it returns
+`503 authentication_unavailable`; the authenticated C3 router returns a
+database-validated session or generic `401`. It never manufactures an
+anonymous or implicitly privileged session. Service-account bearer tokens
+cannot use this browser-session route.
 
 Collection DTOs use opaque cursors with a default limit of 50, maximum limit
 of 100, and a 2,048-byte cursor bound. Response envelopes contain typed items,
 an optional next cursor, and an RFC 3339 generation time. Agent, certificate,
 latest-finding, and finding-history response schemas are generated into OpenAPI
-and the TypeScript client now; the seeded API reuses those DTOs. Agent fields
-match the stored schema, including optional hostname/heartbeat data and
-multiple certificate records. Finding fields include confidence, evidence,
-scan ID, receive time, and authenticated origin. Operation paths are added
-when their database-backed routes are implemented, with production data
-remaining unavailable until authentication and SQL-enforced scope are ready.
+and the TypeScript client; the seeded API reuses those DTOs. Agent fields match
+the stored schema, including optional hostname/heartbeat data and multiple
+certificate records. Finding fields include confidence, evidence, scan ID,
+receive time, and authenticated origin. Implemented agent and finding reads
+resolve current permission scopes for each request and apply asset-group
+selectors in SQL before pagination or aggregation. Access-control, audit,
+enrollment, service-account, rule-set, triage, and agent-revocation operations
+use authenticated, permission-checked routes with transactional audit records.
 
-The first-release UI covers overview, agents, findings and analyst triage,
-enrollment tokens, pre-signed rule bundles, access control and exact agent
-tags, service accounts, and the audit log, retention policy, and bounded CSV
-export. CA and rule-trust-key administration remain CLI-only.
+The implemented production UI covers sign-in, overview, agents, findings,
+enrollment, service accounts, rule sets, access control, audit, and
+latest-finding analyst triage with version-checked updates. Fedora 44 RPM
+installation, upgrade preservation, direct TLS, Unix proxy peer enforcement,
+and systemd sandboxing pass the C5 integration run. CA and rule-trust-key
+administration remain CLI-only.
 
 ## Configuration
 
-### Current (C0)
+### Current
 
 `openvibes-console [--config PATH]` reads `/etc/openvibes/console.toml` by
-default: strict TOML (unknown keys refused) with two keys, both loopback
-only and different:
+default: strict TOML (unknown keys refused). The health listener must be a
+distinct loopback address. `transport_mode` explicitly selects `development`,
+`direct_tls`, or `reverse_proxy`. Development mode is loopback-only. Direct TLS
+requires both absolute `server_certificate_file` and `server_key_file` paths
+and permits a non-loopback public listener. Optional `database_url` and
+`public_origin` must be provided together; HTTP origins must be loopback, while
+HTTPS origins are required for direct TLS and reverse proxy. For example:
 
 ```toml
 development_listen = "127.0.0.1:8443"   # the development web listener
 health_listen = "127.0.0.1:18482"       # /health and /ready
+transport_mode = "development"
+database_url = "postgresql:///openvibes?host=/run/postgresql" # optional
+public_origin = "http://localhost:8443" # required with database_url
 ```
 
-A non-loopback address, equal addresses, or a malformed file is refused at
-startup ("invalid console configuration"), and `run` refuses a listener that
-is not loopback even if bound elsewhere. The e2e fixture uses 18490/18491,
-clear of ingest's 18480 and distribution's 18481.
+A non-loopback address, equal addresses, unpaired auth fields, non-loopback
+origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at startup ("invalid console
+configuration"), and `run` refuses a listener that is not loopback even if
+bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
+certificate chain and key, and are checked before serving; handshakes are TLS
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 18; it
+never runs migrations. The database URL is redacted from `Debug`. Authenticated
+requests must use the configured Host authority. The e2e fixture uses
+18490/18491, clear of ingest's 18480 and distribution's 18481.
+
+Reverse-proxy mode requires authenticated database configuration and a
+canonical HTTPS `public_origin`. It uses either a loopback TCP listener with
+1–64 unique loopback `trusted_proxy_addresses`, or a Unix socket with an
+absolute `unix_socket_file` and 1–64 unique `trusted_proxy_uids`. The TCP and
+Unix trust lists are mutually exclusive. Requests from other peers are
+rejected. Unix sockets are created mode 0660; the proxy user must be able to
+traverse the parent directory and belong to the socket's group. Forwarded
+headers are ignored; the proxy must preserve the configured Host authority.
+HSTS is set for both direct TLS and reverse-proxy responses.
 
 ### Development seed (C1)
 
@@ -113,17 +168,18 @@ returns bounded pages and never loads all rows into the browser. These
 temporary routes are intentionally absent from the production OpenAPI
 contract until the database-backed C2/C3 routes exist.
 
-### Planned (C2 to C5)
+### Deployment and packaging (C5)
 
-The final service configuration is strict, bounded TOML with unknown keys and
-relative key/certificate paths refused. Its approved deployment constraints
-are:
+The production service uses strict, bounded TOML; unknown keys and relative
+key/certificate paths are refused. Its deployment constraints are:
 
-- direct TLS 1.3 termination is the default and requires a server certificate
-  chain and private key;
+- direct TLS 1.3 termination is available with a configured server certificate
+  chain and private key; TLS responses include HSTS;
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
-  origin plus an allow-list of trusted proxy addresses;
-- forwarded headers are ignored unless the immediate peer is trusted;
+  origin plus an allow-list of trusted proxy peers (loopback TCP addresses or
+  Unix effective UIDs);
+- forwarded headers are ignored; Host/Origin checks use the configured
+  external origin;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
   non-loopback upstreams remain TLS protected;
 - the health listener must be loopback-only;
@@ -132,28 +188,52 @@ are:
 - session lifetimes, request limits, password hashing, export limits, and the
   private CSV spool are bounded configuration rather than browser choices.
 
-The exact TOML keys and defaults land with the runtime configuration milestone
-and this page must be updated in that same change. Development uses a
-loopback-only seeded server; the `dev-seed` implementation and its conspicuous
-banner are never included in the production RPM.
+The systemd unit creates `/run/openvibes-console` as a service-owned runtime
+directory and removes it when the service stops. In Unix proxy mode, the
+configured peer UIDs are checked using kernel peer credentials. Development
+uses a loopback-only seeded server; the `dev-seed` implementation and its
+conspicuous banner are never included in the production RPM.
+
+The offline RPM build script validates the caller-supplied cache digest,
+builds the embedded UI and release binary without network access, creates an
+isolated `target/rpm-console` rpmbuild tree, and emits the package there. CI
+installs that RPM after platform migrations inside Fedora 44 with systemd as
+PID 1, then checks readiness, HTTPS delivery, response security headers, the
+systemd seccomp and `NoNewPrivs` settings, Unix proxy access for allowed and
+disallowed peer UIDs, no Node.js runtime dependency, and upgrade preservation
+of local configuration, TLS files, the local account, and its active session.
 
 ## Failure behaviour
 
-**Now (C0 and C1):**
+**Now (C0, C1, and the C3 local-auth slice):**
 
 - The development listener answers only loopback `Host` names (`localhost`,
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
-- Framing is refused: `Content-Security-Policy: frame-ancestors 'none'` is
-  enforced (with `X-Frame-Options: DENY`) while the full policy is still
-  report-only.
+- Authenticated runtime startup refuses absent/unreachable databases and any
+  schema version other than 18; it does not migrate. The configured Host
+  authority is enforced for authenticated requests. Login uses trusted socket
+  peer information from the capped listener; forwarded headers are ignored.
+- Login, logout, pre-auth, session refresh, and password-hash upgrade persist
+  through `platform-store` transactions. Login failures have a generic shape;
+  password work has a four-operation concurrency bound.
+- The embedded UI requests the current session without caching, gates
+  application routes unless that request succeeds, obtains one-use pre-auth
+  state before enabling local login, and sends logout with the synchronizer
+  CSRF token. It never reads the opaque session cookie. Navigation entries are
+  shown only when the current session has a matching read capability (and
+  global scope where required); direct navigation to a restricted page shows
+  an access-denied screen. The loopback seeded demo applies the same visibility
+  rules to its selected persona. API handlers remain the authorization boundary.
+- The full Content Security Policy is enforced on every public response,
+  including `frame-ancestors 'none'`; `X-Frame-Options: DENY` is also set.
 - A wrong method on an API route is a 405 Problem Details response with
   `Cache-Control: no-store`, like every API error.
 - The public and development routers cap extractor request bodies at 1 MiB,
   request handling at 15 seconds, and in-flight requests at 128 per process.
-  The public listener accepts at most 256 concurrent TCP connections and the
-  health listener accepts at most 16; excess connections wait in the OS
-  accept queue until a slot opens.
+  The public TCP or Unix listener accepts at most 256 concurrent connections
+  and the health listener accepts at most 16; excess connections wait in the
+  OS accept queue until a slot opens.
 - Problem Details errors log their request ID, stable code, and HTTP status;
   request fields and secret values are not logged.
 - An `embedded-ui` build fails if the shared route/public-asset contract,
@@ -164,26 +244,28 @@ banner are never included in the production RPM.
 - Frontend tests refuse brand SVGs with scripts, animation, embedded raster,
   external references, text/fonts, or background rectangles, and verify the
   PNG signatures, alpha channel, and declared dimensions.
-**Still planned (C2 to C5):**
+**Implemented runtime behavior:**
 
-- Missing or invalid security configuration, a wildcard plaintext proxy bind,
-  a non-loopback health listener, or an untrusted forwarded-header setup makes
-  startup fail rather than weakening the trust boundary.
-- `/ready` returns 503 while PostgreSQL is unreachable, its schema is older or
-  newer than the supported version, or required local-auth state is not ready;
-  `/health` remains a process-liveness check.
-- Production data routes remain unavailable until their owning milestones
-  are complete. The loopback seeded API is synthetic and cannot access
-  production state. There is no permissive production authentication mode.
-- `GET /api/v1/session` therefore returns a no-store, bounded 503 Problem
-  Details response until C3; its eventual 200 schema is already versioned in
-  the checked API contract.
+- In authenticated mode, `/ready` is refreshed every five seconds using a
+  bounded database connection and schema-version check. It returns 503 on
+  timeout, database failure, or schema drift; `/health` remains a
+  process-liveness check.
+- Development mode and its synthetic seeded routes remain loopback-only. They
+  cannot access production state. Production data and control-plane routes
+  require database-backed authentication; there is no permissive production
+  authentication mode.
+- In authenticated mode, `/api/v1/session` validates the database session and
+  resolves active role bindings on every request.
 - API failures are bounded Problem Details responses and never expose SQL,
   credentials, tokens, certificates, IdP payloads, or authorisation detail.
 - Authorisation is applied in database queries before aggregation, filtering,
   and pagination. An object outside the caller's asset scope looks absent.
 - A mutation whose audit append fails rolls back. Token plaintext is shown
   once and cannot be recovered afterward.
+- Direct TLS 1.3, trusted loopback-TCP proxying, and UID-allow-listed Unix
+  socket proxying are available. Other proxy peers are rejected. Forwarded
+  headers are ignored; the Fedora systemd integration covers the direct TLS
+  package path and Unix-socket peer-UID enforcement.
 
 ## Build and test
 
@@ -212,11 +294,25 @@ independently pinned digest from trusted RPM source metadata:
 `scripts/check-console-npm-cache.sh ARCHIVE CACHE_DIR EXPECTED_SHA256`.
 `scripts/build-console.sh
 --offline-cache-dir CACHE_DIR` then checks the lock digest/platform again,
-verifies npm's cache, and runs every npm command with networking disabled by
-`unshare -rn`. The first package target is Fedora Linux x86_64, so caches for
-other platforms are deliberately distinct. The eventual RPM source metadata
+verifies npm's cache, and runs npm in offline mode. When the host permits an
+unprivileged network namespace, npm commands also run under `unshare -rn`;
+restricted CI kernels may only enforce npm's offline cache. The first package
+target is Fedora Linux x86_64, so caches for other platforms are deliberately
+distinct. Console RPM source metadata
 supplies the expected archive digest independently of the archive and its
 sidecar. The one-argument checker mode used in CI validates corruption only.
+
+Build the Fedora x86_64 console package with:
+
+```sh
+scripts/build-console-rpm.sh "$CACHE_ARCHIVE" "$EXPECTED_SHA256"
+```
+
+The script verifies the pinned source cache, runs the frontend package checks
+and build with networking disabled, builds the Rust binary with Cargo offline,
+and packages it through `packaging/rpm/openvibes-console.spec`. RPM `%check`
+verifies the expected cache digest again. The resulting service is disabled
+until the operator provisions its database and certificate.
 
 For a network-isolated package build, persist the validated cache and pass it
 to the frontend build:

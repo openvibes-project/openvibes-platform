@@ -25,11 +25,12 @@ function publicFiles(directory: string): string[] {
 }
 
 describe("frontend contract", () => {
-  it("keeps Rust browser routing and TypeScript navigation on the same exact route set", () => {
+  it("keeps browser routes, application pages, and navigation aligned", () => {
     const navigationRoutes = navigationGroups.flatMap((group) => group.items.map((item) => item.path));
+    const applicationRoutes = frontendContract.browserRoutes.filter((route) => route !== "/login");
 
     expect(new Set(navigationRoutes).size).toBe(navigationRoutes.length);
-    expect([...navigationRoutes].sort()).toEqual([...frontendContract.browserRoutes].sort());
+    expect([...navigationRoutes].sort()).toEqual([...applicationRoutes].sort());
     expect([...pageRoutes].sort()).toEqual([...frontendContract.browserRoutes].sort());
   });
 

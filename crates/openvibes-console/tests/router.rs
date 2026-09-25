@@ -2,16 +2,15 @@ use axum::{
     body::{Body, to_bytes},
     http::{Request, StatusCode, header},
 };
-use openvibes_console::{Readiness, development_router, health_router, public_router};
+use openvibes_console::{
+    Readiness, TrustedPeer, authenticated_router, development_router, health_router, public_router,
+};
 use serde_json::Value;
 use tower::ServiceExt;
 
 fn assert_public_security_headers(response: &axum::response::Response) {
-    assert!(
-        response
-            .headers()
-            .contains_key("content-security-policy-report-only")
-    );
+    let csp = response.headers().get("content-security-policy").unwrap();
+    assert!(csp.to_str().unwrap().contains("default-src 'none'"));
     assert_eq!(
         response.headers().get("referrer-policy").unwrap(),
         "no-referrer"
@@ -24,12 +23,7 @@ fn assert_public_security_headers(response: &axum::response::Response) {
         "nosniff"
     );
     assert!(response.headers().contains_key("permissions-policy"));
-    // Framing is refused now, not only reported: report-only does not block.
     assert_eq!(response.headers().get("x-frame-options").unwrap(), "DENY");
-    assert_eq!(
-        response.headers().get("content-security-policy").unwrap(),
-        "frame-ancestors 'none'"
-    );
 }
 
 #[tokio::test]
@@ -97,6 +91,167 @@ async fn session_contract_fails_closed_until_authentication_exists() {
     assert_eq!(problem["code"], "authentication_unavailable");
     assert_eq!(problem["status"], 503);
     assert!(problem.get("principal").is_none());
+}
+
+#[tokio::test]
+async fn authenticated_session_rejects_missing_or_malformed_credentials_without_store_access() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    for cookie in [None, Some("__Host-openvibes-session=malformed")] {
+        let mut request = Request::builder().uri("/api/v1/session");
+        if let Some(cookie) = cookie {
+            request = request.header(header::COOKIE, cookie);
+        }
+        let response = authenticated_router(pool.clone(), "https://console.example")
+            .oneshot(request.body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        assert_public_security_headers(&response);
+        assert_eq!(
+            response.headers().get(header::CACHE_CONTROL).unwrap(),
+            "no-store"
+        );
+        let body = to_bytes(response.into_body(), 4096).await.unwrap();
+        let problem: Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(problem["code"], "authentication_required");
+        assert_eq!(problem["status"], 401);
+        assert!(problem.get("principal").is_none());
+    }
+}
+
+#[tokio::test]
+async fn preauth_does_not_issue_browser_secrets_when_the_store_is_unavailable() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://console.example")
+        .oneshot(
+            Request::builder()
+                .uri("/auth/v1/preauth")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    assert_public_security_headers(&response);
+    assert!(!response.headers().contains_key(header::SET_COOKIE));
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let problem: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(problem["code"], "authentication_unavailable");
+    assert_eq!(problem["status"], 503);
+}
+
+#[tokio::test]
+async fn login_rejects_bad_origin_before_consulting_credentials() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://console.example")
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/v1/login")
+                .header(header::ORIGIN, "https://attacker.example")
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(axum::extract::ConnectInfo(TrustedPeer::new(
+                    "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
+                )))
+                .body(Body::from(r#"{"username":"alice","password":"incorrect"}"#))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert_public_security_headers(&response);
+    assert!(!response.headers().contains_key(header::SET_COOKIE));
+    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    let problem: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(problem["code"], "request_rejected");
+}
+
+#[tokio::test]
+async fn malformed_login_body_uses_problem_details() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://console.example")
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/v1/login")
+                .header(header::ORIGIN, "https://console.example")
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(axum::extract::ConnectInfo(TrustedPeer::new(
+                    "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
+                )))
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/problem+json"
+    );
+    let body: Value =
+        serde_json::from_slice(&to_bytes(response.into_body(), 4096).await.unwrap()).unwrap();
+    assert_eq!(body["code"], "invalid_auth_request");
+}
+
+#[tokio::test]
+async fn invalid_public_origins_cannot_enable_browser_login() {
+    for origin in [
+        "null",
+        "http://console.example",
+        "https://Console.example",
+        "https://console.example/path",
+    ] {
+        let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+            .await
+            .unwrap();
+        let response = authenticated_router(pool, origin)
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/auth/v1/login")
+                    .header(header::ORIGIN, origin)
+                    .header(header::CONTENT_TYPE, "application/json")
+                    .extension(axum::extract::ConnectInfo(TrustedPeer::new(
+                        "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
+                    )))
+                    .body(Body::from(r#"{"username":"alice","password":"incorrect"}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "origin: {origin}");
+    }
+}
+
+#[tokio::test]
+async fn authenticated_router_rejects_unconfigured_hosts() {
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://console.example")
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/session")
+                .header(header::HOST, "attacker.example")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+    assert_eq!(
+        response.headers().get(header::CACHE_CONTROL).unwrap(),
+        "no-store"
+    );
 }
 
 #[tokio::test]

@@ -1,5 +1,8 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import type { components } from "../api/generated";
+import { AgentTags } from "./AgentTags";
+import { AssetGroups } from "./AssetGroups";
+import { AgentRevoke } from "./AgentRevoke";
 
 type AgentDetail = components["schemas"]["AgentDetail"];
 type AgentPage = components["schemas"]["AgentPage"];
@@ -7,14 +10,17 @@ type AgentSummary = components["schemas"]["AgentSummary"];
 type Finding = components["schemas"]["FindingView"];
 type FindingPage = components["schemas"]["FindingPage"];
 type FindingSummary = components["schemas"]["FindingSummary"];
+type AuditEventPage = components["schemas"]["AuditEventPage"];
+type AccessInventory = components["schemas"]["AccessInventory"];
 
 type ReadState<T> =
   | { status: "loading" }
   | { status: "error"; code: string; message: string }
   | { status: "ready"; value: T };
 
-function requestHeaders(): Headers {
+function requestHeaders(seeded: boolean): Headers {
   const headers = new Headers({ Accept: "application/json" });
+  if (!seeded) return headers;
   try {
     headers.set("X-OpenVIBES-Dev-Persona", localStorage.getItem("openvibes.dev.persona") ?? "analyst");
     headers.set("X-OpenVIBES-Dev-Mode", localStorage.getItem("openvibes.dev.mode") ?? "mixed");
@@ -24,7 +30,7 @@ function requestHeaders(): Headers {
   return headers;
 }
 
-function useRead<T>(url: string): ReadState<T> {
+function useRead<T>(url: string, seeded = false): ReadState<T> {
   const [state, setState] = useState<{ url: string; result: ReadState<T> }>({
     url: "",
     result: { status: "loading" },
@@ -33,7 +39,7 @@ function useRead<T>(url: string): ReadState<T> {
   useEffect(() => {
     const controller = new AbortController();
     if (url === "") return () => controller.abort();
-    void fetch(url, { headers: requestHeaders(), signal: controller.signal })
+    void fetch(url, { headers: requestHeaders(seeded), signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
           const problem = (await response.json()) as { code?: string; title?: string };
@@ -55,7 +61,7 @@ function useRead<T>(url: string): ReadState<T> {
         });
       });
     return () => controller.abort();
-  }, [url]);
+  }, [url, seeded]);
 
   return state.url === url ? state.result : { status: "loading" };
 }
@@ -64,11 +70,11 @@ function ReadStatus<T>({ state, children }: { state: ReadState<T>; children: (va
   if (state.status === "loading") return <p className="read-state" role="status">Loading current data…</p>;
   if (state.status === "error") {
     const forbidden = state.code === "permission_denied";
-    const expired = state.code === "session_expired";
+    const expired = state.code === "session_expired" || state.code === "authentication_required";
     return (
       <section className="read-state read-state--error" role="alert">
         <h2>{forbidden ? "Access unavailable" : expired ? "Session expired" : "Data unavailable"}</h2>
-        <p>{forbidden ? "Your current role does not permit this view." : expired ? "Choose another seeded session to continue." : state.message}</p>
+        <p>{forbidden ? "Your current role does not permit this view." : expired ? "Sign in again to continue." : state.message}</p>
       </section>
     );
   }
@@ -80,9 +86,9 @@ function dateLabel(value: string): string {
   return Number.isNaN(date.valueOf()) ? value : new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
-export function OverviewReadPage() {
-  const agents = useRead<AgentSummary>("/api/v1/agents/summary");
-  const findings = useRead<FindingSummary>("/api/v1/findings/summary");
+export function OverviewReadPage({ seeded = false }: { seeded?: boolean }) {
+  const agents = useRead<AgentSummary>("/api/v1/agents/summary", seeded);
+  const findings = useRead<FindingSummary>("/api/v1/findings/summary", seeded);
   return (
     <div className="read-dashboard">
       <section className="read-card" aria-labelledby="fleet-summary-title">
@@ -126,15 +132,17 @@ function pagedUrl(path: string, params: URLSearchParams, cursor: string | null):
   return `${path}${next.size === 0 ? "" : `?${next.toString()}`}`;
 }
 
-export function AgentsReadPage() {
+export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = false, canRevoke = false }: { seeded?: boolean; csrfToken?: string | undefined; canManageTags?: boolean; canRevoke?: boolean }) {
   const params = currentSearch();
   const selectedAgent = params.get("agent");
   const [filterQuery, setFilterQuery] = useState(params.get("q") ?? "");
-  const [filterStatus, setFilterStatus] = useState(params.get("status") ?? "");
-  const detail = useRead<AgentDetail>(selectedAgent ? `/api/v1/agents/${encodeURIComponent(selectedAgent)}` : "");
+  const statusParam = seeded ? "status" : "state";
+  const [filterStatus, setFilterStatus] = useState(params.get(statusParam) ?? "");
+  const detail = useRead<AgentDetail>(selectedAgent ? `/api/v1/agents/${encodeURIComponent(selectedAgent)}` : "", seeded);
   const listParams = new URLSearchParams(params);
   listParams.delete("agent");
-  const list = useRead<AgentPage>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`);
+  if (!seeded) listParams.delete("q");
+  const list = useRead<AgentPage>(selectedAgent ? "" : `/api/v1/agents${listParams.size ? `?${listParams}` : ""}`, seeded);
 
   if (selectedAgent) {
     return <ReadStatus state={detail}>{(agent) => (
@@ -159,6 +167,8 @@ export function AgentsReadPage() {
             </li>
           ))}</ul>
         )}
+        <AgentTags agentId={agent.id} csrfToken={csrfToken} canManage={canManageTags && !seeded} />
+        <AgentRevoke agentId={agent.id} csrfToken={csrfToken} canRevoke={canRevoke && !seeded && agent.status !== "revoked"} />
       </section>
     )}</ReadStatus>;
   }
@@ -169,8 +179,8 @@ export function AgentsReadPage() {
         <div className="read-toolbar">
           <h2 id="agents-table-title">{page.items.length.toLocaleString()} agents on this page</h2>
           <form className="filter-form" action="/agents" method="get">
-            <label>Search hostname or ID<input name="q" value={filterQuery} onChange={(event) => setFilterQuery(event.currentTarget.value)} maxLength={128} /></label>
-            <label>Status<select name="status" value={filterStatus} onChange={(event) => setFilterStatus(event.currentTarget.value)}>
+            {seeded && <label>Search hostname or ID<input name="q" value={filterQuery} onChange={(event) => setFilterQuery(event.currentTarget.value)} maxLength={128} /></label>}
+            <label>Status<select name={statusParam} value={filterStatus} onChange={(event) => setFilterStatus(event.currentTarget.value)}>
               <option value="">All statuses</option><option value="active">Active</option><option value="stale">Stale</option><option value="revoked">Revoked</option>
             </select></label>
             <button type="submit">Apply filters</button>
@@ -191,13 +201,15 @@ export function AgentsReadPage() {
   );
 }
 
-export function FindingsReadPage() {
+export function FindingsReadPage({ seeded = false, csrfToken, canTriage = false }: { seeded?: boolean; csrfToken?: string | undefined; canTriage?: boolean }) {
   const params = currentSearch();
   const selected = params.get("finding");
   const severity = params.get("severity") ?? "";
   const query = params.get("q") ?? "";
-  const detail = useRead<Finding>(selected ? `/api/v1/findings/latest/${selected.split("/").map(encodeURIComponent).join("/")}` : "");
-  const list = useRead<FindingPage>(selected ? "" : `/api/v1/findings/latest${params.size ? `?${params}` : ""}`);
+  const detail = useRead<Finding>(selected ? `/api/v1/findings/latest/${selected.split("/").map(encodeURIComponent).join("/")}` : "", seeded);
+  const listParams = new URLSearchParams(params);
+  if (!seeded) listParams.delete("q");
+  const list = useRead<FindingPage>(selected ? "" : `/api/v1/findings/latest${listParams.size ? `?${listParams}` : ""}`, seeded);
 
   if (selected) {
     return <ReadStatus state={detail}>{(finding) => (
@@ -218,6 +230,7 @@ export function FindingsReadPage() {
           <div><dt>Received</dt><dd><time dateTime={finding.received_at}>{dateLabel(finding.received_at)}</time></dd></div>
           <div><dt>Evidence</dt><dd>{finding.evidence.length > 0 ? <ul>{finding.evidence.map((entry) => <li key={entry}><code>{entry}</code></li>)}</ul> : "No evidence recorded"}</dd></div>
         </dl>
+        {!seeded && <FindingTriage agentId={finding.agent_id} ruleSetId={finding.rule_set_id} ruleId={finding.rule_id} csrfToken={csrfToken} canTriage={canTriage} />}
       </section>
     )}</ReadStatus>;
   }
@@ -228,7 +241,7 @@ export function FindingsReadPage() {
         <div className="read-toolbar">
           <h2 id="findings-table-title">{page.items.length.toLocaleString()} observations on this page</h2>
           <form className="filter-form" action="/findings" method="get">
-            <label>Search host, rule, or text<input name="q" defaultValue={query} maxLength={128} /></label>
+            {seeded && <label>Search host, rule, or text<input name="q" defaultValue={query} maxLength={128} /></label>}
             <label>Severity<select name="severity" defaultValue={severity}>
               <option value="">All severities</option><option value="critical">Critical</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
             </select></label>
@@ -246,10 +259,118 @@ export function FindingsReadPage() {
             </tr>)}</tbody>
           </table></div>
         )}
-        <PageFooter page={page} href="/findings" params={params} />
+        <PageFooter page={page} href="/findings" params={listParams} />
       </>}</ReadStatus>
     </section>
   );
+}
+
+function FindingTriage({ agentId, ruleSetId, ruleId, csrfToken, canTriage }: { agentId: string; ruleSetId: string; ruleId: string; csrfToken?: string | undefined; canTriage: boolean }) {
+  const url = `/api/v1/findings/latest/${[agentId, ruleSetId, ruleId].map(encodeURIComponent).join("/")}/triage`;
+  const [value, setValue] = useState<{ state: string; rule_version: number; assigned_to: string | null; note: string | null; accepted_until: string | null; version: number }>();
+  const [etag, setEtag] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { let active = true; void fetch(url, { credentials: "same-origin", headers: { Accept: "application/json" } }).then(async (response) => { if (!response.ok) throw new Error("Triage could not be loaded."); const body = await response.json(); if (active) { setValue(body); setEtag(response.headers.get("ETag") ?? "\"" + body.version + "\""); } }).catch(() => { if (active) setMessage("Triage could not be loaded."); }); return () => { active = false; }; }, [url]);
+  async function save(event: FormEvent<HTMLFormElement>) { event.preventDefault(); if (!value || !csrfToken) return; const form = new FormData(event.currentTarget); setBusy(true); setMessage(""); try { const response = await fetch(url, { method: "PUT", credentials: "same-origin", headers: { "Content-Type": "application/json", "Accept": "application/json", "If-Match": etag, "X-CSRF-Token": csrfToken }, body: JSON.stringify({ state: form.get("state"), assigned_to: form.get("assigned_to") || null, note: form.get("note") || null, accepted_until: form.get("accepted_until") || null }) }); if (!response.ok) throw new Error(response.status === 412 ? "Triage changed elsewhere. Reload this finding before saving." : "Triage update failed."); const body = await response.json(); setValue(body); setEtag(response.headers.get("ETag") ?? "\"" + body.version + "\""); setMessage("Triage saved."); } catch (error) { setMessage(error instanceof Error ? error.message : "Triage update failed."); } finally { setBusy(false); } }
+  return <section className="read-card" aria-labelledby="finding-triage-title"><h3 id="finding-triage-title">Triage</h3>{!value ? <p role="status">{message || "Loading triage…"}</p> : <form className="filter-form" onSubmit={(event) => void save(event)}><label>State<select name="state" defaultValue={value.state} disabled={!canTriage}><option value="open">Open</option><option value="investigating">Investigating</option><option value="mitigated">Mitigated</option><option value="accepted_risk">Accepted risk</option><option value="false_positive">False positive</option></select></label><label>Assigned analyst username<input name="assigned_to" defaultValue={value.assigned_to ?? ""} disabled={!canTriage} /></label><label>Note<textarea name="note" defaultValue={value.note ?? ""} maxLength={4000} disabled={!canTriage} /></label><label>Accepted until (RFC 3339)<input name="accepted_until" type="text" placeholder="2026-12-31T23:59:00Z" defaultValue={value.accepted_until ?? ""} disabled={!canTriage} /></label><p>Rule version {value.rule_version ?? "current"} · version {value.version}</p>{canTriage && <button type="submit" disabled={busy}>{busy ? "Saving…" : "Save triage"}</button>}<p role="status">{message || (!canTriage ? "Read only" : "")}</p></form>}</section>;
+}
+
+export function AuditEventsReadPage({ seeded = false, canExport = false }: { seeded?: boolean; canExport?: boolean }) {
+  const [defaultSince] = useState(() => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString());
+  const search = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
+  const since = search.get("since") ?? defaultSince;
+  const actor = search.get("actor") ?? "";
+  const action = search.get("action") ?? "";
+  const result = search.get("result") ?? "";
+  const params = new URLSearchParams({ since, limit: "50" });
+  for (const [key, value] of [["actor", actor], ["action", action], ["result", result]] as const) {
+    if (value !== "") params.set(key, value);
+  }
+  const cursor = search.get("cursor");
+  if (cursor) params.set("cursor", cursor);
+  const page = useRead<AuditEventPage>(`/api/v1/audit-events?${params.toString()}`, seeded);
+  const exportParams = new URLSearchParams(params);
+  exportParams.delete("cursor");
+  exportParams.delete("limit");
+  return <section className="read-card" aria-labelledby="audit-events-title">
+    <div className="read-card__heading"><div><p className="eyebrow">Audit trail</p><h2 id="audit-events-title">Privileged activity</h2></div></div>
+    {canExport && <p><a className="button-link" href={`/api/v1/audit-export.csv?${exportParams.toString()}`}>Download filtered CSV</a></p>}
+    <form className="filter-form" action="/audit" method="get">
+      <label>Actor<input name="actor" defaultValue={actor} maxLength={128} /></label>
+      <label>Action<input name="action" defaultValue={action} maxLength={128} /></label>
+      <label>Result<input name="result" defaultValue={result} maxLength={128} /></label>
+      <button type="submit">Apply filters</button>
+    </form>
+    <ReadStatus state={page}>{(events) => <>
+      {events.items.length === 0 ? <p className="read-state">No audit events match this time window.</p> : <div className="table-scroll"><table className="data-table">
+        <thead><tr><th scope="col">Time</th><th scope="col">Actor</th><th scope="col">Action</th><th scope="col">Target</th><th scope="col">Result</th></tr></thead>
+        <tbody>{events.items.map((event) => <tr key={event.id}>
+          <td><time dateTime={event.at}>{dateLabel(event.at)}</time></td><td>{event.actor}</td><td><code>{event.action}</code></td><td>{event.target ?? "—"}</td><td>{event.result}</td>
+        </tr>)}</tbody>
+      </table></div>}
+      {events.next_cursor && <a className="button-link" href={`/audit?${new URLSearchParams({ ...Object.fromEntries(params), cursor: events.next_cursor }).toString()}`}>Next page</a>}
+      <p className="read-state">Showing events from <time dateTime={since}>{dateLabel(since)}</time>. Event details and request source data are restricted.</p>
+    </>}</ReadStatus>
+  </section>;
+}
+
+export function AccessControlReadPage({ seeded = false, canManage = false, canManageGroups = false, csrfToken }: { seeded?: boolean; canManage?: boolean; canManageGroups?: boolean; csrfToken?: string | undefined }) {
+  const [mutationError, setMutationError] = useState(false);
+  const inventory = useRead<AccessInventory>("/api/v1/access-control", seeded);
+  async function createBinding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMutationError(false);
+    const values = new FormData(event.currentTarget);
+    const headers = requestHeaders(seeded);
+    headers.set("Content-Type", "application/json");
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    try {
+      const response = await fetch("/api/v1/access-control/bindings", {
+        method: "POST", cache: "no-store", credentials: "same-origin", headers,
+        body: JSON.stringify({ user_id: values.get("user_id"), role_id: values.get("role_id"), asset_group_id: values.get("asset_group_id") || null }),
+      });
+      if (response.status !== 201) throw new Error("binding failed");
+      window.location.reload();
+    } catch {
+      setMutationError(true);
+    }
+  }
+  async function revokeBinding(bindingId: string) {
+    if (!window.confirm("Revoke this role binding? The user may lose access immediately.")) return;
+    const headers = requestHeaders(seeded);
+    if (csrfToken) headers.set("X-CSRF-Token", csrfToken);
+    try {
+      const response = await fetch(`/api/v1/access-control/bindings/${encodeURIComponent(bindingId)}`, {
+        method: "DELETE", cache: "no-store", credentials: "same-origin", headers,
+      });
+      if (response.status !== 204) throw new Error("binding revoke failed");
+      window.location.reload();
+    } catch {
+      setMutationError(true);
+    }
+  }
+  return <section className="read-card" aria-labelledby="access-control-title">
+    <div className="read-card__heading"><div><p className="eyebrow">Authorization</p><h2 id="access-control-title">Roles and access bindings</h2></div></div>
+    <ReadStatus state={inventory}>{(access) => <>
+      {mutationError && <p className="auth-inline-error" role="alert">The access change could not be completed. Reload the page and try again.</p>}
+      {canManage && <form className="filter-form" onSubmit={(event) => void createBinding(event)}>
+        <label>User<select name="user_id" required>{access.users.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name} ({user.username})</option>)}</select></label>
+        <label>Role<select name="role_id" required>{access.roles.map((role) => <option key={role.role_id} value={role.role_id}>{role.display_name}</option>)}</select></label>
+        <label>Scope<select name="asset_group_id"><option value="">Global</option>{access.asset_groups.map((group) => <option key={group.asset_group_id} value={group.asset_group_id}>{group.name}</option>)}</select></label>
+        <button type="submit" disabled={access.users.length === 0}>Add role binding</button>
+      </form>}
+      <h3>Roles</h3>
+      <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">Role</th><th scope="col">Type</th><th scope="col">Permissions</th></tr></thead>
+        <tbody>{access.roles.map((role) => <tr key={role.role_id}><th scope="row">{role.display_name}<span className="table-subtext">{role.role_id}</span></th><td>{role.builtin ? "Built in" : "Custom"}</td><td>{role.permissions.join(", ") || "None"}</td></tr>)}</tbody>
+      </table></div>
+      <h3>Active bindings</h3>
+      {access.bindings.length === 0 ? <p className="read-state">No active local-user bindings.</p> : <div className="table-scroll"><table className="data-table"><thead><tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Scope</th><th scope="col">Added by</th>{canManage && <th scope="col">Actions</th>}</tr></thead>
+        <tbody>{access.bindings.map((binding) => <tr key={binding.binding_id}><th scope="row">{binding.display_name}<span className="table-subtext">{binding.username}</span></th><td>{binding.role_id}</td><td>{binding.asset_group_name ?? "Global"}</td><td>{binding.created_by}</td>{canManage && <td><button type="button" onClick={() => void revokeBinding(binding.binding_id)}>Revoke</button></td>}</tr>)}</tbody>
+      </table></div>}
+      <AssetGroups groups={access.asset_groups} canManage={canManageGroups && !seeded} csrfToken={csrfToken} onError={() => setMutationError(true)} />
+    </>}</ReadStatus>
+  </section>;
 }
 
 function StatusPill({ value }: { value: string }) {

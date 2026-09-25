@@ -1,10 +1,11 @@
 # OpenVIBES Console Technical Design
 
 
-> **Updated 2026-09-24 (Codex):** the shared C2 console read model is now
-> migration 7. Console-owned authentication, RBAC, and audit schema therefore
-> starts at migration 8 or later. The earlier migration range below is stale;
-> the append-only migration sequence is authoritative.
+> **Updated 2026-09-24 (Claude, at the user's request):** aligned with main's
+> migrations 4 and 5 and sub-project 2 (see `decisions.md`): findings keyed
+> by rule set, console migrations from 0013 after main schema 12, rule tables reused
+> from SP2.
+> The design is otherwise unchanged.
 
 Status: **approved by the project owner, 2026-09-23**. Product companion:
 [`2026-09-23-console-product-design.md`](2026-09-23-console-product-design.md).
@@ -439,10 +440,13 @@ Reserved for later/web-excluded: `findings.export`, `rules.trust.manage`,
 Every permission has a server-defined scope class: agent-bound or global.
 Built-ins:
 
-- Viewer: `agents.read`, `findings.read`, `rules.read`;
+- Viewer: `agents.read`, `findings.read`;
 - Analyst: Viewer plus `findings.triage`;
 - Operator: Viewer plus agent revocation, token management, and rule upload;
 - Admin: every console permission, except CLI-only CA operations.
+
+Only Admin has `rules.read` by default, so Rule sets appears only for Admin.
+Custom roles may be granted `rules.read` explicitly.
 
 A first-release binding joins a role to a local user or service account and is
 either global or scoped to one asset group. Later adapters add stable IdP
@@ -687,11 +691,12 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 7 must add or extend. Main
-has migration 4 (ingest least privilege), migration 5 (`rule_set_id`),
-migration 6 (SP2 rule tables), and migration 7 (C2 read models).
-**Console-owned migrations are numbered 0008 or later**, rechecked at merge
-time.
+Append-only migrations after the current schema 5 must add or extend. Main
+now has migration 4 (the ingest role keeps only the rights it uses) and 5
+(`rule_set_id` on `findings` and `current_findings`, current state keyed by
+agent, rule set, and rule); 0006 is reserved for sub-project 2's rule tables.
+Main now uses migrations 0007–0012 for vulnerability management and its scale
+follow-up. **Console migrations start at 0013**, after rechecking main.
 
 1. human users, required local Argon2id credentials, server sessions, local
    pre-auth CSRF state, password-attempt state, and idempotency records;
@@ -740,9 +745,8 @@ Existing schema facts and gaps:
   stable principal reference while retaining CLI history.
 
 All schema and SQL stay in `platform-store`. Schema 5 is integrated in the
-console branch (via `console-fixes`, 2026-09-24); the console takes the next available migration number
-only at implementation start, after checking the current shared base and any
-active platform branch.
+console branch (via `console-fixes`, 2026-09-24); the console migrations were
+renumbered to 0013–0017 after main added migration 0012.
 
 ## 15. Security Acceptance Tests
 

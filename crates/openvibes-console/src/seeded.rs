@@ -725,6 +725,128 @@ async fn finding(
         .map_or_else(not_found, |finding| Json(finding).into_response())
 }
 
+async fn audit_events(headers: HeaderMap) -> Response {
+    let (persona, mode) = match context(&headers, Permission::AuditRead) {
+        Ok(context) => context,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    let events = if matches!(persona, Persona::Admin) {
+        vec![serde_json::json!({
+            "id": "1", "at": GENERATED_AT, "actor": "admin@example.test",
+            "action": "user.login", "target": "console", "result": "success",
+            "request_id": null, "actor_kind": "user", "actor_id": "admin",
+            "authentication_method": "local_password", "target_kind": null,
+            "target_id": null, "reason_code": null
+        })]
+    } else {
+        Vec::new()
+    };
+    Json(serde_json::json!({ "items": events, "next_cursor": null })).into_response()
+}
+
+async fn access_inventory(headers: HeaderMap) -> Response {
+    let (persona, mode) = match context(&headers, Permission::RbacRead) {
+        Ok(context) => context,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    let role = |role_id: &str, name: &str, permissions: &[&str]| {
+        serde_json::json!({
+            "role_id": role_id, "display_name": name, "builtin": true, "permissions": permissions
+        })
+    };
+    let roles = vec![
+        role("viewer", "Viewer", &["agents.read", "findings.read"]),
+        role(
+            "analyst",
+            "Analyst",
+            &["agents.read", "findings.read", "findings.triage"],
+        ),
+        role(
+            "operator",
+            "Operator",
+            &[
+                "agents.read",
+                "agents.revoke",
+                "findings.read",
+                "rules.upload",
+                "tokens.read",
+                "tokens.create",
+                "tokens.revoke",
+            ],
+        ),
+        role(
+            "admin",
+            "Admin",
+            &[
+                "agents.read",
+                "agents.revoke",
+                "findings.read",
+                "findings.triage",
+                "tokens.read",
+                "tokens.create",
+                "tokens.revoke",
+                "rules.read",
+                "rules.upload",
+                "audit.read",
+                "audit.export",
+                "audit.retention.manage",
+                "rbac.read",
+                "rbac.manage",
+                "asset_groups.manage",
+                "service_accounts.read",
+                "service_accounts.manage",
+            ],
+        ),
+    ];
+    let bindings = if matches!(persona, Persona::Admin) {
+        vec![serde_json::json!({
+            "binding_id": "seeded-admin-binding", "user_id": "seeded-admin", "username": "admin",
+            "display_name": "Seeded administrator", "role_id": "admin", "asset_group_id": null,
+            "asset_group_name": null, "created_at": GENERATED_AT, "created_by": "bootstrap"
+        })]
+    } else {
+        Vec::new()
+    };
+    let users = if matches!(persona, Persona::Admin) {
+        vec![serde_json::json!({
+            "user_id": "seeded-admin", "username": "admin", "display_name": "Seeded administrator"
+        })]
+    } else {
+        Vec::new()
+    };
+    Json(serde_json::json!({ "roles": roles, "bindings": bindings, "asset_groups": [], "users": users }))
+        .into_response()
+}
+
+async fn audit_export(headers: HeaderMap) -> Response {
+    let (_, mode) = match context(&headers, Permission::AuditExport) {
+        Ok(context) => context,
+        Err(response) => return *response,
+    };
+    if let Some(response) = read_error(mode) {
+        return response;
+    }
+    let mut response = (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/csv; charset=utf-8",
+        )],
+        "event_id,at,actor,action,target,result\r\n1,2026-09-24T12:00:00Z,admin@example.test,user.login,console,success\r\n",
+    )
+        .into_response();
+    response.headers_mut().insert(
+        axum::http::header::CONTENT_DISPOSITION,
+        axum::http::HeaderValue::from_static("attachment; filename=\"openvibes-audit.csv\""),
+    );
+    response
+}
+
 pub(crate) fn router() -> Router {
     let repository: Arc<dyn ConsoleRepository> = Arc::new(SeededRepository::default());
     Router::new()
@@ -732,6 +854,9 @@ pub(crate) fn router() -> Router {
         .route("/api/v1/agents", get(agents))
         .route("/api/v1/agents/{id}", get(agent))
         .route("/api/v1/findings/summary", get(finding_summary))
+        .route("/api/v1/audit-events", get(audit_events))
+        .route("/api/v1/audit-export.csv", get(audit_export))
+        .route("/api/v1/access-control", get(access_inventory))
         .route("/api/v1/findings/latest", get(findings))
         .route(
             "/api/v1/findings/latest/{agent}/{rule_set}/{rule}",
@@ -756,6 +881,10 @@ mod tests {
 
     #[test]
     fn seeded_personas_use_the_approved_builtin_role_permissions() {
+        assert!(!Persona::Viewer.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(!Persona::Analyst.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::RulesRead, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));

@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 6;
+pub const SCHEMA_VERSION: i32 = 18;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -27,6 +27,45 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (
         6,
         include_str!("../../../migrations/0006_rule_distribution.sql"),
+    ),
+    (7, include_str!("../../../migrations/0007_inventory.sql")),
+    (
+        8,
+        include_str!("../../../migrations/0008_vulnerabilities.sql"),
+    ),
+    (
+        9,
+        include_str!("../../../migrations/0009_running_kernel.sql"),
+    ),
+    (
+        10,
+        include_str!("../../../migrations/0010_cve_enrichment.sql"),
+    ),
+    (11, include_str!("../../../migrations/0011_nvd_euvd.sql")),
+    (
+        12,
+        include_str!("../../../migrations/0012_vulns_analyze.sql"),
+    ),
+    (13, include_str!("../../../migrations/0013_osv.sql")),
+    (
+        14,
+        include_str!("../../../migrations/0014_console_read_models.sql"),
+    ),
+    (
+        15,
+        include_str!("../../../migrations/0015_console_identity.sql"),
+    ),
+    (
+        16,
+        include_str!("../../../migrations/0016_console_enrollment_tokens.sql"),
+    ),
+    (
+        17,
+        include_str!("../../../migrations/0017_console_rule_read.sql"),
+    ),
+    (
+        18,
+        include_str!("../../../migrations/0018_console_triage_history.sql"),
     ),
 ];
 
