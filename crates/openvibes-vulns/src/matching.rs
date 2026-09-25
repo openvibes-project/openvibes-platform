@@ -18,16 +18,43 @@ use serde_json::json;
 
 use crate::rpmver::compare_evr;
 
-/// Re-evaluates every host on one release. Returns the number open.
+/// Hosts matched per query: one query over every host of a large fleet
+/// exceeded the 10 s statement timeout at 10,000 hosts (`docs/sizing.md`).
+pub const MATCH_BATCH: usize = 500;
+
+/// Re-evaluates every host on one release, [`MATCH_BATCH`] hosts at a
+/// time. Returns the number open.
 pub async fn match_release(
     client: &mut Client,
     os_id: &str,
     os_version: &str,
     now: DateTime<Utc>,
 ) -> Result<usize, StoreError> {
-    let candidates = vulns::candidates(client, os_id, os_version, None).await?;
-    let found = evaluate(&candidates);
-    vulns::apply(client, Scope::Release { os_id, os_version }, &found, now).await
+    match_release_in_batches(client, os_id, os_version, MATCH_BATCH, now).await
+}
+
+/// [`match_release`] with a chosen batch size (each batch is one query and
+/// one transaction; a failure keeps the batches already applied).
+pub async fn match_release_in_batches(
+    client: &mut Client,
+    os_id: &str,
+    os_version: &str,
+    batch: usize,
+    now: DateTime<Utc>,
+) -> Result<usize, StoreError> {
+    let hosts = vulns::release_hosts(client, os_id, os_version).await?;
+    let mut open = 0;
+    for agents in hosts.chunks(batch.max(1)) {
+        let candidates = vulns::candidates(client, os_id, os_version, agents).await?;
+        let found = evaluate(&candidates);
+        let scope = Scope::Release {
+            os_id,
+            os_version,
+            agents,
+        };
+        open += vulns::apply(client, scope, &found, now).await?;
+    }
+    Ok(open)
 }
 
 /// Re-evaluates one host, after its inventory changed. A host without a
@@ -40,7 +67,7 @@ pub async fn match_host(
     let Some((os_id, os_version)) = vulns::host_release(client, agent_id).await? else {
         return Ok(0);
     };
-    let candidates = vulns::candidates(client, &os_id, &os_version, Some(agent_id)).await?;
+    let candidates = vulns::candidates(client, &os_id, &os_version, &[agent_id.to_owned()]).await?;
     let found = evaluate(&candidates);
     vulns::apply(client, Scope::Host(agent_id), &found, now).await
 }

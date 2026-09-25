@@ -165,12 +165,29 @@ pub struct Candidate {
     pub running_kernel: Option<String>,
 }
 
-/// Candidates on one release, optionally for one host only.
+/// The hosts on a release, by agent id.
+pub async fn release_hosts(
+    client: &Client,
+    os_id: &str,
+    os_version: &str,
+) -> Result<Vec<String>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT agent_id FROM agents WHERE os_id = $1 AND os_version = $2 ORDER BY 1",
+            &[&os_id, &os_version],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect())
+}
+
+/// Candidates on one release for these hosts.
 pub async fn candidates(
     client: &Client,
     os_id: &str,
     os_version: &str,
-    agent_id: Option<&str>,
+    agents: &[String],
 ) -> Result<Vec<Candidate>, StoreError> {
     let rows = client
         .query(
@@ -184,8 +201,8 @@ pub async fn candidates(
              JOIN agents g ON g.agent_id = h.agent_id
              WHERE a.os_id = $1 AND a.os_version = $2
                AND g.os_id = $1 AND g.os_version = $2
-               AND ($3::text IS NULL OR h.agent_id = $3)",
-            &[&os_id, &os_version, &agent_id],
+               AND h.agent_id = ANY($3)",
+            &[&os_id, &os_version, &agents],
         )
         .await?;
     Ok(rows
@@ -235,12 +252,14 @@ pub struct Found {
 /// Which hosts a matching run covered.
 #[derive(Clone, Copy, Debug)]
 pub enum Scope<'a> {
-    /// Every host on this release, against this release's advisories.
+    /// These hosts of a release (one batch), against its advisories.
     Release {
         /// e.g. `fedora`.
         os_id: &'a str,
         /// e.g. `44`.
         os_version: &'a str,
+        /// The batch's hosts.
+        agents: &'a [String],
     },
     /// One host, against everything.
     Host(&'a str),
@@ -276,16 +295,19 @@ pub async fn apply(
          WHERE fixed_at IS NULL
            AND (agent_id, advisory_id) NOT IN (SELECT * FROM unnest($1::text[], $2::text[]))";
     match scope {
-        Scope::Release { os_id, os_version } => {
+        Scope::Release {
+            os_id,
+            os_version,
+            agents: batch,
+        } => {
             transaction
                 .execute(
                     &format!(
-                        "{fixed} AND agent_id IN (SELECT agent_id FROM agents
-                             WHERE os_id = $4 AND os_version = $5)
+                        "{fixed} AND agent_id = ANY($6)
                          AND advisory_id IN (SELECT advisory_id FROM advisories
                              WHERE os_id = $4 AND os_version = $5)"
                     ),
-                    &[&agents, &advisories, &now, &os_id, &os_version],
+                    &[&agents, &advisories, &now, &os_id, &os_version, &batch],
                 )
                 .await?;
         }
