@@ -154,7 +154,12 @@ async fn host(admin: &mut Client, agent: &str, version: &str, digest: u8) {
 async fn open(client: &Client) -> Vec<String> {
     client
         .query(
-            "SELECT agent_id || ' ' || advisory_id FROM vulnerabilities WHERE fixed_at IS NULL ORDER BY 1",
+            // With a fix per host, without one per package version.
+            "SELECT agent_id || ' ' || advisory_id FROM vulnerabilities WHERE fixed_at IS NULL
+             UNION
+             SELECT h.agent_id || ' ' || vv.advisory_id FROM version_vulnerabilities vv
+             JOIN host_packages h ON h.package_version_id = vv.package_version_id
+             ORDER BY 1",
             &[],
         )
         .await
@@ -246,8 +251,9 @@ async fn full_import_first_then_only_changed_records() {
         changed,
         Ok(Synced::Changes {
             records: 1,
-            open: 2
-        })
+            open: 1
+        }),
+        "openssl; pam has no fix, so it is kept per version"
     );
     assert_eq!(
         osv.singles.load(Ordering::SeqCst),

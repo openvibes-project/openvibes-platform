@@ -137,3 +137,24 @@ Checked against real systems; each changes the design above.
     that Debian's security tracker marks vulnerable in bookworm (`no-dsa`)
     and `debsecan` omits.
 
+## 8. Scale check and no-fix storage (D5, 2026-09-26)
+
+A realistic Debian 12 server (389 packages from 239 sources) has about
+2,900 open vulnerabilities, some 2,700 of them without a fix (Debian tracks
+thousands of unfixed, mostly unassessed CVEs). Kept per host that was about
+29 million rows (~20 GB) per 10,000 servers, and matching compared 23,000
+candidate rows per host (it timed out at 500 hosts, 11.6 GB of memory).
+
+Decided with the user: **vulnerabilities without a fix are kept once per
+package version** (`version_vulnerabilities`, schema 14), not per host; a
+host's are those of the versions it has, and each host's count is stored
+when it is matched (`host_vulnerability_counts`). Fixable ones stay per host
+with their lifecycle.
+
+Matching now evaluates each advisory once per distinct package version (a
+fleet shares a few hundred), keeps the no-fix hits per version, and matches
+hosts only on the (advisory, package) pairs that affect some version.
+`vulns list --host`, `vulns show` and `vulns summary` include the no-fix
+ones; the fleet-wide `vulns list` leaves them out (they would repeat on
+every host).
+

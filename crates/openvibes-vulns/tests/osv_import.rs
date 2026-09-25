@@ -169,17 +169,16 @@ async fn setup() -> (TestDb, Client, Client) {
     (db, admin, vulns)
 }
 
+/// A host's open vulnerabilities, with a fix or without (kept per package
+/// version), as its list shows them.
 async fn open(client: &Client, agent: &str) -> Vec<String> {
-    client
-        .query(
-            "SELECT advisory_id FROM vulnerabilities WHERE agent_id = $1 AND fixed_at IS NULL ORDER BY 1",
-            &[&agent],
-        )
+    let mut ids: Vec<String> = host_rows(client, agent)
         .await
-        .unwrap()
-        .iter()
-        .map(|r| r.get(0))
-        .collect()
+        .into_iter()
+        .map(|r| r.advisory_id)
+        .collect();
+    ids.sort();
+    ids
 }
 
 async fn host_rows(client: &Client, agent: &str) -> Vec<vulns::VulnRow> {
@@ -194,19 +193,19 @@ async fn host_rows(client: &Client, agent: &str) -> Vec<vulns::VulnRow> {
 async fn each_release_matches_by_its_own_package_names() {
     let (db, mut admin, mut vulns) = setup().await;
     let zip = all_zip();
-    for (release, opened) in [
-        ("rocky-9", 2),
-        ("rocky-8", 1),
-        ("almalinux-10", 1),
-        ("debian-12", 2),
-        ("ubuntu-24.04", 1),
+    for (release, opened, no_fix) in [
+        ("rocky-9", 2, 0),
+        ("rocky-8", 1, 0),
+        ("almalinux-10", 1, 0),
+        ("debian-12", 1, 1),
+        ("ubuntu-24.04", 0, 1),
     ] {
         let release: osv::Release = release.parse().unwrap();
         let (report, skipped) = osv::import(&mut vulns, &release, zip.clone(), Utc::now())
             .await
             .unwrap();
         assert_eq!(skipped, 1, "the broken record");
-        assert_eq!(report.open, opened, "{release}");
+        assert_eq!((report.open, report.no_fix), (opened, no_fix), "{release}");
     }
     assert_eq!(
         open(&vulns, R9).await,

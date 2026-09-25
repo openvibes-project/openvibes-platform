@@ -259,6 +259,7 @@ async fn full(
         let ImportReport {
             advisories: stored,
             open: opened,
+            ..
         } = feed::store_and_match(client, key, &found.advisories, sha256, now)
             .await
             .map_err(|e| e.to_string())?;

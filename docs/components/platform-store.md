@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 13; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 14; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -189,6 +189,16 @@ release advisories use: the major version for Rocky and Alma. Candidates
 match a source entry against every binary built from it; the installed
 version is the binary's, or a dpkg binNMU's source version. `summary`
 counts open ones with no fix yet.
+
+Schema 14 keeps vulnerabilities without a fix per package version
+(`version_vulnerabilities`: version, advisory, package, first seen) instead
+of per host, and each host's count of them (`host_vulnerability_counts`).
+`version_candidates` reads advisory packages against the distinct versions
+on a release (or a host); `candidates` takes the (advisory, package) pairs
+worth matching per host; `apply_versions` records per-version hits;
+`refresh_no_fix_counts` stores the counts. `list` adds a host's no-fix rows
+when filtered by host or advisory. Found sets are applied with anti-joins
+(`NOT EXISTS`): `NOT IN` over 150,000 rows outgrew memory and timed out.
 
 ## Audit log
 

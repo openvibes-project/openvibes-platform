@@ -39,5 +39,5 @@
 ### D4: fetching, NVD scope, CLI, docs
 - [x] First import from `all.zip`; hourly `modified_id.csv` (ETag) and changed records; fallback over 5,000; host release mapping; `feeds import FILE --source debian-12`; NVD backfill limited to open vulnerabilities' CVEs; local-server tests; a live check; component docs.
 
-### D5: scale check
-- [ ] The scale example with a Debian package list and the Debian 12 dump; results in `docs/sizing.md`.
+### D5: scale check (and no-fix storage per package version, spec §8)
+- [x] The scale example with a Debian package list and the Debian 12 dump; results in `docs/sizing.md`.
