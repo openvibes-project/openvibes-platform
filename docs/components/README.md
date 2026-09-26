@@ -9,12 +9,14 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
 | `platform-store` | library | schema 6, rule distribution, partitions, status, tokens, agents, CA certificates (PM1, PM2) | [platform-store.md](platform-store.md) |
 | `platform-agent-server` | library | shared agent-facing server: TLS, auth, limits, logs, health, drain (SP2 DM0) | [platform-agent-server.md](platform-agent-server.md) |
-| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2) | [openvibes-admin.md](openvibes-admin.md) |
+| `platform-assistant` | library | assistant configuration, OpenAI-compatible backend client, capability probe (AS1); scoped lookups, orchestrator, output sanitising (AS2); evaluation fleet, question set, gate (AS3) | [platform-assistant.md](platform-assistant.md) |
+| `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); assistant check, eval (AS3), model install (AS5) | [openvibes-admin.md](openvibes-admin.md) |
+| `openvibes-llm` | optional service, loopback 18430 | pinned `llama-server` (CPU, Vulkan) for the assistant, hardened unit, model digest check (AS5) | [openvibes-llm.md](openvibes-llm.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |
 | `openvibes-distribution` | service, port 18424 | `POST /v1/rule-bundle`: signed bundles to agents (SP2 DM2) | [openvibes-distribution.md](openvibes-distribution.md) |
 | `integration-agent` | test script | real agent against ingest: enroll, deliver exactly once, restart, renew, revoke, re-enroll (PM4); against distribution: poll, update, outage, refused bundle, revoke (SP2) | [integration-agent.md](integration-agent.md) |
 | `openvibes-vulns` | service (health 18483) and library | Fedora advisories fetched and verified hourly, exact RPM version matching, vulnerability lifecycle (VM2) | [openvibes-vulns.md](openvibes-vulns.md) |
-| `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), hardened units, maintenance timer; the whole system end to end under systemd with the agent RPM (M6a) | [packaging.md](packaging.md) |
+| `packaging` | RPMs | openvibes-ingest, openvibes-admin (PM4), openvibes-distribution (SP2), openvibes-llm (AS5), hardened units, maintenance timer; the whole system end to end under systemd with the agent RPM (M6a) | [packaging.md](packaging.md) |
 | `load` | test tool | openvibes-load generator and runner: ingest (PM5), distribution mode (SP2) | [load.md](load.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).

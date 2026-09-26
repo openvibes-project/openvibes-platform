@@ -6,6 +6,8 @@
 
 /// Agent listing, inspection, and revocation.
 pub mod agents;
+/// Read-only, scoped lookups for the console's assistant.
+pub mod assistant;
 /// The append-only audit log.
 pub mod audit;
 /// CA certificates the platform issues under.

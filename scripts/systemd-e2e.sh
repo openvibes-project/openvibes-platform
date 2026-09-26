@@ -4,9 +4,10 @@
 # scripted in podman fedora:44 with systemd as PID 1. PostgreSQL, ingest,
 # distribution, and the agent all run from their RPMs as their own units;
 # the agent enrolls, fetches its signed rules from distribution, and its
-# findings reach PostgreSQL.
+# findings reach PostgreSQL. openvibes-llm serves a tiny test model to
+# `openvibes-admin assistant check` from inside its sandbox.
 # Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN
-#   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin} RPMs and one
+#   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin,llm} RPMs and one
 #            openvibes-agent RPM (built from the pinned agent revision)
 #   SIGN_BIN the agent repository's sign_bundle example, built
 set -euo pipefail
@@ -30,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-llm; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -41,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$W"; mkdir -p "$W"
-cp "$1"/openvibes-{ingest,distribution,vulns,admin,agent}-*.rpm "$W/"
+cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent}-*.rpm "$W/"
 (($(ls "$W"/openvibes-agent-*.rpm | wc -l) == 1)) || fail "want exactly one agent RPM in $1"
 cp "$2" "$W/sign_bundle"
 KEY=$("$W/sign_bundle" keygen "$W/signing.key" | tail -1)
@@ -51,6 +52,7 @@ cat > "$W/rules.json" <<'RULES'
   "confidence":100,"expression":"facts['process.count'] >= 1","finding_message":"The host runs processes"}]}
 RULES
 "$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 7 "$W/bundle.json" >/dev/null
+python3 "$ROOT/scripts/tiny-gguf.py" "$W/tiny.gguf"
 
 printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux && dnf clean all\n' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
@@ -193,4 +195,49 @@ in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDOR
 in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*exploited (KEV, ransomware)' ||
     fail "vulns list does not show the KEV mark"
 ok "openvibes-admin vulns list shows it, marked exploited (KEV)"
+
+# 8. openvibes-llm (assistant AS5): refuses to start without a verified
+# model, serves the tiny test model on loopback behind its API key, runs
+# sandboxed, and refuses a model file changed after installation.
+LLM=http://127.0.0.1:18430
+in_c 'dnf -q -y install /test/openvibes-llm-*.rpm' >/dev/null 2>&1 || fail "install openvibes-llm"
+in_c 'systemctl start openvibes-llm' >/dev/null 2>&1 && fail "openvibes-llm started without a model"
+in_c 'journalctl -u openvibes-llm -o cat | grep -q "OPENVIBES_LLM_MODEL is not set"' ||
+    fail "openvibes-llm did not say that no model is installed"
+ok "openvibes-llm refuses to start without a model"
+SHA=$(sha256sum "$W/tiny.gguf" | cut -d' ' -f1)
+in_c "runuser -u openvibes_admin -- openvibes-admin assistant model install /test/tiny.gguf --sha256 $SHA --alias tiny" \
+    >/dev/null || fail "model install"
+[[ "$(in_c 'stat -c "%a" /var/lib/openvibes-llm/models/tiny.gguf')" == 444 ]] || fail "installed model is not read-only"
+in_c 'systemctl reset-failed openvibes-llm; systemctl enable --now openvibes-llm' >/dev/null 2>&1 || fail "start openvibes-llm"
+wait_for "openvibes-llm ready" 60 "curl -fsS $LLM/health"
+in_c "pid=\$(systemctl show -p MainPID --value openvibes-llm);
+      [[ \$(stat -c %U /proc/\$pid) == openvibes_llm ]] &&
+      grep -q '^Seccomp:[[:space:]]*2\$' /proc/\$pid/status &&
+      grep -q '^NoNewPrivs:[[:space:]]*1\$' /proc/\$pid/status &&
+      grep -q '^CapEff:[[:space:]]*0*\$' /proc/\$pid/status &&
+      [[ \$(systemctl show -p IPAddressDeny --value openvibes-llm) == *0.0.0.0/0* ]]" ||
+    fail "openvibes-llm: not its own user, or seccomp, no_new_privs, no capabilities, or the IP deny list not in force"
+ok "openvibes-llm runs as its own user with seccomp, no_new_privs, no capabilities, loopback only"
+CHAT='{"model":"tiny","messages":[{"role":"user","content":"hello"}],"max_tokens":4}'
+[[ "$(in_c "curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' -d '$CHAT' $LLM/v1/chat/completions")" == 401 ]] ||
+    fail "openvibes-llm answered without the API key"
+in_c "curl -fsS -H \"authorization: Bearer \$(cat /etc/openvibes/llm-api-key)\" -H 'content-type: application/json' \
+      -d '$CHAT' $LLM/v1/chat/completions | grep -q '\"choices\"'" || fail "openvibes-llm did not answer with the API key"
+ok "openvibes-llm answers only with its API key"
+# The console reads the key as its own credential; here openvibes_admin gets
+# a private copy for the check.
+in_c "install -o openvibes_admin -m 0600 /etc/openvibes/llm-api-key /run/llm-key &&
+      printf '[assistant]\nenabled = true\n[assistant.backend]\nurl = \"$LLM/v1\"\nmodel = \"tiny\"\napi_key_file = \"/run/llm-key\"\n' > /run/console.toml &&
+      chmod 0644 /run/console.toml &&
+      runuser -u openvibes_admin -- openvibes-admin assistant check --file /run/console.toml > /run/check.out 2>&1" ||
+    { in_c 'cat /run/check.out' || true; fail "assistant check against openvibes-llm"; }
+in_c 'grep -q "models listed 1 (configured model listed)" /run/check.out && grep -q "^first token" /run/check.out' ||
+    fail "assistant check output"
+ok "openvibes-admin assistant check passes against openvibes-llm"
+in_c 'f=/var/lib/openvibes-llm/models/tiny.gguf; chmod 0644 $f && printf x >> $f && chmod 0444 $f &&
+      systemctl restart openvibes-llm' >/dev/null 2>&1 && fail "openvibes-llm started with a changed model file"
+in_c 'journalctl -u openvibes-llm -o cat | grep -q "does not match OPENVIBES_LLM_MODEL_SHA256"' ||
+    fail "openvibes-llm did not report the changed model"
+ok "openvibes-llm refuses a model file changed after installation"
 echo "systemd-e2e: all checks passed"

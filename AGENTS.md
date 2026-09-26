@@ -2,7 +2,7 @@
 
 Guidance for AI coding agents working in this repository.
 
-Cross-repo status, decisions, and the handover routine shared by all AI tools live outside this repository in `../AGENTS.md`, `../status.md`, and `../decisions.md` (local only, never pushed). Read them at the start of a session.
+Cross-repo status, decisions, and the handover routine shared by all AI tools live outside this repository in `../AGENTS.md`, `../status.md`, and `../decisions.md` (local only, never pushed). Read them at the start of a session. Cloud sessions cannot reach those files; they leave their handover in `docs/handover/` instead (newest first), and the next local session copies it into the shared notes.
 
 Built: sub-project 1, the ingest service (agents connect on port 18423),
 the admin CLI, the built-in PKI, storage, RPM packaging, and the
