@@ -30,7 +30,8 @@ persisted-history, and streaming choices for this first console release.
 - [x] Add the Assistant page with a local-model notice, in-memory conversation,
   text-only rendering, citations, lookup disclosure, stop, and reset controls.
 - [x] Generate the OpenAPI snapshot and TypeScript client.
-- [x] Add component/operator documentation; final security review remains.
+- [x] Add component/operator documentation and complete source-level security
+  review; adversarial checks remain.
 - [ ] Manual browser verification and project acceptance review.
 
 ## Review focus

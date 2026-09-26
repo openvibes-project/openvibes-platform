@@ -7,7 +7,7 @@ use platform_assistant::{
 use platform_store::{Pool, console_read};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::sync::{Mutex, RwLock, Semaphore};
+use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use utoipa::ToSchema;
 
 use crate::ConsoleError;
@@ -28,12 +28,15 @@ impl AssistantRuntime {
             return Ok(None);
         }
         assistant.max_lookups = assistant.max_lookups.min(6);
-        let backend = assistant
+        let mut backend = assistant
             .backend
-            .as_ref()
+            .clone()
             .filter(|backend| backend.location != Location::External)
             .ok_or(ConsoleError::Config)?;
-        let backend = Arc::new(BackendClient::new(backend).map_err(|_| ConsoleError::Config)?);
+        // The HTTP turn is capped at 30 seconds. Keep any blocking backend
+        // call within the same bound after the request future is cancelled.
+        backend.deadline = backend.deadline.min(Duration::from_secs(30));
+        let backend = Arc::new(BackendClient::new(&backend).map_err(|_| ConsoleError::Config)?);
         let capacity = assistant
             .backend
             .as_ref()
@@ -84,6 +87,38 @@ impl AssistantRuntime {
             .entry(principal_id.to_owned())
             .or_insert_with(|| Arc::new(Semaphore::new(1)))
             .clone()
+    }
+}
+
+/// Keeps request capacity held if the HTTP future is dropped while a
+/// `spawn_blocking` model request is still draining.
+pub(crate) struct LeasedChatBackend {
+    backend: Arc<BackendClient>,
+    _user_permit: OwnedSemaphorePermit,
+    _capacity_permit: OwnedSemaphorePermit,
+}
+
+impl LeasedChatBackend {
+    pub(crate) fn new(
+        backend: Arc<BackendClient>,
+        user_permit: OwnedSemaphorePermit,
+        capacity_permit: OwnedSemaphorePermit,
+    ) -> Self {
+        Self {
+            backend,
+            _user_permit: user_permit,
+            _capacity_permit: capacity_permit,
+        }
+    }
+}
+
+impl platform_assistant::ChatBackend for LeasedChatBackend {
+    fn chat(
+        &self,
+        request: &platform_assistant::ChatRequest,
+        on_text: &mut dyn FnMut(&str),
+    ) -> Result<platform_assistant::ChatResponse, platform_assistant::BackendError> {
+        self.backend.chat(request, on_text)
     }
 }
 

@@ -2501,14 +2501,14 @@ pub(crate) async fn authenticated_assistant_message(
         ));
     }
     let user_slot = runtime.principal_slot(&actor).await;
-    let Ok(_user_permit) = user_slot.try_acquire_owned() else {
+    let Ok(user_permit) = user_slot.try_acquire_owned() else {
         return problem_response(ProblemDetails::new(
             StatusCode::CONFLICT,
             "assistant_busy",
             "An assistant answer is already running for your account",
         ));
     };
-    let Ok(_capacity_permit) = runtime.concurrency.clone().try_acquire_owned() else {
+    let Ok(capacity_permit) = runtime.concurrency.clone().try_acquire_owned() else {
         return problem_response(ProblemDetails::new(
             StatusCode::SERVICE_UNAVAILABLE,
             "assistant_busy",
@@ -2565,7 +2565,12 @@ pub(crate) async fn authenticated_assistant_message(
         agent_scope,
         settings.now,
     );
-    let backend: Arc<dyn platform_assistant::ChatBackend> = runtime.backend.clone();
+    let backend: Arc<dyn platform_assistant::ChatBackend> =
+        Arc::new(crate::assistant::LeasedChatBackend::new(
+            runtime.backend.clone(),
+            user_permit,
+            capacity_permit,
+        ));
     let started = Instant::now();
     let request_id = next_request_id();
     let answer = tokio::time::timeout(

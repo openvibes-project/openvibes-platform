@@ -75,7 +75,7 @@ export function AssistantPage({ csrfToken }: { csrfToken?: string | undefined })
       if (controller.signal.aborted) {
         setTurns((current) => current.slice(0, -1));
         setQuestion(prompt);
-        setMessage("Answer cancelled.");
+        setMessage("Stopped waiting. The model may finish its current request for up to 30 seconds.");
       } else {
         setTurns((current) => current.slice(0, -1));
         setQuestion(prompt);
@@ -134,7 +134,7 @@ export function AssistantPage({ csrfToken }: { csrfToken?: string | undefined })
         <textarea id="assistant-question" value={question} onChange={(event) => setQuestion(event.currentTarget.value)} rows={3} maxLength={4_000} aria-describedby="assistant-question-help" />
         <div className="assistant-composer__actions">
           <span id="assistant-question-help">{bytes} / 4,000 UTF-8 bytes · {turns.length} / 20 turns</span>
-          {busy ? <button type="button" onClick={() => controllerRef.current?.abort()}>Stop</button> : <button type="submit" disabled={!csrfToken || !question.trim() || bytes > 4_000 || status === undefined || !status.available || turns.length >= 20}>Ask</button>}
+          {busy ? <button type="button" onClick={() => controllerRef.current?.abort()}>Stop waiting</button> : <button type="submit" disabled={!csrfToken || !question.trim() || bytes > 4_000 || status === undefined || !status.available || turns.length >= 20}>Ask</button>}
         </div>
       </form>
     </section>

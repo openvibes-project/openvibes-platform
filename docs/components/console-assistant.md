@@ -56,6 +56,9 @@ Questions are limited to 4,000 UTF-8 bytes; a chat to 20 turns; tool cycles to
 the platform assistant's configured maximum; the output budget follows the
 selected model profile; and the HTTP deadline is 30 seconds. One question may
 run per user at a time, with a global backend concurrency limit.
+Each blocking model call is also capped at 30 seconds. If the browser stops
+waiting, an in-flight call may continue until that cap, and keeps its per-user
+and global capacity permits until it finishes.
 
 ## Failure behavior
 
@@ -63,7 +66,9 @@ Disabled assistant routes return `assistant_disabled`. An unreachable or
 unsupported model reports unavailable; backend errors, invalid model output,
 rate capacity, and timeouts return fixed problem codes without upstream
 response bodies. Permission failures do not reveal hidden record existence.
-An aborted browser request is not saved.
+An aborted browser request is not saved. The Stop waiting action ends the
+browser wait; an already-running blocking model call can continue until its
+30-second limit.
 
 ## How to operate and verify
 
