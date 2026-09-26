@@ -221,13 +221,14 @@ async fn a_kernel_awaiting_reboot_is_shown_as_such() {
     stdout(&fixture.run(&["feeds", "import", &feed(), "--source", "fedora-44-x86_64"]));
     // As matching records it (protocol P9); the fixture feed has no kernel.
     let pool = platform_store::connect(&fixture.url).await.unwrap();
+    // The host's stored counts change with it, as matching would store them.
     pool.get()
         .await
         .unwrap()
-        .execute(
+        .batch_execute(
             r#"UPDATE vulnerabilities SET reboot_needed = true, packages =
-                 '[{"name":"kernel-core","installed":"0:6.17.7-1.fc44","fixed":"0:6.17.6-1.fc44","running":"0:6.17.4-1.fc44"}]'"#,
-            &[],
+                 '[{"name":"kernel-core","installed":"0:6.17.7-1.fc44","fixed":"0:6.17.6-1.fc44","running":"0:6.17.4-1.fc44"}]';
+               UPDATE host_vulnerability_counts SET important = 0, reboot = 1"#,
         )
         .await
         .unwrap();
@@ -337,8 +338,12 @@ async fn a_debian_vulnerability_without_a_fix_is_labelled_and_counted() {
         "--source",
         "debian-12",
     ]));
-    assert_eq!(out, "imported 1 advisories into debian-12; 1 open\n");
-    let list = stdout(&fixture.run(&["vulns", "list"]));
+    assert_eq!(
+        out,
+        "imported 1 advisories into debian-12; 0 open, 1 without a fix\n"
+    );
+    // Without a fix: listed per host (fleet-wide it would repeat per host).
+    let list = stdout(&fixture.run(&["vulns", "list", "--host", "deb-01"]));
     assert!(
         list.contains("DEBIAN-CVE-2024-10041/debian-12 deb-01"),
         "{list}"

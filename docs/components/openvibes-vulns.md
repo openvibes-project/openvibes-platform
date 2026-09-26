@@ -57,6 +57,12 @@ the offline core used by `openvibes-admin feeds import` and the
   `updateinfo.xml[.zst]`: security advisories only; CVEs from reference
   titles and descriptions; severity (`None` → unrated); fixed binary
   packages (`src` dropped); a hard size cap after decompression.
+- Matching (OSV spec §8) first evaluates every advisory once per distinct
+  package version hosts on the release have (a fleet shares a few hundred):
+  hits without a fix are kept per version (`version_vulnerabilities`), and
+  only the (advisory, package) pairs that affect some version are matched
+  per host, where fixable vulnerabilities keep their lifecycle. Each
+  host's no-fix count is stored when it is matched.
 - `matching::{match_release, match_host, evaluate}` — a host is affected
   when its **newest** installed version of a fixed package's name, with a
   compatible architecture (same, or either side `noarch`), is lower than the
