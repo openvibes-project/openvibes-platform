@@ -15,3 +15,7 @@ epss_url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
 nvd_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 # nvd_api_key_file = "/etc/openvibes/nvd.key"
 euvd_url = "https://euvdservices.enisa.europa.eu/api/search"
+# Debian, Ubuntu, Rocky Linux and AlmaLinux (OSV.dev); "" turns it off.
+# The first sync of an ecosystem downloads its whole file (Ubuntu ~760 MB)
+# into /var/lib/openvibes-vulns; later syncs fetch only what changed.
+osv_url = "https://osv-vulnerabilities.storage.googleapis.com"

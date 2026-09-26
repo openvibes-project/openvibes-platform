@@ -90,8 +90,11 @@ impl From<StoreError> for ImportError {
 pub struct ImportReport {
     /// Security advisories stored.
     pub advisories: usize,
-    /// Open vulnerabilities on this release afterwards.
+    /// Open vulnerabilities with a fix on this release afterwards.
     pub open: usize,
+    /// Host and advisory pairs without a fix yet on this release (kept per
+    /// package version).
+    pub no_fix: usize,
 }
 
 fn severity(severity: Severity) -> &'static str {
@@ -191,8 +194,10 @@ pub(crate) async fn store_and_match(
     };
     let count = i32::try_from(rows.len()).unwrap_or(i32::MAX);
     vulns::record_feed(client, key, Ok((sha256, count)), now).await?;
+    let no_fix = vulns::no_fix_count(client, os_id, os_version).await?;
     Ok(ImportReport {
         advisories: rows.len(),
         open,
+        no_fix: usize::try_from(no_fix).unwrap_or(usize::MAX),
     })
 }

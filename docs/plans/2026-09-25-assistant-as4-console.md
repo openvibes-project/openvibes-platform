@@ -23,7 +23,7 @@ grouping, on `console-current`).
   resolution, and the audit contract (technical design §7, §8, §10). AS4
   adds no authentication of its own.
 - Rebase the console branch on `main` first; the next free migration number
-  is checked at that point (`main` is at 0013 on 2026-09-25, so 0014).
+  is checked at that point (`main` is at 0014 on 2026-09-26, so 0015).
 
 ## What `platform-assistant` gives you
 

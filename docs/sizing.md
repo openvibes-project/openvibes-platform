@@ -119,6 +119,48 @@ Findings (second run first):
   only on change, so a full-fleet change (a mass update) takes about
   2.5 min per 10,000 hosts.
 
+### Other distributions via OSV.dev (OSV spec D5)
+
+Source: `crates/openvibes-vulns/examples/scale_osv.rs` (2026-09-26), same
+host and settings. 10,000 synthetic Debian 12 hosts, each with a real
+server package list (389 packages from 239 sources: SSH, nginx,
+PostgreSQL, Python, Docker, build tools), in 20 generations holding about
+g % of the sources OSV has a fix for just below it; matched against OSV's
+real Debian file (46,222 advisories for Debian 12).
+
+First run, with vulnerabilities without a fix kept per host: at **500**
+hosts matching timed out and used 11.6 GB of memory (23,000 candidate rows
+per host). A real server has about 2,900 open vulnerabilities, some 2,700
+of them without a fix; per host that would be about 27 M rows (~20 GB) per
+10,000 servers. They are now kept per package version (spec §8).
+
+| Step | 10,000 hosts |
+|---|---|
+| Ingest, all inventories | 62 s (162 hosts/s), p50 91 ms, p99 191 ms per host |
+| Import + match of every host | 304 s: 3.19 M open with a fix (synthetic), 26.99 M host/advisory pairs without one |
+| Re-match of every host | 319 s |
+| `match_host`, one host | p50 89 ms, max 113 ms |
+| `vulns summary` | 11 ms |
+| `vulns list` (fleet, first 10,000 by priority) | 3.1 s |
+| `vulns list --host` (3,045 rows incl. no-fix) | 0.47 s |
+| One no-fix advisory across hosts (10,000 rows) | 1.7 s |
+| `version_vulnerabilities` | 3,797 rows, 0.8 MB (instead of ~20 GB per host) |
+| `vulnerabilities` (fixable, per host) | 3.2 M rows, 1.6 GB (synthetic: ~320 per host) |
+| `host_packages` | 3.9 M rows, 627 MB |
+
+- **What made it fit:** advisories are evaluated once per distinct package
+  version (452 in this fleet), hosts are matched only on (advisory, package)
+  pairs that affect some version, each host's counts are stored when it is
+  matched, the fleet list takes advisories in priority order until 10,000
+  rows are covered, and found sets are applied with anti-joins.
+- **Known limit:** a full re-match of 10,000 Debian hosts takes about 5
+  minutes, and an hourly OSV change list re-matches the whole release. The
+  upgrade is to re-match only hosts with packages the changed advisories
+  name.
+- **Fixable counts are synthetic:** about 320 per host here, from the held
+  back versions; a patched real fleet has far fewer, so the 1.6 GB is an
+  upper bound for this package count.
+
 ## Agent requirements
 
 | | Minimum | Recommended |

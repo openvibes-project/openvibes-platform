@@ -132,7 +132,7 @@ cat > "$W/updateinfo-test.xml" <<'FEED'
 </updates>
 FEED
 in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' \
-             -e 's#^\(kev\|epss\|nvd\|euvd\)_url = .*#\1_url = \"\"#' /etc/openvibes/vulns.toml &&
+             -e 's#^\(kev\|epss\|nvd\|euvd\|osv\)_url = .*#\1_url = \"\"#' /etc/openvibes/vulns.toml &&
       systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
 wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||

@@ -225,8 +225,9 @@ pub async fn mark_nvd_checked(
     Ok(())
 }
 
-/// CVEs advisories name that NVD has not been asked about, or did not know
-/// 7 days or more ago; newest ids first.
+/// CVEs of open vulnerabilities that NVD has not been asked about, or did
+/// not know 7 days or more ago; newest ids first. (Debian's advisories
+/// alone name tens of thousands of CVEs; only those hosts have matter.)
 pub async fn nvd_pending(
     client: &Client,
     now: DateTime<Utc>,
@@ -235,9 +236,11 @@ pub async fn nvd_pending(
     Ok(client
         .query(
             "SELECT DISTINCT c.cve_id FROM advisory_cves c
+             JOIN vulnerabilities v ON v.advisory_id = c.advisory_id AND v.fixed_at IS NULL
              LEFT JOIN cve_enrichment e ON e.cve_id = c.cve_id
-             WHERE e.nvd_checked_at IS NULL
-                OR (e.nvd_modified_at IS NULL AND e.nvd_checked_at < $1::timestamptz - interval '7 days')
+             WHERE (e.nvd_checked_at IS NULL
+                OR (e.nvd_modified_at IS NULL
+                    AND e.nvd_checked_at < $1::timestamptz - interval '7 days'))
              ORDER BY 1 DESC LIMIT $2",
             &[&now, &limit],
         )

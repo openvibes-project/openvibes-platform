@@ -149,6 +149,21 @@ async fn setup(cves: &[&str]) -> (TestDb, Client, Fetcher) {
     )
     .await
     .unwrap();
+    // A host has it open, so NVD is asked about its CVEs.
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at)
+                 VALUES ('agent.00000000-0000-4000-8000-00000000abcd', 'active', now());
+             INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
+                 last_evaluated_at)
+                 VALUES ('agent.00000000-0000-4000-8000-00000000abcd', 'FEDORA-2026-test', '[]',
+                 now(), now())",
+        )
+        .await
+        .unwrap();
     let fetcher = Fetcher::new("http://127.0.0.1/metalink", None, 1 << 20).unwrap();
     (db, client, fetcher)
 }
