@@ -712,14 +712,14 @@ implementation seam, not a second mock API.
 
 ## 14. Required Schema Work
 
-Append-only migrations after the current schema 13 must add or extend. Main
+Append-only migrations after the current schema 14 must add or extend. Main
 has migration 4 (the ingest role keeps only the rights it uses), 5
 (`rule_set_id` on `findings` and `current_findings`, current state keyed by
 agent, rule set, and rule), 6 (sub-project 2's rule tables), and 7 to 12
 (inventory, vulnerabilities, running kernel, CVE enrichment, NVD and EUVD,
-`MAINTAIN` for the vulnerability tables), and 13 (other distributions via
-OSV.dev).
-**Console migrations are numbered 0014 or later**, rechecked at merge time.
+`MAINTAIN` for the vulnerability tables), 13 (other distributions via
+OSV.dev), and 14 (vulnerabilities without a fix kept per package version).
+**Console migrations are numbered 0015 or later**, rechecked at merge time.
 Schema 12 needs PostgreSQL 17 or later (`GRANT MAINTAIN`).
 The first adds an index on
 `current_findings (rule_set_id, rule_id, last_observed_at DESC, agent_id)`

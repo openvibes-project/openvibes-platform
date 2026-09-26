@@ -153,8 +153,8 @@ permissions.
 Work:
 
 - finalise local-account/password policy and trusted-proxy rules;
-- add the next available append-only migration (0014 or later: main has
-  schema 13, checked again at implementation start): local users,
+- add the next available append-only migration (0015 or later: main has
+  schema 14, checked again at implementation start): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
 - add least-privilege `openvibes_console` database role;
