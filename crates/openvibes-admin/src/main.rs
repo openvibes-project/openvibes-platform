@@ -304,11 +304,12 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             };
             Ok(format!(
                 "schema version {}\nagents active {}\nagents offline {}\nagents revoked {}\n\
-                 tokens usable {}\npartitions {partitions}\n",
+                 imported hosts {}\ntokens usable {}\npartitions {partitions}\n",
                 SCHEMA_VERSION,
                 status.agents_active,
                 status.agents_offline,
                 status.agents_revoked,
+                status.imported_hosts,
                 status.tokens_usable,
             ))
         }

@@ -26,7 +26,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | Command | Does | Prints |
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
-| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
+| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
 | `maintenance [--retention-days 90]` | creates any missing partition from the retention cutoff to today + 7 days, so late or backlogged findings always have a partition; drops older ones, never today's. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M` |
 
 Commands other than `migrate` refuse to run on an outdated schema ("run
@@ -38,9 +38,9 @@ written, the command exits non-zero with a warning.
 
 | Command | Prints |
 |---|---|
-| `agent list [--offline \| --revoked]` | one line per agent: id, status, last seen, version. `--offline` = active with no heartbeat for 15 minutes. |
-| `agent show ID` | id, status, enrolled, revoked, last seen, version, certificate count; `unknown agent` (exit 1) if absent |
-| `agent revoke ID` | `revoked ID`; `agent already revoked` or `unknown agent` are errors. The agent's next request gets `identity_revoked` (PM3). |
+| `agent list [--offline \| --revoked \| --imported]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id. `--offline` = active with no heartbeat for 15 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`). |
+| `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; `unknown agent` (exit 1) if absent |
+| `agent revoke ID` | `revoked ID`; `agent already revoked`, `unknown agent`, or `imported hosts have no identity to revoke` are errors. The agent's next request gets `identity_revoked` (PM3). |
 
 `show` and `revoke` are audited with the agent id as target.
 

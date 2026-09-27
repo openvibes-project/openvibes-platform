@@ -18,6 +18,8 @@ pub struct Status {
     pub agents_offline: i64,
     /// Revoked agents.
     pub agents_revoked: i64,
+    /// Hosts imported from export files (P3b).
+    pub imported_hosts: i64,
     /// Enrollment tokens that are unrevoked, unexpired, and not used up.
     pub tokens_usable: i64,
     /// Oldest day with a findings partition.
@@ -34,7 +36,8 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
             "SELECT count(*) FILTER (WHERE status = 'active'),
                     count(*) FILTER (WHERE status = 'active'
                                      AND (last_seen_at IS NULL OR last_seen_at < $1)),
-                    count(*) FILTER (WHERE status = 'revoked')
+                    count(*) FILTER (WHERE status = 'revoked'),
+                    count(*) FILTER (WHERE status = 'imported')
              FROM agents",
             &[&offline_before],
         )
@@ -54,6 +57,7 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
         agents_active: agents.get(0),
         agents_offline: agents.get(1),
         agents_revoked: agents.get(2),
+        imported_hosts: agents.get(3),
         tokens_usable: tokens,
         oldest_partition: days.first().copied(),
         newest_partition: days.last().copied(),
