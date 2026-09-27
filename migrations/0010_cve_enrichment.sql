@@ -13,4 +13,4 @@ CREATE TABLE cve_enrichment (
 );
 CREATE INDEX cve_enrichment_kev ON cve_enrichment (cve_id) WHERE kev_added IS NOT NULL;
 ALTER TABLE feed_sources ADD COLUMN etag text;
-GRANT SELECT, INSERT, UPDATE, DELETE ON cve_enrichment TO openvibes_vulns;
+GRANT SELECT, INSERT, UPDATE, DELETE ON cve_enrichment TO "openvibes-vulns";

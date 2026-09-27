@@ -31,7 +31,7 @@ pub struct DistributionConfig {
     pub server_key_file: PathBuf,
     /// CA that issued accepted client certificates.
     pub client_ca_file: PathBuf,
-    /// PostgreSQL connection for the `openvibes_distribution` role.
+    /// PostgreSQL connection for the `openvibes-distribution` role.
     pub database_url: String,
     /// Requests served at once; above this, 503.
     #[serde(default = "default_in_flight")]

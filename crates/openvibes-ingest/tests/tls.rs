@@ -73,7 +73,7 @@ server_key_file = "/etc/openvibes/tls/ingest.key"
 client_ca_file = "/etc/openvibes/pki/intermediate.crt"
 issuing_certificate_file = "/etc/openvibes/pki/intermediate.crt"
 issuing_key_file = "/var/lib/openvibes-ingest/intermediate.key"
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_ingest"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-ingest"
 "#;
     let write = |name: &str, text: &str| {
         let path = dir.join(name);

@@ -1,6 +1,6 @@
 //! Rule distribution: rule sets, their trusted signing keys, and published
 //! envelopes. The admin role writes; `serve` runs within the
-//! `openvibes_distribution` role's grants.
+//! `openvibes-distribution` role's grants.
 
 use chrono::{DateTime, Utc};
 

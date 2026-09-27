@@ -241,7 +241,7 @@ fn actor() -> String {
         Ok(user) if !user.is_empty() => format!("{user} (uid {uid})"),
         _ => format!("uid {uid}"),
     };
-    // Run as `sudo -u openvibes_admin`, the uid is the service account; sudo
+    // Run as `sudo -u openvibes-admin`, the uid is the service account; sudo
     // names the person in SUDO_USER. Like USER it is only a readable hint
     // (the uid is the fact); sudo's own log is authoritative.
     match std::env::var("SUDO_USER") {

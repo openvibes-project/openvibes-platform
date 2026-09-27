@@ -7,4 +7,4 @@ CREATE TABLE ca_certificates (
     not_after timestamptz NOT NULL,
     recorded_at timestamptz NOT NULL DEFAULT now()
 );
-GRANT SELECT ON ca_certificates TO openvibes_ingest;
+GRANT SELECT ON ca_certificates TO "openvibes-ingest";

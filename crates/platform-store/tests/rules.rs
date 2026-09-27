@@ -1,5 +1,5 @@
 //! Rule distribution queries: admin writes as the owner, `serve` as the
-//! least-privilege `openvibes_distribution` role.
+//! least-privilege `openvibes-distribution` role.
 
 mod common;
 
@@ -20,7 +20,7 @@ async fn setup() -> (TestDb, Client) {
 async fn as_role(db: &TestDb, role: &str) -> Client {
     let client = db.pool.get().await.unwrap();
     client
-        .batch_execute(&format!("SET ROLE {role}"))
+        .batch_execute(&format!("SET ROLE \"{role}\""))
         .await
         .unwrap();
     client
@@ -96,7 +96,7 @@ async fn publish_stores_exact_bytes_and_serves_by_version() {
     let v1 = br#"{"exact":"bytes",  "v":1}"#;
     let stored = rules::publish(&mut client, &bundle(1, v1)).await.unwrap();
     assert_eq!(stored, Published::Stored);
-    let dist = as_role(&db, "openvibes_distribution").await;
+    let dist = as_role(&db, "openvibes-distribution").await;
     let serve = |set, current| rules::serve(&dist, set, current);
     assert_eq!(
         serve("baseline", None).await.unwrap(),
@@ -112,7 +112,7 @@ async fn publish_stores_exact_bytes_and_serves_by_version() {
 async fn a_set_without_bundles_is_unknown() {
     let (db, mut client) = setup().await;
     trusted(&mut client).await;
-    let dist = as_role(&db, "openvibes_distribution").await;
+    let dist = as_role(&db, "openvibes-distribution").await;
     assert_eq!(
         rules::serve(&dist, "baseline", None).await.unwrap(),
         Served::Unknown
@@ -166,7 +166,7 @@ async fn a_retired_set_is_unknown_and_refuses_publishing() {
         .unwrap();
     assert!(rules::retire(&client, "baseline").await.unwrap());
     assert!(!rules::retire(&client, "baseline").await.unwrap());
-    let dist = as_role(&db, "openvibes_distribution").await;
+    let dist = as_role(&db, "openvibes-distribution").await;
     assert_eq!(
         rules::serve(&dist, "baseline", None).await.unwrap(),
         Served::Unknown
@@ -216,7 +216,7 @@ async fn list_and_bundles_describe_sets() {
 #[tokio::test]
 async fn the_distribution_role_has_only_the_rights_it_uses() {
     let (db, _client) = setup().await;
-    let dist = as_role(&db, "openvibes_distribution").await;
+    let dist = as_role(&db, "openvibes-distribution").await;
     for allowed in [
         "SELECT count(*) FROM agents",
         "SELECT count(*) FROM certificates",
@@ -241,7 +241,7 @@ async fn the_distribution_role_has_only_the_rights_it_uses() {
             "{denied}"
         );
     }
-    let ingest = as_role(&db, "openvibes_ingest").await;
+    let ingest = as_role(&db, "openvibes-ingest").await;
     for denied in [
         "SELECT count(*) FROM rule_sets",
         "SELECT count(*) FROM rule_bundles",
