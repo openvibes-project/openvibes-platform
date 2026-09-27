@@ -109,11 +109,18 @@ pub fn resolve_capabilities(bindings: &[RoleBinding]) -> Vec<EffectiveCapability
 fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
     use Permission as P;
     match role {
-        BuiltInRole::Viewer => matches!(permission, P::AgentsRead | P::FindingsRead),
+        BuiltInRole::Viewer => matches!(
+            permission,
+            P::AgentsRead | P::FindingsRead | P::VulnerabilitiesRead
+        ),
         BuiltInRole::Analyst => {
             matches!(
                 permission,
-                P::AgentsRead | P::FindingsRead | P::FindingsTriage | P::AssistantUse
+                P::AgentsRead
+                    | P::FindingsRead
+                    | P::FindingsTriage
+                    | P::VulnerabilitiesRead
+                    | P::AssistantUse
             )
         }
         BuiltInRole::Operator => matches!(
@@ -121,6 +128,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
             P::AgentsRead
                 | P::AgentsRevoke
                 | P::FindingsRead
+                | P::VulnerabilitiesRead
                 | P::TokensRead
                 | P::TokensCreate
                 | P::TokensRevoke
@@ -136,6 +144,7 @@ fn is_agent_bound(permission: Permission) -> bool {
         Permission::AgentsRead
             | Permission::AgentsRevoke
             | Permission::FindingsRead
+            | Permission::VulnerabilitiesRead
             | Permission::FindingsTriage
     )
 }
@@ -144,6 +153,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::AgentsRead,
     Permission::AgentsRevoke,
     Permission::FindingsRead,
+    Permission::VulnerabilitiesRead,
     Permission::FindingsTriage,
     Permission::TokensRead,
     Permission::TokensCreate,
