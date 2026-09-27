@@ -230,7 +230,7 @@ mod tests {
         fake.answer(
             &admin(&["token", "create", "--expires", "1h"]),
             0,
-            &format!("id 3\ntoken {TOKEN}\n"),
+            &format!("token id 3\ntoken {TOKEN}\n"),
         );
         fake.answer(&["/usr/bin/systemctl", "enable", "openvibes-agent"], 0, "");
         fake.answer(&["/usr/bin/systemctl", "restart", "openvibes-agent"], 0, "");

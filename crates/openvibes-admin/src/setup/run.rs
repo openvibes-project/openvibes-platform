@@ -144,8 +144,9 @@ pub fn ready_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 pub fn token_from(output: &str) -> Result<String, String> {
     output
         .lines()
-        .find_map(|line| line.strip_prefix("token "))
-        .filter(|token| {
+        // "token id N" comes first; the token is the line that fits.
+        .filter_map(|line| line.strip_prefix("token "))
+        .find(|token| {
             token.len() == 43
                 && token
                     .bytes()
@@ -290,7 +291,7 @@ mod tests {
                 "10",
             ],
             0,
-            &format!("id 7\ntoken {TOKEN}\n"),
+            &format!("token id 7\ntoken {TOKEN}\n"),
         );
         // Everything is already ready (the usual case on a first install):
         // the run still creates the endpoint token the last screen shows.
@@ -317,8 +318,13 @@ mod tests {
 
     #[test]
     fn tokens_are_read_from_token_create() {
+        // `token create`'s real output (token.rs): the id line also starts
+        // with "token ".
         assert_eq!(
-            super::token_from(&format!("id 1\ntoken {TOKEN}\n")).unwrap(),
+            super::token_from(&format!(
+                "token id 7\ntoken {TOKEN}\nThe token is shown only now; store it safely.\n"
+            ))
+            .unwrap(),
             TOKEN
         );
         assert!(super::token_from("token short\n").is_err());
