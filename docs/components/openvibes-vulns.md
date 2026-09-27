@@ -132,7 +132,7 @@ the offline core used by `openvibes-admin feeds import` and the
 (unknown keys refused):
 
 ```toml
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_vulns"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-vulns"
 health_listen = "127.0.0.1:18483"      # loopback only
 check_interval_minutes = 60            # 15 to 1440
 metalink_url = "https://mirrors.fedoraproject.org/metalink?repo=updates-released-f{release}&arch={arch}"
@@ -158,7 +158,7 @@ key file must not be readable by group or others, holds one key, and the
 key is sent only in the `apiKey` header, never logged.
 
 Packaged as the `openvibes-vulns` RPM with its unit and user
-`openvibes_vulns` ([packaging.md](packaging.md)).
+`openvibes-vulns` ([packaging.md](packaging.md)).
 
 ## Failure behaviour
 

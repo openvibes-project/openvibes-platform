@@ -9,7 +9,7 @@ PostgreSQL. Everything runs as the current, unprivileged user under
 ## What it proves
 
 1. Platform up: a throwaway PostgreSQL cluster (Unix socket only) whose
-   admin role `openvibes_admin` may create roles but is not a superuser, as in
+   admin role `openvibes-admin` may create roles but is not a superuser, as in
    the documented install,
    `openvibes-admin migrate` and `maintenance`, the built-in CA (root,
    intermediate, a server certificate for `localhost` and `127.0.0.1`),
@@ -42,7 +42,7 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    the run checked before adding the token.
 
 7. **Rule distribution (SP2):** `openvibes-distribution` starts with the
-   least-privilege `openvibes_distribution` role. The operator trusts the
+   least-privilege `openvibes-distribution` role. The operator trusts the
    integration key and publishes, through `openvibes-admin rules`, the exact
    v1 file the agent already accepted (a re-signed v1 would differ and the
    agent would refuse it as a conflict). The agent switches to

@@ -79,10 +79,10 @@ start_platform() {
     # may only create roles, and the database it owns.
     initdb -D "$W/pg/data" -U postgres --auth=trust >/dev/null
     pg_ctl -D "$W/pg/data" -o "-k $W/pg/run -c listen_addresses=''" -l "$W/pg/log" -w start >/dev/null
-    createuser -h "$W/pg/run" -U postgres --createrole openvibes_admin
-    createdb -h "$W/pg/run" -U postgres -O openvibes_admin openvibes
-    sql() { psql -h "$W/pg/run" -U openvibes_admin -d openvibes -AtX -c "$1"; }
-    echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes_admin\"" > "$W/admin.toml"
+    createuser -h "$W/pg/run" -U postgres --createrole openvibes-admin
+    createdb -h "$W/pg/run" -U postgres -O openvibes-admin openvibes
+    sql() { psql -h "$W/pg/run" -U openvibes-admin -d openvibes -AtX -c "$1"; }
+    echo "database_url = \"postgresql:///openvibes?host=$W/pg/run&user=openvibes-admin\"" > "$W/admin.toml"
     admin migrate >/dev/null
     admin maintenance >/dev/null
 
@@ -105,7 +105,7 @@ server_key_file = "$W/ca/tls/localhost.key"
 client_ca_file = "$W/ca/int/intermediate.crt"
 issuing_certificate_file = "$W/ca/int/intermediate.crt"
 issuing_key_file = "$W/ca/int/intermediate.key"
-database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_ingest"
+database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes-ingest"
 EOF
     [[ -n "${INGEST_EXTRA:-}" ]] && printf '%s\n' "$INGEST_EXTRA" >> "$W/ingest.toml"
     "$OPENVIBES_BIN_DIR/openvibes-ingest" --config "$W/ingest.toml" 2> "$W/ingest.log" &
@@ -127,7 +127,7 @@ health_listen = "127.0.0.1:$DIST_HEALTH_PORT"
 server_certificate_file = "$W/ca/tls/localhost.crt"
 server_key_file = "$W/ca/tls/localhost.key"
 client_ca_file = "$W/ca/int/intermediate.crt"
-database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes_distribution"
+database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes-distribution"
 EOF
     "$OPENVIBES_BIN_DIR/openvibes-distribution" --config "$W/distribution.toml" 2>> "$W/distribution.log" &
     DIST_PID=$!

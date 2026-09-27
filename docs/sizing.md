@@ -72,9 +72,9 @@ timeout the services use. Setup:
   an advisory fixes held just below the fix, so matching opens real
   vulnerabilities.
 - Inventories are stored through `inventory::replace` (ingest's call, as
-  `openvibes_ingest`, 16 at a time).
+  `openvibes-ingest`, 16 at a time).
 - The feed is the real Fedora 44 updateinfo (385 advisories), matched as
-  `openvibes_vulns`.
+  `openvibes-vulns`.
 
 First run (before the fixes) and second run (matching in batches of 500
 hosts, feed recorded current only after its match):
@@ -97,7 +97,7 @@ Findings (second run first):
 - **Fixed in a third run:** the first import after a feed's arrival had
   timed out because the newly inserted advisory rows had no planner
   statistics; the import now runs `ANALYZE` on the advisory tables
-  (schema 12 grants `openvibes_vulns` `MAINTAIN`). Third run: feed import
+  (schema 12 grants `openvibes-vulns` `MAINTAIN`). Third run: feed import
   plus match of all 10,000 hosts in 31.6 s (244,000 open), re-match
   29.7 s, `match_host` 14 ms.
 - **Fixed in a third run:** `vulns list` without filters had timed out at
