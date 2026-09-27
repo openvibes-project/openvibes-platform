@@ -37,6 +37,10 @@ pub enum Phase {
     Finished,
     /// A set-up host: `c` checks every step.
     Status,
+    /// What Update will upgrade, and the backup.
+    Update,
+    /// Keep data or remove everything, the backup, the typed hostname.
+    Uninstall,
 }
 
 pub struct Setup {
@@ -59,6 +63,13 @@ pub struct Setup {
     /// The components before Change components.
     pub previous: Option<BTreeSet<Component>>,
     pub home: Option<String>,
+    /// Update and Uninstall screens: backup file, typed hostname, the
+    /// choice, the packages, and the row under the cursor.
+    pub backup: String,
+    pub confirm: String,
+    pub everything: bool,
+    pub packages: Vec<platform_host::PackageUpdate>,
+    pub row2: usize,
 }
 
 impl Setup {
@@ -84,6 +95,11 @@ impl Setup {
             then_remove: None,
             previous: None,
             home,
+            backup: String::new(),
+            confirm: String::new(),
+            everything: false,
+            packages: Vec::new(),
+            row2: 0,
         }
     }
 
@@ -148,6 +164,8 @@ impl<H: Host> App<H> {
             Phase::Password(after) => self.password_key(key, after),
             Phase::Form => self.form_key(key),
             Phase::Running(_) => {}
+            Phase::Update => self.update_key(key),
+            Phase::Uninstall => self.uninstall_key(key),
             Phase::Stopped(at) => match key {
                 Key::Char('r') => self.ask_password(After::Run(at)),
                 Key::Tab => self.leave_setup(),
@@ -161,6 +179,8 @@ impl<H: Host> App<H> {
                     self.ask_password(After::Job(Job::Repair));
                 }
                 Key::Char('m') => self.change_components(),
+                Key::Char('u') => self.open_update(),
+                Key::Char('x') => self.open_uninstall(),
                 Key::Tab => self.leave_setup(),
                 Key::Char('q') => self.quit = true,
                 _ => {}

@@ -13,6 +13,7 @@ use ratatui::{
 use super::{
     app::App,
     jobs::Job,
+    maintain_view,
     setup::{CA_ROW, HOSTNAME_ROW, KEY_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
@@ -47,6 +48,14 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             },
         ),
         Phase::Finished => (finished(app), DONE_KEYS),
+        Phase::Update => (
+            maintain_view::update_lines(app),
+            maintain_view::keys(Phase::Update),
+        ),
+        Phase::Uninstall => (
+            maintain_view::uninstall_lines(app),
+            maintain_view::keys(Phase::Uninstall),
+        ),
     };
     frame.render_widget(
         Paragraph::new(lines)
@@ -151,6 +160,9 @@ fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
                     state.detail()
                 )));
             }
+        }
+        if setup.job == Job::Remove {
+            lines.push(Line::raw("Last step: sudo dnf remove openvibes-admin"));
         }
         return lines;
     }

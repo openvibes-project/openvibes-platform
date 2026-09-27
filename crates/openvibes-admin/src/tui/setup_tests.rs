@@ -320,3 +320,97 @@ fn changing_components_installs_then_removes_the_unticked_ones() {
         "remove-step backup --components vulns"
     );
 }
+
+#[test]
+fn update_lists_the_packages_then_runs_the_update_job() {
+    let mut app = set_up(vec![]);
+    app.host.packages = vec![
+        PackageUpdate {
+            name: "openvibes-agent".into(),
+            installed: "0.1.0-1.fc44".into(),
+            available: None,
+        },
+        PackageUpdate {
+            name: "openvibes-ingest".into(),
+            installed: "0.1.0-1.fc44".into(),
+            available: Some("0.2.0-1.fc44".into()),
+        },
+    ];
+    app.setup.home = Some("/home/alice".into());
+    app.tab = Tab::Setup;
+    app.key(Key::Char('u'));
+    let text = screen(&app);
+    assert!(
+        text.contains("openvibes-ingest") && text.contains("0.2.0-1.fc44"),
+        "{text}"
+    );
+    assert!(text.contains("up to date"), "{text}");
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "update-step backup --backup /home/alice/openvibes-before-update.dump"
+    );
+}
+
+#[test]
+fn remove_everything_needs_this_hosts_name() {
+    let mut answers: Vec<Result<String, HostError>> = Vec::new();
+    for _ in 0..5 {
+        answers.push(Ok("done\tok\n".into()));
+    }
+    let mut app = set_up(answers);
+    app.setup.home = Some("/home/alice".into());
+    app.tab = Tab::Setup;
+    app.key(Key::Char('x'));
+    app.key(Key::Char(' ')); // Remove everything
+    while app.setup.row2 != 3 {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert!(
+        app.message
+            .clone()
+            .unwrap_or_default()
+            .contains("platform.example.com")
+    );
+    assert_eq!(app.setup.phase, Phase::Uninstall);
+    app.key(Key::Up); // confirm field
+    app.key(Key::Enter);
+    type_text(&mut app, "platform.example.com");
+    app.key(Key::Enter);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    for _ in 0..5 {
+        app.setup_tick();
+    }
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "remove-step backup --components ingest,console,distribution,vulns,rules,agent --backup /home/alice/openvibes-backup.dump --confirm platform.example.com"
+    );
+    assert_eq!(app.setup.phase, Phase::Finished);
+    assert!(screen(&app).contains("sudo dnf remove openvibes-admin"));
+}
+
+#[test]
+fn keep_data_uninstall_sends_no_confirmation() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('x'));
+    while app.setup.row2 != 3 {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "remove-step backup --components ingest,console,distribution,vulns,rules,agent"
+    );
+}

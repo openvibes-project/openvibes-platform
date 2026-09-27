@@ -7,6 +7,8 @@ mod config_view;
 mod configuration;
 pub mod form;
 mod jobs;
+mod maintain;
+mod maintain_view;
 mod password;
 mod services;
 mod setup;
