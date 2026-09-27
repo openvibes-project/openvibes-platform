@@ -195,8 +195,39 @@ pub async fn run_feeds(
     }
 }
 
-fn host_label(row: &VulnRow) -> &str {
-    row.hostname.as_deref().unwrap_or(&row.agent_id)
+/// `label`, marked when the host was imported from export files (P3b):
+/// their hostnames are unsigned and may repeat an enrolled host's.
+fn mark(agent_id: &str, label: &str) -> String {
+    if agent_id.starts_with("import.") {
+        format!("{label} (imported)")
+    } else {
+        label.to_owned()
+    }
+}
+
+fn host_label(row: &VulnRow) -> String {
+    mark(
+        &row.agent_id,
+        row.hostname.as_deref().unwrap_or(&row.agent_id),
+    )
+}
+
+/// The one host `name` means (agent id, or a hostname only one host has);
+/// a shared hostname is refused rather than merging hosts. An unknown name
+/// passes through and simply matches nothing.
+async fn resolve(client: &platform_store::Client, name: &str) -> Result<String, String> {
+    let ids = vulns::hosts_named(client, name)
+        .await
+        .map_err(|e| e.to_string())?;
+    if ids.len() > 1 {
+        let listed: Vec<String> = ids.iter().map(|id| mark(id, id)).collect();
+        return Err(format!(
+            "{name} matches {} hosts: {}; give the id",
+            ids.len(),
+            listed.join(", ")
+        ));
+    }
+    Ok(ids.into_iter().next().unwrap_or_else(|| name.to_owned()))
 }
 
 fn packages(row: &VulnRow) -> String {
@@ -338,7 +369,7 @@ pub async fn run_vulns(
                     for (agent, hostname, open, serious) in &s.top_hosts {
                         out.push_str(&format!(
                             "  {} {open} open ({serious} critical or important)\n",
-                            hostname.as_deref().unwrap_or(agent)
+                            mark(agent, hostname.as_deref().unwrap_or(agent))
                         ));
                     }
                     out
@@ -351,6 +382,13 @@ pub async fn run_vulns(
             cve,
             fixed,
         } => {
+            let host = match host {
+                Some(name) => match resolve(client, name).await {
+                    Ok(id) => Some(id),
+                    Err(error) => return (Err(error), None),
+                },
+                None => None,
+            };
             let filter = ListFilter {
                 host: host.as_deref(),
                 severity: severity.as_deref(),
@@ -367,10 +405,6 @@ pub async fn run_vulns(
         VulnsCommand::Show { target } => {
             let as_advisory = ListFilter {
                 advisory: Some(target),
-                ..ListFilter::default()
-            };
-            let as_host = ListFilter {
-                host: Some(target),
                 ..ListFilter::default()
             };
             let result = async {
@@ -402,6 +436,11 @@ pub async fn run_vulns(
                     }
                     return Ok(out);
                 }
+                let host = resolve(client, target).await?;
+                let as_host = ListFilter {
+                    host: Some(&host),
+                    ..ListFilter::default()
+                };
                 let rows = vulns::list(client, &as_host)
                     .await
                     .map_err(|e| e.to_string())?;
