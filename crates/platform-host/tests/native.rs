@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, ServiceAction, Unit,
+    Host, HostError, Service, ServiceAction, Unit,
     native::Native,
     runner::{Output, Program, Runner},
 };
@@ -12,6 +12,7 @@ use platform_host::{
 /// Answers calls whose argv starts with a scripted prefix; records every call.
 struct FakeRunner {
     calls: RefCell<Vec<Vec<String>>>,
+    inputs: RefCell<Vec<String>>,
     answers: Vec<(Vec<&'static str>, Output)>,
 }
 
@@ -27,6 +28,18 @@ impl Runner for FakeRunner {
         }
         Ok(out(1, "", "unexpected call"))
     }
+
+    fn run_with_input(
+        &self,
+        program: Program,
+        args: &[&str],
+        input: &[u8],
+    ) -> std::io::Result<Output> {
+        self.inputs
+            .borrow_mut()
+            .push(String::from_utf8_lossy(input).into_owned());
+        self.run(program, args)
+    }
 }
 
 fn out(status: i32, stdout: &str, stderr: &str) -> Output {
@@ -41,6 +54,7 @@ fn fake(answers: Vec<(Vec<&'static str>, Output)>) -> Native<FakeRunner> {
     Native {
         runner: FakeRunner {
             calls: RefCell::new(Vec::new()),
+            inputs: RefCell::new(Vec::new()),
             answers,
         },
     }
@@ -233,4 +247,140 @@ fn only_the_four_programs_exist() {
             "/usr/bin/curl"
         ]
     );
+}
+
+#[test]
+fn config_is_read_and_written_through_the_helper() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-n",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "config-read",
+                "ingest",
+            ],
+            out(0, "listen = \"0.0.0.0:18423\"\n", ""),
+        ),
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-n",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "config-write",
+                "ingest",
+            ],
+            out(0, "", ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    assert_eq!(
+        host.read_config(Service::Ingest).unwrap(),
+        "listen = \"0.0.0.0:18423\"\n"
+    );
+    host.write_config(Service::Ingest, "listen = \"0.0.0.0:443\"\n")
+        .unwrap();
+    assert_eq!(*host.runner.inputs.borrow(), ["listen = \"0.0.0.0:443\"\n"]);
+    let calls = host.runner.calls.borrow();
+    let journal = calls
+        .iter()
+        .find(|call| call[0] == "/usr/bin/logger")
+        .unwrap();
+    assert_eq!(journal[1..3], ["-t", "openvibes-admin"]);
+    assert!(
+        journal[3].ends_with(" config-write ingest ok"),
+        "{journal:?}"
+    );
+}
+
+#[test]
+fn config_refusals_are_reported() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-n",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "config-read",
+            ],
+            out(1, "", "sudo: a password is required\n"),
+        ),
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-n",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "config-write",
+            ],
+            out(
+                1,
+                "",
+                "openvibes-admin helper: not saved: invalid ingest configuration\n",
+            ),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    assert_eq!(
+        host.read_config(Service::Vulns),
+        Err(HostError::NotOperator)
+    );
+    assert_eq!(
+        host.write_config(Service::Ingest, "x = 1\n"),
+        Err(HostError::Failed(
+            "openvibes-admin helper: not saved: invalid ingest configuration".into()
+        ))
+    );
+    let calls = host.runner.calls.borrow();
+    assert!(
+        calls
+            .iter()
+            .any(|call| call[0] == "/usr/bin/logger"
+                && call[3].ends_with(" config-write ingest failed")),
+        "{calls:?}"
+    );
+}
+
+#[test]
+fn services_and_their_files_are_a_closed_list() {
+    for service in Service::ALL {
+        assert_eq!(Service::parse(service.name()), Some(service));
+        assert_eq!(
+            service.path(),
+            format!("/etc/openvibes/{}.toml", service.name())
+        );
+    }
+    for bad in [
+        "",
+        "ingest.toml",
+        "../ingest",
+        "llm",
+        "Ingest",
+        "/etc/openvibes/ingest.toml",
+    ] {
+        assert_eq!(Service::parse(bad), None, "{bad}");
+    }
+    assert_eq!(Service::Console.unit(), Some(Unit::Console));
+    assert_eq!(Service::Admin.unit(), None);
+    assert_eq!(
+        Unit::parse("openvibes-console.service"),
+        Some(Unit::Console)
+    );
+}
+
+#[test]
+fn the_polkit_rule_lists_exactly_the_units() {
+    let rule = include_str!("../../../packaging/rpm/openvibes-operators.polkit.rules");
+    for unit in Unit::ALL {
+        assert!(
+            rule.contains(&format!("\"{}\"", unit.name())),
+            "{} missing",
+            unit.name()
+        );
+    }
+    let listed = rule.matches(".service\"").count() + rule.matches(".timer\"").count();
+    assert_eq!(listed, Unit::ALL.len());
 }

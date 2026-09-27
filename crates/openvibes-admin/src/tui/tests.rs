@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 
-use platform_host::{Host, HostError, ServiceAction, ServiceStatus, Unit};
+use platform_host::{Host, HostError, Service, ServiceAction, ServiceStatus, Unit};
 use ratatui::{Terminal, backend::TestBackend};
 
 use super::{app::App, render};
@@ -44,6 +44,12 @@ impl Host for FakeHost {
     fn logs(&self, unit: Unit, _lines: u16) -> Result<Vec<String>, HostError> {
         *self.log_reads.borrow_mut() += 1;
         Ok(vec![format!("first log line of {}", unit.label())])
+    }
+    fn read_config(&self, _service: Service) -> Result<String, HostError> {
+        Err(HostError::Io("not used yet".into()))
+    }
+    fn write_config(&self, _service: Service, _toml: &str) -> Result<(), HostError> {
+        Err(HostError::Io("not used yet".into()))
     }
 }
 

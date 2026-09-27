@@ -8,7 +8,8 @@ polkit.addRule(function (action, subject) {
         return polkit.Result.NOT_HANDLED;
     }
     var units = ["openvibes-ingest.service", "openvibes-distribution.service",
-                 "openvibes-vulns.service", "openvibes-llm.service",
+                 "openvibes-vulns.service", "openvibes-console.service",
+                 "openvibes-llm.service",
                  "openvibes-maintenance.timer"];
     var verbs = ["start", "stop", "restart"];
     if (units.indexOf(action.lookup("unit")) >= 0 &&
