@@ -11,6 +11,7 @@ const RECENT: &str = "agent.00000000-0000-4000-8000-000000000001";
 const SILENT: &str = "agent.00000000-0000-4000-8000-000000000002";
 const REVOKED: &str = "agent.00000000-0000-4000-8000-000000000003";
 const UNKNOWN: &str = "agent.00000000-0000-4000-8000-000000000009";
+const IMPORTED: &str = "import.inst-1";
 
 async fn seeded() -> Fixture {
     let fixture = Fixture::create().await;
@@ -32,6 +33,15 @@ async fn seeded() -> Fixture {
             .await
             .unwrap();
     }
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version,
+                 claimed_agent_id)
+             VALUES ($1, 'imported', $2, $2, '0.1.0', $3)",
+            &[&IMPORTED, &(now - Duration::days(30)), &RECENT],
+        )
+        .await
+        .unwrap();
     fixture
 }
 
@@ -47,7 +57,11 @@ async fn agents_are_listed_and_shown() {
     let fixture = seeded().await;
     assert_eq!(
         ids(&stdout(&fixture.run(&["agent", "list"]))),
-        [RECENT, SILENT, REVOKED]
+        [RECENT, SILENT, REVOKED, IMPORTED]
+    );
+    assert_eq!(
+        ids(&stdout(&fixture.run(&["agent", "list", "--imported"]))),
+        [IMPORTED]
     );
     assert_eq!(
         ids(&stdout(&fixture.run(&["agent", "list", "--offline"]))),
@@ -102,5 +116,38 @@ async fn revocation_outcomes_are_distinct_and_audited() {
             (Some(UNKNOWN.to_owned()), "error".to_owned()),
         ]
     );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn imported_hosts_are_shown_and_cannot_be_revoked() {
+    let fixture = seeded().await;
+    let listed = stdout(&fixture.run(&["agent", "list", "--imported"]));
+    assert!(
+        listed.starts_with(&format!("{IMPORTED}  imported  ")),
+        "{listed}"
+    );
+    assert!(listed.contains(&format!("claims {RECENT}")), "{listed}");
+    let shown = stdout(&fixture.run(&["agent", "show", IMPORTED]));
+    for line in ["status imported".to_owned(), format!("claims {RECENT}")] {
+        assert!(
+            shown.lines().any(|l| l == line),
+            "missing {line:?} in {shown}"
+        );
+    }
+    let revoke = fixture.run(&["agent", "revoke", IMPORTED]);
+    assert!(!revoke.status.success());
+    assert!(
+        String::from_utf8_lossy(&revoke.stderr)
+            .contains("imported hosts have no identity to revoke")
+    );
+    assert_eq!(
+        fixture
+            .count("SELECT count(*) FROM agents WHERE status = 'imported'")
+            .await,
+        1
+    );
+    let status = stdout(&fixture.run(&["status"]));
+    assert!(status.lines().any(|l| l == "imported hosts 1"), "{status}");
     fixture.drop().await;
 }

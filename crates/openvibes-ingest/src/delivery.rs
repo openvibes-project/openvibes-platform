@@ -1,23 +1,15 @@
 use axum::{Json, body::Bytes, extract::State, http::StatusCode};
-use std::collections::BTreeSet;
 
-use chrono::{DateTime, Duration, NaiveDate, Utc};
+use chrono::{Duration, Utc};
 use openvibes_core::{
-    DeliveryAcknowledgement, Finding, FindingBatch, Heartbeat, Identifier, InventoryReport,
-    PackageManager, RejectedFinding, SchemaVersion, Severity,
+    DeliveryAcknowledgement, FindingBatch, Heartbeat, Identifier, InventoryReport, RejectedFinding,
+    SchemaVersion,
 };
-use platform_store::{
-    ingest::{self, StoredFinding},
-    inventory::{self, PackageRow},
-};
+use platform_store::{ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
 use crate::server::AppState;
-
-/// Findings observed further ahead than this are refused
-/// (`future_observation`); the protocol states the window.
-const MAX_FUTURE_MINUTES: i64 = 60;
 
 /// `POST /v1/heartbeat`: records liveness for the authenticated agent.
 pub(crate) async fn heartbeat(
@@ -47,63 +39,6 @@ pub(crate) async fn heartbeat(
     Ok(StatusCode::NO_CONTENT)
 }
 
-fn severity(severity: Severity) -> &'static str {
-    match severity {
-        Severity::Info => "info",
-        Severity::Low => "low",
-        Severity::Medium => "medium",
-        Severity::High => "high",
-        Severity::Critical => "critical",
-    }
-}
-
-fn stored(finding: &Finding, observed_at: DateTime<Utc>, rule_version: i64) -> StoredFinding {
-    StoredFinding {
-        finding_id: finding.finding_id.as_str().to_owned(),
-        scan_id: finding.scan_id.as_str().to_owned(),
-        rule_set_id: finding
-            .rule_set_id
-            .as_ref()
-            .map_or_else(String::new, |id| id.as_str().to_owned()),
-        rule_id: finding.rule_id.as_str().to_owned(),
-        rule_version,
-        observed_at,
-        severity: severity(finding.severity).to_owned(),
-        confidence: i16::from(finding.confidence.value()),
-        message: finding.message.clone(),
-        evidence: finding
-            .evidence
-            .iter()
-            .map(|key| key.as_str().to_owned())
-            .collect(),
-    }
-}
-
-/// The observation time and rule version to store, or the reason the
-/// finding is refused permanently.
-fn refusal(
-    finding: &Finding,
-    oldest: DateTime<Utc>,
-    latest: DateTime<Utc>,
-    partitions: &BTreeSet<NaiveDate>,
-) -> Result<(DateTime<Utc>, i64), &'static str> {
-    let observed =
-        DateTime::from_timestamp_millis(finding.observed_at_unix_ms).ok_or("out_of_range")?;
-    let rule_version = i64::try_from(finding.rule_version).map_err(|_| "out_of_range")?;
-    if observed > latest {
-        return Err("future_observation");
-    }
-    if observed < oldest {
-        return Err("retention_expired");
-    }
-    if !partitions.contains(&observed.date_naive()) {
-        // No partition for a day inside retention: an operator must fix
-        // maintenance; retrying cannot help this finding.
-        return Err("unstorable");
-    }
-    Ok((observed, rule_version))
-}
-
 /// `POST /v1/findings`: stores a batch for the authenticated agent in one
 /// transaction and acknowledges every finding in it, including ones stored
 /// before. One bad finding never fails the batch: a finding observed more
@@ -118,21 +53,23 @@ pub(crate) async fn findings(
     let batch: FindingBatch = parse(&body)?;
     let now = Utc::now();
     let oldest = now - Duration::days(i64::from(state.finding_retention_days));
-    let latest = now + Duration::minutes(MAX_FUTURE_MINUTES);
+    let latest = now + Duration::minutes(wire::MAX_FUTURE_MINUTES);
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     let partitions = platform_store::partition_days(&client).await?;
     let mut keep = Vec::with_capacity(batch.findings.len());
     let mut rejected = Vec::new();
     for finding in &batch.findings {
-        match refusal(finding, oldest, latest, &partitions) {
-            Ok((observed, rule_version)) => keep.push(stored(finding, observed, rule_version)),
+        match wire::finding(finding, oldest, latest, &partitions) {
+            Ok(row) => keep.push(row),
             Err(reason) => rejected.push(RejectedFinding {
                 finding_id: finding.finding_id.clone(),
                 reason: Identifier::new(reason).map_err(|_| ApiError::Unavailable)?,
             }),
         }
     }
-    if let Err(error) = ingest::store_findings(&mut client, &agent_id, &keep, now).await {
+    if let Err(error) =
+        ingest::store_findings(&mut client, &agent_id, &keep, ingest::Origin::Online, now).await
+    {
         tracing::warn!(
             endpoint = "/v1/findings",
             agent_id,
@@ -163,37 +100,11 @@ pub(crate) async fn inventory(
     if report.agent_id.as_str() != agent_id {
         return Err(ApiError::BadRequest);
     }
-    // Canonical order, so the digest ignores how the agent listed them.
-    report
-        .packages
-        .sort_by_cached_key(|package| serde_json::to_string(package).unwrap_or_default());
-    let digest: [u8; 32] = {
-        use sha2::Digest;
-        let bytes = serde_json::to_vec(&(&report.os, &report.running_kernel, &report.packages))
-            .map_err(|_| ApiError::BadRequest)?;
-        sha2::Sha256::digest(&bytes).into()
-    };
-    let rows: Vec<PackageRow> = report
-        .packages
-        .iter()
-        .map(|package| PackageRow {
-            manager: match package.manager {
-                PackageManager::Rpm => "rpm",
-                PackageManager::Dpkg => "dpkg",
-            }
-            .to_owned(),
-            name: package.name.clone(),
-            epoch: package
-                .epoch
-                .and_then(|e| i32::try_from(e).ok())
-                .unwrap_or(0),
-            version: package.version.clone(),
-            release: package.release.clone().unwrap_or_default(),
-            arch: package.arch.clone().unwrap_or_default(),
-            source: package.source.clone(),
-            source_version: package.source_version.clone(),
-        })
-        .collect();
+    let (rows, digest) = wire::inventory(
+        &report.os,
+        report.running_kernel.as_deref(),
+        &mut report.packages,
+    )?;
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     inventory::replace(
         &mut client,

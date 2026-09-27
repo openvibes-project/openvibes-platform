@@ -9,7 +9,7 @@ use crate::{Client, OFFLINE_AFTER_MINUTES, StoreError};
 pub struct AgentInfo {
     /// Platform-assigned id.
     pub agent_id: String,
-    /// `active` or `revoked`.
+    /// `active`, `revoked`, or `imported` (from export files, P3b).
     pub status: String,
     /// First enrollment.
     pub enrolled_at: DateTime<Utc>,
@@ -21,6 +21,8 @@ pub struct AgentInfo {
     pub scanner_version: Option<String>,
     /// Certificates ever issued to it.
     pub certificates: i64,
+    /// Imported hosts: the `agent_id` their files named, a label only.
+    pub claimed_agent_id: Option<String>,
 }
 
 /// Which agents to list.
@@ -32,6 +34,8 @@ pub enum Filter {
     Offline,
     /// Revoked agents.
     Revoked,
+    /// Hosts imported from export files.
+    Imported,
 }
 
 /// Outcome of [`revoke`].
@@ -43,11 +47,14 @@ pub enum Revoke {
     AlreadyRevoked,
     /// No such agent.
     Unknown,
+    /// An imported host: it has no identity to revoke.
+    Imported,
 }
 
 const SELECT: &str = "SELECT a.agent_id, a.status, a.enrolled_at, a.revoked_at, a.last_seen_at,
         a.scanner_version,
-        (SELECT count(*) FROM certificates c WHERE c.agent_id = a.agent_id)
+        (SELECT count(*) FROM certificates c WHERE c.agent_id = a.agent_id),
+        a.claimed_agent_id
     FROM agents a";
 
 fn info(row: &tokio_postgres::Row) -> AgentInfo {
@@ -59,6 +66,7 @@ fn info(row: &tokio_postgres::Row) -> AgentInfo {
         last_seen_at: row.get(4),
         scanner_version: row.get(5),
         certificates: row.get(6),
+        claimed_agent_id: row.get(7),
     }
 }
 
@@ -75,11 +83,16 @@ pub async fn list(
                 .query(&format!("{SELECT} ORDER BY a.agent_id"), &[])
                 .await?
         }
-        Filter::Revoked => {
+        Filter::Revoked | Filter::Imported => {
+            let status = if filter == Filter::Revoked {
+                "revoked"
+            } else {
+                "imported"
+            };
             client
                 .query(
-                    &format!("{SELECT} WHERE a.status = 'revoked' ORDER BY a.agent_id"),
-                    &[],
+                    &format!("{SELECT} WHERE a.status = $1 ORDER BY a.agent_id"),
+                    &[&status],
                 )
                 .await?
         }
@@ -123,13 +136,16 @@ pub async fn revoke(
     if changed == 1 {
         return Ok(Revoke::Revoked);
     }
-    let exists = client
-        .query_opt("SELECT 1 FROM agents WHERE agent_id = $1", &[&agent_id])
+    let status: Option<String> = client
+        .query_opt(
+            "SELECT status FROM agents WHERE agent_id = $1",
+            &[&agent_id],
+        )
         .await?
-        .is_some();
-    Ok(if exists {
-        Revoke::AlreadyRevoked
-    } else {
-        Revoke::Unknown
+        .map(|row| row.get(0));
+    Ok(match status.as_deref() {
+        None => Revoke::Unknown,
+        Some("imported") => Revoke::Imported,
+        Some(_) => Revoke::AlreadyRevoked,
     })
 }
