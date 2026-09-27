@@ -16,10 +16,12 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved. C0 and C1 are complete. C3 local authentication is
+The design is approved. C0 and C1 are complete. C2–C5 are implemented in the
+Codex branch and remain in progress overall while PR #29 is updated, reviewed,
+and merged. C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 19, and serves
+the executable connects to PostgreSQL, requires schema version 20, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
