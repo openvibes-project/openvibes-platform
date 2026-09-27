@@ -1,0 +1,55 @@
+import { useMemo } from "react";
+
+import { useAllPages, useResource } from "../api/client";
+import type { Agent, AgentSummary } from "../api/types";
+import { nav, useLocation } from "../app/nav";
+import { Ago, Empty, ErrorBox, Loading, StatusBadge } from "../ui/bits";
+import { DataTable } from "../ui/DataTable";
+import { date } from "../ui/format";
+import { matches } from "../ui/table";
+import { ViewHeader } from "../ui/ViewHeader";
+
+export function Agents() {
+  const { params, panels } = useLocation();
+  const agents = useAllPages<Agent>("/api/v1/agents");
+  const summary = useResource<AgentSummary>("/api/v1/agents/summary");
+  const status = params.get("status");
+  const q = params.get("q") ?? "";
+  const all = useMemo(() => agents.data ?? [], [agents.data]);
+  const rows = useMemo(() => all.filter((agent) => (!status || agent.status === status) &&
+    matches([agent.hostname, agent.id, agent.scanner_version], q)), [all, status, q]);
+  const top = panels[panels.length - 1];
+  const versions = [...new Set(all.map((a) => a.scanner_version).filter(Boolean))].sort().reverse();
+  const newest = versions[0];
+
+  return (
+    <div className="view">
+      <ViewHeader title="Agents" count={rows.length} total={all.length} refresh="/api/v1/agents" placeholder="Filter by host name, ID or version…"
+        chips={[
+          { label: "Online", param: "status", value: "active", count: summary.data?.active },
+          { label: "Stale", param: "status", value: "stale", count: summary.data?.stale },
+          { label: "Imported", param: "status", value: "imported", count: summary.data?.imported },
+          { label: "Revoked", param: "status", value: "revoked", count: summary.data?.revoked },
+        ]} />
+      {agents.error ? <div className="view-pad"><ErrorBox error={agents.error} /></div> : agents.loading && !agents.data ? <Loading /> : rows.length === 0 ? (
+        <Empty icon="agents" title={all.length === 0 ? "No agents yet" : "Nothing matches these filters"}>
+          {all.length === 0 ? "Create an enrollment token under Enrollment, then install the agent on a host." : "Clear a filter to see more."}
+        </Empty>
+      ) : (
+        <DataTable label="Agents" rows={rows} rowKey={(a) => a.id}
+          onOpen={(a) => nav.open({ kind: "agent", id: a.id }, true)}
+          isOpen={(a) => top?.kind === "agent" && top.id === a.id}
+          defaultSort={{ key: "host", direction: "asc" }}
+          columns={[
+            { key: "host", header: "Host", sort: (a) => a.hostname ?? a.id, render: (a) => <div className="cell-two"><span className="truncate">{a.hostname ?? "—"}</span><span className="mono subtle">{a.id}</span></div> },
+            { key: "status", header: "Status", width: "110px", sort: (a) => a.status, render: (a) => <StatusBadge status={a.status} /> },
+            { key: "seen", header: "Last contact", width: "140px", sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} /></span> },
+            { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => a.scanner_version
+              ? <span className={a.scanner_version === newest ? "mono" : "mono warn-text"} title={a.scanner_version === newest ? "Newest version in the fleet" : `Older than ${newest ?? ""}`}>{a.scanner_version}</span>
+              : <span className="subtle">—</span> },
+            { key: "enrolled", header: "Enrolled", width: "130px", hideBelow: 900, sort: (a) => a.enrolled_at, render: (a) => <span className="subtle">{date(a.enrolled_at)}</span> },
+          ]} />
+      )}
+    </div>
+  );
+}

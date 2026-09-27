@@ -122,7 +122,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const context = /agent-\d{5}/.exec(question)?.[0];
     if (context !== undefined) {
       const agent = agentById(context);
-      const open = findings().filter((finding) => finding.agent_id === context);
+      const open = findings().filter((finding) => finding.agent_id === context).sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9));
       const vulns = vulnerabilities().filter((item) => item.agent_id === context);
       return [text("For "), cite("agent", context), text(` (${agent?.status ?? "unknown"}): ${open.length} findings and ${vulns.length} open vulnerabilities. `),
         ...(open[0] ? [text("The most serious finding is "), cite("finding", `${open[0].rule_set_id}/${open[0].rule_id}`), text(` — ${open[0].message.toLowerCase()}.`)] : [text("No findings right now.")])];
