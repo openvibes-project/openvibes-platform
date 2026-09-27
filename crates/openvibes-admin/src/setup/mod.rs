@@ -4,6 +4,7 @@
 //! safe and resumes.
 
 mod base;
+mod console;
 #[cfg(test)]
 mod fake;
 mod pki;
@@ -24,6 +25,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Schema => base::schema_check(ctx),
         Step::Ca => pki::ca_check(ctx),
         Step::Certificates => pki::certificates_check(ctx),
+        Step::Console => console::console_check(ctx),
         // Removed in Task 8, when every step has its module.
         other => Err(format!("{} is not implemented yet", other.name())),
     };
@@ -40,6 +42,7 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Schema => base::schema_apply(ctx),
         Step::Ca => pki::ca_apply(ctx),
         Step::Certificates => pki::certificates_apply(ctx),
+        Step::Console => console::console_apply(ctx),
         other => Err(format!("{} is not implemented yet", other.name())),
     };
     result.unwrap_or_else(StepState::Failed)

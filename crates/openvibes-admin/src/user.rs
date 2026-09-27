@@ -45,6 +45,10 @@ pub enum UserCommand {
         /// Initial built-in role.
         #[arg(long, value_enum, default_value = "admin")]
         role: BuiltInRole,
+        /// Read the password from one line of standard input instead of
+        /// prompting twice (for scripts and Setup).
+        #[arg(long)]
+        password_stdin: bool,
     },
     /// List local users without credential or token material.
     List,
@@ -88,6 +92,7 @@ pub async fn run(
             username,
             display_name,
             role,
+            password_stdin,
         } => {
             let username = match canonical_username(username) {
                 Ok(username) => username,
@@ -102,7 +107,12 @@ pub async fn run(
                     Some(username),
                 );
             }
-            let password = match confirmed_password() {
+            let password = if *password_stdin {
+                password_from_stdin()
+            } else {
+                confirmed_password()
+            };
+            let password = match password {
                 Ok(password) => password,
                 Err(error) => return (Err(error), Some(username)),
             };
@@ -291,6 +301,21 @@ fn canonical_username(username: &str) -> Result<String, String> {
         return Err("username must use 1 to 64 ASCII letters, digits, or ._@+- characters".into());
     }
     Ok(username.to_ascii_lowercase())
+}
+
+/// One line of standard input as the new password (at most 1 KiB).
+fn password_from_stdin() -> Result<NormalizedPassword, String> {
+    use std::io::{BufRead, Read};
+    let mut line = Zeroizing::new(String::new());
+    std::io::stdin()
+        .lock()
+        .take(1024)
+        .read_line(&mut line)
+        .map_err(|_| "could not read the password from standard input".to_owned())?;
+    let password = line.trim_end_matches(['\n', '\r']);
+    NormalizedPassword::new(password).map_err(|_| {
+        "password must be 15 to 128 Unicode characters and not a blocked common passphrase".into()
+    })
 }
 
 fn confirmed_password() -> Result<NormalizedPassword, String> {
