@@ -35,7 +35,32 @@ Out of scope: building the appliance image, container images, Kubernetes
 manifests (their own sub-projects); fleet screens; remote access (the TUI
 never listens on the network).
 
-## 2. Users and privileges (native)
+## 2. Account names (the user, 2026-09-27)
+
+Service accounts use hyphens, matching the package and command names:
+`openvibes-admin`, `openvibes-ingest`, `openvibes-distribution`,
+`openvibes-vulns`, `openvibes-llm`, and later `openvibes-console`
+(replacing `openvibes_admin`, `openvibes_ingest`, …). Each OS user and group
+keeps the same name as its PostgreSQL role, so peer login still needs no
+configuration (PM4). Human operators are the separate group
+`openvibes-operators`, which cannot be mistaken for the `openvibes-admin`
+service account.
+
+- **Database:** one migration renames every role
+  (`ALTER ROLE openvibes_admin RENAME TO "openvibes-admin"`, …); ownership
+  and grants move with the rename. Later SQL quotes the names. Applied
+  migrations are not edited.
+- **OS:** the RPM `%pre`/`%post` scripts rename existing users and groups
+  (`usermod -l`, `groupmod -n`) on upgrade and the sysusers files create
+  the new names on fresh installs; unit files, file ownership, sudoers and
+  docs use the new names.
+- **Upgrade order:** the OS rename and the role rename happen in the same
+  upgrade (`openvibes-admin migrate` runs from `%post` as the renamed
+  user), so the admin CLI never loses its database login. The upgrade is
+  tested in the systemd container from the previous release's RPMs.
+- **Console:** PR #29 (Codex) must name its role `openvibes-console`.
+
+## 3. Users and privileges (native)
 
 An **operator** is a member of the group `openvibes-operators`, created by
 the `openvibes-admin` RPM (sysusers). Setup adds the invoking user to it
@@ -43,8 +68,8 @@ once (a root step). Membership grants exactly these, with no password:
 
 | Need | How | Scope |
 |---|---|---|
-| Service lifecycle | polkit rule (`/usr/share/polkit-1/rules.d/50-openvibes.rules`) for `org.freedesktop.systemd1.manage-units` and `manage-unit-files` | only units named in the allow-list (§4) |
-| Database work | sudoers drop-in: run `/usr/bin/openvibes-admin` as `openvibes_admin` | the existing CLI, its peer login, schema checks and audit log, unchanged |
+| Service lifecycle | polkit rule (`/usr/share/polkit-1/rules.d/50-openvibes.rules`) for `org.freedesktop.systemd1.manage-units` and `manage-unit-files` | only units named in the allow-list (§5) |
+| Database work | sudoers drop-in: run `/usr/bin/openvibes-admin` as `openvibes-admin` | the existing CLI, its peer login, schema checks and audit log, unchanged |
 | Config save, service logs | sudoers drop-in: run `/usr/bin/openvibes-admin helper config-write SERVICE` and `helper logs UNIT` as root | fixed verbs; arguments checked against the allow-lists; content read from stdin and validated again as root |
 
 Everything else that needs root is a **privileged step**: the TUI shows
@@ -52,8 +77,8 @@ what it will do, asks for the user's password in the TUI, and runs
 `sudo -S -k -p '' /usr/bin/openvibes-admin helper <verb> [args]` with the
 password on stdin (never on the command line, never stored). The user must
 be allowed to use sudo (wheel on Fedora; the appliance's admin user is).
-Privileged steps: setup steps (§5), certificate installation and renewal,
-OS actions (§7).
+Privileged steps: setup steps (§6), certificate installation and renewal,
+OS actions (§8).
 
 `openvibes-admin helper` is a hidden subcommand with a closed set of verbs.
 It refuses to run unless real or effective uid is 0, takes no paths or unit
@@ -66,11 +91,11 @@ file has one group. Replacing a file atomically as an operator would also
 change its owner. The helper writes a temp file in `/etc/openvibes`, sets
 the original owner, group and mode, keeps `NAME.toml.bak`, and renames.
 
-## 3. Architecture
+## 4. Architecture
 
 - **`crates/platform-host`** (new, no terminal code): the backend. A
   `Host` trait with the operations the screens need; `Native` implements it
-  for systemd, and a fake implements it for tests. Later backends (§9)
+  for systemd, and a fake implements it for tests. Later backends (§10)
   implement the same trait.
 - **`crates/openvibes-admin`**: `main` opens the TUI when no subcommand is
   given; `src/tui/` holds the screens (ratatui + crossterm, new
@@ -96,7 +121,7 @@ pub trait Host {
 `Unit`, `Service` and `Step` are enums, so an unknown unit or step cannot
 be expressed.
 
-## 4. Screens
+## 5. Screens
 
 Keyboard only; works at 80×24 over SSH; readable without colour (state is
 also written as text); no mouse needed. Tabs: Setup · Services ·
@@ -120,9 +145,9 @@ destructive action asks for confirmation.
   expires (ingest and distribution server certificates, intermediate);
   feed errors (`feeds status`); disk use of `/var/lib/pgsql` and
   `/var/lib/openvibes-*`. Problems are listed first.
-- **Setup** (§5) and **System** (§7).
+- **Setup** (§6) and **System** (§8).
 
-## 5. Setup
+## 6. Setup
 
 Opens first on a host that is not set up. A checklist; each step checks its
 own state first (so re-running is safe and resumes), shows the exact
@@ -130,7 +155,7 @@ commands it runs, and marks root steps with a lock.
 
 1. PostgreSQL installed, initialised, running (root).
 2. Operator group membership for the current user (root, once).
-3. Database and `openvibes_admin` role (root, as `postgres`).
+3. Database and `openvibes-admin` role (root, as `postgres`).
 4. Schema migrated, partitions created (operator).
 5. CA — quick or careful:
    - quick: root created in `/run` (tmpfs), intermediate signed, root key
@@ -150,16 +175,16 @@ commands it runs, and marks root steps with a lock.
 [--root-key-out PATH]` runs the same steps without screens, as root, for
 scripts and the systemd end-to-end test.
 
-## 6. Audit
+## 7. Audit
 
 Every action (service action, config save, privileged step, shell opened)
 is written to the system journal with `SYSLOG_IDENTIFIER=openvibes-admin`,
 the operator's user name and uid, and the outcome. When the database is
 reachable it is also recorded in `audit_log` through the existing CLI
 (`openvibes-admin audit note ACTION TARGET RESULT`, a hidden subcommand run
-as `openvibes_admin`). Passwords and key material are never logged.
+as `openvibes-admin`). Passwords and key material are never logged.
 
-## 7. System (operating system)
+## 8. System (operating system)
 
 All privileged steps (password prompt), shown on every deployment where the
 backend supports them:
@@ -176,9 +201,9 @@ backend supports them:
   new address).
 - **Time:** time zone and NTP state (`timedatectl`); set the zone, enable
   NTP.
-- **Shell** (§8).
+- **Shell** (§9).
 
-## 8. Shell
+## 9. Shell
 
 Two options, both returning to the TUI on exit:
 
@@ -188,14 +213,14 @@ Two options, both returning to the TUI on exit:
   logs, processes, network state and files.
 - **Normal shell:** after a warning screen: "This shell is unsupported.
   Changes made here can break OpenVIBES and are not covered by upgrades or
-  support." The user types `yes`. Opening it is audited (§6), and the TUI
+  support." The user types `yes`. Opening it is audited (§7), and the TUI
   shows "a normal shell was used on this host" on Health until dismissed.
 
 Both run as the operator, never as root. On a native install the operator
 already has a shell; the options matter most on the appliance, whose admin
 user logs in straight into the TUI.
 
-## 9. Other deployments (later)
+## 10. Other deployments (later)
 
 The screens stay; a new `Host` implementation provides:
 
@@ -208,7 +233,7 @@ The screens stay; a new `Host` implementation provides:
 
 `Host` reports which features it supports; screens hide what it does not.
 
-## 10. Failure behaviour
+## 11. Failure behaviour
 
 - A failed action shows the command's error text (control characters
   escaped) and changes nothing else; a failed config write leaves the old
@@ -221,7 +246,7 @@ The screens stay; a new `Host` implementation provides:
 - The TUI never leaves the terminal in raw mode: panics and signals
   restore it.
 
-## 11. Testing
+## 12. Testing
 
 - `platform-host`: `Native` against a fake `Runner` asserting exact argument
   vectors, allow-list refusals, config write order (temp, owner, mode,
@@ -234,10 +259,12 @@ The screens stay; a new `Host` implementation provides:
   save through the helper, a restart through polkit as an operator, and the
   read-only shell refusing a write.
 
-## 12. Delivery
+## 13. Delivery
 
 One PR each, in order:
 
+0. Account rename (§2): migration, RPM upgrade scripts, units, docs,
+   upgrade test.
 1. `platform-host` + Services screen + `openvibes-admin` opening the TUI;
    RPM: `openvibes-operators` group, polkit rule, sudoers drop-in, helper
    `logs`.
