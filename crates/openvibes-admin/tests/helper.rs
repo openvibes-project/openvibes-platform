@@ -41,3 +41,29 @@ fn refuses_units_outside_the_allow_list_and_bad_counts_before_anything_else() {
 fn unknown_verbs_are_refused() {
     assert_eq!(helper(&["shell"]).status.code(), Some(2));
 }
+
+#[test]
+fn config_verbs_refuse_other_services_before_anything_else() {
+    for args in [
+        ["config-read", "llm"],
+        ["config-read", "../../etc/shadow"],
+        ["config-write", "ingest.toml"],
+        ["config-write", ""],
+    ] {
+        let out = helper(&args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("not allowed"),
+            "{args:?}"
+        );
+    }
+}
+
+#[test]
+fn config_verbs_need_root() {
+    for verb in ["config-read", "config-write"] {
+        let out = helper(&[verb, "ingest"]);
+        assert_eq!(out.status.code(), Some(1), "{verb}");
+        assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
+    }
+}
