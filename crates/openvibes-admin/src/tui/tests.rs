@@ -437,8 +437,8 @@ fn tab_switches_screens() {
     let mut app = configuration(false);
     assert_eq!(app.tab, Tab::Configuration);
     app.key(Key::Tab);
-    assert_eq!(app.tab, Tab::Services);
-    assert!(screen(&app, 80, 24).contains("[Services]"));
+    assert_eq!(app.tab, Tab::Setup);
+    assert!(screen(&app, 80, 24).contains("[Setup]"));
 }
 
 #[test]

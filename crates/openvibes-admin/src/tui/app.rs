@@ -2,7 +2,7 @@
 
 use platform_host::{Host, ServiceAction, ServiceStatus, Unit};
 
-use super::configuration::Configuration;
+use super::{configuration::Configuration, setup::Setup};
 
 /// Journal lines shown for the selected unit.
 pub const LOG_LINES: u16 = 50;
@@ -24,6 +24,7 @@ pub enum Key {
 /// The screen shown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
+    Setup,
     Services,
     Configuration,
 }
@@ -33,6 +34,7 @@ pub enum Tab {
 pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
+    pub setup: Setup,
     pub config: Configuration,
     pub services: Vec<ServiceStatus>,
     pub selected: usize,
@@ -46,9 +48,15 @@ pub struct App<H: Host> {
 
 impl<H: Host> App<H> {
     pub fn new(host: H) -> Self {
+        let set_up = host.is_set_up();
+        let hostname = std::fs::read_to_string("/etc/hostname")
+            .map(|h| h.trim().to_lowercase())
+            .unwrap_or_default();
+        let setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
         let mut app = App {
             host,
-            tab: Tab::Services,
+            tab: if set_up { Tab::Services } else { Tab::Setup },
+            setup,
             config: Configuration::default(),
             services: Vec::new(),
             selected: 0,
@@ -90,6 +98,7 @@ impl<H: Host> App<H> {
     /// One key, handled by the screen shown.
     pub fn key(&mut self, key: Key) {
         match self.tab {
+            Tab::Setup => self.setup_key(key),
             Tab::Services => self.services_key(key),
             Tab::Configuration => self.config_key(key),
         }

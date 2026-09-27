@@ -29,8 +29,8 @@ pub enum Prompt {
 pub enum Then {
     /// Open this service's file (index into `Service::ALL`); the same index reloads.
     Service(usize),
-    /// Back to the Services screen.
-    Services,
+    /// The Setup screen.
+    Setup,
     Quit,
 }
 
@@ -104,7 +104,7 @@ impl<H: Host> App<H> {
                 self.leave(Then::Service((self.config.service + count - 1) % count))
             }
             Key::Char('R') => self.leave(Then::Service(self.config.service)),
-            Key::Tab => self.leave(Then::Services),
+            Key::Tab => self.leave(Then::Setup),
             Key::Char('q') => self.leave(Then::Quit),
             Key::Enter => {
                 if let Some(form) = &self.config.form {
@@ -170,10 +170,9 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_config();
             }
-            Then::Services => {
-                self.tab = Tab::Services;
+            Then::Setup => {
+                self.tab = Tab::Setup;
                 self.message = None;
-                self.refresh();
             }
             Then::Quit => self.quit = true,
         }
