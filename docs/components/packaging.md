@@ -30,22 +30,22 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 |---|---|---|
 | `/usr/bin/openvibes-ingest` | 0755 root | ingest |
 | `/usr/lib/systemd/system/openvibes-ingest.service` | 0644 root | ingest |
-| `/usr/lib/sysusers.d/openvibes-ingest.conf` | user `openvibes_ingest` | ingest |
-| `/etc/openvibes/ingest.toml` | 0640 root:openvibes_ingest, `%config(noreplace)` | ingest |
+| `/usr/lib/sysusers.d/openvibes-ingest.conf` | user `openvibes-ingest` | ingest |
+| `/etc/openvibes/ingest.toml` | 0640 root:openvibes-ingest, `%config(noreplace)` | ingest |
 | `/etc/openvibes/{tls,pki}/` | 0755 root | ingest |
-| `/var/lib/openvibes-ingest/` | 0700 openvibes_ingest (intermediate key) | ingest |
+| `/var/lib/openvibes-ingest/` | 0700 openvibes-ingest (intermediate key) | ingest |
 | `/usr/bin/openvibes-distribution` | 0755 root | distribution |
 | `/usr/lib/systemd/system/openvibes-distribution.service` | 0644 root | distribution |
-| `/usr/lib/sysusers.d/openvibes-distribution.conf` | user `openvibes_distribution` | distribution |
-| `/etc/openvibes/distribution.toml` | 0640 root:openvibes_distribution, `%config(noreplace)` | distribution |
+| `/usr/lib/sysusers.d/openvibes-distribution.conf` | user `openvibes-distribution` | distribution |
+| `/etc/openvibes/distribution.toml` | 0640 root:openvibes-distribution, `%config(noreplace)` | distribution |
 | `/usr/bin/openvibes-vulns` | 0755 root | vulns |
 | `/usr/lib/systemd/system/openvibes-vulns.service` | 0644 root | vulns |
-| `/usr/lib/sysusers.d/openvibes-vulns.conf` | user `openvibes_vulns` | vulns |
-| `/etc/openvibes/vulns.toml` | 0640 root:openvibes_vulns, `%config(noreplace)` | vulns |
+| `/usr/lib/sysusers.d/openvibes-vulns.conf` | user `openvibes-vulns` | vulns |
+| `/etc/openvibes/vulns.toml` | 0640 root:openvibes-vulns, `%config(noreplace)` | vulns |
 | `/usr/bin/openvibes-admin` | 0755 root | admin |
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
-| `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes_admin` | admin |
-| `/etc/openvibes/admin.toml` | 0640 root:openvibes_admin, `%config(noreplace)` | admin |
+| `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes-admin` | admin |
+| `/etc/openvibes/admin.toml` | 0640 root:openvibes-admin, `%config(noreplace)` | admin |
 | `/usr/bin/openvibes-console` | 0755 root | console |
 | `/usr/lib/systemd/system/openvibes-console.service` | 0644 root | console |
 | `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes-console` | console |
@@ -53,10 +53,10 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/var/lib/openvibes-console/` | 0700 openvibes-console | console |
 | `/usr/libexec/openvibes-llm/{llama-server,openvibes-llm-check}` | 0755 root | llm |
 | `/usr/lib/systemd/system/openvibes-llm.service` | 0644 root | llm |
-| `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes_llm` | llm |
+| `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes-llm` | llm |
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
-| `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes_admin | llm |
+| `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`
@@ -65,7 +65,7 @@ directory itself, so no tmpfiles.d entry is needed.
 
 ## Units
 
-- `openvibes-ingest.service`: runs as `openvibes_ingest`, `Restart=on-failure`,
+- `openvibes-ingest.service`: runs as `openvibes-ingest`, `Restart=on-failure`,
   `LimitNOFILE=65536` (keep `max_connections` below it), `KillSignal=SIGINT`
   (on SIGINT ingest stops accepting, lets requests in flight finish, bounded
   by `request_timeout_seconds`, then exits). Hardening: `NoNewPrivileges`,
@@ -76,22 +76,22 @@ directory itself, so no tmpfiles.d entry is needed.
   syscall filter without `@privileged @resources`, no capabilities,
   `UMask=0077`.
 - `openvibes-distribution.service`: the same unit and hardening as ingest,
-  as `openvibes_distribution`; it writes nothing, so it has no state
+  as `openvibes-distribution`; it writes nothing, so it has no state
   directory.
 - `openvibes-vulns.service`: the same unit and hardening, as
-  `openvibes_vulns`; it connects out to its feeds (or `proxy_url`) and
+  `openvibes-vulns`; it connects out to its feeds (or `proxy_url`) and
   writes to PostgreSQL and its state directory `/var/lib/openvibes-vulns`
   (0700, `StateDirectory`), where OSV downloads (Ubuntu's is ~760 MB) stay
   only until imported. On SIGINT it stops; an interrupted feed
   check is redone at the next start.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
-  `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
+  `openvibes-admin maintenance` as `openvibes-admin`, with the same hardening.
 - `openvibes-console.service`: runs as `openvibes-console`, with the same
   systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
   HTTPS listener on port 443. It is disabled by the package preset until
   configuration and certificate setup are complete.
-- `openvibes-llm.service`: `llama-server` on loopback as `openvibes_llm`,
+- `openvibes-llm.service`: `llama-server` on loopback as `openvibes-llm`,
   after `openvibes-llm-check`. It has the same hardening plus
   `IPAddressDeny=any`/`IPAddressAllow=localhost`, `NoExecPaths=/`, the API
   key as a credential, and resource shares
@@ -99,9 +99,9 @@ directory itself, so no tmpfiles.d entry is needed.
 
 ## First install on Fedora
 
-Run as root. `openvibes-admin` connects as the OS user `openvibes_admin`
+Run as root. `openvibes-admin` connects as the OS user `openvibes-admin`
 (peer authentication), so every database command runs through
-`sudo -u openvibes_admin`; CA material is staged in a directory that user
+`sudo -u openvibes-admin`; CA material is staged in a directory that user
 owns and installed by root afterwards. Staging is in `/run`, a tmpfs, so
 key copies stay in memory: `shred` cannot reliably erase a file on
 copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
@@ -112,10 +112,10 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    users), then the database and schema:
 
    ```sh
-   sudo -u postgres createuser --createrole openvibes_admin
-   sudo -u postgres createdb -O openvibes_admin openvibes
-   sudo -u openvibes_admin openvibes-admin migrate       # creates the openvibes_ingest role
-   sudo -u openvibes_admin openvibes-admin maintenance
+   sudo -u postgres createuser --createrole openvibes-admin
+   sudo -u postgres createdb -O openvibes-admin openvibes
+   sudo -u openvibes-admin openvibes-admin migrate       # creates the openvibes-ingest role
+   sudo -u openvibes-admin openvibes-admin maintenance
    ```
 
 3. CA ([openvibes-admin.md](openvibes-admin.md)). The root lives on an
@@ -123,13 +123,13 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 
    ```sh
    S=/run/openvibes-ca
-   install -d -o openvibes_admin -g openvibes_admin -m 0700 $S
-   sudo -u openvibes_admin openvibes-admin ca intermediate-request --out $S/int
+   install -d -o openvibes-admin -g openvibes-admin -m 0700 $S
+   sudo -u openvibes-admin openvibes-admin ca intermediate-request --out $S/int
    # offline: ca sign-intermediate --root root --csr intermediate.csr --out intermediate.crt
-   # bring intermediate.crt and root/root.crt back into $S/int (owner openvibes_admin)
-   sudo -u openvibes_admin openvibes-admin ca import-intermediate \
+   # bring intermediate.crt and root/root.crt back into $S/int (owner openvibes-admin)
+   sudo -u openvibes-admin openvibes-admin ca import-intermediate \
        --cert $S/int/intermediate.crt --key $S/int/intermediate.key --root-cert $S/int/root.crt
-   sudo -u openvibes_admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
+   sudo -u openvibes-admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
        --issuer-cert $S/int/intermediate.crt --issuer-key $S/int/intermediate.key --out $S/tls
    ```
 
@@ -137,9 +137,9 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 
    ```sh
    install -m 0644 $S/int/intermediate.crt /etc/openvibes/pki/intermediate.crt
-   install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
+   install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
    install -m 0644 $S/tls/ingest.example.com.crt /etc/openvibes/tls/ingest.crt
-   install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
+   install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
    rm -r $S   # /run is a tmpfs: the staged key copies never reached disk
    ```
 
@@ -154,7 +154,7 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
 
    ```sh
    install -m 0644 $S/tls/rules.example.com.crt /etc/openvibes/tls/distribution.crt
-   install -o openvibes_distribution -g openvibes_distribution -m 0600 $S/tls/rules.example.com.key /etc/openvibes/tls/distribution.key
+   install -o openvibes-distribution -g openvibes-distribution -m 0600 $S/tls/rules.example.com.key /etc/openvibes/tls/distribution.key
    ```
 
    `openvibes-admin migrate` (schema 6) already created its database role.
@@ -172,7 +172,7 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    Alma) over HTTPS; behind a
    proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. An NVD API key
    (free) speeds the first NVD fill from about 95 to 10 minutes: put it in
-   `/etc/openvibes/nvd.key`, owned by `openvibes_vulns` with mode 0600
+   `/etc/openvibes/nvd.key`, owned by `openvibes-vulns` with mode 0600
    (a group- or world-readable key is refused), and set
    `nvd_api_key_file`. Without network access, set the five `*_url` keys
    to `""` and import files by hand (`openvibes-admin feeds import FILE
@@ -311,11 +311,11 @@ can share the machine, as below; normally the agent runs on the endpoints.
    baseline 1 org.rules 30 bundle.json`), then on the platform:
 
    ```sh
-   sudo -u openvibes_admin openvibes-admin rules trust add baseline org.rules PUBLIC_KEY
-   sudo -u openvibes_admin openvibes-admin rules publish bundle.json
+   sudo -u openvibes-admin openvibes-admin rules trust add baseline org.rules PUBLIC_KEY
+   sudo -u openvibes-admin openvibes-admin rules publish bundle.json
    ```
 
-3. **Token:** `sudo -u openvibes_admin openvibes-admin token create --expires 1h`
+3. **Token:** `sudo -u openvibes-admin openvibes-admin token create --expires 1h`
    (add `--uses N` for a fleet).
 4. **Agent** (on each endpoint): `dnf install openvibes-agent-*.rpm`, then
 
@@ -339,7 +339,7 @@ can share the machine, as below; normally the agent runs on the endpoints.
 5. **Check:** `openvibes-admin agent list` shows the agent active;
    `journalctl -u openvibes-distribution` logs a 200 for `/v1/rule-bundle`;
    `psql -d openvibes -c "SELECT rule_id, message FROM findings"` (as
-   `openvibes_admin`) lists its findings; `openvibes-admin vulns list`
+   `openvibes-admin`) lists its findings; `openvibes-admin vulns list`
    lists the agent's vulnerable packages once its release's feed is in
    (the end-to-end test imports an offline feed that marks the
    container's `bash` as vulnerable, before the agent enrolls, so the
@@ -348,6 +348,45 @@ can share the machine, as below; normally the agent runs on the endpoints.
 The agent package is documented in the agent repository
 (`docs/components/packaging.md`): its sandbox, upgrade, and uninstall.
 
+## Upgrading from `openvibes_*` accounts
+
+Service accounts and their PostgreSQL roles are named with hyphens since
+the admin TUI work (`openvibes-admin`, `openvibes-ingest`,
+`openvibes-distribution`, `openvibes-vulns`, `openvibes-llm`; before:
+`openvibes_admin`, …). Upgrading the RPMs renames an existing install:
+
+- `%pre` stops the unit (and the maintenance timer) and renames the OS user
+  and group (`usermod -l`, `groupmod -n`); uids, file ownership and group
+  memberships stay the same. If rpm already created the new name from the
+  sysusers file, that empty account is removed first. Units that were
+  running are started again at the end of the transaction (`%posttrans`).
+- If a process still runs as the old user (for example an operator's
+  `runuser -u openvibes_admin …`), that package's upgrade is refused with
+  its PIDs: `processes still run as openvibes_admin …; stop them and
+  upgrade again`. The package stays installed on the old name, consistent
+  and running; the other packages upgrade. Run the upgrade again once the
+  process has ended.
+- `%post` changes `user=openvibes_NAME` to `user=openvibes-NAME` in the kept
+  `database_url` of `/etc/openvibes/NAME.toml` (nothing else in the file),
+  then renames the PostgreSQL role as `postgres`
+  (`ALTER ROLE openvibes_ingest RENAME TO "openvibes-ingest"`); ownership and
+  grants move with it.
+- If PostgreSQL is not reachable on this host (a remote database, or it was
+  stopped), the upgrade still completes and prints the statements to run
+  there as `postgres`:
+
+  ```sql
+  ALTER ROLE openvibes_admin RENAME TO "openvibes-admin";
+  ALTER ROLE openvibes_ingest RENAME TO "openvibes-ingest";
+  ALTER ROLE openvibes_distribution RENAME TO "openvibes-distribution";
+  ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";
+  ```
+
+`%post` only changes the config and the role once the OS account was
+renamed, and warns when the roles are not as expected (neither name, or
+both). Every step checks first, so reinstalling changes nothing. In SQL the new
+names need quotes (`GRANT … TO "openvibes-ingest"`).
+
 ## Renewing the server certificate
 
 It lasts 90 days. Before it expires, stage a copy of the intermediate key for
@@ -355,12 +394,12 @@ the admin user, issue, install, and restart:
 
 ```sh
 S=/run/openvibes-ca
-install -d -o openvibes_admin -g openvibes_admin -m 0700 $S
-install -o openvibes_admin -m 0600 /var/lib/openvibes-ingest/intermediate.key $S/intermediate.key
-sudo -u openvibes_admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
+install -d -o openvibes-admin -g openvibes-admin -m 0700 $S
+install -o openvibes-admin -m 0600 /var/lib/openvibes-ingest/intermediate.key $S/intermediate.key
+sudo -u openvibes-admin openvibes-admin ca issue-server ingest.example.com --san 10.0.0.5 \
     --issuer-cert /etc/openvibes/pki/intermediate.crt --issuer-key $S/intermediate.key --out $S/tls
 install -m 0644 $S/tls/ingest.example.com.crt /etc/openvibes/tls/ingest.crt
-install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
+install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/tls/ingest.example.com.key /etc/openvibes/tls/ingest.key
 rm -r $S   # /run is a tmpfs: the staged key copy never reached disk
 systemctl restart openvibes-ingest   # drains requests in flight first
 ```
@@ -399,7 +438,7 @@ intermediate's last day.
 
 ## Known gaps
 
-- Run as `sudo -u openvibes_admin`, audit entries name the service account
+- Run as `sudo -u openvibes-admin`, audit entries name the service account
   and, as a hint, the person from `SUDO_USER`; sudo's own log is
   authoritative.
 - Finding retention is set twice: `finding_retention_days` in `ingest.toml`

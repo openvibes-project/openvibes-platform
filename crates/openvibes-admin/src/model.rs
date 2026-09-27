@@ -2,7 +2,7 @@
 //! against the SHA-256 the operator got from its publisher, installs it
 //! read-only for `openvibes-llm`, and selects it in
 //! `/var/lib/openvibes-llm/model.conf` (assistant spec §6, §9). The platform
-//! never downloads models itself. Runs as `openvibes_admin`, whose group owns
+//! never downloads models itself. Runs as `openvibes-admin`, whose group owns
 //! `/var/lib/openvibes-llm`; the service's own settings stay root's in
 //! `/etc/openvibes/llm.conf`.
 

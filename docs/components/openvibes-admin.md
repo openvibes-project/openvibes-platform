@@ -6,8 +6,8 @@ command, including failed ones, appends an `audit_log` entry with the
 invoking OS user and `ok` or `error`. The actor is the real uid, which the
 caller cannot choose, with `$USER` as a readable hint: `alice (uid 1000)`,
 or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
-(`sudo -u openvibes_admin …`), the person is appended from `SUDO_USER`:
-`openvibes_admin (uid 994) via sudo by alice`.
+(`sudo -u openvibes-admin …`), the person is appended from `SUDO_USER`:
+`openvibes-admin (uid 994) via sudo by alice`.
 
 ## Configuration
 
@@ -15,11 +15,11 @@ or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
 every platform config:
 
 ```toml
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_admin"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-admin"
 ```
 
 The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
-`openvibes_ingest`).
+`openvibes-ingest`).
 
 ## Commands
 
@@ -183,7 +183,7 @@ the installed file name.
 |---|---|
 | `assistant check` | Probes the backend: URL and location (local, own network, external), whether the model is listed, time to first token and speed (streaming backends), native tool calls and JSON-schema output, the lookup mode that will be used, the profile, and the recommended models (with whether each has passed the gate here). Fails if the backend cannot answer a plain question. |
 | `assistant eval [--cases FILE]` | Asks the question set (built in: 53 cases, 6 of them injection tests) against the evaluation fleet, never platform data, and prints lookup accuracy, fact completeness, contradictions or leaks, injections resisted, errors, median and p95 latency, and each failed case. Exits non-zero when the gate (spec §10) fails. |
-| `assistant model install FILE --sha256 HEX [--alias NAME] [--name FILE.gguf]` | For `openvibes-llm`: copies the GGUF file into `/var/lib/openvibes-llm/models/` through a temporary file, hashing what it copies, and installs it read-only (0444) only if the digest matches; then sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and the alias in `/var/lib/openvibes-llm/model.conf`. Refuses names that are not plain `.gguf` file names and a different file under an installed name. The platform never downloads models. Run as `openvibes_admin` (its group owns the model store), then `systemctl restart openvibes-llm`. |
+| `assistant model install FILE --sha256 HEX [--alias NAME] [--name FILE.gguf]` | For `openvibes-llm`: copies the GGUF file into `/var/lib/openvibes-llm/models/` through a temporary file, hashing what it copies, and installs it read-only (0444) only if the digest matches; then sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and the alias in `/var/lib/openvibes-llm/model.conf`. Refuses names that are not plain `.gguf` file names and a different file under an installed name. The platform never downloads models. Run as `openvibes-admin` (its group owns the model store), then `systemctl restart openvibes-llm`. |
 
 ## CA commands
 

@@ -150,7 +150,7 @@ async fn main() {
         .unwrap();
 
     // Ingest: every host's inventory through inventory::replace, as the
-    // openvibes_ingest role, `workers` at a time.
+    // openvibes-ingest role, `workers` at a time.
     let start = Instant::now();
     let generations = std::sync::Arc::new(generations);
     let ids = std::sync::Arc::new(ids);
@@ -162,7 +162,7 @@ async fn main() {
         tasks.push(tokio::spawn(async move {
             let mut client = pool.get().await.unwrap();
             client
-                .batch_execute("SET ROLE openvibes_ingest")
+                .batch_execute("SET ROLE \"openvibes-ingest\"")
                 .await
                 .unwrap();
             let mut times = Vec::new();
@@ -233,11 +233,11 @@ async fn main() {
         println!("{table}: {rows} rows, {pretty} ({per_host:.0} KiB per host)");
     }
 
-    // Matching: the real feed imported as openvibes_vulns, which matches the
+    // Matching: the real feed imported as openvibes-vulns, which matches the
     // whole release (every host).
     let mut vulns_client = pool.get().await.unwrap();
     vulns_client
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     let source: SourceId = "fedora-44-x86_64".parse().unwrap();

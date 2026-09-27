@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-User=openvibes_vulns
-Group=openvibes_vulns
+User=openvibes-vulns
+Group=openvibes-vulns
 ExecStart=/usr/bin/openvibes-vulns --config /etc/openvibes/vulns.toml
 # OSV downloads (up to ~760 MB for Ubuntu) land here and are removed after
 # import; the rest of the file system stays read-only (ProtectSystem=strict).

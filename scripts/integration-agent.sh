@@ -16,8 +16,8 @@ AGENT_BIN=${AGENT_BIN:-$(build_agent "$ROOT/target/integration/agent")}
 start_platform
 # The documented install: migrate and every admin command as a role that
 # may create roles but is not a superuser.
-[[ "$(sql "SELECT rolsuper FROM pg_roles WHERE rolname = 'openvibes_admin'")" == f ]] ||
-    { echo "FAIL: openvibes_admin is a superuser"; exit 1; }
+[[ "$(sql "SELECT rolsuper FROM pg_roles WHERE rolname = 'openvibes-admin'")" == f ]] ||
+    { echo "FAIL: openvibes-admin is a superuser"; exit 1; }
 echo "ok: admin role is not a superuser"
 mkdir -p "$W/agent/state"; chmod 700 "$W/agent/state"
 

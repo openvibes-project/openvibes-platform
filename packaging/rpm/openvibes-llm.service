@@ -11,8 +11,8 @@ After=network.target
 
 [Service]
 Type=exec
-User=openvibes_llm
-Group=openvibes_llm
+User=openvibes-llm
+Group=openvibes-llm
 EnvironmentFile=/etc/openvibes/llm.conf
 # Optional so that, before the first model install, the check says what to do.
 EnvironmentFile=-/var/lib/openvibes-llm/model.conf

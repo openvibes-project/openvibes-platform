@@ -1,4 +1,4 @@
-//! Queries the ingest service runs, all within the `openvibes_ingest`
+//! Queries the ingest service runs, all within the `openvibes-ingest`
 //! role's grants.
 
 use chrono::{DateTime, Duration, Utc};

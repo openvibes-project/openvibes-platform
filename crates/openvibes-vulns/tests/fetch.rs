@@ -140,7 +140,7 @@ async fn setup() -> (TestDb, platform_store::Client) {
     .unwrap();
     let client = db.pool.get().await.unwrap();
     client
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     (db, client)

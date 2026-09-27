@@ -1,5 +1,5 @@
 //! Advisories, vulnerabilities, and feed state (VM spec §6–§7), within the
-//! `openvibes_vulns` role's grants. Matching itself (RPM version order)
+//! `openvibes-vulns` role's grants. Matching itself (RPM version order)
 //! lives in `openvibes-vulns`; this module stores and queries.
 
 use chrono::{DateTime, NaiveDate, Utc};

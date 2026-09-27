@@ -1,5 +1,5 @@
 //! Matching stored inventories against advisories, and the vulnerability
-//! lifecycle, as the least-privilege `openvibes_vulns` role.
+//! lifecycle, as the least-privilege `openvibes-vulns` role.
 
 mod common;
 
@@ -34,7 +34,7 @@ async fn setup() -> (TestDb, Client, Client) {
     }
     let vulns = db.pool.get().await.unwrap();
     vulns
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     (db, admin, vulns)
@@ -651,7 +651,7 @@ async fn a_feed_is_recorded_current_only_after_its_match_succeeds() {
     // Matching fails (as it did on timeouts at scale): nothing is recorded
     // as current, so the next check downloads and imports it again.
     admin
-        .batch_execute("REVOKE SELECT ON host_packages FROM openvibes_vulns")
+        .batch_execute("REVOKE SELECT ON host_packages FROM \"openvibes-vulns\"")
         .await
         .unwrap();
     let failed = openvibes_vulns::feed::import(&mut vulns, &source, &content, Utc::now()).await;
@@ -665,7 +665,7 @@ async fn a_feed_is_recorded_current_only_after_its_match_succeeds() {
     let feed = vulns::feeds(&vulns).await.unwrap().remove(0);
     assert!(feed.last_error.is_some());
     admin
-        .batch_execute("GRANT SELECT ON host_packages TO openvibes_vulns")
+        .batch_execute("GRANT SELECT ON host_packages TO \"openvibes-vulns\"")
         .await
         .unwrap();
     openvibes_vulns::feed::import(&mut vulns, &source, &content, Utc::now())

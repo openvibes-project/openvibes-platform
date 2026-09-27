@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-User=openvibes_ingest
-Group=openvibes_ingest
+User=openvibes-ingest
+Group=openvibes-ingest
 ExecStart=/usr/bin/openvibes-ingest --config /etc/openvibes/ingest.toml
 # On SIGINT ingest stops accepting and drains requests in flight
 # (bounded by request_timeout_seconds) before exiting.

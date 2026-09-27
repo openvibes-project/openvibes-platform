@@ -177,7 +177,7 @@ async fn full_import_first_then_only_changed_records() {
     host(&mut admin, D12, "12", 1).await;
     let mut vulns = db.pool.get().await.unwrap();
     vulns
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     let (osv, addr) = start().await;
@@ -315,7 +315,7 @@ async fn releases_hosts_run_are_grouped_by_ecosystem() {
     host(&mut admin, D13, "13", 2).await;
     let vulns = db.pool.get().await.unwrap();
     vulns
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     let groups = osv_fetch::releases_by_ecosystem(&vulns).await.unwrap();

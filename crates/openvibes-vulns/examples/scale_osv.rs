@@ -167,7 +167,7 @@ async fn main() {
         tasks.push(tokio::spawn(async move {
             let mut client = pool.get().await.unwrap();
             client
-                .batch_execute("SET ROLE openvibes_ingest")
+                .batch_execute("SET ROLE \"openvibes-ingest\"")
                 .await
                 .unwrap();
             let mut times = Vec::new();
@@ -234,7 +234,7 @@ async fn main() {
     // The import as the service runs it: store, then match every host.
     let mut vulns_client = pool.get().await.unwrap();
     vulns_client
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     let start = Instant::now();

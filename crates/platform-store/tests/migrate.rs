@@ -117,7 +117,7 @@ async fn the_ingest_role_can_read_the_schema_version() {
     platform_store::migrate(&mut client).await.unwrap();
     let allowed: bool = client
         .query_one(
-            "SELECT has_table_privilege('openvibes_ingest', 'schema_version', 'SELECT')",
+            "SELECT has_table_privilege('openvibes-ingest', 'schema_version', 'SELECT')",
             &[],
         )
         .await
@@ -252,4 +252,30 @@ async fn an_invalid_database_url_is_a_configuration_error() {
         .unwrap_err();
     assert_eq!(error, platform_store::StoreError::InvalidUrl);
     assert_eq!(error.to_string(), "invalid database_url");
+}
+
+// Fresh databases create the hyphenated roles (admin TUI spec §2), with the
+// grants the services need, even in a cluster that still holds old-named
+// roles from earlier runs.
+#[tokio::test]
+async fn roles_are_hyphenated() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    for (role, table, privilege) in [
+        ("openvibes-ingest", "findings", "INSERT"),
+        ("openvibes-distribution", "rule_bundles", "SELECT"),
+        ("openvibes-vulns", "vulnerabilities", "INSERT"),
+    ] {
+        let granted: bool = client
+            .query_one(
+                "SELECT has_table_privilege($1, $2, $3)",
+                &[&role, &table, &privilege],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        assert!(granted, "{role} {privilege} {table}");
+    }
+    db.drop().await;
 }

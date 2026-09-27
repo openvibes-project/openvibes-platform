@@ -1,1 +1,1 @@
-u openvibes_ingest - "OpenVIBES ingest service" /var/lib/openvibes-ingest -
+u openvibes-ingest - "OpenVIBES ingest service" /var/lib/openvibes-ingest -

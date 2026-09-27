@@ -127,7 +127,7 @@ async fn setup(cves: &[&str]) -> (TestDb, Client, Fetcher) {
         .unwrap();
     let mut client = db.pool.get().await.unwrap();
     client
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     vulns::replace_advisories(

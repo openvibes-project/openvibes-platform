@@ -1,5 +1,5 @@
 //! CVE enrichment (VM spec §6, §9): KEV and EPSS per CVE, within the
-//! `openvibes_vulns` role's grants. Parsing lives in `openvibes-vulns`.
+//! `openvibes-vulns` role's grants. Parsing lives in `openvibes-vulns`.
 
 use chrono::{DateTime, NaiveDate, Utc};
 

@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-User=openvibes_distribution
-Group=openvibes_distribution
+User=openvibes-distribution
+Group=openvibes-distribution
 ExecStart=/usr/bin/openvibes-distribution --config /etc/openvibes/distribution.toml
 # On SIGINT distribution stops accepting and drains requests in flight
 # (bounded by request_timeout_seconds) before exiting.

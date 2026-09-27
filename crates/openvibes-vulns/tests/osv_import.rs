@@ -163,7 +163,7 @@ async fn setup() -> (TestDb, Client, Client) {
     }
     let vulns = db.pool.get().await.unwrap();
     vulns
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     (db, admin, vulns)

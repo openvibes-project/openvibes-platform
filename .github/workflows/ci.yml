@@ -90,6 +90,12 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      - name: Account rename script
+        run: bash scripts/test-rename-account.sh
+
+      - name: No old account names
+        run: bash scripts/check-names.sh
+
       - name: Clippy
         env:
           CARGO_NET_OFFLINE: "true"
@@ -237,6 +243,68 @@ jobs:
             LOAD_BIN="$PWD/target/release/openvibes-load" \
             BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
             bash scripts/load/run.sh 50 1000 10
+
+  # RPMs from the last commit before the service accounts were renamed
+  # (admin TUI spec §2), for the upgrade test. Fixed, so the test keeps
+  # checking the upgrade from openvibes_* accounts after this merges.
+  base-rpms:
+    name: RPMs before the account rename (fedora:44)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    container: registry.fedoraproject.org/fedora:44
+    env:
+      UPGRADE_FROM: 26c1cb38567c40498d3d0b5aac063358aed17325
+    steps:
+      - name: Install build packages
+        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros
+
+      - name: Checkout the pre-rename commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ env.UPGRADE_FROM }}
+
+      - name: Build RPMs
+        shell: bash
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          OV_LLM=0 bash scripts/build-rpm.sh
+          mkdir -p dist-base && cp target/rpm/RPMS/x86_64/*.rpm dist-base/
+
+      - name: Upload RPMs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rpms-base
+          path: dist-base/
+          if-no-files-found: error
+
+  # Upgrading an install with openvibes_* accounts renames users, groups,
+  # roles and configs, and the services work again (podman, systemd).
+  upgrade-e2e:
+    name: Upgrade from openvibes_* accounts under systemd
+    needs: [fedora, base-rpms]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms
+          path: dist
+
+      - name: Download pre-rename RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms-base
+          path: dist-base
+
+      - name: Upgrade end to end
+        run: bash scripts/upgrade-e2e.sh dist-base dist
 
   # The documented install, scripted, under a real systemd (podman fedora:44,
   # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the

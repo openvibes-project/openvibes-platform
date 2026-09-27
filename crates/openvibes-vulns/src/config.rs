@@ -54,7 +54,7 @@ fn default_download() -> u64 {
 #[derive(Clone, Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VulnsConfig {
-    /// PostgreSQL connection for the `openvibes_vulns` role.
+    /// PostgreSQL connection for the `openvibes-vulns` role.
     pub database_url: String,
     /// Loopback health listener (`/health`, `/ready`).
     #[serde(default = "default_health")]

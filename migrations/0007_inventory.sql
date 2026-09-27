@@ -24,6 +24,6 @@ CREATE TABLE host_packages (
 );
 CREATE INDEX host_packages_version ON host_packages (package_version_id);
 -- Ingest adds versions and replaces a host's links; it never edits either.
-GRANT SELECT, INSERT ON package_versions TO openvibes_ingest;
-GRANT USAGE ON SEQUENCE package_versions_id_seq TO openvibes_ingest;
-GRANT SELECT, INSERT, DELETE ON host_packages TO openvibes_ingest;
+GRANT SELECT, INSERT ON package_versions TO "openvibes-ingest";
+GRANT USAGE ON SEQUENCE package_versions_id_seq TO "openvibes-ingest";
+GRANT SELECT, INSERT, DELETE ON host_packages TO "openvibes-ingest";

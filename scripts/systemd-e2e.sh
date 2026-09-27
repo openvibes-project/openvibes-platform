@@ -70,10 +70,10 @@ ok "systemd enforces unit sandboxes in this container"
 in_c 'postgresql-setup --initdb && systemctl enable --now postgresql' >/dev/null 2>&1 || fail "postgresql"
 in_c 'dnf -q -y install /test/openvibes-ingest-*.rpm /test/openvibes-distribution-*.rpm /test/openvibes-vulns-*.rpm /test/openvibes-admin-*.rpm' \
     >/dev/null 2>&1 || fail "install platform RPMs"
-in_c 'runuser -u postgres -- createuser --createrole openvibes_admin &&
-      runuser -u postgres -- createdb -O openvibes_admin openvibes &&
-      runuser -u openvibes_admin -- openvibes-admin migrate &&
-      runuser -u openvibes_admin -- openvibes-admin maintenance' >/dev/null || fail "database"
+in_c 'runuser -u postgres -- createuser --createrole openvibes-admin &&
+      runuser -u postgres -- createdb -O openvibes-admin openvibes &&
+      runuser -u openvibes-admin -- openvibes-admin migrate &&
+      runuser -u openvibes-admin -- openvibes-admin maintenance' >/dev/null || fail "database"
 ok "platform installed, schema migrated"
 
 # Optional C5 package validation. Install only after the platform migrations
@@ -119,7 +119,7 @@ TOML
     in_c 'set -e
           password="C5-systemd-upgrade-check-2026!"
           printf "%s\n%s\n" "$password" "$password" |
-            script -q -c "runuser -u openvibes_admin -- openvibes-admin user create --username c5-upgrade --display-name C5Upgrade --role admin" /dev/null >/dev/null
+            script -q -c "runuser -u openvibes-admin -- openvibes-admin user create --username c5-upgrade --display-name C5Upgrade --role admin" /dev/null >/dev/null
           curl -ksS --resolve console.example.invalid:443:127.0.0.1 \
             -c /tmp/c5-cookies -o /tmp/c5-preauth.json \
             https://console.example.invalid/auth/v1/preauth
@@ -134,7 +134,7 @@ TOML
             -o /tmp/c5-login.json -w "%{http_code}" \
             https://console.example.invalid/auth/v1/login)
           test "$status" = 200
-          session_hash=$(runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+          session_hash=$(runuser -u openvibes-admin -- psql -d openvibes -Atqc \
             "SELECT encode(s.session_sha256, '\''hex'\'') FROM console_sessions s JOIN console_users u USING (user_id) WHERE u.username = '\''c5-upgrade'\'' AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1")
           test -n "$session_hash"
           printf "%s" "$session_hash" > /tmp/c5-session-hash' || fail "create authenticated upgrade fixture"
@@ -146,10 +146,10 @@ TOML
           test -r /etc/openvibes/tls/console-key.pem' || fail "console upgrade changed local state"
     in_c 'set -e
           session_hash=$(cat /tmp/c5-session-hash)
-          session_hash_after=$(runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+          session_hash_after=$(runuser -u openvibes-admin -- psql -d openvibes -Atqc \
             "SELECT encode(s.session_sha256, '\''hex'\'') FROM console_sessions s JOIN console_users u USING (user_id) WHERE u.username = '\''c5-upgrade'\'' AND s.revoked_at IS NULL ORDER BY s.created_at DESC LIMIT 1")
           test "$session_hash_after" = "$session_hash"
-          runuser -u openvibes_admin -- psql -d openvibes -Atqc \
+          runuser -u openvibes-admin -- psql -d openvibes -Atqc \
             "SELECT 1 FROM console_users WHERE username = '\''c5-upgrade'\''" | grep -qx 1
           status=$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 \
             -b /tmp/c5-cookies -o /tmp/c5-session.json -w "%{http_code}" \
@@ -182,15 +182,15 @@ fi
 # 3-4, 7. CA: the root (here in the container, normally offline), the
 # intermediate, and one server certificate each for ingest and distribution.
 in_c 'set -e
-      A="runuser -u openvibes_admin -- openvibes-admin"
+      A="runuser -u openvibes-admin -- openvibes-admin"
       openvibes-admin ca init-root --out /root/ca-root >/dev/null
       S=/run/openvibes-ca
-      install -d -o openvibes_admin -g openvibes_admin -m 0700 $S
+      install -d -o openvibes-admin -g openvibes-admin -m 0700 $S
       $A ca intermediate-request --out $S/int >/dev/null
       openvibes-admin ca sign-intermediate --root /root/ca-root --csr $S/int/intermediate.csr \
           --out $S/int/intermediate.crt >/dev/null
-      install -o openvibes_admin -m 0644 /root/ca-root/root.crt $S/int/root.crt
-      chown openvibes_admin $S/int/intermediate.crt
+      install -o openvibes-admin -m 0644 /root/ca-root/root.crt $S/int/root.crt
+      chown openvibes-admin $S/int/intermediate.crt
       $A ca import-intermediate --cert $S/int/intermediate.crt --key $S/int/intermediate.key \
           --root-cert $S/int/root.crt >/dev/null
       for name in localhost rules.localhost; do
@@ -198,11 +198,11 @@ in_c 'set -e
               --issuer-key $S/int/intermediate.key --out $S/tls >/dev/null
       done
       install -m 0644 $S/int/intermediate.crt /etc/openvibes/pki/intermediate.crt
-      install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
+      install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
       install -m 0644 $S/tls/localhost.crt /etc/openvibes/tls/ingest.crt
-      install -o openvibes_ingest -g openvibes_ingest -m 0600 $S/tls/localhost.key /etc/openvibes/tls/ingest.key
+      install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/tls/localhost.key /etc/openvibes/tls/ingest.key
       install -m 0644 $S/tls/rules.localhost.crt /etc/openvibes/tls/distribution.crt
-      install -o openvibes_distribution -g openvibes_distribution -m 0600 $S/tls/rules.localhost.key /etc/openvibes/tls/distribution.key
+      install -o openvibes-distribution -g openvibes-distribution -m 0600 $S/tls/rules.localhost.key /etc/openvibes/tls/distribution.key
       rm -r $S' || fail "CA"
 ok "CA and server certificates installed"
 
@@ -238,23 +238,23 @@ in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metali
              -e 's#^\(kev\|epss\|nvd\|euvd\|osv\)_url = .*#\1_url = \"\"#' /etc/openvibes/vulns.toml &&
       systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
 wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
-in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||
+in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||
     fail "feeds import"
 printf '{"vulnerabilities":[{"cveID":"CVE-2026-99999","dateAdded":"2026-09-25","knownRansomwareCampaignUse":"Known"}]}' \
     > "$W/kev-test.json"
-in_c 'runuser -u openvibes_admin -- openvibes-admin feeds import /test/kev-test.json --source kev' >/dev/null ||
+in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import /test/kev-test.json --source kev' >/dev/null ||
     fail "kev import"
 ok "offline feed and KEV imported"
 
 # Rules: trust the signing key and publish the signed bundle.
 in_c "set -e
-      runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules -- "$KEY"
-      runuser -u openvibes_admin -- openvibes-admin rules publish /test/bundle.json" ||
+      runuser -u openvibes-admin -- openvibes-admin rules trust add baseline org.rules -- \"$KEY\"
+      runuser -u openvibes-admin -- openvibes-admin rules publish /test/bundle.json" >/dev/null 2>&1 ||
     fail "publish rules"
 ok "rules trusted and published"
 
 # The agent, as its first-run steps say.
-TOKEN=$(in_c 'runuser -u openvibes_admin -- openvibes-admin token create --expires 1h' |
+TOKEN=$(in_c 'runuser -u openvibes-admin -- openvibes-admin token create --expires 1h' |
     sed -n 's/^token \([A-Za-z0-9_-]\{43\}\)$/\1/p')
 [[ -n "$TOKEN" ]] || fail "no token"
 in_c 'dnf -q -y install /test/openvibes-agent-*.rpm' >/dev/null 2>&1 || fail "install agent"
@@ -284,7 +284,7 @@ for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-ag
         fail "$unit: seccomp filter or no_new_privs not in force"
 done
 ok "ingest, distribution, vulns, and agent run with seccomp and no_new_privs"
-SQL='runuser -u openvibes_admin -- psql -d openvibes -AtX -c'
+SQL='runuser -u openvibes-admin -- psql -d openvibes -AtX -c'
 wait_for "agent enrolled" 60 "[[ \$($SQL \"SELECT count(*) FROM agents WHERE status = 'active'\") == 1 ]]"
 wait_for "agent fetched its rules from distribution (200)" 120 \
     'journalctl -u openvibes-distribution -o cat | grep -q "\"endpoint\":\"/v1/rule-bundle\".*\"status\":200"'
@@ -294,9 +294,9 @@ wait_for "the agent's inventory is stored (protocol P8)" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM host_packages\") -gt 100 ]]"
 wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
     "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
-in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
+in_c 'runuser -u openvibes-admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
     fail "vulns list does not show the bash vulnerability"
-in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*exploited (KEV, ransomware)' ||
+in_c 'runuser -u openvibes-admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*exploited (KEV, ransomware)' ||
     fail "vulns list does not show the KEV mark"
 ok "openvibes-admin vulns list shows it, marked exploited (KEV)"
 
@@ -306,13 +306,13 @@ in_c 'install -d -m 0700 /run/local-state /run/exports &&
       printf "state_dir = \"/run/local-state\"\n" > /run/local.toml &&
       openvibes-agent export /run/local.toml /run/exports' >/dev/null 2>&1 || fail "local-only export"
 in_c 'chmod 0755 /run/exports && chmod 0644 /run/exports/*.json &&
-      runuser -u openvibes_admin -- openvibes-admin import /run/exports' | grep -q 'inventory accepted' ||
+      runuser -u openvibes-admin -- openvibes-admin import /run/exports' | grep -q 'inventory accepted' ||
     fail "import of the export files"
 IMP=$(in_c "$SQL \"SELECT agent_id FROM agents WHERE status = 'imported'\"")
 [[ "$IMP" == import.* ]] || fail "no imported host"
 wait_for "the vulns service matched the imported host: bash vulnerable" 60 \
     "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE agent_id = '$IMP' AND advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
-in_c 'runuser -u openvibes_admin -- openvibes-admin agent list --imported' | grep -q "^$IMP  imported" ||
+in_c 'runuser -u openvibes-admin -- openvibes-admin agent list --imported' | grep -q "^$IMP  imported" ||
     fail "agent list --imported"
 ok "openvibes-admin import stores a local-only export as a matched imported host"
 
@@ -326,13 +326,13 @@ in_c 'journalctl -u openvibes-llm -o cat | grep -q "OPENVIBES_LLM_MODEL is not s
     fail "openvibes-llm did not say that no model is installed"
 ok "openvibes-llm refuses to start without a model"
 SHA=$(sha256sum "$W/tiny.gguf" | cut -d' ' -f1)
-in_c "runuser -u openvibes_admin -- openvibes-admin assistant model install /test/tiny.gguf --sha256 $SHA --alias tiny" \
+in_c "runuser -u openvibes-admin -- openvibes-admin assistant model install /test/tiny.gguf --sha256 $SHA --alias tiny" \
     >/dev/null || fail "model install"
 [[ "$(in_c 'stat -c "%a" /var/lib/openvibes-llm/models/tiny.gguf')" == 444 ]] || fail "installed model is not read-only"
 in_c 'systemctl reset-failed openvibes-llm; systemctl enable --now openvibes-llm' >/dev/null 2>&1 || fail "start openvibes-llm"
 wait_for "openvibes-llm ready" 60 "curl -fsS $LLM/health"
 in_c "pid=\$(systemctl show -p MainPID --value openvibes-llm);
-      [[ \$(stat -c %U /proc/\$pid) == openvibes_llm ]] &&
+      [[ \$(stat -c %U /proc/\$pid) == openvibes-llm ]] &&
       grep -q '^Seccomp:[[:space:]]*2\$' /proc/\$pid/status &&
       grep -q '^NoNewPrivs:[[:space:]]*1\$' /proc/\$pid/status &&
       grep -q '^CapEff:[[:space:]]*0*\$' /proc/\$pid/status &&
@@ -345,12 +345,12 @@ CHAT='{"model":"tiny","messages":[{"role":"user","content":"hello"}],"max_tokens
 in_c "curl -fsS -H \"authorization: Bearer \$(cat /etc/openvibes/llm-api-key)\" -H 'content-type: application/json' \
       -d '$CHAT' $LLM/v1/chat/completions | grep -q '\"choices\"'" || fail "openvibes-llm did not answer with the API key"
 ok "openvibes-llm answers only with its API key"
-# The console reads the key as its own credential; here openvibes_admin gets
+# The console reads the key as its own credential; here openvibes-admin gets
 # a private copy for the check.
-in_c "install -o openvibes_admin -m 0600 /etc/openvibes/llm-api-key /run/llm-key &&
+in_c "install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key /run/llm-key &&
       printf '[assistant]\nenabled = true\n[assistant.backend]\nurl = \"$LLM/v1\"\nmodel = \"tiny\"\napi_key_file = \"/run/llm-key\"\n' > /run/console.toml &&
       chmod 0644 /run/console.toml &&
-      runuser -u openvibes_admin -- openvibes-admin assistant check --file /run/console.toml > /run/check.out 2>&1" ||
+      runuser -u openvibes-admin -- openvibes-admin assistant check --file /run/console.toml > /run/check.out 2>&1" ||
     { in_c 'cat /run/check.out' || true; fail "assistant check against openvibes-llm"; }
 in_c 'grep -q "models listed 1 (configured model listed)" /run/check.out && grep -q "^first token" /run/check.out' ||
     fail "assistant check output"

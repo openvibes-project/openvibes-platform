@@ -1,4 +1,4 @@
-//! Ingest queries, run as the least-privilege `openvibes_ingest` role.
+//! Ingest queries, run as the least-privilege `openvibes-ingest` role.
 
 mod common;
 
@@ -32,7 +32,7 @@ async fn setup() -> (TestDb, String, String) {
 async fn as_ingest(db: &TestDb) -> Client {
     let client = db.pool.get().await.unwrap();
     client
-        .batch_execute("SET ROLE openvibes_ingest")
+        .batch_execute("SET ROLE \"openvibes-ingest\"")
         .await
         .unwrap();
     client
