@@ -158,7 +158,6 @@ async fn console_store_writes_work_as_openvibes_console() {
         .unwrap();
     apply_agent_tags(&mut client, AGENT, &tags, &preview.token, "operator", now)
         .await
-        .unwrap()
         .unwrap();
     assert_eq!(
         revoke_agent_in_scope(
