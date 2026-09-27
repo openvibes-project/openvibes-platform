@@ -260,6 +260,17 @@ credentials and removes only its own socket inode at shutdown. Keep the health
 port loopback-only and expose only the proxy's public HTTPS port in the
 firewall.
 
+## Updating and removing
+
+Update through Setup: the TUI's Setup tab, `u`, or `sudo openvibes-admin
+setup --update [--backup PATH]`. It offers a database backup, stops the
+running OpenVIBES units, upgrades exactly the installed OpenVIBES packages
+(the agent on this host too), migrates, and starts what was running
+([openvibes-admin.md](openvibes-admin.md), "Setup command"). A plain OS
+update should leave them out (`dnf upgrade --exclude='openvibes-*'`); the
+manual procedure is below. Remove through Setup's `x` or `setup
+--uninstall --keep-data|--everything`.
+
 ## Console update and recovery
 
 The console refuses to start unless the database is at its exact supported
@@ -457,6 +468,13 @@ scripts/build-rpm.sh
 podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 bash -c \
   'dnf -q -y install systemd && dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm && bash scripts/check-rpm.sh'
 ```
+
+`scripts/setup-lifecycle-e2e.sh OLD_DIR NEW_DIR` (CI job "Setup life
+cycle") installs from lower-version RPMs (`OV_VERSION=0.0.9
+OV_RPM_TOPDIR=… scripts/build-rpm.sh`) with the agent on the host, breaks
+things and repairs, uninstalls keeping data and installs again (same CA,
+same agent), updates to the current RPMs, and removes everything, checking
+that no packages, files, accounts, database or roles remain.
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all

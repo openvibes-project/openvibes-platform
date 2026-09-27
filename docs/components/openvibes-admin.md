@@ -38,7 +38,15 @@ stops the run and drops the password; `r` asks for it again and continues
 from that step. Three wrong passwords close the prompt. The finished screen
 shows the root certificate's fingerprint, the console address and admin
 password (shown only then), and an endpoint enrollment token. On a set-up
-host, `c` checks every step (`helper setup-status`). The steps are those of
+host, the Setup tab offers `c` check every step (`helper setup-status`),
+`r` repair (every step with `--repair`: never a new CA), `u` update (the
+installed OpenVIBES packages with any newer version, a backup file, then
+the update job), `m` change components (the form filled from `setup.toml`;
+added components are installed, unticked ones removed keeping data) and
+`x` uninstall (keep data, or remove everything with a backup and the
+typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+Each runs one step per refresh like the install, asking for the password
+once. The steps are those of
 `setup --quick` (below).
 
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
