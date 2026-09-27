@@ -72,6 +72,10 @@ Shared with distribution: implemented in
   an absent hostname keeps the stored one. Capabilities name the agent's
   enabled collectors (`collector.processes`, `collector.packages`,
   `collector.ports`; protocol P7), and each list replaces the stored one.
+  The optional `health` report (protocol P12) is stored in the same
+  throttled write, and the report before it is kept to compare totals; a
+  heartbeat without one keeps the stored report. An invalid `health`
+  makes the heartbeat invalid (400).
   204.
 - `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
   `agent_id` must be the authenticated agent's (else 400); at most 50,000
