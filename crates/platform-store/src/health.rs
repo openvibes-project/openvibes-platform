@@ -102,7 +102,18 @@ pub fn health_status(
         ),
         (
             "collector_failing",
-            scan.is_some_and(|scan| scan.collectors.values().any(|o| *o != CollectorOutcome::Ok)),
+            // Nothing to read on this host (another OS, no package
+            // database) is not a failure; a later version's code is.
+            scan.is_some_and(|scan| {
+                scan.collectors.values().any(|o| {
+                    !matches!(
+                        o,
+                        CollectorOutcome::Ok
+                            | CollectorOutcome::Unsupported
+                            | CollectorOutcome::NotFound
+                    )
+                })
+            }),
         ),
         (
             "rule_set_expiring",
@@ -259,6 +270,32 @@ mod tests {
         let mut h = clean();
         h.clock_jump_s = Some(-301);
         degraded(&h, None, "clock_jump");
+    }
+
+    /// Review of P12: a collector with nothing to read on this host (no
+    /// package database, another operating system) is not failing; a code
+    /// from a later version is.
+    #[test]
+    fn unsupported_or_missing_collectors_are_not_failing() {
+        let mut h = clean();
+        let collectors = &mut h.last_scan.as_mut().unwrap().collectors;
+        collectors.insert(
+            Identifier::new("packages").unwrap(),
+            CollectorOutcome::NotFound,
+        );
+        collectors.insert(
+            Identifier::new("ports").unwrap(),
+            CollectorOutcome::Unsupported,
+        );
+        assert_eq!(check(&h, None), (HealthStatus::Healthy, vec![]));
+        h.last_scan.as_mut().unwrap().collectors.insert(
+            Identifier::new("processes").unwrap(),
+            CollectorOutcome::Other,
+        );
+        assert_eq!(
+            check(&h, None),
+            (HealthStatus::Degraded, vec!["collector_failing"])
+        );
     }
 
     #[test]

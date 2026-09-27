@@ -104,7 +104,9 @@ Reasons, in this order:
 - `delivery_stalled`: oldest pending over `DELIVERY_STALLED_S` (3,600);
 - `queue_nearly_full`: over `QUEUE_NEARLY_FULL_PERCENT` (80) of the limit;
 - `scan_overdue`: more than twice the interval since the last scan;
-- `collector_failing`;
+- `collector_failing`: an outcome other than `ok`, `unsupported` or
+  `not_found` (those mean nothing to read on this host); a code from a
+  later version counts as failing;
 - `rule_set_expiring`: within `RULE_SET_EXPIRING_DAYS` (7);
 - `rule_set_refused`;
 - `storage_errors`: rose;

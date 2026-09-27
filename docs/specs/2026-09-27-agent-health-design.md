@@ -73,8 +73,12 @@ under 1 KB.
   - `refused`: `null`, or why the last provisioned bundle was refused
     (`signature`, `expired`, `rolled_back`, `invalid`).
 - **`storage_errors`:** local database failures since the agent started.
-- **`clock_jump_s`:** the last wall-clock jump the clock guard detected,
-  when there was one.
+- **`clock_jump_s`:** a wall-clock jump the clock guard detected in the
+  last hour (amended after the final review: one correction at boot or
+  after a resume must not flag the agent for as long as it runs).
+- Collector outcomes and refusal codes are open identifiers (amended after
+  the final review): a reader treats one it does not know as a failure or
+  as `invalid`, so a later agent never has its heartbeats refused.
 
 Totals are cumulative, so the platform compares a report with the previous
 one; a missed heartbeat loses nothing.
@@ -128,7 +132,10 @@ Reasons, each with a stable code for the API:
 - `delivery_stalled`: the oldest pending finding is over 1 hour old;
 - `queue_nearly_full`: over 80% of `max_bytes`;
 - `scan_overdue`: the last scan finished more than twice its interval ago;
-- `collector_failing`: a collector's outcome is not `ok`;
+- `collector_failing`: a collector's outcome is not `ok`, `unsupported` or
+  `not_found` (amended after the final review: those mean the host has
+  nothing for it to read, such as no supported package database, and would
+  otherwise flag such hosts forever);
 - `rule_set_expiring`: a rule set expires within 7 days;
 - `rule_set_refused`: a rule set's last bundle was refused;
 - `storage_errors`: the count rose since the previous report;
