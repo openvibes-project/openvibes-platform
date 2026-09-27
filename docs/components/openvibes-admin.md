@@ -116,22 +116,24 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 | `feeds import FILE --source kev\|epss\|nvd\|euvd` | imports a CISA KEV JSON, an EPSS CSV (`.gz` or plain), an NVD API response page (only CVEs advisories name are kept), or an EUVD exploited list (the whole list: CVEs missing from it lose the mark): `imported N CVEs from kev` |
 | `feeds status` | per source: advisories (or CVEs for `kev`, `epss`, `nvd`, `euvd`), last check, last change, last error |
 | `vulns summary` | open count by severity and host count; open ones exploited in the wild (CISA KEV or EUVD), and open ones with no fix available yet, when any; hosts with a kernel fix installed but not booted (a separate state, not counted as open); the ten most affected hosts |
-| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed`, or `installed (no fix available)` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
+| `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | (vulnerabilities without a fix appear with `--host`, not fleet-wide, where they would repeat on every host) one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed`, or `installed (no fix available)` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
 | `vulns show ADVISORY\|HOST` | an advisory with its link, one line per CVE (`CVE-… CVSS 6.1 (3.1) CWE-79 KEV EUVD-… EPSS 94.0%: description`, first 200 characters), and hosts; or a host with its open vulnerabilities |
 
 All are audited; `feeds import` with the source as target.
 
 ## Assistant commands
 
-Both read the `[assistant]` section of the console's configuration
+`check` and `eval` read the `[assistant]` section of the console's configuration
 (`--file`, default `/etc/openvibes/console.toml`; other sections are
 ignored), so run them as a user that can read it and its key files. They
-are audited with the configured model as the target.
+are audited with the configured model as the target; `model install` with
+the installed file name.
 
 | Command | Result |
 |---|---|
 | `assistant check` | Probes the backend: URL and location (local, own network, external), whether the model is listed, time to first token and speed (streaming backends), native tool calls and JSON-schema output, the lookup mode that will be used, the profile, and the recommended models (with whether each has passed the gate here). Fails if the backend cannot answer a plain question. |
 | `assistant eval [--cases FILE]` | Asks the question set (built in: 53 cases, 6 of them injection tests) against the evaluation fleet, never platform data, and prints lookup accuracy, fact completeness, contradictions or leaks, injections resisted, errors, median and p95 latency, and each failed case. Exits non-zero when the gate (spec §10) fails. |
+| `assistant model install FILE --sha256 HEX [--alias NAME] [--name FILE.gguf]` | For `openvibes-llm`: copies the GGUF file into `/var/lib/openvibes-llm/models/` through a temporary file, hashing what it copies, and installs it read-only (0444) only if the digest matches; then sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and the alias in `/var/lib/openvibes-llm/model.conf`. Refuses names that are not plain `.gguf` file names and a different file under an installed name. The platform never downloads models. Run as `openvibes_admin` (its group owns the model store), then `systemctl restart openvibes-llm`. |
 
 ## CA commands
 

@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 19;
+pub const SCHEMA_VERSION: i32 = 20;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -49,27 +49,31 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (13, include_str!("../../../migrations/0013_osv.sql")),
     (
         14,
-        include_str!("../../../migrations/0014_console_read_models.sql"),
+        include_str!("../../../migrations/0014_version_vulnerabilities.sql"),
     ),
     (
         15,
-        include_str!("../../../migrations/0015_console_identity.sql"),
+        include_str!("../../../migrations/0015_console_read_models.sql"),
     ),
     (
         16,
-        include_str!("../../../migrations/0016_console_enrollment_tokens.sql"),
+        include_str!("../../../migrations/0016_console_identity.sql"),
     ),
     (
         17,
-        include_str!("../../../migrations/0017_console_rule_read.sql"),
+        include_str!("../../../migrations/0017_console_enrollment_tokens.sql"),
     ),
     (
         18,
-        include_str!("../../../migrations/0018_console_triage_history.sql"),
+        include_str!("../../../migrations/0018_console_rule_read.sql"),
     ),
     (
         19,
-        include_str!("../../../migrations/0019_console_assistant_permission.sql"),
+        include_str!("../../../migrations/0019_console_triage_history.sql"),
+    ),
+    (
+        20,
+        include_str!("../../../migrations/0020_console_assistant_permission.sql"),
     ),
 ];
 

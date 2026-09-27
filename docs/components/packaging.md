@@ -1,8 +1,10 @@
 # packaging (RPM)
 
-`packaging/rpm/` builds four Fedora packages from one spec,
+`packaging/rpm/` builds Fedora packages from one spec,
 `openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
-**openvibes-vulns**, and **openvibes-admin**.
+**openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
+(the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
+`OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**).
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
@@ -19,7 +21,7 @@ The console unit ships disabled until the operator configures its
 database and TLS certificate.
 
 ```sh
-scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin}-*.rpm
+scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm}-*.rpm
 ```
 
 ## Contents
@@ -49,6 +51,12 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes_console` | console |
 | `/etc/openvibes/console.toml` | 0640 root:openvibes_console, `%config(noreplace)` | console |
 | `/var/lib/openvibes-console/` | 0700 openvibes_console | console |
+| `/usr/libexec/openvibes-llm/{llama-server,openvibes-llm-check}` | 0755 root | llm |
+| `/usr/lib/systemd/system/openvibes-llm.service` | 0644 root | llm |
+| `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes_llm` | llm |
+| `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
+| `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
+| `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes_admin | llm |
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`
@@ -71,8 +79,10 @@ directory itself, so no tmpfiles.d entry is needed.
   as `openvibes_distribution`; it writes nothing, so it has no state
   directory.
 - `openvibes-vulns.service`: the same unit and hardening, as
-  `openvibes_vulns`; it connects out to Fedora's mirrors (or `proxy_url`)
-  and writes only to PostgreSQL. On SIGINT it stops; an interrupted feed
+  `openvibes_vulns`; it connects out to its feeds (or `proxy_url`) and
+  writes to PostgreSQL and its state directory `/var/lib/openvibes-vulns`
+  (0700, `StateDirectory`), where OSV downloads (Ubuntu's is ~760 MB) stay
+  only until imported. On SIGINT it stops; an interrupted feed
   check is redone at the next start.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
@@ -81,6 +91,11 @@ directory itself, so no tmpfiles.d entry is needed.
   systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
   HTTPS listener on port 443. It is disabled by the package preset until
   configuration and certificate setup are complete.
+- `openvibes-llm.service`: `llama-server` on loopback as `openvibes_llm`,
+  after `openvibes-llm-check`. It has the same hardening plus
+  `IPAddressDeny=any`/`IPAddressAllow=localhost`, `NoExecPaths=/`, the API
+  key as a credential, and resource shares
+  ([openvibes-llm.md](openvibes-llm.md)).
 
 ## First install on Fedora
 
@@ -152,12 +167,14 @@ copy-on-write filesystems (btrfs, Fedora's default) or on SSDs.
    certificate. `openvibes-admin migrate` (schema 8) already created its
    database role. It reaches `mirrors.fedoraproject.org`, `www.cisa.gov`
    (KEV), `epss.empiricalsecurity.com` (EPSS), `services.nvd.nist.gov`
-   (NVD) and `euvdservices.enisa.europa.eu` (EUVD) over HTTPS; behind a
+   (NVD), `euvdservices.enisa.europa.eu` (EUVD) and
+   `osv-vulnerabilities.storage.googleapis.com` (Debian, Ubuntu, Rocky,
+   Alma) over HTTPS; behind a
    proxy set `proxy_url` in `/etc/openvibes/vulns.toml`. An NVD API key
    (free) speeds the first NVD fill from about 95 to 10 minutes: put it in
    `/etc/openvibes/nvd.key`, owned by `openvibes_vulns` with mode 0600
    (a group- or world-readable key is refused), and set
-   `nvd_api_key_file`. Without network access, set the four `*_url` keys
+   `nvd_api_key_file`. Without network access, set the five `*_url` keys
    to `""` and import files by hand (`openvibes-admin feeds import FILE
    --source fedora-44-x86_64|kev|epss|nvd|euvd`,
    [openvibes-admin.md](openvibes-admin.md)).
@@ -170,7 +187,7 @@ Agents trust `root.crt` (their `platform_ca_file`).
 ## Console RPM setup
 
 The console RPM requires the platform database schema to be current through
-schema 18; those migrations create the least-privilege PostgreSQL role
+schema 20; those migrations create the least-privilege PostgreSQL role
 `openvibes_console`. Install the console RPM after the platform migrations so
 the matching operating-system user and database role can use PostgreSQL peer
 authentication. Its unit is disabled at install time.
@@ -392,7 +409,8 @@ podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 ba
 
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
-five units, that the ingest, distribution, and vulns units stop with
+six units, the generated `llm-api-key`, the `openvibes-llm` sandbox lines
+and its pre-start check's refusals, that the ingest, distribution, and vulns units stop with
 SIGINT (an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 

@@ -1,0 +1,79 @@
+# The local model server for the console's assistant (assistant spec §3
+# options A and B, §6): llama.cpp's llama-server from a pinned build, on
+# loopback only, as its own user, with nowhere to go if it is compromised.
+# Settings: /etc/openvibes/llm.conf; the model: /var/lib/openvibes-llm/
+# model.conf, written by `openvibes-admin assistant model install`. Memory and
+# CPU share: `systemctl edit openvibes-llm` (MemoryMax=, CPUWeight=).
+[Unit]
+Description=OpenVIBES local model server (assistant)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+After=network.target
+
+[Service]
+Type=exec
+User=openvibes_llm
+Group=openvibes_llm
+EnvironmentFile=/etc/openvibes/llm.conf
+# Optional so that, before the first model install, the check says what to do.
+EnvironmentFile=-/var/lib/openvibes-llm/model.conf
+# No crash backtrace: ggml would start gdb for it.
+Environment=GGML_NO_BACKTRACE=1
+# The API key the console sends; the file stays root's (or the console's).
+LoadCredential=api-key:/etc/openvibes/llm-api-key
+# Refuses unknown llama-server variables, out-of-range settings, and a model
+# file that is writable, outside the models directory, or not the one whose
+# SHA-256 llm.conf pins.
+ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check
+# Every option is fixed here; nothing reaches llama-server from requests but
+# the chat API the console calls. Left off by default and not enabled:
+# web UI, props changes, metrics, tools/MCP, media paths, model downloads.
+ExecStart=/usr/libexec/openvibes-llm/llama-server \
+    --model ${OPENVIBES_LLM_MODEL} --alias ${OPENVIBES_LLM_ALIAS} \
+    --host 127.0.0.1 --port ${OPENVIBES_LLM_PORT} \
+    --ctx-size ${OPENVIBES_LLM_CONTEXT} --threads ${OPENVIBES_LLM_THREADS} \
+    --n-gpu-layers ${OPENVIBES_LLM_GPU_LAYERS} --parallel ${OPENVIBES_LLM_PARALLEL} \
+    --api-key-file %d/api-key \
+    --no-webui --no-slots --offline --jinja --timeout 300 --log-colors off
+Restart=on-failure
+RestartSec=10s
+# Resource shares: the model must never starve ingest or PostgreSQL.
+MemoryMax=8G
+CPUWeight=20
+IOWeight=20
+TasksMax=512
+LimitCORE=0
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectProc=invisible
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# Only the two binaries (and the libraries they load) can be executed: no
+# shell, no gdb, nothing a hijacked process could start.
+NoExecPaths=/
+ExecPaths=/usr/libexec/openvibes-llm /usr/lib64 /usr/lib
+# Loopback only, in and out.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

@@ -10,9 +10,10 @@ use crate::{Client, StoreError};
 mod candidates;
 mod feeds;
 mod summary;
+use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
-pub use summary::{Summary, summary};
+pub use summary::{Summary, no_fix_count, refresh_counts, summary};
 
 /// A package an advisory affects, and the version range affected.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -237,9 +238,12 @@ pub async fn apply(
             &[&agents, &advisories, &packages, &now, &reboots],
         )
         .await?;
-    let fixed = "UPDATE vulnerabilities SET fixed_at = $3, last_evaluated_at = $3
-         WHERE fixed_at IS NULL
-           AND (agent_id, advisory_id) NOT IN (SELECT * FROM unnest($1::text[], $2::text[]))";
+    // An anti-join: NOT IN over a large found set outgrows work_mem and
+    // turns quadratic (150,000 rows per batch timed out, docs/sizing.md).
+    let fixed = "UPDATE vulnerabilities v SET fixed_at = $3, last_evaluated_at = $3
+         WHERE v.fixed_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM unnest($1::text[], $2::text[]) AS f(a, d)
+                           WHERE f.a = v.agent_id AND f.d = v.advisory_id)";
     match scope {
         Scope::Release {
             os_id,
@@ -332,49 +336,134 @@ pub struct ListFilter<'a> {
 /// then the highest EPSS percentile among the advisory's CVEs, then
 /// severity, then the highest CVSS, then oldest first.
 pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRow>, StoreError> {
-    let rows = client
-        .query(
-            // Each advisory's CVEs and enrichment are combined once (a few
-            // hundred advisories), not once per vulnerability: at 244,000
-            // open rows the per-row form exceeded the statement timeout.
-            "WITH adv AS (
-                 SELECT a.advisory_id, a.severity, a.title, a.url,
-                        COALESCE(array_agg(DISTINCT c.cve_id)
-                            FILTER (WHERE c.cve_id IS NOT NULL), '{}') AS cves,
-                        COALESCE(bool_or(x.kev_added IS NOT NULL), false) AS kev,
-                        min(x.kev_due) AS due,
-                        COALESCE(bool_or(x.kev_ransomware), false) AS ransomware,
-                        max(x.epss) AS epss, max(x.epss_percentile) AS pct,
-                        COALESCE(bool_or(x.euvd_exploited), false) AS euvd,
-                        max(x.cvss_score) AS cvss
-                 FROM advisories a
-                 LEFT JOIN advisory_cves c ON c.advisory_id = a.advisory_id
-                 LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
-                 WHERE ($3::text IS NULL OR a.advisory_id = $3)
-                   AND ($4::text IS NULL OR a.severity = $4)
-                 GROUP BY a.advisory_id, a.severity, a.title, a.url)
-             SELECT v.agent_id, g.hostname, v.advisory_id, e.severity, e.title, e.cves,
-                    v.packages, v.first_seen_at, v.fixed_at, v.reboot_needed,
-                    e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url
-             FROM vulnerabilities v
-             JOIN adv e ON e.advisory_id = v.advisory_id
-             JOIN agents g ON g.agent_id = v.agent_id
-             WHERE (v.fixed_at IS NOT NULL) = $1
-               AND ($2::text IS NULL OR v.agent_id = $2 OR g.hostname = $2)
-               AND ($5::text IS NULL OR $5 = ANY(e.cves))
-             ORDER BY (e.kev OR e.euvd) DESC, e.pct DESC NULLS LAST,
-                      array_position(ARRAY['critical','important','moderate','low','unrated'],
-                          e.severity), e.cvss DESC NULLS LAST, v.first_seen_at, v.agent_id
-             LIMIT 10000",
-            &[
-                &filter.fixed,
-                &filter.host,
-                &filter.advisory,
-                &filter.severity,
-                &filter.cve,
-            ],
-        )
-        .await?;
+    // Each advisory's CVEs, enrichment and priority, combined once (a few
+    // tens of thousands of advisories), not once per vulnerability.
+    let adv = "WITH adv AS (
+         SELECT a.advisory_id, a.severity, a.title, a.url,
+                COALESCE(array_agg(DISTINCT c.cve_id)
+                    FILTER (WHERE c.cve_id IS NOT NULL), '{}') AS cves,
+                COALESCE(bool_or(x.kev_added IS NOT NULL), false) AS kev,
+                min(x.kev_due) AS due,
+                COALESCE(bool_or(x.kev_ransomware), false) AS ransomware,
+                max(x.epss) AS epss, max(x.epss_percentile) AS pct,
+                COALESCE(bool_or(x.euvd_exploited), false) AS euvd,
+                max(x.cvss_score) AS cvss
+         FROM advisories a
+         LEFT JOIN advisory_cves c ON c.advisory_id = a.advisory_id
+         LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
+         WHERE ($3::text IS NULL OR a.advisory_id = $3)
+           AND ($4::text IS NULL OR a.severity = $4)
+         GROUP BY a.advisory_id, a.severity, a.title, a.url),
+     ranked AS (
+         SELECT e.*, row_number() OVER (ORDER BY (e.kev OR e.euvd) DESC, e.pct DESC NULLS LAST,
+                    array_position(ARRAY['critical','important','moderate','low','unrated'],
+                        e.severity), e.cvss DESC NULLS LAST, e.advisory_id) AS rank
+         FROM adv e
+         WHERE $5::text IS NULL OR $5 = ANY(e.cves))";
+    let columns = "e.severity, e.title, e.cves";
+    let enrichment = "e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url";
+    // A host by agent id or hostname, resolved first so the per-host
+    // indexes apply.
+    let hosts: Option<Vec<String>> = match filter.host {
+        Some(host) => Some(
+            client
+                .query(
+                    "SELECT agent_id FROM agents WHERE agent_id = $1 OR hostname = $1",
+                    &[&host],
+                )
+                .await?
+                .iter()
+                .map(|row| row.get(0))
+                .collect(),
+        ),
+        None => None,
+    };
+    let rows = if hosts.is_none() && filter.advisory.is_none() {
+        // Fleet-wide: count each advisory's rows (the open ones through a
+        // partial index), take advisories in priority order until 10,000
+        // rows are covered, and fetch only theirs. Sorting all 3.2 M open
+        // rows of 10,000 Debian hosts could not finish in time. Rows
+        // without a fix are left out here: they would repeat on every host.
+        client
+            .query(
+                &format!(
+                    "{adv},
+                     counts AS (
+                         SELECT advisory_id, count(*) AS n FROM vulnerabilities
+                         WHERE (fixed_at IS NOT NULL) = $1 AND $2::text IS NULL
+                         GROUP BY advisory_id),
+                     chosen AS (
+                         SELECT advisory_id FROM (
+                             SELECT r.advisory_id,
+                                    sum(c.n) OVER (ORDER BY r.rank) - c.n AS before
+                             FROM ranked r JOIN counts c ON c.advisory_id = r.advisory_id) x
+                         WHERE before < 10000)
+                     SELECT v.agent_id, g.hostname, e.advisory_id, {columns}, v.packages,
+                            v.first_seen_at, v.fixed_at, v.reboot_needed, {enrichment}
+                     FROM chosen ch
+                     JOIN ranked e ON e.advisory_id = ch.advisory_id
+                     JOIN vulnerabilities v ON v.advisory_id = ch.advisory_id
+                         AND (v.fixed_at IS NOT NULL) = $1
+                     JOIN agents g ON g.agent_id = v.agent_id
+                     ORDER BY e.rank, v.first_seen_at, v.agent_id
+                     LIMIT 10000"
+                ),
+                &[
+                    &filter.fixed,
+                    &filter.host,
+                    &filter.advisory,
+                    &filter.severity,
+                    &filter.cve,
+                ],
+            )
+            .await?
+    } else {
+        // One host or one advisory: its fixable rows, and without a fix
+        // the rows of the package versions its hosts have.
+        let agents: Vec<String> = hosts.unwrap_or_default();
+        let any_host = filter.host.is_none();
+        client
+            .query(
+                &format!(
+                    "{adv}
+                     SELECT * FROM (
+                     SELECT v.agent_id, g.hostname, e.advisory_id, {columns}, v.packages,
+                            v.first_seen_at, v.fixed_at, v.reboot_needed, {enrichment}, e.rank
+                     FROM vulnerabilities v
+                     JOIN ranked e ON e.advisory_id = v.advisory_id
+                     JOIN agents g ON g.agent_id = v.agent_id
+                     WHERE (v.fixed_at IS NOT NULL) = $1
+                       AND ($6 OR v.agent_id = ANY($7))
+                       AND ($2::text IS NOT NULL OR $3::text IS NOT NULL)
+                     UNION ALL
+                     SELECT h.agent_id, g.hostname, e.advisory_id, {columns},
+                            jsonb_agg(DISTINCT jsonb_build_object('name', vv.package,
+                                'installed', {INSTALLED}, 'fixed', NULL)),
+                            min(vv.first_seen_at), NULL::timestamptz, false, {enrichment}, e.rank
+                     FROM version_vulnerabilities vv
+                     JOIN ranked e ON e.advisory_id = vv.advisory_id
+                     JOIN package_versions pv ON pv.id = vv.package_version_id
+                     JOIN host_packages h ON h.package_version_id = vv.package_version_id
+                     JOIN agents g ON g.agent_id = h.agent_id
+                     WHERE NOT $1 AND ($6 OR h.agent_id = ANY($7))
+                     GROUP BY h.agent_id, g.hostname, e.advisory_id, e.severity, e.title,
+                              e.cves, {enrichment}, e.rank
+                     ) r
+                     ORDER BY r.rank, r.first_seen_at, r.agent_id
+                     LIMIT 10000"
+                ),
+                &[
+                    &filter.fixed,
+                    &filter.host,
+                    &filter.advisory,
+                    &filter.severity,
+                    &filter.cve,
+                    &any_host,
+                    &agents,
+                ],
+            )
+            .await?
+    };
     Ok(rows
         .iter()
         .map(|row| VulnRow {

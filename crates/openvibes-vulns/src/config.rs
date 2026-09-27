@@ -9,6 +9,7 @@ use serde::Deserialize;
 
 use crate::{
     fetch::{self, EPSS_URL, FEDORA_METALINK, Fetcher, KEV_URL},
+    osv_fetch::OSV_URL,
     sources::{EUVD_URL, NVD_URL},
 };
 
@@ -35,6 +36,15 @@ fn default_nvd() -> String {
 }
 fn default_euvd() -> String {
     EUVD_URL.to_owned()
+}
+fn default_osv() -> String {
+    OSV_URL.to_owned()
+}
+fn default_osv_dir() -> PathBuf {
+    PathBuf::from("/var/lib/openvibes-vulns")
+}
+fn default_osv_download() -> u64 {
+    2 << 30
 }
 fn default_download() -> u64 {
     64 << 20
@@ -81,6 +91,17 @@ pub struct VulnsConfig {
     /// ENISA EUVD search API URL (HTTPS); empty turns it off.
     #[serde(default = "default_euvd")]
     pub euvd_url: String,
+    /// OSV.dev bucket (HTTPS) for Debian, Ubuntu, Rocky Linux and
+    /// AlmaLinux; empty turns it off.
+    #[serde(default = "default_osv")]
+    pub osv_url: String,
+    /// Directory an ecosystem's `all.zip` is downloaded into, then removed
+    /// (the service's state directory).
+    #[serde(default = "default_osv_dir")]
+    pub osv_dir: PathBuf,
+    /// Largest OSV `all.zip` downloaded (Ubuntu's is about 760 MB).
+    #[serde(default = "default_osv_download")]
+    pub osv_max_download_bytes: u64,
 }
 
 impl VulnsConfig {
@@ -103,7 +124,19 @@ impl VulnsConfig {
         {
             return Err("arch must be an architecture name like x86_64".into());
         }
-        for url in [&self.kev_url, &self.epss_url, &self.nvd_url, &self.euvd_url] {
+        if !(1..=(8 << 30)).contains(&self.osv_max_download_bytes) {
+            return Err("osv_max_download_bytes must be 1 to 8589934592".into());
+        }
+        if !self.osv_dir.is_absolute() {
+            return Err("osv_dir must be an absolute path".into());
+        }
+        for url in [
+            &self.kev_url,
+            &self.epss_url,
+            &self.nvd_url,
+            &self.euvd_url,
+            &self.osv_url,
+        ] {
             if !url.is_empty() {
                 fetch::check_source_url(url)?;
             }

@@ -130,7 +130,7 @@ questions_per_user_per_hour = 30 # 1–1000
 # concurrency = 1                # 1–64; default 1 local, 4 remote
 
 [assistant.backend]
-url = "http://127.0.0.1:8080/v1" # OpenAI-compatible base URL
+url = "http://127.0.0.1:18430/v1" # OpenAI-compatible; 18430 is openvibes-llm
 model = "qwen3.5-4b"
 # api_key_file = "/etc/openvibes/assistant.key"      # owner-only
 # ca_file = "/etc/openvibes/assistant-ca.crt"        # pinned CAs

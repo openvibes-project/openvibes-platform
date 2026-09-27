@@ -135,8 +135,9 @@ pub async fn run_feeds(
                             String::new()
                         };
                         format!(
-                            "imported {} advisories into {release}{skipped}; {} open\n",
-                            report.advisories, report.open
+                            "imported {} advisories into {release}{skipped}; {} open, \
+                             {} without a fix\n",
+                            report.advisories, report.open, report.no_fix
                         )
                     })
                     .map_err(|error| error.to_string());

@@ -679,3 +679,132 @@ async fn a_feed_is_recorded_current_only_after_its_match_succeeds() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_vulnerability_without_a_fix_is_kept_once_per_package_version() {
+    let (db, mut admin, mut vulns) = setup().await;
+    let c = "agent.00000000-0000-4000-8000-00000000000c";
+    admin
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname) VALUES ($1, 'active', now(), 'c')",
+            &[&c],
+        )
+        .await
+        .unwrap();
+    let pam = PackageRow {
+        manager: "dpkg".into(),
+        name: "libpam0g".into(),
+        epoch: 0,
+        version: "1.5.2".into(),
+        release: "6".into(),
+        arch: "amd64".into(),
+        source: Some("pam".into()),
+        source_version: None,
+    };
+    for (i, agent) in [A, B, c].into_iter().enumerate() {
+        inventory::replace(
+            &mut admin,
+            agent,
+            "debian",
+            "12",
+            None,
+            std::slice::from_ref(&pam),
+            [u8::try_from(i).unwrap() + 1; 32],
+            Utc::now(),
+        )
+        .await
+        .unwrap();
+    }
+    let unfixed = NewAdvisory {
+        advisory_id: "DEBIAN-CVE-2024-10041/debian-12".into(),
+        severity: "unrated".into(),
+        title: "pam".into(),
+        issued_at: None,
+        updated_at: None,
+        url: "https://osv.dev/vulnerability/DEBIAN-CVE-2024-10041".into(),
+        cves: vec!["CVE-2024-10041".into()],
+        packages: vec![FixedRow {
+            name: "pam".into(),
+            arch: String::new(),
+            scheme: "dpkg".into(),
+            match_on: "source".into(),
+            introduced: None,
+            fixed: None,
+            last_affected: None,
+        }],
+    };
+    vulns::replace_advisories(
+        &mut vulns,
+        "debian-12",
+        "debian",
+        "12",
+        &[unfixed],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    matching::match_release(&mut vulns, "debian", "12", Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(
+        count(&vulns, "SELECT count(*) FROM vulnerabilities").await,
+        0,
+        "no per-host rows"
+    );
+    assert_eq!(
+        count(&vulns, "SELECT count(*) FROM version_vulnerabilities").await,
+        1,
+        "one per version"
+    );
+
+    let rows = vulns::list(
+        &vulns,
+        &vulns::ListFilter {
+            host: Some("c"),
+            ..vulns::ListFilter::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].advisory_id, "DEBIAN-CVE-2024-10041/debian-12");
+    assert_eq!(rows[0].packages[0]["installed"], "0:1.5.2-6");
+    assert_eq!(rows[0].packages[0]["fixed"], serde_json::Value::Null);
+    assert_eq!(
+        vulns::summary(&vulns).await.unwrap().no_fix,
+        3,
+        "three hosts have it"
+    );
+
+    // A host updated past it (a later version, still unfixed upstream, is
+    // also affected: no fix is known).
+    let updated = PackageRow {
+        version: "1.5.3".into(),
+        ..pam.clone()
+    };
+    inventory::replace(
+        &mut admin,
+        c,
+        "debian",
+        "12",
+        None,
+        &[updated],
+        [9; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    matching::match_host(&mut vulns, c, Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(
+        count(&vulns, "SELECT count(*) FROM version_vulnerabilities").await,
+        2
+    );
+    assert_eq!(vulns::summary(&vulns).await.unwrap().no_fix, 3);
+    db.drop().await;
+}
+
+async fn count(client: &Client, sql: &str) -> i64 {
+    client.query_one(sql, &[]).await.unwrap().get(0)
+}

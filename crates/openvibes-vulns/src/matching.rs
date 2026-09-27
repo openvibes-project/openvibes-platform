@@ -12,7 +12,7 @@ use std::{cmp::Ordering, collections::BTreeMap};
 use chrono::{DateTime, Utc};
 use platform_store::{
     Client, StoreError,
-    vulns::{self, Candidate, Found, Scope},
+    vulns::{self, Candidate, Found, Scope, VersionFound},
 };
 use serde_json::json;
 
@@ -21,6 +21,51 @@ use crate::{dpkgver, rpmver::compare_evr};
 /// Hosts matched per query: one query over every host of a large fleet
 /// exceeded the 10 s statement timeout at 10,000 hosts (`docs/sizing.md`).
 pub const MATCH_BATCH: usize = 500;
+
+/// What evaluating each distinct package version once finds: the fixable
+/// (advisory, package) pairs worth matching per host, and the no-fix hits,
+/// kept per version (the user, 2026-09-26).
+#[derive(Debug, Default)]
+struct PerVersion {
+    pairs: Vec<(String, String)>,
+    no_fix: Vec<VersionFound>,
+    evaluated: Vec<i64>,
+}
+
+/// Evaluates advisories against each distinct installed version once.
+fn per_version(candidates: &[Candidate]) -> PerVersion {
+    let mut pairs = std::collections::BTreeSet::new();
+    let mut no_fix = std::collections::BTreeSet::new();
+    let mut evaluated = std::collections::BTreeSet::new();
+    for candidate in candidates {
+        evaluated.insert(candidate.version_id);
+        // Kernels stay candidates even when fixed: the fix may not run yet.
+        let kernel = candidate.scheme == "rpm" && is_kernel(&candidate.name);
+        if candidate.fixed.is_some() {
+            if kernel || in_range(candidate, &candidate.installed) {
+                pairs.insert((candidate.advisory_id.clone(), candidate.name.clone()));
+            }
+        } else if in_range(candidate, &candidate.installed) {
+            no_fix.insert((
+                candidate.version_id,
+                candidate.advisory_id.clone(),
+                candidate.name.clone(),
+            ));
+        }
+    }
+    PerVersion {
+        pairs: pairs.into_iter().collect(),
+        no_fix: no_fix
+            .into_iter()
+            .map(|(version_id, advisory_id, package)| VersionFound {
+                version_id,
+                advisory_id,
+                package,
+            })
+            .collect(),
+        evaluated: evaluated.into_iter().collect(),
+    }
+}
 
 /// Re-evaluates every host on one release, [`MATCH_BATCH`] hosts at a
 /// time. Returns the number open.
@@ -42,10 +87,13 @@ pub async fn match_release_in_batches(
     batch: usize,
     now: DateTime<Utc>,
 ) -> Result<usize, StoreError> {
+    let versions = per_version(&vulns::version_candidates(client, os_id, os_version, None).await?);
+    vulns::apply_versions(client, &versions.evaluated, &versions.no_fix, now).await?;
     let hosts = vulns::release_hosts(client, os_id, os_version).await?;
     let mut open = 0;
     for agents in hosts.chunks(batch.max(1)) {
-        let candidates = vulns::candidates(client, os_id, os_version, agents).await?;
+        let candidates =
+            vulns::candidates(client, os_id, os_version, agents, &versions.pairs).await?;
         let found = evaluate(&candidates);
         let scope = Scope::Release {
             os_id,
@@ -53,6 +101,7 @@ pub async fn match_release_in_batches(
             agents,
         };
         open += vulns::apply(client, scope, &found, now).await?;
+        vulns::refresh_counts(client, agents, now).await?;
     }
     Ok(open)
 }
@@ -67,9 +116,21 @@ pub async fn match_host(
     let Some((os_id, os_version)) = vulns::host_release(client, agent_id).await? else {
         return Ok(0);
     };
-    let candidates = vulns::candidates(client, &os_id, &os_version, &[agent_id.to_owned()]).await?;
+    let versions =
+        per_version(&vulns::version_candidates(client, &os_id, &os_version, Some(agent_id)).await?);
+    vulns::apply_versions(client, &versions.evaluated, &versions.no_fix, now).await?;
+    let candidates = vulns::candidates(
+        client,
+        &os_id,
+        &os_version,
+        &[agent_id.to_owned()],
+        &versions.pairs,
+    )
+    .await?;
     let found = evaluate(&candidates);
-    vulns::apply(client, Scope::Host(agent_id), &found, now).await
+    let open = vulns::apply(client, Scope::Host(agent_id), &found, now).await?;
+    vulns::refresh_counts(client, &[agent_id.to_owned()], now).await?;
+    Ok(open)
 }
 
 /// `[E:]V-R` split as RPM compares it; a missing epoch is 0.
@@ -140,7 +201,8 @@ type Entry = (serde_json::Value, bool);
 pub fn evaluate(candidates: &[Candidate]) -> Vec<Found> {
     // Newest installed version per (host, advisory, package, fixed arch).
     let mut newest: BTreeMap<(&str, &str, &str, &str, &str), &Candidate> = BTreeMap::new();
-    for candidate in candidates {
+    // Without a fix, a vulnerability is kept per version, not per host.
+    for candidate in candidates.iter().filter(|c| c.fixed.is_some()) {
         let slot = newest
             .entry((
                 candidate.agent_id.as_str(),

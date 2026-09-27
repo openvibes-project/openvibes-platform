@@ -124,15 +124,24 @@ panel, AS4e end to end). The items below summarise it.
 - [ ] Retention job for conversations in the existing maintenance run.
 
 ### Task AS5: `openvibes-llm` packaging (options A and B)
-- [ ] RPM subpackage with a pinned llama.cpp `llama-server` build: CPU build,
+- [x] RPM subpackage with a pinned llama.cpp `llama-server` build: CPU build,
   plus a Vulkan build for GPUs (NVIDIA, AMD, Intel), selected at install.
   Hardened unit: own user, no capabilities, `IPAddressAllow=localhost`,
   `IPAddressDeny=any`, `MemoryMax` and `CPUWeight` from configuration, RPC
   and idle-sleep off, API key from a file readable by the console user.
-- [ ] `openvibes-admin assistant model install FILE --sha256 HEX`: verifies
+  Done: `openvibes-llm` and `openvibes-llm-vulkan` (`--with vulkan`; the
+  Vulkan build is not exercised in CI). The pin is
+  `packaging/llm/llama-cpp.pin`, built by `scripts/build-llama-server.sh`
+  without subprocesses (built-in tools), RPC, TLS, or the web UI. This
+  llama.cpp has no idle-sleep. `MemoryMax`/`CPUWeight` are set in the unit
+  and changed with `systemctl edit`. The API key is root's and is passed as
+  a systemd credential to `openvibes-llm` and (AS4) to the console.
+  `openvibes-llm-check` also refuses `LLAMA_*` variables.
+- [x] `openvibes-admin assistant model install FILE --sha256 HEX`: verifies
   and installs the GGUF file read-only; the unit refuses to start on a
-  digest mismatch.
-- [ ] systemd test in CI (like the existing packaging job): install, model
+  digest mismatch. The selection goes to `/var/lib/openvibes-llm/model.conf`
+  (the admin group's), and operator settings stay in root's `llm.conf`.
+- [x] systemd test in CI (like the existing packaging job): install, model
   install with a tiny test model, `assistant check` through the console
   configuration, and the unit's sandbox assertions.
 

@@ -1,0 +1,12 @@
+# The llama.cpp source openvibes-llm builds llama-server from (assistant
+# spec §6, §10). Read by scripts/build-llama-server.sh.
+#
+# The source is the llama.cpp tree vendored in the llama-cpp-python sdist on
+# PyPI, which pins upstream commit ggml-org/llama.cpp@4df29be4f4c3 (see its
+# CHANGELOG.md). PyPI serves immutable files, so the SHA-256 below pins the
+# exact bytes. To update: pick a newer release, check its CHANGELOG for the
+# llama.cpp commit and upstream security advisories, update all three
+# values, rebuild, and run `openvibes-admin assistant eval`.
+LLAMA_CPP_COMMIT=4df29be4f4c3673f428170fda944a5b19f743bb8
+LLAMA_SOURCE_URL=https://files.pythonhosted.org/packages/source/l/llama_cpp_python/llama_cpp_python-0.3.35.tar.gz
+LLAMA_SOURCE_SHA256=1139dbb54509074b70893fab8554e3b079aa9f4d312058ce4018ef0019e3de12

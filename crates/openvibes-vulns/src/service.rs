@@ -16,6 +16,7 @@ use crate::{
     feed::SourceId,
     fetch::{self, Checked, Fetcher},
     matching,
+    osv_fetch::{self, OsvSync},
     sources::{self, NvdClient},
 };
 
@@ -55,6 +56,19 @@ pub async fn run(
         let nvd = NvdClient::new(&fetcher, &config.nvd_url, key, None)?;
         Some(tokio::spawn(nvd_loop(pool.clone(), nvd, every)))
     };
+    // OSV's first imports are large downloads: apart from the main loop.
+    let osv_task = if config.osv_url.is_empty() {
+        None
+    } else {
+        let osv = OsvSync::new(
+            &fetcher,
+            &config.osv_url,
+            &config.osv_dir,
+            config.osv_max_download_bytes,
+            osv_fetch::MAX_CHANGES,
+        )?;
+        Some(tokio::spawn(osv_loop(pool.clone(), osv, every)))
+    };
     let (changed, mut notifications) = mpsc::unbounded_channel();
     let listener = tokio::spawn(listen(config.database_url.clone(), changed));
     let mut interval = tokio::time::interval(every);
@@ -72,7 +86,7 @@ pub async fn run(
     }
     listener.abort();
     health_task.abort();
-    if let Some(task) = nvd_task {
+    for task in [nvd_task, osv_task].into_iter().flatten() {
         task.abort();
     }
     Ok(())
@@ -117,6 +131,32 @@ async fn check_all(pool: &Pool, fetcher: &Fetcher, arch: &str) {
                 "feed imported"
             ),
             Err(error) => tracing::warn!(source = %source.name(), %error, "feed check failed"),
+        }
+    }
+}
+
+/// Syncs OSV for the releases hosts run, every interval (first at start).
+async fn osv_loop(pool: Pool, osv: OsvSync, every: Duration) {
+    let mut interval = tokio::time::interval(every);
+    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    loop {
+        interval.tick().await;
+        let Ok(mut client) = pool.get().await else {
+            tracing::warn!("database unavailable; osv sync skipped");
+            continue;
+        };
+        let groups = match osv_fetch::releases_by_ecosystem(&client).await {
+            Ok(groups) => groups,
+            Err(error) => {
+                tracing::warn!(%error, "cannot list osv releases");
+                continue;
+            }
+        };
+        for (ecosystem, releases) in groups {
+            match osv_fetch::sync(&mut client, &osv, ecosystem, &releases, Utc::now()).await {
+                Ok(synced) => tracing::info!(ecosystem, ?synced, "osv synced"),
+                Err(error) => tracing::warn!(ecosystem, %error, "osv sync failed"),
+            }
         }
     }
 }

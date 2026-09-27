@@ -15,7 +15,21 @@ the offline core used by `openvibes-admin feeds import` and the
 - `rpmver::{rpmvercmp, compare_evr}` — RPM version order, exactly: RPM's own
   test vectors pass, and the `vercmp` example agrees with `rpm.vercmp` on
   4,000 real version and release pairs.
-- `osv::{Release, parse, advisory, advisories_from_zip, import}` (OSV spec
+- `osv_fetch::{OsvSync, sync, releases_by_ecosystem}` (OSV spec D4) —
+  keeps each ecosystem current for the releases hosts run, in its own task
+  (so a long first import never delays re-matching). The first sync, a
+  release not imported yet, or more than 5,000 changes download the
+  ecosystem's `all.zip` into `osv_dir` (read once for all its releases,
+  then removed); otherwise OSV's `modified_id.csv` is read with its ETag
+  (a 304 when unchanged) and only the changed records of the accepted
+  kinds are fetched, one by one. The sync point (newest change applied)
+  and ETag live on the ecosystem's source (`osv-debian`, `osv-ubuntu`,
+  `osv-rocky-linux`, `osv-almalinux`); a failure is recorded there and the
+  next run retries from the same point. Live, first syncs for real Rocky
+  9.8, Debian 12 and Ubuntu 24.04 hosts: Debian 9.2 s (73 MB), Rocky
+  1.9 s (5 MB), Ubuntu 84 s (757 MB, peak 428 MB of memory); later syncs
+  with nothing new, under 0.2 s each.
+- `osv::{Release, parse, advisory, advisories_from_zip, read_zip, import}` (OSV spec
   2026-09-25) — Rocky Linux, AlmaLinux, Debian and Ubuntu from OSV.dev.
   `Release` is `rocky-9`, `almalinux-9`, `debian-12` or `ubuntu-24.04`
   (hosts' os-release, RHEL rebuilds by major version); imports read the
@@ -43,6 +57,12 @@ the offline core used by `openvibes-admin feeds import` and the
   `updateinfo.xml[.zst]`: security advisories only; CVEs from reference
   titles and descriptions; severity (`None` → unrated); fixed binary
   packages (`src` dropped); a hard size cap after decompression.
+- Matching (OSV spec §8) first evaluates every advisory once per distinct
+  package version hosts on the release have (a fleet shares a few hundred):
+  hits without a fix are kept per version (`version_vulnerabilities`), and
+  only the (advisory, package) pairs that affect some version are matched
+  per host, where fixable vulnerabilities keep their lifecycle. Each
+  host's no-fix count is stored when it is matched.
 - `matching::{match_release, match_host, evaluate}` — a host is affected
   when its **newest** installed version of a fixed package's name, with a
   compatible architecture (same, or either side `noarch`), is lower than the
@@ -124,11 +144,16 @@ epss_url = "https://epss.empiricalsecurity.com/epss_scores-current.csv.gz"
 nvd_url = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 # nvd_api_key_file = "/etc/openvibes/nvd.key"   # mode 0600 or stricter
 euvd_url = "https://euvdservices.enisa.europa.eu/api/search"
+osv_url = "https://osv-vulnerabilities.storage.googleapis.com"
+osv_dir = "/var/lib/openvibes-vulns"      # absolute; the unit's state directory
+osv_max_download_bytes = 2147483648       # 1 to 8 GiB; Ubuntu's file is ~760 MB
 ```
 
-`kev_url`, `epss_url`, `nvd_url` and `euvd_url` must be HTTPS; an empty
-value turns that source off (offline platforms import files with
-`openvibes-admin feeds import FILE --source kev|epss|nvd|euvd`). The NVD
+`kev_url`, `epss_url`, `nvd_url`, `euvd_url` and `osv_url` must be HTTPS;
+an empty value turns that source off (offline platforms import files with
+`openvibes-admin feeds import FILE --source kev|epss|nvd|euvd|debian-12|…`).
+NVD backfill asks only about CVEs of open vulnerabilities (Debian's
+advisories alone name tens of thousands). The NVD
 key file must not be readable by group or others, holds one key, and the
 key is sent only in the `apiKey` header, never logged.
 

@@ -47,3 +47,10 @@ persisted-history, and streaming choices for this first console release.
   prompts, answers, or retrieved records.
 - Disabled mode does not construct a client, probe a model, expose a
   navigation item, or register assistant routes in the authenticated router.
+
+## Branch integration
+
+Schema 14 is now used by the platform main branch. Console migrations are
+renumbered after it: C2–C4 occupy 0015–0019, and the assistant permission is
+0020. The optional `openvibes-llm` service supplies a local model endpoint; the
+console still refuses external backends.

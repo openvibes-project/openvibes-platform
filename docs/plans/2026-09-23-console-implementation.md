@@ -1,7 +1,9 @@
 # OpenVIBES Console Implementation Plan
 
-Status: **approved by the project owner, 2026-09-23**. PM4 and platform schema
-3 are integrated. C0–C3 feature work is implemented, including authenticated
+Status: **approved by the project owner, 2026-09-23**. As of 2026-09-27,
+milestones C2–C5 are implemented on the Codex branch and are **in progress
+overall** while PR #29's conflict resolution and review/merge remain. PM4 and
+platform schema 3 are integrated. C0–C3 feature work is implemented, including authenticated
 SQL-scoped reads, access-control and audit operations, first-account bootstrap,
 and analyst triage. C5 is complete: direct TLS 1.3, trusted TCP and Unix
 socket proxy modes, enforced browser headers, offline RPM packaging, and a
@@ -140,6 +142,10 @@ No shared migration is required.
 
 ## 4. Milestone C2 — PostgreSQL Read Adapter
 
+**Status:** implementation and PostgreSQL acceptance measurements complete on
+the Codex branch; overall milestone remains in progress until PR #29 is
+conflict-free, reviewed, and merged.
+
 Prerequisite satisfied: PM4 and platform schema 3 are integrated in the
 console branch.
 
@@ -171,9 +177,12 @@ Verification:
 
 ## 5. Milestone C3 — Authentication, Sessions, and RBAC
 
+**Status:** implementation and recorded integration coverage complete on the
+Codex branch; overall milestone remains in progress until PR #29 is merged.
+
 Goal: production local username/password login and server-enforced, auditable
 permissions. The console serves pre-auth, login, session, and logout against
-the database when paired auth configuration is present, checks for schema 18
+the database when paired auth configuration is present, checks for schema 20
 at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
 failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
 and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct
@@ -226,6 +235,9 @@ item, list, summary, count, and facet paths.
 
 ## 6. Milestone C4 — Safe Mutations
 
+**Status:** implementation and recorded integration coverage complete on the
+Codex branch; overall milestone remains in progress until PR #29 is merged.
+
 Goal: expose only shared, transactionally audited domain operations.
 
 Order:
@@ -257,6 +269,10 @@ transitions, triage/observation separation, and successful/failed accessibility
 states.
 
 ## 7. Milestone C5 — Packaging and Hardening
+
+**Status:** implementation, Fedora RPM/systemd integration, browser matrix,
+and dependency audits are recorded as passing on the Codex branch; overall
+milestone remains in progress until PR #29 is merged.
 
 Goal: production-ready RPM and systemd service.
 

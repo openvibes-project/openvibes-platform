@@ -169,3 +169,141 @@ async fn configuration_problems_are_reported_and_audited() {
     );
     fixture.drop().await;
 }
+
+fn model_dirs(fixture: &Fixture, name: &str) -> (PathBuf, PathBuf) {
+    let dir = fixture.config.with_extension(format!("{name}.d"));
+    let models = dir.join("models");
+    std::fs::create_dir_all(&models).unwrap();
+    // Absent until the first install creates it.
+    (models, dir.join("model.conf"))
+}
+
+const ABC_SHA256: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+#[tokio::test]
+async fn model_install_verifies_installs_read_only_and_selects_the_model() {
+    use std::os::unix::fs::PermissionsExt;
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let (models, conf) = model_dirs(&fixture, "install");
+    let download = models.parent().unwrap().join("Tiny-Model.Q4_K_M.gguf");
+    std::fs::write(&download, b"abc").unwrap();
+    let args = |sha: &str| {
+        vec![
+            "assistant".to_owned(),
+            "model".into(),
+            "install".into(),
+            download.display().to_string(),
+            "--sha256".into(),
+            sha.into(),
+            "--alias".into(),
+            "tiny".into(),
+            "--models-dir".into(),
+            models.display().to_string(),
+            "--model-config".into(),
+            conf.display().to_string(),
+        ]
+    };
+    let run = |sha: &str| {
+        let args = args(sha);
+        fixture.run(&args.iter().map(String::as_str).collect::<Vec<_>>())
+    };
+
+    // A wrong digest installs nothing and leaves no partial file.
+    let output = run(&"0".repeat(64));
+    assert!(!output.status.success());
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(error.contains("SHA-256 mismatch"), "{error}");
+    assert_eq!(std::fs::read_dir(&models).unwrap().count(), 0);
+    assert!(!conf.exists());
+
+    let out = stdout(&run(&ABC_SHA256.to_uppercase()));
+    assert!(
+        out.contains("next: systemctl restart openvibes-llm"),
+        "{out}"
+    );
+    let installed = models.join("Tiny-Model.Q4_K_M.gguf");
+    assert_eq!(std::fs::read(&installed).unwrap(), b"abc");
+    let mode = std::fs::metadata(&installed).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o444);
+    assert_eq!(
+        std::fs::read_to_string(&conf).unwrap(),
+        format!(
+            "OPENVIBES_LLM_MODEL={}\nOPENVIBES_LLM_MODEL_SHA256={ABC_SHA256}\nOPENVIBES_LLM_ALIAS=tiny\n",
+            installed.display()
+        )
+    );
+    // Installing the same file again is harmless; a different file under
+    // the same name is refused.
+    stdout(&run(ABC_SHA256));
+    std::fs::write(&download, b"abcd").unwrap();
+    let digest_abcd = "88d4266fd4e6338d13b845fcf289579d209c897823b9217da3e161936f031589";
+    let output = run(digest_abcd);
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("already installed with different contents")
+    );
+    assert_eq!(std::fs::read(&installed).unwrap(), b"abc");
+
+    let audit = fixture.audit().await;
+    let actions: Vec<_> = audit
+        .iter()
+        .map(|(_, action, result)| (action.as_str(), result.as_str()))
+        .collect();
+    assert_eq!(
+        actions,
+        [
+            ("migrate", "ok"),
+            ("assistant model install", "error"),
+            ("assistant model install", "ok"),
+            ("assistant model install", "ok"),
+            ("assistant model install", "error"),
+        ]
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn model_install_refuses_bad_names_and_digests() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let (models, conf) = model_dirs(&fixture, "refuse");
+    let download = models.parent().unwrap().join("model.gguf");
+    std::fs::write(&download, b"abc").unwrap();
+    let dir = models.display().to_string();
+    let conf = conf.display().to_string();
+    let file = download.display().to_string();
+    for (extra, expected) in [
+        (vec!["--sha256", "abc"], "--sha256 must be 64 hexadecimal"),
+        (
+            vec!["--sha256", ABC_SHA256, "--name", "../escape.gguf"],
+            "must end in .gguf",
+        ),
+        (
+            vec!["--sha256", ABC_SHA256, "--name", "model.bin"],
+            "must end in .gguf",
+        ),
+        (
+            vec!["--sha256", ABC_SHA256, "--alias", "bad alias"],
+            "--alias must be",
+        ),
+    ] {
+        let mut args = vec![
+            "assistant",
+            "model",
+            "install",
+            &file,
+            "--models-dir",
+            &dir,
+            "--model-config",
+            &conf,
+        ];
+        args.extend(extra);
+        let output = fixture.run(&args);
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(expected), "{expected}: {error}");
+    }
+    assert_eq!(std::fs::read_dir(&models).unwrap().count(), 0);
+    fixture.drop().await;
+}

@@ -149,6 +149,22 @@ async fn bad_content_is_recorded_and_changes_nothing() {
     db.drop().await;
 }
 
+/// An open vulnerability of `advisory` on a new host (as the owner).
+async fn open_on_a_host(db: &TestDb, advisory: &str) {
+    let owner = db.pool.get().await.unwrap();
+    owner
+        .batch_execute(&format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at)
+                 VALUES ('agent.00000000-0000-4000-8000-00000000abcd', 'active', now());
+             INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
+                 last_evaluated_at)
+                 VALUES ('agent.00000000-0000-4000-8000-00000000abcd', '{advisory}', '[]',
+                 now(), now())"
+        ))
+        .await
+        .unwrap();
+}
+
 /// Stores an advisory naming `cves`, so NVD data for them is kept.
 async fn name_cves(vulns: &mut Client, cves: &[&str]) {
     platform_store::vulns::replace_advisories(
@@ -202,7 +218,17 @@ async fn nvd_data_is_kept_only_for_cves_our_advisories_name() {
     assert!(row.get::<_, bool>(3));
     assert!(row_count(&vulns, "CVE-2025-0108").await == 0);
 
-    // Still pending: the named CVE NVD did not return.
+    // Asked about only once a host has it open (Debian alone names tens of
+    // thousands of CVEs).
+    assert!(
+        enrichment::nvd_pending(&vulns, now, 100)
+            .await
+            .unwrap()
+            .is_empty(),
+        "no host has it open"
+    );
+    open_on_a_host(&db, "FEDORA-2026-test").await;
+    // Now pending: the open CVE NVD did not return.
     let pending = enrichment::nvd_pending(&vulns, now, 100).await.unwrap();
     assert_eq!(pending, ["CVE-2099-99999"]);
     // Asked and not found: not asked again for 7 days.

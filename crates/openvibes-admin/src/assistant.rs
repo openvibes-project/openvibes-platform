@@ -36,6 +36,11 @@ pub enum AssistantCommand {
         #[arg(long)]
         cases: Option<PathBuf>,
     },
+    /// Model files for the local openvibes-llm service.
+    Model {
+        #[command(subcommand)]
+        command: crate::model::ModelCommand,
+    },
 }
 
 impl AssistantCommand {
@@ -43,6 +48,7 @@ impl AssistantCommand {
         match self {
             Self::Check { .. } => "assistant check",
             Self::Eval { .. } => "assistant eval",
+            Self::Model { .. } => "assistant model install",
         }
     }
 }
@@ -177,6 +183,7 @@ async fn probe_blocking(loaded: &Loaded) -> Result<ProbeReport, String> {
 pub async fn run(command: &AssistantCommand) -> (Result<String, String>, Option<String>) {
     let file = match command {
         AssistantCommand::Check { file } | AssistantCommand::Eval { file, .. } => file,
+        AssistantCommand::Model { command } => return crate::model::run(command),
     };
     let loaded = match load(file) {
         Ok(loaded) => loaded,
@@ -200,6 +207,7 @@ pub async fn run(command: &AssistantCommand) -> (Result<String, String>, Option<
     }
     match command {
         AssistantCommand::Check { .. } => (Ok(format!("{described}{}", models_text())), target),
+        AssistantCommand::Model { .. } => unreachable!("handled above"),
         AssistantCommand::Eval { cases, .. } => {
             let set = match cases {
                 Some(path) => read_cases(path),

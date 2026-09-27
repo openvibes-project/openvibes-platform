@@ -104,7 +104,11 @@ impl Fetcher {
 impl Fetcher {
     /// GETs `url` unless its ETag still equals `etag` (`None` for a 304),
     /// with the ETag served.
-    fn get_if_changed(&self, url: &str, etag: Option<&str>) -> Result<Option<Download>, String> {
+    pub(crate) fn get_if_changed(
+        &self,
+        url: &str,
+        etag: Option<&str>,
+    ) -> Result<Option<Download>, String> {
         let mut request = self.agent.get(url);
         if let Some(etag) = etag {
             request = request.header("If-None-Match", etag);
@@ -147,6 +151,41 @@ impl Fetcher {
             .limit(self.max_bytes)
             .read_to_vec()
             .map_err(|error| format!("{}: {error}", host_of(url)))
+    }
+}
+
+impl Fetcher {
+    /// Streams `url` into the file at `path`, at most `limit` bytes, and
+    /// returns its SHA-256.
+    pub(crate) fn download_to(
+        &self,
+        url: &str,
+        path: &std::path::Path,
+        limit: u64,
+    ) -> Result<[u8; 32], String> {
+        use std::io::{Read, Write};
+        let mut response = self
+            .agent
+            .get(url)
+            .call()
+            .map_err(|error| format!("{}: {error}", host_of(url)))?;
+        let mut body = response.body_mut().with_config().limit(limit).reader();
+        let mut file = std::fs::File::create(path)
+            .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        let mut hasher = Sha256::new();
+        let mut buffer = vec![0u8; 1 << 16];
+        loop {
+            let read = body
+                .read(&mut buffer)
+                .map_err(|error| format!("{}: {error}", host_of(url)))?;
+            if read == 0 {
+                break;
+            }
+            hasher.update(&buffer[..read]);
+            file.write_all(&buffer[..read])
+                .map_err(|error| format!("cannot write {}: {error}", path.display()))?;
+        }
+        Ok(hasher.finalize().into())
     }
 }
 
