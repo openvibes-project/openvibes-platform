@@ -14,6 +14,8 @@ pub(crate) struct AppState {
     pub issuer: Arc<Issuer>,
     pub client_certificate_days: u32,
     pub finding_retention_days: u32,
+    /// Inventory reports being handled; at most `max_inventory_in_flight`.
+    pub inventory_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl FromRef<AppState> for Pool {
@@ -26,7 +28,12 @@ fn routes(state: AppState) -> Router {
     Router::new()
         .route("/v1/heartbeat", post(crate::delivery::heartbeat))
         .route("/v1/findings", post(crate::delivery::findings))
-        .route("/v1/inventory", post(crate::delivery::inventory))
+        .route(
+            "/v1/inventory",
+            post(crate::delivery::inventory).layer(axum::extract::DefaultBodyLimit::max(
+                platform_agent_server::MAX_INVENTORY_BYTES,
+            )),
+        )
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))
         .with_state(state)
@@ -65,6 +72,7 @@ pub async fn run(
         config.client_certificate_days,
         config.finding_retention_days,
     );
+    let inventory_slots = Arc::new(tokio::sync::Semaphore::new(config.max_inventory_in_flight));
     platform_agent_server::run(
         &config.settings(),
         listener,
@@ -75,6 +83,7 @@ pub async fn run(
                 issuer,
                 client_certificate_days,
                 finding_retention_days,
+                inventory_slots,
             })
         },
         shutdown,

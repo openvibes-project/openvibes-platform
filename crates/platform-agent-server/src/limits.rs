@@ -30,7 +30,8 @@ pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: N
         .get(axum::http::header::CONTENT_LENGTH)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok());
-    if declared.is_some_and(|length| length > crate::request::MAX_BODY_BYTES as u64) {
+    let limit = crate::request::body_limit(request.uri().path()) as u64;
+    if declared.is_some_and(|length| length > limit) {
         return ApiError::BadRequest.into_response();
     }
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {

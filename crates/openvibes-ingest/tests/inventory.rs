@@ -213,10 +213,10 @@ async fn an_unauthenticated_report_is_refused() {
 }
 
 #[tokio::test]
-async fn more_than_ten_thousand_packages_are_refused() {
+async fn more_than_fifty_thousand_packages_are_refused() {
     let world = World::start().await;
     let (agent, chain, key) = enrolled(&world).await;
-    let packages: Vec<serde_json::Value> = (0..10_001)
+    let packages: Vec<serde_json::Value> = (0..50_001)
         .map(|n| serde_json::json!({ "manager": "rpm", "name": format!("p{n}"), "version": "1" }))
         .collect();
     let body = serde_json::json!({
@@ -226,8 +226,8 @@ async fn more_than_ten_thousand_packages_are_refused() {
     });
     let bytes = serde_json::to_vec(&body).unwrap();
     assert!(
-        bytes.len() < 1024 * 1024,
-        "under the body limit: refused for the count"
+        bytes.len() < 8 * 1024 * 1024,
+        "under the inventory body limit: refused for the count"
     );
     let status = world
         .raw("/v1/inventory", &bytes, Some((&chain.concat(), &key)))
@@ -235,5 +235,104 @@ async fn more_than_ten_thousand_packages_are_refused() {
         .map(|r| r.0);
     assert_eq!(status, Some(400));
     assert!(stored(&world, &agent).await.is_empty());
+    world.stop().await;
+}
+
+fn long_package(i: usize) -> InstalledPackage {
+    InstalledPackage {
+        manager: PackageManager::Rpm,
+        name: format!("texlive-collection-package-{i:06}"),
+        version: "20250308".into(),
+        release: Some("91.fc44".into()),
+        epoch: Some(12),
+        arch: Some("noarch".into()),
+        vendor: Some("Fedora Project".into()),
+        source: Some("texlive".into()),
+        source_version: None,
+    }
+}
+
+// M1 limits review: an inventory may be up to 8 MiB and 50,000 packages,
+// on /v1/inventory only.
+#[tokio::test]
+async fn inventories_over_one_mib_are_stored() {
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let packages: Vec<InstalledPackage> = (0..40_000).map(long_package).collect();
+    let body = serde_json::to_vec(&report(&agent, packages.clone())).unwrap();
+    assert!(body.len() > 2 * 1024 * 1024, "{} bytes", body.len());
+    send(&world, &chain, &key, report(&agent, packages))
+        .await
+        .unwrap();
+    let count: i64 = world
+        .db()
+        .await
+        .query_one(
+            "SELECT count(*) FROM host_packages WHERE agent_id = $1",
+            &[&agent],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 40_000);
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn only_inventories_may_exceed_one_mib() {
+    let world = World::start().await;
+    let (_agent, chain, key) = enrolled(&world).await;
+    let client = Some((chain.join("").leak() as &str, key.leak() as &str));
+    let findings = vec![b' '; 1024 * 1024 + 1];
+    let (status, _) = world.raw("/v1/findings", &findings, client).await.unwrap();
+    assert_eq!(status, 400, "findings keep the 1 MiB limit");
+    // Refused on the declared length, before the body is read: the client
+    // may see a 400 or the connection closing while it still writes.
+    let inventory = vec![b' '; 8 * 1024 * 1024 + 1];
+    let answer = world.raw("/v1/inventory", &inventory, client).await;
+    assert!(
+        matches!(answer, None | Some((400, _))),
+        "inventories stop at 8 MiB: {answer:?}"
+    );
+    world.stop().await;
+}
+
+// At most max_inventory_in_flight inventories are handled at once; the next
+// one gets 503 (TransportError::Unavailable) and the agent retries.
+#[tokio::test]
+async fn a_busy_inventory_endpoint_answers_503() {
+    let world = World::start_with(|config| config.max_inventory_in_flight = 1).await;
+    let (agent, chain, key) = enrolled(&world).await;
+    // Hold the host's row lock, so the first report waits inside the
+    // handler while holding the only slot.
+    let mut locker = world.db().await;
+    let lock = locker.transaction().await.unwrap();
+    lock.execute(
+        "SELECT 1 FROM agents WHERE agent_id = $1 FOR UPDATE",
+        &[&agent],
+    )
+    .await
+    .unwrap();
+    let first = {
+        let (world_transport, chain, key, agent) =
+            (world.transport(), chain.clone(), key.clone(), agent.clone());
+        tokio::task::spawn_blocking(move || {
+            let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+            PlatformClient::new(&world_transport, Some(&identity))
+                .unwrap()
+                .report_inventory(&report(&agent, vec![package("bash", "5.2.37")]))
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let second = send(
+        &world,
+        &chain,
+        &key,
+        report(&agent, vec![package("bash", "5.2.38")]),
+    )
+    .await;
+    assert_eq!(second, Err(TransportError::Unavailable));
+    lock.rollback().await.unwrap();
+    assert_eq!(first.await.unwrap(), Ok(()));
     world.stop().await;
 }

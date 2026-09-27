@@ -10,6 +10,9 @@ fn default_days() -> u32 {
 fn default_in_flight() -> usize {
     4096
 }
+fn default_inventory_in_flight() -> usize {
+    4
+}
 fn default_retention() -> u32 {
     90
 }
@@ -49,6 +52,10 @@ pub struct IngestConfig {
     /// Requests served at once; above this, 503.
     #[serde(default = "default_in_flight")]
     pub max_in_flight: usize,
+    /// Inventory reports handled at once (1 to 128); above this, 503. Each
+    /// may be up to 8 MiB, so this bounds their memory (M1 limits review).
+    #[serde(default = "default_inventory_in_flight")]
+    pub max_inventory_in_flight: usize,
     /// Findings older than this are acknowledged without storing (1 to
     /// 36500; must match `openvibes-admin maintenance --retention-days`).
     #[serde(default = "default_retention")]
@@ -78,7 +85,8 @@ impl IngestConfig {
         ])
         .map_err(|_| IngestError::Config)?;
         let valid = (1..=365).contains(&self.client_certificate_days)
-            && (1..=36_500).contains(&self.finding_retention_days);
+            && (1..=36_500).contains(&self.finding_retention_days)
+            && (1..=128).contains(&self.max_inventory_in_flight);
         if valid {
             Ok(())
         } else {

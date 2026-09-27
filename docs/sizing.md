@@ -215,6 +215,15 @@ The planned protocol change that reports when a match starts and ends,
 instead of on every scan, would move a fleet from the first rows towards
 the last one. Retention days scale the 90-day column linearly.
 
+## Large hosts (M1 limits review, 2026-09-27)
+
+A Fedora 44 workstation with 3,613 RPM packages sends a 483 KB inventory
+(134 bytes per package); collection takes 0.16 s and 17 MB. Inventories may
+hold up to 50,000 packages and 8 MiB (a full TeX Live alone is 9,527
+packages). Ingest handles at most `max_inventory_in_flight` (4) inventory
+reports at once, so their bodies use at most 32 MiB; storage of 50,000
+packages for one host is covered by a store test.
+
 ## Open questions
 
 - **Vulnerability management storage:** 6.7 GB per 10,000 hosts for

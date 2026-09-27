@@ -168,7 +168,8 @@ directory, whose `*.json` files are imported in name order (not
 recursive; other files are skipped).
 
 - Only regular files are read (a symlink to a device, a FIFO or a socket
-  is refused), at most 1 MiB, then decoded and validated with the same
+  is refused), at most 8 MiB for an inventory and 1 MiB for a finding
+  file, then decoded and validated with the same
   types and limits as online deliveries. A file time
   (`exported_at`, `collected_at`) more than an hour in the future is
   refused, since it would win newest-wins forever, and so is a `hostname`
@@ -194,7 +195,8 @@ recursive; other files are skipped).
 ```
 
 Other lines: `inventory unchanged`, `older inventory ignored`, `refused:
-larger than 1 MiB`, `not a regular file`, `not valid JSON`, `invalid: …`,
+larger than 8 MiB` (any file) or `larger than 1 MiB` (a finding file),
+`not a regular file`, `not valid JSON`, `invalid: …`,
 `no operating system: export again with a newer agent`, `database error:
 …`. Control characters from files and file names are printed escaped
 (`\u{1b}`), never raw. A refused file does

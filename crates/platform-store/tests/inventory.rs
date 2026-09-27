@@ -284,3 +284,35 @@ async fn the_ingest_role_cannot_touch_other_tables() {
     }
     db.drop().await;
 }
+
+// M1 limits review: one host may have up to 50,000 packages.
+#[tokio::test]
+async fn fifty_thousand_packages_are_stored() {
+    let (db, mut client, agent) = setup().await;
+    let packages: Vec<PackageRow> = (0..50_000)
+        .map(|i| package(&format!("pkg{i:05}"), "1.0", "1.fc44"))
+        .collect();
+    let outcome = inventory::replace(
+        &mut client,
+        &agent,
+        "fedora",
+        "44",
+        None,
+        &packages,
+        [50; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(outcome, InventoryOutcome::Stored);
+    let count: i64 = client
+        .query_one(
+            "SELECT count(*) FROM host_packages WHERE agent_id = $1",
+            &[&agent],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(count, 50_000);
+    db.drop().await;
+}

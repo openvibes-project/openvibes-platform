@@ -27,6 +27,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `database_url` | required | the `openvibes-ingest` role |
 | `client_certificate_days` | 30 | 1 to 365 |
 | `max_in_flight` | 4096 | at least 1 |
+| `max_inventory_in_flight` | 4 | 1 to 128; inventory reports handled at once (each up to 8 MiB), above it 503 |
 | `finding_retention_days` | 90 | 1 to 36500; match `openvibes-admin maintenance` |
 | `request_timeout_seconds` | 10 | 1 to 300; TLS handshake, request headers, and each whole request |
 | `max_connections` | 1024 | 1 to 65536; keep below the process's file limit (`LimitNOFILE`) |
@@ -106,7 +107,8 @@ Shared with distribution: implemented in
 
 - Accepted sockets set `TCP_NODELAY`: without it every request waited about
   40 ms for the client's delayed ACK (found by the PM5 load test).
-- Bodies over 1 MiB → 400 (never read past the limit).
+- Bodies over 1 MiB → 400 (never read past the limit); `/v1/inventory` takes
+  up to 8 MiB and 50,000 packages (M1 limits review).
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the
   connection is dropped or the request gets 408, and its slot is freed.

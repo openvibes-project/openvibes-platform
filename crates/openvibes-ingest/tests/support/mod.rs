@@ -94,6 +94,7 @@ impl World {
             database_url: url.clone(),
             client_certificate_days: 30,
             max_in_flight: 64,
+            max_inventory_in_flight: 4,
             finding_retention_days: 90,
             request_timeout_seconds: 10,
             max_connections: 256,

@@ -141,7 +141,7 @@ async fn refuses_bad_files_and_keeps_going() {
     );
     write(&dir, "notes.json", &json!({"hello": 1}));
     write(&dir, "inv-noos.json", &inventory_export(now, false));
-    std::fs::write(dir.join("big.json"), vec![b' '; 2 * 1024 * 1024]).unwrap();
+    std::fs::write(dir.join("big.json"), vec![b' '; 9 * 1024 * 1024]).unwrap();
     std::fs::write(dir.join("broken.json"), b"{not json").unwrap();
     std::fs::write(dir.join("readme.txt"), b"not an export").unwrap();
 
@@ -153,7 +153,7 @@ async fn refuses_bad_files_and_keeps_going() {
         "{all}"
     );
     assert!(
-        all.contains("big.json: refused: larger than 1 MiB"),
+        all.contains("big.json: refused: larger than 8 MiB"),
         "{all}"
     );
     assert!(
@@ -318,5 +318,41 @@ async fn control_characters_never_reach_the_terminal() {
     );
     assert!(all.contains("manager.json: refused: invalid:"), "{all}");
     assert_eq!(fixture.count("SELECT count(*) FROM agents").await, 0);
+    fixture.drop().await;
+}
+
+// M1 limits review: inventory files may be up to 8 MiB; finding files
+// keep the 1 MiB limit.
+#[tokio::test]
+async fn large_inventory_files_are_imported_large_finding_files_refused() {
+    let fixture = migrated().await;
+    let dir = scratch_dir("import-large");
+    let now = Utc::now().timestamp_millis();
+    let mut inventory = inventory_export(now, true);
+    inventory["packages"] = Value::Array(
+        (0..30_000)
+            .map(|i| {
+                json!({"manager": "rpm", "name": format!("texlive-collection-package-{i:06}"),
+                            "version": "20250308", "release": "91.fc44", "arch": "noarch",
+                            "vendor": "Fedora Project"})
+            })
+            .collect(),
+    );
+    write(&dir, "inventory.json", &inventory);
+    assert!(std::fs::metadata(dir.join("inventory.json")).unwrap().len() > 2 * 1024 * 1024);
+    let mut findings = finding_export(vec![finding("finding.1", now)]);
+    findings["hostname"] = json!("h");
+    findings["padding"] = json!("x".repeat(2 * 1024 * 1024));
+    write(&dir, "findings.json", &findings);
+    let output = fixture.run(&["import", dir.to_str().unwrap()]);
+    let all = text(&output);
+    assert!(
+        all.contains("inventory.json: inventory accepted (30000 packages)"),
+        "{all}"
+    );
+    assert!(
+        all.contains("findings.json: refused: larger than 1 MiB"),
+        "{all}"
+    );
     fixture.drop().await;
 }
