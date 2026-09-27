@@ -1132,7 +1132,7 @@ pub async fn finding_history_in_scope(
             "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings f
+             FROM findings f JOIN agents a ON a.agent_id = f.agent_id
              WHERE f.observed_day >= $1 AND f.observed_at >= $2
                AND {visible_agent}
                AND ($3::text IS NULL OR f.agent_id = $3)
@@ -1199,7 +1199,8 @@ pub async fn finding_event_in_scope(
             "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings f WHERE f.observed_day = $1 AND f.finding_id = $2
+             FROM findings f JOIN agents a ON a.agent_id = f.agent_id
+             WHERE f.observed_day = $1 AND f.finding_id = $2
                AND {visible_agent}"),
             &[&observed_day, &finding_id, &global, &groups],
         )
