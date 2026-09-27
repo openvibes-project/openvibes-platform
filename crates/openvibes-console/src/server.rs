@@ -775,7 +775,7 @@ fn trusted_forwarded_address(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get_all("x-forwarded-for")
         .iter()
-        .last()
+        .next_back()
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.rsplit(',').next())
         .and_then(|value| value.trim().parse().ok())
