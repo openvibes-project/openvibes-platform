@@ -3,6 +3,7 @@
 //! `setup --quick` (as root). Every step checks first, so re-running is
 //! safe and resumes.
 
+mod backup;
 mod base;
 mod console;
 #[cfg(test)]

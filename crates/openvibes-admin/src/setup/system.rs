@@ -241,6 +241,32 @@ impl<R: Runner> Ctx<'_, R> {
         result
     }
 
+    /// Creates `abs` (never over an existing file), 0600, filled from
+    /// `from`; owned by the operator through the handle when there is one.
+    /// A note when the owner could not be changed (e.g. a vfat stick).
+    pub fn write_new(&self, abs: &str, from: &mut dyn std::io::Read) -> Result<String, String> {
+        let fail = |error: std::io::Error| format!("{abs}: {error}");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(self.path(abs))
+            .map_err(fail)?;
+        std::io::copy(from, &mut file)
+            .and_then(|_| file.sync_all())
+            .map_err(fail)?;
+        let owner = self.plan.operator.as_deref().map(|user| {
+            self.ids(Some((user, user))).and_then(|(uid, gid)| {
+                std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
+                    .map_err(|error| format!("{abs}: {error}"))
+            })
+        });
+        Ok(match owner {
+            Some(Err(error)) => format!(" (still owned by root: {error})"),
+            _ => String::new(),
+        })
+    }
+
     pub fn copy(&self, from: &str, to: &str, owner: Owner<'_>, mode: u32) -> Result<(), String> {
         let contents = fs::read(self.path(from)).map_err(|error| format!("{from}: {error}"))?;
         self.put(to, &contents, owner, mode)

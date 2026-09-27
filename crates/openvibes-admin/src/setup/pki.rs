@@ -2,7 +2,7 @@
 //! in `/run/openvibes-ca` (tmpfs, so key copies never reach disk) and
 //! installed where the services read them (packaging.md "First install").
 
-use std::{fs, io::Write, os::unix::fs::OpenOptionsExt};
+use std::fs;
 
 use platform_host::{
     StepState,
@@ -122,31 +122,10 @@ fn keep_root_key<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     let Some(out) = &ctx.plan.root_key_out else {
         return Ok("root key deleted (a new intermediate will need a new root)".into());
     };
-    let key = fs::read(ctx.path(&format!("{ROOT_DIR}/root.key")))
-        .map_err(|error| format!("root key: {error}"))?;
     let shown = out.display().to_string();
-    let path = ctx.path(&shown);
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&path)
-        .map_err(|error| format!("{shown}: {error}"))?;
-    file.write_all(&key)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("{shown}: {error}"))?;
-    // Through the open file, never the path (the directory may be the
-    // user's); a stick that cannot change owners keeps it root's.
-    let owner = ctx.plan.operator.as_deref().map(|user| {
-        ctx.ids(Some((user, user))).and_then(|(uid, gid)| {
-            std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
-                .map_err(|error| format!("{shown}: {error}"))
-        })
-    });
-    let note = match owner {
-        Some(Err(error)) => format!(" (still owned by root: {error})"),
-        _ => String::new(),
-    };
+    let mut key = fs::File::open(ctx.path(&format!("{ROOT_DIR}/root.key")))
+        .map_err(|error| format!("root key: {error}"))?;
+    let note = ctx.write_new(&shown, &mut key)?;
     Ok(format!("root key saved to {shown}: keep it offline{note}"))
 }
 
