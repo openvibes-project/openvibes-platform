@@ -3614,6 +3614,69 @@
           }
         }
       },
+      "CveDetailView": {
+        "type": "object",
+        "description": "CVE enrichment visible through one advisory present in the caller's scope.",
+        "required": [
+          "cve_id",
+          "cwe",
+          "kev"
+        ],
+        "properties": {
+          "cve_id": {
+            "type": "string",
+            "description": "CVE identifier."
+          },
+          "cvss_score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "NVD CVSS base score."
+          },
+          "cvss_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "CVSS version."
+          },
+          "cwe": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "CWE identifiers."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "NVD description."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "EPSS score."
+          },
+          "euvd_exploited": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "EUVD identifier, if listed as exploited."
+          },
+          "kev": {
+            "type": "boolean",
+            "description": "On CISA KEV."
+          }
+        }
+      },
       "EffectiveCapability": {
         "type": "object",
         "description": "One effective capability returned to the browser.",
@@ -4110,6 +4173,7 @@
           "agents.read",
           "agents.revoke",
           "findings.read",
+          "vulnerabilities.read",
           "findings.triage",
           "tokens.read",
           "tokens.create",
@@ -4753,6 +4817,290 @@
           }
         },
         "additionalProperties": false
+      },
+      "VulnerabilityAdvisoryDetail": {
+        "type": "object",
+        "description": "Advisory view and in-scope affected hosts.",
+        "required": [
+          "hosts",
+          "cves"
+        ],
+        "properties": {
+          "cves": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CveDetailView"
+            },
+            "description": "CVE metadata for this visible advisory."
+          },
+          "hosts": {
+            "$ref": "#/components/schemas/VulnerabilityPage",
+            "description": "Affected host-advisory matches in the current scope."
+          }
+        }
+      },
+      "VulnerabilityPage": {
+        "type": "object",
+        "description": "Bounded prioritised vulnerability list for the current scope.",
+        "required": [
+          "items",
+          "more_available",
+          "generated_at"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 instant when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnerabilityView"
+            },
+            "description": "Highest-priority rows returned by the query."
+          },
+          "more_available": {
+            "type": "boolean",
+            "description": "True when more rows exist beyond this response's fixed page bound."
+          }
+        }
+      },
+      "VulnerabilitySeverity": {
+        "type": "string",
+        "description": "Advisory severity used by the vulnerability matcher.",
+        "enum": [
+          "critical",
+          "important",
+          "moderate",
+          "low",
+          "unrated"
+        ]
+      },
+      "VulnerabilitySeverityCount": {
+        "type": "object",
+        "description": "One severity total in the visible vulnerability scope.",
+        "required": [
+          "severity",
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open host-advisory pairs.",
+            "minimum": 0
+          },
+          "severity": {
+            "$ref": "#/components/schemas/VulnerabilitySeverity",
+            "description": "Advisory severity."
+          }
+        }
+      },
+      "VulnerabilitySummary": {
+        "type": "object",
+        "description": "Scope-filtered fleet vulnerability summary.",
+        "required": [
+          "by_severity",
+          "hosts",
+          "top_hosts",
+          "reboot_hosts",
+          "no_fix",
+          "exploited"
+        ],
+        "properties": {
+          "by_severity": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnerabilitySeverityCount"
+            },
+            "description": "Open host-advisory pairs by severity."
+          },
+          "exploited": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open, non-reboot findings with KEV/EUVD exploitation evidence.",
+            "minimum": 0
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts with at least one open advisory.",
+            "minimum": 0
+          },
+          "no_fix": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Host-advisory pairs without a known fixed package version.",
+            "minimum": 0
+          },
+          "reboot_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts only needing a reboot to activate the installed fix.",
+            "minimum": 0
+          },
+          "top_hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VulnerabilityTopHost"
+            },
+            "description": "Ten most affected hosts in scope."
+          }
+        }
+      },
+      "VulnerabilityTopHost": {
+        "type": "object",
+        "description": "Operator-facing top vulnerable host.",
+        "required": [
+          "agent_id",
+          "open",
+          "serious"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent or imported installation identifier."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname label, when reported."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of open advisories.",
+            "minimum": 0
+          },
+          "serious": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Critical and important advisories.",
+            "minimum": 0
+          }
+        }
+      },
+      "VulnerabilityView": {
+        "type": "object",
+        "description": "One host-advisory match with package and exploitation details.",
+        "required": [
+          "agent_id",
+          "advisory_id",
+          "severity",
+          "title",
+          "url",
+          "cves",
+          "packages",
+          "first_seen_at",
+          "reboot_needed",
+          "exploited",
+          "kev",
+          "euvd",
+          "ransomware"
+        ],
+        "properties": {
+          "advisory_id": {
+            "type": "string",
+            "description": "Advisory identifier."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Agent or imported installation identifier."
+          },
+          "cves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "CVE identifiers named by the advisory."
+          },
+          "cvss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Highest NVD CVSS base score among advisory CVEs."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Highest EPSS score among advisory CVEs."
+          },
+          "epss_percentile": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Highest EPSS percentile among advisory CVEs."
+          },
+          "euvd": {
+            "type": "boolean",
+            "description": "At least one CVE is on EUVD's exploited list."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "At least one CVE is on KEV or EUVD exploited lists."
+          },
+          "first_seen_at": {
+            "type": "string",
+            "description": "First time this host matched the advisory."
+          },
+          "fixed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the vulnerability was fixed; absent while still open."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname label, when reported."
+          },
+          "kev": {
+            "type": "boolean",
+            "description": "At least one CVE is on CISA KEV."
+          },
+          "kev_due": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Earliest KEV due date."
+          },
+          "packages": {
+            "description": "Affected package names and installed/fixed versions."
+          },
+          "ransomware": {
+            "type": "boolean",
+            "description": "One CVE is known to be used by ransomware."
+          },
+          "reboot_needed": {
+            "type": "boolean",
+            "description": "A kernel fix is installed but not running."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/VulnerabilitySeverity",
+            "description": "Advisory severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "Advisory title."
+          },
+          "url": {
+            "type": "string",
+            "description": "Advisory URL."
+          }
+        }
       }
     }
   },

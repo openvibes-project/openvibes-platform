@@ -195,6 +195,7 @@ mod tests {
                 (Permission::AgentsRead, vec!["group-a", "group-b"]),
                 (Permission::AgentsRevoke, vec!["group-a", "group-b"]),
                 (Permission::FindingsRead, vec!["group-a", "group-b"]),
+                (Permission::VulnerabilitiesRead, vec!["group-a", "group-b"]),
             ]
             .map(|(permission, asset_group_ids)| crate::EffectiveCapability {
                 permission,
@@ -210,6 +211,10 @@ mod tests {
                 .iter()
                 .any(|item| item.permission == Permission::RulesRead)
         );
+        assert!(viewer_capabilities.iter().any(|item| {
+            item.permission == Permission::VulnerabilitiesRead
+                && item.scope == PermissionScope::Global
+        }));
         let operator_capabilities =
             resolve_capabilities(&[RoleBinding::global(BuiltInRole::Operator)]);
         assert!(

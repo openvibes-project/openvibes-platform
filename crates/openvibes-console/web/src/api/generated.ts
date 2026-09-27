@@ -1016,6 +1016,31 @@ export interface components {
              */
             limit: number;
         };
+        /** @description CVE enrichment visible through one advisory present in the caller's scope. */
+        CveDetailView: {
+            /** @description CVE identifier. */
+            cve_id: string;
+            /**
+             * Format: float
+             * @description NVD CVSS base score.
+             */
+            cvss_score?: number | null;
+            /** @description CVSS version. */
+            cvss_version?: string | null;
+            /** @description CWE identifiers. */
+            cwe: string[];
+            /** @description NVD description. */
+            description?: string | null;
+            /**
+             * Format: float
+             * @description EPSS score.
+             */
+            epss?: number | null;
+            /** @description EUVD identifier, if listed as exploited. */
+            euvd_exploited?: string | null;
+            /** @description On CISA KEV. */
+            kev: boolean;
+        };
         /** @description One effective capability returned to the browser. */
         EffectiveCapability: {
             /** @description Permission granted to the current principal. */
@@ -1236,7 +1261,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "findings.read" | "findings.triage" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use";
+        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -1504,6 +1529,131 @@ export interface components {
             note?: string | null;
             /** @description Workflow state. */
             state: string;
+        };
+        /** @description Advisory view and in-scope affected hosts. */
+        VulnerabilityAdvisoryDetail: {
+            /** @description CVE metadata for this visible advisory. */
+            cves: components["schemas"]["CveDetailView"][];
+            /** @description Affected host-advisory matches in the current scope. */
+            hosts: components["schemas"]["VulnerabilityPage"];
+        };
+        /** @description Bounded prioritised vulnerability list for the current scope. */
+        VulnerabilityPage: {
+            /** @description RFC 3339 instant when this page was generated. */
+            generated_at: string;
+            /** @description Highest-priority rows returned by the query. */
+            items: components["schemas"]["VulnerabilityView"][];
+            /** @description True when more rows exist beyond this response's fixed page bound. */
+            more_available: boolean;
+        };
+        /**
+         * @description Advisory severity used by the vulnerability matcher.
+         * @enum {string}
+         */
+        VulnerabilitySeverity: "critical" | "important" | "moderate" | "low" | "unrated";
+        /** @description One severity total in the visible vulnerability scope. */
+        VulnerabilitySeverityCount: {
+            /**
+             * Format: int64
+             * @description Open host-advisory pairs.
+             */
+            count: number;
+            /** @description Advisory severity. */
+            severity: components["schemas"]["VulnerabilitySeverity"];
+        };
+        /** @description Scope-filtered fleet vulnerability summary. */
+        VulnerabilitySummary: {
+            /** @description Open host-advisory pairs by severity. */
+            by_severity: components["schemas"]["VulnerabilitySeverityCount"][];
+            /**
+             * Format: int64
+             * @description Open, non-reboot findings with KEV/EUVD exploitation evidence.
+             */
+            exploited: number;
+            /**
+             * Format: int64
+             * @description Hosts with at least one open advisory.
+             */
+            hosts: number;
+            /**
+             * Format: int64
+             * @description Host-advisory pairs without a known fixed package version.
+             */
+            no_fix: number;
+            /**
+             * Format: int64
+             * @description Hosts only needing a reboot to activate the installed fix.
+             */
+            reboot_hosts: number;
+            /** @description Ten most affected hosts in scope. */
+            top_hosts: components["schemas"]["VulnerabilityTopHost"][];
+        };
+        /** @description Operator-facing top vulnerable host. */
+        VulnerabilityTopHost: {
+            /** @description Agent or imported installation identifier. */
+            agent_id: string;
+            /** @description Hostname label, when reported. */
+            hostname?: string | null;
+            /**
+             * Format: int64
+             * @description Number of open advisories.
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Critical and important advisories.
+             */
+            serious: number;
+        };
+        /** @description One host-advisory match with package and exploitation details. */
+        VulnerabilityView: {
+            /** @description Advisory identifier. */
+            advisory_id: string;
+            /** @description Agent or imported installation identifier. */
+            agent_id: string;
+            /** @description CVE identifiers named by the advisory. */
+            cves: string[];
+            /**
+             * Format: float
+             * @description Highest NVD CVSS base score among advisory CVEs.
+             */
+            cvss?: number | null;
+            /**
+             * Format: float
+             * @description Highest EPSS score among advisory CVEs.
+             */
+            epss?: number | null;
+            /**
+             * Format: float
+             * @description Highest EPSS percentile among advisory CVEs.
+             */
+            epss_percentile?: number | null;
+            /** @description At least one CVE is on EUVD's exploited list. */
+            euvd: boolean;
+            /** @description At least one CVE is on KEV or EUVD exploited lists. */
+            exploited: boolean;
+            /** @description First time this host matched the advisory. */
+            first_seen_at: string;
+            /** @description When the vulnerability was fixed; absent while still open. */
+            fixed_at?: string | null;
+            /** @description Hostname label, when reported. */
+            hostname?: string | null;
+            /** @description At least one CVE is on CISA KEV. */
+            kev: boolean;
+            /** @description Earliest KEV due date. */
+            kev_due?: string | null;
+            /** @description Affected package names and installed/fixed versions. */
+            packages: unknown;
+            /** @description One CVE is known to be used by ransomware. */
+            ransomware: boolean;
+            /** @description A kernel fix is installed but not running. */
+            reboot_needed: boolean;
+            /** @description Advisory severity. */
+            severity: components["schemas"]["VulnerabilitySeverity"];
+            /** @description Advisory title. */
+            title: string;
+            /** @description Advisory URL. */
+            url: string;
         };
     };
     responses: never;

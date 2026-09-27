@@ -334,7 +334,7 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
   await selectDemoOption(page, "Data scenario", "stale");
   await page.goto("/agents");
   await expect(page.locator("tbody tr")).toHaveCount(50);
-  await expect(page.getByText("stale", { exact: true })).toHaveCount(50);
+  await expect(page.locator("tbody .status-pill")).toHaveText(Array(50).fill("Stale"));
   await page.goto("/agents?agent=agent-00199");
   await expect(page.getByText("No heartbeat recorded")).toBeVisible();
 
