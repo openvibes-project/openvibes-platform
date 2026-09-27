@@ -128,16 +128,14 @@ jobs:
         run: cargo audit --deny warnings
 
   fedora:
-    name: RPMs and agent integration (fedora:44)
+    name: RPMs (fedora:44)
     runs-on: ubuntu-latest
     timeout-minutes: 45
     container: registry.fedoraproject.org/fedora:44
     steps:
       # git first, so checkout makes a real repository (submodules need it).
-      - name: Install build and test packages
-        run: >-
-          dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros systemd ImageMagick
-          postgresql-server sqlite jq curl procps-ng util-linux
+      - name: Install build packages
+        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -149,21 +147,32 @@ jobs:
         with:
           node-version: 22.23.1
 
-      # As in the ubuntu job, every fetch happens here; the pinned agent (a
-      # git dependency) is built here too, and later steps build offline.
-      - name: Fetch dependencies and build the pinned agent
+      # As in the ubuntu job, every fetch happens here and later steps build
+      # offline. The agent RPM comes from the pinned revision; its binary is
+      # also the one the integration job runs.
+      - name: Fetch dependencies
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git submodule update --init
           cargo fetch --locked
           ROOT=$PWD; source scripts/integration-lib.sh
-          build_agent "$PWD/target/integration/agent" > agent-path
-          # The agent's own RPM, from the same pinned revision (built offline
-          # in a later step).
           git clone -q https://github.com/openvibes-project/openvibes-agent /opt/agent-src
           git -C /opt/agent-src checkout -q "$(agent_rev)"
           cargo fetch --locked --manifest-path /opt/agent-src/Cargo.toml
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: |
+            . -> target
+            /opt/agent-src -> target
+
+      - name: Cache llama.cpp build
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/llama
+          key: llama-${{ hashFiles('packaging/llm/llama-cpp.pin', 'scripts/build-llama-server.sh') }}
 
       - name: Build lower-version RPMs for the update test
         env:
@@ -190,113 +199,50 @@ jobs:
           # The lower-version package exercises a genuine RPM upgrade in the
           # systemd job; it uses the same binary and schemas because the
           # console package itself owns neither database migrations nor data.
-          bash scripts/build-console-rpm.sh "$archive" "$digest" 0.0.9
-          bash scripts/build-console-rpm.sh "$archive" "$digest"
+          bash scripts/build-console-rpm.sh "$archive" "$digest" 0.0.9 \
+            "$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)"
 
-      - name: Build the agent RPM and signing tool (pinned revision)
+      - name: Build the agent RPM and the test tools
         env:
           CARGO_NET_OFFLINE: "true"
         run: |
           bash /opt/agent-src/scripts/build-rpm.sh
           cargo build --release --locked --manifest-path /opt/agent-src/Cargo.toml \
             -p openvibes-rules --example sign_bundle
-          mkdir -p dist
+          cargo build --release --locked -p openvibes-load \
+            -p openvibes-ingest --example integration_bundle
+          mkdir -p dist tools
           cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
           cp target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
+          cp target/release/openvibes-load target/release/examples/integration_bundle tools/
 
-      - name: Upload RPMs for the systemd end to end
+      - name: Upload RPMs for the end to end jobs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: rpms
           path: dist/
           if-no-files-found: error
 
-      - name: Install and check RPMs
-        run: |
-          dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm
-          bash scripts/check-rpm.sh
-
-      # initdb refuses root: build the test tools as root, then run the
-      # integration as a plain user against the installed binaries.
-      - name: Build the bundle tool and the load generator
-        shell: bash
-        env:
-          CARGO_NET_OFFLINE: "true"
-        run: |
-          cargo build --release --locked -p openvibes-ingest --example integration_bundle
-          cargo build --release --locked -p openvibes-load
-
-      - name: Integration against the installed binaries
-        shell: bash
-        run: |
-          useradd -m ci
-          chown -R ci "$GITHUB_WORKSPACE"
-          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin \
-            AGENT_BIN="$(cat agent-path)" \
-            BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
-            INTEGRATION_DIR=/home/ci/run \
-            bash scripts/integration-agent.sh
-
-      # A shared runner is too small and noisy for the full target run; this
-      # keeps the generator working. Results live in docs/components/load.md.
-      - name: Load smoke test against the installed binaries
-        shell: bash
-        run: |
-          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load \
-            LOAD_BIN="$PWD/target/release/openvibes-load" LOAD_ARGS="--findings-every 5" \
-            bash scripts/load/run.sh 50 1000 10
-
-      - name: Distribution load smoke against the installed binaries
-        shell: bash
-        run: |
-          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load-dist MODE=distribution \
-            LOAD_BIN="$PWD/target/release/openvibes-load" \
-            BUNDLE_BIN="$PWD/target/release/examples/integration_bundle" \
-            bash scripts/load/run.sh 50 1000 10
-
-  # RPMs from the last commit before the service accounts were renamed
-  # (admin TUI spec §2), for the upgrade test. Fixed, so the test keeps
-  # checking the upgrade from openvibes_* accounts after this merges.
-  base-rpms:
-    name: RPMs before the account rename (fedora:44)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    container: registry.fedoraproject.org/fedora:44
-    env:
-      UPGRADE_FROM: 26c1cb38567c40498d3d0b5aac063358aed17325
-    steps:
-      - name: Install build packages
-        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros
-
-      - name: Checkout the pre-rename commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          ref: ${{ env.UPGRADE_FROM }}
-
-      - name: Build RPMs
-        shell: bash
-        run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          OV_LLM=0 bash scripts/build-rpm.sh
-          mkdir -p dist-base && cp target/rpm/RPMS/x86_64/*.rpm dist-base/
-
-      - name: Upload RPMs
+      - name: Upload test tools
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: rpms-base
-          path: dist-base/
+          name: tools
+          path: tools/
           if-no-files-found: error
 
-  # Upgrading an install with openvibes_* accounts renames users, groups,
-  # roles and configs, and the services work again (podman, systemd).
-  upgrade-e2e:
-    name: Upgrade from openvibes_* accounts under systemd
-    needs: [fedora, base-rpms]
+  # The installed platform and agent RPMs against each other: renewal,
+  # revocation, expiry re-enrollment, distribution outage, then load smokes.
+  integration:
+    name: Agent integration (fedora:44)
+    needs: fedora
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    container: registry.fedoraproject.org/fedora:44
     steps:
+      - name: Install test packages
+        run: dnf -q -y install git systemd postgresql-server sqlite jq curl procps-ng util-linux
+
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -308,14 +254,46 @@ jobs:
           name: rpms
           path: dist
 
-      - name: Download pre-rename RPMs
+      - name: Download test tools
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: rpms-base
-          path: dist-base
+          name: tools
+          path: tools
 
-      - name: Upgrade end to end
-        run: bash scripts/upgrade-e2e.sh dist-base dist
+      - name: Install and check RPMs
+        run: |
+          dnf -q -y install dist/openvibes-{ingest,distribution,vulns,admin,llm,agent}-*.rpm
+          bash scripts/check-rpm.sh
+          chmod +x tools/*
+
+      # initdb refuses root: run the integration as a plain user.
+      - name: Integration against the installed binaries
+        shell: bash
+        run: |
+          useradd -m ci
+          chown -R ci "$GITHUB_WORKSPACE"
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin \
+            AGENT_BIN=/usr/bin/openvibes-agent \
+            BUNDLE_BIN="$PWD/tools/integration_bundle" \
+            INTEGRATION_DIR=/home/ci/run \
+            bash scripts/integration-agent.sh
+
+      # A shared runner is too small and noisy for the full target run; this
+      # keeps the generator working. Results live in docs/components/load.md.
+      - name: Load smoke test against the installed binaries
+        shell: bash
+        run: |
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load \
+            LOAD_BIN="$PWD/tools/openvibes-load" LOAD_ARGS="--findings-every 5" \
+            bash scripts/load/run.sh 50 1000 10
+
+      - name: Distribution load smoke against the installed binaries
+        shell: bash
+        run: |
+          runuser -u ci -- env OPENVIBES_BIN_DIR=/usr/bin LOAD_DIR=/home/ci/load-dist MODE=distribution \
+            LOAD_BIN="$PWD/tools/openvibes-load" \
+            BUNDLE_BIN="$PWD/tools/integration_bundle" \
+            bash scripts/load/run.sh 50 1000 10
 
   # The documented install, scripted, under a real systemd (podman fedora:44,
   # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the
