@@ -4,10 +4,13 @@
 
 use chrono::{DateTime, Utc};
 
+use openvibes_core::NormalizedPackage;
+
 use crate::{Client, StoreError};
 
-/// One installed package, as matching needs it.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// One installed package, as matching needs it: the normalised record of
+/// the P11 fingerprint (one row per distinct record).
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct PackageRow {
     /// Package database (`rpm`, `dpkg`).
     pub manager: String,
@@ -25,6 +28,40 @@ pub struct PackageRow {
     pub source: Option<String>,
     /// dpkg: the source's full version when it differs (a binNMU).
     pub source_version: Option<String>,
+}
+
+impl PackageRow {
+    /// The record the P11 fingerprint is computed over.
+    #[must_use]
+    pub fn normalized(&self) -> NormalizedPackage {
+        NormalizedPackage {
+            manager: self.manager.clone(),
+            name: self.name.clone(),
+            epoch: u32::try_from(self.epoch).unwrap_or(0),
+            version: self.version.clone(),
+            release: self.release.clone(),
+            arch: self.arch.clone(),
+            source: self.source.clone(),
+            source_version: self.source_version.clone(),
+        }
+    }
+}
+
+impl From<&NormalizedPackage> for PackageRow {
+    fn from(package: &NormalizedPackage) -> Self {
+        Self {
+            manager: package.manager.clone(),
+            name: package.name.clone(),
+            // ponytail: epochs above 2^31 - 1 do not exist in practice; such a
+            // host's fingerprint never matches, so it always gets full reports.
+            epoch: i32::try_from(package.epoch).unwrap_or(0),
+            version: package.version.clone(),
+            release: package.release.clone(),
+            arch: package.arch.clone(),
+            source: package.source.clone(),
+            source_version: package.source_version.clone(),
+        }
+    }
 }
 
 /// Outcome of [`replace`].

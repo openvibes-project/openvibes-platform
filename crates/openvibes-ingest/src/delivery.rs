@@ -96,7 +96,7 @@ pub(crate) async fn inventory(
     AuthenticatedAgent(agent_id): AuthenticatedAgent,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
-    let mut report: InventoryReport =
+    let report: InventoryReport =
         platform_agent_server::parse_with_limit(&body, platform_agent_server::MAX_INVENTORY_BYTES)?;
     if report.agent_id.as_str() != agent_id {
         return Err(ApiError::BadRequest);
@@ -104,7 +104,7 @@ pub(crate) async fn inventory(
     let (rows, digest) = wire::inventory(
         &report.os,
         report.running_kernel.as_deref(),
-        &mut report.packages,
+        &report.packages,
     )?;
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     inventory::replace(
