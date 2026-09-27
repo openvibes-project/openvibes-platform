@@ -217,7 +217,10 @@ ok "openvibes-admin import stores a local-only export as a matched imported host
 # password; a non-member cannot, and neither can reach other units. The
 # full-screen TUI itself is covered by its snapshot tests; this checks the
 # rights it relies on, called exactly as it calls them.
-in_c 'useradd -m -G openvibes-operators alice && useradd -m bob' || fail "operator users"
+# Real operators have a password; PAM's account check refuses sudo for a
+# user without a shadow entry, so the test users get one.
+in_c 'useradd -m -G openvibes-operators alice && useradd -m bob &&
+      printf "alice:Test-alice-1\nbob:Test-bob-1\n" | chpasswd' || fail "operator users"
 in_c 'runuser -u alice -- systemctl --no-ask-password restart openvibes-vulns.service' ||
     fail "operator restart through polkit"
 wait_for "vulns ready after the operator's restart" 30 'curl -fsS http://127.0.0.1:18483/ready'
@@ -228,7 +231,7 @@ in_c 'runuser -u alice -- systemctl --no-ask-password restart systemd-journald.s
 in_c 'runuser -u alice -- systemctl --no-ask-password enable openvibes-llm.service' >/dev/null 2>&1 &&
     fail "an operator enabled a unit without a password"
 in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' | grep -q . ||
-    fail "operator log read through the helper"
+    fail "operator log read through the helper: $(in_c 'getent shadow alice | cut -d: -f1,3-; id alice; journalctl -t sudo -n 5 -o cat' 2>&1)"
 in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs systemd-journald.service 5' >/dev/null 2>&1 &&
     fail "the helper read a unit outside the allow-list"
 in_c 'runuser -u bob -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' >/dev/null 2>&1 &&
