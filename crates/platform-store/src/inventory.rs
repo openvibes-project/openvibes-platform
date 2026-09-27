@@ -1,6 +1,6 @@
 //! Host package inventories (protocol P8, VM spec §6), stored as distinct
 //! package versions shared by the fleet plus one link per host and version.
-//! Runs within the `openvibes_ingest` role's grants.
+//! Runs within the `openvibes-ingest` role's grants.
 
 use chrono::{DateTime, Utc};
 

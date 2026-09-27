@@ -1,5 +1,5 @@
 //! Importing KEV and EPSS into `cve_enrichment` as the least-privilege
-//! `openvibes_vulns` role.
+//! `openvibes-vulns` role.
 
 mod common;
 
@@ -27,7 +27,7 @@ async fn setup() -> (TestDb, Client) {
         .unwrap();
     let vulns = db.pool.get().await.unwrap();
     vulns
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     (db, vulns)

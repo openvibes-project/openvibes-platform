@@ -43,7 +43,7 @@ health_listen = "127.0.0.1:18481"          # loopback only
 server_certificate_file = "/etc/openvibes/tls/distribution.crt"
 server_key_file = "/etc/openvibes/tls/distribution.key"
 client_ca_file = "/etc/openvibes/pki/intermediate.crt"
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_distribution"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-distribution"
 max_in_flight = 4096            # default
 request_timeout_seconds = 10    # default, 1 to 300
 max_connections = 1024          # default, 1 to 65536
@@ -52,7 +52,7 @@ database_pool_size = 16         # default, 1 to 1024
 
 Unknown keys, relative paths, a non-loopback `health_listen`, or
 out-of-range values stop startup with "invalid distribution configuration".
-The database role `openvibes_distribution` may only read `agents`,
+The database role `openvibes-distribution` may only read `agents`,
 `certificates`, `rule_sets`, `rule_bundles`, and `schema_version`.
 
 ## Failure behaviour

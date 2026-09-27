@@ -52,13 +52,13 @@ CREATE TABLE feed_sources (
     last_error text
 );
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes_vulns') THEN
-        CREATE ROLE openvibes_vulns LOGIN;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes-vulns') THEN
+        CREATE ROLE "openvibes-vulns" LOGIN;
     END IF;
 -- Roles are cluster-wide: parallel migrations (tests) can race on creation.
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 GRANT SELECT, INSERT, UPDATE, DELETE
     ON advisories, advisory_cves, advisory_packages, vulnerabilities, feed_sources
-    TO openvibes_vulns;
-GRANT SELECT ON agents, package_versions, host_packages, schema_version TO openvibes_vulns;
+    TO "openvibes-vulns";
+GRANT SELECT ON agents, package_versions, host_packages, schema_version TO "openvibes-vulns";

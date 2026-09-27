@@ -1,4 +1,4 @@
-//! Inventory storage (VM1), run as the least-privilege `openvibes_ingest`.
+//! Inventory storage (VM1), run as the least-privilege `openvibes-ingest`.
 
 mod common;
 
@@ -30,7 +30,7 @@ async fn setup() -> (TestDb, Client, String) {
     .unwrap();
     let mut client = db.pool.get().await.unwrap();
     client
-        .batch_execute("SET ROLE openvibes_ingest")
+        .batch_execute("SET ROLE \"openvibes-ingest\"")
         .await
         .unwrap();
     let now = Utc::now();

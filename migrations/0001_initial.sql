@@ -73,16 +73,16 @@ CREATE TABLE audit_log (
     detail jsonb NOT NULL DEFAULT '{}'
 );
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes_ingest') THEN
-        CREATE ROLE openvibes_ingest LOGIN;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes-ingest') THEN
+        CREATE ROLE "openvibes-ingest" LOGIN;
     END IF;
 -- Roles are cluster-wide: parallel migrations (tests) can race on creation.
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 GRANT SELECT, INSERT, UPDATE ON agents, certificates, token_uses, findings, current_findings
-    TO openvibes_ingest;
-GRANT SELECT ON enrollment_tokens TO openvibes_ingest;
+    TO "openvibes-ingest";
+GRANT SELECT ON enrollment_tokens TO "openvibes-ingest";
 -- migrate() creates schema_version before this file runs; /ready reads it.
-GRANT SELECT ON schema_version TO openvibes_ingest;
-GRANT INSERT ON audit_log TO openvibes_ingest;
-GRANT USAGE ON SEQUENCE audit_log_id_seq TO openvibes_ingest;
+GRANT SELECT ON schema_version TO "openvibes-ingest";
+GRANT INSERT ON audit_log TO "openvibes-ingest";
+GRANT USAGE ON SEQUENCE audit_log_id_seq TO "openvibes-ingest";

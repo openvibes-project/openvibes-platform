@@ -12,10 +12,10 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `/usr/libexec/openvibes-llm/llama-server` | Pinned llama.cpp build, CPU (AVX2 baseline, static) |
 | `/usr/libexec/openvibes-llm/llama-server-vulkan` | Same source built for Vulkan (NVIDIA, AMD, Intel), in `openvibes-llm-vulkan` |
 | `/usr/libexec/openvibes-llm/openvibes-llm-check` | `ExecStartPre=`: refuses to start on bad settings or an unverified model (crate `openvibes-llm`) |
-| `openvibes-llm.service` | Hardened unit, loopback port 18430, user `openvibes_llm` |
+| `openvibes-llm.service` | Hardened unit, loopback port 18430, user `openvibes-llm` |
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)`: port, context, threads, GPU layers, parallel requests, default alias |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install (64 hex characters); given to the service as a systemd credential |
-| `/var/lib/openvibes-llm/models/` | 0775 root:openvibes_admin; models installed read-only (0444) |
+| `/var/lib/openvibes-llm/models/` | 0775 root:openvibes-admin; models installed read-only (0444) |
 | `/var/lib/openvibes-llm/model.conf` | The model in use and its SHA-256, written by `openvibes-admin assistant model install`; read after `llm.conf` |
 
 ## The pinned build
@@ -94,7 +94,7 @@ exempts them. They reveal only the alias, on loopback.
 dnf install ./openvibes-llm-*.rpm            # and openvibes-llm-vulkan for a GPU
 # Download a GGUF model yourself (see `assistant check` for the recommended
 # ones) and take its SHA-256 from the publisher's page.
-runuser -u openvibes_admin -- openvibes-admin assistant model install \
+runuser -u openvibes-admin -- openvibes-admin assistant model install \
     /path/Qwen3.5-4B-Instruct-Q4_K_M.gguf --sha256 <hex> --alias qwen3.5-4b
 systemctl enable --now openvibes-llm
 ```
@@ -111,8 +111,8 @@ api_key_file = "/run/credentials/openvibes-console.service/llm-api-key"
 The console unit receives the key as its own credential
 (`LoadCredential=llm-api-key:/etc/openvibes/llm-api-key`), so the file
 stays root's. To run `assistant check` or `assistant eval` as
-`openvibes_admin`, give it a private copy
-(`install -o openvibes_admin -m 0600 /etc/openvibes/llm-api-key …`).
+`openvibes-admin`, give it a private copy
+(`install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key …`).
 
 Replacing the model is another `model install` and a restart. A model
 file changed after installation fails the digest check, and the service

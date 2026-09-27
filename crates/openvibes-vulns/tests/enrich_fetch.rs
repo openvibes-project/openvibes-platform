@@ -68,7 +68,7 @@ async fn setup() -> (TestDb, platform_store::Client, Fetcher) {
         .unwrap();
     let client = db.pool.get().await.unwrap();
     client
-        .batch_execute("SET ROLE openvibes_vulns")
+        .batch_execute("SET ROLE \"openvibes-vulns\"")
         .await
         .unwrap();
     let fetcher = Fetcher::new("http://127.0.0.1/metalink", None, 1 << 20).unwrap();

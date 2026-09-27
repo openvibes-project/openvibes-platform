@@ -11,7 +11,7 @@ CREATE TABLE version_vulnerabilities (
     PRIMARY KEY (package_version_id, advisory_id, package)
 );
 CREATE INDEX version_vulnerabilities_advisory ON version_vulnerabilities (advisory_id);
-GRANT SELECT, INSERT, UPDATE, DELETE, MAINTAIN ON version_vulnerabilities TO openvibes_vulns;
+GRANT SELECT, INSERT, UPDATE, DELETE, MAINTAIN ON version_vulnerabilities TO "openvibes-vulns";
 -- Each host's counts, refreshed when the host is matched, so the fleet
 -- summary adds numbers instead of scanning millions of rows (10,000 Debian
 -- hosts: 3.2 M fixable rows, 27 M no-fix pairs; docs/sizing.md).
@@ -26,7 +26,7 @@ CREATE TABLE host_vulnerability_counts (
     reboot integer NOT NULL,
     counted_at timestamptz NOT NULL
 );
-GRANT SELECT, INSERT, UPDATE, DELETE ON host_vulnerability_counts TO openvibes_vulns;
+GRANT SELECT, INSERT, UPDATE, DELETE ON host_vulnerability_counts TO "openvibes-vulns";
 -- Per-host rows without any fixed version move to the new table at the
 -- next match (nothing is deployed yet, so they are simply dropped).
 DELETE FROM vulnerabilities v

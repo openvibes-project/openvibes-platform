@@ -41,7 +41,7 @@ pub struct IngestConfig {
     pub issuing_certificate_file: PathBuf,
     /// Its private key (0600, ingest user only).
     pub issuing_key_file: PathBuf,
-    /// PostgreSQL connection for the `openvibes_ingest` role.
+    /// PostgreSQL connection for the `openvibes-ingest` role.
     pub database_url: String,
     /// Agent certificate lifetime, 1 to 365 days.
     #[serde(default = "default_days")]

@@ -24,12 +24,12 @@ functions, so schema knowledge and SQL live in one place.
 
 Numbered SQL files in `/migrations`, embedded at build time. Migration 4
 revokes UPDATE on `findings`, `certificates`, and `token_uses` from
-`openvibes_ingest`, which only inserts them; a test checks the role is
+`openvibes-ingest`, which only inserts them; a test checks the role is
 refused every write, read, or DDL it does not use. Migration 5 adds `rule_set_id`
 to `findings` and `current_findings` (`''` = unknown sender) and keys
 current state by agent, rule set, and rule: rule ids are unique only within
 a rule set. Migration 6 adds rule distribution (below) and the role
-`openvibes_distribution`. `migrate` runs
+`openvibes-distribution`. `migrate` runs
 in one transaction that first takes an advisory lock (before even creating
 `schema_version`), so concurrent runs serialize and both succeed;
 already-applied migrations are skipped. A database at a
@@ -38,7 +38,7 @@ already-applied migrations are skipped. A database at a
 Schema 1 (`0001_initial.sql`): `agents`, `certificates`,
 `enrollment_tokens`, `token_uses`, `findings` (partitioned by
 `observed_day`), `current_findings`, `audit_log`, and the least-privilege
-role `openvibes_ingest` (which may also read `schema_version`, for its
+role `openvibes-ingest` (which may also read `schema_version`, for its
 readiness check). The migrating role needs `CREATEROLE`.
 
 ## Tokens, agents, CA certificates (schema 2)
@@ -54,12 +54,12 @@ readiness check). The migrating role needs `CREATEROLE`.
   Unknown}`.
 - `ca::record(&client, role, fingerprint, pem, not_after)` (idempotent on the
   fingerprint), `ca::list`. Migration 2 adds `ca_certificates` (readable by
-  `openvibes_ingest`).
+  `openvibes-ingest`).
 
 ## Ingest queries (`ingest::…`)
 
-All run within the `openvibes_ingest` role's grants (the tests use
-`SET ROLE openvibes_ingest`).
+All run within the `openvibes-ingest` role's grants (the tests use
+`SET ROLE "openvibes-ingest"`).
 
 - `token_by_hash(&client, sha256) -> Option<TokenRow>`.
 - `enroll(&mut client, token_id, spki_sha256, now, issue) -> Enrolled`: one
@@ -94,9 +94,9 @@ and `rule_bundles` (per set and version: the exact envelope bytes, at most
 `published_by`). The current bundle is the highest version; there is no
 mutable pointer.
 
-`openvibes_distribution` may only read `agents`, `certificates`,
+`openvibes-distribution` may only read `agents`, `certificates`,
 `rule_sets`, `rule_bundles`, and `schema_version`; it cannot see trust keys.
-`openvibes_ingest` has no rights on the rule tables. A test checks both.
+`openvibes-ingest` has no rights on the rule tables. A test checks both.
 
 - `add_trust_key(set, issuer, key)` creates the set if needed →
   `Added`, `AlreadyTrusted` (same key), `Conflict` (different key, or the id
@@ -124,7 +124,7 @@ Distinct package versions are stored once for the fleet in
 and `host_packages` links each host to the versions it has, so 10,000
 Fedora hosts need about 36M two-key rows rather than full package rows.
 `agents` gains `os_id`, `os_version`, `inventory_sha256`, and
-`inventory_at`. `openvibes_ingest` may add versions and replace a host's
+`inventory_at`. `openvibes-ingest` may add versions and replace a host's
 links, never edit or delete versions (a test checks it).
 
 - `replace(&mut client, agent_id, os_id, os_version, running_kernel,
@@ -171,7 +171,7 @@ Migration 15 lets `agents.status` be `imported` only with an id
 `vulnerabilities` (host × advisory: affected packages as JSON, first seen,
 fixed at — kept after fixing; `reboot_needed` since schema 9), and
 `feed_sources` (last check, last change,
-content digest, advisories, last error). Role `openvibes_vulns` writes only
+content digest, advisories, last error). Role `openvibes-vulns` writes only
 these and reads `agents`, `package_versions`, `host_packages`.
 
 - `replace_advisories` upserts in bulk and never deletes advisories.
@@ -204,7 +204,7 @@ Schema 11 (VM5) adds NVD columns (`cvss_score`, `cvss_version`,
 `feed_cursor`/`set_feed_cursor` hold NVD's sync point. `vulns::summary`
 moved to `vulns/summary.rs` (same path).
 
-Schema 12 grants `openvibes_vulns` `MAINTAIN` on the tables it bulk-loads
+Schema 12 grants `openvibes-vulns` `MAINTAIN` on the tables it bulk-loads
 (PostgreSQL 17 or later), so `replace_advisories` can `ANALYZE` them.
 `vulns::list` combines each advisory's CVEs and enrichment once, then
 sorts and limits (0.63 s at 244,000 open vulnerabilities).

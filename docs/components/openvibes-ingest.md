@@ -24,7 +24,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `server_certificate_file`, `server_key_file` | required | server chain (leaf first) and key |
 | `client_ca_file` | required | CA whose client certificates are accepted |
 | `issuing_certificate_file`, `issuing_key_file` | required | intermediate that signs agent certificates |
-| `database_url` | required | the `openvibes_ingest` role |
+| `database_url` | required | the `openvibes-ingest` role |
 | `client_certificate_days` | 30 | 1 to 365 |
 | `max_in_flight` | 4096 | at least 1 |
 | `finding_retention_days` | 90 | 1 to 36500; match `openvibes-admin maintenance` |

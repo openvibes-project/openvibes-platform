@@ -27,12 +27,12 @@ CREATE TABLE rule_bundles (
     PRIMARY KEY (rule_set_id, version)
 );
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes_distribution') THEN
-        CREATE ROLE openvibes_distribution LOGIN;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes-distribution') THEN
+        CREATE ROLE "openvibes-distribution" LOGIN;
     END IF;
 -- Roles are cluster-wide: parallel migrations (tests) can race on creation.
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
 -- Authentication reads agents and certificates; /ready reads schema_version.
 GRANT SELECT ON agents, certificates, rule_sets, rule_bundles, schema_version
-    TO openvibes_distribution;
+    TO "openvibes-distribution";
