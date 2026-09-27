@@ -219,6 +219,40 @@ pub async fn update_many(
     actor_id: &str,
     now: DateTime<Utc>,
 ) -> Result<BulkTriageUpdate, StoreError> {
+    update_many_with_request_id(
+        client,
+        rule_set_id,
+        rule_id,
+        changes,
+        scope,
+        state,
+        assigned_to_username,
+        note,
+        accepted_until,
+        actor_id,
+        None,
+        now,
+    )
+    .await
+}
+
+/// Applies an atomic group transition and writes one audit row per changed
+/// endpoint, all sharing the HTTP request ID supplied by the caller.
+#[allow(clippy::too_many_arguments)]
+pub async fn update_many_with_request_id(
+    client: &mut Client,
+    rule_set_id: &str,
+    rule_id: &str,
+    changes: &[(String, i64)],
+    scope: &crate::console_read::AgentScope,
+    state: &str,
+    assigned_to_username: Option<&str>,
+    note: Option<&str>,
+    accepted_until: Option<DateTime<Utc>>,
+    actor_id: &str,
+    request_id: Option<&str>,
+    now: DateTime<Utc>,
+) -> Result<BulkTriageUpdate, StoreError> {
     if changes.is_empty()
         || changes.len() > 100
         || changes.iter().any(|(_, version)| *version < 0)
@@ -353,8 +387,8 @@ pub async fn update_many(
         tx.execute("INSERT INTO console_finding_triage_history(agent_id,rule_set_id,rule_id,from_state,to_state,note,changed_at,changed_by,assigned_to,accepted_until,rule_version)
             VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::text::uuid,$10,$11)",&[&agent_id,&rule_set_id,&rule_id,&Some(prior.state.as_str()),&state,&note,&now,&actor_id,&assigned_to_id,&accepted_until,&rule_version]).await?;
         let target = format!("{agent_id}:{rule_set_id}:{rule_id}");
-        tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id)
-            VALUES($1,'finding.triage.changed','finding_triage','success',jsonb_build_object('from_state',$2::text,'to_state',$3::text,'assigned_to',$4::text,'accepted_until',$5::text,'version',$6::bigint),'user',$1,$1,'finding_triage',$7)",&[&actor_id,&prior.state,&state,&assigned_name,&accepted_until.map(|value|value.to_rfc3339()),&version,&target]).await?;
+        tx.execute("INSERT INTO audit_log(actor,action,target,result,detail,request_id,actor_kind,actor_id,actor_display,target_kind,target_id)
+            VALUES($1,'finding.triage.changed','finding_triage','success',jsonb_build_object('from_state',$2::text,'to_state',$3::text,'assigned_to',$4::text,'accepted_until',$5::text,'version',$6::bigint),$8,'user',$1,$1,'finding_triage',$7)",&[&actor_id,&prior.state,&state,&assigned_name,&accepted_until.map(|value|value.to_rfc3339()),&version,&target,&request_id]).await?;
         records.push(TriageRecord {
             state: state.to_owned(),
             rule_version,
