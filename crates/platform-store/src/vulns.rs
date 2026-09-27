@@ -13,7 +13,9 @@ mod summary;
 use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;
-pub use summary::{Summary, no_fix_count, refresh_counts, summary};
+pub use summary::{
+    Summary, no_fix_count, no_fix_count_in_scope, refresh_counts, summary, summary_in_scope,
+};
 
 /// A package an advisory affects, and the version range affected.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -336,6 +338,29 @@ pub struct ListFilter<'a> {
 /// then the highest EPSS percentile among the advisory's CVEs, then
 /// severity, then the highest CVSS, then oldest first.
 pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRow>, StoreError> {
+    list_for_agents(client, filter, None).await
+}
+
+/// Lists vulnerabilities only for agents visible in the supplied console
+/// scope. Scope is applied in SQL before selecting prioritized advisories and
+/// rows; an empty scope returns no rows.
+pub async fn list_in_scope(
+    client: &Client,
+    filter: &ListFilter<'_>,
+    scope: &crate::console_read::AgentScope,
+) -> Result<Vec<VulnRow>, StoreError> {
+    let agents = match scope {
+        crate::console_read::AgentScope::Global => None,
+        _ => Some(crate::console_read::agent_ids_in_scope(client, scope).await?),
+    };
+    list_for_agents(client, filter, agents.as_deref()).await
+}
+
+async fn list_for_agents(
+    client: &Client,
+    filter: &ListFilter<'_>,
+    scoped_agents: Option<&[String]>,
+) -> Result<Vec<VulnRow>, StoreError> {
     // Each advisory's CVEs, enrichment and priority, combined once (a few
     // tens of thousands of advisories), not once per vulnerability.
     let adv = "WITH adv AS (
@@ -381,6 +406,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                      counts AS (
                          SELECT advisory_id, count(*) AS n FROM vulnerabilities
                          WHERE (fixed_at IS NOT NULL) = $1 AND $2::text IS NULL
+                           AND ($6::text[] IS NULL OR agent_id = ANY($6))
                          GROUP BY advisory_id),
                      chosen AS (
                          SELECT advisory_id FROM (
@@ -394,6 +420,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                      JOIN ranked e ON e.advisory_id = ch.advisory_id
                      JOIN vulnerabilities v ON v.advisory_id = ch.advisory_id
                          AND (v.fixed_at IS NOT NULL) = $1
+                         AND ($6::text[] IS NULL OR v.agent_id = ANY($6))
                      JOIN agents g ON g.agent_id = v.agent_id
                      ORDER BY e.rank, v.first_seen_at, v.agent_id
                      LIMIT 10000"
@@ -404,6 +431,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                     &filter.advisory,
                     &filter.severity,
                     &filter.cve,
+                    &scoped_agents,
                 ],
             )
             .await?
@@ -424,6 +452,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                      JOIN agents g ON g.agent_id = v.agent_id
                      WHERE (v.fixed_at IS NOT NULL) = $1
                        AND ($6 OR v.agent_id = ANY($7))
+                       AND ($8::text[] IS NULL OR v.agent_id = ANY($8))
                        AND ($2::text IS NOT NULL OR $3::text IS NOT NULL)
                      UNION ALL
                      SELECT h.agent_id, g.hostname, e.advisory_id, {columns},
@@ -436,6 +465,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                      JOIN host_packages h ON h.package_version_id = vv.package_version_id
                      JOIN agents g ON g.agent_id = h.agent_id
                      WHERE NOT $1 AND ($6 OR h.agent_id = ANY($7))
+                       AND ($8::text[] IS NULL OR h.agent_id = ANY($8))
                      GROUP BY h.agent_id, g.hostname, e.advisory_id, e.severity, e.title,
                               e.cves, {enrichment}, e.rank
                      ) r
@@ -450,6 +480,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
                     &filter.cve,
                     &any_host,
                     &agents,
+                    &scoped_agents,
                 ],
             )
             .await?
@@ -478,6 +509,40 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
             epss_percentile: row.get(14),
         })
         .collect())
+}
+
+/// Returns an advisory's CVE details only when a host in the caller's scope
+/// has a matching vulnerability. Enrichment is advisory-wide public feed data;
+/// host visibility is checked before it is returned.
+pub async fn cve_details_in_scope(
+    client: &Client,
+    advisory_id: &str,
+    scope: &crate::console_read::AgentScope,
+) -> Result<Option<Vec<crate::enrichment::CveDetail>>, StoreError> {
+    let agents = match scope {
+        crate::console_read::AgentScope::Global => None,
+        _ => Some(crate::console_read::agent_ids_in_scope(client, scope).await?),
+    };
+    let visible = client
+        .query_one(
+            "SELECT EXISTS (
+                 SELECT 1 FROM vulnerabilities v
+                 WHERE v.advisory_id = $1 AND ($2::text[] IS NULL OR v.agent_id = ANY($2))
+                 UNION ALL
+                 SELECT 1 FROM version_vulnerabilities vv
+                 JOIN host_packages hp USING (package_version_id)
+                 WHERE vv.advisory_id = $1 AND ($2::text[] IS NULL OR hp.agent_id = ANY($2))
+             )",
+            &[&advisory_id, &agents],
+        )
+        .await?
+        .get::<_, bool>(0);
+    if !visible {
+        return Ok(None);
+    }
+    Ok(Some(
+        crate::enrichment::cve_details(client, advisory_id).await?,
+    ))
 }
 
 /// The hosts `name` means: the host with that agent id, or else every host

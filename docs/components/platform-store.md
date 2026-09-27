@@ -209,6 +209,13 @@ Schema 12 grants `openvibes-vulns` `MAINTAIN` on the tables it bulk-loads
 `vulns::list` combines each advisory's CVEs and enrichment once, then
 sorts and limits (0.63 s at 244,000 open vulnerabilities).
 
+Console reads use `vulns::list_in_scope`, `vulns::summary_in_scope`, and
+`vulns::cve_details_in_scope`. Asset-group membership is resolved to agent
+IDs and applied in SQL before priority selection, aggregation, or returning
+advisory enrichment. An empty scope returns no host rows or summary counts;
+advisory details are returned only when a visible host has a matching
+vulnerability.
+
 Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
 each range as whole version strings with its `scheme` (`rpm` or `dpkg`),
 `match_on` (`binary`, or `source`), `introduced`, `fixed` (null: no fix

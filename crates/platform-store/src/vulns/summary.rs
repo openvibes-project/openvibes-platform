@@ -25,6 +25,27 @@ pub struct Summary {
 /// EUVD change without a re-match, starting from the few exploited
 /// advisories.
 pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
+    summary_for_agents(client, None).await
+}
+
+/// Counts open vulnerabilities for hosts in a console asset scope. Only
+/// precomputed per-host counters for visible agents are aggregated; exploited
+/// state remains live because enrichment feeds can change without a rematch.
+pub async fn summary_in_scope(
+    client: &Client,
+    scope: &crate::console_read::AgentScope,
+) -> Result<Summary, StoreError> {
+    let agents = match scope {
+        crate::console_read::AgentScope::Global => None,
+        _ => Some(crate::console_read::agent_ids_in_scope(client, scope).await?),
+    };
+    summary_for_agents(client, agents.as_deref()).await
+}
+
+async fn summary_for_agents(
+    client: &Client,
+    agents: Option<&[String]>,
+) -> Result<Summary, StoreError> {
     let totals = client
         .query_one(
             "SELECT COALESCE(sum(critical), 0)::bigint, COALESCE(sum(important), 0)::bigint,
@@ -33,8 +54,9 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
                     count(*) FILTER (WHERE critical + important + moderate + low + unrated > 0),
                     count(*) FILTER (WHERE reboot > 0),
                     COALESCE(sum(no_fix), 0)::bigint
-             FROM host_vulnerability_counts",
-            &[],
+             FROM host_vulnerability_counts
+             WHERE ($1::text[] IS NULL OR agent_id = ANY($1))",
+            &[&agents],
         )
         .await?;
     let by_severity = ["critical", "important", "moderate", "low", "unrated"]
@@ -50,8 +72,9 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
                     (c.critical + c.important)::bigint
              FROM host_vulnerability_counts c JOIN agents g ON g.agent_id = c.agent_id
              WHERE c.critical + c.important + c.moderate + c.low + c.unrated > 0
+               AND ($1::text[] IS NULL OR c.agent_id = ANY($1))
              ORDER BY 4 DESC, 3 DESC, 1 LIMIT 10",
-            &[],
+            &[&agents],
         )
         .await?
         .iter()
@@ -61,11 +84,12 @@ pub async fn summary(client: &Client) -> Result<Summary, StoreError> {
         .query_one(
             "SELECT count(*) FROM vulnerabilities v
              WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
+               AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
                AND v.advisory_id = ANY(ARRAY(
                    SELECT DISTINCT c.advisory_id FROM advisory_cves c
                    JOIN cve_enrichment x ON x.cve_id = c.cve_id
                    WHERE x.kev_added IS NOT NULL OR x.euvd_exploited))",
-            &[],
+            &[&agents],
         )
         .await?
         .get(0);
@@ -86,12 +110,36 @@ pub async fn no_fix_count(
     os_id: &str,
     os_release: &str,
 ) -> Result<i64, StoreError> {
+    no_fix_count_for_agents(client, os_id, os_release, None).await
+}
+
+/// Counts packages without a known fix for one OS release and console scope.
+pub async fn no_fix_count_in_scope(
+    client: &Client,
+    os_id: &str,
+    os_release: &str,
+    scope: &crate::console_read::AgentScope,
+) -> Result<i64, StoreError> {
+    let agents = match scope {
+        crate::console_read::AgentScope::Global => None,
+        _ => Some(crate::console_read::agent_ids_in_scope(client, scope).await?),
+    };
+    no_fix_count_for_agents(client, os_id, os_release, agents.as_deref()).await
+}
+
+async fn no_fix_count_for_agents(
+    client: &Client,
+    os_id: &str,
+    os_release: &str,
+    agents: Option<&[String]>,
+) -> Result<i64, StoreError> {
     Ok(client
         .query_one(
             "SELECT COALESCE(sum(c.no_fix), 0)::bigint FROM host_vulnerability_counts c
              JOIN agents g ON g.agent_id = c.agent_id
-             WHERE g.os_id = $1 AND g.os_release = $2",
-            &[&os_id, &os_release],
+             WHERE g.os_id = $1 AND g.os_release = $2
+               AND ($3::text[] IS NULL OR c.agent_id = ANY($3))",
+            &[&os_id, &os_release, &agents],
         )
         .await?
         .get(0))
