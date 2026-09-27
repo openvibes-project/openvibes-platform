@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 24;
+pub const SCHEMA_VERSION: i32 = 25;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -91,6 +91,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
         24,
         include_str!("../../../migrations/0024_console_rules_permission_cleanup.sql"),
     ),
+    (
+        25,
+        include_str!("../../../migrations/0025_console_vulnerability_reads.sql"),
+    ),
 ];
 
 // The build fails if a migration is added without bumping SCHEMA_VERSION or
@@ -153,4 +157,38 @@ pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
     }
     transaction.commit().await?;
     Ok(SCHEMA_VERSION.max(applied))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MIGRATIONS;
+
+    /// Every file in migrations/ is in MIGRATIONS exactly once, numbered as
+    /// its name says: a file left out after a merge (two PRs both adding a
+    /// version 23) never runs, and nothing else would notice.
+    #[test]
+    fn every_migration_file_is_listed_once_with_its_number() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../migrations");
+        let mut files: Vec<(i32, String)> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .filter(|name| name.ends_with(".sql"))
+            .map(|name| (name[..4].parse().expect("NNNN_name.sql"), name))
+            .collect();
+        files.sort();
+        let listed: Vec<(i32, String)> = MIGRATIONS
+            .iter()
+            .map(|(version, sql)| {
+                let name = files
+                    .iter()
+                    .find(|(_, name)| {
+                        std::fs::read_to_string(dir.join(name)).unwrap() == **sql
+                    })
+                    .map(|(_, name)| name.clone())
+                    .unwrap_or_else(|| format!("(no file for version {version})"));
+                (*version, name)
+            })
+            .collect();
+        assert_eq!(listed, files, "migrations/ and MIGRATIONS differ");
+    }
 }

@@ -412,11 +412,15 @@ trigger prevents it from restoring or reclassifying an agent.
 `SET ROLE "openvibes-console"` and checks forbidden status changes;
 `tests/migrate.rs` asserts the exact table and column grants.
 
-## Built-in console permissions (schema 23)
+## Built-in console permissions (schemas 24, 25)
 
-Migration 23 adds agent-scoped `vulnerabilities.read` to all built-in roles.
-It removes the older `rules.read` grants from Viewer, Analyst, and Operator;
-only Admin receives that global permission by default. The console integration
+Migration 25 adds agent-scoped `vulnerabilities.read` to all built-in roles
+and grants the console `SELECT` on the vulnerability tables (written as
+version 23 in #38 and renumbered after #45's version 23 left it out of the
+list). Migration 24 removes the older `rules.read` grants from Viewer,
+Analyst, and Operator; only Admin receives that global permission by
+default. `migrate::tests::every_migration_file_is_listed_once_with_its_number`
+fails if a file in `migrations/` is missing from the list. The console integration
 test compares the complete database role-permission mapping with the canonical
 Rust role resolver.
 
