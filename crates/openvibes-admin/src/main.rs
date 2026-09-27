@@ -8,10 +8,12 @@ mod agent;
 mod assistant;
 mod ca;
 mod files;
+mod helper;
 mod import;
 mod model;
 mod rules;
 mod token;
+mod tui;
 mod user;
 mod vulns;
 
@@ -31,8 +33,9 @@ struct Cli {
     /// Admin configuration file.
     #[arg(long, default_value = "/etc/openvibes/admin.toml")]
     config: PathBuf,
+    /// Without a subcommand, the administration TUI opens.
     #[command(subcommand)]
-    command: Command,
+    command: Option<Command>,
 }
 
 #[derive(Subcommand)]
@@ -93,6 +96,12 @@ enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// Root-only verbs for the administration TUI (run through sudo).
+    #[command(hide = true)]
+    Helper {
+        #[command(subcommand)]
+        command: helper::HelperCommand,
+    },
     /// The console's assistant: check its model backend and run the
     /// quality gate.
     Assistant {
@@ -116,6 +125,7 @@ impl Command {
             Self::Vulns { command } => command.name(),
             Self::Import { .. } => "import",
             Self::Assistant { command } => command.name(),
+            Self::Helper { .. } => "helper",
         }
     }
 }
@@ -129,9 +139,17 @@ struct AdminConfig {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    // No subcommand: the administration TUI, which needs no config file.
+    let Some(command) = &cli.command else {
+        return tui::run();
+    };
+    // The root helper runs before any config or database access.
+    if let Command::Helper { command } = command {
+        return helper::run(command);
+    }
     // Offline CA commands run where no platform exists: no config, no
     // database, no audit row.
-    if let Command::Ca { command } = &cli.command
+    if let Command::Ca { command } = command
         && command.is_offline()
     {
         return match ca::run_offline(command) {
@@ -167,7 +185,7 @@ async fn main() -> ExitCode {
         }
     };
     let actor = actor();
-    let (result, target) = match &cli.command {
+    let (result, target) = match command {
         Command::Ca { command } => match require_current_schema(&client).await {
             Ok(()) => ca::run_host(command, &client).await,
             Err(error) => (Err(error), command.target()),
@@ -210,14 +228,9 @@ async fn main() -> ExitCode {
         other => (run(other, &mut client).await, None),
     };
     let outcome = if result.is_ok() { "ok" } else { "error" };
-    let audited = platform_store::audit::record(
-        &client,
-        &actor,
-        cli.command.name(),
-        target.as_deref(),
-        outcome,
-    )
-    .await;
+    let audited =
+        platform_store::audit::record(&client, &actor, command.name(), target.as_deref(), outcome)
+            .await;
     match (result, audited) {
         (Ok(output), Ok(())) => {
             print!("{output}");
@@ -303,6 +316,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Feeds { .. }
         | Command::Vulns { .. }
         | Command::Import { .. }
+        | Command::Helper { .. }
         | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
         }

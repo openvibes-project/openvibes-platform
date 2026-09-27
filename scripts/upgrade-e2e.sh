@@ -40,7 +40,7 @@ for p in "${PKGS[@]}"; do
     cp "$1"/openvibes-$p-[0-9]*.rpm "$W/base/"
     cp "$2"/openvibes-$p-[0-9]*.rpm "$W/new/"
 done
-printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux && dnf clean all\n' |
+printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux sudo polkit curl && dnf clean all\n' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" rm -f "$C" >/dev/null 2>&1 || true
 "$PODMAN" run -d --systemd=always --privileged --name "$C" -v "$W:/test:Z" "$IMAGE" /sbin/init >/dev/null

@@ -27,6 +27,11 @@ grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service ||
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-distribution.service || fail "distribution unit lacks KillSignal=SIGINT"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-vulns.service || fail "vulns unit lacks KillSignal=SIGINT"
 /usr/bin/openvibes-admin --help >/dev/null || fail "openvibes-admin does not run"
+# Administration TUI operators (admin TUI spec §3).
+getent group openvibes-operators >/dev/null || fail "no openvibes-operators group"
+visudo -cf /etc/sudoers.d/openvibes-operators >/dev/null || fail "sudoers drop-in does not parse"
+[[ "$(stat -c '%a %U' /etc/sudoers.d/openvibes-operators)" == "440 root" ]] || fail "sudoers drop-in mode"
+[[ -f /usr/share/polkit-1/rules.d/50-openvibes-operators.rules ]] || fail "no polkit rule"
 # Hyphenated service accounts (admin TUI spec §2) and the upgrade rename.
 for n in admin ingest distribution vulns; do
     getent passwd openvibes-$n >/dev/null || fail "no openvibes-$n user"

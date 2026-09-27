@@ -76,6 +76,8 @@ inventories OpenVIBES agents report.
 
 %package -n openvibes-admin
 Requires(pre):  shadow-utils procps-ng systemd
+# The administration TUI: operators act through sudo, polkit and curl.
+Requires:       sudo polkit curl
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
 
@@ -131,6 +133,8 @@ install -D -m 0644 $S/packaging/rpm/openvibes-ingest.sysusers %{buildroot}%{_sys
 install -D -m 0644 $S/packaging/rpm/openvibes-admin.sysusers %{buildroot}%{_sysusersdir}/openvibes-admin.conf
 install -D -m 0640 $S/packaging/rpm/ingest.toml %{buildroot}%{_sysconfdir}/openvibes/ingest.toml
 install -D -m 0640 $S/packaging/rpm/admin.toml %{buildroot}%{_sysconfdir}/openvibes/admin.toml
+install -D -m 0644 $S/packaging/rpm/openvibes-operators.polkit.rules %{buildroot}%{_datadir}/polkit-1/rules.d/50-openvibes-operators.rules
+install -D -m 0440 $S/packaging/rpm/openvibes-operators.sudoers %{buildroot}%{_sysconfdir}/sudoers.d/openvibes-operators
 install -d -m 0700 %{buildroot}%{_sharedstatedir}/openvibes-ingest
 for n in admin ingest distribution vulns; do
     install -D -m 0755 $S/packaging/rpm/rename-account.sh %{buildroot}%{_libexecdir}/openvibes/rename-account-$n
@@ -265,6 +269,8 @@ fi
 %{_libexecdir}/openvibes/rename-account-admin
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0640, root, openvibes-admin) %{_sysconfdir}/openvibes/admin.toml
+%{_datadir}/polkit-1/rules.d/50-openvibes-operators.rules
+%config(noreplace) %attr(0440, root, root) %{_sysconfdir}/sudoers.d/openvibes-operators
 
 %if %{with llm}
 %files -n openvibes-llm

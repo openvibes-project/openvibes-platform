@@ -13,6 +13,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |
 | `platform-agent-server` | library | shared agent-facing server: TLS, auth, limits, logs, health, drain (SP2 DM0) | [platform-agent-server.md](platform-agent-server.md) |
 | `platform-assistant` | library | assistant configuration, OpenAI-compatible backend client, capability probe (AS1); scoped lookups, orchestrator, output sanitising (AS2); evaluation fleet, question set, gate (AS3) | [platform-assistant.md](platform-assistant.md) |
+| `platform-host` | library | host operations for the admin TUI: unit allow-list, systemd backend (services, start/stop/restart, logs) (TUI PR 1) | [platform-host.md](platform-host.md) |
 | `openvibes-admin` | CLI | migrate, status, maintenance (PM1); ca, token, agent (PM2); rules (SP2); assistant check, eval (AS3); local console user bootstrap and administration (C3); local model install/check (AS5) | [openvibes-admin.md](openvibes-admin.md) |
 | `openvibes-llm` | optional service, loopback 18430 | pinned `llama-server` (CPU, Vulkan) for the assistant, hardened unit, model digest check (AS5) | [openvibes-llm.md](openvibes-llm.md) |
 | `openvibes-ingest` | service, port 18423 | enroll, renew, heartbeat, findings, limits, health (PM3) | [openvibes-ingest.md](openvibes-ingest.md) |

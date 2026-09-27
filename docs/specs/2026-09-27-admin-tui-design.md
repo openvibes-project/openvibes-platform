@@ -72,9 +72,13 @@ once (a root step). Membership grants exactly these, with no password:
 
 | Need | How | Scope |
 |---|---|---|
-| Service lifecycle | polkit rule (`/usr/share/polkit-1/rules.d/50-openvibes.rules`) for `org.freedesktop.systemd1.manage-units` and `manage-unit-files` | only units named in the allow-list (§5) |
+| Service lifecycle | polkit rule (`/usr/share/polkit-1/rules.d/50-openvibes-operators.rules`) for `org.freedesktop.systemd1.manage-units`: start, stop, restart | only units named in the allow-list (§5) |
 | Database work | sudoers drop-in: run `/usr/bin/openvibes-admin` as `openvibes-admin` | the existing CLI, its peer login, schema checks and audit log, unchanged |
 | Config save, service logs | sudoers drop-in: run `/usr/bin/openvibes-admin helper config-write SERVICE` and `helper logs UNIT` as root | fixed verbs; arguments checked against the allow-lists; content read from stdin and validated again as root |
+
+Enabling and disabling a unit at boot are privileged steps: systemd's
+`manage-unit-files` polkit action does not name the unit, so a rule could
+not limit it to OpenVIBES units.
 
 Everything else that needs root is a **privileged step**: the TUI shows
 what it will do, asks for the user's password in the TUI, and runs
@@ -135,7 +139,8 @@ destructive action asks for confirmation.
 - **Services.** For each installed allow-listed unit (`openvibes-ingest`,
   `-distribution`, `-vulns`, `-llm`, `-maintenance.timer`, later
   `-console`): enabled, active, readiness (`/ready` where the unit has
-  one), last error line. Actions: start, stop, restart, enable, disable.
+  one), last error line. Actions: start, stop, restart (enable and disable
+  at boot are privileged steps, PR 4).
   The last 50 journal lines of the selected unit.
 - **Configuration.** One form per service, built from that service's own
   config type (`openvibes-ingest`, `-distribution`, `-vulns`, admin,
@@ -270,12 +275,12 @@ One PR each, in order:
 0. Account rename (§2): migration, RPM upgrade scripts, units, docs,
    upgrade test.
 1. `platform-host` + Services screen + `openvibes-admin` opening the TUI;
-   RPM: `openvibes-operators` group, polkit rule, sudoers drop-in, helper
-   `logs`.
+   RPM: `openvibes-operators` group, polkit rule (start, stop, restart),
+   sudoers drop-in, helper `logs`.
 2. Configuration screen + helper `config-write`.
 3. Database and Health screens + `audit note`.
 4. Setup (screen and `setup` command) + privileged steps with the password
-   prompt; e2e uses `setup --quick`.
+   prompt (including enable and disable); e2e uses `setup --quick`.
 5. System screen + shell options.
 
 Each PR updates `docs/components/` (new page `platform-host.md`; admin page

@@ -138,6 +138,22 @@ async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
     fixture.drop().await;
 }
 
+// Without a subcommand the administration TUI opens; with no terminal (a
+// pipe, cron) it says so and exits 2 instead of drawing garbage.
+#[test]
+fn no_subcommand_without_a_terminal_explains_itself() {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .stdin(std::process::Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("needs a terminal"),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
 #[tokio::test]
 async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
     let fixture = Fixture::create().await;
