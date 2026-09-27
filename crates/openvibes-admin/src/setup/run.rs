@@ -114,7 +114,7 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("open: {}", ports.join(" "))))
 }
 
-fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
+pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
     unit.ready_url().is_none_or(|url| {
         ctx.succeeds(
             Curl,

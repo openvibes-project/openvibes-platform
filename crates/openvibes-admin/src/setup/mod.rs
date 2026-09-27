@@ -15,6 +15,7 @@ mod pki_tests;
 pub mod plan;
 mod run;
 mod system;
+pub mod update;
 
 use std::{path::Path, process::ExitCode, time::Duration};
 

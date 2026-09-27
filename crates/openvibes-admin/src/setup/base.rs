@@ -25,7 +25,11 @@ fn platform_packages(plan: &Plan) -> Vec<&'static str> {
 
 /// The one file for package `name` in `dir` (`NAME-VERSION-….rpm`, not a
 /// source package and not `NAME-other-…`).
-fn local_rpm<R: Runner>(ctx: &Ctx<R>, dir: &std::path::Path, name: &str) -> Result<String, String> {
+pub(super) fn local_rpm<R: Runner>(
+    ctx: &Ctx<R>,
+    dir: &std::path::Path,
+    name: &str,
+) -> Result<String, String> {
     let prefix = format!("{name}-");
     let shown = dir.display();
     let entries = std::fs::read_dir(ctx.root.join(dir.strip_prefix("/").unwrap_or(dir)))
