@@ -37,8 +37,9 @@ contracts document gains the import rules:
 - The inventory with the newest `collected_at_unix_ms` wins; an older or
   equal one is ignored, so importing files in any order gives the same
   result.
-- An inventory without `os` is stored but not matched for
-  vulnerabilities.
+- An inventory without `os` is refused by the importer ("no operating
+  system: export again with a newer agent"): matching needs it, and no
+  agent release exists yet whose exports lack it.
 - `agent_id` and `hostname` in a file are labels, never identity.
 
 New fixtures: `inventory-export/valid-os.json` (with `os` and
@@ -81,10 +82,14 @@ merges second renumbers its own files.
   through the same store code as online delivery with `origin = 'import'`
   and `authenticated = false`; update current findings the same way.
   Findings already present are counted, not re-stored.
-- **InventoryExport:** upsert the row; if newer than the stored
-  inventory, replace `host_packages`, set `os_id`/`os_version_id` and
-  `running_kernel`, and `NOTIFY inventory_changed` so `openvibes-vulns`
-  matches the host (within a second, as online).
+- **InventoryExport:** upsert the row; if `collected_at` is newer than
+  the stored `inventory_at`, replace the inventory through the same store
+  function as online reports (`inventory::replace`: `host_packages`,
+  `os_id`, `os_version`, `running_kernel`, digest, `NOTIFY
+  inventory_changed`), with `inventory_at` = `collected_at` rather than
+  the receipt time, so `openvibes-vulns` matches the host within a second
+  as online. For an imported row `inventory_at` is always the snapshot
+  time, which is what newest-wins compares.
 - Each file is one transaction; a refused file does not stop the others.
 - Output: one line per file, e.g.
   `openvibes-export-…json: imported 12 findings (3 already present)`,
@@ -122,7 +127,7 @@ merges second renumbers its own files.
 - Store (PostgreSQL): re-import stores nothing new; an older inventory is
   ignored and a newer one replaces; a file claiming an enrolled
   `agent_id` leaves that agent, its findings and inventory untouched;
-  an inventory without `os` is stored and not matched.
+  an inventory without `os` is refused.
 - Admin CLI integration: mixed directory (good, oversized, invalid,
   unknown kind) gives the expected lines and exit code 1; audit entry
   written; `agent revoke import.…` refused.
