@@ -5,8 +5,10 @@
 //! with the invoking OS user, including commands that fail.
 
 mod agent;
+mod assistant;
 mod ca;
 mod files;
+mod model;
 mod rules;
 mod token;
 mod vulns;
@@ -73,6 +75,12 @@ enum Command {
         #[command(subcommand)]
         command: vulns::VulnsCommand,
     },
+    /// The console's assistant: check its model backend and run the
+    /// quality gate.
+    Assistant {
+        #[command(subcommand)]
+        command: assistant::AssistantCommand,
+    },
 }
 
 impl Command {
@@ -87,6 +95,7 @@ impl Command {
             Self::Rules { command } => command.name(),
             Self::Feeds { command } => command.name(),
             Self::Vulns { command } => command.name(),
+            Self::Assistant { command } => command.name(),
         }
     }
 }
@@ -161,6 +170,10 @@ async fn main() -> ExitCode {
         },
         Command::Vulns { command } => match require_current_schema(&client).await {
             Ok(()) => vulns::run_vulns(command, &client).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Assistant { command } => match require_current_schema(&client).await {
+            Ok(()) => assistant::run(command).await,
             Err(error) => (Err(error), None),
         },
         other => (run(other, &mut client).await, None),
@@ -256,7 +269,8 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Agent { .. }
         | Command::Rules { .. }
         | Command::Feeds { .. }
-        | Command::Vulns { .. } => {
+        | Command::Vulns { .. }
+        | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
         }
         Command::Status => {
