@@ -7,6 +7,7 @@ mod base;
 mod console;
 #[cfg(test)]
 mod fake;
+mod fleet;
 mod pki;
 pub mod plan;
 mod run;
@@ -29,9 +30,9 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Console => console::console_check(ctx),
         Step::Services => run::services_check(ctx),
         Step::Firewall => run::firewall_check(ctx),
+        Step::Rules => fleet::rules_check(ctx),
+        Step::Agent => fleet::agent_check(ctx),
         Step::Ready => run::ready_check(ctx),
-        // Removed in Task 8, when every step has its module.
-        other => Err(format!("{} is not implemented yet", other.name())),
     };
     result.unwrap_or_else(StepState::Failed)
 }
@@ -49,8 +50,9 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Console => console::console_apply(ctx),
         Step::Services => run::services_apply(ctx),
         Step::Firewall => run::firewall_apply(ctx),
+        Step::Rules => fleet::rules_apply(ctx),
+        Step::Agent => fleet::agent_apply(ctx),
         Step::Ready => run::ready_apply(ctx),
-        other => Err(format!("{} is not implemented yet", other.name())),
     };
     result.unwrap_or_else(StepState::Failed)
 }
