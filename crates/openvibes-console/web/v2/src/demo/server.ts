@@ -23,12 +23,15 @@ const problem = (status: number, code: string, title: string) =>
   });
 
 function page<T>(items: readonly T[], query: URLSearchParams, fallback = 50) {
-  const limit = Math.min(500, Math.max(1, Number(query.get("limit") ?? fallback) || fallback));
+  const limit = Number(query.get("limit") ?? fallback) || fallback;
   const offset = Number(atob(query.get("cursor") ?? "") || 0) || 0;
   const slice = items.slice(offset, offset + limit);
   const next = offset + limit < items.length ? btoa(String(offset + limit)) : null;
   return { items: slice, next_cursor: next };
 }
+
+/** The real API's `MAX_PAGE_SIZE` (crates/openvibes-console/src/api.rs). */
+export const MAX_PAGE = 100;
 
 const severityRank: Record<string, number> = { critical: 0, important: 1, high: 1, moderate: 2, medium: 2, low: 3, unrated: 4 };
 
@@ -304,6 +307,10 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     persona,
     async handle(method: string, url: string, body?: unknown): Promise<Response> {
       const parsed = new URL(url, "http://demo");
+      const limit = parsed.searchParams.get("limit");
+      if (limit !== null && !(Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= MAX_PAGE)) {
+        return problem(400, "invalid_pagination", "limit must be between 1 and 100");
+      }
       for (const candidate of routes) {
         if (candidate.method !== method) continue;
         const match = candidate.pattern.exec(parsed.pathname);

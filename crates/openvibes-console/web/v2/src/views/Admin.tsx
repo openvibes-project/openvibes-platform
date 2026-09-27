@@ -3,8 +3,8 @@
 // investigate views.
 import { useMemo } from "react";
 
-import { useResource } from "../api/client";
-import type { AccessInventory, AuditPage, AuditRetention, EnrollmentToken, RuleSet, ServiceAccount } from "../api/types";
+import { isDemo, useAllPages, useResource } from "../api/client";
+import type { AccessInventory, AuditEvent, AuditRetention, EnrollmentToken, RuleSet, ServiceAccount } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { tokenState } from "../panels/OpsPanels";
@@ -14,6 +14,16 @@ import { within } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { matches } from "../ui/table";
 import { ViewHeader } from "../ui/ViewHeader";
+
+/** The demo has no server to export from: build the same columns in the browser. */
+function downloadCsv(events: readonly AuditEvent[]) {
+  const cell = (value: string | null | undefined) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const lines = [["at", "action", "actor", "target", "result"].join(","), ...events.map((e) => [e.at, e.action, e.actor, e.target, e.result].map(cell).join(","))];
+  const url = URL.createObjectURL(new Blob([`${lines.join("\n")}\n`], { type: "text/csv" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: "openvibes-audit-demo.csv" });
+  link.click();
+  URL.revokeObjectURL(url);
+}
 
 function useTop() {
   const { panels } = useLocation();
@@ -147,18 +157,20 @@ export function ServiceAccounts() {
 export function Audit() {
   const { can } = useSession();
   const { params } = useLocation();
-  const page = useResource<AuditPage>("/api/v1/audit-events?limit=500");
+  const page = useAllPages<AuditEvent>("/api/v1/audit-events", 1000);
   const retention = useResource<AuditRetention>("/api/v1/audit-retention");
   const top = useTop();
   const failed = params.get("result") === "failure";
-  const rows = (page.data?.items ?? []).filter((e) => (!failed || e.result !== "success") && matches([e.action, e.actor, e.target], params.get("q") ?? ""));
+  const rows = (page.data ?? []).filter((e) => (!failed || e.result !== "success") && matches([e.action, e.actor, e.target], params.get("q") ?? ""));
   return (
     <div className="view">
       <ViewHeader title="Audit log" count={rows.length} refresh="/api/v1/audit" placeholder="Filter by action, person or target…"
         chips={[{ label: "Failures", param: "result", value: "failure" }]}
         actions={<>
           {retention.data && <span className="subtle nowrap">Kept {retention.data.retention_days} days</span>}
-          {can("audit.export", true) && <a className="button" href="/api/v1/audit-export.csv" download><Icon name="download" size={15} /> Export CSV</a>}
+          {can("audit.export", true) && (isDemo()
+            ? <button type="button" className="button" onClick={() => downloadCsv(rows)}><Icon name="download" size={15} /> Export CSV</button>
+            : <a className="button" href="/api/v1/audit-export.csv" download><Icon name="download" size={15} /> Export CSV</a>)}
         </>} />
       {page.error ? <div className="view-pad"><ErrorBox error={page.error} /></div> : !page.data ? <Loading /> : (
         <DataTable label="Audit events" compact rows={rows} rowKey={(e) => e.id}

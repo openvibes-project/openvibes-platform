@@ -2,8 +2,8 @@
 // in a panel beside the list, never on a separate page.
 import { useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { AccessInventory, AuditPage, CreatedToken, EnrollmentToken, RuleBundle, RuleSet, ServiceAccount, ServiceToken } from "../api/types";
+import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
+import type { AccessInventory, AuditEvent, CreatedToken, EnrollmentToken, RuleBundle, RuleSet, ServiceAccount, ServiceToken } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
@@ -182,10 +182,10 @@ export function ServiceAccountPanel({ id }: { id: string }) {
 }
 
 export function AuditEventPanel({ id }: { id: string }) {
-  const page = useResource<AuditPage>("/api/v1/audit-events?limit=500");
-  const event = page.data?.items.find((item) => item.id === id);
+  const page = useAllPages<AuditEvent>("/api/v1/audit-events", 1000);
+  const event = page.data?.find((item) => item.id === id);
   if (page.error) return <div className="panel-body"><ErrorBox error={page.error} /></div>;
-  if (!event) return page.loading ? <Loading /> : <div className="panel-body"><Empty title="Event not in the latest 500" /></div>;
+  if (!event) return page.loading ? <Loading /> : <div className="panel-body"><Empty title="Event not in the latest 1,000" /></div>;
   const target = event.target_kind === "agent" && event.target_id ? { kind: "agent", id: event.target_id }
     : event.target_kind === "finding" && event.target_id ? { kind: "finding", id: event.target_id }
       : event.target_kind === "enrollment_token" && event.target_id ? { kind: "enrollment-token", id: event.target_id }

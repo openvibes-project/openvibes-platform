@@ -27,20 +27,20 @@ describe("demo server", () => {
     expect((first.items as unknown[]).length).toBe(50);
     const second = await json(await server.handle("GET", `/api/v1/agents?limit=50&cursor=${String(first.next_cursor)}`));
     expect((second.items as { id: string }[])[0]?.id).toBe("agent-00051");
-    const stale = await json(await server.handle("GET", "/api/v1/agents?state=stale&limit=500"));
+    const stale = await json(await server.handle("GET", "/api/v1/agents?state=stale&limit=100"));
     expect((stale.items as { status: string }[]).every((agent) => agent.status === "stale")).toBe(true);
   });
 
   it("applies bulk triage to a finding group and records it in the audit log", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=500"));
+    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
     const group = (groups.items as { rule_set_id: string; rule_id: string; endpoint_count: number }[])[0];
     if (group === undefined) throw new Error("no groups");
-    const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=500`));
+    const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
     const changes = (endpoints.items as { agent_id: string; triage_version: number }[]).map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
     const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", changes });
     expect(response.status).toBe(200);
-    const after = await json(await server.handle("GET", "/api/v1/findings/groups?limit=500"));
+    const after = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
     const updated = (after.items as { rule_id: string; triage_counts: { mitigated: number } }[]).find((g) => g.rule_id === group.rule_id);
     expect(updated?.triage_counts.mitigated).toBe(group.endpoint_count);
     const audit = await json(await server.handle("GET", "/api/v1/audit-events?limit=1"));
@@ -82,6 +82,13 @@ describe("demo server", () => {
     expect(response.status).toBe(200);
     const agent = await json(await server.handle("GET", "/api/v1/agents/agent-00001"));
     expect(agent.status).toBe("revoked");
+  });
+
+  it("rejects page sizes above the real API's maximum of 100", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await server.handle("GET", "/api/v1/agents?limit=101")).status).toBe(400);
+    expect((await server.handle("GET", "/api/v1/findings/groups?limit=250")).status).toBe(400);
+    expect((await server.handle("GET", "/api/v1/agents?limit=100")).status).toBe(200);
   });
 
   it("answers 404 for unknown routes", async () => {

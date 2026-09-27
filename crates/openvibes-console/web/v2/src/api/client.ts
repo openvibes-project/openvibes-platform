@@ -118,7 +118,7 @@ export function useAllPages<T>(path: string | null, max = 2000): Resource<T[]> {
       let cursor: string | null | undefined = null;
       do {
         const separator = path.includes("?") ? "&" : "?";
-        const pageData: { items: T[]; next_cursor?: string | null } = await load(`${path}${separator}limit=500${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
+        const pageData: { items: T[]; next_cursor?: string | null } = await load(`${path}${separator}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`);
         items.push(...pageData.items);
         cursor = pageData.next_cursor;
       } while (cursor && items.length < max);

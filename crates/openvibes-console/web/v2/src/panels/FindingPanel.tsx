@@ -2,8 +2,8 @@
 // with triage for one host or many at once.
 import { useMemo, useState } from "react";
 
-import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { FindingGroup, FindingGroupPage, GroupEndpoint } from "../api/types";
+import { ApiError, invalidate, request, useAllPages } from "../api/client";
+import type { FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, triageLabel } from "../ui/format";
@@ -34,21 +34,21 @@ export function FindingPanel({ id }: { id: string }) {
   const [ruleSetId, ruleId] = splitFindingId(id);
   const { can } = useSession();
   const groups = useAllPages<FindingGroup>("/api/v1/findings/groups");
-  const endpoints = useResource<{ items: GroupEndpoint[] }>(`/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/endpoints?limit=500`);
+  const endpoints = useAllPages<GroupEndpoint>(`/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/endpoints`);
   const group = groups.data?.find((candidate) => candidate.rule_set_id === ruleSetId && candidate.rule_id === ruleId);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, setState] = useState<string>("investigating");
   const [note, setNote] = useState("");
   const [filter, setFilter] = useState<string>("all");
   const [busy, setBusy] = useState(false);
-  const items = useMemo(() => (endpoints.data?.items ?? []).filter((item) => filter === "all" || item.triage_state === filter), [endpoints.data, filter]);
+  const items = useMemo(() => (endpoints.data ?? []).filter((item) => filter === "all" || item.triage_state === filter), [endpoints.data, filter]);
 
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
   if (!group && groups.loading) return <Loading />;
   if (!group) return <div className="panel-body"><Empty icon="findings" title="Finding not found">It may have been resolved, or it is outside your access.</Empty></div>;
 
   const apply = async (agentIds: string[]) => {
-    const all = endpoints.data?.items ?? [];
+    const all = endpoints.data ?? [];
     const changes = all.filter((item) => agentIds.includes(item.agent_id)).map((item) => ({ agent_id: item.agent_id, version: item.triage_version }));
     setBusy(true);
     try {
@@ -132,4 +132,3 @@ export function FindingPanel({ id }: { id: string }) {
   );
 }
 
-export type { FindingGroupPage };
