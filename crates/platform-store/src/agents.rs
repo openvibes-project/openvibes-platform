@@ -23,6 +23,31 @@ pub struct AgentInfo {
     pub certificates: i64,
     /// Imported hosts: the `agent_id` their files named, a label only.
     pub claimed_agent_id: Option<String>,
+    /// The latest health report (P12); `None` when absent or unreadable.
+    pub health: Option<openvibes_core::Health>,
+    /// The report before it.
+    pub health_previous: Option<openvibes_core::Health>,
+    /// When the latest report was written.
+    pub health_at: Option<DateTime<Utc>>,
+}
+
+impl AgentInfo {
+    /// Health status and reasons; `None` unless the agent is active.
+    #[must_use]
+    pub fn health_status(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Option<(crate::health::HealthStatus, Vec<&'static str>)> {
+        (self.status == "active").then(|| {
+            crate::health::health_status(
+                self.last_seen_at,
+                self.health_at,
+                self.health.as_ref(),
+                self.health_previous.as_ref(),
+                now,
+            )
+        })
+    }
 }
 
 /// Which agents to list.
@@ -54,7 +79,7 @@ pub enum Revoke {
 const SELECT: &str = "SELECT a.agent_id, a.status, a.enrolled_at, a.revoked_at, a.last_seen_at,
         a.scanner_version,
         (SELECT count(*) FROM certificates c WHERE c.agent_id = a.agent_id),
-        a.claimed_agent_id
+        a.claimed_agent_id, a.health, a.health_previous, a.health_at
     FROM agents a";
 
 fn info(row: &tokio_postgres::Row) -> AgentInfo {
@@ -67,6 +92,14 @@ fn info(row: &tokio_postgres::Row) -> AgentInfo {
         scanner_version: row.get(5),
         certificates: row.get(6),
         claimed_agent_id: row.get(7),
+        // A report that does not parse counts as absent.
+        health: row
+            .get::<_, Option<serde_json::Value>>(8)
+            .and_then(|value| serde_json::from_value(value).ok()),
+        health_previous: row
+            .get::<_, Option<serde_json::Value>>(9)
+            .and_then(|value| serde_json::from_value(value).ok()),
+        health_at: row.get(10),
     }
 }
 

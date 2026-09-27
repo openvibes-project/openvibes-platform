@@ -309,13 +309,20 @@ pub async fn heartbeat(
     version: &str,
     hostname: Option<&str>,
     capabilities: &[String],
+    health: Option<&serde_json::Value>,
     now: DateTime<Utc>,
 ) -> Result<bool, StoreError> {
     let stale_before = now - Duration::minutes(HEARTBEAT_WRITE_MINUTES);
+    // P12: the health report rides on this throttled write; the one before
+    // it is kept to tell a total that rose. No report (an agent before P12)
+    // keeps the stored one.
     let changed = client
         .execute(
             "UPDATE agents SET last_seen_at = $2, scanner_version = $3, capabilities = $4,
-                 hostname = COALESCE($6, hostname)
+                 hostname = COALESCE($6, hostname),
+                 health_previous = CASE WHEN $7::jsonb IS NULL THEN health_previous ELSE health END,
+                 health = COALESCE($7::jsonb, health),
+                 health_at = CASE WHEN $7::jsonb IS NULL THEN health_at ELSE $2 END
              WHERE agent_id = $1
                AND (last_seen_at IS NULL OR last_seen_at < $5
                     OR hostname IS DISTINCT FROM COALESCE($6, hostname)
@@ -327,6 +334,7 @@ pub async fn heartbeat(
                 &capabilities,
                 &stale_before,
                 &hostname,
+                &health,
             ],
         )
         .await?;
