@@ -15,6 +15,7 @@ mod helper;
 mod import;
 mod model;
 mod rules;
+mod setup;
 mod token;
 mod tui;
 mod user;
