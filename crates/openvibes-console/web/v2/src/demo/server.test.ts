@@ -144,6 +144,16 @@ describe("demo server", () => {
     expect((sets.items as { rule_set_id: string; current_version: number }[]).find((set) => set.rule_set_id === "baseline-linux")?.current_version).toBe(99);
   });
 
+  it("answers finding history for a rule within since, like the real API", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await server.handle("GET", "/api/v1/findings/history")).status).toBe(400);
+    const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
+    const page = await json(await server.handle("GET", `/api/v1/findings/history?since=${since}&rule_set_id=hardening-ssh&rule_id=SSH-002&limit=100`));
+    const items = page.items as { rule_id: string; observed_at: string; observed_day: string }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((item) => item.rule_id === "SSH-002" && Date.parse(item.observed_at) >= Date.parse(since))).toBe(true);
+  });
+
   it("answers 404 for unknown routes", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/nope")).status).toBe(404);

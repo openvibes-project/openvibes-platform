@@ -157,3 +157,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 }
 .dropzone:hover, .dropzone:focus-within { border-color: var(--accent); background: var(--accent-soft); }
 .dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.trend { margin: 0; display: grid; gap: 6px; }
+.trend__bars { display: flex; align-items: flex-end; gap: 3px; height: 56px; }
+.trend__bar { flex: 1; border-radius: 3px 3px 0 0; background: var(--accent); opacity: 0.85; transition: opacity var(--fast); }
+.trend__bar:hover { opacity: 1; }
+.trend__bar[data-empty] { background: var(--surface-3); }
+.trend figcaption { font-size: 11.5px; }

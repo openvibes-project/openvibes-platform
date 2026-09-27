@@ -201,6 +201,24 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("finding.triage", `${set}/${rule}`, "finding");
     return json({ updated });
   });
+  route("GET", "/api/v1/findings/history", "findings.read", (_, query) => {
+    const since = Date.parse(query.get("since") ?? "");
+    if (Number.isNaN(since)) return problem(400, "invalid_query", "since is required");
+    const day = 86_400_000;
+    const items = findings().filter((f) => (query.get("agent_id") === null || f.agent_id === query.get("agent_id")) &&
+      (query.get("rule_set_id") === null || f.rule_set_id === query.get("rule_set_id")) && (query.get("rule_id") === null || f.rule_id === query.get("rule_id")))
+      .flatMap((f) => {
+        // A mitigated finding stopped being observed a few days ago; the rest are still seen daily.
+        const state = data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state;
+        const last = state === "mitigated" ? Date.parse(f.last_observed_at) - 3 * day : Date.parse(f.last_observed_at);
+        const out = [];
+        for (let at = last; at >= Math.max(since, Date.parse(f.first_observed_at)); at -= day) {
+          out.push({ ...f, id: `${f.id}-${Math.floor(at / day)}`, observed_at: iso(at), observed_day: iso(at).slice(0, 10) });
+        }
+        return out;
+      }).sort((a, b) => b.observed_at.localeCompare(a.observed_at));
+    return json({ ...page(items, query), generated_at: iso() });
+  });
   route("GET", "/api/v1/findings/latest", "findings.read", (_, query) => {
     const severity = query.get("severity");
     const agent = query.get("agent_id");

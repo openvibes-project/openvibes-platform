@@ -7,7 +7,8 @@ import type { FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
-import { date, triageLabel } from "../ui/format";
+import { date, daysAgo, triageLabel } from "../ui/format";
+import { Trend, dailyHosts } from "../ui/trend";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
 
@@ -37,6 +38,12 @@ export function FindingPanel({ id }: { id: string }) {
   const groups = useAllPages<FindingGroup>("/api/v1/findings/groups");
   const endpoints = useAllPages<GroupEndpoint>(`/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/endpoints`);
   const group = groups.data?.find((candidate) => candidate.rule_set_id === ruleSetId && candidate.rule_id === ruleId);
+  // ponytail: the chart pages raw history (at most 3,000 rows); a
+  // per-day count endpoint would scale it to large fleets.
+  const since = daysAgo(13);
+  const history = useAllPages<{ agent_id: string; observed_day: string }>(
+    `/api/v1/findings/history?since=${encodeURIComponent(since)}&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`, 3000);
+  const trend = useMemo(() => dailyHosts(history.data ?? [], 14), [history.data]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, setState] = useState<string>("investigating");
   const [note, setNote] = useState("");
@@ -91,6 +98,7 @@ export function FindingPanel({ id }: { id: string }) {
             })}
           </div>
         </Section>
+        {history.data && history.data.length > 0 && history.data.length < 3000 && <Section title="Hosts reporting it, last 14 days"><Trend counts={trend} label="hosts per day" /></Section>}
         <dl className="kv">
           <dt>First seen</dt><dd>{date(group.first_observed_at)}</dd>
           <dt>Last seen</dt><dd><Ago value={group.last_observed_at} /></dd>
