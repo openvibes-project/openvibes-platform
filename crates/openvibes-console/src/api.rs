@@ -1095,7 +1095,22 @@ pub struct FindingGroupView {
     /// Visible endpoints whose latest observation is older than the window.
     pub older_endpoint_count: u64,
     /// Counts by endpoint triage state, for current in-window observations.
-    pub triage_counts: serde_json::Value,
+    pub triage_counts: FindingTriageCounts,
+}
+
+/// Number of endpoints in each current finding triage state.
+#[derive(Clone, Debug, Default, Serialize, ToSchema)]
+pub struct FindingTriageCounts {
+    /// Open endpoints.
+    pub open: u64,
+    /// Endpoints being investigated.
+    pub investigating: u64,
+    /// Mitigated endpoints.
+    pub mitigated: u64,
+    /// Endpoints accepted as risk.
+    pub accepted_risk: u64,
+    /// Findings marked as false positives.
+    pub false_positive: u64,
 }
 
 /// Page of unique rule groups.

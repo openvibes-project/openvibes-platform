@@ -4703,22 +4703,12 @@ pub(crate) async fn authenticated_vulnerabilities(
         Err(_) => return unavailable_auth(),
     };
     if let Some(host) = params.host.as_deref() {
-        let visible_agents = match &scope {
-            platform_store::console_read::AgentScope::Global => None,
-            _ => match platform_store::console_read::agent_ids_in_scope(&client, &scope).await {
-                Ok(ids) => Some(ids),
-                Err(_) => return unavailable_auth(),
-            },
+        let matches = match platform_store::vulns::hosts_named_in_scope(&client, host, &scope).await
+        {
+            Ok(ids) => ids,
+            Err(_) => return unavailable_auth(),
         };
-        let matches = match client.query(
-            "SELECT agent_id FROM agents WHERE (agent_id = $1 OR (hostname = $1 AND NOT EXISTS (SELECT 1 FROM agents WHERE agent_id = $1))) AND ($2::text[] IS NULL OR agent_id = ANY($2)) ORDER BY agent_id",
-            &[&host, &visible_agents],
-        ).await { Ok(rows) => rows, Err(_) => return unavailable_auth() };
         if matches.len() > 1 {
-            let ids = matches
-                .iter()
-                .map(|row| row.get::<_, String>(0))
-                .collect::<Vec<_>>();
             let mut problem = ProblemDetails::new(
                 StatusCode::BAD_REQUEST,
                 "ambiguous_host",
@@ -4727,7 +4717,7 @@ pub(crate) async fn authenticated_vulnerabilities(
             problem.field_errors = Some(vec![crate::FieldError {
                 field: "host".into(),
                 code: "ambiguous_host".into(),
-                message: ids.join(", "),
+                message: matches.join(", "),
             }]);
             return problem_response(problem);
         }
@@ -4740,6 +4730,8 @@ pub(crate) async fn authenticated_vulnerabilities(
             severity: params.severity.as_deref(),
             cve: params.cve.as_deref(),
             fixed: params.fixed.unwrap_or(false),
+            exploited: params.exploited,
+            reboot_needed: params.reboot_needed,
         },
         &scope,
     )
@@ -4749,12 +4741,6 @@ pub(crate) async fn authenticated_vulnerabilities(
         Err(_) => return unavailable_auth(),
     };
     let mut rows = rows;
-    if let Some(exploited) = params.exploited {
-        rows.retain(|row| row.exploited == exploited);
-    }
-    if let Some(reboot_needed) = params.reboot_needed {
-        rows.retain(|row| row.reboot_needed == reboot_needed);
-    }
     let more_available = rows.len() > 100;
     rows.truncate(100);
     let items = rows.into_iter().map(vulnerability_view).collect();
@@ -4888,9 +4874,26 @@ pub(crate) async fn authenticated_finding_groups(
         Ok(v) => v,
         Err(_) => return invalid_finding_query(),
     };
-    let since_text = params.since.unwrap_or_else(|| {
-        (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
-    });
+    let cursor_token = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(v) => v,
+                Err(_) => return invalid_finding_query(),
+            };
+            match serde_json::from_slice::<FindingGroupCursorToken>(&bytes) {
+                Ok(token) => Some(token),
+                Err(_) => return invalid_finding_query(),
+            }
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let since_text = params
+        .since
+        .or_else(|| cursor_token.as_ref().map(|v| v.since.clone()))
+        .unwrap_or_else(|| {
+            (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
+        });
     let since = match chrono::DateTime::parse_from_rfc3339(&since_text) {
         Ok(v) => v.with_timezone(&Utc),
         Err(_) => return invalid_finding_query(),
@@ -4904,17 +4907,9 @@ pub(crate) async fn authenticated_finding_groups(
         Some(v) => v,
         None => return invalid_finding_query(),
     };
-    let after = match params.cursor.as_deref() {
+    let after = match cursor_token {
         None => None,
-        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
-            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
-                Ok(v) => v,
-                Err(_) => return invalid_finding_query(),
-            };
-            let token = match serde_json::from_slice::<FindingGroupCursorToken>(&bytes) {
-                Ok(v) if v.since == since_text && v.scope == scope => v,
-                _ => return invalid_finding_query(),
-            };
+        Some(token) if token.since == since_text && token.scope == scope => {
             let timestamp = match chrono::DateTime::parse_from_rfc3339(&token.last_observed_at) {
                 Ok(v) => v.with_timezone(&Utc),
                 Err(_) => return invalid_finding_query(),
@@ -4945,7 +4940,45 @@ pub(crate) async fn authenticated_finding_groups(
         Ok(v) => v,
         Err(_) => return unavailable_auth(),
     };
-    let items=page.items.into_iter().map(|g|crate::FindingGroupView{rule_set_id:if g.rule_set_id.is_empty(){"~unknown".into()}else{g.rule_set_id},rule_id:g.rule_id,endpoint_count:g.endpoint_count.max(0) as u64,severity:match g.severity{platform_store::console_read::Severity::Critical=>crate::Severity::Critical,platform_store::console_read::Severity::High=>crate::Severity::High,platform_store::console_read::Severity::Medium=>crate::Severity::Medium,platform_store::console_read::Severity::Low=>crate::Severity::Low},latest_message:g.latest_message,rule_versions:g.rule_versions.into_iter().map(|v|v.max(0) as u64).collect(),first_observed_at:g.first_observed_at.to_rfc3339_opts(SecondsFormat::Secs,true),last_observed_at:g.last_observed_at.to_rfc3339_opts(SecondsFormat::Secs,true),older_endpoint_count:g.older_endpoint_count.max(0) as u64,triage_counts:serde_json::json!({"open":g.open,"investigating":g.investigating,"mitigated":g.mitigated,"accepted_risk":g.accepted_risk,"false_positive":g.false_positive})}).collect();
+    let items = page
+        .items
+        .into_iter()
+        .map(|g| crate::FindingGroupView {
+            rule_set_id: if g.rule_set_id.is_empty() {
+                "~unknown".into()
+            } else {
+                g.rule_set_id
+            },
+            rule_id: g.rule_id,
+            endpoint_count: g.endpoint_count.max(0) as u64,
+            severity: match g.severity {
+                platform_store::console_read::Severity::Critical => crate::Severity::Critical,
+                platform_store::console_read::Severity::High => crate::Severity::High,
+                platform_store::console_read::Severity::Medium => crate::Severity::Medium,
+                platform_store::console_read::Severity::Low => crate::Severity::Low,
+            },
+            latest_message: g.latest_message,
+            rule_versions: g
+                .rule_versions
+                .into_iter()
+                .map(|v| v.max(0) as u64)
+                .collect(),
+            first_observed_at: g
+                .first_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            last_observed_at: g
+                .last_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            older_endpoint_count: g.older_endpoint_count.max(0) as u64,
+            triage_counts: crate::FindingTriageCounts {
+                open: g.open.max(0) as u64,
+                investigating: g.investigating.max(0) as u64,
+                mitigated: g.mitigated.max(0) as u64,
+                accepted_risk: g.accepted_risk.max(0) as u64,
+                false_positive: g.false_positive.max(0) as u64,
+            },
+        })
+        .collect();
     let next_cursor = match page.next {
         None => None,
         Some(c) => match serde_json::to_vec(&FindingGroupCursorToken {
@@ -4990,9 +5023,26 @@ pub(crate) async fn authenticated_finding_group_endpoints(
         Ok(v) => v,
         Err(_) => return invalid_finding_query(),
     };
-    let since_text = params.since.unwrap_or_else(|| {
-        (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
-    });
+    let cursor_token = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(v) => v,
+                Err(_) => return invalid_finding_query(),
+            };
+            match serde_json::from_slice::<FindingGroupEndpointCursorToken>(&bytes) {
+                Ok(token) => Some(token),
+                Err(_) => return invalid_finding_query(),
+            }
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let since_text = params
+        .since
+        .or_else(|| cursor_token.as_ref().map(|v| v.since.clone()))
+        .unwrap_or_else(|| {
+            (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
+        });
     let since = match chrono::DateTime::parse_from_rfc3339(&since_text) {
         Ok(v) => v.with_timezone(&Utc),
         Err(_) => return invalid_finding_query(),
@@ -5012,25 +5062,15 @@ pub(crate) async fn authenticated_finding_group_endpoints(
     } else {
         &rule_set_id
     };
-    let after = match params.cursor.as_deref() {
+    let after = match cursor_token {
         None => None,
-        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
-            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
-                Ok(v) => v,
-                Err(_) => return invalid_finding_query(),
-            };
-            let token = match serde_json::from_slice::<FindingGroupEndpointCursorToken>(&bytes) {
-                Ok(v)
-                    if v.since == since_text
-                        && v.include_older == include_older
-                        && v.scope == scope
-                        && v.rule_set_id == rule_set_id
-                        && v.rule_id == rule_id =>
-                {
-                    v
-                }
-                _ => return invalid_finding_query(),
-            };
+        Some(token)
+            if token.since == since_text
+                && token.include_older == include_older
+                && token.scope == scope
+                && token.rule_set_id == rule_set_id
+                && token.rule_id == rule_id =>
+        {
             let ts = match chrono::DateTime::parse_from_rfc3339(&token.last_observed_at) {
                 Ok(v) => v.with_timezone(&Utc),
                 Err(_) => return invalid_finding_query(),

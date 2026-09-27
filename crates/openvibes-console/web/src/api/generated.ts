@@ -1309,7 +1309,7 @@ export interface components {
             /** @description Highest severity among the current in-window endpoints. */
             severity: components["schemas"]["Severity"];
             /** @description Counts by endpoint triage state, for current in-window observations. */
-            triage_counts: unknown;
+            triage_counts: components["schemas"]["FindingTriageCounts"];
         };
         /** @description One historical observation event. */
         FindingHistoryEntry: {
@@ -1405,6 +1405,34 @@ export interface components {
              * @description Number of visible latest observation rows.
              */
             total: number;
+        };
+        /** @description Number of endpoints in each current finding triage state. */
+        FindingTriageCounts: {
+            /**
+             * Format: int64
+             * @description Endpoints accepted as risk.
+             */
+            accepted_risk: number;
+            /**
+             * Format: int64
+             * @description Findings marked as false positives.
+             */
+            false_positive: number;
+            /**
+             * Format: int64
+             * @description Endpoints being investigated.
+             */
+            investigating: number;
+            /**
+             * Format: int64
+             * @description Mitigated endpoints.
+             */
+            mitigated: number;
+            /**
+             * Format: int64
+             * @description Open endpoints.
+             */
+            open: number;
         };
         /** @description Human workflow state attached to the latest finding. */
         FindingTriageView: {

@@ -738,12 +738,46 @@ async fn finding_groups(
             .or_default()
             .push(row);
     }
-    let items=groups.into_iter().map(|((rule_set_id,rule_id),rows)|{
-        let latest=rows.iter().max_by(|a,b|a.last_observed_at.cmp(&b.last_observed_at)).expect("group has a member");
-        let rank=|severity:Severity|match severity{Severity::Critical=>0,Severity::High=>1,Severity::Medium=>2,Severity::Low=>3};
-        let severity=rows.iter().map(|item|item.severity).min_by_key(|v|rank(*v)).unwrap_or(Severity::Low);
-        crate::FindingGroupView{rule_set_id,rule_id,endpoint_count:rows.len() as u64,severity,latest_message:latest.message.clone(),rule_versions:rows.iter().map(|item|item.rule_version).collect(),first_observed_at:rows.iter().map(|item|item.first_observed_at.as_str()).min().unwrap_or(latest.first_observed_at.as_str()).to_owned(),last_observed_at:latest.last_observed_at.clone(),older_endpoint_count:0,triage_counts:serde_json::json!({"open":rows.len(),"investigating":0,"mitigated":0,"accepted_risk":0,"false_positive":0})}
-    }).collect();
+    let items = groups
+        .into_iter()
+        .map(|((rule_set_id, rule_id), rows)| {
+            let latest = rows
+                .iter()
+                .max_by(|a, b| a.last_observed_at.cmp(&b.last_observed_at))
+                .expect("group has a member");
+            let rank = |severity: Severity| match severity {
+                Severity::Critical => 0,
+                Severity::High => 1,
+                Severity::Medium => 2,
+                Severity::Low => 3,
+            };
+            let severity = rows
+                .iter()
+                .map(|item| item.severity)
+                .min_by_key(|v| rank(*v))
+                .unwrap_or(Severity::Low);
+            crate::FindingGroupView {
+                rule_set_id,
+                rule_id,
+                endpoint_count: rows.len() as u64,
+                severity,
+                latest_message: latest.message.clone(),
+                rule_versions: rows.iter().map(|item| item.rule_version).collect(),
+                first_observed_at: rows
+                    .iter()
+                    .map(|item| item.first_observed_at.as_str())
+                    .min()
+                    .unwrap_or(latest.first_observed_at.as_str())
+                    .to_owned(),
+                last_observed_at: latest.last_observed_at.clone(),
+                older_endpoint_count: 0,
+                triage_counts: crate::FindingTriageCounts {
+                    open: rows.len() as u64,
+                    ..Default::default()
+                },
+            }
+        })
+        .collect();
     Json(crate::FindingGroupPage {
         items,
         next_cursor: None,

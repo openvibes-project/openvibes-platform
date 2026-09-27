@@ -1192,9 +1192,9 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .unwrap();
     assert_eq!(group_endpoints["items"].as_array().unwrap().len(), 1);
     let endpoint_cursor = group_endpoints["next_cursor"].as_str().unwrap();
-    let group_since = group_endpoints["since"].as_str().unwrap();
+    assert!(group_endpoints["since"].as_str().is_some());
     let second_group_endpoint = router.clone().oneshot(Request::builder()
-        .uri(format!("/api/v1/findings/groups/base/credential/endpoints?limit=1&since={group_since}&cursor={endpoint_cursor}"))
+        .uri(format!("/api/v1/findings/groups/base/credential/endpoints?limit=1&cursor={endpoint_cursor}"))
         .header(header::COOKIE, session_cookie.clone()).body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(second_group_endpoint.status(), StatusCode::OK);
     let second_group_endpoint: Value = serde_json::from_slice(

@@ -89,13 +89,17 @@ Every query applies the caller's asset scope in SQL before returning records.
 The summary reports severity, affected hosts, exploited advisories, no-fix
 matches, and reboot-needed hosts. The bounded prioritized list uses the same
 ranking as `vulns list`; host, advisory, severity, CVE, and fixed-state filters
-are available. Host names that match multiple visible hosts are refused with
-their visible IDs; an agent ID selects one exact host. Advisory details return
-CVE enrichment only if at least one affected host is visible to the caller.
+are available, with exploited and reboot-needed filters applied before the
+store's fleet row cap. Host names that match multiple visible hosts are refused
+with their visible IDs; an agent ID selects one exact host. Advisory details
+return CVE enrichment only if at least one affected host is visible to the
+caller.
 
 `GET /api/v1/findings/groups` shows each rule set and rule once in the recent
 window, after scope filtering. Its endpoint route pages visible current
-reporters and can include older matches on request. `~unknown` represents
+reporters with a cursor-bound window (the response's `since` is reused for
+subsequent pages) and can include older matches on request. Triage counts are
+typed by state in OpenAPI. `~unknown` represents
 pre-P6 findings with no rule set. `POST .../triage` accepts at most 100
 endpoint/version pairs and performs one all-or-nothing state transition.
 Stale selections return 412 and no endpoint is updated. Imported rows are
