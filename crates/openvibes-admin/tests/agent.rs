@@ -230,3 +230,40 @@ async fn agent_show_prints_the_report() {
         assert!(shown.contains(want), "missing {want:?} in\n{shown}");
     }
 }
+
+#[tokio::test]
+async fn agent_command_prints_the_install_line_with_a_fresh_token() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let dir = common::scratch_dir("agent-command");
+    let root = platform_pki::generate_root(Utc::now()).unwrap();
+    std::fs::write(dir.join("root.crt"), &root.cert_pem).unwrap();
+    let out = stdout(&fixture.run(&[
+        "agent",
+        "command",
+        "--platform",
+        "platform.example.com",
+        "--root-cert",
+        dir.join("root.crt").to_str().unwrap(),
+    ]));
+    let line = out.lines().next().unwrap();
+    assert!(
+        line.starts_with(
+            "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
+             --agent --platform platform.example.com --token "
+        ),
+        "{out}"
+    );
+    assert!(line.contains(" --ca-sha256 "), "{out}");
+    assert!(out.contains("24 hours, 10 enrollments"), "{out}");
+    let refused = fixture.run(&[
+        "agent",
+        "command",
+        "--platform",
+        "Bad Name",
+        "--root-cert",
+        dir.join("root.crt").to_str().unwrap(),
+    ]);
+    assert!(!refused.status.success());
+    fixture.drop().await;
+}

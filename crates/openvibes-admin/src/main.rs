@@ -263,7 +263,7 @@ async fn main() -> ExitCode {
             Err(error) => (Err(error), None),
         },
         Command::Agent { command } => match require_current_schema(&client).await {
-            Ok(()) => agent::run(command, &client).await,
+            Ok(()) => agent::run(command, &client, &actor).await,
             Err(error) => (Err(error), None),
         },
         Command::Rules { command } => match require_current_schema(&client).await {

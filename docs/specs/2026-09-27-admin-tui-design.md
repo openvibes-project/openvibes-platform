@@ -267,9 +267,11 @@ last output lines; Retry continues from that step.
     60 seconds for it to show as active.
 13. Readiness checks, and an endpoint enrollment token (24 hours, 10
     uses). The last screen shows the console address, the admin login,
-    the endpoint command (`curl … | sh -s -- --agent --platform …
-    --token …`; until the install script exists, the agent configuration
-    snippet) and the root certificate's path and SHA-256 fingerprint.
+    the endpoint command (`curl -fsSL https://openvibes-project.github.io/install.sh
+    | sudo sh -s -- --agent --platform HOSTNAME --token TOKEN --ca-sha256
+    FINGERPRINT`, releases spec §5; `openvibes-admin agent command`
+    prints it again with a new token) and the root certificate's path and
+    SHA-256 fingerprint.
 
 ### 6.4 Repair, change components
 

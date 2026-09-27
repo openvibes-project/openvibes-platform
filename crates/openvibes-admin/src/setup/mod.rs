@@ -28,6 +28,17 @@ use platform_host::{
 
 pub use system::{Ctx, lock};
 
+pub(crate) use pki::fingerprint;
+pub(crate) use run::token_from;
+
+/// The one line that installs and enrolls an agent (releases spec §5).
+pub fn agent_install_command(platform: &str, token: &str, fingerprint: &str) -> String {
+    format!(
+        "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
+         --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}"
+    )
+}
+
 /// Whether the step is done (a check that cannot run is `Failed`).
 pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
     let result = match step {
@@ -315,5 +326,17 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
         (true, _) => ExitCode::SUCCESS,
         (false, true) => ExitCode::from(3),
         (false, false) => ExitCode::FAILURE,
+    }
+}
+
+#[cfg(test)]
+mod command_tests {
+    #[test]
+    fn the_agent_install_command_is_one_line() {
+        assert_eq!(
+            super::agent_install_command("h.example", "T", "AB:CD"),
+            "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
+             --agent --platform h.example --token T --ca-sha256 AB:CD"
+        );
     }
 }

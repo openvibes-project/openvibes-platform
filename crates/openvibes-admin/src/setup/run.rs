@@ -185,8 +185,12 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     }
     let token =
         token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
+    let root = ctx.read(super::pki::ROOT_CERT)?;
+    let command =
+        super::agent_install_command(&ctx.plan.hostname, &token, &super::pki::fingerprint(&root)?);
     Ok(StepState::Done(format!(
-        "ready: {}; endpoint enrollment token (24 hours, 10 uses): {token}",
+        "ready: {}; add an agent on another host (token valid 24 hours, 10 enrollments; \
+         visible in its process list while it runs): {command}",
         names(&units).join(" ")
     )))
 }
@@ -304,10 +308,17 @@ mod tests {
             0,
             &format!("token id 7\ntoken {TOKEN}\n"),
         );
+        let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
+        fake.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
         // Everything is already ready (the usual case on a first install):
-        // the run still creates the endpoint token the last screen shows.
+        // the run still creates the endpoint token and the agent command.
         let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
-        assert!(state.detail().contains(TOKEN), "{state:?}");
+        let fingerprint = crate::setup::pki::fingerprint(&root.cert_pem).unwrap();
+        let command = format!(
+            "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
+             --agent --platform platform.example.com --token {TOKEN} --ca-sha256 {fingerprint}"
+        );
+        assert!(state.detail().contains(&command), "{state:?}");
         // Only a status check leaves the token alone.
         fake.calls.borrow_mut().clear();
         assert!(matches!(
