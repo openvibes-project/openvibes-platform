@@ -526,8 +526,66 @@ async fn exploited_first_then_likely_exploited_then_severity() {
     assert!(!rows[1].exploited);
     assert_eq!(rows[3].epss, None);
 
+    let exploited_only = vulns::list(
+        &vulns,
+        &vulns::ListFilter {
+            exploited: Some(true),
+            ..vulns::ListFilter::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        exploited_only
+            .iter()
+            .map(|row| row.advisory_id.as_str())
+            .collect::<Vec<_>>(),
+        ["FEDORA-KEV"]
+    );
+
     let summary = vulns::summary(&vulns).await.unwrap();
     assert_eq!(summary.exploited, 1);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn reboot_filter_finds_rows_beyond_the_fleet_priority_cap() {
+    let (db, _admin, mut vulns) = setup().await;
+    let now = Utc::now();
+    vulns
+        .execute(
+            "INSERT INTO advisories (advisory_id, source, os_id, os_version, severity,
+                 title, url)
+             SELECT 'ADV-' || lpad(value::text, 5, '0'), 'test', 'fedora', '44', 'low',
+                    'test advisory', 'https://example.test/'
+             FROM generate_series(0, 10000) AS value",
+            &[],
+        )
+        .await
+        .unwrap();
+    vulns
+        .execute(
+            "INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
+                 last_evaluated_at, reboot_needed)
+             SELECT $1, advisory_id, '[]', $2, $2, advisory_id = 'ADV-10000'
+             FROM advisories WHERE advisory_id LIKE 'ADV-%'",
+            &[&A, &now],
+        )
+        .await
+        .unwrap();
+
+    let rows = vulns::list(
+        &vulns,
+        &vulns::ListFilter {
+            reboot_needed: Some(true),
+            ..vulns::ListFilter::default()
+        },
+    )
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].advisory_id, "ADV-10000");
+    assert!(rows[0].reboot_needed);
     db.drop().await;
 }
 

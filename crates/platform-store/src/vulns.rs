@@ -332,6 +332,10 @@ pub struct ListFilter<'a> {
     pub cve: Option<&'a str>,
     /// Fixed ones instead of open ones.
     pub fixed: bool,
+    /// Whether the advisory is on an exploited-vulnerability list.
+    pub exploited: Option<bool>,
+    /// Whether the fix is installed but still needs a reboot.
+    pub reboot_needed: Option<bool>,
 }
 
 /// Vulnerabilities by priority (VM spec §9): exploited (KEV or EUVD) first,
@@ -384,13 +388,14 @@ async fn list_for_agents(
                     array_position(ARRAY['critical','important','moderate','low','unrated'],
                         e.severity), e.cvss DESC NULLS LAST, e.advisory_id) AS rank
          FROM adv e
-         WHERE $5::text IS NULL OR $5 = ANY(e.cves))";
+         WHERE ($5::text IS NULL OR $5 = ANY(e.cves))
+           AND ($6::boolean IS NULL OR (e.kev OR e.euvd) = $6))";
     let columns = "e.severity, e.title, e.cves";
     let enrichment = "e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url";
     // A host by agent id or hostname, resolved first so the per-host
     // indexes apply.
     let hosts: Option<Vec<String>> = match filter.host {
-        Some(host) => Some(hosts_named(client, host).await?),
+        Some(host) => Some(hosts_named_with_agents(client, host, scoped_agents).await?),
         None => None,
     };
     let rows = if hosts.is_none() && filter.advisory.is_none() {
@@ -406,7 +411,8 @@ async fn list_for_agents(
                      counts AS (
                          SELECT advisory_id, count(*) AS n FROM vulnerabilities
                          WHERE (fixed_at IS NOT NULL) = $1 AND $2::text IS NULL
-                           AND ($6::text[] IS NULL OR agent_id = ANY($6))
+                           AND ($8::text[] IS NULL OR agent_id = ANY($8))
+                           AND ($7::boolean IS NULL OR reboot_needed = $7)
                          GROUP BY advisory_id),
                      chosen AS (
                          SELECT advisory_id FROM (
@@ -420,7 +426,8 @@ async fn list_for_agents(
                      JOIN ranked e ON e.advisory_id = ch.advisory_id
                      JOIN vulnerabilities v ON v.advisory_id = ch.advisory_id
                          AND (v.fixed_at IS NOT NULL) = $1
-                         AND ($6::text[] IS NULL OR v.agent_id = ANY($6))
+                         AND ($8::text[] IS NULL OR v.agent_id = ANY($8))
+                         AND ($7::boolean IS NULL OR v.reboot_needed = $7)
                      JOIN agents g ON g.agent_id = v.agent_id
                      ORDER BY e.rank, v.first_seen_at, v.agent_id
                      LIMIT 10000"
@@ -431,6 +438,8 @@ async fn list_for_agents(
                     &filter.advisory,
                     &filter.severity,
                     &filter.cve,
+                    &filter.exploited,
+                    &filter.reboot_needed,
                     &scoped_agents,
                 ],
             )
@@ -451,8 +460,9 @@ async fn list_for_agents(
                      JOIN ranked e ON e.advisory_id = v.advisory_id
                      JOIN agents g ON g.agent_id = v.agent_id
                      WHERE (v.fixed_at IS NOT NULL) = $1
-                       AND ($6 OR v.agent_id = ANY($7))
-                       AND ($8::text[] IS NULL OR v.agent_id = ANY($8))
+                       AND ($8 OR v.agent_id = ANY($9))
+                       AND ($10::text[] IS NULL OR v.agent_id = ANY($10))
+                       AND ($7::boolean IS NULL OR v.reboot_needed = $7)
                        AND ($2::text IS NOT NULL OR $3::text IS NOT NULL)
                      UNION ALL
                      SELECT h.agent_id, g.hostname, e.advisory_id, {columns},
@@ -464,8 +474,9 @@ async fn list_for_agents(
                      JOIN package_versions pv ON pv.id = vv.package_version_id
                      JOIN host_packages h ON h.package_version_id = vv.package_version_id
                      JOIN agents g ON g.agent_id = h.agent_id
-                     WHERE NOT $1 AND ($6 OR h.agent_id = ANY($7))
-                       AND ($8::text[] IS NULL OR h.agent_id = ANY($8))
+                     WHERE NOT $1 AND ($8 OR h.agent_id = ANY($9))
+                       AND ($10::text[] IS NULL OR h.agent_id = ANY($10))
+                       AND ($7::boolean IS NULL OR NOT $7)
                      GROUP BY h.agent_id, g.hostname, e.advisory_id, e.severity, e.title,
                               e.cves, {enrichment}, e.rank
                      ) r
@@ -478,6 +489,8 @@ async fn list_for_agents(
                     &filter.advisory,
                     &filter.severity,
                     &filter.cve,
+                    &filter.exploited,
+                    &filter.reboot_needed,
                     &any_host,
                     &agents,
                     &scoped_agents,
@@ -549,12 +562,37 @@ pub async fn cve_details_in_scope(
 /// with that hostname (several when hostnames repeat, for example an
 /// imported host claiming an enrolled one's name), ordered by id.
 pub async fn hosts_named(client: &Client, name: &str) -> Result<Vec<String>, StoreError> {
+    hosts_named_with_agents(client, name, None).await
+}
+
+/// Resolves an ID or hostname only against hosts visible in `scope`. An
+/// out-of-scope ID cannot suppress a visible hostname match.
+pub async fn hosts_named_in_scope(
+    client: &Client,
+    name: &str,
+    scope: &crate::console_read::AgentScope,
+) -> Result<Vec<String>, StoreError> {
+    let agents = match scope {
+        crate::console_read::AgentScope::Global => None,
+        _ => Some(crate::console_read::agent_ids_in_scope(client, scope).await?),
+    };
+    hosts_named_with_agents(client, name, agents.as_deref()).await
+}
+
+async fn hosts_named_with_agents(
+    client: &Client,
+    name: &str,
+    scoped_agents: Option<&[String]>,
+) -> Result<Vec<String>, StoreError> {
     Ok(client
         .query(
-            "SELECT agent_id FROM agents WHERE agent_id = $1
-                 OR (hostname = $1 AND NOT EXISTS (SELECT 1 FROM agents WHERE agent_id = $1))
+            "SELECT agent_id FROM agents
+             WHERE ($2::text[] IS NULL OR agent_id = ANY($2))
+               AND (agent_id = $1 OR (hostname = $1 AND NOT EXISTS (
+                   SELECT 1 FROM agents WHERE agent_id = $1
+                     AND ($2::text[] IS NULL OR agent_id = ANY($2)))))
              ORDER BY agent_id",
-            &[&name],
+            &[&name, &scoped_agents],
         )
         .await?
         .iter()

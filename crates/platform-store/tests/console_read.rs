@@ -547,6 +547,62 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
 }
 
 #[tokio::test]
+async fn scoped_host_lookup_does_not_let_a_hidden_id_shadow_a_hostname() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    let visible = "agent.visible-host";
+    let hidden_id = "shared-host-label";
+    for (agent_id, hostname) in [(visible, Some(hidden_id)), (hidden_id, None)] {
+        client
+            .execute(
+                "INSERT INTO agents (agent_id, status, enrolled_at, hostname)
+                 VALUES ($1, 'active', $2, $3)",
+                &[&agent_id, &now, &hostname],
+            )
+            .await
+            .unwrap();
+    }
+    let group = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+    client
+        .execute(
+            "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
+             VALUES ($1, 'visible', $2, 'test')",
+            &[&group, &now],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_asset_group_selectors
+                 (asset_group_id, tag_key, tag_value, created_at)
+             VALUES ($1, 'env', 'prod', $2)",
+            &[&group, &now],
+        )
+        .await
+        .unwrap();
+    client
+        .execute(
+            "INSERT INTO console_agent_tags
+                 (agent_id, tag_key, tag_value, changed_at, changed_by)
+             VALUES ($1, 'env', 'prod', $2, 'test')",
+            &[&visible, &now],
+        )
+        .await
+        .unwrap();
+
+    let scope = platform_store::console_read::AgentScope::AssetGroups(vec![group.into()]);
+    assert_eq!(
+        platform_store::vulns::hosts_named_in_scope(&client, hidden_id, &scope)
+            .await
+            .unwrap(),
+        [visible]
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn records_console_query_plan_and_latency_at_fifty_thousand_agents() {
     const HOSTS: i32 = 50_000;
     const RUNS: usize = 30;

@@ -215,6 +215,11 @@ IDs and applied in SQL before priority selection, aggregation, or returning
 advisory enrichment. An empty scope returns no host rows or summary counts;
 advisory details are returned only when a visible host has a matching
 vulnerability.
+`ListFilter.exploited` and `ListFilter.reboot_needed` are applied inside the
+ranked/counting SQL before the 10,000-row fleet bound, so filtered fleet reads
+do not lose lower-priority matching rows. `hosts_named_in_scope` resolves an
+agent ID or hostname only among visible agents; a hidden ID cannot suppress a
+visible hostname match.
 
 Schema 23 grants the console role read-only access to the vulnerability and
 inventory tables and adds the agent-scoped `vulnerabilities.read` permission
