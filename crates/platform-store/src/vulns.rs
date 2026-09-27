@@ -365,17 +365,7 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
     // A host by agent id or hostname, resolved first so the per-host
     // indexes apply.
     let hosts: Option<Vec<String>> = match filter.host {
-        Some(host) => Some(
-            client
-                .query(
-                    "SELECT agent_id FROM agents WHERE agent_id = $1 OR hostname = $1",
-                    &[&host],
-                )
-                .await?
-                .iter()
-                .map(|row| row.get(0))
-                .collect(),
-        ),
+        Some(host) => Some(hosts_named(client, host).await?),
         None => None,
     };
     let rows = if hosts.is_none() && filter.advisory.is_none() {
@@ -487,5 +477,22 @@ pub async fn list(client: &Client, filter: &ListFilter<'_>) -> Result<Vec<VulnRo
             epss: row.get(13),
             epss_percentile: row.get(14),
         })
+        .collect())
+}
+
+/// The hosts `name` means: the host with that agent id, or else every host
+/// with that hostname (several when hostnames repeat, for example an
+/// imported host claiming an enrolled one's name), ordered by id.
+pub async fn hosts_named(client: &Client, name: &str) -> Result<Vec<String>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT agent_id FROM agents WHERE agent_id = $1
+                 OR (hostname = $1 AND NOT EXISTS (SELECT 1 FROM agents WHERE agent_id = $1))
+             ORDER BY agent_id",
+            &[&name],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
         .collect())
 }

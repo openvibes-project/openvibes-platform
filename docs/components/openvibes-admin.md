@@ -119,6 +119,13 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 | `vulns list [--host H] [--severity S] [--cve ID] [--fixed]` | (vulnerabilities without a fix appear with `--host`, not fleet-wide, where they would repeat on every host) one line per vulnerability by priority (exploited first, then EPSS percentile, then severity, then CVSS, then oldest): severity, advisory, host, since, packages `installed -> fixed`, or `installed (no fix available)` (with `(running …)` for a kernel), CVEs, `exploited (KEV, due DATE, ransomware; EUVD)`, `EPSS 94.0% (top 1%)`, `CVSS 9.8`, and `(fix installed, reboot needed)` when only a reboot is missing |
 | `vulns show ADVISORY\|HOST` | an advisory with its link, one line per CVE (`CVE-… CVSS 6.1 (3.1) CWE-79 KEV EUVD-… EPSS 94.0%: description`, first 200 characters), and hosts; or a host with its open vulnerabilities |
 
+Hosts are named by hostname (else agent id); a host imported from export
+files is marked `web-01 (imported)`, since its hostname is unsigned and may
+repeat an enrolled host's. `--host H` and `vulns show H` take an agent id
+or a hostname only one host has: a shared hostname is refused with the
+matching ids (`web-01 matches 2 hosts: agent.…, import.… (imported); give
+the id`) rather than merging their vulnerabilities.
+
 All are audited; `feeds import` with the source as target.
 
 ## Import command (protocol P3b)
