@@ -20,16 +20,19 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     `curl --silent --fail --max-time 1` on the default loopback endpoints
     (ingest 18480, distribution 18481, vulns 18483 `/ready`, llm 18430
     `/health`), only for active units;
-  - actions: `systemctl --no-ask-password VERB UNIT`, allowed for
+  - actions: `systemctl --no-ask-password --no-block VERB UNIT` (queued, so
+    the screen stays responsive; the next refresh shows the outcome), allowed for
     `openvibes-operators` by the RPM's polkit rule; each is written to the
     journal with `logger -t openvibes-admin` (user, uid, verb, unit,
     outcome);
   - logs: `sudo -n /usr/bin/openvibes-admin helper logs UNIT N` (the RPM's
     sudoers drop-in allows it to operators).
-- `runner::Runner` / `SystemRunner`: every command is a fixed absolute
-  path and argument vector, never a shell. `SystemRunner::run` is the one
-  place this crate starts a process (the workspace's clippy rule forbids
-  `std::process::Command` elsewhere).
+- `runner::Runner` / `SystemRunner`: every command is one of a closed set of
+  `Program`s (`/usr/bin/systemctl`, `sudo`, `logger`, `curl`) with an
+  argument vector, never a shell. `SystemRunner::run` is the one place this
+  crate starts a process (the workspace's clippy rule forbids
+  `std::process::Command` elsewhere); because `Program` is closed, the
+  exception cannot be used to run anything else.
 
 ## Configuration
 

@@ -9,6 +9,7 @@ use super::{app::App, render};
 
 struct FakeHost {
     actions: RefCell<Vec<(Unit, ServiceAction)>>,
+    log_reads: RefCell<usize>,
     refuse: bool,
 }
 
@@ -41,6 +42,7 @@ impl Host for FakeHost {
         Ok(())
     }
     fn logs(&self, unit: Unit, _lines: u16) -> Result<Vec<String>, HostError> {
+        *self.log_reads.borrow_mut() += 1;
         Ok(vec![format!("first log line of {}", unit.label())])
     }
 }
@@ -48,6 +50,7 @@ impl Host for FakeHost {
 fn app(refuse: bool) -> App<FakeHost> {
     App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
+        log_reads: RefCell::new(0),
         refuse,
     })
 }
@@ -107,7 +110,27 @@ fn restart_asks_first() {
         *app.host.actions.borrow(),
         [(Unit::Vulns, ServiceAction::Restart)]
     );
-    assert!(app.message.as_deref().unwrap_or("").contains("restart"));
+    assert!(
+        app.message
+            .as_deref()
+            .unwrap_or("")
+            .contains("restart requested"),
+        "{:?}",
+        app.message
+    );
+}
+
+// The periodic refresh reloads unit states only: reading logs goes through
+// sudo, and every sudo call is written to the auth log (quiet by default).
+#[test]
+fn periodic_refresh_does_not_read_logs() {
+    let mut app = app(false);
+    let reads = *app.host.log_reads.borrow();
+    app.refresh();
+    app.refresh();
+    assert_eq!(*app.host.log_reads.borrow(), reads);
+    app.key('R');
+    assert_eq!(*app.host.log_reads.borrow(), reads + 1, "R reloads the log");
 }
 
 #[test]

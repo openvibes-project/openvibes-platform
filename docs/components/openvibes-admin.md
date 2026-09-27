@@ -29,7 +29,10 @@ read their logs through the root helper, without a password.
 installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
 `-`), and since when; below, the selected unit's last 50 journal lines.
 Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
-`y/n`), `R` refresh (also every 5 s), `q` or Ctrl-C quit. Not an operator:
+`y/n`; the job is queued and the state follows on the next refresh), `R`
+refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
+only on selection, `R` and after an action, since each read goes through
+sudo and the auth log. Not an operator:
 the TUI names the group to join. Every action is written to the journal
 (`journalctl -t openvibes-admin`). Enabling and disabling at boot come with
 the password-prompted steps (a later release).

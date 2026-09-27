@@ -30,17 +30,19 @@ impl<H: Host> App<H> {
             quit: false,
         };
         app.refresh();
+        app.load_logs();
         app
     }
 
-    /// Reloads the units and the selected unit's log.
+    /// Reloads the unit states (the periodic refresh). Logs are reloaded
+    /// only on selection, `R`, and after an action: each read goes through
+    /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
         match self.host.services() {
             Ok(services) => self.services = services,
             Err(error) => self.message = Some(error.to_string()),
         }
         self.selected = self.selected.min(self.services.len().saturating_sub(1));
-        self.load_logs();
     }
 
     fn load_logs(&mut self) {
@@ -63,10 +65,11 @@ impl<H: Host> App<H> {
         if let Some((unit, action)) = self.confirm.take() {
             if key == 'y' {
                 self.message = Some(match self.host.service_action(unit, action) {
-                    Ok(()) => format!("{} {}: done", action.verb(), unit.name()),
+                    Ok(()) => format!("{} requested for {}", action.verb(), unit.name()),
                     Err(error) => error.to_string(),
                 });
                 self.refresh();
+                self.load_logs();
             }
             return;
         }
@@ -85,6 +88,7 @@ impl<H: Host> App<H> {
             'R' => {
                 self.message = None;
                 self.refresh();
+                self.load_logs();
             }
             'q' => self.quit = true,
             _ => {}

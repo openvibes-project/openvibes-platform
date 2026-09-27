@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use platform_host::{
     Host, HostError, ServiceAction, Unit,
     native::Native,
-    runner::{Output, Runner},
+    runner::{Output, Program, Runner},
 };
 
 /// Answers calls whose argv starts with a scripted prefix; records every call.
@@ -16,8 +16,8 @@ struct FakeRunner {
 }
 
 impl Runner for FakeRunner {
-    fn run(&self, program: &str, args: &[&str]) -> std::io::Result<Output> {
-        let mut call = vec![program.to_owned()];
+    fn run(&self, program: Program, args: &[&str]) -> std::io::Result<Output> {
+        let mut call = vec![program.path().to_owned()];
         call.extend(args.iter().map(|a| (*a).to_owned()));
         self.calls.borrow_mut().push(call.clone());
         for (prefix, out) in &self.answers {
@@ -117,6 +117,7 @@ fn actions_are_exact_argument_vectors_and_journalled() {
         [
             "/usr/bin/systemctl",
             "--no-ask-password",
+            "--no-block",
             "restart",
             "openvibes-vulns.service"
         ]
@@ -213,4 +214,23 @@ fn unit_names_round_trip_and_nothing_else_parses() {
     ] {
         assert_eq!(Unit::parse(bad), None, "{bad}");
     }
+}
+
+#[test]
+fn only_the_four_programs_exist() {
+    assert_eq!(
+        [
+            Program::Systemctl,
+            Program::Sudo,
+            Program::Logger,
+            Program::Curl
+        ]
+        .map(Program::path),
+        [
+            "/usr/bin/systemctl",
+            "/usr/bin/sudo",
+            "/usr/bin/logger",
+            "/usr/bin/curl"
+        ]
+    );
 }
