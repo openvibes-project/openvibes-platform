@@ -1,6 +1,9 @@
 //! Deterministic, permission-aware C1 read models for the loopback demo.
 
-use std::{collections::BTreeMap, sync::Arc};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Arc,
+};
 
 use axum::{
     Json, Router,
@@ -220,6 +223,7 @@ trait ConsoleRepository: Send + Sync {
         persona: Persona,
         mode: SeedMode,
     ) -> Option<FindingView>;
+    fn all_findings(&self, persona: Persona, mode: SeedMode) -> Vec<FindingView>;
 }
 
 struct SeededRepository {
@@ -501,6 +505,10 @@ impl ConsoleRepository for SeededRepository {
                     && finding.rule_id == rule
             })
     }
+
+    fn all_findings(&self, persona: Persona, mode: SeedMode) -> Vec<FindingView> {
+        self.matching_findings(persona, mode)
+    }
 }
 
 fn page<T>(items: Vec<T>, offset: usize, limit: u16, collection: &str) -> CursorPage<T> {
@@ -711,6 +719,121 @@ async fn findings(
     (Json(repository.findings(&filters, persona, mode))).into_response()
 }
 
+async fn finding_groups(
+    State(repository): State<Arc<dyn ConsoleRepository>>,
+    headers: HeaderMap,
+) -> Response {
+    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Some(error) = read_error(mode) {
+        return error;
+    }
+    let rows = repository.all_findings(persona, mode);
+    let mut groups: BTreeMap<(String, String), Vec<FindingView>> = BTreeMap::new();
+    for row in rows {
+        groups
+            .entry((row.rule_set_id.clone(), row.rule_id.clone()))
+            .or_default()
+            .push(row);
+    }
+    let items = groups
+        .into_iter()
+        .map(|((rule_set_id, rule_id), rows)| {
+            let latest = rows
+                .iter()
+                .max_by(|a, b| a.last_observed_at.cmp(&b.last_observed_at))
+                .expect("group has a member");
+            let rank = |severity: Severity| match severity {
+                Severity::Critical => 0,
+                Severity::High => 1,
+                Severity::Medium => 2,
+                Severity::Low => 3,
+            };
+            let severity = rows
+                .iter()
+                .map(|item| item.severity)
+                .min_by_key(|v| rank(*v))
+                .unwrap_or(Severity::Low);
+            crate::FindingGroupView {
+                rule_set_id,
+                rule_id,
+                endpoint_count: rows.len() as u64,
+                severity,
+                latest_message: latest.message.clone(),
+                rule_versions: rows.iter().map(|item| item.rule_version).collect(),
+                first_observed_at: rows
+                    .iter()
+                    .map(|item| item.first_observed_at.as_str())
+                    .min()
+                    .unwrap_or(latest.first_observed_at.as_str())
+                    .to_owned(),
+                last_observed_at: latest.last_observed_at.clone(),
+                older_endpoint_count: 0,
+                triage_counts: crate::FindingTriageCounts {
+                    open: rows.len() as u64,
+                    ..Default::default()
+                },
+            }
+        })
+        .collect();
+    Json(crate::FindingGroupPage {
+        items,
+        next_cursor: None,
+        generated_at: GENERATED_AT.into(),
+        since: "2026-09-23T12:00:00Z".into(),
+    })
+    .into_response()
+}
+
+async fn finding_group_endpoints(
+    State(repository): State<Arc<dyn ConsoleRepository>>,
+    headers: HeaderMap,
+    Path((rule_set, rule)): Path<(String, String)>,
+) -> Response {
+    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Some(error) = read_error(mode) {
+        return error;
+    }
+    let rows = repository
+        .all_findings(persona, mode)
+        .into_iter()
+        .filter(|item| item.rule_set_id == rule_set && item.rule_id == rule)
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return problem_response(ProblemDetails::not_found(
+            "finding_not_found",
+            "Finding group not found",
+        ));
+    }
+    let items = rows
+        .into_iter()
+        .map(|item| crate::FindingGroupEndpointView {
+            agent_id: item.agent_id,
+            hostname: item.hostname,
+            first_observed_at: item.first_observed_at,
+            last_observed_at: item.last_observed_at,
+            rule_version: item.rule_version,
+            triage_state: "open".into(),
+            triage_version: 0,
+            outside_window: false,
+            origin: item.origin,
+            authenticated: item.authenticated,
+        })
+        .collect();
+    Json(crate::FindingGroupEndpointPage {
+        items,
+        next_cursor: None,
+        generated_at: GENERATED_AT.into(),
+        since: "2026-09-23T12:00:00Z".into(),
+    })
+    .into_response()
+}
+
 async fn finding(
     State(repository): State<Arc<dyn ConsoleRepository>>,
     headers: HeaderMap,
@@ -758,54 +881,26 @@ async fn access_inventory(headers: HeaderMap) -> Response {
     if let Some(response) = read_error(mode) {
         return response;
     }
-    let role = |role_id: &str, name: &str, permissions: &[&str]| {
+    let role = |role_id: &str, name: &str, builtin_role: BuiltInRole| {
+        let permissions = resolve_capabilities(&[RoleBinding::global(builtin_role)])
+            .into_iter()
+            .map(|capability| {
+                serde_json::to_value(capability.permission)
+                    .expect("permissions serialize")
+                    .as_str()
+                    .expect("permissions serialize as strings")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
         serde_json::json!({
             "role_id": role_id, "display_name": name, "builtin": true, "permissions": permissions
         })
     };
     let roles = vec![
-        role("viewer", "Viewer", &["agents.read", "findings.read"]),
-        role(
-            "analyst",
-            "Analyst",
-            &["agents.read", "findings.read", "findings.triage"],
-        ),
-        role(
-            "operator",
-            "Operator",
-            &[
-                "agents.read",
-                "agents.revoke",
-                "findings.read",
-                "rules.upload",
-                "tokens.read",
-                "tokens.create",
-                "tokens.revoke",
-            ],
-        ),
-        role(
-            "admin",
-            "Admin",
-            &[
-                "agents.read",
-                "agents.revoke",
-                "findings.read",
-                "findings.triage",
-                "tokens.read",
-                "tokens.create",
-                "tokens.revoke",
-                "rules.read",
-                "rules.upload",
-                "audit.read",
-                "audit.export",
-                "audit.retention.manage",
-                "rbac.read",
-                "rbac.manage",
-                "asset_groups.manage",
-                "service_accounts.read",
-                "service_accounts.manage",
-            ],
-        ),
+        role("viewer", "Viewer", BuiltInRole::Viewer),
+        role("analyst", "Analyst", BuiltInRole::Analyst),
+        role("operator", "Operator", BuiltInRole::Operator),
+        role("admin", "Admin", BuiltInRole::Admin),
     ];
     let bindings = if matches!(persona, Persona::Admin) {
         vec![serde_json::json!({
@@ -861,6 +956,20 @@ pub(crate) fn router() -> Router {
         .route("/api/v1/audit-export.csv", get(audit_export))
         .route("/api/v1/access-control", get(access_inventory))
         .route("/api/v1/findings/latest", get(findings))
+        .route("/api/v1/findings/groups", get(finding_groups))
+        .route(
+            "/api/v1/findings/groups/{rule_set}/{rule}/endpoints",
+            get(finding_group_endpoints),
+        )
+        .route(
+            "/api/v1/vulnerabilities/summary",
+            get(vulnerability_summary),
+        )
+        .route("/api/v1/vulnerabilities", get(vulnerabilities))
+        .route(
+            "/api/v1/vulnerabilities/advisories/{advisory_id}",
+            get(vulnerability_advisory),
+        )
         .route(
             "/api/v1/findings/latest/{agent}/{rule_set}/{rule}",
             get(finding),
@@ -877,6 +986,215 @@ async fn no_store(mut response: Response) -> Response {
     response
 }
 
+fn demo_vulnerabilities(persona: Persona, mode: SeedMode) -> Vec<crate::VulnerabilityView> {
+    if matches!(mode, SeedMode::Empty) {
+        return Vec::new();
+    }
+    (1..=40).filter(|number| persona.global_scope() || number % 5 == 0).map(|number| {
+        let severity = match number % 5 { 0 => crate::VulnerabilitySeverity::Critical, 1 => crate::VulnerabilitySeverity::Important, 2 => crate::VulnerabilitySeverity::Moderate, 3 => crate::VulnerabilitySeverity::Low, _ => crate::VulnerabilitySeverity::Unrated };
+        let cve = format!("CVE-2026-{:04}", 1000 + number);
+        crate::VulnerabilityView {
+            agent_id: format!("agent-{number:05}"), hostname: Some(format!("host-{number:05}.example.test")),
+            advisory_id: format!("FEDORA-2026-{:04}", number), severity,
+            title: format!("Security update for package-{}", number % 7), url: format!("https://example.test/advisories/FEDORA-2026-{number:04}"), cves: vec![cve],
+            packages: serde_json::json!([{"name":format!("package-{}",number%7),"installed":"1.0-1.fc44","fixed":if number%4==0 { serde_json::Value::Null } else { serde_json::Value::String("1.0-2.fc44".into()) }}]),
+            first_seen_at: format!("2026-09-2{}T10:00:00Z", number % 7), fixed_at: None, reboot_needed: number % 9 == 0,
+            exploited: number % 7 == 0, kev: number % 11 == 0, euvd: number % 13 == 0, kev_due: None,
+            ransomware: number % 17 == 0, epss: Some((number % 100) as f32 / 100.0), epss_percentile: Some((number % 100) as f32 / 100.0), cvss: Some(5.0 + (number % 50) as f32 / 10.0),
+        }
+    }).collect()
+}
+
+async fn vulnerability_summary(
+    State(_repository): State<Arc<dyn ConsoleRepository>>,
+    headers: HeaderMap,
+) -> Response {
+    let (persona, mode) = match context(&headers, Permission::VulnerabilitiesRead) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Some(error) = read_error(mode) {
+        return error;
+    }
+    let items = demo_vulnerabilities(persona, mode);
+    let mut by_severity = Vec::new();
+    for (name, severity) in [
+        ("critical", crate::VulnerabilitySeverity::Critical),
+        ("important", crate::VulnerabilitySeverity::Important),
+        ("moderate", crate::VulnerabilitySeverity::Moderate),
+        ("low", crate::VulnerabilitySeverity::Low),
+        ("unrated", crate::VulnerabilitySeverity::Unrated),
+    ] {
+        let count = items
+            .iter()
+            .filter(|item| item.severity == severity && !item.reboot_needed)
+            .count() as u64;
+        if count > 0 {
+            by_severity.push(crate::VulnerabilitySeverityCount { severity, count });
+        }
+        let _ = name;
+    }
+    let mut counts = BTreeMap::<String, u64>::new();
+    for item in items.iter().filter(|item| !item.reboot_needed) {
+        *counts.entry(item.agent_id.clone()).or_default() += 1;
+    }
+    let hosts = counts.len() as u64;
+    let mut top_hosts: Vec<_> = counts
+        .into_iter()
+        .map(|(agent_id, open)| crate::VulnerabilityTopHost {
+            hostname: Some(format!(
+                "host-{}.example.test",
+                agent_id.trim_start_matches("agent-")
+            )),
+            agent_id,
+            open,
+            serious: open,
+        })
+        .collect();
+    top_hosts.sort_by(|a, b| {
+        b.open
+            .cmp(&a.open)
+            .then_with(|| a.agent_id.cmp(&b.agent_id))
+    });
+    Json(crate::VulnerabilitySummary {
+        by_severity,
+        hosts,
+        top_hosts: top_hosts.into_iter().take(10).collect(),
+        reboot_hosts: items.iter().filter(|item| item.reboot_needed).count() as u64,
+        no_fix: items
+            .iter()
+            .filter(|item| item.packages[0]["fixed"].is_null())
+            .count() as u64,
+        exploited: items
+            .iter()
+            .filter(|item| item.exploited && !item.reboot_needed)
+            .count() as u64,
+    })
+    .into_response()
+}
+
+async fn vulnerabilities(
+    State(_repository): State<Arc<dyn ConsoleRepository>>,
+    headers: HeaderMap,
+    query: Result<Query<HashMap<String, String>>, QueryRejection>,
+) -> Response {
+    let (persona, mode) = match context(&headers, Permission::VulnerabilitiesRead) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Some(error) = read_error(mode) {
+        return error;
+    }
+    let Query(params) = match query {
+        Ok(v) => v,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_vulnerability_query",
+                "Vulnerability filters are invalid",
+            ));
+        }
+    };
+    if params.keys().any(|key| {
+        !matches!(
+            key.as_str(),
+            "host" | "advisory" | "severity" | "cve" | "fixed" | "exploited" | "reboot_needed"
+        )
+    }) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_vulnerability_query",
+            "Vulnerability filters are invalid",
+        ));
+    }
+    let mut items = demo_vulnerabilities(persona, mode);
+    if let Some(host) = params.get("host") {
+        items.retain(|item| item.agent_id == *host || item.hostname.as_deref() == Some(host));
+    }
+    if let Some(advisory) = params.get("advisory") {
+        items.retain(|item| item.advisory_id == *advisory);
+    }
+    if let Some(severity) = params.get("severity") {
+        items.retain(|item| format!("{:?}", item.severity).to_lowercase() == *severity);
+    }
+    if let Some(cve) = params.get("cve") {
+        items.retain(|item| item.cves.iter().any(|value| value == cve));
+    }
+    if params.get("fixed").is_some_and(|value| value == "true") {
+        items.clear();
+    }
+    if params.get("exploited").is_some_and(|value| value == "true") {
+        items.retain(|item| item.exploited);
+    }
+    if params
+        .get("exploited")
+        .is_some_and(|value| value == "false")
+    {
+        items.retain(|item| !item.exploited);
+    }
+    if params
+        .get("reboot_needed")
+        .is_some_and(|value| value == "true")
+    {
+        items.retain(|item| item.reboot_needed);
+    }
+    if params
+        .get("reboot_needed")
+        .is_some_and(|value| value == "false")
+    {
+        items.retain(|item| !item.reboot_needed);
+    }
+    Json(crate::VulnerabilityPage {
+        more_available: items.len() > 100,
+        items: items.into_iter().take(100).collect(),
+        generated_at: GENERATED_AT.into(),
+    })
+    .into_response()
+}
+
+async fn vulnerability_advisory(
+    State(_repository): State<Arc<dyn ConsoleRepository>>,
+    headers: HeaderMap,
+    Path(advisory_id): Path<String>,
+) -> Response {
+    let (persona, mode) = match context(&headers, Permission::VulnerabilitiesRead) {
+        Ok(v) => v,
+        Err(r) => return *r,
+    };
+    if let Some(error) = read_error(mode) {
+        return error;
+    }
+    let hosts: Vec<_> = demo_vulnerabilities(persona, mode)
+        .into_iter()
+        .filter(|item| item.advisory_id == advisory_id)
+        .collect();
+    if hosts.is_empty() {
+        return problem_response(ProblemDetails::not_found(
+            "advisory_not_found",
+            "Advisory not found",
+        ));
+    }
+    let cve_id = hosts[0].cves[0].clone();
+    Json(crate::VulnerabilityAdvisoryDetail {
+        hosts: crate::VulnerabilityPage {
+            items: hosts,
+            more_available: false,
+            generated_at: GENERATED_AT.into(),
+        },
+        cves: vec![crate::CveDetailView {
+            cve_id,
+            cvss_score: Some(7.5),
+            cvss_version: Some("3.1".into()),
+            cwe: vec!["CWE-79".into()],
+            description: Some("Synthetic demo CVE enrichment.".into()),
+            kev: true,
+            euvd_exploited: Some("EUVD-DEMO-0001".into()),
+            epss: Some(0.72),
+        }],
+    })
+    .into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Persona, SeedMode};
@@ -890,6 +1208,14 @@ mod tests {
         assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::Viewer.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Analyst.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Analyst.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(!Persona::Viewer.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));
         assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
         assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));

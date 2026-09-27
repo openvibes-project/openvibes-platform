@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 23; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 24; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -382,13 +382,22 @@ trigger prevents it from restoring or reclassifying an agent.
 `SET ROLE "openvibes-console"` and checks forbidden status changes;
 `tests/migrate.rs` asserts the exact table and column grants.
 
+## Built-in console permissions (schema 23)
+
+Migration 23 adds agent-scoped `vulnerabilities.read` to all built-in roles.
+It removes the older `rules.read` grants from Viewer, Analyst, and Operator;
+only Admin receives that global permission by default. The console integration
+test compares the complete database role-permission mapping with the canonical
+Rust role resolver.
+
 Migration 20 stores the time a finding entered `mitigated` separately from
 general `updated_at`, so note or assignment edits do not hide a recurrence
 observed after mitigation.
 
 Migration 15 is reserved for imported-host support. Console migrations were
 renumbered to 16–21 when import support landed; migration 22 adds the
-reviewed console write grants.
+reviewed console write grants, and migration 23 adds vulnerability reads to
+the built-in role inventory.
 
 ## Test
 

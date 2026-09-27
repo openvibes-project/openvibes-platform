@@ -2,7 +2,7 @@
 
 `platform_store::console_read` supplies bounded, typed read queries for
 the OpenVIBES web console. It contains all SQL for agent summaries and pages,
-certificate metadata, latest findings, finding summaries, and retained finding
+certificate metadata, latest and grouped findings, finding summaries, and retained finding
 history. The console crate converts these records to its HTTP DTOs and applies
 authentication and scope rules before calling them. The unscoped functions
 are global read primitives. `agents_in_scope` and `agent_in_scope` enforce
@@ -36,8 +36,10 @@ agent visibility in SQL for the supplied global or asset-group scope.
   only after applying asset scope, and returns in-window endpoint counts,
   severity, version and triage rollups plus older endpoint counts.
   `finding_group_endpoints_in_scope` pages the visible endpoints and hides a
-  group with no recent in-scope endpoint. Imported installations are global
-  only until association is implemented.
+  group with no recent in-scope endpoint. The authenticated console exposes
+  opaque cursors bound to the time window and caller scope, and provides
+  atomic endpoint triage through the companion `console_triage` store module.
+  Imported installations remain global only until association is implemented.
 - `agent` reads one agent. `certificates` pages certificate serial and
   validity metadata and never selects the stored PEM chain.
 - `latest_findings` and `latest_finding` read the complete snapshot in

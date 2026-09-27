@@ -182,7 +182,7 @@ Codex branch; overall milestone remains in progress until PR #29 is merged.
 
 Goal: production local username/password login and server-enforced, auditable
 permissions. The console serves pre-auth, login, session, and logout against
-the database when paired auth configuration is present, checks for schema 22
+the database when paired auth configuration is present, checks for schema 23
 at startup, and otherwise stays in C0 fail-closed mode. Login uses generic
 failures, bounded Argon2id work, hashed account/source throttles, exact-Origin
 and CSRF checks, Fetch Metadata, session rotation, and audit events. Direct

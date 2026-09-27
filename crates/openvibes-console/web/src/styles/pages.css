@@ -246,6 +246,41 @@ h2 {
   gap: var(--space-5);
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--space-3);
+  margin: var(--space-5) 0;
+}
+
+.summary-card {
+  display: grid;
+  min-height: 5.5rem;
+  align-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-medium);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  text-decoration: none;
+}
+
+a.summary-card:hover {
+  border-color: var(--color-brand-strong);
+  text-decoration: none;
+}
+
+.summary-card span {
+  color: var(--color-text-muted);
+  font-size: 0.8125rem;
+}
+
+.summary-card strong {
+  font-size: 1.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
 .read-card {
   min-width: 0;
   max-width: none;

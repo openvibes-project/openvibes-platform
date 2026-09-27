@@ -115,6 +115,9 @@ pub enum Permission {
     /// Read observed findings.
     #[serde(rename = "findings.read")]
     FindingsRead,
+    /// Read vulnerability exposure for hosts in the bound asset scope.
+    #[serde(rename = "vulnerabilities.read")]
+    VulnerabilitiesRead,
     /// Change human triage state for findings.
     #[serde(rename = "findings.triage")]
     FindingsTriage,
@@ -929,6 +932,269 @@ pub struct FindingSummary {
     pub medium: u64,
     /// Visible low latest observations.
     pub low: u64,
+}
+
+/// Advisory severity used by the vulnerability matcher.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum VulnerabilitySeverity {
+    /// Critical.
+    Critical,
+    /// Important.
+    Important,
+    /// Moderate.
+    Moderate,
+    /// Low.
+    Low,
+    /// No severity rating was supplied.
+    Unrated,
+}
+
+/// One severity total in the visible vulnerability scope.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilitySeverityCount {
+    /// Advisory severity.
+    pub severity: VulnerabilitySeverity,
+    /// Open host-advisory pairs.
+    pub count: u64,
+}
+
+/// Operator-facing top vulnerable host.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilityTopHost {
+    /// Agent or imported installation identifier.
+    pub agent_id: String,
+    /// Hostname label, when reported.
+    pub hostname: Option<String>,
+    /// Number of open advisories.
+    pub open: u64,
+    /// Critical and important advisories.
+    pub serious: u64,
+}
+
+/// Scope-filtered fleet vulnerability summary.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilitySummary {
+    /// Open host-advisory pairs by severity.
+    pub by_severity: Vec<VulnerabilitySeverityCount>,
+    /// Hosts with at least one open advisory.
+    pub hosts: u64,
+    /// Ten most affected hosts in scope.
+    pub top_hosts: Vec<VulnerabilityTopHost>,
+    /// Hosts only needing a reboot to activate the installed fix.
+    pub reboot_hosts: u64,
+    /// Host-advisory pairs without a known fixed package version.
+    pub no_fix: u64,
+    /// Open, non-reboot findings with KEV/EUVD exploitation evidence.
+    pub exploited: u64,
+}
+
+/// One host-advisory match with package and exploitation details.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilityView {
+    /// Agent or imported installation identifier.
+    pub agent_id: String,
+    /// Hostname label, when reported.
+    pub hostname: Option<String>,
+    /// Advisory identifier.
+    pub advisory_id: String,
+    /// Advisory severity.
+    pub severity: VulnerabilitySeverity,
+    /// Advisory title.
+    pub title: String,
+    /// Advisory URL.
+    pub url: String,
+    /// CVE identifiers named by the advisory.
+    pub cves: Vec<String>,
+    /// Affected package names and installed/fixed versions.
+    pub packages: serde_json::Value,
+    /// First time this host matched the advisory.
+    pub first_seen_at: String,
+    /// When the vulnerability was fixed; absent while still open.
+    pub fixed_at: Option<String>,
+    /// A kernel fix is installed but not running.
+    pub reboot_needed: bool,
+    /// At least one CVE is on KEV or EUVD exploited lists.
+    pub exploited: bool,
+    /// At least one CVE is on CISA KEV.
+    pub kev: bool,
+    /// At least one CVE is on EUVD's exploited list.
+    pub euvd: bool,
+    /// Earliest KEV due date.
+    pub kev_due: Option<String>,
+    /// One CVE is known to be used by ransomware.
+    pub ransomware: bool,
+    /// Highest EPSS score among advisory CVEs.
+    pub epss: Option<f32>,
+    /// Highest EPSS percentile among advisory CVEs.
+    pub epss_percentile: Option<f32>,
+    /// Highest NVD CVSS base score among advisory CVEs.
+    pub cvss: Option<f32>,
+}
+
+/// Bounded prioritised vulnerability list for the current scope.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilityPage {
+    /// Highest-priority rows returned by the query.
+    pub items: Vec<VulnerabilityView>,
+    /// True when more rows exist beyond this response's fixed page bound.
+    pub more_available: bool,
+    /// RFC 3339 instant when this page was generated.
+    pub generated_at: String,
+}
+
+/// CVE enrichment visible through one advisory present in the caller's scope.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct CveDetailView {
+    /// CVE identifier.
+    pub cve_id: String,
+    /// NVD CVSS base score.
+    pub cvss_score: Option<f32>,
+    /// CVSS version.
+    pub cvss_version: Option<String>,
+    /// CWE identifiers.
+    pub cwe: Vec<String>,
+    /// NVD description.
+    pub description: Option<String>,
+    /// On CISA KEV.
+    pub kev: bool,
+    /// EUVD identifier, if listed as exploited.
+    pub euvd_exploited: Option<String>,
+    /// EPSS score.
+    pub epss: Option<f32>,
+}
+
+/// Advisory view and in-scope affected hosts.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilityAdvisoryDetail {
+    /// Affected host-advisory matches in the current scope.
+    pub hosts: VulnerabilityPage,
+    /// CVE metadata for this visible advisory.
+    pub cves: Vec<CveDetailView>,
+}
+
+/// One grouped current finding across visible endpoints.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupView {
+    /// Rule-set identifier; `~unknown` represents legacy findings without one.
+    pub rule_set_id: String,
+    /// Rule identifier within the rule set.
+    pub rule_id: String,
+    /// Visible endpoints whose latest observation is inside the requested window.
+    pub endpoint_count: u64,
+    /// Highest severity among the current in-window endpoints.
+    pub severity: Severity,
+    /// Message from the most recently observed endpoint.
+    pub latest_message: String,
+    /// Distinct signed rule versions represented in the group.
+    pub rule_versions: Vec<u64>,
+    /// Earliest first-observed timestamp in the group.
+    pub first_observed_at: String,
+    /// Latest-observed timestamp in the group.
+    pub last_observed_at: String,
+    /// Visible endpoints whose latest observation is older than the window.
+    pub older_endpoint_count: u64,
+    /// Counts by endpoint triage state, for current in-window observations.
+    pub triage_counts: FindingTriageCounts,
+}
+
+/// Number of endpoints in each current finding triage state.
+#[derive(Clone, Debug, Default, Serialize, ToSchema)]
+pub struct FindingTriageCounts {
+    /// Open endpoints.
+    pub open: u64,
+    /// Endpoints being investigated.
+    pub investigating: u64,
+    /// Mitigated endpoints.
+    pub mitigated: u64,
+    /// Endpoints accepted as risk.
+    pub accepted_risk: u64,
+    /// Findings marked as false positives.
+    pub false_positive: u64,
+}
+
+/// Page of unique rule groups.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupPage {
+    /// Current page of unique rule groups.
+    pub items: Vec<FindingGroupView>,
+    /// Opaque continuation cursor, or `null` after the final page.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 time when this page was generated.
+    pub generated_at: String,
+    /// RFC 3339 start of the grouping window.
+    pub since: String,
+}
+
+/// One endpoint reporting a grouped finding.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupEndpointView {
+    /// Enrolled-agent or imported-installation identifier.
+    pub agent_id: String,
+    /// Hostname label, when reported.
+    pub hostname: Option<String>,
+    /// RFC 3339 time when this endpoint first reported the finding.
+    pub first_observed_at: String,
+    /// RFC 3339 time of the latest observation.
+    pub last_observed_at: String,
+    /// Signed rule version reported by this endpoint.
+    pub rule_version: u64,
+    /// Current workflow state; missing triage records are `open`.
+    pub triage_state: String,
+    /// Monotonic triage version used to reject stale writes.
+    pub triage_version: i64,
+    /// Whether this endpoint is older than the requested window.
+    pub outside_window: bool,
+    /// Online or imported observation provenance.
+    pub origin: FindingOrigin,
+    /// Whether the finding arrived over authenticated agent transport.
+    pub authenticated: bool,
+}
+
+/// Page of endpoints reporting one rule.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupEndpointPage {
+    /// Current page of visible endpoints reporting the rule.
+    pub items: Vec<FindingGroupEndpointView>,
+    /// Opaque continuation cursor, or `null` after the final page.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 time when this page was generated.
+    pub generated_at: String,
+    /// RFC 3339 start of the endpoint query window.
+    pub since: String,
+}
+
+/// One endpoint and its expected triage version for a bulk transition.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BulkFindingTriageChange {
+    /// Enrolled-agent or imported-installation identifier.
+    pub agent_id: String,
+    /// Expected triage version for this endpoint.
+    pub version: i64,
+}
+
+/// Atomic workflow transition for selected endpoints in one rule group.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BulkFindingTriageRequest {
+    /// One through 100 unique endpoints to update atomically.
+    pub changes: Vec<BulkFindingTriageChange>,
+    /// Requested workflow state.
+    pub state: String,
+    /// Analyst username, or `null` to unassign.
+    pub assigned_to: Option<String>,
+    /// Required when moving to a completed state.
+    pub note: Option<String>,
+    /// Required only for accepted risk; RFC 3339 timestamp.
+    pub accepted_until: Option<String>,
+}
+
+/// Successful endpoint-level triage results.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct BulkFindingTriageResponse {
+    /// New triage state and version for every updated endpoint.
+    pub updated: Vec<(String, FindingTriageView)>,
 }
 
 /// A page of agents using the shared cursor response shape.
