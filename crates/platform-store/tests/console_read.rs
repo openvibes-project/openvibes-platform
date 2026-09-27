@@ -552,8 +552,8 @@ async fn scoped_host_lookup_does_not_let_a_hidden_id_shadow_a_hostname() {
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
     let now = Utc::now();
-    let visible = "agent.visible-host";
-    let hidden_id = "shared-host-label";
+    let visible = "agent.00000000-0000-4000-8000-000000000021";
+    let hidden_id = "agent.00000000-0000-4000-8000-000000000022";
     for (agent_id, hostname) in [(visible, Some(hidden_id)), (hidden_id, None)] {
         client
             .execute(
