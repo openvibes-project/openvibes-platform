@@ -293,6 +293,28 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("access.binding.create", binding.binding_id, "binding");
     return json(binding, 201);
   });
+  const saveGroup = (id: string, body: Record<string, unknown>) => {
+    const name = String(body.name ?? "").trim();
+    const selectors = ((body.selectors ?? []) as { key: string; value: string }[]).map((sel) => `${sel.key}=${sel.value}`);
+    if (name === "" || selectors.length === 0 || selectors.some((sel) => /^=|=$/.test(sel))) return undefined;
+    return { asset_group_id: id, name, selectors };
+  };
+  route("POST", "/api/v1/access-control/asset-groups", "asset_groups.manage", (_, __, body) => {
+    const group = saveGroup(`grp-${Date.now().toString(36)}`, body);
+    if (!group) return problem(422, "invalid_asset_group", "Give the group a name and at least one key=value selector");
+    data.access.asset_groups.push(group);
+    audit("access.asset_group.create", group.asset_group_id, "asset_group");
+    return json(group, 201);
+  });
+  route("PUT", "/api/v1/access-control/asset-groups/{id}", "asset_groups.manage", ({ id = "" }, _, body) => {
+    const index = data.access.asset_groups.findIndex((g) => g.asset_group_id === id);
+    const group = saveGroup(id, body);
+    if (index < 0) return problem(404, "not_found", "Asset group not found");
+    if (!group) return problem(422, "invalid_asset_group", "Give the group a name and at least one key=value selector");
+    data.access.asset_groups[index] = group;
+    audit("access.asset_group.update", id, "asset_group");
+    return json(group);
+  });
   route("DELETE", "/api/v1/access-control/bindings/{id}", "rbac.manage", ({ id = "" }) => {
     data.access.bindings = data.access.bindings.filter((b) => b.binding_id !== id);
     audit("access.binding.delete", id, "binding");

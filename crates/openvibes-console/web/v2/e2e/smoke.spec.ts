@@ -96,3 +96,13 @@ test("audit retention changes from its panel", async ({ page }) => {
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: /Kept 400 days/ })).toBeVisible();
 });
+
+test("an asset group is created from the access view", async ({ page }) => {
+  await page.goto("/access");
+  await page.getByRole("button", { name: "New group" }).click();
+  await page.getByLabel("Name").fill("Web servers");
+  await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
+  await page.getByRole("button", { name: "Create group" }).click();
+  await expect(page.locator(".panel-header__title")).toContainText("Web servers");
+  await expect(page.locator(".group-card", { hasText: "Web servers" })).toBeVisible();
+});

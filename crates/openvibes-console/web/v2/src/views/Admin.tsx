@@ -96,6 +96,7 @@ export function RuleSets() {
 
 export function Access() {
   const { params } = useLocation();
+  const { can } = useSession();
   const inventory = useResource<AccessInventory>("/api/v1/access-control");
   const top = useTop();
   const data = inventory.data;
@@ -119,13 +120,18 @@ export function Access() {
               ))}</span> },
             ]} />
           <section className="view-pad stack">
-            <h2 className="section-title">Asset groups</h2>
+            <div className="row row--between">
+              <h2 className="section-title">Asset groups</h2>
+              {can("asset_groups.manage", true) && <button type="button" className="button button--small" onClick={() => nav.open({ kind: "asset-group", id: "new" }, true)}><Icon name="plus" size={14} /> New group</button>}
+            </div>
             <div className="group-cards">
               {data.asset_groups.map((group) => (
-                <div key={group.asset_group_id} className="card card__body">
+                <button key={group.asset_group_id} type="button" className="card card__body group-card" aria-pressed={top?.kind === "asset-group" && top.id === group.asset_group_id}
+                  onClick={() => nav.open({ kind: "asset-group", id: group.asset_group_id }, true)}>
                   <strong>{group.name}</strong>
-                  <div className="row row--wrap" style={{ marginTop: 8 }}>{group.selectors.map((s) => <span key={s} className="tag">{s}</span>)}</div>
-                </div>
+                  <span className="row row--wrap" style={{ marginTop: 8 }}>{group.selectors.map((sel) => <span key={sel} className="tag">{sel}</span>)}</span>
+                  <span className="subtle">{data.bindings.filter((b) => b.asset_group_id === group.asset_group_id).length} role grants</span>
+                </button>
               ))}
             </div>
           </section>

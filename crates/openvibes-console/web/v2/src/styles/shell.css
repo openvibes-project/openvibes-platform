@@ -176,3 +176,5 @@
   .view .table-wrap { margin: 0 8px 16px; }
   .view--overview { padding: 16px; }
 }
+.group-card { display: grid; gap: 6px; text-align: left; font: inherit; color: inherit; cursor: pointer; transition: border-color var(--fast); }
+.group-card:hover, .group-card[aria-pressed="true"] { border-color: var(--accent); }

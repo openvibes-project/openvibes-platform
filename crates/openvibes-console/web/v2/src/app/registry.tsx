@@ -6,7 +6,7 @@ import type { ReactNode } from "react";
 
 import type { Permission } from "../api/types";
 import { panelTitle } from "./titles";
-import { PublishBundle, RetentionPanel } from "../panels/AdminPanels";
+import { AssetGroupPanel, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
@@ -64,5 +64,6 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
   user: { label: "User", icon: "user", title: (id) => id, render: (id) => <UserPanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
+  "asset-group": { label: "Asset group", icon: "access", title: (id) => id === "new" ? "New group" : id, render: (id) => <AssetGroupPanel id={id} /> },
   "audit-retention": { label: "Audit log", icon: "audit", title: () => "Retention", render: () => <RetentionPanel /> },
 };

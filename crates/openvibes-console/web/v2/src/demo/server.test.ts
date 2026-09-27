@@ -154,6 +154,17 @@ describe("demo server", () => {
     expect(items.every((item) => item.rule_id === "SSH-002" && Date.parse(item.observed_at) >= Date.parse(since))).toBe(true);
   });
 
+  it("creates and edits asset groups", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const created = await json(await server.handle("POST", "/api/v1/access-control/asset-groups", { name: "Web", selectors: [{ key: "role", value: "web" }] }));
+    const id = String(created.asset_group_id);
+    expect(created.selectors).toEqual(["role=web"]);
+    await server.handle("PUT", `/api/v1/access-control/asset-groups/${id}`, { name: "Web servers", selectors: [{ key: "role", value: "web" }, { key: "env", value: "prod" }] });
+    const inventory = await json(await server.handle("GET", "/api/v1/access-control"));
+    expect((inventory.asset_groups as { asset_group_id: string; name: string }[]).find((g) => g.asset_group_id === id)?.name).toBe("Web servers");
+    expect((await server.handle("POST", "/api/v1/access-control/asset-groups", { name: "", selectors: [] })).status).toBe(422);
+  });
+
   it("answers 404 for unknown routes", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/nope")).status).toBe(404);
