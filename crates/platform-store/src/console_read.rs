@@ -899,7 +899,7 @@ pub async fn finding_groups_in_scope(
                     SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
                     FROM current_findings c JOIN agents a USING (agent_id)
                     LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-                    WHERE {visible_agent} AND (a.status <> 'imported' OR $7::boolean)
+                    WHERE {visible_agent}
                  ), grouped AS (
                     SELECT rule_set_id, rule_id,
                            count(*) FILTER (WHERE last_observed_at >= $1)::bigint AS endpoint_count,
@@ -1001,7 +1001,7 @@ pub async fn finding_group_endpoints_in_scope(
                    SELECT 1 FROM current_findings c JOIN agents a USING(agent_id)
                    WHERE c.rule_set_id = $3 AND c.rule_id = $4
                      AND c.last_observed_at >= $5
-                     AND {visible} AND (a.status <> 'imported' OR $1::boolean)
+                     AND {visible}
                  )"
             ),
             &[&global, &groups, &rule_set_id, &rule_id, &query.since],
@@ -1022,7 +1022,7 @@ pub async fn finding_group_endpoints_in_scope(
                  LEFT JOIN console_finding_triage t USING(agent_id, rule_set_id, rule_id)
                  WHERE c.rule_set_id = $3 AND c.rule_id = $4
                    AND (c.last_observed_at >= $1 OR $2::boolean)
-                   AND {visible_page} AND (a.status <> 'imported' OR $9::boolean)
+                   AND {visible_page}
                    AND ($5::boolean = false OR c.last_observed_at < $6 OR
                        (c.last_observed_at = $6 AND c.agent_id > $7))
                  ORDER BY c.last_observed_at DESC, c.agent_id ASC
