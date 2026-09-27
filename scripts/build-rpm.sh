@@ -2,6 +2,8 @@
 # Builds target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm}-*.rpm.
 # OV_LLM=0 skips openvibes-llm (and its llama.cpp build); OV_LLM_VULKAN=1
 # adds openvibes-llm-vulkan (needs glslc and the Vulkan headers).
+# OV_VERSION overrides the package version (a lower one for the update test);
+# OV_RPM_TOPDIR the rpmbuild directory (default target/rpm).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
@@ -16,8 +18,9 @@ if [[ ${OV_LLM:-1} == 1 ]]; then
         llm+=(--with vulkan)
     fi
 fi
-version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+version=${OV_VERSION:-$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)}
+topdir=${OV_RPM_TOPDIR:-$PWD/target/rpm}
 rpmbuild -bb packaging/rpm/openvibes-platform.spec "${llm[@]}" \
-    --define "_topdir $PWD/target/rpm" --define "_sourcedir $PWD" \
+    --define "_topdir $topdir" --define "_sourcedir $PWD" \
     --define "ov_version $version"
-ls target/rpm/RPMS/*/openvibes-*.rpm
+ls "$topdir"/RPMS/*/openvibes-*.rpm

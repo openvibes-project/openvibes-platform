@@ -1,7 +1,8 @@
 //! `openvibes-admin helper VERB …`: the root helper of the administration
 //! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
 //! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
-//! `setup-step`, `unit-enable`, `unit-disable` (only with the user's own
+//! `setup-step`, `update-step`, `remove-step`, `unit-enable`,
+//! `unit-disable` (only with the user's own
 //! sudo rights and password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
 //! nothing runs unless the effective uid is 0. Operators reach it through
@@ -10,7 +11,7 @@
 use std::{io::Read, path::Path, process::ExitCode};
 
 use clap::Subcommand;
-use platform_host::{CONFIG_DIR, Service, Step, Unit, runner::Runner};
+use platform_host::{CONFIG_DIR, RemoveStep, Service, Step, Unit, UpdateStep, runner::Runner};
 
 use crate::{config_file, configs::MAX_BYTES};
 
@@ -46,6 +47,23 @@ pub enum HelperCommand {
         /// packages, postgres, operators, database, schema, ca,
         /// certificates, console, services, firewall, rules, agent, ready.
         step: String,
+        /// Repair: never makes a new CA.
+        #[arg(long)]
+        repair: bool,
+    },
+    /// Runs one Update step.
+    UpdateStep {
+        /// backup, stop, upgrade, migrate, start, ready.
+        step: String,
+        #[command(flatten)]
+        args: crate::setup::update::UpdateArgs,
+    },
+    /// Runs one step of removing components or uninstalling.
+    RemoveStep {
+        /// backup, stop, firewall, packages, purge.
+        step: String,
+        #[command(flatten)]
+        args: crate::setup::remove::RemoveArgs,
     },
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
@@ -60,18 +78,21 @@ enum Verb {
     ConfigWrite(Service),
     SetupPlan(Box<crate::setup::plan::Plan>),
     SetupStatus,
-    SetupStep(Step),
+    SetupStep(Step, bool),
+    UpdateStep(UpdateStep, crate::setup::update::UpdateArgs),
+    RemoveStep(RemoveStep, crate::setup::remove::RemoveArgs),
     UnitFile(Unit, bool),
 }
 
-fn verb(command: &HelperCommand) -> Result<Verb, &'static str> {
-    let service = |name: &str| Service::parse(name).ok_or("not an OpenVIBES service");
+fn verb(command: &HelperCommand) -> Result<Verb, String> {
+    let service =
+        |name: &str| Service::parse(name).ok_or_else(|| "not an OpenVIBES service".to_owned());
     Ok(match command {
         HelperCommand::Logs { unit, lines } => {
-            let unit = Unit::parse(unit).ok_or("not an OpenVIBES unit")?;
+            let unit = Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?;
             match lines.parse::<u16>() {
                 Ok(n @ 1..=500) => Verb::Logs(unit, n),
-                _ => return Err("lines must be 1 to 500"),
+                _ => return Err("lines must be 1 to 500".into()),
             }
         }
         HelperCommand::ConfigRead { service: name } => Verb::ConfigRead(service(name)?),
@@ -80,19 +101,36 @@ fn verb(command: &HelperCommand) -> Result<Verb, &'static str> {
             // The plan's own checks; SUDO_USER is set by sudo, not the caller.
             match args.plan(crate::setup::plan::operator_from_env()) {
                 Ok(plan) => Verb::SetupPlan(Box::new(plan)),
-                Err(_) => return Err("invalid Setup arguments (see openvibes-admin setup --help)"),
+                Err(reason) => return Err(format!("invalid Setup arguments: {reason}")),
             }
         }
         HelperCommand::SetupStatus => Verb::SetupStatus,
-        HelperCommand::SetupStep { step } => {
-            Verb::SetupStep(Step::parse(step).ok_or("not a Setup step")?)
+        HelperCommand::SetupStep { step, repair } => Verb::SetupStep(
+            Step::parse(step).ok_or_else(|| "not a Setup step".to_owned())?,
+            *repair,
+        ),
+        HelperCommand::UpdateStep { step, args } => {
+            args.check()?;
+            Verb::UpdateStep(
+                UpdateStep::parse(step).ok_or_else(|| "not an update step".to_owned())?,
+                args.clone(),
+            )
         }
-        HelperCommand::UnitEnable { unit } => {
-            Verb::UnitFile(Unit::parse(unit).ok_or("not an OpenVIBES unit")?, true)
+        HelperCommand::RemoveStep { step, args } => {
+            args.check()?;
+            Verb::RemoveStep(
+                RemoveStep::parse(step).ok_or_else(|| "not a remove step".to_owned())?,
+                args.clone(),
+            )
         }
-        HelperCommand::UnitDisable { unit } => {
-            Verb::UnitFile(Unit::parse(unit).ok_or("not an OpenVIBES unit")?, false)
-        }
+        HelperCommand::UnitEnable { unit } => Verb::UnitFile(
+            Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
+            true,
+        ),
+        HelperCommand::UnitDisable { unit } => Verb::UnitFile(
+            Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
+            false,
+        ),
     })
 }
 
@@ -111,7 +149,7 @@ fn refuse(reason: &str) -> ExitCode {
 pub fn run(command: &HelperCommand) -> ExitCode {
     let verb = match verb(command) {
         Ok(verb) => verb,
-        Err(reason) => return refuse(reason),
+        Err(reason) => return refuse(&reason),
     };
     if effective_uid().as_deref() != Some("0") {
         eprintln!("openvibes-admin: helper must run as root (through sudo)");
@@ -119,7 +157,11 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     }
     let dir = Path::new(CONFIG_DIR);
     match verb {
-        Verb::SetupPlan(plan) => match plan.save(Path::new("/")) {
+        Verb::SetupPlan(plan) => match crate::setup::lock(Path::new("/")).and_then(|lock| {
+            plan.save(Path::new("/"))?;
+            drop(lock);
+            Ok(())
+        }) {
             Ok(()) => {
                 println!("{} written", platform_host::SETUP_FILE);
                 ExitCode::SUCCESS
@@ -127,7 +169,9 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             Err(error) => failed(&error),
         },
         Verb::SetupStatus => crate::setup::status(),
-        Verb::SetupStep(step) => crate::setup::step(step),
+        Verb::SetupStep(step, repair) => crate::setup::step(step, repair),
+        Verb::UpdateStep(step, args) => crate::setup::update(step, &args),
+        Verb::RemoveStep(step, args) => crate::setup::remove(step, &args),
         Verb::UnitFile(unit, enable) => {
             let action = if enable { "enable" } else { "disable" };
             match platform_host::runner::SystemRunner.run(

@@ -140,3 +140,83 @@ fn setup_quick_needs_root_and_checks_its_plan() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("--quick"));
 }
+
+#[test]
+fn maintenance_verbs_check_their_arguments_before_the_root_check() {
+    for (args, reason) in [
+        (vec!["update-step", "everything"], "not an update step"),
+        (
+            vec!["update-step", "backup", "--backup", "relative.dump"],
+            "absolute",
+        ),
+        (vec!["remove-step", "purge"], "--components is required"),
+        (
+            vec![
+                "remove-step",
+                "purge",
+                "--components",
+                "ingest",
+                "--confirm",
+                "Bad Name",
+            ],
+            "lowercase DNS name",
+        ),
+        (
+            vec![
+                "setup-plan",
+                "--components",
+                "ingest",
+                "--hostname",
+                "platform.example.com",
+                "--allow-unsigned-local",
+            ],
+            "needs --repo-dir",
+        ),
+    ] {
+        let out = helper(&args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(
+            stderr.contains("not allowed") && stderr.contains(reason),
+            "{args:?}: {stderr}"
+        );
+    }
+    for args in [
+        vec!["setup-step", "ca", "--repair"],
+        vec!["update-step", "stop"],
+        vec!["remove-step", "stop", "--components", "vulns"],
+    ] {
+        let out = helper(&args);
+        assert_eq!(out.status.code(), Some(1), "{args:?}");
+    }
+}
+
+#[test]
+fn setup_actions_need_root_and_exactly_one_action() {
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    for args in [
+        ["setup", "--repair"].as_slice(),
+        &["setup", "--update"],
+        &["setup", "--uninstall", "--keep-data"],
+    ] {
+        let out = run(args);
+        assert_eq!(out.status.code(), Some(1), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("must run as root"),
+            "{args:?}"
+        );
+    }
+    let out = run(&["setup", "--repair", "--update"]);
+    assert_eq!(out.status.code(), Some(2));
+    let out = run(&["setup", "--uninstall"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--keep-data or --everything"));
+    let out = run(&["setup", "--uninstall", "--everything"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--confirm"));
+}

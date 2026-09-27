@@ -4,7 +4,8 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, Privileged, Secret, Service, ServiceAction, Step, StepState, Unit,
+    Host, HostError, PackageUpdate, Privileged, RemoveStep, Secret, Service, ServiceAction, Step,
+    StepState, Unit, UpdateStep,
     native::Native,
     runner::{Output, Program, Runner},
 };
@@ -520,4 +521,103 @@ fn verbs_steps_and_states_are_closed_lists() {
     }
     assert_eq!(StepState::Done("a\tb\nc".into()).line(), "done\ta b c");
     assert_eq!(StepState::parse("maybe\tx"), None);
+}
+
+#[test]
+fn update_and_remove_verbs_carry_their_arguments_but_journal_only_the_step() {
+    let args = ["--backup".to_owned(), "/home/alice/b.dump".to_owned()];
+    assert_eq!(
+        Privileged::Update(UpdateStep::Backup, &args).args(),
+        ["update-step", "backup", "--backup", "/home/alice/b.dump"]
+    );
+    assert_eq!(
+        Privileged::Update(UpdateStep::Backup, &args).journal(),
+        "update-step backup"
+    );
+    let remove = ["--components".to_owned(), "vulns".to_owned()];
+    assert_eq!(
+        Privileged::Remove(RemoveStep::Stop, &remove).args(),
+        ["remove-step", "stop", "--components", "vulns"]
+    );
+    assert_eq!(
+        Privileged::Remove(RemoveStep::Purge, &remove).journal(),
+        "remove-step purge"
+    );
+    assert_eq!(
+        Privileged::Repair(Step::Ca).args(),
+        ["setup-step", "ca", "--repair"]
+    );
+    for step in UpdateStep::ALL {
+        assert_eq!(UpdateStep::parse(step.name()), Some(step));
+    }
+    for step in RemoveStep::ALL {
+        assert_eq!(RemoveStep::parse(step.name()), Some(step));
+    }
+    assert_eq!(RemoveStep::parse("everything"), None);
+}
+
+#[test]
+fn packages_lists_installed_versions_and_newer_ones() {
+    let host = fake(vec![
+        (
+            vec!["/usr/bin/rpm", "-qa"],
+            out(
+                0,
+                "openvibes-ingest 0.1.0-1.fc44\nopenvibes-agent 0.1.0-1.fc44\nopenvibes-ingest-debuginfo 0.1.0-1.fc44\n",
+                "",
+            ),
+        ),
+        (
+            vec!["/usr/bin/dnf", "-q", "list", "--upgrades"],
+            out(
+                0,
+                "Available upgrades\nopenvibes-ingest.x86_64 0.2.0-1.fc44 openvibes\n",
+                "",
+            ),
+        ),
+    ]);
+    assert_eq!(
+        host.packages().unwrap(),
+        [
+            PackageUpdate {
+                name: "openvibes-agent".into(),
+                installed: "0.1.0-1.fc44".into(),
+                available: None
+            },
+            PackageUpdate {
+                name: "openvibes-ingest".into(),
+                installed: "0.1.0-1.fc44".into(),
+                available: Some("0.2.0-1.fc44".into())
+            },
+        ]
+    );
+}
+
+#[test]
+fn the_journal_records_the_state_a_step_ended_in() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "setup-step",
+                "ca",
+            ],
+            out(0, "failed\tdatabase down\n", ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    host.privileged(Privileged::SetupStep(Step::Ca), &Secret::new("pw".into()))
+        .unwrap();
+    let calls = host.runner.calls.borrow();
+    let journal = calls
+        .iter()
+        .find(|call| call[0] == "/usr/bin/logger")
+        .unwrap();
+    assert!(journal[3].ends_with(" setup-step ca failed"), "{journal:?}");
 }

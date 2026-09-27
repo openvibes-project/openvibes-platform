@@ -3,7 +3,8 @@
 use std::{cell::RefCell, collections::VecDeque};
 
 use platform_host::{
-    Host, HostError, Privileged, Secret, Service, ServiceAction, ServiceStatus, Step, Unit,
+    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus,
+    Step, Unit,
 };
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -19,6 +20,9 @@ struct SetupHost {
     answers: RefCell<VecDeque<Result<String, HostError>>>,
     /// (verb, password) of each call.
     calls: RefCell<Vec<(String, String)>>,
+    /// `setup.toml`'s text; empty: not set up.
+    plan: String,
+    packages: Vec<PackageUpdate>,
 }
 
 impl Host for SetupHost {
@@ -40,6 +44,16 @@ impl Host for SetupHost {
     fn is_set_up(&self) -> bool {
         self.set_up
     }
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
+        Ok(self.packages.clone())
+    }
+    fn setup_plan(&self) -> Result<String, HostError> {
+        if self.plan.is_empty() {
+            Err(HostError::Failed("not set up".into()))
+        } else {
+            Ok(self.plan.clone())
+        }
+    }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.calls
             .borrow_mut()
@@ -56,6 +70,8 @@ fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<SetupHost> 
         set_up,
         answers: RefCell::new(answers.into()),
         calls: RefCell::new(Vec::new()),
+        plan: String::new(),
+        packages: Vec::new(),
     });
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
@@ -236,5 +252,167 @@ fn rules_bring_distribution_and_the_finished_screen_shows_the_login() {
     assert!(
         screen(&app).contains("Abc123"),
         "the generated password is on the finished screen"
+    );
+}
+
+const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
+
+fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    let mut app = app(true, answers);
+    app.host.plan = PLAN.into();
+    app
+}
+
+#[test]
+fn a_set_up_host_offers_the_maintenance_actions() {
+    let mut app = set_up(vec![]);
+    app.key(Key::Tab);
+    app.key(Key::Tab); // Services → Configuration → Setup
+    let text = screen(&app);
+    for want in [
+        "c check",
+        "r repair",
+        "u update",
+        "m change components",
+        "x uninstall",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+}
+
+#[test]
+fn repair_runs_every_step_in_repair_mode() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('r'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(app.host.calls.borrow()[0].0, "setup-step packages --repair");
+}
+
+#[test]
+fn changing_components_installs_then_removes_the_unticked_ones() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('m'));
+    assert_eq!(app.setup.phase, Phase::Form);
+    assert_eq!(app.setup.hostname, "platform.example.com");
+    while app.setup.row != 3 {
+        app.key(Key::Down); // vulns
+    }
+    app.key(Key::Char(' '));
+    start(&mut app, "pw");
+    for _ in 0..Step::ALL.len() {
+        app.setup_tick();
+    }
+    app.setup_tick();
+    let calls = app.host.calls.borrow();
+    assert!(
+        calls[0]
+            .0
+            .starts_with("setup-plan --components ingest,console,distribution,rules,agent"),
+        "{}",
+        calls[0].0
+    );
+    assert_eq!(
+        calls.last().unwrap().0,
+        "remove-step backup --components vulns"
+    );
+    // The install part runs in repair mode: it may add packages, never a new CA.
+    assert_eq!(calls[1].0, "setup-step packages --repair");
+}
+
+#[test]
+fn update_lists_the_packages_then_runs_the_update_job() {
+    let mut app = set_up(vec![]);
+    app.host.packages = vec![
+        PackageUpdate {
+            name: "openvibes-agent".into(),
+            installed: "0.1.0-1.fc44".into(),
+            available: None,
+        },
+        PackageUpdate {
+            name: "openvibes-ingest".into(),
+            installed: "0.1.0-1.fc44".into(),
+            available: Some("0.2.0-1.fc44".into()),
+        },
+    ];
+    app.setup.home = Some("/home/alice".into());
+    app.tab = Tab::Setup;
+    app.key(Key::Char('u'));
+    let text = screen(&app);
+    assert!(
+        text.contains("openvibes-ingest") && text.contains("0.2.0-1.fc44"),
+        "{text}"
+    );
+    assert!(text.contains("up to date"), "{text}");
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "update-step backup --backup /home/alice/openvibes-before-update.dump"
+    );
+}
+
+#[test]
+fn remove_everything_needs_this_hosts_name() {
+    let mut answers: Vec<Result<String, HostError>> = Vec::new();
+    for _ in 0..5 {
+        answers.push(Ok("done\tok\n".into()));
+    }
+    let mut app = set_up(answers);
+    app.setup.home = Some("/home/alice".into());
+    app.tab = Tab::Setup;
+    app.key(Key::Char('x'));
+    app.key(Key::Char(' ')); // Remove everything
+    while app.setup.row2 != 3 {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert!(
+        app.message
+            .clone()
+            .unwrap_or_default()
+            .contains("platform.example.com")
+    );
+    assert_eq!(app.setup.phase, Phase::Uninstall);
+    app.key(Key::Up); // confirm field
+    app.key(Key::Enter);
+    type_text(&mut app, "platform.example.com");
+    app.key(Key::Enter);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    for _ in 0..5 {
+        app.setup_tick();
+    }
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "remove-step backup --components ingest,console,distribution,vulns,rules,agent --backup /home/alice/openvibes-backup.dump --confirm platform.example.com"
+    );
+    assert_eq!(app.setup.phase, Phase::Finished);
+    assert!(screen(&app).contains("sudo dnf remove openvibes-admin"));
+}
+
+#[test]
+fn keep_data_uninstall_sends_no_confirmation() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('x'));
+    while app.setup.row2 != 3 {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(
+        app.host.calls.borrow()[0].0,
+        "remove-step backup --components ingest,console,distribution,vulns,rules,agent"
     );
 }

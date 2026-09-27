@@ -12,13 +12,15 @@ use ratatui::{
 
 use super::{
     app::App,
+    jobs::Job,
+    maintain_view,
     setup::{CA_ROW, HOSTNAME_ROW, KEY_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
 
 const FORM_KEYS: &str = "Tab screens  j/k move  space toggle  Enter edit/start  q quit";
 const RUN_KEYS: &str = "r retry from the failed step  Tab screens  q quit";
-const DONE_KEYS: &str = "c check every step  Tab screens  q quit";
+const DONE_KEYS: &str = "c check  r repair  u update  m change components  x uninstall  Tab  q";
 
 pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let [body, status, keys] = Layout::vertical([
@@ -46,6 +48,14 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             },
         ),
         Phase::Finished => (finished(app), DONE_KEYS),
+        Phase::Update => (
+            maintain_view::update_lines(app),
+            maintain_view::keys(Phase::Update),
+        ),
+        Phase::Uninstall => (
+            maintain_view::uninstall_lines(app),
+            maintain_view::keys(Phase::Uninstall),
+        ),
     };
     frame.render_widget(
         Paragraph::new(lines)
@@ -118,23 +128,44 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
 }
 
 fn checklist<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
-    Step::ALL
-        .iter()
+    app.setup
+        .job
+        .titles()
+        .into_iter()
         .enumerate()
-        .map(|(index, step)| {
-            let (label, detail) = match (&app.setup.states[index], app.setup.phase) {
+        .map(|(index, title)| {
+            let state = app.setup.states.get(index).and_then(Option::as_ref);
+            let (label, detail) = match (state, app.setup.phase) {
                 (_, Phase::Running(next)) if next == index => {
                     ("running…".to_owned(), String::new())
                 }
                 (Some(state), _) => (state.label().to_owned(), state.detail().to_owned()),
                 (None, _) => (String::new(), String::new()),
             };
-            Line::raw(format!("{:<26}{label:<9}{detail}", step.title()))
+            Line::raw(format!("{title:<26}{label:<9}{detail}"))
         })
         .collect()
 }
 
 fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
+    let setup = &app.setup;
+    if setup.job != Job::Install {
+        // Repair, update, remove: every step's outcome.
+        let mut lines = vec![Line::raw("Finished.")];
+        for (index, title) in setup.job.titles().into_iter().enumerate() {
+            if let Some(Some(state)) = setup.states.get(index) {
+                lines.push(Line::raw(format!(
+                    "{title}: {} {}",
+                    state.label(),
+                    state.detail()
+                )));
+            }
+        }
+        if setup.job == Job::Remove {
+            lines.push(Line::raw("Last step: sudo dnf remove openvibes-admin"));
+        }
+        return lines;
+    }
     let mut lines = vec![Line::raw(
         "Setup finished. Keep what follows: the password is shown only now.",
     )];
@@ -142,7 +173,7 @@ fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         if matches!(
             step,
             Step::Ca | Step::Console | Step::Operators | Step::Ready
-        ) && let Some(state) = &app.setup.states[index]
+        ) && let Some(Some(state)) = setup.states.get(index)
         {
             lines.push(Line::raw(format!("{}: {}", step.title(), state.detail())));
         }

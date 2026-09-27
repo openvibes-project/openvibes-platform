@@ -38,7 +38,15 @@ stops the run and drops the password; `r` asks for it again and continues
 from that step. Three wrong passwords close the prompt. The finished screen
 shows the root certificate's fingerprint, the console address and admin
 password (shown only then), and an endpoint enrollment token. On a set-up
-host, `c` checks every step (`helper setup-status`). The steps are those of
+host, the Setup tab offers `c` check every step (`helper setup-status`),
+`r` repair (every step with `--repair`: never a new CA), `u` update (the
+installed OpenVIBES packages with any newer version, a backup file, then
+the update job), `m` change components (the form filled from `setup.toml`;
+added components are installed, unticked ones removed keeping data) and
+`x` uninstall (keep data, or remove everything with a backup and the
+typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+Each runs one step per refresh like the install, asking for the password
+once. The steps are those of
 `setup --quick` (below).
 
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
@@ -294,11 +302,38 @@ and the `admin` account; a generated password is shown once), `services`,
 up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
 uses).
 
+The same command maintains a set-up host (one action per call; each takes
+the run lock `/run/openvibes-admin/setup.lock`, so a second Setup run is
+refused while one works):
+
+- `setup --repair`: every step checked, and only failed ones fixed. It
+  never makes a new CA: with the CA files gone it stops and says how to
+  recover. Certificates issued for other names are issued again; one
+  expiring within 14 days is reported, not replaced.
+- `setup --update [--backup PATH] [--update-repo-dir DIR]`: backup, stop
+  the active OpenVIBES units (remembered in
+  `/run/openvibes-admin/update-active`), `dnf upgrade` of exactly the
+  installed `openvibes-*` packages (the agent too), `migrate` and
+  `maintenance`, start the remembered units, readiness.
+- `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
+  ports, remove the packages; database, CA and configuration stay.
+  `--everything --confirm HOSTNAME` also drops the database and every
+  `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
+  `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays;
+  `openvibes-admin` itself is removed last with `sudo dnf remove
+  openvibes-admin`.
+- Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
+  --no-role-passwords` to `PATH.roles.sql`, both new files (never over an
+  existing one), 0600, owned by the sudo user, checked with `pg_restore
+  --list` first.
+
 Root helper verbs for the TUI, run with the user's own sudo rights and
 password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 `setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
-(`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP`
-(`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper unit-enable UNIT`,
+(`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP [--repair]`
+(`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
+[--backup PATH] [--repo-dir DIR]`, `helper remove-step STEP --components
+LIST [--backup PATH] [--confirm HOSTNAME]`, `helper unit-enable UNIT`,
 `helper unit-disable UNIT`. Arguments are checked before the root check.
 
 ## CA commands

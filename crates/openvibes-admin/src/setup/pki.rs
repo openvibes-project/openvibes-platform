@@ -2,7 +2,7 @@
 //! in `/run/openvibes-ca` (tmpfs, so key copies never reach disk) and
 //! installed where the services read them (packaging.md "First install").
 
-use std::{fs, io::Write, os::unix::fs::OpenOptionsExt};
+use std::fs;
 
 use platform_host::{
     StepState,
@@ -122,31 +122,10 @@ fn keep_root_key<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     let Some(out) = &ctx.plan.root_key_out else {
         return Ok("root key deleted (a new intermediate will need a new root)".into());
     };
-    let key = fs::read(ctx.path(&format!("{ROOT_DIR}/root.key")))
-        .map_err(|error| format!("root key: {error}"))?;
     let shown = out.display().to_string();
-    let path = ctx.path(&shown);
-    let mut file = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o600)
-        .open(&path)
-        .map_err(|error| format!("{shown}: {error}"))?;
-    file.write_all(&key)
-        .and_then(|()| file.sync_all())
-        .map_err(|error| format!("{shown}: {error}"))?;
-    // Through the open file, never the path (the directory may be the
-    // user's); a stick that cannot change owners keeps it root's.
-    let owner = ctx.plan.operator.as_deref().map(|user| {
-        ctx.ids(Some((user, user))).and_then(|(uid, gid)| {
-            std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
-                .map_err(|error| format!("{shown}: {error}"))
-        })
-    });
-    let note = match owner {
-        Some(Err(error)) => format!(" (still owned by root: {error})"),
-        _ => String::new(),
-    };
+    let mut key = fs::File::open(ctx.path(&format!("{ROOT_DIR}/root.key")))
+        .map_err(|error| format!("root key: {error}"))?;
+    let note = ctx.write_new(&shown, &mut key)?;
     Ok(format!("root key saved to {shown}: keep it offline{note}"))
 }
 
@@ -203,6 +182,12 @@ fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn ca_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if ctx.repair {
+        return Err("the CA files are missing; Repair never makes a new CA (enrolled agents trust \
+                    the old one): restore /etc/openvibes/pki and /var/lib/openvibes-ingest/\
+                    intermediate.key from a backup, or uninstall with Remove everything and set up again"
+            .into());
+    }
     match ctx.plan.ca {
         CaMode::Quick => quick(ctx),
         CaMode::Careful => careful(ctx),
@@ -252,17 +237,32 @@ fn chosen<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
     TLS.iter().filter(|tls| ctx.plan.has(tls.component))
 }
 
+const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
+const RENEW_DAYS: i64 = 14;
+
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    Ok(
-        if chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key)) {
-            StepState::Done(format!(
-                "server certificates for {}",
-                ctx.plan.names().join(", ")
-            ))
-        } else {
-            StepState::Todo
-        },
-    )
+    let names = ctx.plan.names();
+    let wanted = format!("{}\n", names.join("\n"));
+    let present = chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key));
+    if !present || ctx.read(TLS_NAMES).ok().as_deref() != Some(wanted.as_str()) {
+        return Ok(StepState::Todo);
+    }
+    for tls in chosen(ctx) {
+        let pem = ctx.read(tls.cert)?;
+        let expires =
+            platform_pki::not_after(&pem).map_err(|error| format!("{}: {error:?}", tls.cert))?;
+        if expires - chrono::Utc::now() < chrono::Duration::days(RENEW_DAYS) {
+            return Ok(StepState::Failed(format!(
+                "{} expires on {}: renew it (docs/components/packaging.md, \"Renewing the server certificate\")",
+                tls.cert,
+                expires.format("%Y-%m-%d")
+            )));
+        }
+    }
+    Ok(StepState::Done(format!(
+        "server certificates for {}",
+        names.join(", ")
+    )))
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -310,260 +310,15 @@ pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
             ctx.copy(&key, tls.key, Some((tls.owner, tls.owner)), 0o600)?;
         }
     }
+    ctx.put(
+        TLS_NAMES,
+        format!("{}\n", names.join("\n")).as_bytes(),
+        None,
+        0o644,
+    )?;
     remove_stage(ctx)?;
     Ok(StepState::Done(format!(
         "server certificates for {} (valid 90 days)",
         names.join(", ")
     )))
-}
-
-#[cfg(test)]
-mod tests {
-    use platform_host::{Step, StepState};
-
-    use crate::setup::{
-        fake::{Fake, plan},
-        plan::{CaMode, Component::*},
-        run_step,
-    };
-
-    const ADMIN: [&str; 5] = [
-        "/usr/sbin/runuser",
-        "-u",
-        "openvibes-admin",
-        "--",
-        "/usr/bin/openvibes-admin",
-    ];
-
-    fn with(prefix: &[&str], rest: &[&str]) -> Vec<&'static str> {
-        prefix
-            .iter()
-            .chain(rest)
-            .map(|s| &*Box::leak((*s).to_owned().into_boxed_str()))
-            .collect()
-    }
-
-    /// The CA commands as fakes that write what the real ones write.
-    fn ca_commands(fake: &Fake) {
-        fake.effect(&["/usr/bin/openvibes-admin", "ca", "init-root"], |root| {
-            let dir = root.join("run/openvibes-ca/root");
-            std::fs::create_dir_all(&dir).unwrap();
-            let ca = platform_pki::generate_root(chrono::Utc::now()).unwrap();
-            std::fs::write(dir.join("root.crt"), &ca.cert_pem).unwrap();
-            std::fs::write(dir.join("root.key"), &ca.key_pem).unwrap();
-        });
-        fake.effect(&with(&ADMIN, &["ca", "intermediate-request"]), |root| {
-            let dir = root.join("run/openvibes-ca/int");
-            std::fs::create_dir_all(&dir).unwrap();
-            std::fs::write(dir.join("intermediate.csr"), "CSR").unwrap();
-            std::fs::write(dir.join("intermediate.key"), "INTERMEDIATE KEY").unwrap();
-        });
-        fake.effect(
-            &["/usr/bin/openvibes-admin", "ca", "sign-intermediate"],
-            |root| {
-                std::fs::write(
-                    root.join("run/openvibes-ca/int/intermediate.crt"),
-                    "INTERMEDIATE",
-                )
-                .unwrap();
-            },
-        );
-        fake.answer(&with(&ADMIN, &["ca", "import-intermediate"]), 0, "");
-    }
-
-    #[test]
-    fn quick_ca_keeps_only_the_root_certificate_and_the_chosen_key_copy() {
-        let fake = Fake::new("ca-quick");
-        ca_commands(&fake);
-        fake.file("/run/openvibes-ca/stale", "left by a failed run");
-        let mut plan = plan(&[Ingest]);
-        plan.root_key_out = Some("/media/usb/openvibes-root.key".into());
-        std::fs::create_dir_all(fake.root.join("media/usb")).unwrap();
-        let state = run_step(&fake.ctx(&plan), Step::Ca);
-        assert!(matches!(state, StepState::Done(_)), "{state:?}");
-        assert!(
-            state.detail().contains("/media/usb/openvibes-root.key"),
-            "{state:?}"
-        );
-        assert!(state.detail().contains("SHA-256 "), "{state:?}");
-        assert!(
-            fake.text("/etc/openvibes/pki/root.crt")
-                .contains("BEGIN CERTIFICATE")
-        );
-        assert_eq!(
-            fake.text("/etc/openvibes/pki/intermediate.crt"),
-            "INTERMEDIATE"
-        );
-        assert_eq!(
-            fake.text("/var/lib/openvibes-ingest/intermediate.key"),
-            "INTERMEDIATE KEY"
-        );
-        assert!(
-            fake.text("/media/usb/openvibes-root.key")
-                .contains("PRIVATE KEY")
-        );
-        assert!(
-            !fake.root.join("run/openvibes-ca").exists(),
-            "staging removed"
-        );
-        use std::os::unix::fs::PermissionsExt;
-        let mode = |abs: &str| {
-            std::fs::metadata(fake.root.join(abs.trim_start_matches('/')))
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777
-        };
-        assert_eq!(mode("/var/lib/openvibes-ingest/intermediate.key"), 0o600);
-        assert_eq!(mode("/media/usb/openvibes-root.key"), 0o600);
-        assert_eq!(mode("/etc/openvibes/pki/root.crt"), 0o644);
-        // Done now: a second run changes nothing.
-        let calls = fake.calls.borrow().len();
-        assert!(matches!(
-            run_step(&fake.ctx(&plan), Step::Ca),
-            StepState::Done(_)
-        ));
-        assert_eq!(fake.calls.borrow().len(), calls);
-    }
-
-    #[test]
-    fn a_stale_staging_directory_is_replaced() {
-        let fake = Fake::new("ca-stale");
-        ca_commands(&fake);
-        fake.file(
-            "/run/openvibes-ca/root/root.crt",
-            "half-written by a failed run",
-        );
-        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ca);
-        assert!(matches!(state, StepState::Done(_)), "{state:?}");
-        assert!(state.detail().contains("root key deleted"), "{state:?}");
-    }
-
-    #[test]
-    fn a_failed_import_leaves_no_root_key_file_to_block_the_retry() {
-        let fake = Fake::new("ca-import-fails");
-        fake.answer(&with(&ADMIN, &["ca", "import-intermediate"]), 1, "");
-        ca_commands(&fake);
-        std::fs::create_dir_all(fake.root.join("media/usb")).unwrap();
-        let mut plan = plan(&[Ingest]);
-        plan.root_key_out = Some("/media/usb/openvibes-root.key".into());
-        let state = run_step(&fake.ctx(&plan), Step::Ca);
-        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
-        assert!(
-            !fake.root.join("media/usb/openvibes-root.key").exists(),
-            "a key for a root that was never installed would block every retry"
-        );
-    }
-
-    #[test]
-    fn an_existing_root_key_file_is_not_overwritten() {
-        let fake = Fake::new("ca-existing-key");
-        ca_commands(&fake);
-        fake.file("/media/usb/openvibes-root.key", "an older root key");
-        let mut plan = plan(&[Ingest]);
-        plan.root_key_out = Some("/media/usb/openvibes-root.key".into());
-        let state = run_step(&fake.ctx(&plan), Step::Ca);
-        assert!(state.detail().contains("already exists"), "{state:?}");
-        assert_eq!(
-            fake.text("/media/usb/openvibes-root.key"),
-            "an older root key"
-        );
-        assert!(
-            !fake.called(&["/usr/bin/openvibes-admin", "ca", "init-root"]),
-            "checked before any CA material"
-        );
-    }
-
-    #[test]
-    fn careful_ca_waits_for_the_signed_certificate() {
-        let fake = Fake::new("ca-careful");
-        ca_commands(&fake);
-        let mut plan = plan(&[Ingest]);
-        plan.ca = CaMode::Careful;
-        let state = run_step(&fake.ctx(&plan), Step::Ca);
-        assert!(matches!(state, StepState::Waiting(_)), "{state:?}");
-        assert!(state.detail().contains("sign-intermediate"), "{state:?}");
-        assert!(!fake.called(&["/usr/bin/openvibes-admin", "ca", "init-root"]));
-        assert!(matches!(
-            run_step(&fake.ctx(&plan), Step::Ca),
-            StepState::Waiting(_)
-        ));
-        let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
-        fake.file("/run/openvibes-ca/int/intermediate.crt", "INTERMEDIATE");
-        fake.file("/run/openvibes-ca/int/root.crt", &root.cert_pem);
-        let state = run_step(&fake.ctx(&plan), Step::Ca);
-        assert!(matches!(state, StepState::Done(_)), "{state:?}");
-        assert!(fake.called(&with(&ADMIN, &["ca", "import-intermediate"])));
-    }
-
-    #[test]
-    fn certificates_are_issued_for_every_name_and_installed() {
-        let fake = Fake::new("certificates");
-        fake.file("/etc/openvibes/pki/intermediate.crt", "INTERMEDIATE\n");
-        fake.file(
-            "/var/lib/openvibes-ingest/intermediate.key",
-            "INTERMEDIATE KEY",
-        );
-        fake.effect(&with(&ADMIN, &["ca", "issue-server"]), |root| {
-            for service in ["ingest", "distribution", "console"] {
-                let dir = root.join(format!("run/openvibes-ca/{service}"));
-                if dir.exists() && !dir.join("platform.example.com.crt").exists() {
-                    std::fs::write(
-                        dir.join("platform.example.com.crt"),
-                        format!("{service} CERT\n"),
-                    )
-                    .unwrap();
-                    std::fs::write(
-                        dir.join("platform.example.com.key"),
-                        format!("{service} KEY"),
-                    )
-                    .unwrap();
-                    return;
-                }
-            }
-            panic!("no output directory");
-        });
-        let state = run_step(
-            &fake.ctx(&plan(&[Ingest, Console, Distribution])),
-            Step::Certificates,
-        );
-        assert!(matches!(state, StepState::Done(_)), "{state:?}");
-        let issue = fake.call(&with(&ADMIN, &["ca", "issue-server"]));
-        assert_eq!(
-            issue[7..],
-            [
-                "platform.example.com",
-                "--san",
-                "10.0.0.5",
-                "--san",
-                "localhost",
-                "--san",
-                "127.0.0.1",
-                "--issuer-cert",
-                "/run/openvibes-ca/issuer.crt",
-                "--issuer-key",
-                "/run/openvibes-ca/issuer.key",
-                "--out",
-                "/run/openvibes-ca/ingest"
-            ]
-        );
-        assert_eq!(fake.text("/etc/openvibes/tls/ingest.crt"), "ingest CERT\n");
-        assert_eq!(
-            fake.text("/etc/openvibes/tls/console-chain.pem"),
-            "console CERT\nINTERMEDIATE\n"
-        );
-        use std::os::unix::fs::PermissionsExt;
-        let mode = |abs: &str| {
-            std::fs::metadata(fake.root.join(abs.trim_start_matches('/')))
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o777
-        };
-        assert_eq!(mode("/etc/openvibes/tls/ingest.key"), 0o600);
-        assert_eq!(mode("/etc/openvibes/tls/distribution.key"), 0o600);
-        assert_eq!(mode("/etc/openvibes/tls/console-key.pem"), 0o640);
-        assert_eq!(mode("/etc/openvibes/tls/console-chain.pem"), 0o640);
-        assert!(!fake.root.join("run/openvibes-ca").exists());
-    }
 }

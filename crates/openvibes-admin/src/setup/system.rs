@@ -27,6 +27,30 @@ pub struct Ctx<'a, R: Runner> {
     pub root: &'a Path,
     /// Between readiness polls: one second on a host, none in tests.
     pub pause: Duration,
+    /// Repair: steps may reinstall and restart, never make a new CA.
+    pub repair: bool,
+}
+
+/// Holds `/run/openvibes-admin/setup.lock` while one Setup run works; a
+/// second is refused rather than racing (e.g. both staging a CA).
+pub fn lock(root: &Path) -> Result<fs::File, String> {
+    let dir = root.join("run/openvibes-admin");
+    fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let path = dir.join("setup.lock");
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(fs::TryLockError::WouldBlock) => {
+            Err("another Setup run is in progress on this host; wait for it to finish".into())
+        }
+        Err(fs::TryLockError::Error(error)) => Err(format!("{}: {error}", path.display())),
+    }
 }
 
 /// The last lines of an error, on one line, control characters escaped.
@@ -217,6 +241,32 @@ impl<R: Runner> Ctx<'_, R> {
         result
     }
 
+    /// Creates `abs` (never over an existing file), 0600, filled from
+    /// `from`; owned by the operator through the handle when there is one.
+    /// A note when the owner could not be changed (e.g. a vfat stick).
+    pub fn write_new(&self, abs: &str, from: &mut dyn std::io::Read) -> Result<String, String> {
+        let fail = |error: std::io::Error| format!("{abs}: {error}");
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(self.path(abs))
+            .map_err(fail)?;
+        std::io::copy(from, &mut file)
+            .and_then(|_| file.sync_all())
+            .map_err(fail)?;
+        let owner = self.plan.operator.as_deref().map(|user| {
+            self.ids(Some((user, user))).and_then(|(uid, gid)| {
+                std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
+                    .map_err(|error| format!("{abs}: {error}"))
+            })
+        });
+        Ok(match owner {
+            Some(Err(error)) => format!(" (still owned by root: {error})"),
+            _ => String::new(),
+        })
+    }
+
     pub fn copy(&self, from: &str, to: &str, owner: Owner<'_>, mode: u32) -> Result<(), String> {
         let contents = fs::read(self.path(from)).map_err(|error| format!("{from}: {error}"))?;
         self.put(to, &contents, owner, mode)
@@ -224,5 +274,36 @@ impl<R: Runner> Ctx<'_, R> {
 
     pub fn pause(&self) {
         std::thread::sleep(self.pause);
+    }
+}
+
+/// Marks an update or uninstall that is half done (between its Stop and its
+/// last step); other Setup runs refuse until it is finished, so nothing
+/// starts services against a half-migrated database. In /run: a reboot
+/// starts the services anyway.
+const JOB: &str = "run/openvibes-admin/job";
+
+/// Refuses when a job of another kind is half done.
+pub fn job_guard(root: &Path, kind: &str) -> Result<(), String> {
+    match fs::read_to_string(root.join(JOB)) {
+        Ok(text) if !text.trim().is_empty() && text.trim() != kind => {
+            let other = text.trim();
+            Err(format!(
+                "an {other} is half done on this host: finish it first (Setup tab, or setup --{other})"
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+impl<R: Runner> Ctx<'_, R> {
+    /// Starts the half-done mark for `kind` (`update`, `uninstall`).
+    pub fn job_begin(&self, kind: &str) -> Result<(), String> {
+        self.put(&format!("/{JOB}"), kind.as_bytes(), None, 0o600)
+    }
+
+    /// Clears it once the job's last step is done.
+    pub fn job_end(&self) {
+        let _ = fs::remove_file(self.root.join(JOB));
     }
 }

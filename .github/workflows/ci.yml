@@ -165,6 +165,17 @@ jobs:
           git -C /opt/agent-src checkout -q "$(agent_rev)"
           cargo fetch --locked --manifest-path /opt/agent-src/Cargo.toml
 
+      - name: Build lower-version RPMs for the update test
+        env:
+          CARGO_NET_OFFLINE: "true"
+          OV_LLM: "0"
+          OV_VERSION: "0.0.9"
+          OV_RPM_TOPDIR: ${{ github.workspace }}/target/rpm-old
+        run: |
+          bash scripts/build-rpm.sh
+          mkdir -p dist/old
+          cp target/rpm-old/RPMS/x86_64/openvibes-*.rpm dist/old/
+
       - name: Build RPMs
         env:
           CARGO_NET_OFFLINE: "true"
@@ -337,3 +348,23 @@ jobs:
           console_rpm=$(find dist -maxdepth 1 -name "openvibes-console-${console_version}-*.rpm" -type f -print -quit)
           bash scripts/systemd-e2e.sh dist dist/sign_bundle \
             "$console_old_rpm" "$console_rpm"
+
+  setup-lifecycle:
+    name: Setup life cycle under systemd (install, repair, update, uninstall)
+    needs: fedora
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms
+          path: dist
+      - name: Life cycle
+        run: |
+          cp dist/openvibes-agent-*.rpm dist/old/
+          bash scripts/setup-lifecycle-e2e.sh dist/old dist
