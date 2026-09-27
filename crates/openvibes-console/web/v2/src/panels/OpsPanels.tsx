@@ -11,6 +11,7 @@ import { auditSince, date, isPast, when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
+import { IssueServiceToken, NewServiceAccount } from "./AdminPanels";
 
 export function tokenState(token: EnrollmentToken, now = Date.now()): { label: string; tone: string } {
   if (token.revoked) return { label: "Revoked", tone: "bad" };
@@ -154,6 +155,11 @@ function NewEnrollmentToken() {
 }
 
 export function ServiceAccountPanel({ id }: { id: string }) {
+  if (id === "new") return <NewServiceAccount />;
+  return <ExistingServiceAccount id={id} />;
+}
+
+function ExistingServiceAccount({ id }: { id: string }) {
   const { can } = useSession();
   const accounts = useResource<{ items: ServiceAccount[] }>("/api/v1/service-accounts");
   const tokens = useResource<{ items: ServiceToken[] }>(`/api/v1/service-accounts/${encodeURIComponent(id)}/tokens`);
@@ -172,16 +178,23 @@ export function ServiceAccountPanel({ id }: { id: string }) {
             toast(`${account.name} disabled`);
           }}>Disable</Confirm>
         )} />
+      {can("service_accounts.manage", true) && account.enabled && <div className="panel-body"><IssueServiceToken accountId={id} /></div>}
       <Section title="Tokens" flush>
         {!tokens.data ? <Loading rows={2} /> : tokens.data.items.length === 0 ? <Empty title="No tokens" /> : (
           <table className="table table--compact">
-            <thead><tr><th>Label</th><th>Expires</th><th>State</th></tr></thead>
+            <thead><tr><th>Label</th><th>Expires</th><th>State</th>{can("service_accounts.manage", true) && <th />}</tr></thead>
             <tbody>
               {tokens.data.items.map((token) => (
                 <tr key={token.token_id}>
                   <td>{token.label}</td>
                   <td><Ago value={token.expires_at} /></td>
                   <td><span className={`badge badge--${token.revoked ? "bad" : isPast(token.expires_at) ? "plain" : "ok"}`}>{token.revoked ? "Revoked" : isPast(token.expires_at) ? "Expired" : "Active"}</span></td>
+                  {can("service_accounts.manage", true) && <td>{!token.revoked && !isPast(token.expires_at) && (
+                    <button type="button" className="button button--small button--danger" onClick={() => {
+                      request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(token.token_id)}/revoke`)
+                        .then(() => { invalidate("/api/v1/service-accounts"); toast(`${token.label} revoked`); }, (e: unknown) => toast(e instanceof ApiError ? e.message : "Revoke failed", true));
+                    }}>Revoke</button>
+                  )}</td>}
                 </tr>
               ))}
             </tbody>

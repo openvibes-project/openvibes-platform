@@ -65,12 +65,16 @@ export function Enrollment() {
 }
 
 export function RuleSets() {
+  const { can } = useSession();
   const sets = useResource<{ items: RuleSet[] }>("/api/v1/rule-sets");
   const top = useTop();
   const rows = sets.data?.items ?? [];
   return (
     <div className="view">
-      <ViewHeader title="Rule sets" count={rows.length} refresh="/api/v1/rule-sets" />
+      <ViewHeader title="Rule sets" count={rows.length} refresh="/api/v1/rule-sets"
+        actions={can("rules.upload", true) && (
+          <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "rule-bundle", id: "new" }, true)}><Icon name="plus" size={15} /> Publish bundle</button>
+        )} />
       {sets.error ? <div className="view-pad"><ErrorBox error={sets.error} /></div> : !sets.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="rules" title="No rule sets">Publish a signed bundle with openvibes-admin to start.</Empty>
       ) : (
@@ -132,12 +136,16 @@ export function Access() {
 }
 
 export function ServiceAccounts() {
+  const { can } = useSession();
   const accounts = useResource<{ items: ServiceAccount[] }>("/api/v1/service-accounts");
   const top = useTop();
   const rows = accounts.data?.items ?? [];
   return (
     <div className="view">
-      <ViewHeader title="Service accounts" count={rows.length} refresh="/api/v1/service-accounts" />
+      <ViewHeader title="Service accounts" count={rows.length} refresh="/api/v1/service-accounts"
+        actions={can("service_accounts.manage", true) && (
+          <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "service-account", id: "new" }, true)}><Icon name="plus" size={15} /> New account</button>
+        )} />
       {accounts.error ? <div className="view-pad"><ErrorBox error={accounts.error} /></div> : !accounts.data ? <Loading /> : (
         <DataTable label="Service accounts" rows={rows} rowKey={(a) => a.service_account_id}
           onOpen={(a) => nav.open({ kind: "service-account", id: a.service_account_id }, true)}
@@ -171,7 +179,7 @@ export function Audit() {
           ...[1, 7, 365].map((days) => ({ label: days === 1 ? "Last day" : `Last ${days} days`, param: "range", value: String(days) })),
         ]}
         actions={<>
-          {retention.data && <span className="subtle nowrap">Kept {retention.data.retention_days} days</span>}
+          {retention.data && <button type="button" className="button button--ghost" onClick={() => nav.open({ kind: "audit-retention", id: "policy" }, true)} title="Retention policy"><Icon name="clock" size={15} /> Kept {retention.data.retention_days} days</button>}
           {can("audit.export", true) && (isDemo()
             ? <button type="button" className="button" onClick={() => downloadCsv(rows)}><Icon name="download" size={15} /> Export CSV</button>
             : <a className="button" href={`/api/v1/audit-export.csv?since=${encodeURIComponent(since)}`} download><Icon name="download" size={15} /> Export CSV</a>)}

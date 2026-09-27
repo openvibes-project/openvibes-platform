@@ -255,8 +255,13 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
   });
   route("GET", "/api/v1/audit-retention", "audit.read", () => json(data.retention));
-  route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body) => {
-    data.retention = { ...data.retention, retention_days: Number(body.retention_days), version: data.retention.version + 1, updated_at: iso(), updated_by: actor };
+  route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body, headers) => {
+    const match = headers["if-match"];
+    if (match === undefined) return problem(428, "precondition_required", "If-Match is required");
+    if (match !== `"${data.retention.version}"`) return problem(412, "stale_policy", "The retention policy changed; reload and try again");
+    const days = Number(body.retention_days);
+    if (!Number.isInteger(days) || days < 1 || days > 36_500) return problem(422, "invalid_retention", "Retention must be between 1 and 36,500 days");
+    data.retention = { ...data.retention, retention_days: days, version: data.retention.version + 1, updated_at: iso(), updated_by: actor };
     audit("audit.retention.update", "audit", "retention");
     return json(data.retention);
   });
@@ -299,8 +304,68 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   });
   route("GET", "/api/v1/rule-sets", "rules.read", () => json({ items: data.ruleSets }));
   route("GET", "/api/v1/rule-sets/{id}/bundles", "rules.read", ({ id = "" }) => json({ items: data.bundles.get(id) ?? [] }));
+  const previews = new Map<string, string>();
+  const envelopeOf = (body: Record<string, unknown>) => ({
+    set: String(body.rule_set_id ?? ""), version: Number(body.rule_set_version), key: String(body.issuer_key_id ?? ""), expires: Number(body.expires_at_unix_ms),
+  });
+  route("POST", "/api/v1/rule-bundles/preview", "rules.upload", (_, __, body) => {
+    const e = envelopeOf(body);
+    const set = data.ruleSets.find((candidate) => candidate.rule_set_id === e.set);
+    if (!set || !Number.isInteger(e.version) || e.key === "") return problem(422, "invalid_envelope", "The envelope failed signature or trust validation");
+    if (set.current_version != null && e.version <= set.current_version) return problem(409, "version_not_newer", `Version ${e.version} is not newer than ${set.current_version}`);
+    const preview_token = `preview-${crypto.randomUUID()}`;
+    previews.set(preview_token, JSON.stringify(e));
+    return json({ rule_set_id: e.set, version: e.version, current_version: set.current_version ?? null, issuer_key_id: e.key, envelope_sha256: "demo".padEnd(64, "0"), expires_at_ms: e.expires, preview_token });
+  });
+  route("POST", "/api/v1/rule-bundles/publish", "rules.upload", (_, __, body, headers) => {
+    const token = headers["x-rule-preview-token"];
+    if (token === undefined) return problem(428, "preview_required", "Preview the bundle first");
+    const e = envelopeOf(body);
+    if (previews.get(token) !== JSON.stringify(e)) return problem(409, "preview_mismatch", "The envelope changed since its preview; preview it again");
+    previews.delete(token);
+    const set = data.ruleSets.find((candidate) => candidate.rule_set_id === e.set);
+    if (!set) return problem(404, "not_found", "Rule set not found");
+    set.current_version = e.version;
+    set.current_issuer_key_id = e.key;
+    set.current_expires_at_ms = e.expires;
+    data.bundles.set(e.set, [{ version: e.version, bytes: JSON.stringify(body).length, created_at_ms: Date.now(), published_at: iso(), published_by: actor, envelope_sha256: "demo".padEnd(64, "0"), expires_at_ms: e.expires, issuer_key_id: e.key }, ...(data.bundles.get(e.set) ?? [])]);
+    audit("rule_bundle.publish", e.set, "rule_set");
+    return new Response(null, { status: 201 });
+  });
   route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts }));
   route("GET", "/api/v1/service-accounts/{id}/tokens", "service_accounts.read", ({ id = "" }) => json({ items: data.serviceTokens.get(id) ?? [] }));
+  route("POST", "/api/v1/service-accounts", "service_accounts.manage", (_, __, body) => {
+    const name = String(body.name ?? "").trim();
+    if (name === "" || name.length > 128) return problem(422, "invalid_name", "Give the account a name");
+    const account = { service_account_id: `sa-${Date.now().toString(36)}`, name, role_ids: [String(body.role_id ?? "viewer")], enabled: true, active_tokens: 0, created_at: iso() };
+    data.serviceAccounts.push(account);
+    audit("service_account.create", account.service_account_id, "service_account");
+    return json(account, 201);
+  });
+  const issued = new Map<string, { token_id: string; expires_at: string }>();
+  route("POST", "/api/v1/service-accounts/{id}/tokens", "service_accounts.manage", ({ id = "" }, _, body, headers) => {
+    const key = headers["idempotency-key"] ?? "";
+    if (!/^[\x21-\x7e]{16,128}$/.test(key)) return problem(400, "invalid_idempotency_key", "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters");
+    const account = data.serviceAccounts.find((a) => a.service_account_id === id);
+    if (!account) return problem(404, "not_found", "Service account not found");
+    const previous = issued.get(key);
+    if (previous) return json({ ...previous, secret_available: false, replayed: true });
+    const token = { token_id: `st-${Date.now().toString(36)}${issued.size}`, label: String(body.label ?? ""), created_at: iso(), expires_at: iso(Date.now() + Number(body.expires_in_hours ?? 24) * 3_600_000), revoked: false };
+    issued.set(key, { token_id: token.token_id, expires_at: token.expires_at });
+    data.serviceTokens.set(id, [token, ...(data.serviceTokens.get(id) ?? [])]);
+    account.active_tokens += 1;
+    audit("service_token.create", id, "service_account");
+    return json({ token_id: token.token_id, token: `ovst_demo_${crypto.randomUUID().replaceAll("-", "")}`, expires_at: token.expires_at, secret_available: true, replayed: false }, 201);
+  });
+  route("POST", "/api/v1/service-accounts/{id}/tokens/{token}/revoke", "service_accounts.manage", ({ id = "", token = "" }) => {
+    const found = data.serviceTokens.get(id)?.find((t) => t.token_id === token);
+    const account = data.serviceAccounts.find((a) => a.service_account_id === id);
+    if (!found || !account) return problem(404, "not_found", "Token not found");
+    if (!found.revoked) account.active_tokens = Math.max(0, account.active_tokens - 1);
+    found.revoked = true;
+    audit("service_token.revoke", id, "service_account");
+    return json(found);
+  });
   route("POST", "/api/v1/service-accounts/{id}/disable", "service_accounts.manage", ({ id = "" }) => {
     const account = data.serviceAccounts.find((a) => a.service_account_id === id);
     if (!account) return problem(404, "not_found", "Service account not found");

@@ -150,3 +150,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .signin__logo { height: 30px; }
 .signin__card h1 { font-size: 20px; }
 .signin__card .link-button { justify-self: center; font-size: 13px; }
+
+.dropzone {
+  display: grid; place-items: center; gap: 8px; padding: 28px 16px; border: 2px dashed var(--line-strong); border-radius: var(--r-3);
+  color: var(--text-2); text-align: center; cursor: pointer; transition: border-color var(--fast), background var(--fast);
+}
+.dropzone:hover, .dropzone:focus-within { border-color: var(--accent); background: var(--accent-soft); }
+.dropzone input { position: absolute; width: 1px; height: 1px; opacity: 0; }

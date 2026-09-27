@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 
 import type { Permission } from "../api/types";
 import { panelTitle } from "./titles";
+import { PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
@@ -59,7 +60,9 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
-  "service-account": { label: "Service account", icon: "service", title: (id) => id, render: (id) => <ServiceAccountPanel id={id} /> },
+  "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
   user: { label: "User", icon: "user", title: (id) => id, render: (id) => <UserPanel id={id} /> },
+  "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
+  "audit-retention": { label: "Audit log", icon: "audit", title: () => "Retention", render: () => <RetentionPanel /> },
 };

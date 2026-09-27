@@ -77,3 +77,22 @@ for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/find
     expect(result.violations.flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.target.join(" ")} ${n.any[0]?.message ?? ""}`))).toEqual([]);
   });
 }
+
+test("a service account is created and issues a token shown once", async ({ page }) => {
+  await page.goto("/service-accounts");
+  await page.getByRole("button", { name: "New account" }).click();
+  await page.getByLabel("Name").fill("Backup job");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.locator(".panel-header__title")).toContainText("Backup job");
+  await page.getByLabel("Token label").fill("nightly");
+  await page.getByRole("button", { name: "Issue" }).click();
+  await expect(page.locator(".secret")).toContainText("ovst_demo_");
+});
+
+test("audit retention changes from its panel", async ({ page }) => {
+  await page.goto("/audit");
+  await page.getByRole("button", { name: /Kept 365 days/ }).click();
+  await page.getByLabel("Keep audit events for (days)").fill("400");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: /Kept 400 days/ })).toBeVisible();
+});

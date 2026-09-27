@@ -110,6 +110,40 @@ describe("demo server", () => {
     expect(again.token).toBeUndefined();
   });
 
+  it("creates a service account, issues a token once, and revokes it", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const created = await json(await server.handle("POST", "/api/v1/service-accounts", { name: "Backup job", role_id: "viewer" }));
+    const id = String(created.service_account_id);
+    const body = { label: "cron", expires_in_hours: 24 };
+    expect((await server.handle("POST", `/api/v1/service-accounts/${id}/tokens`, body)).status).toBe(400);
+    const token = await json(await server.handle("POST", `/api/v1/service-accounts/${id}/tokens`, body, { "idempotency-key": "svc-key-0123456789" }));
+    expect(token.secret_available).toBe(true);
+    expect((await server.handle("POST", `/api/v1/service-accounts/${id}/tokens/${String(token.token_id)}/revoke`)).status).toBe(200);
+    const tokens = await json(await server.handle("GET", `/api/v1/service-accounts/${id}/tokens`));
+    expect((tokens.items as { revoked: boolean }[])[0]?.revoked).toBe(true);
+  });
+
+  it("changes audit retention only with the current version in If-Match", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const policy = await json(await server.handle("GET", "/api/v1/audit-retention"));
+    expect((await server.handle("PUT", "/api/v1/audit-retention", { retention_days: 400 })).status).toBe(428);
+    expect((await server.handle("PUT", "/api/v1/audit-retention", { retention_days: 400 }, { "if-match": '"99"' })).status).toBe(412);
+    const updated = await json(await server.handle("PUT", "/api/v1/audit-retention", { retention_days: 400 }, { "if-match": `"${String(policy.version)}"` }));
+    expect(updated.retention_days).toBe(400);
+  });
+
+  it("previews a signed bundle and publishes it with the preview token", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const envelope = { rule_set_id: "baseline-linux", rule_set_version: 99, issuer_key_id: "ops-2026", expires_at_unix_ms: Date.now() + 86_400_000 };
+    const preview = await json(await server.handle("POST", "/api/v1/rule-bundles/preview", envelope));
+    expect(preview.version).toBe(99);
+    expect((await server.handle("POST", "/api/v1/rule-bundles/publish", envelope)).status).toBe(428);
+    const published = await server.handle("POST", "/api/v1/rule-bundles/publish", envelope, { "x-rule-preview-token": String(preview.preview_token) });
+    expect(published.status).toBe(201);
+    const sets = await json(await server.handle("GET", "/api/v1/rule-sets"));
+    expect((sets.items as { rule_set_id: string; current_version: number }[]).find((set) => set.rule_set_id === "baseline-linux")?.current_version).toBe(99);
+  });
+
   it("answers 404 for unknown routes", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/nope")).status).toBe(404);
