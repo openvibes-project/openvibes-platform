@@ -23,6 +23,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `health_listen` | required | loopback address for `/health`, `/ready`; any other address is refused |
 | `server_certificate_file`, `server_key_file` | required | server chain (leaf first) and key |
 | `client_ca_file` | required | CA whose client certificates are accepted |
+| `root_certificate_file` | `/etc/openvibes/pki/root.crt` | root certificate served at `GET /v1/ca`; read at start; missing → 503 |
 | `issuing_certificate_file`, `issuing_key_file` | required | intermediate that signs agent certificates |
 | `database_url` | required | the `openvibes-ingest` role |
 | `client_certificate_days` | 30 | 1 to 365 |
@@ -48,6 +49,16 @@ Shared with distribution: implemented in
 - Authenticated endpoints need a certificate whose **serial and key hash**
   are recorded for an agent: unknown → 401; agent revoked → 403 with
   `PlatformError { identity_revoked }` (the only source of that code).
+
+## Root certificate for installers
+
+`GET /v1/ca` (contracts-v1) needs no client certificate and returns the
+root certificate from `root_certificate_file` as PEM (`application/x-pem-file`),
+or 503 "the platform has no CA yet: finish Setup first" when the file was
+missing or not a certificate at start. The agent install script fetches it
+without verifying the server, accepts it only if its SHA-256 matches the
+fingerprint in the install command, then verifies the server against it.
+The usual request limits apply. Test: `tests/ca.rs`.
 
 ## Enrollment and renewal
 

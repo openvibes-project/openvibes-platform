@@ -89,6 +89,7 @@ impl World {
             server_certificate_file: write("server.crt", &server.cert_pem),
             server_key_file: write("server.key", &server.key_pem),
             client_ca_file: write("client-ca.crt", &intermediate),
+            root_certificate_file: write("root.crt", &root.cert_pem),
             issuing_certificate_file: write("intermediate.crt", &intermediate),
             issuing_key_file: write("intermediate.key", &key),
             database_url: url.clone(),
@@ -284,6 +285,53 @@ pub async fn raw_tls_with(
     version: &'static rustls::SupportedProtocolVersion,
     extra_headers: &str,
 ) -> Option<(u16, String)> {
+    raw_request_with(
+        addr,
+        root_pem,
+        "POST",
+        path,
+        body,
+        client,
+        version,
+        extra_headers,
+    )
+    .await
+}
+
+/// One HTTP/1.1 request with METHOD over TLS 1.3: (status, body).
+#[allow(dead_code)]
+pub async fn raw_request(
+    addr: SocketAddr,
+    root_pem: &str,
+    method: &str,
+    path: &str,
+    body: &[u8],
+    client: Option<(&str, &str)>,
+) -> Option<(u16, String)> {
+    raw_request_with(
+        addr,
+        root_pem,
+        method,
+        path,
+        body,
+        client,
+        &rustls::version::TLS13,
+        "",
+    )
+    .await
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn raw_request_with(
+    addr: SocketAddr,
+    root_pem: &str,
+    method: &str,
+    path: &str,
+    body: &[u8],
+    client: Option<(&str, &str)>,
+    version: &'static rustls::SupportedProtocolVersion,
+    extra_headers: &str,
+) -> Option<(u16, String)> {
     let mut roots = rustls::RootCertStore::empty();
     for cert in CertificateDer::pem_slice_iter(root_pem.as_bytes()) {
         roots.add(cert.unwrap()).unwrap();
@@ -314,7 +362,7 @@ pub async fn raw_tls_with(
         .await
         .ok()?;
     let head = format!(
-        "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
+        "{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
          {extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
