@@ -361,3 +361,75 @@ async fn a_debian_vulnerability_without_a_fix_is_labelled_and_counted() {
     );
     fixture.drop().await;
 }
+
+// An imported host can carry any hostname (export files are unsigned): it
+// is marked wherever vulns names a host, and a hostname that matches more
+// than one host is refused instead of merging their vulnerabilities.
+#[tokio::test]
+async fn imported_hosts_are_marked_and_shared_hostnames_are_refused() {
+    let fixture = ready().await;
+    let pool = platform_store::connect(&fixture.url).await.unwrap();
+    let mut client = pool.get().await.unwrap();
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname)
+             VALUES ('import.inst-1', 'imported', now(), 'web-01')",
+            &[],
+        )
+        .await
+        .unwrap();
+    let wordpress = PackageRow {
+        manager: "rpm".into(),
+        name: "wordpress".into(),
+        epoch: 0,
+        version: "6.9.6".into(),
+        release: "1.fc44".into(),
+        arch: "noarch".into(),
+        source: None,
+        source_version: None,
+    };
+    inventory::replace(
+        &mut client,
+        "import.inst-1",
+        "fedora",
+        "44",
+        None,
+        &[wordpress],
+        [2; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    stdout(&fixture.run(&["feeds", "import", &feed(), "--source", "fedora-44-x86_64"]));
+
+    let list = stdout(&fixture.run(&["vulns", "list"]));
+    assert!(
+        list.contains("FEDORA-2026-dc0ff85b8b web-01 (imported) "),
+        "{list}"
+    );
+    assert!(list.contains("FEDORA-2026-dc0ff85b8b web-01 "), "{list}");
+    let summary = stdout(&fixture.run(&["vulns", "summary"]));
+    assert!(summary.contains("  web-01 (imported) 1 open"), "{summary}");
+    let advisory = stdout(&fixture.run(&["vulns", "show", "FEDORA-2026-dc0ff85b8b"]));
+    assert!(
+        advisory.contains("  web-01 (imported): wordpress"),
+        "{advisory}"
+    );
+
+    for args in [
+        &["vulns", "list", "--host", "web-01"][..],
+        &["vulns", "show", "web-01"][..],
+    ] {
+        failed(
+            &fixture,
+            args,
+            &format!("web-01 matches 2 hosts: {HOST}, import.inst-1 (imported); give the id"),
+        );
+    }
+    let only = stdout(&fixture.run(&["vulns", "list", "--host", "import.inst-1"]));
+    assert_eq!(only.lines().count(), 1, "{only}");
+    assert!(only.contains("web-01 (imported)"), "{only}");
+    let shown = stdout(&fixture.run(&["vulns", "show", "import.inst-1"]));
+    assert!(shown.starts_with("1 open on web-01 (imported):"), "{shown}");
+    fixture.drop().await;
+}

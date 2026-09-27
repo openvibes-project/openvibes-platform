@@ -110,7 +110,9 @@ merges second renumbers its own files.
 - `agent show ID` works for `import.` ids.
 - `agent revoke` on an imported host is refused: "imported hosts have no
   identity to revoke".
-- `vulns summary|list|show` include imported hosts unchanged.
+- `vulns summary|list|show` mark imported hosts (`web-01 (imported)`),
+  and `--host`/`show` refuse a hostname shared by several hosts, listing
+  their ids (the user, 2026-09-27: imported hostnames are unsigned).
 - Note for Codex (console): `agents.status` has a third value,
   `imported`, and `claimed_agent_id` exists.
 
