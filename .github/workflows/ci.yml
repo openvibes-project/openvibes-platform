@@ -209,8 +209,9 @@ jobs:
           bash /opt/agent-src/scripts/build-rpm.sh
           cargo build --release --locked --manifest-path /opt/agent-src/Cargo.toml \
             -p openvibes-rules --example sign_bundle
-          cargo build --release --locked -p openvibes-load \
-            -p openvibes-ingest --example integration_bundle
+          # Separate runs: --example would limit a combined build to examples.
+          cargo build --release --locked -p openvibes-load
+          cargo build --release --locked -p openvibes-ingest --example integration_bundle
           mkdir -p dist tools
           cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
