@@ -18,6 +18,9 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
     let result = match step {
         Step::Packages => base::packages_check(ctx),
         Step::Postgres => base::postgres_check(ctx),
+        Step::Operators => base::operators_check(ctx),
+        Step::Database => base::database_check(ctx),
+        Step::Schema => base::schema_check(ctx),
         // Removed in Task 8, when every step has its module.
         other => Err(format!("{} is not implemented yet", other.name())),
     };
@@ -29,6 +32,9 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
     let result = match step {
         Step::Packages => base::packages_apply(ctx),
         Step::Postgres => base::postgres_apply(ctx),
+        Step::Operators => base::operators_apply(ctx),
+        Step::Database => base::database_apply(ctx),
+        Step::Schema => base::schema_apply(ctx),
         other => Err(format!("{} is not implemented yet", other.name())),
     };
     result.unwrap_or_else(StepState::Failed)

@@ -3,7 +3,7 @@
 use platform_host::{
     StepState,
     runner::{
-        Program::{Dnf, PostgresqlSetup, Rpm, Systemctl},
+        Program::{Dnf, PostgresqlSetup, Rpm, Systemctl, Usermod},
         Runner,
     },
 };
@@ -106,6 +106,85 @@ pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     }
     ctx.ok(Systemctl, &["enable", "--now", "postgresql"])?;
     Ok(StepState::Done("PostgreSQL installed and running".into()))
+}
+
+const OPERATORS: &str = "openvibes-operators";
+
+pub fn operators_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    let Some(user) = &ctx.plan.operator else {
+        return Ok(StepState::Skipped(
+            "no invoking user: Setup was run as root directly".into(),
+        ));
+    };
+    let groups = ctx.read("/etc/group")?;
+    let members = groups
+        .lines()
+        .find_map(|line| line.strip_prefix(&format!("{OPERATORS}:")))
+        .ok_or("group openvibes-operators is missing: is openvibes-admin installed?")?
+        .rsplit(':')
+        .next()
+        .unwrap_or("");
+    Ok(if members.split(',').any(|member| member == user) {
+        StepState::Done(format!("{user} is an operator"))
+    } else {
+        StepState::Todo
+    })
+}
+
+pub fn operators_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    let Some(user) = &ctx.plan.operator else {
+        return operators_check(ctx);
+    };
+    ctx.ok(Usermod, &["-aG", OPERATORS, user])?;
+    Ok(StepState::Done(format!(
+        "{user} added to {OPERATORS}; log in again for it to take effect"
+    )))
+}
+
+fn query<R: Runner>(ctx: &Ctx<R>, sql: &str) -> Result<bool, String> {
+    Ok(ctx.as_postgres(&["/usr/bin/psql", "-Atqc", sql])?.trim() == "1")
+}
+
+const ROLE: &str = "SELECT 1 FROM pg_roles WHERE rolname = 'openvibes-admin'";
+const DATABASE: &str = "SELECT 1 FROM pg_database WHERE datname = 'openvibes'";
+
+pub fn database_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    Ok(if query(ctx, ROLE)? && query(ctx, DATABASE)? {
+        StepState::Done("database openvibes owned by openvibes-admin".into())
+    } else {
+        StepState::Todo
+    })
+}
+
+pub fn database_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    if !query(ctx, ROLE)? {
+        ctx.as_postgres(&["/usr/bin/createuser", "--createrole", "openvibes-admin"])?;
+    }
+    if !query(ctx, DATABASE)? {
+        ctx.as_postgres(&["/usr/bin/createdb", "-O", "openvibes-admin", "openvibes"])?;
+    }
+    Ok(StepState::Done(
+        "database openvibes owned by openvibes-admin".into(),
+    ))
+}
+
+pub fn schema_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // `status` refuses unless the schema is current.
+    Ok(if ctx.as_admin(&["status"]).is_ok() {
+        StepState::Done("schema current".into())
+    } else {
+        StepState::Todo
+    })
+}
+
+pub fn schema_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    let migrated = ctx.as_admin(&["migrate"])?;
+    let maintained = ctx.as_admin(&["maintenance"])?;
+    Ok(StepState::Done(format!(
+        "{}; {}",
+        migrated.trim(),
+        maintained.trim()
+    )))
 }
 
 #[cfg(test)]
@@ -244,5 +323,119 @@ mod tests {
             StepState::Done("PostgreSQL installed and running".into())
         );
         assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
+    }
+    #[test]
+    fn the_invoking_user_joins_the_operators() {
+        let fake = Fake::new("operators");
+        fake.answer(
+            &["/usr/sbin/usermod", "-aG", "openvibes-operators", "alice"],
+            0,
+            "",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Operators);
+        assert!(state.detail().contains("log in again"), "{state:?}");
+        assert!(fake.called(&["/usr/sbin/usermod"]));
+
+        let fake = Fake::new("operators-member");
+        fake.file("/etc/group", "openvibes-operators:x:990:bob,alice\n");
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Operators);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(!fake.called(&["/usr/sbin/usermod"]));
+
+        let mut as_root = plan(&[Ingest]);
+        as_root.operator = None;
+        assert!(matches!(
+            run_step(&fake.ctx(&as_root), Step::Operators),
+            StepState::Skipped(_)
+        ));
+    }
+
+    #[test]
+    fn the_database_and_role_are_created_only_when_missing() {
+        let fake = Fake::new("database");
+        let psql = [
+            "/usr/sbin/runuser",
+            "-u",
+            "postgres",
+            "--",
+            "/usr/bin/psql",
+            "-Atqc",
+        ];
+        fake.answer(
+            &[
+                &psql[..],
+                &["SELECT 1 FROM pg_roles WHERE rolname = 'openvibes-admin'"],
+            ]
+            .concat(),
+            0,
+            "1\n",
+        );
+        fake.answer(
+            &[
+                &psql[..],
+                &["SELECT 1 FROM pg_database WHERE datname = 'openvibes'"],
+            ]
+            .concat(),
+            0,
+            "",
+        );
+        fake.answer(
+            &[
+                "/usr/sbin/runuser",
+                "-u",
+                "postgres",
+                "--",
+                "/usr/bin/createdb",
+                "-O",
+                "openvibes-admin",
+                "openvibes",
+            ],
+            0,
+            "",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Database);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(!fake.called(&[
+            "/usr/sbin/runuser",
+            "-u",
+            "postgres",
+            "--",
+            "/usr/bin/createuser"
+        ]));
+        assert!(fake.called(&[
+            "/usr/sbin/runuser",
+            "-u",
+            "postgres",
+            "--",
+            "/usr/bin/createdb"
+        ]));
+    }
+
+    #[test]
+    fn the_schema_is_migrated_and_partitions_created() {
+        let fake = Fake::new("schema");
+        let admin = [
+            "/usr/sbin/runuser",
+            "-u",
+            "openvibes-admin",
+            "--",
+            "/usr/bin/openvibes-admin",
+        ];
+        fake.answer(&[&admin[..], &["status"]].concat(), 1, "");
+        fake.answer(
+            &[&admin[..], &["migrate"]].concat(),
+            0,
+            "schema version 24\n",
+        );
+        fake.answer(
+            &[&admin[..], &["maintenance"]].concat(),
+            0,
+            "created 97 partitions\n",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Schema);
+        assert_eq!(
+            state,
+            StepState::Done("schema version 24; created 97 partitions".into())
+        );
     }
 }
