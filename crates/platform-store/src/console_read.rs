@@ -19,11 +19,11 @@ pub enum AgentScope {
 }
 
 impl AgentScope {
-    fn is_global(&self) -> bool {
+    pub(crate) fn is_global(&self) -> bool {
         matches!(self, Self::Global)
     }
 
-    fn group_ids(&self) -> Vec<String> {
+    pub(crate) fn group_ids(&self) -> Vec<String> {
         match self {
             Self::Global => Vec::new(),
             Self::AssetGroups(ids) => ids.clone(),
@@ -53,7 +53,7 @@ pub async fn agent_ids_in_scope(
 
 /// Builds the SQL predicate shared by finding reads; its only interpolated
 /// values are internal aliases and positional parameter numbers.
-fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
+pub(crate) fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
     format!(
         "({global}::boolean OR EXISTS (
             SELECT 1 FROM console_asset_group_selectors s
@@ -68,7 +68,7 @@ fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
                       AND t.tag_value = required.tag_value
                   )
               )
-        ))"
+        )) AND ({global}::boolean OR a.status <> 'imported')"
     )
 }
 
@@ -227,6 +227,15 @@ impl Severity {
     }
 }
 
+fn parse_severity(value: String) -> Severity {
+    match value.as_str() {
+        "critical" => Severity::Critical,
+        "high" => Severity::High,
+        "medium" => Severity::Medium,
+        _ => Severity::Low,
+    }
+}
+
 /// Full latest observation snapshot retained independently of history partitions.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LatestFinding {
@@ -285,6 +294,109 @@ pub struct LatestQuery {
     /// Exclusive keyset cursor.
     pub after: Option<LatestCursor>,
     /// Bounded page size.
+    pub limit: PageLimit,
+}
+
+/// Cursor for grouped latest findings: last observation descending, then
+/// rule-set and rule identifiers ascending.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FindingGroupCursor {
+    /// Last in-window observation of the preceding group.
+    pub last_observed_at: DateTime<Utc>,
+    /// Rule-set identifier (`''` is the pre-P6 unknown set).
+    pub rule_set_id: String,
+    /// Rule identifier within that set.
+    pub rule_id: String,
+}
+
+/// Bounded query for unique rule groups over the current latest snapshots.
+#[derive(Clone, Debug)]
+pub struct FindingGroupQuery {
+    /// Start of the recent-observation window.
+    pub since: DateTime<Utc>,
+    /// Exclusive keyset cursor.
+    pub after: Option<FindingGroupCursor>,
+    /// Page size.
+    pub limit: PageLimit,
+}
+
+/// One rule group and its in-scope endpoint rollup.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FindingGroup {
+    /// Rule-set identifier (`''` is the pre-P6 unknown set).
+    pub rule_set_id: String,
+    /// Rule identifier within the rule set.
+    pub rule_id: String,
+    /// Endpoints whose latest observation is inside the query window.
+    pub endpoint_count: i64,
+    /// Highest severity in the window.
+    pub severity: Severity,
+    /// Message from the most recently observed endpoint.
+    pub latest_message: String,
+    /// Distinct rule versions present in the window, descending.
+    pub rule_versions: Vec<i64>,
+    /// Earliest first observation among endpoints in the window.
+    pub first_observed_at: DateTime<Utc>,
+    /// Latest observation among endpoints in the window.
+    pub last_observed_at: DateTime<Utc>,
+    /// Endpoints in scope whose latest match is older than the window.
+    pub older_endpoint_count: i64,
+    /// Per-endpoint triage counts for the in-window endpoints.
+    pub open: i64,
+    /// Per-endpoint triage counts for the in-window endpoints.
+    pub investigating: i64,
+    /// Per-endpoint triage counts for the in-window endpoints.
+    pub mitigated: i64,
+    /// Per-endpoint triage counts for the in-window endpoints.
+    pub accepted_risk: i64,
+    /// Per-endpoint triage counts for the in-window endpoints.
+    pub false_positive: i64,
+}
+
+/// One endpoint that currently reports a member of a rule group.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FindingGroupEndpoint {
+    /// Enrolled agent or synthetic `import.<install_id>` identifier.
+    pub agent_id: String,
+    /// Hostname label, not an identity key.
+    pub hostname: Option<String>,
+    /// First observed timestamp for the latest snapshot.
+    pub first_observed_at: DateTime<Utc>,
+    /// Latest observed timestamp.
+    pub last_observed_at: DateTime<Utc>,
+    /// Latest signed rule version on this endpoint.
+    pub rule_version: i64,
+    /// Current workflow state (missing rows are `open`).
+    pub triage_state: String,
+    /// Current triage version (missing rows are version 0).
+    pub triage_version: i64,
+    /// Whether this endpoint is older than the requested window.
+    pub outside_window: bool,
+    /// `online` or `import` provenance.
+    pub origin: String,
+    /// Whether authenticated transport was used.
+    pub authenticated: bool,
+}
+
+/// Cursor for endpoint pages: last observation descending, then agent ID.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FindingGroupEndpointCursor {
+    /// Last-observed timestamp of the prior row.
+    pub last_observed_at: DateTime<Utc>,
+    /// Prior row's agent or imported installation ID.
+    pub agent_id: String,
+}
+
+/// Endpoint-page query for one rule group.
+#[derive(Clone, Debug)]
+pub struct FindingGroupEndpointQuery {
+    /// Start of the recent-observation window.
+    pub since: DateTime<Utc>,
+    /// Include endpoints whose latest observation is older than the window.
+    pub include_older: bool,
+    /// Exclusive keyset cursor.
+    pub after: Option<FindingGroupEndpointCursor>,
+    /// Page size.
     pub limit: PageLimit,
 }
 
@@ -413,7 +525,7 @@ pub async fn agent_summary_in_scope(
                               AND t.tag_value = required.tag_value
                           )
                       )
-             ))",
+             )) AND ($2::boolean OR a.status <> 'imported')",
             &[&threshold, &global, &groups],
         )
         .await?;
@@ -479,7 +591,7 @@ pub async fn agents_in_scope(
                               AND t.tag_value = required.tag_value
                           )
                       )
-               ))
+               )) AND ($7::boolean OR a.status <> 'imported')
                AND ($5::boolean = false OR
                     ($3::timestamptz IS NOT NULL AND
                         (a.last_seen_at < $3 OR (a.last_seen_at = $3 AND a.agent_id > $4)
@@ -554,7 +666,7 @@ pub async fn agent_in_scope(
                               AND t.tag_value = required.tag_value
                           )
                       )
-               ))",
+               )) AND ($3::boolean OR a.status <> 'imported')",
             &[&agent_id, &threshold, &global, &groups],
         )
         .await?;
@@ -636,7 +748,7 @@ pub async fn certificates_in_scope(
                                   AND t.tag_value = required.tag_value
                               )
                           )
-                     ))
+                     )) AND ($6::boolean OR a.status <> 'imported')
                )
                AND ($4::boolean = false OR c.issued_at < $2
                     OR (c.issued_at = $2 AND c.serial > $3))
@@ -768,6 +880,195 @@ pub async fn latest_findings_in_scope(
     Ok(Page { items, next })
 }
 
+/// Groups current latest snapshots once per rule set and rule. The caller's
+/// asset scope is applied before aggregation; imported installations are
+/// visible only to a global reader until an association contract exists.
+pub async fn finding_groups_in_scope(
+    client: &Client,
+    query: &FindingGroupQuery,
+    scope: &AgentScope,
+) -> Result<Page<FindingGroup, FindingGroupCursor>, StoreError> {
+    let cursor = query.after.as_ref();
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible_agent = agent_visibility("a.agent_id", "$7", "$8");
+    let rows = client
+        .query(
+            &format!(
+                "WITH visible AS (
+                    SELECT c.*, a.hostname, COALESCE(t.state, 'open') AS triage_state
+                    FROM current_findings c JOIN agents a USING (agent_id)
+                    LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+                    WHERE {visible_agent}
+                 ), grouped AS (
+                    SELECT rule_set_id, rule_id,
+                           count(*) FILTER (WHERE last_observed_at >= $1)::bigint AS endpoint_count,
+                           CASE min(CASE WHEN last_observed_at >= $1 THEN
+                                    CASE severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2
+                                         WHEN 'medium' THEN 3 ELSE 4 END END)
+                                WHEN 1 THEN 'critical' WHEN 2 THEN 'high'
+                                WHEN 3 THEN 'medium' ELSE 'low' END AS severity,
+                           (array_agg(message ORDER BY last_observed_at DESC, agent_id ASC)
+                                FILTER (WHERE last_observed_at >= $1))[1] AS latest_message,
+                           array_agg(DISTINCT rule_version ORDER BY rule_version DESC)
+                                FILTER (WHERE last_observed_at >= $1) AS rule_versions,
+                           min(first_observed_at) FILTER (WHERE last_observed_at >= $1)
+                                AS first_observed_at,
+                           max(last_observed_at) FILTER (WHERE last_observed_at >= $1)
+                                AS last_observed_at,
+                           count(*) FILTER (WHERE last_observed_at < $1)::bigint AS older_endpoint_count,
+                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'open')::bigint AS open,
+                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'investigating')::bigint AS investigating,
+                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'mitigated')::bigint AS mitigated,
+                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'accepted_risk')::bigint AS accepted_risk,
+                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'false_positive')::bigint AS false_positive
+                    FROM visible GROUP BY rule_set_id, rule_id
+                    HAVING count(*) FILTER (WHERE last_observed_at >= $1) > 0
+                 )
+                 SELECT rule_set_id, rule_id, endpoint_count, severity, latest_message,
+                        rule_versions, first_observed_at, last_observed_at,
+                        older_endpoint_count, open, investigating, mitigated,
+                        accepted_risk, false_positive
+                 FROM grouped
+                 WHERE ($2::boolean = false OR last_observed_at < $3 OR
+                       (last_observed_at = $3 AND (rule_set_id, rule_id) > ($4, $5)))
+                 ORDER BY last_observed_at DESC, rule_set_id ASC, rule_id ASC
+                 LIMIT $6"
+            ),
+            &[
+                &query.since,
+                &cursor.is_some(),
+                &cursor.map(|value| value.last_observed_at),
+                &cursor.map(|value| value.rule_set_id.as_str()),
+                &cursor.map(|value| value.rule_id.as_str()),
+                &(query.limit.value() + 1),
+                &global,
+                &groups,
+            ],
+        )
+        .await?;
+    let mut items: Vec<_> = rows
+        .iter()
+        .map(|row| FindingGroup {
+            rule_set_id: row.get(0),
+            rule_id: row.get(1),
+            endpoint_count: row.get(2),
+            severity: parse_severity(row.get(3)),
+            latest_message: row.get(4),
+            rule_versions: row.get(5),
+            first_observed_at: row.get(6),
+            last_observed_at: row.get(7),
+            older_endpoint_count: row.get(8),
+            open: row.get(9),
+            investigating: row.get(10),
+            mitigated: row.get(11),
+            accepted_risk: row.get(12),
+            false_positive: row.get(13),
+        })
+        .collect();
+    let next = if items.len() > usize::from(query.limit.0) {
+        items.pop();
+        items.last().map(|item| FindingGroupCursor {
+            last_observed_at: item.last_observed_at,
+            rule_set_id: item.rule_set_id.clone(),
+            rule_id: item.rule_id.clone(),
+        })
+    } else {
+        None
+    };
+    Ok(Page { items, next })
+}
+
+/// Pages the endpoints of a rule group only when at least one endpoint in
+/// scope has a latest match inside the requested window. Imported endpoints
+/// remain restricted to global readers. Returns `None` for a hidden or absent
+/// group so callers cannot distinguish those cases.
+pub async fn finding_group_endpoints_in_scope(
+    client: &Client,
+    rule_set_id: &str,
+    rule_id: &str,
+    query: &FindingGroupEndpointQuery,
+    scope: &AgentScope,
+) -> Result<Option<Page<FindingGroupEndpoint, FindingGroupEndpointCursor>>, StoreError> {
+    let groups = scope.group_ids();
+    let global = scope.is_global();
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let visible_page = agent_visibility("a.agent_id", "$9", "$10");
+    let exists = client
+        .query_one(
+            &format!(
+                "SELECT EXISTS (
+                   SELECT 1 FROM current_findings c JOIN agents a USING(agent_id)
+                   WHERE c.rule_set_id = $3 AND c.rule_id = $4
+                     AND c.last_observed_at >= $5
+                     AND {visible}
+                 )"
+            ),
+            &[&global, &groups, &rule_set_id, &rule_id, &query.since],
+        )
+        .await?
+        .get::<_, bool>(0);
+    if !exists {
+        return Ok(None);
+    }
+    let cursor = query.after.as_ref();
+    let rows = client
+        .query(
+            &format!(
+                "SELECT c.agent_id, a.hostname, c.first_observed_at, c.last_observed_at,
+                        c.rule_version, COALESCE(t.state, 'open'), COALESCE(t.version, 0),
+                        c.last_observed_at < $1, c.origin, c.authenticated
+                 FROM current_findings c JOIN agents a USING(agent_id)
+                 LEFT JOIN console_finding_triage t USING(agent_id, rule_set_id, rule_id)
+                 WHERE c.rule_set_id = $3 AND c.rule_id = $4
+                   AND (c.last_observed_at >= $1 OR $2::boolean)
+                   AND {visible_page}
+                   AND ($5::boolean = false OR c.last_observed_at < $6 OR
+                       (c.last_observed_at = $6 AND c.agent_id > $7))
+                 ORDER BY c.last_observed_at DESC, c.agent_id ASC
+                 LIMIT $8"
+            ),
+            &[
+                &query.since,
+                &query.include_older,
+                &rule_set_id,
+                &rule_id,
+                &cursor.is_some(),
+                &cursor.map(|value| value.last_observed_at),
+                &cursor.map(|value| value.agent_id.as_str()),
+                &(query.limit.value() + 1),
+                &global,
+                &groups,
+            ],
+        )
+        .await?;
+    let mut items: Vec<_> = rows
+        .iter()
+        .map(|row| FindingGroupEndpoint {
+            agent_id: row.get(0),
+            hostname: row.get(1),
+            first_observed_at: row.get(2),
+            last_observed_at: row.get(3),
+            rule_version: row.get(4),
+            triage_state: row.get(5),
+            triage_version: row.get(6),
+            outside_window: row.get(7),
+            origin: row.get(8),
+            authenticated: row.get(9),
+        })
+        .collect();
+    let next = if items.len() > usize::from(query.limit.0) {
+        items.pop();
+        items.last().map(|item| FindingGroupEndpointCursor {
+            last_observed_at: item.last_observed_at,
+            agent_id: item.agent_id.clone(),
+        })
+    } else {
+        None
+    };
+    Ok(Some(Page { items, next }))
+}
+
 /// Finds a latest observation by its composite primary key.
 pub async fn latest_finding(
     client: &Client,
@@ -831,7 +1132,7 @@ pub async fn finding_history_in_scope(
             "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings f
+             FROM findings f JOIN agents a ON a.agent_id = f.agent_id
              WHERE f.observed_day >= $1 AND f.observed_at >= $2
                AND {visible_agent}
                AND ($3::text IS NULL OR f.agent_id = $3)
@@ -898,7 +1199,8 @@ pub async fn finding_event_in_scope(
             "SELECT f.finding_id, f.observed_day, f.agent_id, f.rule_set_id, f.rule_id, f.rule_version,
                     severity, confidence, message, evidence, scan_id, authenticated,
                     origin, observed_at, received_at
-             FROM findings f WHERE f.observed_day = $1 AND f.finding_id = $2
+             FROM findings f JOIN agents a ON a.agent_id = f.agent_id
+             WHERE f.observed_day = $1 AND f.finding_id = $2
                AND {visible_agent}"),
             &[&observed_day, &finding_id, &global, &groups],
         )
