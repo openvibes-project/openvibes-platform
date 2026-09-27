@@ -294,6 +294,16 @@ wait_for "findings from the published rule set in PostgreSQL" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM findings WHERE rule_set_id = 'baseline' AND rule_id = 'host.has.processes'\") -ge 1 ]]"
 wait_for "the agent's inventory is stored (protocol P8)" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM host_packages\") -gt 100 ]]"
+# P11: a package change reaches the platform as a change set, not a full
+# report. `rpm -e --justdb` drops tar from the package database only (its
+# files stay); the restarted agent scans at once and sends the difference.
+in_c 'rpm -q tar' >/dev/null 2>&1 || fail "the e2e image has no tar package to remove"
+in_c 'rpm -e --justdb --nodeps tar && systemctl restart openvibes-agent' || fail "change the agent's inventory"
+wait_for "the agent sent inventory changes (protocol P11)" 120 \
+    'journalctl -u openvibes-ingest -o cat | grep -q "\"endpoint\":\"/v1/inventory/changes\".*\"status\":204"'
+[[ $($SQL "SELECT count(*) FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id WHERE v.name = 'tar'") == 0 ]] ||
+    fail "the platform still lists tar after the change set"
+ok "a package change arrives as inventory changes"
 wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
     "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
 in_c 'runuser -u openvibes-admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
