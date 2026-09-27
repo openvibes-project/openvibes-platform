@@ -100,18 +100,26 @@ Privileged steps: setup steps (§6), certificate installation and renewal,
 OS actions (§8).
 
 Exception for Setup: a Setup run (install, repair, change components,
-uninstall) asks for the password once when it starts, keeps it in locked
-memory (`mlock`, zeroed on drop) for that run only, and wipes it when the
-run ends or fails. Every other screen asks per step. Setup's helper verbs,
-each its own function with arguments from enums:
+uninstall) asks for the password once when it starts, keeps it for that
+run only (zeroed on drop with `zeroize`; not `mlock`ed, because
+`openvibes-admin` forbids unsafe code), and wipes it when the run ends or
+fails. Every other screen asks per step. The operator group added in step
+3 takes effect only at the next login, so during Setup every step,
+including the ones an operator could run, goes through the helper as root
+(database commands as `runuser -u openvibes-admin`). Setup's helper verbs,
+each its own function:
 
 | Verb | Does |
 |---|---|
-| `packages-install COMPONENT...` / `packages-remove COMPONENT...` | `dnf install`/`remove` of the component's fixed package names; signature checks stay on (`--nogpgcheck` is never passed) |
-| `repo-local DIR` | temporary local repository for `setup --repo-dir` (below) |
-| `firewall-open` / `firewall-close` | `firewall-cmd --permanent` for the chosen services' ports, then reload |
-| `agent-configure` | writes `/etc/openvibes-agent/agent.toml`, the CA and the token (read from stdin) with the agent's owner and modes |
-| `purge` | remove-everything uninstall (§6); refuses unless the typed hostname is passed and matches |
+| `setup-plan --components LIST --hostname NAME [--san ADDR]... [--ca quick\|careful] [--root-key-out PATH] [--repo-dir DIR] [--allow-unsigned-local]` | checks the arguments (components from an enum, hostname and addresses as DNS names or IPs) and writes `/etc/openvibes/setup.toml` |
+| `setup-status` | prints each step's state (done, to do, waiting, failed with a reason) |
+| `setup-step STEP` | runs one step (§6.3) for the components in `setup.toml`; packages come from each component's fixed package names, and signature checks stay on (`--nogpgcheck` is never passed; local package files are checked with `localpkg_gpgcheck=1` unless `--allow-unsigned-local` was given) |
+| `unit-enable UNIT` / `unit-disable UNIT` | enable or disable an allow-listed unit at boot (Services screen) |
+| `purge` | remove-everything uninstall (§6.5, PR 5); refuses unless the typed hostname is passed and matches |
+
+These verbs run only with the user's password (their own sudo rights, no
+sudoers entry), so, unlike the password-free verbs, `setup-plan` may take
+paths.
 
 `openvibes-admin helper` is a hidden subcommand with a closed set of verbs.
 It refuses to run unless real or effective uid is 0, takes no paths or unit
@@ -146,13 +154,15 @@ pub trait Host {
     fn logs(&self, unit: Unit, lines: u16) -> Result<Vec<String>, HostError>;
     fn read_config(&self, service: Service) -> Result<String, HostError>;
     fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError>;
-    fn admin(&self, args: &[&str]) -> Result<Output, HostError>; // openvibes-admin as openvibes_admin
-    fn privileged(&self, step: Step, password: &Secret) -> Result<Output, HostError>;
+    fn is_set_up(&self) -> bool;                      // /etc/openvibes/setup.toml exists
+    fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError>;
 }
+// Privileged: SetupPlan(args), SetupStatus, SetupStep(Step), UnitEnable(Unit), UnitDisable(Unit)
 ```
 
 `Unit`, `Service` and `Step` are enums, so an unknown unit or step cannot
-be expressed.
+be expressed. The root side of Setup (the step checks and actions) lives in
+`openvibes-admin/src/setup/` and runs commands through the same `Runner`.
 
 ## 5. Screens
 
@@ -208,16 +218,19 @@ up", and the TUI opens on Setup.
 
 ### 6.3 Install
 
-**Components** (checkboxes): ingest and console (always), distribution,
-vulns, assistant (off by default: heavy), baseline rules (on with
-distribution), agent on this host (on by default).
+**Components** (checkboxes): ingest and console (always in the TUI;
+`--components` must name ingest and may leave out the console, which the
+systemd end-to-end test installs separately for its upgrade check),
+distribution, vulns, assistant (off by default: heavy), baseline rules (on
+with distribution), agent on this host (on by default).
 
 **Checklist.** Each step checks its own state first (so re-running is safe
 and resumes), shows the exact commands it runs, and marks root steps with
 a lock. A failed step stops the run and shows the failing command and its
 last output lines; Retry continues from that step.
 
-1. Packages of the chosen components installed (root, `packages-install`).
+1. Platform packages of the chosen components installed (root; the rules
+   and agent packages are installed by their own steps).
 2. PostgreSQL installed, initialised, running (root).
 3. Operator group membership for the current user (root, once).
 4. Database and `openvibes-admin` role (root, as `postgres`).
@@ -232,20 +245,28 @@ last output lines; Retry continues from that step.
    hostname and addresses to put in them, shown and editable (root: key
    install).
 8. Console TLS and the first admin account (the console RPM's existing
-   setup, `packaging.md` "Console RPM setup").
+   setup, `packaging.md` "Console RPM setup"): a server certificate from
+   the intermediate (browsers trust it once the root certificate is
+   imported), `public_origin` set to `https://HOSTNAME`, and the account
+   `admin` with a generated password shown once on the last screen
+   (`--admin-password-file` sets it for scripts).
 9. Services enabled and started (root: enable).
 10. Firewall ports 18423 and, with distribution, 18424, and the console's
     port (root).
-11. Baseline rules: trust the project rules key and publish the bundle
-    that `openvibes-rules-baseline` installs under
-    `/usr/share/openvibes/rules/` (`rules trust add`, `rules publish`).
+11. Baseline rules: install `openvibes-rules-baseline`, trust the project
+    rules key and publish the bundle it installs under
+    `/usr/share/openvibes/rules/` (`baseline.json`, and `baseline.key`:
+    one line `RULE_SET ISSUER_KEY_ID PUBLIC_KEY`) with `rules trust add`
+    and `rules publish`. Skipped while the package is not available.
 12. Agent on this host: install `openvibes-agent`, write its config
-    through `agent-configure` (platform on 127.0.0.1, the CA, a
-    single-use token, the baseline rule set and its key), start it, and
-    wait for its first report.
-13. Readiness checks. The last screen shows the console address, the admin
-    login, the endpoint command (`curl … | sh -s -- --agent --platform …
-    --token …`) and the CA fingerprint.
+    (platform at `https://localhost`, the root certificate, a single-use
+    token, the baseline rule set and its key), start it, and wait up to
+    60 seconds for it to show as active.
+13. Readiness checks, and an endpoint enrollment token (24 hours, 10
+    uses). The last screen shows the console address, the admin login,
+    the endpoint command (`curl … | sh -s -- --agent --platform …
+    --token …`; until the install script exists, the agent configuration
+    snippet) and the root certificate's path and SHA-256 fingerprint.
 
 ### 6.4 Repair, change components
 
