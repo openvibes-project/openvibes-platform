@@ -6,6 +6,7 @@
 mod base;
 #[cfg(test)]
 mod fake;
+mod pki;
 pub mod plan;
 mod system;
 
@@ -21,6 +22,8 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Operators => base::operators_check(ctx),
         Step::Database => base::database_check(ctx),
         Step::Schema => base::schema_check(ctx),
+        Step::Ca => pki::ca_check(ctx),
+        Step::Certificates => pki::certificates_check(ctx),
         // Removed in Task 8, when every step has its module.
         other => Err(format!("{} is not implemented yet", other.name())),
     };
@@ -35,6 +38,8 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Operators => base::operators_apply(ctx),
         Step::Database => base::database_apply(ctx),
         Step::Schema => base::schema_apply(ctx),
+        Step::Ca => pki::ca_apply(ctx),
+        Step::Certificates => pki::certificates_apply(ctx),
         other => Err(format!("{} is not implemented yet", other.name())),
     };
     result.unwrap_or_else(StepState::Failed)
