@@ -54,7 +54,7 @@ RULES
 "$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 7 "$W/bundle.json" >/dev/null
 python3 "$ROOT/scripts/tiny-gguf.py" "$W/tiny.gguf"
 
-printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux && dnf clean all\n' |
+printf 'FROM registry.fedoraproject.org/fedora:44\nRUN dnf -q -y install systemd postgresql-server procps-ng util-linux polkit sudo && dnf clean all\n' |
     "$PODMAN" build -q -t "$IMAGE" -f - "$W" >/dev/null
 "$PODMAN" rm -f "$C" >/dev/null 2>&1 || true
 # Rootless --privileged: privileged only inside the container's user
@@ -211,6 +211,32 @@ wait_for "the vulns service matched the imported host: bash vulnerable" 60 \
 in_c 'runuser -u openvibes-admin -- openvibes-admin agent list --imported' | grep -q "^$IMP  imported" ||
     fail "agent list --imported"
 ok "openvibes-admin import stores a local-only export as a matched imported host"
+
+# 7c. Operators (admin TUI PR 1): a member of openvibes-operators restarts a
+# unit through polkit and reads its log through the root helper, without a
+# password; a non-member cannot, and neither can reach other units. The
+# full-screen TUI itself is covered by its snapshot tests; this checks the
+# rights it relies on, called exactly as it calls them.
+in_c 'useradd -m -G openvibes-operators alice && useradd -m bob' || fail "operator users"
+in_c 'runuser -u alice -- systemctl --no-ask-password restart openvibes-vulns.service' ||
+    fail "operator restart through polkit"
+wait_for "vulns ready after the operator's restart" 30 'curl -fsS http://127.0.0.1:18483/ready'
+in_c 'runuser -u bob -- systemctl --no-ask-password restart openvibes-vulns.service' >/dev/null 2>&1 &&
+    fail "a non-operator restarted a unit"
+in_c 'runuser -u alice -- systemctl --no-ask-password restart systemd-journald.service' >/dev/null 2>&1 &&
+    fail "an operator restarted a unit outside the allow-list"
+in_c 'runuser -u alice -- systemctl --no-ask-password enable openvibes-llm.service' >/dev/null 2>&1 &&
+    fail "an operator enabled a unit without a password"
+in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' | grep -q . ||
+    fail "operator log read through the helper"
+in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs systemd-journald.service 5' >/dev/null 2>&1 &&
+    fail "the helper read a unit outside the allow-list"
+in_c 'runuser -u bob -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' >/dev/null 2>&1 &&
+    fail "a non-operator read logs"
+in_c 'runuser -u alice -- sudo -n -u openvibes-admin /usr/bin/openvibes-admin status' >/dev/null ||
+    fail "operator database work as openvibes-admin"
+in_c 'journalctl -t openvibes-admin -o cat | grep -q .' || true
+ok "operators restart units, read logs and use the admin CLI without a password; others cannot"
 
 # 8. openvibes-llm (assistant AS5): refuses to start without a verified
 # model, serves the tiny test model on loopback behind its API key, runs
