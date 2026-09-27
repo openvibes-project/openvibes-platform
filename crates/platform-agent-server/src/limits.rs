@@ -19,6 +19,8 @@ use crate::ApiError;
 pub(crate) struct Limits {
     pub in_flight: Arc<Semaphore>,
     pub request_timeout: Duration,
+    /// Deadline for `/v1/inventory`, which may carry 8 MiB.
+    pub inventory_request_timeout: Duration,
 }
 
 /// Refuses a request with 503 when `max_in_flight` requests are already
@@ -30,7 +32,8 @@ pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: N
         .get(axum::http::header::CONTENT_LENGTH)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.parse::<u64>().ok());
-    if declared.is_some_and(|length| length > crate::request::MAX_BODY_BYTES as u64) {
+    let limit = crate::request::body_limit(request.uri().path()) as u64;
+    if declared.is_some_and(|length| length > limit) {
         return ApiError::BadRequest.into_response();
     }
     let Ok(permit) = state.in_flight.clone().try_acquire_owned() else {
@@ -38,7 +41,12 @@ pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: N
     };
     // The whole request, body included, must finish within the deadline,
     // so a slow client cannot keep its permit.
-    let response = match tokio::time::timeout(state.request_timeout, next.run(request)).await {
+    let deadline = if request.uri().path() == "/v1/inventory" {
+        state.inventory_request_timeout
+    } else {
+        state.request_timeout
+    };
+    let response = match tokio::time::timeout(deadline, next.run(request)).await {
         Ok(response) => response,
         Err(_) => ApiError::Timeout.into_response(),
     };

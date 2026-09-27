@@ -19,6 +19,9 @@ pub struct AuthenticatedAgent(pub String);  // extractor; needs Pool: FromRef<S>
 pub enum ApiError { BadRequest, Unauthorized, Revoked, NotFound, Unavailable, Busy, Timeout }
 pub enum ServerError { Config, Tls, Database, Listen }
 pub const MAX_BODY_BYTES: usize;            // 1 MiB, the V1 document limit
+pub const MAX_INVENTORY_BYTES: usize;       // 8 MiB, /v1/inventory only
+pub fn body_limit(path: &str) -> usize;     // the limit for a path
+pub fn parse_with_limit<T>(body, limit);    // parse with another limit
 pub fn parse<T: DeserializeOwned + Validate>(body: &[u8]) -> Result<T, ApiError>;
 pub fn read_pem(path: &Path) -> Result<String, ServerError>;
 ```
@@ -44,7 +47,7 @@ requires absolute certificate and key paths, a loopback `health_listen`,
 | Expired or not-yet-valid certificate that otherwise chains | handshake passes; 401 (or 403 if revoked) |
 | Unknown certificate, or none on an authenticated route | 401 |
 | Revoked agent | 403 `{"schema_version":1,"code":"identity_revoked"}` |
-| Declared or actual body over 1 MiB, malformed or invalid body | 400 |
+| Declared or actual body over 1 MiB (8 MiB on `/v1/inventory`), malformed or invalid body | 400 |
 | More than `max_in_flight` requests | 503 `busy` |
 | Database unreachable or query failed | 503, one warning log line |
 | Request (body included) past `request_timeout_seconds` | 408 |

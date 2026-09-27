@@ -158,8 +158,10 @@ async fn import_file(
     client: &mut Client,
     now: DateTime<Utc>,
 ) -> Result<(String, Imported), String> {
-    let limit = ResourceLimits::V1.document_bytes;
-    let too_large = || String::from("larger than 1 MiB");
+    // Read up to the inventory limit (8 MiB); finding files are held to the
+    // 1 MiB document limit once their kind is known (M1 limits review).
+    let limit = ResourceLimits::V1.inventory_document_bytes;
+    let too_large = || String::from("larger than 8 MiB");
     let unreadable = |error: std::io::Error| format!("cannot read: {error}");
     // A symlink to a device, a FIFO, or a socket is never opened: opening a
     // FIFO blocks until a writer appears. Checked again on the open file in
@@ -187,6 +189,9 @@ async fn import_file(
     let value: serde_json::Value =
         serde_json::from_slice(&bytes).map_err(|_| String::from("not valid JSON"))?;
     if value.get("findings").is_some() {
+        if bytes.len() > ResourceLimits::V1.document_bytes {
+            return Err("larger than 1 MiB".into());
+        }
         findings(decode(value)?, retention_days, client, now).await
     } else if value.get("packages").is_some() {
         inventory(decode(value)?, client, now).await

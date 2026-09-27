@@ -60,6 +60,7 @@ impl DistributionConfig {
             database_url: self.database_url.clone(),
             max_in_flight: self.max_in_flight,
             request_timeout_seconds: self.request_timeout_seconds,
+            inventory_request_timeout_seconds: self.request_timeout_seconds,
             max_connections: self.max_connections,
             database_pool_size: self.database_pool_size,
         }

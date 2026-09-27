@@ -10,6 +10,12 @@ fn default_days() -> u32 {
 fn default_in_flight() -> usize {
     4096
 }
+fn default_inventory_timeout() -> u64 {
+    180
+}
+fn default_inventory_in_flight() -> usize {
+    4
+}
 fn default_retention() -> u32 {
     90
 }
@@ -49,6 +55,15 @@ pub struct IngestConfig {
     /// Requests served at once; above this, 503.
     #[serde(default = "default_in_flight")]
     pub max_in_flight: usize,
+    /// Deadline for a whole inventory report, 1 to 900 seconds; the default
+    /// 180 carries 8 MiB at 500 kbit/s (every other request keeps
+    /// `request_timeout_seconds`).
+    #[serde(default = "default_inventory_timeout")]
+    pub inventory_request_timeout_seconds: u64,
+    /// Inventory reports handled at once (1 to 128); above this, 503. Each
+    /// may be up to 8 MiB, so this bounds their memory (M1 limits review).
+    #[serde(default = "default_inventory_in_flight")]
+    pub max_inventory_in_flight: usize,
     /// Findings older than this are acknowledged without storing (1 to
     /// 36500; must match `openvibes-admin maintenance --retention-days`).
     #[serde(default = "default_retention")]
@@ -78,7 +93,8 @@ impl IngestConfig {
         ])
         .map_err(|_| IngestError::Config)?;
         let valid = (1..=365).contains(&self.client_certificate_days)
-            && (1..=36_500).contains(&self.finding_retention_days);
+            && (1..=36_500).contains(&self.finding_retention_days)
+            && (1..=128).contains(&self.max_inventory_in_flight);
         if valid {
             Ok(())
         } else {
@@ -99,6 +115,7 @@ impl IngestConfig {
             database_url: self.database_url.clone(),
             max_in_flight: self.max_in_flight,
             request_timeout_seconds: self.request_timeout_seconds,
+            inventory_request_timeout_seconds: self.inventory_request_timeout_seconds,
             max_connections: self.max_connections,
             database_pool_size: self.database_pool_size,
         }
