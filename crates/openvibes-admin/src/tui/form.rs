@@ -70,10 +70,17 @@ impl Form {
         Ok(())
     }
 
-    /// Puts a field back as the file had it.
+    /// Puts a field back as the file had it: the file as read, with every
+    /// other field's edit applied again, so its comments and place return.
     pub fn undo(&mut self, key: &str) {
-        let value = lookup(&self.read, key).cloned();
-        put(&mut self.doc, key, value);
+        let mut doc = self.read.clone();
+        for field in self.fields().iter().filter(|field| field.key != key) {
+            let current = lookup(&self.doc, field.key);
+            if lookup(&self.read, field.key).map(show) != current.map(show) {
+                put(&mut doc, field.key, current.cloned());
+            }
+        }
+        self.doc = doc;
         self.recheck();
     }
 
@@ -170,6 +177,36 @@ fn parse(kind: Kind, input: &str) -> Result<Value, String> {
     })
 }
 
+/// Removes `key`. The comment lines above it (kept in the key's decor)
+/// move to the value after it; returned when there is none.
+fn remove_keeping_comment(table: &mut dyn TableLike, key: &str) -> Option<String> {
+    let comment = table
+        .key(key)
+        .and_then(|key| key.leaf_decor().prefix())
+        .and_then(|prefix| prefix.as_str())
+        .filter(|prefix| prefix.contains('#'))
+        .map(str::to_owned);
+    let next = table
+        .iter()
+        .map(|(name, _)| name.to_owned())
+        .skip_while(|name| name != key)
+        .nth(1)
+        .filter(|name| table.get(name).is_some_and(Item::is_value));
+    table.remove(key);
+    let comment = comment?;
+    let Some(mut next) = next.as_deref().and_then(|name| table.key_mut(name)) else {
+        return Some(comment);
+    };
+    let own = next
+        .leaf_decor()
+        .prefix()
+        .and_then(|prefix| prefix.as_str())
+        .unwrap_or("")
+        .to_owned();
+    next.leaf_decor_mut().set_prefix(format!("{comment}{own}"));
+    None
+}
+
 /// Sets `key` (keeping the old value's trailing comment), creating its
 /// tables; `None` removes it and any table it leaves empty.
 fn put(doc: &mut DocumentMut, key: &str, value: Option<Value>) {
@@ -180,7 +217,13 @@ fn put(doc: &mut DocumentMut, key: &str, value: Option<Value>) {
                 return;
             };
             if depth == parents.len() {
-                table.remove(last);
+                if let Some(comment) = remove_keeping_comment(table, last)
+                    && depth == 0
+                {
+                    // The root table's last key: the comment stays at the end.
+                    let trailing = doc.trailing().as_str().unwrap_or("").to_owned();
+                    doc.set_trailing(format!("{comment}{trailing}"));
+                }
             } else if table
                 .get(parents[depth])
                 .and_then(Item::as_table_like)
@@ -326,6 +369,36 @@ mod tests {
                 .unwrap_err()
                 .starts_with("not valid TOML")
         );
+    }
+
+    #[test]
+    fn clearing_keeps_the_comment_above_and_undo_restores_the_file() {
+        let text = packaged(Service::Vulns);
+        let mut form = Form::parse(Service::Vulns, text).unwrap();
+        form.set(field(Service::Vulns, "kev_url"), "").unwrap();
+        assert!(
+            form.text().contains("# Enrichment (exploited in the wild"),
+            "{}",
+            form.text()
+        );
+        form.undo("kev_url");
+        assert_eq!(form.text(), text);
+        // The table's last key: its comment has no next key to move to.
+        form.set(field(Service::Vulns, "osv_url"), "").unwrap();
+        assert!(
+            form.text()
+                .contains("# Debian, Ubuntu, Rocky Linux and AlmaLinux"),
+            "{}",
+            form.text()
+        );
+        form.undo("osv_url");
+        assert_eq!(form.text(), text);
+        // Undoing one field keeps the other edits.
+        form.set(field(Service::Vulns, "kev_url"), "").unwrap();
+        form.set(field(Service::Vulns, "arch"), "aarch64").unwrap();
+        form.undo("kev_url");
+        assert_eq!(form.get("arch").as_deref(), Some("aarch64"));
+        assert_eq!(form.changes().len(), 1);
     }
 
     #[test]

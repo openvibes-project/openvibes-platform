@@ -39,8 +39,13 @@ pub fn read(dir: &Path, service: Service) -> Result<String, String> {
 pub fn replace(dir: &Path, service: Service, text: &str) -> Result<(), String> {
     let name = service.file_name();
     let path = dir.join(name);
-    let metadata = existing(&path)?;
     configs::validate(service, text)?;
+    // One save at a time (the temp name is shared): an exclusive lock on the
+    // directory, released when `lock` is dropped.
+    let lock = fs::File::open(dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    lock.lock()
+        .map_err(|error| format!("{}: {error}", dir.display()))?;
+    let metadata = existing(&path)?;
     let temp = dir.join(format!(".{name}.new"));
     // Left by an interrupted save; it is ours to replace.
     let _ = fs::remove_file(&temp);
@@ -148,6 +153,25 @@ mod tests {
                 .contains("not a regular file")
         );
         assert_eq!(fs::read_to_string(&target).unwrap(), OLD);
+    }
+
+    // Two saves at once must not share or delete each other's temp file.
+    #[test]
+    fn a_save_waits_for_another_save_to_finish() {
+        let dir = dir("lock");
+        admin_file(&dir);
+        let held = fs::File::open(&dir).unwrap();
+        held.lock().unwrap();
+        let worker = {
+            let dir = dir.clone();
+            std::thread::spawn(move || replace(&dir, Service::Admin, NEW))
+        };
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        assert!(!worker.is_finished(), "the save waits for the lock");
+        assert_eq!(read(&dir, Service::Admin).unwrap(), OLD);
+        held.unlock().unwrap();
+        worker.join().unwrap().unwrap();
+        assert_eq!(read(&dir, Service::Admin).unwrap(), NEW);
     }
 
     #[test]
