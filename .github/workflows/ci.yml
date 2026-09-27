@@ -57,6 +57,9 @@ jobs:
       - name: Format
         run: cargo fmt --all --check
 
+      - name: Account rename script
+        run: bash scripts/test-rename-account.sh
+
       - name: Clippy
         env:
           CARGO_NET_OFFLINE: "true"
