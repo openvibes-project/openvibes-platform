@@ -21,7 +21,20 @@ Show everything v1 shows, without page changes for details:
 - **Command palette** (Ctrl+K): searches views, actions, recent objects,
   hosts, advisories/CVEs and findings.
 - **Lists:** saved views per viewer, keyboard navigation (j/k, Enter, x, /),
-  and one table component for every list.
+  and one table component for every list. Compact rows can be switched on
+  per viewer.
+- **Parity with v1:**
+  - findings with bulk triage and a 14-day trend of reporting hosts;
+  - vulnerabilities by advisory, with CVEs, EPSS and KEV;
+  - agents, with tags and revocation;
+  - enrollment tokens;
+  - rule sets, with signed-bundle preview and publish;
+  - access: roles, bindings and asset groups;
+  - service accounts, with tokens issued once;
+  - audit log, with ranges, CSV export and retention.
+
+  Not yet in v2: per-host triage fields for assignee and "accepted until"
+  (v1's single-finding form).
 
 ## Interfaces
 
