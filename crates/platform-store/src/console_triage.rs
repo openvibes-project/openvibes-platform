@@ -202,40 +202,6 @@ pub async fn update(
     }))
 }
 
-/// Applies one versioned triage transition to a bounded set of endpoints in
-/// one transaction. Every latest row is locked in stable ID order and scope
-/// is checked in SQL; stale, hidden, or invalid members abort the whole batch.
-#[allow(clippy::too_many_arguments)]
-pub async fn update_many(
-    client: &mut Client,
-    rule_set_id: &str,
-    rule_id: &str,
-    changes: &[(String, i64)],
-    scope: &crate::console_read::AgentScope,
-    state: &str,
-    assigned_to_username: Option<&str>,
-    note: Option<&str>,
-    accepted_until: Option<DateTime<Utc>>,
-    actor_id: &str,
-    now: DateTime<Utc>,
-) -> Result<BulkTriageUpdate, StoreError> {
-    update_many_with_request_id(
-        client,
-        rule_set_id,
-        rule_id,
-        changes,
-        scope,
-        state,
-        assigned_to_username,
-        note,
-        accepted_until,
-        actor_id,
-        None,
-        now,
-    )
-    .await
-}
-
 /// Applies an atomic group transition and writes one audit row per changed
 /// endpoint, all sharing the HTTP request ID supplied by the caller.
 #[allow(clippy::too_many_arguments)]
