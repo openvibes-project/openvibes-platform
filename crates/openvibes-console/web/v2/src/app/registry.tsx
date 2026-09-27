@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 
 import type { Permission } from "../api/types";
+import { panelTitle } from "./titles";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
@@ -46,6 +47,11 @@ export type PanelDef = {
   title: (id: string) => string;
   render: (id: string) => ReactNode;
 };
+
+/** The best known name of an object: learned from its panel, else from its id. */
+export function objectTitle(ref: { kind: string; id: string }): string {
+  return panelTitle(ref) ?? panels[ref.kind]?.title(ref.id) ?? ref.id;
+}
 
 export const panels: Readonly<Record<string, PanelDef>> = {
   agent: { label: "Agent", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },

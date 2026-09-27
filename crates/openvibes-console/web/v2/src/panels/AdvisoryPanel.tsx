@@ -2,6 +2,7 @@
 // versions fix it, and every host in scope that still needs it.
 import { useResource } from "../api/client";
 import type { AdvisoryDetail, Vulnerability } from "../api/types";
+import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
 import { date, pct } from "../ui/format";
 import { Icon } from "../ui/Icon";
@@ -28,6 +29,7 @@ function cvssTone(score: number | null | undefined) {
 
 export function AdvisoryPanel({ id }: { id: string }) {
   const detail = useResource<AdvisoryDetail>(`/api/v1/vulnerabilities/advisories/${encodeURIComponent(id)}`);
+  useProvideTitle({ kind: "advisory", id }, detail.data?.hosts.items[0]?.title);
   if (detail.error) return <div className="panel-body"><ErrorBox error={detail.error} /></div>;
   if (!detail.data) return <Loading />;
   const hosts = detail.data.hosts.items;

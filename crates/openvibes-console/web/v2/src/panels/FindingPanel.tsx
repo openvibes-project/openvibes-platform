@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { ApiError, invalidate, request, useAllPages } from "../api/client";
 import type { FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
+import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, triageLabel } from "../ui/format";
 import { PanelHeader, Section } from "../ui/panel";
@@ -43,6 +44,7 @@ export function FindingPanel({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const items = useMemo(() => (endpoints.data ?? []).filter((item) => filter === "all" || item.triage_state === filter), [endpoints.data, filter]);
 
+  useProvideTitle({ kind: "finding", id }, group?.latest_message);
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
   if (!group && groups.loading) return <Loading />;
   if (!group) return <div className="panel-body"><Empty icon="findings" title="Finding not found">It may have been resolved, or it is outside your access.</Empty></div>;

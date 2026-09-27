@@ -7,7 +7,7 @@ import type { Agent, FindingGroup, VulnerabilityPage } from "../api/types";
 import { assistant } from "../app/assistant";
 import type { PanelRef } from "../app/location";
 import { nav } from "../app/nav";
-import { panels, views } from "../app/registry";
+import { objectTitle, panels, views } from "../app/registry";
 import { useSession } from "../app/session";
 import { windowsStore } from "../app/windows";
 import { Icon, type IconName } from "../ui/Icon";
@@ -51,7 +51,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     if (query.trim() === "") {
       for (const ref of recent()) {
         const def = panels[ref.kind];
-        if (def) out.push({ id: `r${ref.kind}:${ref.id}`, group: "Recent", icon: def.icon, label: def.title(ref.id), hint: def.label, run: openObject(ref) });
+        if (def) out.push({ id: `r${ref.kind}:${ref.id}`, group: "Recent", icon: def.icon, label: objectTitle(ref), hint: def.label, run: openObject(ref) });
       }
       return out;
     }

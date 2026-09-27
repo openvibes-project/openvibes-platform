@@ -7,7 +7,8 @@ import { useResource } from "../api/client";
 import type { AssistantSegment, AssistantStatus } from "../api/types";
 import { assistant, useAssistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
-import { panels } from "../app/registry";
+import { objectTitle, panels } from "../app/registry";
+import { useTitles } from "../app/titles";
 import { Icon } from "../ui/Icon";
 
 const suggestions = [
@@ -22,7 +23,7 @@ function Segments({ segments }: { segments: AssistantSegment[] }) {
       {segments.map((segment, index) => segment.kind === "text" ? <span key={index}>{segment.text}</span> : (
         <button key={index} type="button" className="cite" onClick={() => nav.open({ kind: segment.target_kind, id: segment.id })}>
           <Icon name={panels[segment.target_kind]?.icon ?? "layers"} size={12} />
-          {panels[segment.target_kind]?.title(segment.id) ?? segment.id}
+          {objectTitle({ kind: segment.target_kind, id: segment.id })}
         </button>
       ))}
     </p>
@@ -31,6 +32,7 @@ function Segments({ segments }: { segments: AssistantSegment[] }) {
 
 export function AssistantDock() {
   const state = useAssistant();
+  useTitles();
   const { panels: stack } = useLocation();
   const status = useResource<AssistantStatus>(state.open ? "/api/v1/assistant/status" : null);
   const [draft, setDraft] = useState("");
@@ -95,8 +97,8 @@ export function AssistantDock() {
             <button type="button" aria-label="Remove context" onClick={() => assistant.clearContext()}><Icon name="close" size={12} /></button>
           </div>
         ) : offer && (
-          <button type="button" className="context-offer" onClick={() => assistant.askAbout(offer, panels[offer.kind]?.title(offer.id) ?? offer.id)}>
-            <Icon name="plus" size={12} /> Ask about {panels[offer.kind]?.title(offer.id)}
+          <button type="button" className="context-offer" onClick={() => assistant.askAbout(offer, objectTitle(offer))}>
+            <Icon name="plus" size={12} /> Ask about {objectTitle(offer)}
           </button>
         )}
         <div className="assistant__input">

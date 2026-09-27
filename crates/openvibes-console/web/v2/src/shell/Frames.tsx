@@ -4,7 +4,8 @@ import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } f
 
 import type { PanelRef } from "../app/location";
 import { nav, useLocation } from "../app/nav";
-import { panels } from "../app/registry";
+import { objectTitle, panels } from "../app/registry";
+import { useTitles } from "../app/titles";
 import { type Win, useWindows, windowsStore } from "../app/windows";
 import { Empty } from "../ui/bits";
 import { Icon } from "../ui/Icon";
@@ -22,6 +23,7 @@ function readWidth() {
 
 export function Inspector() {
   const { panels: stack } = useLocation();
+  useTitles();
   const [width, setWidth] = useState(readWidth);
   const [wide, setWide] = useState(false);
   const top = stack[stack.length - 1];
@@ -68,8 +70,8 @@ export function Inspector() {
             return (
               <span key={`${panel.kind}:${panel.id}`} className="crumbs__item">
                 {index > 0 && <Icon name="chevronRight" size={12} className="subtle" />}
-                {last ? <span className="crumbs__current truncate" aria-current="page">{def?.title(panel.id) ?? panel.id}</span>
-                  : <button type="button" className="crumbs__link truncate" onClick={() => nav.truncate(index + 1)}>{def?.title(panel.id) ?? panel.id}</button>}
+                {last ? <span className="crumbs__current truncate" aria-current="page" title={def?.label}>{objectTitle(panel)}</span>
+                  : <button type="button" className="crumbs__link truncate" onClick={() => nav.truncate(index + 1)}>{objectTitle(panel)}</button>}
               </span>
             );
           })}
@@ -89,6 +91,7 @@ export function Inspector() {
 
 function FloatingWindow({ win }: { win: Win }) {
   const def = panels[win.kind];
+  useTitles();
   const drag = (event: ReactPointerEvent, mode: "move" | "resize") => {
     if ((event.target as HTMLElement).closest("button") && mode === "move") return;
     event.preventDefault();
@@ -107,11 +110,11 @@ function FloatingWindow({ win }: { win: Win }) {
   if (win.min) return null;
   return (
     <section className="window" style={{ left: win.x, top: win.y, width: win.w, height: win.h, zIndex: win.z }}
-      aria-label={`${def?.label ?? "Window"}: ${def?.title(win.id) ?? win.id}`} onPointerDown={() => windowsStore.focus(win)}
+      aria-label={`${def?.label ?? "Window"}: ${objectTitle(win)}`} onPointerDown={() => windowsStore.focus(win)}
       onKeyDown={(event) => { if (event.key === "Escape") windowsStore.close(win); }}>
       <div className="window__bar" onPointerDown={(event) => drag(event, "move")}>
         <Icon name={def?.icon ?? "layers"} size={14} className="subtle" />
-        <span className="window__title truncate">{def?.label}: {def?.title(win.id) ?? win.id}</span>
+        <span className="window__title truncate">{def?.label}: {objectTitle(win)}</span>
         <button type="button" className="icon-button" aria-label="Minimise" onClick={() => windowsStore.minimize(win)}><Icon name="minimize" size={14} /></button>
         <button type="button" className="icon-button" aria-label="Back into the details pane" title="Dock into the details pane" onClick={() => windowsStore.dock(win)}><Icon name="dock" size={14} /></button>
         <button type="button" className="icon-button" aria-label="Close window" onClick={() => windowsStore.close(win)}><Icon name="close" size={14} /></button>
@@ -134,7 +137,7 @@ export function WindowLayer() {
             const def = panels[win.kind];
             return (
               <button key={`${win.kind}:${win.id}`} type="button" className="window-dock__item" onClick={() => windowsStore.focus(win)}>
-                <Icon name={def?.icon ?? "layers"} size={14} /> <span className="truncate">{def?.title(win.id) ?? win.id}</span>
+                <Icon name={def?.icon ?? "layers"} size={14} /> <span className="truncate">{objectTitle(win)}</span>
               </button>
             );
           })}
