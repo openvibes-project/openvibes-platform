@@ -120,9 +120,12 @@ async fn seed() -> (Db, chrono::DateTime<Utc>) {
         client
             .execute(
                 "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id,
-                     rule_version, severity, first_observed_at, last_observed_at)
-                 VALUES ($1, 'baseline', 'ssh.exposed', $1, 3, 'high', $2, $2)",
-                &[&id, &(now - Duration::hours(1))],
+                     rule_version, severity, first_observed_at, last_observed_at,
+                     last_observed_day, scan_id, confidence, message, evidence, received_at,
+                     origin, authenticated)
+                 VALUES ($1, 'baseline', 'ssh.exposed', $1, 3, 'high', $2, $2, $3,
+                         'scan.test', 90, 'SSH exposure', '{}', $2, 'online', true)",
+                &[&id, &(now - Duration::hours(1)), &now.date_naive()],
             )
             .await
             .unwrap();
