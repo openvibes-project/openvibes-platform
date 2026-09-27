@@ -261,7 +261,7 @@ do not lose lower-priority matching rows. `hosts_named_in_scope` resolves an
 agent ID or hostname only among visible agents; a hidden ID cannot suppress a
 visible hostname match.
 
-Schema 23 grants the console role read-only access to the vulnerability and
+Schema 25 grants the console role read-only access to the vulnerability and
 inventory tables and adds the agent-scoped `vulnerabilities.read` permission
 to built-in roles. The role can still change no vulnerability or inventory
 rows; each console query must apply the resolved asset scope.
