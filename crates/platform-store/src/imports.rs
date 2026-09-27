@@ -114,6 +114,16 @@ pub async fn replace_inventory(
     .await?;
     Ok(match outcome {
         InventoryOutcome::Stored => InventoryImport::Stored,
-        InventoryOutcome::Unchanged => InventoryImport::Unchanged,
+        InventoryOutcome::Unchanged => {
+            // Same content, newer file (a package rolled back): the snapshot
+            // time still moves, so an older file cannot win afterwards.
+            client
+                .execute(
+                    "UPDATE agents SET inventory_at = $2 WHERE agent_id = $1 AND inventory_at < $2",
+                    &[&agent_id, &collected_at],
+                )
+                .await?;
+            InventoryImport::Unchanged
+        }
     })
 }

@@ -160,8 +160,9 @@ Migration 15 lets `agents.status` be `imported` only with an id
 - `replace_inventory(&mut client, id, os_id, os_version, running_kernel,
   rows, sha256, collected_at) -> Stored | Unchanged | Older`: `Older` when
   the stored `inventory_at` is later than `collected_at`; otherwise
-  `inventory::replace` with `collected_at` as the time, so newest wins
-  whatever order files arrive in.
+  `inventory::replace` with `collected_at` as the time; on `Unchanged` the
+  snapshot time still moves forward (content can repeat after a rollback),
+  so newest wins whatever order files arrive in.
 
 ## Vulnerabilities (`vulns::…`, schema 8)
 

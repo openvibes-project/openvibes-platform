@@ -4,6 +4,7 @@
 
 use std::{
     collections::BTreeMap,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -54,18 +55,29 @@ pub async fn run(
                 format!("refused: {reason}")
             }
         };
-        output.push_str(&format!("{}: {line}\n", path.display()));
+        let shown = printable(&format!("{}: {line}", path.display()));
+        output.push_str(&shown);
+        output.push('\n');
     }
     let total = format!(
         "{files} files: {} findings, {} inventories, {refused} refused",
         totals.findings, totals.inventories
     );
+    // The audit keeps where unsigned data came from; bounded like any target.
+    let named: Vec<String> = paths
+        .iter()
+        .map(|path| path.display().to_string())
+        .collect();
+    let target: String = printable(&format!("{total} from {}", named.join(" ")))
+        .chars()
+        .take(1000)
+        .collect();
     output.push_str(&total);
     output.push('\n');
     if refused > 0 {
-        (Err(output.trim_end().to_owned()), Some(total))
+        (Err(output.trim_end().to_owned()), Some(target))
     } else {
-        (Ok(output), Some(total))
+        (Ok(output), Some(target))
     }
 }
 
@@ -98,8 +110,37 @@ fn store(error: StoreError) -> String {
     format!("database error: {error}")
 }
 
-fn time(field: &str, unix_ms: i64) -> Result<DateTime<Utc>, String> {
-    DateTime::from_timestamp_millis(unix_ms).ok_or_else(|| format!("invalid: {field} out of range"))
+/// Control characters from untrusted files and file names, escaped so they
+/// never reach the operator's terminal as escape sequences.
+fn printable(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() {
+                c.escape_default().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
+/// A file time; one later than online delivery accepts is refused, since it
+/// would win newest-wins forever.
+fn time(field: &str, unix_ms: i64, now: DateTime<Utc>) -> Result<DateTime<Utc>, String> {
+    let at = DateTime::from_timestamp_millis(unix_ms)
+        .ok_or_else(|| format!("invalid: {field} out of range"))?;
+    if at > now + Duration::minutes(wire::MAX_FUTURE_MINUTES) {
+        return Err(format!("invalid: {field} is in the future"));
+    }
+    Ok(at)
+}
+
+/// Labels shown to operators must not carry control characters.
+fn label(field: &str, value: Option<&str>) -> Result<(), String> {
+    if value.is_some_and(|value| value.chars().any(char::is_control)) {
+        return Err(format!("invalid: {field} contains control characters"));
+    }
+    Ok(())
 }
 
 /// Decoded and validated with the same types and limits as online documents.
@@ -119,11 +160,21 @@ async fn import_file(
 ) -> Result<(String, Imported), String> {
     let limit = ResourceLimits::V1.document_bytes;
     let too_large = || String::from("larger than 1 MiB");
-    let size = std::fs::metadata(path).map_err(|error| format!("cannot read: {error}"))?;
-    if size.len() > limit as u64 {
+    let unreadable = |error: std::io::Error| format!("cannot read: {error}");
+    let file = std::fs::File::open(path).map_err(unreadable)?;
+    // A symlink to a device, a FIFO, or a socket is never read.
+    let metadata = file.metadata().map_err(unreadable)?;
+    if !metadata.is_file() {
+        return Err("not a regular file".into());
+    }
+    if metadata.len() > limit as u64 {
         return Err(too_large());
     }
-    let bytes = std::fs::read(path).map_err(|error| format!("cannot read: {error}"))?;
+    // Bounded even if the file grows after the size check.
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(unreadable)?;
     if bytes.len() > limit {
         return Err(too_large());
     }
@@ -149,8 +200,10 @@ async fn findings(
         claimed_agent_id: export.agent_id.as_ref().map(Identifier::as_str),
         hostname: export.hostname.as_deref(),
         scanner_version: &export.scanner_version,
-        seen_at: time("exported_at_unix_ms", export.exported_at_unix_ms)?,
+        seen_at: time("exported_at_unix_ms", export.exported_at_unix_ms, now)?,
     };
+    label("hostname", host.hostname)?;
+    label("scanner_version", Some(host.scanner_version))?;
     let id = imports::upsert_host(client, &host, now)
         .await
         .map_err(store)?;
@@ -193,7 +246,9 @@ async fn inventory(
     now: DateTime<Utc>,
 ) -> Result<(String, Imported), String> {
     let os = export.os.clone().ok_or_else(|| String::from(NO_OS))?;
-    let collected_at = time("collected_at_unix_ms", export.collected_at_unix_ms)?;
+    let collected_at = time("collected_at_unix_ms", export.collected_at_unix_ms, now)?;
+    label("hostname", export.hostname.as_deref())?;
+    label("scanner_version", Some(&export.scanner_version))?;
     let (rows, digest) =
         wire::inventory(&os, export.running_kernel.as_deref(), &mut export.packages)
             .map_err(store)?;

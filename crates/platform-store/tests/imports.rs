@@ -258,3 +258,40 @@ async fn upsert_keeps_first_import_time_and_newest_labels() {
     assert_eq!(row.get::<_, String>(3), "imported");
     db.drop().await;
 }
+
+// A(t1, X), B(t2, Y), C(t3, X): the newest wins whatever the order, also when
+// its content equals an older file's (a package rolled back).
+#[tokio::test]
+async fn newest_wins_when_content_repeats() {
+    let (db, mut client) = setup().await;
+    let base = Utc::now().duration_trunc(Duration::seconds(1)).unwrap();
+    let t = |hours| base - Duration::hours(hours);
+    let id = imports::upsert_host(&client, &host(t(3), "h", None), base)
+        .await
+        .unwrap();
+    for (release, digest, at) in [("x", 1, t(3)), ("x", 1, t(1)), ("y", 2, t(2))] {
+        imports::replace_inventory(
+            &mut client,
+            &id,
+            "fedora",
+            "44",
+            None,
+            &packages(release),
+            [digest; 32],
+            at,
+        )
+        .await
+        .unwrap();
+    }
+    let release: String = client
+        .query_one(
+            "SELECT v.release FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id
+             WHERE h.agent_id = $1",
+            &[&id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(release, "x", "the file from t1 (newest) wins");
+    db.drop().await;
+}

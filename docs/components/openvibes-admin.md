@@ -108,8 +108,12 @@ All are audited; `feeds import` with the source as target.
 directory, whose `*.json` files are imported in name order (not
 recursive; other files are skipped).
 
-- Each file is refused above 1 MiB before it is read, then decoded and
-  validated with the same types and limits as online deliveries. Its kind
+- Only regular files are read (a symlink to a device, a FIFO or a socket
+  is refused), at most 1 MiB, then decoded and validated with the same
+  types and limits as online deliveries. A file time
+  (`exported_at`, `collected_at`) more than an hour in the future is
+  refused, since it would win newest-wins forever, and so is a `hostname`
+  or `scanner_version` with control characters. Its kind
   comes from its members: `findings` (`FindingExport`) or `packages`
   (`InventoryExport`).
 - The host is `import.<install_id>`, status `imported`: its own host, never
@@ -131,11 +135,14 @@ recursive; other files are skipped).
 ```
 
 Other lines: `inventory unchanged`, `older inventory ignored`, `refused:
-larger than 1 MiB`, `not valid JSON`, `invalid: …`, `no operating system:
-export again with a newer agent`, `database error: …`. A refused file does
+larger than 1 MiB`, `not a regular file`, `not valid JSON`, `invalid: …`,
+`no operating system: export again with a newer agent`, `database error:
+…`. Control characters from files and file names are printed escaped
+(`\u{1b}`), never raw. A refused file does
 not stop the others; any refusal makes the exit code 1 (lines then go to
-stderr). Re-running an import is always safe. One audit entry per run,
-with the totals line as its target.
+stderr). Re-running an import is always safe. One audit entry per run:
+the totals and the paths given (`… from /exports`, at most 1,000
+characters), so the log keeps where unsigned data came from.
 
 ## Assistant commands
 

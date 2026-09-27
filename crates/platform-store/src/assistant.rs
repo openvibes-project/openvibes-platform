@@ -476,6 +476,8 @@ pub struct AgentCounts {
     pub never_seen: i64,
     /// Revoked.
     pub revoked: i64,
+    /// Imported from export files (P3b); never online or offline.
+    pub imported: i64,
 }
 
 /// One advisory across hosts.
@@ -520,7 +522,8 @@ pub async fn overview(
             "SELECT count(*) FILTER (WHERE status = 'active' AND last_seen_at >= $2),
                     count(*) FILTER (WHERE status = 'active' AND last_seen_at < $2),
                     count(*) FILTER (WHERE status = 'active' AND last_seen_at IS NULL),
-                    count(*) FILTER (WHERE status = 'revoked')
+                    count(*) FILTER (WHERE status = 'revoked'),
+                    count(*) FILTER (WHERE status = 'imported')
              FROM agents WHERE ($1::text[] IS NULL OR agent_id = ANY($1))",
             &[&scope.param(), &offline_before],
         )
@@ -554,6 +557,7 @@ pub async fn overview(
             offline: agents.get(1),
             never_seen: agents.get(2),
             revoked: agents.get(3),
+            imported: agents.get(4),
         },
         open_vulnerabilities: vulns.get(0),
         hosts_with_exploited: vulns.get(1),

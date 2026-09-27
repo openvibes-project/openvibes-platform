@@ -119,9 +119,11 @@ async fn imports_findings_and_inventory_once() {
     assert_eq!(imports.len(), 2);
     for (_, target, result) in imports {
         assert_eq!(result, "ok");
+        let target = target.as_deref().unwrap();
+        assert!(target.starts_with("2 files:"), "{target}");
         assert!(
-            target.as_deref().unwrap().starts_with("2 files:"),
-            "{target:?}"
+            target.contains(dir_arg),
+            "the audit names the paths: {target}"
         );
     }
     fixture.drop().await;
@@ -222,5 +224,73 @@ async fn old_findings_refused_individually() {
         out.contains("imported 1 findings (0 already present, 1 refused: retention_expired)"),
         "{out}"
     );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn future_dated_files_are_refused() {
+    let fixture = migrated().await;
+    let dir = scratch_dir("import-future");
+    let tomorrow = (Utc::now() + Duration::days(1)).timestamp_millis();
+    write(&dir, "inventory.json", &inventory_export(tomorrow, true));
+    let mut export = finding_export(vec![finding("finding.1", Utc::now().timestamp_millis())]);
+    export["exported_at_unix_ms"] = json!(tomorrow);
+    write(&dir, "findings.json", &export);
+    let output = fixture.run(&["import", dir.to_str().unwrap()]);
+    let all = text(&output);
+    assert_eq!(output.status.code(), Some(1), "{all}");
+    assert!(
+        all.contains("inventory.json: refused: invalid: collected_at_unix_ms is in the future"),
+        "{all}"
+    );
+    assert!(
+        all.contains("findings.json: refused: invalid: exported_at_unix_ms is in the future"),
+        "{all}"
+    );
+    assert_eq!(
+        fixture.count("SELECT count(*) FROM agents").await,
+        0,
+        "a refused file creates no host"
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn special_files_are_refused_unread() {
+    let fixture = migrated().await;
+    let dir = scratch_dir("import-special");
+    std::os::unix::fs::symlink("/dev/zero", dir.join("zero.json")).unwrap();
+    let output = fixture.run(&["import", dir.to_str().unwrap()]);
+    let all = text(&output);
+    assert_eq!(output.status.code(), Some(1), "{all}");
+    assert!(
+        all.contains("zero.json: refused: not a regular file"),
+        "{all}"
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn control_characters_never_reach_the_terminal() {
+    let fixture = migrated().await;
+    let dir = scratch_dir("import-control");
+    let now = Utc::now().timestamp_millis();
+    let mut export = finding_export(vec![finding("finding.1", now)]);
+    export["hostname"] = json!("host\u{1b}[2J");
+    write(&dir, "host.json", &export);
+    let mut inventory = inventory_export(now, true);
+    inventory["packages"][0]["manager"] = json!("rpm\u{1b}]0;owned\u{7}");
+    write(&dir, "manager.json", &inventory);
+    write(&dir, "name\u{1b}[31m.json", &json!({"hello": 1}));
+    let output = fixture.run(&["import", dir.to_str().unwrap()]);
+    let all = text(&output);
+    assert_eq!(output.status.code(), Some(1), "{all}");
+    assert!(!all.contains('\u{1b}') && !all.contains('\u{7}'), "{all:?}");
+    assert!(
+        all.contains("host.json: refused: invalid: hostname contains control characters"),
+        "{all}"
+    );
+    assert!(all.contains("manager.json: refused: invalid:"), "{all}");
+    assert_eq!(fixture.count("SELECT count(*) FROM agents").await, 0);
     fixture.drop().await;
 }
