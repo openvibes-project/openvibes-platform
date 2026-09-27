@@ -2,7 +2,11 @@
   "compilerOptions": {
     "target": "ES2022",
     "useDefineForClassFields": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "allowJs": false,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -21,7 +25,18 @@
     "noImplicitOverride": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "types": ["vite/client", "vitest/globals", "node"]
+    "types": [
+      "vite/client",
+      "vitest/globals",
+      "node"
+    ]
   },
-  "include": ["e2e", "src", "playwright.config.ts", "vite.config.ts"]
+  "include": [
+    "e2e",
+    "src",
+    "playwright.config.ts",
+    "vite.config.ts",
+    "v2/src",
+    "vite.v2.config.ts"
+  ]
 }
