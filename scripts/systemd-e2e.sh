@@ -196,6 +196,22 @@ in_c 'runuser -u openvibes_admin -- openvibes-admin vulns list' | grep -q 'FEDOR
     fail "vulns list does not show the KEV mark"
 ok "openvibes-admin vulns list shows it, marked exploited (KEV)"
 
+# 7b. File import (P3b): a local-only agent's export becomes an imported host
+# whose inventory the vulns service matches like an enrolled one.
+in_c 'install -d -m 0700 /run/local-state /run/exports &&
+      printf "state_dir = \"/run/local-state\"\n" > /run/local.toml &&
+      openvibes-agent export /run/local.toml /run/exports' >/dev/null 2>&1 || fail "local-only export"
+in_c 'chmod 0755 /run/exports && chmod 0644 /run/exports/*.json &&
+      runuser -u openvibes_admin -- openvibes-admin import /run/exports' | grep -q 'inventory accepted' ||
+    fail "import of the export files"
+IMP=$(in_c "$SQL \"SELECT agent_id FROM agents WHERE status = 'imported'\"")
+[[ "$IMP" == import.* ]] || fail "no imported host"
+wait_for "the vulns service matched the imported host: bash vulnerable" 60 \
+    "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE agent_id = '$IMP' AND advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
+in_c 'runuser -u openvibes_admin -- openvibes-admin agent list --imported' | grep -q "^$IMP  imported" ||
+    fail "agent list --imported"
+ok "openvibes-admin import stores a local-only export as a matched imported host"
+
 # 8. openvibes-llm (assistant AS5): refuses to start without a verified
 # model, serves the tiny test model on loopback behind its API key, runs
 # sandboxed, and refuses a model file changed after installation.

@@ -39,7 +39,7 @@ whole platform. Each module is then designed and built as its own sub-project.
 
 | Module | Binary | Port | Role | Sub-project |
 |---|---|---|---|---|
-| Ingest | `openvibes-ingest` | 18423 | Enrollment, renewal, heartbeats and health, finding delivery; later file import | 1 |
+| Ingest | `openvibes-ingest` | 18423 | Enrollment, renewal, heartbeats and health, finding delivery | 1 |
 | Admin CLI | `openvibes-admin` | none | Local operator tool: CA, tokens, agents, rules, migrations, maintenance | 1 |
 | Distribution | `openvibes-distribution` | 18424 | Serves offline-signed rule bundles (`/v1/rule-bundle`) | 2 |
 | Admin API and web UI | `openvibes-console` | 443 | Human access, RBAC, deployment packages | later |
@@ -144,7 +144,9 @@ public keys before storing.
   model plans for it now), the agent configuration format promoted to a
   protocol contract, and per-OS agent installers (agent Milestone 6).
 - **File import** of `FindingExport` and `InventoryExport` (protocol P3),
-  stored as imported and unauthenticated.
+  stored as imported and unauthenticated. Done by `openvibes-admin import`
+  on the platform host rather than an ingest endpoint (spec
+  `2026-09-27-file-import-design.md`).
 
 ## 8. Deployment
 
