@@ -99,6 +99,12 @@ directory itself, so no tmpfiles.d entry is needed.
 
 ## First install on Fedora
 
+The quickest path is Setup: `sudo dnf install openvibes-admin`, then run
+`openvibes-admin` (the Setup tab) or `sudo openvibes-admin setup --quick
+--components … --hostname …` ([openvibes-admin.md](openvibes-admin.md),
+"Setup command"); `scripts/systemd-e2e.sh` installs the platform this way.
+The steps below are what Setup runs, for hosts set up by hand.
+
 Run as root. `openvibes-admin` connects as the OS user `openvibes-admin`
 (peer authentication), so every database command runs through
 `sudo -u openvibes-admin`; CA material is staged in a directory that user

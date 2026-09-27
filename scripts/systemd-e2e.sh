@@ -68,15 +68,26 @@ wait_for "systemd is up" 30 'systemctl is-system-running | grep -qE "running|deg
     fail "this container does not enforce systemd sandboxing"
 ok "systemd enforces unit sandboxes in this container"
 
-# 1-2. PostgreSQL, the platform RPMs, database and schema.
-in_c 'postgresql-setup --initdb && systemctl enable --now postgresql' >/dev/null 2>&1 || fail "postgresql"
-in_c 'dnf -q -y install /test/openvibes-ingest-*.rpm /test/openvibes-distribution-*.rpm /test/openvibes-vulns-*.rpm /test/openvibes-admin-*.rpm' \
-    >/dev/null 2>&1 || fail "install platform RPMs"
-in_c 'runuser -u postgres -- createuser --createrole openvibes-admin &&
-      runuser -u postgres -- createdb -O openvibes-admin openvibes &&
-      runuser -u openvibes-admin -- openvibes-admin migrate &&
-      runuser -u openvibes-admin -- openvibes-admin maintenance' >/dev/null || fail "database"
-ok "platform installed, schema migrated"
+# 1-7. As the install script will: install openvibes-admin, then Setup
+# without screens (admin TUI spec §6.6) from the RPMs in /test: PostgreSQL,
+# the platform packages, database, schema, quick CA, server certificates
+# for localhost and 127.0.0.1, services, readiness. The console and the
+# agent are installed further down (upgrade check, and the vulnerability
+# must open through the re-match); the container has no firewalld.
+in_c 'dnf -q -y install /test/openvibes-admin-*.rpm' >/dev/null 2>&1 || fail "install openvibes-admin"
+SETUP='openvibes-admin setup --quick --components ingest,distribution,vulns --hostname localhost \
+       --san 127.0.0.1 --repo-dir /test --allow-unsigned-local'
+in_c "$SETUP --root-key-out /root/ca-root.key" > "$W/setup.out" 2>&1 || { cat "$W/setup.out"; fail "setup --quick"; }
+grep -q '^Readiness: done' "$W/setup.out" || { cat "$W/setup.out"; fail "setup did not finish"; }
+grep -q '^Firewall: skipped' "$W/setup.out" || fail "firewall step should be skipped without firewalld"
+[[ "$(in_c 'stat -c "%a %U" /var/lib/openvibes-ingest/intermediate.key /root/ca-root.key')" == $'600 openvibes-ingest\n600 root' ]] ||
+    fail "CA key files have the wrong owner or mode"
+in_c '! test -e /run/openvibes-ca' || fail "CA staging directory left behind"
+# Re-running is safe: every step is already done and nothing is redone.
+in_c "$SETUP --root-key-out /root/ca-root-2.key" > "$W/setup2.out" 2>&1 || { cat "$W/setup2.out"; fail "second setup --quick"; }
+! grep -qE ': (to do|failed|waiting)' "$W/setup2.out" || { cat "$W/setup2.out"; fail "second run redid a step"; }
+in_c '! test -e /root/ca-root-2.key' || fail "second run created another root"
+ok "platform installed and set up by setup --quick (and re-run safely)"
 
 # Optional C5 package validation. Install only after the platform migrations
 # create the least-privilege console database role and schema.
@@ -181,38 +192,6 @@ TOML
     ok "console Unix proxy accepts only the configured peer UID"
 fi
 
-# 3-4, 7. CA: the root (here in the container, normally offline), the
-# intermediate, and one server certificate each for ingest and distribution.
-in_c 'set -e
-      A="runuser -u openvibes-admin -- openvibes-admin"
-      openvibes-admin ca init-root --out /root/ca-root >/dev/null
-      S=/run/openvibes-ca
-      install -d -o openvibes-admin -g openvibes-admin -m 0700 $S
-      $A ca intermediate-request --out $S/int >/dev/null
-      openvibes-admin ca sign-intermediate --root /root/ca-root --csr $S/int/intermediate.csr \
-          --out $S/int/intermediate.crt >/dev/null
-      install -o openvibes-admin -m 0644 /root/ca-root/root.crt $S/int/root.crt
-      chown openvibes-admin $S/int/intermediate.crt
-      $A ca import-intermediate --cert $S/int/intermediate.crt --key $S/int/intermediate.key \
-          --root-cert $S/int/root.crt >/dev/null
-      for name in localhost rules.localhost; do
-          $A ca issue-server $name --san 127.0.0.1 --issuer-cert $S/int/intermediate.crt \
-              --issuer-key $S/int/intermediate.key --out $S/tls >/dev/null
-      done
-      install -m 0644 $S/int/intermediate.crt /etc/openvibes/pki/intermediate.crt
-      install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/int/intermediate.key /var/lib/openvibes-ingest/intermediate.key
-      install -m 0644 $S/tls/localhost.crt /etc/openvibes/tls/ingest.crt
-      install -o openvibes-ingest -g openvibes-ingest -m 0600 $S/tls/localhost.key /etc/openvibes/tls/ingest.key
-      install -m 0644 $S/tls/rules.localhost.crt /etc/openvibes/tls/distribution.crt
-      install -o openvibes-distribution -g openvibes-distribution -m 0600 $S/tls/rules.localhost.key /etc/openvibes/tls/distribution.key
-      rm -r $S' || fail "CA"
-ok "CA and server certificates installed"
-
-# 5-7. Services.
-in_c 'systemctl enable --now openvibes-ingest openvibes-distribution' >/dev/null 2>&1 || fail "start services"
-wait_for "ingest ready" 30 'curl -fsS http://127.0.0.1:18480/ready'
-wait_for "distribution ready" 30 'curl -fsS http://127.0.0.1:18481/ready'
-
 # Vulnerabilities (VM): the service runs offline (its mirror list points at
 # a closed loopback port, so checks fail and are recorded, and KEV, EPSS,
 # NVD, EUVD are turned off); an offline feed
@@ -238,7 +217,7 @@ cat > "$W/updateinfo-test.xml" <<'FEED'
 FEED
 in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metalink?release={release}\&arch={arch}\"|' \
              -e 's#^\(kev\|epss\|nvd\|euvd\|osv\)_url = .*#\1_url = \"\"#' /etc/openvibes/vulns.toml &&
-      systemctl enable --now openvibes-vulns" >/dev/null 2>&1 || fail "start vulns"
+      systemctl restart openvibes-vulns" >/dev/null 2>&1 || fail "restart vulns offline"
 wait_for "vulns service ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes-admin -- openvibes-admin feeds import /test/updateinfo-test.xml --source fedora-44-x86_64' >/dev/null ||
     fail "feeds import"
@@ -260,7 +239,7 @@ TOKEN=$(in_c 'runuser -u openvibes-admin -- openvibes-admin token create --expir
     sed -n 's/^token \([A-Za-z0-9_-]\{43\}\)$/\1/p')
 [[ -n "$TOKEN" ]] || fail "no token"
 in_c 'dnf -q -y install /test/openvibes-agent-*.rpm' >/dev/null 2>&1 || fail "install agent"
-in_c "install -m 0644 /root/ca-root/root.crt /etc/openvibes-agent/platform-ca.crt &&
+in_c "install -m 0644 /etc/openvibes/pki/root.crt /etc/openvibes-agent/platform-ca.crt &&
       printf '%s\n' '$TOKEN' > /run/token &&
       install -o openvibes_agent -g openvibes_agent -m 0600 /run/token /etc/openvibes-agent/token && rm /run/token" ||
     fail "agent files"

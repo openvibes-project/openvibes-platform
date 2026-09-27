@@ -23,7 +23,23 @@ Who can use it: members of `openvibes-operators` (created by the RPM; add a
 person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
-without a password. `Tab` switches between the screens.
+without a password. `Tab` switches between the screens (Setup, Services,
+Configuration).
+
+**Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
+form: components (ingest and console always; distribution, vulns, rules,
+the agent on this host on by default; the assistant off), hostname, other
+names or addresses, CA mode (quick or careful) and the root key file.
+`Start` asks for the user's password once (masked; the user needs sudo
+rights, not operator membership), writes the plan through `helper
+setup-plan`, then runs one step per screen refresh through `helper
+setup-step`, showing each step's state. The first step that fails or waits
+stops the run and drops the password; `r` asks for it again and continues
+from that step. Three wrong passwords close the prompt. The finished screen
+shows the root certificate's fingerprint, the console address and admin
+password (shown only then), and an endpoint enrollment token. On a set-up
+host, `c` checks every step (`helper setup-status`). The steps are those of
+`setup --quick` (below).
 
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
 `llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
@@ -35,8 +51,10 @@ refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
 only on selection, `R` and after an action, since each read goes through
 sudo and the auth log. Not an operator:
 the TUI names the group to join. Every action is written to the journal
-(`journalctl -t openvibes-admin`). Enabling and disabling at boot come with
-the password-prompted steps (a later release).
+(`journalctl -t openvibes-admin`). `e` and `d` enable or disable the
+selected unit at boot after asking for the user's password (`helper
+unit-enable|unit-disable` through sudo; polkit cannot limit boot changes to
+OpenVIBES units).
 
 **Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
 `distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
