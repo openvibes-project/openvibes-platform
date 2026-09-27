@@ -6,9 +6,9 @@ ALTER TABLE console_finding_triage_history
     ADD COLUMN rule_version bigint;
 
 -- Ingest reopens completed triage in the same transaction as the observation.
-GRANT SELECT, UPDATE ON console_finding_triage TO openvibes_ingest;
-GRANT INSERT ON console_finding_triage_history TO openvibes_ingest;
-GRANT USAGE ON SEQUENCE console_finding_triage_history_event_id_seq TO openvibes_ingest;
+GRANT SELECT, UPDATE ON console_finding_triage TO "openvibes-ingest";
+GRANT INSERT ON console_finding_triage_history TO "openvibes-ingest";
+GRANT USAGE ON SEQUENCE console_finding_triage_history_event_id_seq TO "openvibes-ingest";
 
 -- Preserve the transition time into mitigation across later note/assignee edits.
 ALTER TABLE console_finding_triage
