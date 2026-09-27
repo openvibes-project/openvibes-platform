@@ -301,7 +301,7 @@ in_c 'rpm -q tar' >/dev/null 2>&1 || fail "the e2e image has no tar package to r
 in_c 'rpm -e --justdb --nodeps tar && systemctl restart openvibes-agent' || fail "change the agent's inventory"
 wait_for "the agent sent inventory changes (protocol P11)" 120 \
     'journalctl -u openvibes-ingest -o cat | grep -q "\"endpoint\":\"/v1/inventory/changes\".*\"status\":204"'
-[[ $($SQL "SELECT count(*) FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id WHERE v.name = 'tar'") == 0 ]] ||
+[[ $(in_c "$SQL \"SELECT count(*) FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id WHERE v.name = 'tar'\"") == 0 ]] ||
     fail "the platform still lists tar after the change set"
 ok "a package change arrives as inventory changes"
 wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
