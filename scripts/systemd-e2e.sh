@@ -216,11 +216,8 @@ ok "openvibes-admin import stores a local-only export as a matched imported host
 # unit through polkit and reads its log through the root helper, without a
 # password; a non-member cannot, and neither can reach other units. The
 # full-screen TUI itself is covered by its snapshot tests; this checks the
-# rights it relies on, called exactly as it calls them.
-# Real operators have a password; PAM's account check refuses sudo for a
-# user without a shadow entry, so the test users get one.
-in_c 'useradd -m -G openvibes-operators alice && useradd -m bob &&
-      printf "alice:Test-alice-1\nbob:Test-bob-1\n" | chpasswd' || fail "operator users"
+# rights it relies on.
+in_c 'useradd -m -G openvibes-operators alice && useradd -m bob' || fail "operator users"
 in_c 'runuser -u alice -- systemctl --no-ask-password restart openvibes-vulns.service' ||
     fail "operator restart through polkit"
 wait_for "vulns ready after the operator's restart" 30 'curl -fsS http://127.0.0.1:18483/ready'
@@ -230,16 +227,29 @@ in_c 'runuser -u alice -- systemctl --no-ask-password restart systemd-journald.s
     fail "an operator restarted a unit outside the allow-list"
 in_c 'runuser -u alice -- systemctl --no-ask-password enable openvibes-llm.service' >/dev/null 2>&1 &&
     fail "an operator enabled a unit without a password"
-in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' | grep -q . ||
-    fail "operator log read through the helper: $(in_c 'getent shadow alice | cut -d: -f1,3-; id alice; journalctl -t sudo -n 5 -o cat' 2>&1)"
-in_c 'runuser -u alice -- sudo -n /usr/bin/openvibes-admin helper logs systemd-journald.service 5' >/dev/null 2>&1 &&
+# sudo's rules are checked as root with `sudo -l -U USER COMMAND` (exit 0
+# only if the policy allows it without a password): on the CI runner's
+# rootless podman, setuid does not take effect, so sudo run by alice never
+# becomes root and PAM cannot read /etc/shadow. The helper is then run as
+# root, as sudo would run it.
+allowed() { in_c "sudo -n -l -U $1 $2" >/dev/null 2>&1; }
+allowed alice '/usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' ||
+    fail "operators may not read logs through the helper"
+allowed alice '-u openvibes-admin /usr/bin/openvibes-admin status' ||
+    fail "operators may not run openvibes-admin as openvibes-admin"
+allowed bob '/usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' &&
+    fail "a non-operator may read logs"
+allowed bob '-u openvibes-admin /usr/bin/openvibes-admin status' &&
+    fail "a non-operator may run openvibes-admin as openvibes-admin"
+allowed alice '/usr/bin/openvibes-admin helper config-write ingest' &&
+    fail "operators may run helper verbs beyond logs"
+in_c '/usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' | grep -q . ||
+    fail "the helper, as root, reads a unit's log"
+in_c '/usr/bin/openvibes-admin helper logs systemd-journald.service 5' >/dev/null 2>&1 &&
     fail "the helper read a unit outside the allow-list"
-in_c 'runuser -u bob -- sudo -n /usr/bin/openvibes-admin helper logs openvibes-vulns.service 5' >/dev/null 2>&1 &&
-    fail "a non-operator read logs"
-in_c 'runuser -u alice -- sudo -n -u openvibes-admin /usr/bin/openvibes-admin status' >/dev/null ||
-    fail "operator database work as openvibes-admin"
-in_c 'journalctl -t openvibes-admin -o cat | grep -q .' || true
-ok "operators restart units, read logs and use the admin CLI without a password; others cannot"
+in_c 'runuser -u openvibes-admin -- /usr/bin/openvibes-admin status' >/dev/null ||
+    fail "openvibes-admin status as openvibes-admin"
+ok "operators restart units through polkit; sudo lets them read logs and use the admin CLI; others cannot"
 
 # 8. openvibes-llm (assistant AS5): refuses to start without a verified
 # model, serves the tiny test model on loopback behind its API key, runs
