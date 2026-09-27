@@ -5,8 +5,10 @@
 
 pub mod native;
 pub mod runner;
+pub mod service;
 pub mod unit;
 
+pub use service::{CONFIG_DIR, Service};
 pub use unit::Unit;
 
 /// A lifecycle action an operator may take without a password.
@@ -81,4 +83,9 @@ pub trait Host {
     fn service_action(&self, unit: Unit, action: ServiceAction) -> Result<(), HostError>;
     /// The unit's last `lines` journal lines.
     fn logs(&self, unit: Unit, lines: u16) -> Result<Vec<String>, HostError>;
+    /// The service's configuration file, as text.
+    fn read_config(&self, service: Service) -> Result<String, HostError>;
+    /// Replaces the service's configuration file with `toml` (checked again
+    /// by the helper; the old file is kept as `NAME.toml.bak`).
+    fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError>;
 }

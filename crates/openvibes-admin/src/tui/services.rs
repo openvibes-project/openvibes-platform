@@ -4,7 +4,7 @@
 use platform_host::{Host, ServiceAction, ServiceStatus};
 use ratatui::{
     Frame,
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Modifier, Style},
     text::Line,
     widgets::{Block, Borders, Paragraph, Row, Table},
@@ -12,11 +12,7 @@ use ratatui::{
 
 use super::app::App;
 
-/// The smallest terminal the screen is laid out for (spec §5).
-pub const MIN_WIDTH: u16 = 80;
-pub const MIN_HEIGHT: u16 = 24;
-
-const KEYS: &str = "j/k select  s start  t stop  r restart  R refresh  q quit";
+const KEYS: &str = "Tab screens  j/k select  s start  t stop  r restart  R refresh  q quit";
 
 fn cells(status: &ServiceStatus) -> [String; 5] {
     let boot = match (status.installed, status.enabled) {
@@ -42,29 +38,14 @@ fn cells(status: &ServiceStatus) -> [String; 5] {
     ]
 }
 
-pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
-    let area = frame.area();
-    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-        let text = format!(
-            "openvibes-admin needs at least {MIN_WIDTH}×{MIN_HEIGHT} (now {}×{}); enlarge the window",
-            area.width, area.height
-        );
-        frame.render_widget(Paragraph::new(text), area);
-        return;
-    }
-    let [title, table, logs, status, keys] = Layout::vertical([
-        Constraint::Length(1),
+pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
+    let [table, logs, status, keys] = Layout::vertical([
         Constraint::Length(u16::try_from(app.services.len()).unwrap_or(5) + 3),
         Constraint::Min(3),
         Constraint::Length(1),
         Constraint::Length(1),
     ])
     .areas(area);
-    frame.render_widget(
-        Paragraph::new("OpenVIBES administration · Services")
-            .style(Style::new().add_modifier(Modifier::BOLD)),
-        title,
-    );
     let rows = app.services.iter().enumerate().map(|(index, status)| {
         let row = Row::new(cells(status));
         if index == app.selected {

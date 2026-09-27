@@ -10,6 +10,8 @@ pub enum Unit {
     Distribution,
     /// `openvibes-vulns.service`.
     Vulns,
+    /// `openvibes-console.service`.
+    Console,
     /// `openvibes-llm.service`.
     Llm,
     /// `openvibes-maintenance.timer`.
@@ -18,10 +20,11 @@ pub enum Unit {
 
 impl Unit {
     /// Every unit, in display order.
-    pub const ALL: [Unit; 5] = [
+    pub const ALL: [Unit; 6] = [
         Unit::Ingest,
         Unit::Distribution,
         Unit::Vulns,
+        Unit::Console,
         Unit::Llm,
         Unit::Maintenance,
     ];
@@ -33,6 +36,7 @@ impl Unit {
             Unit::Ingest => "openvibes-ingest.service",
             Unit::Distribution => "openvibes-distribution.service",
             Unit::Vulns => "openvibes-vulns.service",
+            Unit::Console => "openvibes-console.service",
             Unit::Llm => "openvibes-llm.service",
             Unit::Maintenance => "openvibes-maintenance.timer",
         }
@@ -45,6 +49,7 @@ impl Unit {
             Unit::Ingest => "ingest",
             Unit::Distribution => "distribution",
             Unit::Vulns => "vulns",
+            Unit::Console => "console",
             Unit::Llm => "llm",
             Unit::Maintenance => "maintenance",
         }
@@ -57,6 +62,7 @@ impl Unit {
             Unit::Ingest => Some("http://127.0.0.1:18480/ready"),
             Unit::Distribution => Some("http://127.0.0.1:18481/ready"),
             Unit::Vulns => Some("http://127.0.0.1:18483/ready"),
+            Unit::Console => Some("http://127.0.0.1:18482/ready"),
             Unit::Llm => Some("http://127.0.0.1:18430/health"),
             Unit::Maintenance => None,
         }

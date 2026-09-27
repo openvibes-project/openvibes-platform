@@ -24,6 +24,10 @@ platform-store = { path = "../platform-store" }
 platform-host = { path = "../platform-host" }
 ratatui = "0.30"
 openvibes-vulns = { path = "../openvibes-vulns" }
+openvibes-ingest = { path = "../openvibes-ingest" }
+openvibes-distribution = { path = "../openvibes-distribution" }
+toml.workspace = true
+toml_edit = "0.25.12"
 serde.workspace = true
 rpassword = "=7.5.4"
 tokio.workspace = true

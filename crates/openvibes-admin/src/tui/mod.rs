@@ -3,6 +3,9 @@
 //! `platform_host::Host`.
 
 pub mod app;
+mod config_view;
+mod configuration;
+pub mod form;
 mod services;
 #[cfg(test)]
 mod tests;
@@ -13,10 +16,45 @@ use std::{
     time::{Duration, Instant},
 };
 
-use platform_host::{native::Native, runner::SystemRunner};
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use app::{App, Key, Tab};
+use platform_host::{Host, native::Native, runner::SystemRunner};
+use ratatui::{
+    Frame,
+    crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    layout::{Constraint, Layout},
+    style::{Modifier, Style},
+    widgets::Paragraph,
+};
 
-pub use services::render;
+/// The smallest terminal the screens are laid out for (spec §5).
+pub const MIN_WIDTH: u16 = 80;
+pub const MIN_HEIGHT: u16 = 24;
+
+pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
+    let area = frame.area();
+    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
+        let text = format!(
+            "openvibes-admin needs at least {MIN_WIDTH}×{MIN_HEIGHT} (now {}×{}); enlarge the window",
+            area.width, area.height
+        );
+        frame.render_widget(Paragraph::new(text), area);
+        return;
+    }
+    let [title, body] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let tabs = match app.tab {
+        Tab::Services => "[Services]  Configuration",
+        Tab::Configuration => "Services  [Configuration]",
+    };
+    frame.render_widget(
+        Paragraph::new(format!("OpenVIBES administration   {tabs}"))
+            .style(Style::new().add_modifier(Modifier::BOLD)),
+        title,
+    );
+    match app.tab {
+        Tab::Services => services::draw(frame, body, app),
+        Tab::Configuration => config_view::draw(frame, body, app),
+    }
+}
 
 /// How often the unit states are reloaded while the screen is open.
 const REFRESH: Duration = Duration::from_secs(5);
@@ -38,7 +76,7 @@ pub fn run() -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut app = app::App::new(Native {
+    let mut app = App::new(Native {
         runner: SystemRunner,
     });
     let mut terminal = ratatui::init();
@@ -52,25 +90,34 @@ pub fn run() -> ExitCode {
         }
         match event::poll(Duration::from_millis(250)) {
             Ok(true) => {
-                if let Ok(Event::Key(key)) = event::read()
-                    && key.kind == KeyEventKind::Press
-                {
-                    match key.code {
-                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                            app.quit = true;
-                        }
-                        KeyCode::Down => app.key('j'),
-                        KeyCode::Up => app.key('k'),
-                        KeyCode::Esc => app.key('n'),
-                        KeyCode::Char(c) => app.key(c),
-                        _ => {}
-                    }
+                let Ok(Event::Key(key)) = event::read() else {
+                    continue;
+                };
+                if key.kind != KeyEventKind::Press {
+                    continue;
                 }
+                let key = match key.code {
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        app.quit = true;
+                        continue;
+                    }
+                    KeyCode::Char(c) => Key::Char(c),
+                    KeyCode::Up => Key::Up,
+                    KeyCode::Down => Key::Down,
+                    KeyCode::Left => Key::Left,
+                    KeyCode::Right => Key::Right,
+                    KeyCode::Enter => Key::Enter,
+                    KeyCode::Esc => Key::Esc,
+                    KeyCode::Backspace => Key::Backspace,
+                    KeyCode::Tab | KeyCode::BackTab => Key::Tab,
+                    _ => continue,
+                };
+                app.key(key);
             }
             Ok(false) => {}
             Err(_) => app.quit = true,
         }
-        if refreshed.elapsed() >= REFRESH && app.confirm.is_none() {
+        if app.tab == Tab::Services && app.confirm.is_none() && refreshed.elapsed() >= REFRESH {
             app.refresh();
             refreshed = Instant::now();
         }

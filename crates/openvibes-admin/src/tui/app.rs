@@ -2,12 +2,38 @@
 
 use platform_host::{Host, ServiceAction, ServiceStatus, Unit};
 
+use super::configuration::Configuration;
+
 /// Journal lines shown for the selected unit.
 pub const LOG_LINES: u16 = 50;
 
-/// The Services screen's state.
+/// A key press, as the event loop maps it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Key {
+    Char(char),
+    Up,
+    Down,
+    Left,
+    Right,
+    Enter,
+    Esc,
+    Backspace,
+    Tab,
+}
+
+/// The screen shown.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Tab {
+    Services,
+    Configuration,
+}
+
+/// The TUI's state: the Services screen's fields, and the Configuration
+/// screen's in `config`.
 pub struct App<H: Host> {
     pub host: H,
+    pub tab: Tab,
+    pub config: Configuration,
     pub services: Vec<ServiceStatus>,
     pub selected: usize,
     /// An action waiting for y/n.
@@ -22,6 +48,8 @@ impl<H: Host> App<H> {
     pub fn new(host: H) -> Self {
         let mut app = App {
             host,
+            tab: Tab::Services,
+            config: Configuration::default(),
             services: Vec::new(),
             selected: 0,
             confirm: None,
@@ -59,11 +87,19 @@ impl<H: Host> App<H> {
         };
     }
 
-    /// One key: j/k move, s/t/r ask to start/stop/restart, y/n answer,
-    /// R refreshes, q quits (the event loop maps arrows to j/k).
-    pub fn key(&mut self, key: char) {
+    /// One key, handled by the screen shown.
+    pub fn key(&mut self, key: Key) {
+        match self.tab {
+            Tab::Services => self.services_key(key),
+            Tab::Configuration => self.config_key(key),
+        }
+    }
+
+    /// j/k (arrows) move, s/t/r ask to start/stop/restart, y answers, R
+    /// refreshes, Tab opens Configuration, q quits.
+    fn services_key(&mut self, key: Key) {
         if let Some((unit, action)) = self.confirm.take() {
-            if key == 'y' {
+            if key == Key::Char('y') {
                 self.message = Some(match self.host.service_action(unit, action) {
                     Ok(()) => format!("{} requested for {}", action.verb(), unit.name()),
                     Err(error) => error.to_string(),
@@ -74,23 +110,28 @@ impl<H: Host> App<H> {
             return;
         }
         match key {
-            'j' if self.selected + 1 < self.services.len() => {
+            Key::Char('j') | Key::Down if self.selected + 1 < self.services.len() => {
                 self.selected += 1;
                 self.load_logs();
             }
-            'k' if self.selected > 0 => {
+            Key::Char('k') | Key::Up if self.selected > 0 => {
                 self.selected -= 1;
                 self.load_logs();
             }
-            's' => self.ask(ServiceAction::Start),
-            't' => self.ask(ServiceAction::Stop),
-            'r' => self.ask(ServiceAction::Restart),
-            'R' => {
+            Key::Char('s') => self.ask(ServiceAction::Start),
+            Key::Char('t') => self.ask(ServiceAction::Stop),
+            Key::Char('r') => self.ask(ServiceAction::Restart),
+            Key::Char('R') => {
                 self.message = None;
                 self.refresh();
                 self.load_logs();
             }
-            'q' => self.quit = true,
+            Key::Tab => {
+                self.tab = Tab::Configuration;
+                self.message = None;
+                self.load_config();
+            }
+            Key::Char('q') => self.quit = true,
             _ => {}
         }
     }

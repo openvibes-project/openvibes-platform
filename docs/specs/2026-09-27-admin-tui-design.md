@@ -74,7 +74,7 @@ once (a root step). Membership grants exactly these, with no password:
 |---|---|---|
 | Service lifecycle | polkit rule (`/usr/share/polkit-1/rules.d/50-openvibes-operators.rules`) for `org.freedesktop.systemd1.manage-units`: start, stop, restart | only units named in the allow-list (§5) |
 | Database work | sudoers drop-in: run `/usr/bin/openvibes-admin` as `openvibes-admin` | the existing CLI, its peer login, schema checks and audit log, unchanged |
-| Config save, service logs | sudoers drop-in: run `/usr/bin/openvibes-admin helper config-write SERVICE` and `helper logs UNIT` as root | fixed verbs; arguments checked against the allow-lists; content read from stdin and validated again as root |
+| Config read and save, service logs | sudoers drop-in: run `/usr/bin/openvibes-admin helper config-read SERVICE`, `helper config-write SERVICE` and `helper logs UNIT` as root | fixed verbs; arguments checked against the allow-lists; content read from stdin and validated again as root |
 
 Enabling and disabling a unit at boot are privileged steps: systemd's
 `manage-unit-files` polkit action does not name the unit, so a rule could
@@ -137,8 +137,7 @@ Configuration · Database · Health · System. `?` shows keys; every
 destructive action asks for confirmation.
 
 - **Services.** For each installed allow-listed unit (`openvibes-ingest`,
-  `-distribution`, `-vulns`, `-llm`, `-maintenance.timer`, later
-  `-console`): enabled, active, readiness (`/ready` where the unit has
+  `-distribution`, `-vulns`, `-console`, `-llm`, `-maintenance.timer`): enabled, active, readiness (`/ready` where the unit has
   one), last error line. Actions: start, stop, restart (enable and disable
   at boot are privileged steps, PR 4).
   The last 50 journal lines of the selected unit.
@@ -147,7 +146,11 @@ destructive action asks for confirmation.
   assistant), so the TUI validates exactly as the service does. Unknown
   fields cannot be added; there is no free-text file editor. Save shows a
   diff, writes through `helper config-write`, then offers to restart the
-  service.
+  service. The fields each form offers are listed per service in
+  `openvibes-admin/src/fields.rs`, each checked against the service type by
+  a test; the files are read through `helper config-read` (they are
+  readable only by root and the service's group). `llm.conf` (an
+  environment file) is not edited here.
 - **Database.** Schema version and whether it is current; migrate;
   run maintenance now; partitions (oldest, newest, count); database size.
 - **Health.** Readiness of each service; days until each certificate

@@ -44,6 +44,21 @@ pub struct Output {
 pub trait Runner {
     /// Runs `program` with `args`, stdin closed, and waits for it.
     fn run(&self, program: Program, args: &[&str]) -> std::io::Result<Output>;
+    /// Runs `program` with `args` and `input` on stdin, and waits for it.
+    fn run_with_input(
+        &self,
+        program: Program,
+        args: &[&str],
+        input: &[u8],
+    ) -> std::io::Result<Output>;
+}
+
+fn output(output: std::process::Output) -> Output {
+    Output {
+        status: output.status.code().unwrap_or(-1),
+        stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+        stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+    }
 }
 
 /// Runs commands on this host.
@@ -56,14 +71,40 @@ impl Runner for SystemRunner {
     // everywhere else.
     #[allow(clippy::disallowed_types)]
     fn run(&self, program: Program, args: &[&str]) -> std::io::Result<Output> {
-        let output = std::process::Command::new(program.path())
+        let result = std::process::Command::new(program.path())
             .args(args)
             .stdin(std::process::Stdio::null())
             .output()?;
-        Ok(Output {
-            status: output.status.code().unwrap_or(-1),
-            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        Ok(output(result))
+    }
+
+    // As `run`, with stdin piped: the second of the two process starts here.
+    #[allow(clippy::disallowed_types)]
+    fn run_with_input(
+        &self,
+        program: Program,
+        args: &[&str],
+        input: &[u8],
+    ) -> std::io::Result<Output> {
+        use std::io::Write;
+        let mut child = std::process::Command::new(program.path())
+            .args(args)
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()?;
+        // ponytail: stdin is written before output is read; fine because the
+        // helper reads all of stdin (at most 64 KiB) before writing anything.
+        let written = child
+            .stdin
+            .take()
+            .map_or(Ok(()), |mut stdin| stdin.write_all(input));
+        let result = child.wait_with_output()?;
+        // A child that refused before reading (sudo) closes the pipe; its own
+        // error text is the useful one.
+        if result.status.success() {
+            written?;
+        }
+        Ok(output(result))
     }
 }
