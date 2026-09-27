@@ -6,8 +6,8 @@ Wants=network-online.target
 
 [Service]
 Type=exec
-User=openvibes_console
-Group=openvibes_console
+User=openvibes-console
+Group=openvibes-console
 WorkingDirectory=/var/lib/openvibes-console
 RuntimeDirectory=openvibes-console
 RuntimeDirectoryMode=0750

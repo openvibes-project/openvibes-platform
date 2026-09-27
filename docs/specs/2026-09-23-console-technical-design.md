@@ -749,7 +749,7 @@ ingest side first. The rest must add or extend:
 7. structured append-only audit metadata while preserving CLI compatibility;
 8. a versioned singleton audit-retention policy, defaulting to 365 days, plus
    a timestamp index for bounded maintenance cleanup;
-9. least-privilege `openvibes_console` role without DDL or unrestricted audit
+9. least-privilege `openvibes-console` role without DDL or unrestricted audit
    update/delete, granted only the rights its queries use (as migration 4
    does for ingest); cleanup uses a narrowly scoped store operation;
 10. measured indexes for every stable cursor and filter tuple.

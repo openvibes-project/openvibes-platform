@@ -307,7 +307,8 @@ structured audit columns, and a versioned 365-day audit-retention policy.
 `audit::cleanup_expired_events` removes at most 10,000 events older than the
 stored policy cutoff per call; repeated maintenance runs drain larger backlogs.
 Built-in Viewer, Analyst, Operator, and Admin role permissions are seeded by
-the migration. The `openvibes_console` database role can read platform data
+the migration. The login role is named `"openvibes-console"` (quoted in SQL
+because of the hyphen); it can read platform data
 and update console-owned state; it cannot update agent/finding source data or
 modify/delete audit rows. This migration establishes tables and grants;
 bounded transactional store operations follow in C3 work.
@@ -322,7 +323,7 @@ never exposes secret material.
 
 ## Console rule verification reads (schema 18)
 
-Migration 17 grants `openvibes_console` `SELECT` on `rule_trust_keys` so the
+Migration 17 grants `openvibes-console` `SELECT` on `rule_trust_keys` so the
 console can verify uploaded signed envelopes against the active public keys.
 It grants no trust-key mutation rights; adding/removing keys remains an audited
 local `openvibes-admin` operation.
@@ -344,14 +345,14 @@ permissions.
 
 ## Console write grants (schema 22)
 
-Migration 22 grants `openvibes_console` DELETE for idempotency and
+Migration 22 grants `openvibes-console` DELETE for idempotency and
 selector/tag replacement and INSERT for published rule bundles. It grants
 column-level UPDATE only for the agent fields used by revoke and one low-impact
 column on each table that console code locks (`current_findings`, `rule_sets`,
 and `rule_trust_keys`). The role cannot UPDATE those tables as a whole, and a
 trigger prevents it from restoring or reclassifying an agent.
 `tests/console_role.rs` runs representative console writes after
-`SET ROLE openvibes_console` and checks forbidden status changes;
+`SET ROLE "openvibes-console"` and checks forbidden status changes;
 `tests/migrate.rs` asserts the exact table and column grants.
 
 Migration 20 stores the time a finding entered `mitigated` separately from

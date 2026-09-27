@@ -196,7 +196,7 @@ key/certificate paths are refused. Its deployment constraints are:
   non-loopback upstreams remain TLS protected;
 - the health listener must be loopback-only;
 - the production PostgreSQL connection uses the least-privilege
-  `openvibes_console` role;
+  `openvibes-console` role;
 - session lifetimes, request limits, password hashing, export limits, and the
   private CSV spool are bounded configuration rather than browser choices.
 

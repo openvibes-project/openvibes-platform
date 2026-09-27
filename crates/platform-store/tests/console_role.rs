@@ -22,7 +22,7 @@ const AGENT: &str = "agent.00000000-0000-4000-8000-000000000091";
 const REVOKE_AGENT: &str = "agent.00000000-0000-4000-8000-000000000092";
 
 #[tokio::test]
-async fn console_store_writes_work_as_openvibes_console() {
+async fn console_store_writes_work_as_hyphenated_console_role() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
@@ -79,7 +79,7 @@ async fn console_store_writes_work_as_openvibes_console() {
     .await
     .unwrap();
     client
-        .batch_execute("SET ROLE openvibes_console")
+        .batch_execute("SET ROLE \"openvibes-console\"")
         .await
         .unwrap();
 

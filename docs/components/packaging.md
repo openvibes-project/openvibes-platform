@@ -48,9 +48,9 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/admin.toml` | 0640 root:openvibes_admin, `%config(noreplace)` | admin |
 | `/usr/bin/openvibes-console` | 0755 root | console |
 | `/usr/lib/systemd/system/openvibes-console.service` | 0644 root | console |
-| `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes_console` | console |
-| `/etc/openvibes/console.toml` | 0640 root:openvibes_console, `%config(noreplace)` | console |
-| `/var/lib/openvibes-console/` | 0700 openvibes_console | console |
+| `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes-console` | console |
+| `/etc/openvibes/console.toml` | 0640 root:openvibes-console, `%config(noreplace)` | console |
+| `/var/lib/openvibes-console/` | 0700 openvibes-console | console |
 | `/usr/libexec/openvibes-llm/{llama-server,openvibes-llm-check}` | 0755 root | llm |
 | `/usr/lib/systemd/system/openvibes-llm.service` | 0644 root | llm |
 | `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes_llm` | llm |
@@ -87,7 +87,7 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes_admin`, with the same hardening.
-- `openvibes-console.service`: runs as `openvibes_console`, with the same
+- `openvibes-console.service`: runs as `openvibes-console`, with the same
   systemd sandbox. It has only `CAP_NET_BIND_SERVICE` to bind the configured
   HTTPS listener on port 443. It is disabled by the package preset until
   configuration and certificate setup are complete.
@@ -188,19 +188,19 @@ Agents trust `root.crt` (their `platform_ca_file`).
 
 The console RPM requires the platform database schema to be current through
 schema 22; those migrations create the least-privilege PostgreSQL role
-`openvibes_console`. Install the console RPM after the platform migrations so
+`openvibes-console`. Install the console RPM after the platform migrations so
 the matching operating-system user and database role can use PostgreSQL peer
 authentication. Its unit is disabled at install time.
 
 Install a browser-trusted certificate chain and private key at the paths in
-`/etc/openvibes/console.toml`, with owner `root:openvibes_console`, mode 0640,
+`/etc/openvibes/console.toml`, with owner `root:openvibes-console`, mode 0640,
 and the TLS directory searchable by the service. Edit the file to replace
 `console.example.invalid` with the canonical HTTPS origin and set the public
 listen address. For example, install the chain and key like this:
 
 ```sh
-install -o root -g openvibes_console -m 0640 console-chain.pem /etc/openvibes/tls/console-chain.pem
-install -o root -g openvibes_console -m 0640 console-key.pem /etc/openvibes/tls/console-key.pem
+install -o root -g openvibes-console -m 0640 console-chain.pem /etc/openvibes/tls/console-chain.pem
+install -o root -g openvibes-console -m 0640 console-key.pem /etc/openvibes/tls/console-key.pem
 ```
 
 Then enable the service and allow the configured public port:
@@ -248,7 +248,7 @@ trusted_proxy_uids = [1001]
 
 Keep the existing `health_listen`, database URL, and HTTPS `public_origin`.
 Add the proxy user to the
-`openvibes_console` group so it can traverse the runtime directory and connect
+`openvibes-console` group so it can traverse the runtime directory and connect
 to the mode-0660 socket. The listener verifies the peer UID with kernel
 credentials and removes only its own socket inode at shutdown. Keep the health
 port loopback-only and expose only the proxy's public HTTPS port in the

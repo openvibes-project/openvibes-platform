@@ -90,18 +90,18 @@ if [[ $# == 4 ]]; then
               -addext "subjectAltName=DNS:console.example.invalid" \
               -keyout /etc/openvibes/tls/console-key.pem \
               -out /etc/openvibes/tls/console-chain.pem >/dev/null 2>&1
-          chown root:openvibes_console /etc/openvibes/tls/console-{key,chain}.pem
+          chown root:openvibes-console /etc/openvibes/tls/console-{key,chain}.pem
           chmod 0640 /etc/openvibes/tls/console-{key,chain}.pem
           cat > /etc/openvibes/console.toml <<TOML
 development_listen = "0.0.0.0:443"
 health_listen = "127.0.0.1:18482"
 transport_mode = "direct_tls"
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_console"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-console"
 public_origin = "https://console.example.invalid"
 server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
 server_key_file = "/etc/openvibes/tls/console-key.pem"
 TOML
-          chown root:openvibes_console /etc/openvibes/console.toml
+          chown root:openvibes-console /etc/openvibes/console.toml
           chmod 0640 /etc/openvibes/console.toml
           systemctl enable --now openvibes-console' >/dev/null 2>&1 || fail "configure/start console"
     wait_for "console ready over loopback health" 30 '[[ "$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:18482/ready)" == 204 ]]'
@@ -164,7 +164,7 @@ TOML
 development_listen = "0.0.0.0:443"
 health_listen = "127.0.0.1:18482"
 transport_mode = "reverse_proxy"
-database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes_console"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-console"
 public_origin = "https://console.example.invalid"
 unix_socket_file = "/run/openvibes-console/console.sock"
 trusted_proxy_uids = [0]
@@ -174,7 +174,7 @@ TOML
     wait_for "allowed Unix proxy UID serves shell" 30 \
         '[[ "$(curl -sS --unix-socket /run/openvibes-console/console.sock -H "Host: console.example.invalid" -o /dev/null -w "%{http_code}" http://localhost/)" == 200 ]]'
     in_c 'set -e
-          status=$(runuser -u openvibes_console -- curl -sS --unix-socket /run/openvibes-console/console.sock -H "Host: console.example.invalid" -o /dev/null -w "%{http_code}" http://localhost/)
+          status=$(runuser -u openvibes-console -- curl -sS --unix-socket /run/openvibes-console/console.sock -H "Host: console.example.invalid" -o /dev/null -w "%{http_code}" http://localhost/)
           [[ "$status" == 403 ]]' || fail "reject untrusted Unix proxy UID"
     ok "console Unix proxy accepts only the configured peer UID"
 fi

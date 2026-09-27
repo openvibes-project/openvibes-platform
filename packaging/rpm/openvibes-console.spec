@@ -49,8 +49,8 @@ install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 %{_prefix}/lib/systemd/system-preset/90-openvibes-console.preset
 %dir %{_sysconfdir}/openvibes
 %dir %{_sysconfdir}/openvibes/tls
-%config(noreplace) %attr(0640, root, openvibes_console) %{_sysconfdir}/openvibes/console.toml
-%dir %attr(0700, openvibes_console, openvibes_console) %{_sharedstatedir}/openvibes-console
+%config(noreplace) %attr(0640, root, openvibes-console) %{_sysconfdir}/openvibes/console.toml
+%dir %attr(0700, openvibes-console, openvibes-console) %{_sharedstatedir}/openvibes-console
 
 %changelog
 * Fri Sep 25 2026 itismelime <26064407+itismelime@users.noreply.github.com> - 0.1.0-1

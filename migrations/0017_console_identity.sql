@@ -228,8 +228,8 @@ ALTER TABLE audit_log
 CREATE INDEX audit_log_console_time_idx ON audit_log (at DESC, id DESC);
 
 DO $$ BEGIN
-    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes_console') THEN
-        CREATE ROLE openvibes_console LOGIN;
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'openvibes-console') THEN
+        CREATE ROLE "openvibes-console" LOGIN;
     END IF;
 EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
 END $$;
@@ -272,14 +272,14 @@ GRANT SELECT ON agents, certificates, current_findings, findings, rule_sets,
     console_role_permissions, console_role_bindings, console_asset_groups,
     console_asset_group_selectors, console_agent_tags, console_service_accounts,
     console_service_tokens, console_finding_triage, console_finding_triage_history,
-    console_audit_retention TO openvibes_console;
+    console_audit_retention TO "openvibes-console";
 GRANT SELECT, INSERT, UPDATE ON console_users, console_credentials,
     console_auth_throttle, console_preauth, console_sessions, console_idempotency,
     console_role_bindings, console_asset_groups, console_asset_group_selectors,
     console_agent_tags, console_service_accounts, console_service_tokens,
-    console_finding_triage, console_audit_retention TO openvibes_console;
-GRANT SELECT, INSERT ON audit_log TO openvibes_console;
+    console_finding_triage, console_audit_retention TO "openvibes-console";
+GRANT SELECT, INSERT ON audit_log TO "openvibes-console";
 GRANT USAGE ON SEQUENCE audit_log_id_seq, console_finding_triage_history_event_id_seq
-    TO openvibes_console;
-GRANT INSERT ON console_finding_triage_history TO openvibes_console;
-REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM openvibes_console;
+    TO "openvibes-console";
+GRANT INSERT ON console_finding_triage_history TO "openvibes-console";
+REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM "openvibes-console";

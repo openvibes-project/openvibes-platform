@@ -135,15 +135,15 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     platform_store::migrate(&mut client).await.unwrap();
     let row = client
         .query_one(
-            "SELECT has_table_privilege('openvibes_console', 'console_sessions', 'SELECT'),
-                    has_table_privilege('openvibes_console', 'console_sessions', 'UPDATE'),
-                    has_table_privilege('openvibes_console', 'agents', 'UPDATE'),
-                    has_table_privilege('openvibes_console', 'certificates', 'SELECT'),
-                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'SELECT'),
-                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'INSERT'),
-                    has_table_privilege('openvibes_console', 'rule_trust_keys', 'UPDATE'),
-                    has_table_privilege('openvibes_console', 'audit_log', 'INSERT'),
-                    has_table_privilege('openvibes_console', 'audit_log', 'UPDATE')",
+            "SELECT has_table_privilege('openvibes-console', 'console_sessions', 'SELECT'),
+                    has_table_privilege('openvibes-console', 'console_sessions', 'UPDATE'),
+                    has_table_privilege('openvibes-console', 'agents', 'UPDATE'),
+                    has_table_privilege('openvibes-console', 'certificates', 'SELECT'),
+                    has_table_privilege('openvibes-console', 'rule_trust_keys', 'SELECT'),
+                    has_table_privilege('openvibes-console', 'rule_trust_keys', 'INSERT'),
+                    has_table_privilege('openvibes-console', 'rule_trust_keys', 'UPDATE'),
+                    has_table_privilege('openvibes-console', 'audit_log', 'INSERT'),
+                    has_table_privilege('openvibes-console', 'audit_log', 'UPDATE')",
             &[],
         )
         .await
@@ -165,12 +165,12 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     );
     let write_rights = client
         .query_one(
-            "SELECT has_table_privilege('openvibes_console', 'console_idempotency', 'DELETE'),
-                    has_table_privilege('openvibes_console', 'console_asset_group_selectors', 'DELETE'),
-                    has_table_privilege('openvibes_console', 'console_agent_tags', 'DELETE'),
-                    has_table_privilege('openvibes_console', 'current_findings', 'UPDATE'),
-                    has_table_privilege('openvibes_console', 'rule_sets', 'UPDATE'),
-                    has_table_privilege('openvibes_console', 'rule_bundles', 'INSERT')",
+            "SELECT has_table_privilege('openvibes-console', 'console_idempotency', 'DELETE'),
+                    has_table_privilege('openvibes-console', 'console_asset_group_selectors', 'DELETE'),
+                    has_table_privilege('openvibes-console', 'console_agent_tags', 'DELETE'),
+                    has_table_privilege('openvibes-console', 'current_findings', 'UPDATE'),
+                    has_table_privilege('openvibes-console', 'rule_sets', 'UPDATE'),
+                    has_table_privilege('openvibes-console', 'rule_bundles', 'INSERT')",
             &[],
         )
         .await
@@ -188,16 +188,16 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     );
     let column_rights = client
         .query_one(
-            "SELECT has_column_privilege('openvibes_console', 'agents', 'status', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'agents', 'revoked_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'agents', 'enrolled_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'current_findings', 'received_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'current_findings', 'message', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'rule_sets', 'created_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'rule_sets', 'retired_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'added_at', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'public_key', 'UPDATE'),
-                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'removed_at', 'UPDATE')",
+            "SELECT has_column_privilege('openvibes-console', 'agents', 'status', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'agents', 'revoked_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'agents', 'enrolled_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'current_findings', 'received_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'current_findings', 'message', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'rule_sets', 'created_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'rule_sets', 'retired_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'rule_trust_keys', 'added_at', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'rule_trust_keys', 'public_key', 'UPDATE'),
+                    has_column_privilege('openvibes-console', 'rule_trust_keys', 'removed_at', 'UPDATE')",
             &[],
         )
         .await

@@ -199,7 +199,7 @@ Work:
   migrations are renumbered after the per-version vulnerability migration): local users,
   Argon2id credentials, sessions, local pre-auth state, RBAC, asset groups,
   and structured audit;
-- add least-privilege `openvibes_console` database role;
+- add least-privilege `openvibes-console` database role;
 - audited, interactive `openvibes-admin user` commands now cover create, list,
   disable, unlock, and reset-password; create provides first-Admin bootstrap
   and supports lockout recovery without a secret CLI argument;
