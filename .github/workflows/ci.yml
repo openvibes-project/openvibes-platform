@@ -311,7 +311,9 @@ jobs:
   # agent enrolls/fetches rules/delivers findings; the console serves TLS and
   # validates the Unix proxy peer UID.
   systemd-e2e:
-    name: End to end under systemd (platform, agent, and console RPMs)
+    # The name is a required status check on main: keep it (the job also
+    # covers the console RPM).
+    name: End to end under systemd (platform and agent RPMs)
     needs: fedora
     runs-on: ubuntu-latest
     timeout-minutes: 20
