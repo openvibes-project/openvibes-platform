@@ -189,10 +189,10 @@ impl Plan {
 pub struct PlanArgs {
     /// Components, comma-separated: ingest (required), console,
     /// distribution, vulns, assistant, rules, agent.
-    #[arg(long, value_delimiter = ',', required = true, value_enum)]
+    #[arg(long, value_delimiter = ',', value_enum)]
     pub components: Vec<Component>,
     /// This host's DNS name, put in the server certificates.
-    #[arg(long)]
+    #[arg(long, default_value = "")]
     pub hostname: String,
     /// More DNS names or IP addresses for the server certificates.
     #[arg(long)]
@@ -248,6 +248,20 @@ fn check_san(san: &str) -> Result<(), String> {
 impl PlanArgs {
     /// The checked plan; `operator` is who ran Setup through sudo.
     pub fn plan(&self, operator: Option<String>) -> Result<Plan, String> {
+        if self.components.is_empty() {
+            return Err("--components is required".into());
+        }
+        if self.hostname.is_empty() {
+            return Err("--hostname is required".into());
+        }
+        if self.allow_unsigned_local && self.repo_dir.is_none() {
+            return Err("--allow-unsigned-local needs --repo-dir".into());
+        }
+        if self.root_key_out.is_some() && self.ca == CaMode::Careful {
+            return Err(
+                "--root-key-out is for the quick CA (a careful CA's root stays offline)".into(),
+            );
+        }
         let mut components = self.components.clone();
         components.sort();
         components.dedup();
@@ -387,10 +401,24 @@ mod tests {
             (args(&[Ingest], "1.2.3", &[]), "lowercase DNS name"),
             (args(&[Ingest], host, &["bad name"]), "lowercase DNS name"),
             (args(&[Ingest], host, &["a"; 17]), "at most 16"),
+            (args(&[], host, &[]), "--components is required"),
+            (args(&[Ingest], "", &[]), "--hostname is required"),
         ] {
             let error = args.plan(None).unwrap_err();
             assert!(error.contains(want), "{error} should contain {want}");
         }
+        let mut unsigned = args(&[Ingest], host, &[]);
+        unsigned.allow_unsigned_local = true;
+        assert!(
+            unsigned
+                .plan(None)
+                .unwrap_err()
+                .contains("needs --repo-dir")
+        );
+        let mut careful = args(&[Ingest], host, &[]);
+        careful.ca = CaMode::Careful;
+        careful.root_key_out = Some("/media/usb/root.key".into());
+        assert!(careful.plan(None).unwrap_err().contains("quick CA"));
         let mut relative = args(&[Ingest], host, &[]);
         relative.root_key_out = Some("root.key".into());
         assert!(
