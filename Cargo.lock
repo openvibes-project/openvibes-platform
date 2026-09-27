@@ -1361,6 +1361,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "platform-host"
+version = "0.1.0"
+
+[[package]]
 name = "platform-pki"
 version = "0.1.0"
 dependencies = [
