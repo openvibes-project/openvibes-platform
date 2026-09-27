@@ -1,5 +1,11 @@
 # Assistant: Questions and Triage Help in the Console — Design
 
+> **First-release update (project owner, 2026-09-26):** the current console
+> implementation follows [`2026-09-26-console-local-assistant-design.md`](2026-09-26-console-local-assistant-design.md).
+> That approval supersedes this document's external-provider support and
+> persisted conversation history for the first console release. The
+> `platform-assistant` library remains a replaceable local-backend client.
+
 **Status: design approved by the user in conversation on 2026-09-25**
 (requested 2026-09-24 as "small built-in LLM"; decisions in section 12:
 local backends first, external providers supported later, 30-day

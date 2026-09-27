@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+openvibes-console = { path = "../openvibes-console" }
 chrono.workspace = true
 clap.workspace = true
 platform-assistant = { path = "../platform-assistant" }
@@ -24,7 +25,9 @@ platform-host = { path = "../platform-host" }
 ratatui = "0.30"
 openvibes-vulns = { path = "../openvibes-vulns" }
 serde.workspace = true
+rpassword = "=7.5.4"
 tokio.workspace = true
+zeroize = "=1.9.0"
 
 [lints]
 workspace = true

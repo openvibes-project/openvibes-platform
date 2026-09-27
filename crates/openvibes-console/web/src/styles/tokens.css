@@ -1,0 +1,90 @@
+:root {
+  color-scheme: light dark;
+  --color-canvas: #f5f4f0;
+  --color-surface: #ffffff;
+  --color-surface-subtle: #ecebe6;
+  --color-surface-raised: #faf9f6;
+  --color-text: #17202a;
+  --color-text-muted: #58636f;
+  --color-text-subtle: #626e7a;
+  --color-border: #d4d6d5;
+  --color-border-strong: #aeb4b7;
+  --color-brand: #087fbd;
+  --color-brand-strong: #075f91;
+  --color-brand-soft: #dceef5;
+  --color-focus: #006fba;
+  --color-info: #196fa6;
+  --color-success: #24704b;
+  --color-warning: #99600a;
+  --color-danger: #9b2c3a;
+  --color-seeded-bg: #fff3cc;
+  --color-seeded-text: #604400;
+  --shadow-raised: 0 12px 30px rgb(23 32 42 / 8%);
+  --radius-small: 0.375rem;
+  --radius-medium: 0.625rem;
+  --radius-large: 0.875rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+  --sidebar-width: 16.5rem;
+  --sidebar-width-collapsed: 5rem;
+  --transition-fast: 140ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --color-canvas: #11171d;
+    --color-surface: #182129;
+    --color-surface-subtle: #202b34;
+    --color-surface-raised: #1d2730;
+    --color-text: #edf2f4;
+    --color-text-muted: #aeb9c2;
+    --color-text-subtle: #8f9da8;
+    --color-border: #35434e;
+    --color-border-strong: #536471;
+    --color-brand: #52bce4;
+    --color-brand-strong: #87d2ed;
+    --color-brand-soft: #173a4a;
+    --color-focus: #79cff0;
+    --color-info: #75c3e7;
+    --color-success: #65c28e;
+    --color-warning: #f1bd59;
+    --color-danger: #ff8290;
+    --color-seeded-bg: #443711;
+    --color-seeded-text: #ffe29b;
+    --shadow-raised: 0 12px 30px rgb(0 0 0 / 25%);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --color-canvas: #11171d;
+  --color-surface: #182129;
+  --color-surface-subtle: #202b34;
+  --color-surface-raised: #1d2730;
+  --color-text: #edf2f4;
+  --color-text-muted: #aeb9c2;
+  --color-text-subtle: #8f9da8;
+  --color-border: #35434e;
+  --color-border-strong: #536471;
+  --color-brand: #52bce4;
+  --color-brand-strong: #87d2ed;
+  --color-brand-soft: #173a4a;
+  --color-focus: #79cff0;
+  --color-info: #75c3e7;
+  --color-success: #65c28e;
+  --color-warning: #f1bd59;
+  --color-danger: #ff8290;
+  --color-seeded-bg: #443711;
+  --color-seeded-text: #ffe29b;
+  --shadow-raised: 0 12px 30px rgb(0 0 0 / 25%);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}

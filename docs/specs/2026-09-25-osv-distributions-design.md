@@ -157,4 +157,3 @@ hosts only on the (advisory, package) pairs that affect some version.
 `vulns list --host`, `vulns show` and `vulns summary` include the no-fix
 ones; the fleet-wide `vulns list` leaves them out (they would repeat on
 every host).
-
