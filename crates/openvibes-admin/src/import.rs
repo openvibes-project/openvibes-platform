@@ -161,11 +161,17 @@ async fn import_file(
     let limit = ResourceLimits::V1.document_bytes;
     let too_large = || String::from("larger than 1 MiB");
     let unreadable = |error: std::io::Error| format!("cannot read: {error}");
+    // A symlink to a device, a FIFO, or a socket is never opened: opening a
+    // FIFO blocks until a writer appears. Checked again on the open file in
+    // case the path was swapped in between.
+    let not_regular = || String::from("not a regular file");
+    if !std::fs::metadata(path).map_err(unreadable)?.is_file() {
+        return Err(not_regular());
+    }
     let file = std::fs::File::open(path).map_err(unreadable)?;
-    // A symlink to a device, a FIFO, or a socket is never read.
     let metadata = file.metadata().map_err(unreadable)?;
     if !metadata.is_file() {
-        return Err("not a regular file".into());
+        return Err(not_regular());
     }
     if metadata.len() > limit as u64 {
         return Err(too_large());

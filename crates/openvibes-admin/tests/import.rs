@@ -255,16 +255,42 @@ async fn future_dated_files_are_refused() {
     fixture.drop().await;
 }
 
+/// Runs `import DIR` capped at 4 GiB of address space and 60 seconds, so a
+/// regression that reads `/dev/zero` or blocks on a FIFO fails this test
+/// instead of exhausting the machine's memory or hanging the suite.
+fn import_bounded(fixture: &Fixture, dir: &Path) -> Output {
+    std::process::Command::new("timeout")
+        .args(["60", "prlimit", "--as=4294967296", "--"])
+        .arg(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .arg("--config")
+        .arg(&fixture.config)
+        .arg("import")
+        .arg(dir)
+        .env("USER", "ov-test")
+        .env_remove("SUDO_USER")
+        .output()
+        .unwrap()
+}
+
 #[tokio::test]
 async fn special_files_are_refused_unread() {
     let fixture = migrated().await;
     let dir = scratch_dir("import-special");
     std::os::unix::fs::symlink("/dev/zero", dir.join("zero.json")).unwrap();
-    let output = fixture.run(&["import", dir.to_str().unwrap()]);
+    let made = std::process::Command::new("mkfifo")
+        .arg(dir.join("fifo.json"))
+        .status()
+        .unwrap();
+    assert!(made.success());
+    let output = import_bounded(&fixture, &dir);
     let all = text(&output);
     assert_eq!(output.status.code(), Some(1), "{all}");
     assert!(
         all.contains("zero.json: refused: not a regular file"),
+        "{all}"
+    );
+    assert!(
+        all.contains("fifo.json: refused: not a regular file"),
         "{all}"
     );
     fixture.drop().await;
