@@ -336,3 +336,45 @@ async fn a_busy_inventory_endpoint_answers_503() {
     assert_eq!(first.await.unwrap(), Ok(()));
     world.stop().await;
 }
+
+// The inventory slot is taken before the body is read (review): a request
+// that finds every slot busy is answered 503 at once, without the server
+// buffering up to 8 MiB for it, so memory stays bounded by the slots.
+#[tokio::test]
+async fn a_busy_inventory_endpoint_answers_before_reading_the_body() {
+    let world = World::start_with(|config| config.max_inventory_in_flight = 1).await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let mut locker = world.db().await;
+    let lock = locker.transaction().await.unwrap();
+    lock.execute(
+        "SELECT 1 FROM agents WHERE agent_id = $1 FOR UPDATE",
+        &[&agent],
+    )
+    .await
+    .unwrap();
+    let first = {
+        let (transport, chain, key, agent) =
+            (world.transport(), chain.clone(), key.clone(), agent.clone());
+        tokio::task::spawn_blocking(move || {
+            let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+            PlatformClient::new(&transport, Some(&identity))
+                .unwrap()
+                .report_inventory(&report(&agent, vec![package("bash", "5.2.37")]))
+        })
+    };
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    let chain_pem = chain.concat();
+    let status = world
+        .raw_partial(
+            "/v1/inventory",
+            8 * 1024 * 1024,
+            &[b' '; 100],
+            (&chain_pem, &key),
+            std::time::Duration::from_secs(3),
+        )
+        .await;
+    assert_eq!(status, Some(503), "answered before the 8 MiB body arrived");
+    lock.rollback().await.unwrap();
+    assert_eq!(first.await.unwrap(), Ok(()));
+    world.stop().await;
+}

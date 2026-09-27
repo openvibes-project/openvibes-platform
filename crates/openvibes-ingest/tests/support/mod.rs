@@ -296,6 +296,58 @@ pub async fn raw_tls(
     Some((status, body))
 }
 
+impl World {
+    /// Declares `declared` body bytes but sends only `sent`, then waits up to
+    /// `wait` for a status: shows whether the server answers before reading
+    /// the body.
+    #[allow(dead_code)]
+    pub async fn raw_partial(
+        &self,
+        path: &str,
+        declared: usize,
+        sent: &[u8],
+        client: (&str, &str),
+        wait: std::time::Duration,
+    ) -> Option<u16> {
+        let mut roots = rustls::RootCertStore::empty();
+        for cert in CertificateDer::pem_slice_iter(self.root.cert_pem.as_bytes()) {
+            roots.add(cert.unwrap()).unwrap();
+        }
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let chain: Vec<CertificateDer<'static>> =
+            CertificateDer::pem_slice_iter(client.0.as_bytes())
+                .map(Result::unwrap)
+                .collect();
+        let config = rustls::ClientConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_client_auth_cert(
+                chain,
+                PrivateKeyDer::from_pem_slice(client.1.as_bytes()).unwrap(),
+            )
+            .unwrap();
+        let tcp = TcpStream::connect(self.addr).await.ok()?;
+        let mut tls = TlsConnector::from(Arc::new(config))
+            .connect(ServerName::try_from("127.0.0.1").unwrap(), tcp)
+            .await
+            .ok()?;
+        let head = format!(
+            "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
+             Content-Length: {declared}\r\n\r\n"
+        );
+        tls.write_all(head.as_bytes()).await.ok()?;
+        tls.write_all(sent).await.ok()?;
+        let mut buffer = [0u8; 64];
+        let read = tokio::time::timeout(wait, tls.read(&mut buffer))
+            .await
+            .ok()?
+            .ok()?;
+        let text = String::from_utf8_lossy(&buffer[..read]).into_owned();
+        text.split_whitespace().nth(1)?.parse().ok()
+    }
+}
+
 /// Plain HTTP GET to the loopback health listener.
 pub async fn health_get(addr: SocketAddr, path: &str) -> u16 {
     let mut tcp = TcpStream::connect(addr).await.unwrap();

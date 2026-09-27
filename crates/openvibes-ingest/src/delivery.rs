@@ -96,12 +96,6 @@ pub(crate) async fn inventory(
     AuthenticatedAgent(agent_id): AuthenticatedAgent,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
-    // At most max_inventory_in_flight reports (each up to 8 MiB) at once.
-    let _slot = state
-        .inventory_slots
-        .clone()
-        .try_acquire_owned()
-        .map_err(|_| ApiError::Busy)?;
     let mut report: InventoryReport =
         platform_agent_server::parse_with_limit(&body, platform_agent_server::MAX_INVENTORY_BYTES)?;
     if report.agent_id.as_str() != agent_id {

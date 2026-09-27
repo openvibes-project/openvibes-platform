@@ -220,9 +220,13 @@ the last one. Retention days scale the 90-day column linearly.
 A Fedora 44 workstation with 3,613 RPM packages sends a 483 KB inventory
 (134 bytes per package); collection takes 0.16 s and 17 MB. Inventories may
 hold up to 50,000 packages and 8 MiB (a full TeX Live alone is 9,527
-packages). Ingest handles at most `max_inventory_in_flight` (4) inventory
-reports at once, so their bodies use at most 32 MiB; storage of 50,000
-packages for one host is covered by a store test.
+packages). Ingest takes one of `max_inventory_in_flight` (4) slots before
+reading an inventory body; a request finding none free gets 503 unread. With
+the body (up to 8 MiB), the parsed packages and the rows built for storage,
+one 50,000-package report needs roughly 30 to 40 MiB, so about 150 MiB for
+four at once. Storage of 50,000 packages for one host is covered by a store
+test. `request_timeout_seconds` (default 10) covers the upload and storage:
+an 8 MiB body needs about 7 Mbit/s; raise it for large hosts on slow links.
 
 ## Open questions
 
