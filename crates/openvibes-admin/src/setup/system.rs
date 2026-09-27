@@ -147,12 +147,20 @@ impl<R: Runner> Ctx<'_, R> {
             .ok_or_else(|| format!("{name} is not in {file}"))
     }
 
+    /// The numeric (uid, gid) of an owner.
+    pub fn ids(&self, owner: Owner<'_>) -> Result<(u32, u32), String> {
+        let (user, group) = owner.ok_or("no owner")?;
+        Ok((self.id("/etc/passwd", user)?, self.id("/etc/group", group)?))
+    }
+
+    /// For paths in directories only root can write (a service's files in
+    /// `/run/openvibes-ca`); files written into other directories are
+    /// owned through their open handle (`put`).
     pub fn chown(&self, abs: &str, owner: Owner<'_>) -> Result<(), String> {
-        let Some((user, group)) = owner else {
+        if owner.is_none() {
             return Ok(());
-        };
-        let uid = self.id("/etc/passwd", user)?;
-        let gid = self.id("/etc/group", group)?;
+        }
+        let (uid, gid) = self.ids(owner)?;
         std::os::unix::fs::chown(self.path(abs), Some(uid), Some(gid))
             .map_err(|error| format!("{abs}: {error}"))
     }
@@ -185,13 +193,24 @@ impl<R: Runner> Ctx<'_, R> {
             .mode(0o600)
             .open(&temp)
             .map_err(fail)?;
-        let result = file
-            .write_all(contents)
-            .and_then(|()| file.sync_all())
-            .map_err(fail)
-            .and_then(|()| self.chown(&temp_abs, owner))
-            .and_then(|()| fs::set_permissions(&temp, Permissions::from_mode(mode)).map_err(fail))
-            .and_then(|()| fs::rename(&temp, &path).map_err(fail));
+        // Owner and mode through the open handle, not the path: the
+        // directory may belong to the service (a swapped symlink must not
+        // redirect a root chown).
+        let ids = match owner {
+            Some(_) => self.ids(owner).map(Some),
+            None => Ok(None),
+        };
+        let result = ids.and_then(|ids| {
+            file.write_all(contents)
+                .and_then(|()| match ids {
+                    Some((uid, gid)) => std::os::unix::fs::fchown(&file, Some(uid), Some(gid)),
+                    None => Ok(()),
+                })
+                .and_then(|()| file.set_permissions(Permissions::from_mode(mode)))
+                .and_then(|()| file.sync_all())
+                .and_then(|()| fs::rename(&temp, &path))
+                .map_err(fail)
+        });
         if result.is_err() {
             let _ = fs::remove_file(&temp);
         }

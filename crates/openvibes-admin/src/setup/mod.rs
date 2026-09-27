@@ -65,6 +65,11 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
 
 /// Checks the step and does it unless it is done or skipped.
 pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
+    // Readiness always runs: it also creates the endpoint token the last
+    // screen shows, and on a first install every service is ready by then.
+    if step == Step::Ready {
+        return apply(ctx, step);
+    }
     match check(ctx, step) {
         state @ (StepState::Done(_) | StepState::Skipped(_)) => state,
         _ => apply(ctx, step),

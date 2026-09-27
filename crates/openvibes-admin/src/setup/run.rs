@@ -292,14 +292,17 @@ mod tests {
             0,
             &format!("id 7\ntoken {TOKEN}\n"),
         );
-        // The check finds everything ready: Done without a token.
+        // Everything is already ready (the usual case on a first install):
+        // the run still creates the endpoint token the last screen shows.
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
+        assert!(state.detail().contains(TOKEN), "{state:?}");
+        // Only a status check leaves the token alone.
+        fake.calls.borrow_mut().clear();
         assert!(matches!(
-            run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready),
+            crate::setup::check(&fake.ctx(&plan(&[Ingest])), Step::Ready),
             StepState::Done(_)
         ));
         assert!(!fake.called(&["/usr/sbin/runuser"]));
-        let state = crate::setup::apply(&fake.ctx(&plan(&[Ingest])), Step::Ready);
-        assert!(state.detail().contains(TOKEN), "{state:?}");
 
         let fake = Fake::new("not-ready");
         fake.answer(&["/usr/bin/curl"], 7, "");

@@ -85,7 +85,8 @@ fn remove_stage<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     fs::remove_dir_all(ctx.path(STAGE)).map_err(|error| format!("{STAGE}: {error}"))
 }
 
-/// Imports the signed intermediate and installs the CA files.
+/// Imports the signed intermediate and installs the CA files; the staging
+/// directory is left for the caller to remove.
 fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     for file in ["intermediate.crt", "root.crt"] {
         ctx.chown(&format!("{INT}/{file}"), ADMIN_OWNER)?;
@@ -112,8 +113,7 @@ fn import_and_install<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
         INTERMEDIATE_KEY,
         Some(("openvibes-ingest", "openvibes-ingest")),
         0o600,
-    )?;
-    remove_stage(ctx)
+    )
 }
 
 /// Writes the root key once to `root_key_out` (never over an existing
@@ -135,10 +135,19 @@ fn keep_root_key<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     file.write_all(&key)
         .and_then(|()| file.sync_all())
         .map_err(|error| format!("{shown}: {error}"))?;
-    if let Some(user) = &ctx.plan.operator {
-        ctx.chown(&shown, Some((user, user)))?;
-    }
-    Ok(format!("root key saved to {shown}: keep it offline"))
+    // Through the open file, never the path (the directory may be the
+    // user's); a stick that cannot change owners keeps it root's.
+    let owner = ctx.plan.operator.as_deref().map(|user| {
+        ctx.ids(Some((user, user))).and_then(|(uid, gid)| {
+            std::os::unix::fs::fchown(&file, Some(uid), Some(gid))
+                .map_err(|error| format!("{shown}: {error}"))
+        })
+    });
+    let note = match owner {
+        Some(Err(error)) => format!(" (still owned by root: {error})"),
+        _ => String::new(),
+    };
+    Ok(format!("root key saved to {shown}: keep it offline{note}"))
 }
 
 fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -172,14 +181,18 @@ fn quick<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         ADMIN_OWNER,
         0o644,
     )?;
-    let kept = keep_root_key(ctx)?;
+    // The key is written only once the root is installed, so a failed
+    // import leaves no key file to block the retry.
     import_and_install(ctx)?;
+    let kept = keep_root_key(ctx)?;
+    remove_stage(ctx)?;
     Ok(StepState::Done(format!("{kept}; {}", root_summary(ctx)?)))
 }
 
 fn careful<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if ctx.exists(&format!("{INT}/intermediate.crt")) && ctx.exists(&format!("{INT}/root.crt")) {
         import_and_install(ctx)?;
+        remove_stage(ctx)?;
         return Ok(StepState::Done(root_summary(ctx)?));
     }
     if !ctx.exists(&format!("{INT}/intermediate.csr")) {
@@ -424,6 +437,22 @@ mod tests {
         let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ca);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
         assert!(state.detail().contains("root key deleted"), "{state:?}");
+    }
+
+    #[test]
+    fn a_failed_import_leaves_no_root_key_file_to_block_the_retry() {
+        let fake = Fake::new("ca-import-fails");
+        fake.answer(&with(&ADMIN, &["ca", "import-intermediate"]), 1, "");
+        ca_commands(&fake);
+        std::fs::create_dir_all(fake.root.join("media/usb")).unwrap();
+        let mut plan = plan(&[Ingest]);
+        plan.root_key_out = Some("/media/usb/openvibes-root.key".into());
+        let state = run_step(&fake.ctx(&plan), Step::Ca);
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+        assert!(
+            !fake.root.join("media/usb/openvibes-root.key").exists(),
+            "a key for a root that was never installed would block every retry"
+        );
     }
 
     #[test]
