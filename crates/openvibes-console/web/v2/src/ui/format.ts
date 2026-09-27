@@ -60,3 +60,17 @@ export function within(value: string | number | null | undefined, ms: number, no
   if (value == null) return false;
   return (typeof value === "number" ? value : Date.parse(value)) - now < ms;
 }
+
+/** Start of the UTC day `days` ago: a stable `since` for the whole day, so cached loads are reused. */
+export function daysAgo(days: number, now = Date.now()): string {
+  const today = new Date(now);
+  return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - days)).toISOString();
+}
+
+export const auditRanges = [1, 7, 30, 365] as const;
+
+/** The audit window chosen in the URL (`range` days, default 30). */
+export function auditSince(params: URLSearchParams): string {
+  const days = Number(params.get("range") ?? 30);
+  return daysAgo((auditRanges as readonly number[]).includes(days) ? days : 30);
+}

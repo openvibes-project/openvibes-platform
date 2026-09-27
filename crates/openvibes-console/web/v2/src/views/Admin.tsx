@@ -10,7 +10,7 @@ import { useSession } from "../app/session";
 import { tokenState } from "../panels/OpsPanels";
 import { Ago, Empty, ErrorBox, Loading } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
-import { within } from "../ui/format";
+import { auditSince, within } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { matches } from "../ui/table";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -157,7 +157,8 @@ export function ServiceAccounts() {
 export function Audit() {
   const { can } = useSession();
   const { params } = useLocation();
-  const page = useAllPages<AuditEvent>("/api/v1/audit-events", 1000);
+  const since = auditSince(params);
+  const page = useAllPages<AuditEvent>(`/api/v1/audit-events?since=${encodeURIComponent(since)}`, 1000);
   const retention = useResource<AuditRetention>("/api/v1/audit-retention");
   const top = useTop();
   const failed = params.get("result") === "failure";
@@ -165,12 +166,15 @@ export function Audit() {
   return (
     <div className="view">
       <ViewHeader title="Audit log" count={rows.length} refresh="/api/v1/audit" placeholder="Filter by action, person or target…"
-        chips={[{ label: "Failures", param: "result", value: "failure" }]}
+        chips={[
+          { label: "Failures", param: "result", value: "failure" },
+          ...[1, 7, 365].map((days) => ({ label: days === 1 ? "Last day" : `Last ${days} days`, param: "range", value: String(days) })),
+        ]}
         actions={<>
           {retention.data && <span className="subtle nowrap">Kept {retention.data.retention_days} days</span>}
           {can("audit.export", true) && (isDemo()
             ? <button type="button" className="button" onClick={() => downloadCsv(rows)}><Icon name="download" size={15} /> Export CSV</button>
-            : <a className="button" href="/api/v1/audit-export.csv" download><Icon name="download" size={15} /> Export CSV</a>)}
+            : <a className="button" href={`/api/v1/audit-export.csv?since=${encodeURIComponent(since)}`} download><Icon name="download" size={15} /> Export CSV</a>)}
         </>} />
       {page.error ? <div className="view-pad"><ErrorBox error={page.error} /></div> : !page.data ? <Loading /> : (
         <DataTable label="Audit events" compact rows={rows} rowKey={(e) => e.id}

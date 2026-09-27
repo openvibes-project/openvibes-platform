@@ -13,8 +13,8 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 5174,
     proxy: {
-      "/api": { target: process.env.V2_LIVE ?? "http://127.0.0.1:18490", changeOrigin: true },
-      "/auth": { target: process.env.V2_LIVE ?? "http://127.0.0.1:18490", changeOrigin: true },
+      "/api": { target: process.env.V2_LIVE ?? "http://127.0.0.1:18490" },
+      "/auth": { target: process.env.V2_LIVE ?? "http://127.0.0.1:18490" },
     },
   },
   build: {

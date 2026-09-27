@@ -12,7 +12,7 @@ export const personas = ["viewer", "analyst", "operator", "scoped_operator", "ad
 export type Persona = (typeof personas)[number];
 
 type Params = Record<string, string>;
-type Handler = (params: Params, query: URLSearchParams, body: Record<string, unknown>) => Response | Promise<Response>;
+type Handler = (params: Params, query: URLSearchParams, body: Record<string, unknown>, headers: Record<string, string>) => Response | Promise<Response>;
 type Route = { method: string; pattern: RegExp; keys: string[]; permission: Permission | null; handler: Handler };
 
 const json = (value: unknown, status = 200) =>
@@ -249,7 +249,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return json({ cves: advisory.cves, hosts: { items, more_available: false, generated_at: iso() } });
   });
 
-  route("GET", "/api/v1/audit-events", "audit.read", (_, query) => json(page(data.audit, query)));
+  route("GET", "/api/v1/audit-events", "audit.read", (_, query) => {
+    const since = Date.parse(query.get("since") ?? "");
+    if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");
+    return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
+  });
   route("GET", "/api/v1/audit-retention", "audit.read", () => json(data.retention));
   route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body) => {
     data.retention = { ...data.retention, retention_days: Number(body.retention_days), version: data.retention.version + 1, updated_at: iso(), updated_by: actor };
@@ -273,9 +277,15 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   });
 
   route("GET", "/api/v1/enrollment-tokens", "tokens.read", () => json({ items: data.enrollmentTokens }));
-  route("POST", "/api/v1/enrollment-tokens", "tokens.create", (_, __, body) => {
-    const token_id = `tok-${Date.now().toString(16).slice(-4)}`;
+  const idempotent = new Map<string, { token_id: string; expires_at: string }>();
+  route("POST", "/api/v1/enrollment-tokens", "tokens.create", (_, __, body, headers) => {
+    const key = headers["idempotency-key"] ?? "";
+    if (!/^[\x21-\x7e]{16,128}$/.test(key)) return problem(400, "invalid_idempotency_key", "Provide an Idempotency-Key header between 16 and 128 visible ASCII characters");
+    const previous = idempotent.get(key);
+    if (previous) return json({ ...previous, secret_available: false, replayed: true });
+    const token_id = `tok-${Date.now().toString(16).slice(-4)}${idempotent.size}`;
     const expires = iso(Date.now() + Number(body.expires_in_hours ?? 24) * 3_600_000);
+    idempotent.set(key, { token_id, expires_at: expires });
     data.enrollmentTokens.unshift({ token_id, label: (body.label as string | null) ?? null, created_at: iso(), expires_at: expires, max_uses: Number(body.max_uses ?? 1), uses: 0, revoked: false });
     audit("enrollment_token.create", token_id, "enrollment_token");
     return json({ token_id, token: `ovet_demo_${crypto.randomUUID().replaceAll("-", "")}`, expires_at: expires, secret_available: true, replayed: false }, 201);
@@ -305,7 +315,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
 
   return {
     persona,
-    async handle(method: string, url: string, body?: unknown): Promise<Response> {
+    async handle(method: string, url: string, body?: unknown, headers: Record<string, string> = {}): Promise<Response> {
       const parsed = new URL(url, "http://demo");
       const limit = parsed.searchParams.get("limit");
       if (limit !== null && !(Number.isInteger(Number(limit)) && Number(limit) >= 1 && Number(limit) <= MAX_PAGE)) {
@@ -319,7 +329,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
           return problem(403, "forbidden", "Your role does not allow this");
         }
         const params = Object.fromEntries(candidate.keys.map((key, index) => [key, decodeURIComponent(match[index + 1] ?? "")]));
-        return candidate.handler(params, parsed.searchParams, (body ?? {}) as Record<string, unknown>);
+        const lower = Object.fromEntries(Object.entries(headers).map(([key, value]) => [key.toLowerCase(), value]));
+        return candidate.handler(params, parsed.searchParams, (body ?? {}) as Record<string, unknown>, lower);
       }
       return problem(404, "not_found", "No such endpoint");
     },

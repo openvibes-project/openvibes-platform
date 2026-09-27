@@ -29,9 +29,9 @@ export function configureDemo(persona: Persona | undefined): void {
 export const isDemo = () => demo !== undefined;
 export const setCsrfToken = (token: string) => { csrfToken = token; };
 
-export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+export async function request<T>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
   const response = demo
-    ? await demo.handle(method, path, body)
+    ? await demo.handle(method, path, body, extra)
     : await fetch(path, {
       method,
       cache: "no-store",
@@ -40,6 +40,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
         accept: "application/json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(method === "GET" ? {} : { "x-csrf-token": csrfToken }),
+        ...extra,
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });

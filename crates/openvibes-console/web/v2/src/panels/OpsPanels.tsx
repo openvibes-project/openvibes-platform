@@ -1,13 +1,13 @@
 // Panels for the operate and administer areas. Creation happens here too,
 // in a panel beside the list, never on a separate page.
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { AccessInventory, AuditEvent, CreatedToken, EnrollmentToken, RuleBundle, RuleSet, ServiceAccount, ServiceToken } from "../api/types";
-import { nav } from "../app/nav";
+import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
-import { date, isPast, when } from "../ui/format";
+import { auditSince, date, isPast, when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
@@ -103,11 +103,17 @@ function NewEnrollmentToken() {
   const [hours, setHours] = useState(24);
   const [created, setCreated] = useState<CreatedToken>();
   const [error, setError] = useState<string>();
+  const attempt = useRef({ signature: "", key: "" });
   return (
     <>
       <PanelHeader icon="enrollment" kind="Enrollment" title="New enrollment token" subtitle="A single secret that lets a bounded number of hosts enroll for a limited time." />
       <div className="panel-body stack">
-        {created ? (
+        {created && !created.token ? (
+          <>
+            <div className="callout callout--warn"><Icon name="alert" size={16} /><span>The token {created.token_id} was created by an earlier attempt, and its secret cannot be shown again. Revoke it and create a new one if nobody copied it.</span></div>
+            <button type="button" className="button" onClick={() => nav.open({ kind: "enrollment-token", id: created.token_id }, true)}>Open the token</button>
+          </>
+        ) : created ? (
           <>
             <div className="callout callout--warn"><Icon name="alert" size={16} /> Copy the token now. It is shown only once.</div>
             <div className="secret"><span className="grow">{created.token}</span>
@@ -123,8 +129,13 @@ function NewEnrollmentToken() {
           <form className="stack" onSubmit={(event) => {
             event.preventDefault();
             setError(undefined);
-            request<CreatedToken>("POST", "/api/v1/enrollment-tokens", { label: label.trim() || null, max_uses: uses, expires_in_hours: hours })
-              .then((token) => { setCreated(token); invalidate("/api/v1/enrollment-tokens"); }, (e: unknown) => setError(e instanceof ApiError ? e.message : "Could not create the token"));
+            // One key per distinct request: a retry after a lost response replays
+            // (without the secret) instead of creating a second token.
+            const body = { label: label.trim() || null, max_uses: uses, expires_in_hours: hours };
+            const signature = JSON.stringify(body);
+            if (attempt.current.signature !== signature) attempt.current = { signature, key: crypto.randomUUID() };
+            request<CreatedToken>("POST", "/api/v1/enrollment-tokens", body, { "idempotency-key": attempt.current.key })
+              .then((token) => { setCreated(token); attempt.current = { signature: "", key: "" }; invalidate("/api/v1/enrollment-tokens"); }, (e: unknown) => setError(e instanceof ApiError ? e.message : "Could not create the token"));
           }}>
             <label className="field">Label<input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Office laptops" /></label>
             <div className="row">
@@ -182,7 +193,8 @@ export function ServiceAccountPanel({ id }: { id: string }) {
 }
 
 export function AuditEventPanel({ id }: { id: string }) {
-  const page = useAllPages<AuditEvent>("/api/v1/audit-events", 1000);
+  const { params } = useLocation();
+  const page = useAllPages<AuditEvent>(`/api/v1/audit-events?since=${encodeURIComponent(auditSince(params))}`, 1000);
   const event = page.data?.find((item) => item.id === id);
   if (page.error) return <div className="panel-body"><ErrorBox error={page.error} /></div>;
   if (!event) return page.loading ? <Loading /> : <div className="panel-body"><Empty title="Event not in the latest 1,000" /></div>;

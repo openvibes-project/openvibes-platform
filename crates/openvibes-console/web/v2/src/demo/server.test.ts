@@ -43,7 +43,7 @@ describe("demo server", () => {
     const after = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
     const updated = (after.items as { rule_id: string; triage_counts: { mitigated: number } }[]).find((g) => g.rule_id === group.rule_id);
     expect(updated?.triage_counts.mitigated).toBe(group.endpoint_count);
-    const audit = await json(await server.handle("GET", "/api/v1/audit-events?limit=1"));
+    const audit = await json(await server.handle("GET", `/api/v1/audit-events?limit=1&since=${new Date(Date.now() - 86_400_000).toISOString()}`));
     expect((audit.items as { action: string }[])[0]?.action).toBe("finding.triage");
   });
 
@@ -89,6 +89,25 @@ describe("demo server", () => {
     expect((await server.handle("GET", "/api/v1/agents?limit=101")).status).toBe(400);
     expect((await server.handle("GET", "/api/v1/findings/groups?limit=250")).status).toBe(400);
     expect((await server.handle("GET", "/api/v1/agents?limit=100")).status).toBe(200);
+  });
+
+  it("requires since on audit queries, like the real API", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect((await server.handle("GET", "/api/v1/audit-events")).status).toBe(400);
+    const recent = await json(await server.handle("GET", `/api/v1/audit-events?limit=100&since=${new Date(Date.now() - 3_600_000).toISOString()}`));
+    expect((recent.items as { at: string }[]).every((e) => Date.parse(e.at) >= Date.now() - 3_600_000 - 1000)).toBe(true);
+  });
+
+  it("needs an Idempotency-Key to create an enrollment token, and a replay never returns the secret", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const body = { label: "x", max_uses: 1, expires_in_hours: 1 };
+    expect((await server.handle("POST", "/api/v1/enrollment-tokens", body)).status).toBe(400);
+    const key = { "idempotency-key": "key-0123456789abcdef" };
+    const first = await json(await server.handle("POST", "/api/v1/enrollment-tokens", body, key));
+    const again = await json(await server.handle("POST", "/api/v1/enrollment-tokens", body, key));
+    expect(first.secret_available).toBe(true);
+    expect(again).toMatchObject({ token_id: first.token_id, replayed: true, secret_available: false });
+    expect(again.token).toBeUndefined();
   });
 
   it("answers 404 for unknown routes", async () => {
