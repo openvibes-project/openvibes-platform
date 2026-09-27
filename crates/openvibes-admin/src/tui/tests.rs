@@ -2,7 +2,9 @@
 
 use std::cell::RefCell;
 
-use platform_host::{Host, HostError, Service, ServiceAction, ServiceStatus, Unit};
+use platform_host::{
+    Host, HostError, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
+};
 use ratatui::{Terminal, backend::TestBackend};
 
 use super::{
@@ -84,6 +86,15 @@ impl Host for FakeHost {
         }
         self.writes.borrow_mut().push((service, toml.into()));
         Ok(())
+    }
+    fn is_set_up(&self) -> bool {
+        true
+    }
+    fn privileged(&self, verb: Privileged<'_>, _password: &Secret) -> Result<String, HostError> {
+        Err(HostError::Failed(format!(
+            "{} is not used in this test",
+            verb.journal()
+        )))
     }
 }
 

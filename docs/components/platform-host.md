@@ -45,6 +45,27 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   `std::process::Command` elsewhere); because `Program` is closed, the
   exception cannot be used to run anything else.
 
+### Setup (admin TUI spec §3, §6)
+
+- `Step`: the 13 Setup steps in order (`packages` … `ready`), with
+  `name()` (the helper's argument), `title()` and `parse()`.
+- `StepState`: `Done`, `Todo`, `Waiting`, `Skipped`, `Failed`, each with a
+  one-line detail. The helper prints `STATE<TAB>DETAIL`
+  (`line()`/`parse()`); control characters become spaces.
+- `Secret`: the user's password for one Setup run, zeroed on drop
+  (`zeroize`), `Debug` prints `Secret(..)`.
+- `Privileged`: the password-gated helper verbs `setup-plan ARGS…`,
+  `setup-status`, `setup-step STEP`, `unit-enable UNIT`, `unit-disable UNIT`.
+  `Host::privileged` runs `sudo -S -k -p '' /usr/bin/openvibes-admin helper
+  VERB…` with the password on stdin only (never in argv or the journal),
+  journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
+  the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
+  password") and `NotSudoer` (not in sudoers).
+- `Host::is_set_up`: whether `/etc/openvibes/setup.toml` exists.
+- `Program` also covers `dnf`, `rpm`, `runuser`, `postgresql-setup`,
+  `usermod`, `firewall-cmd` and `openvibes-admin`, which Setup's root side
+  runs.
+
 ## Configuration
 
 None. Readiness uses the packaged default ports.

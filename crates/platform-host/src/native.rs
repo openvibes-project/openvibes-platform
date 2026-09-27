@@ -2,8 +2,10 @@
 //! polkit rule (start, stop, restart of the allow-listed units) and the root
 //! helper (`openvibes-admin helper logs`) the RPM installs (admin TUI §3).
 
+use zeroize::Zeroizing;
+
 use crate::{
-    Host, HostError, Service, ServiceAction, ServiceStatus, Unit,
+    Host, HostError, Privileged, SETUP_FILE, Secret, Service, ServiceAction, ServiceStatus, Unit,
     runner::{
         Program::{Curl, Logger, Sudo, Systemctl},
         Runner,
@@ -184,5 +186,39 @@ impl<R: Runner> Host for Native<R> {
         let outcome = if result.is_ok() { "ok" } else { "failed" };
         self.journal(&format!("config-write {} {outcome}", service.name()));
         result.map(drop)
+    }
+
+    fn is_set_up(&self) -> bool {
+        std::path::Path::new(SETUP_FILE).exists()
+    }
+
+    fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
+        let args = verb.args();
+        // -S: password from stdin; -k: never a cached credential; -p '': no
+        // prompt text mixed into the output.
+        let mut argv = vec!["-S", "-k", "-p", "", ADMIN, "helper"];
+        argv.extend(args.iter().map(String::as_str));
+        let mut input = Zeroizing::new(password.expose().as_bytes().to_vec());
+        input.push(b'\n');
+        let out = self
+            .runner
+            .run_with_input(Sudo, &argv, &input)
+            .map_err(|error| HostError::Io(format!("{}: {error}", Sudo.path())))?;
+        let outcome = if out.status == 0 { "ok" } else { "failed" };
+        self.journal(&format!("{} {outcome}", verb.journal()));
+        if out.status == 0 {
+            Ok(out.stdout)
+        } else if out.stderr.contains("incorrect password")
+            || out.stderr.contains("Sorry, try again")
+        {
+            Err(HostError::WrongPassword)
+        } else if out.stderr.contains("not in the sudoers file")
+            || out.stderr.contains("may not run sudo")
+            || out.stderr.contains("is not allowed to run sudo")
+        {
+            Err(HostError::NotSudoer)
+        } else {
+            Err(HostError::Failed(printable(&out.stderr)))
+        }
     }
 }

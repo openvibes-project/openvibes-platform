@@ -4,7 +4,7 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, Service, ServiceAction, Unit,
+    Host, HostError, Privileged, Secret, Service, ServiceAction, Step, StepState, Unit,
     native::Native,
     runner::{Output, Program, Runner},
 };
@@ -383,4 +383,141 @@ fn the_polkit_rule_lists_exactly_the_units() {
     }
     let listed = rule.matches(".service\"").count() + rule.matches(".timer\"").count();
     assert_eq!(listed, Unit::ALL.len());
+}
+
+#[test]
+fn privileged_verbs_pass_the_password_on_stdin_only() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "setup-step",
+                "ca",
+            ],
+            out(0, "done\tintermediate imported\n", ""),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    let password = Secret::new("hunter2 hunter2".into());
+    assert_eq!(
+        host.privileged(Privileged::SetupStep(Step::Ca), &password)
+            .unwrap(),
+        "done\tintermediate imported\n"
+    );
+    assert_eq!(*host.runner.inputs.borrow(), ["hunter2 hunter2\n"]);
+    let calls = host.runner.calls.borrow();
+    assert!(
+        calls
+            .iter()
+            .all(|call| !call.iter().any(|arg| arg.contains("hunter2"))),
+        "{calls:?}"
+    );
+    let journal = calls
+        .iter()
+        .find(|call| call[0] == "/usr/bin/logger")
+        .unwrap();
+    assert!(journal[3].ends_with(" setup-step ca ok"), "{journal:?}");
+    assert_eq!(format!("{password:?}"), "Secret(..)");
+}
+
+#[test]
+fn wrong_password_and_missing_sudo_rights_are_told_apart() {
+    let host = fake(vec![
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "setup-status",
+            ],
+            out(1, "", "sudo: 1 incorrect password attempt\n"),
+        ),
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "unit-enable",
+            ],
+            out(1, "", "alice is not in the sudoers file.\n"),
+        ),
+        (
+            vec![
+                "/usr/bin/sudo",
+                "-S",
+                "-k",
+                "-p",
+                "",
+                "/usr/bin/openvibes-admin",
+                "helper",
+                "unit-disable",
+            ],
+            out(
+                1,
+                "",
+                "openvibes-admin helper: not allowed: not an OpenVIBES unit\n",
+            ),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    let password = Secret::new("wrong".into());
+    assert_eq!(
+        host.privileged(Privileged::SetupStatus, &password),
+        Err(HostError::WrongPassword)
+    );
+    assert_eq!(
+        host.privileged(Privileged::UnitEnable(Unit::Ingest), &password),
+        Err(HostError::NotSudoer)
+    );
+    assert_eq!(
+        host.privileged(Privileged::UnitDisable(Unit::Ingest), &password),
+        Err(HostError::Failed(
+            "openvibes-admin helper: not allowed: not an OpenVIBES unit".into()
+        ))
+    );
+}
+
+#[test]
+fn verbs_steps_and_states_are_closed_lists() {
+    let args = ["--components".to_owned(), "ingest".to_owned()];
+    assert_eq!(
+        Privileged::SetupPlan(&args).args(),
+        ["setup-plan", "--components", "ingest"]
+    );
+    assert_eq!(Privileged::SetupPlan(&args).journal(), "setup-plan");
+    assert_eq!(
+        Privileged::UnitEnable(Unit::Vulns).args(),
+        ["unit-enable", "openvibes-vulns.service"]
+    );
+    for step in Step::ALL {
+        assert_eq!(Step::parse(step.name()), Some(step));
+    }
+    for bad in ["", "Packages", "packages ", "../ca", "all"] {
+        assert_eq!(Step::parse(bad), None, "{bad}");
+    }
+    for state in [
+        StepState::Done("x y".into()),
+        StepState::Todo,
+        StepState::Waiting("sign it".into()),
+        StepState::Skipped("not chosen".into()),
+        StepState::Failed("boom".into()),
+    ] {
+        assert_eq!(StepState::parse(&state.line()), Some(state));
+    }
+    assert_eq!(StepState::Done("a\tb\nc".into()).line(), "done\ta b c");
+    assert_eq!(StepState::parse("maybe\tx"), None);
 }
