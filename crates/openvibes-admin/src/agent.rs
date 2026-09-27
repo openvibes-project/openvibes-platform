@@ -2,7 +2,15 @@
 
 use chrono::{DateTime, Utc};
 use clap::Subcommand;
-use platform_store::agents::{self, AgentInfo, Filter, Revoke};
+use platform_store::{
+    agents::{self, AgentInfo, Filter, Revoke},
+    health::HealthStatus,
+};
+
+fn health_arg(value: &str) -> Result<HealthStatus, String> {
+    HealthStatus::parse(value)
+        .ok_or_else(|| "one of: healthy, degraded, offline, unknown".to_owned())
+}
 
 #[derive(Subcommand)]
 pub enum AgentCommand {
@@ -17,6 +25,10 @@ pub enum AgentCommand {
         /// Only hosts imported from export files.
         #[arg(long, conflicts_with = "offline")]
         imported: bool,
+        /// Only active agents with this health (protocol P12): healthy,
+        /// degraded, offline, unknown.
+        #[arg(long, value_parser = health_arg, conflicts_with_all = ["revoked", "imported"])]
+        health: Option<HealthStatus>,
     },
     /// Show one agent.
     Show {
@@ -47,18 +59,109 @@ fn when(time: Option<DateTime<Utc>>) -> String {
     )
 }
 
-fn line(agent: &AgentInfo) -> String {
+/// `health <status>[ (<reason>, …)]` for an active agent.
+fn health_text(agent: &AgentInfo, now: DateTime<Utc>) -> Option<String> {
+    let (status, reasons) = agent.health_status(now)?;
+    Some(if reasons.is_empty() {
+        format!("health {}", status.as_str())
+    } else {
+        format!("health {} ({})", status.as_str(), reasons.join(", "))
+    })
+}
+
+fn line(agent: &AgentInfo, now: DateTime<Utc>) -> String {
     let claims = agent
         .claimed_agent_id
         .as_ref()
         .map_or_else(String::new, |id| format!("  claims {id}"));
+    let health = health_text(agent, now).map_or_else(String::new, |text| format!("  {text}"));
     format!(
-        "{}  {}  last seen {}  version {}{claims}\n",
+        "{}  {}  last seen {}  version {}{claims}{health}\n",
         agent.agent_id,
         agent.status,
         when(agent.last_seen_at),
         agent.scanner_version.as_deref().unwrap_or("unknown"),
     )
+}
+
+fn when_ms(unix_ms: i64) -> String {
+    when(DateTime::from_timestamp_millis(unix_ms))
+}
+
+/// The report's lines for `agent show`; lines without data are left out.
+fn health_lines(agent: &AgentInfo, now: DateTime<Utc>) -> String {
+    let mut out = String::new();
+    let Some((status, reasons)) = agent.health_status(now) else {
+        return out;
+    };
+    out.push_str(&format!("health {}\n", status.as_str()));
+    if !reasons.is_empty() {
+        out.push_str(&format!("reasons {}\n", reasons.join(", ")));
+    }
+    let Some(health) = &agent.health else {
+        return out;
+    };
+    let queue = &health.queue;
+    let rejected: Vec<String> = queue
+        .rejected_total
+        .iter()
+        .map(|(reason, n)| format!("{}={n}", reason.as_str()))
+        .collect();
+    out.push_str(&format!(
+        "queue {} pending, oldest {} s, {} dropped{}\n",
+        queue.pending,
+        queue.oldest_pending_age_s.unwrap_or(0),
+        queue.dropped_total,
+        if rejected.is_empty() {
+            String::new()
+        } else {
+            format!(", rejected {}", rejected.join(" "))
+        },
+    ));
+    if let Some(scan) = &health.last_scan {
+        out.push_str(&format!(
+            "last scan {}, {} rules ({} unavailable, {} failed)\n",
+            when_ms(scan.finished_at_unix_ms),
+            scan.rules_evaluated,
+            scan.rules_unavailable,
+            scan.rules_failed,
+        ));
+        let collectors: Vec<String> = scan
+            .collectors
+            .iter()
+            .map(|(name, outcome)| {
+                let outcome = serde_json::to_value(outcome)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_owned))
+                    .unwrap_or_default();
+                format!("{}={outcome}", name.as_str())
+            })
+            .collect();
+        if !collectors.is_empty() {
+            out.push_str(&format!("collectors {}\n", collectors.join(" ")));
+        }
+    }
+    for set in &health.rule_sets {
+        let refused = set
+            .refused
+            .and_then(|r| serde_json::to_value(r).ok())
+            .and_then(|v| v.as_str().map(|s| format!(" refused {s}")))
+            .unwrap_or_default();
+        out.push_str(&format!(
+            "rule set {} version {} expires {}{refused}\n",
+            set.id.as_str(),
+            set.version
+                .map_or_else(|| "none".to_owned(), |v| v.to_string()),
+            set.expires_at_unix_ms
+                .map_or_else(|| "never".to_owned(), when_ms),
+        ));
+    }
+    out.push_str(&format!("storage errors {}\n", health.storage_errors));
+    if let Some(jump) = health.clock_jump_s {
+        out.push_str(&format!("clock jump {jump} s\n"));
+    }
+    out.push_str(&format!("health report {}\n", when(agent.health_at)));
+    out
 }
 
 /// Runs an agent command; returns the output and the audit target.
@@ -72,6 +175,7 @@ pub async fn run(
             offline,
             revoked,
             imported,
+            health,
         } => {
             let filter = if *offline {
                 Filter::Offline
@@ -82,16 +186,31 @@ pub async fn run(
             } else {
                 Filter::All
             };
-            let listed = agents::list(client, filter, Utc::now())
-                .await
-                .map_err(store);
-            (listed.map(|agents| agents.iter().map(line).collect()), None)
+            let now = Utc::now();
+            let listed = agents::list(client, filter, now).await.map_err(store);
+            let wanted = |agent: &&AgentInfo| {
+                health.is_none_or(|wanted| {
+                    agent
+                        .health_status(now)
+                        .is_some_and(|(status, _)| status == wanted)
+                })
+            };
+            (
+                listed.map(|agents| {
+                    agents
+                        .iter()
+                        .filter(wanted)
+                        .map(|agent| line(agent, now))
+                        .collect()
+                }),
+                None,
+            )
         }
         AgentCommand::Show { id } => {
             let target = Some(id.clone());
             let shown = match agents::show(client, id).await {
                 Ok(Some(agent)) => Ok(format!(
-                    "agent {}\nstatus {}\nenrolled {}\nrevoked {}\nlast seen {}\nversion {}\ncertificates {}\n{}",
+                    "agent {}\nstatus {}\nenrolled {}\nrevoked {}\nlast seen {}\nversion {}\ncertificates {}\n{}{}",
                     agent.agent_id,
                     agent.status,
                     when(Some(agent.enrolled_at)),
@@ -103,6 +222,7 @@ pub async fn run(
                         .claimed_agent_id
                         .as_ref()
                         .map_or_else(String::new, |id| format!("claims {id}\n")),
+                    health_lines(&agent, Utc::now()),
                 )),
                 Ok(None) => Err("unknown agent".into()),
                 Err(error) => Err(store(error)),

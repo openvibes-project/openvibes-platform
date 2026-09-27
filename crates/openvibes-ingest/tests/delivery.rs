@@ -56,6 +56,7 @@ fn heartbeat(agent_id: &str) -> Heartbeat {
         hostname: Some("metabox-lnx".into()),
         observed_at_unix_ms: Utc::now().timestamp_millis(),
         capabilities: Vec::new(),
+        health: None,
     }
 }
 

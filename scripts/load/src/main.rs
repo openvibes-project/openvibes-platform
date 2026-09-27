@@ -212,6 +212,7 @@ fn tick(
         hostname: Some(format!("load-{index}")),
         observed_at_unix_ms: now_ms(),
         capabilities: Vec::new(),
+        health: None,
     };
     let started = Instant::now();
     let result = client.heartbeat(&heartbeat);

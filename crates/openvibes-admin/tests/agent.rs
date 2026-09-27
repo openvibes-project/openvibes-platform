@@ -151,3 +151,82 @@ async fn imported_hosts_are_shown_and_cannot_be_revoked() {
     assert!(status.lines().any(|l| l == "imported hosts 1"), "{status}");
     fixture.drop().await;
 }
+
+const DEGRADED: &str = "agent.00000000-0000-4000-8000-000000000004";
+
+/// P12: adds an active agent whose report says a collector is failing.
+async fn with_degraded(fixture: &Fixture) {
+    let pool = platform_store::connect(&fixture.url).await.unwrap();
+    let client = pool.get().await.unwrap();
+    let now = Utc::now();
+    let health = serde_json::json!({
+        "queue": {"pending": 12, "oldest_pending_age_s": 340, "bytes": 1000,
+                  "max_bytes": 268435456, "dropped_total": 0,
+                  "rejected_total": {"retention_expired": 2}},
+        "last_scan": {"finished_at_unix_ms": now.timestamp_millis() - 60_000, "interval_s": 3600,
+                      "rules_evaluated": 42, "rules_unavailable": 1, "rules_failed": 0,
+                      "collectors": {"packages": "permission_denied", "ports": "ok"}},
+        "rule_sets": [{"id": "baseline", "version": 7,
+                       "expires_at_unix_ms": now.timestamp_millis() + 30 * 86_400_000_i64,
+                       "refused": null}],
+        "storage_errors": 0
+    });
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, scanner_version,
+                 health, health_at)
+             VALUES ($1, 'active', $2, $3, '0.2.0', $4, $3)",
+            &[&DEGRADED, &(now - Duration::days(1)), &now, &health],
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn agent_list_shows_health() {
+    let fixture = seeded().await;
+    with_degraded(&fixture).await;
+    let listed = stdout(&fixture.run(&["agent", "list"]));
+    let line = |id: &str| {
+        listed
+            .lines()
+            .find(|l| l.starts_with(id))
+            .unwrap()
+            .to_owned()
+    };
+    assert!(line(SILENT).contains("health offline"), "{listed}");
+    assert!(line(RECENT).contains("health unknown"), "{listed}");
+    assert!(
+        line(DEGRADED).contains("health degraded (collector_failing)"),
+        "{listed}"
+    );
+    assert!(
+        !line(REVOKED).contains("health"),
+        "revoked agents have no health"
+    );
+    assert_eq!(
+        ids(&stdout(
+            &fixture.run(&["agent", "list", "--health", "degraded"])
+        )),
+        [DEGRADED]
+    );
+}
+
+#[tokio::test]
+async fn agent_show_prints_the_report() {
+    let fixture = seeded().await;
+    with_degraded(&fixture).await;
+    let shown = stdout(&fixture.run(&["agent", "show", DEGRADED]));
+    for want in [
+        "health degraded",
+        "reasons collector_failing",
+        "queue 12 pending, oldest 340 s, 0 dropped, rejected retention_expired=2",
+        "last scan",
+        "42 rules (1 unavailable, 0 failed)",
+        "collectors packages=permission_denied ports=ok",
+        "rule set baseline version 7 expires",
+        "storage errors 0",
+    ] {
+        assert!(shown.contains(want), "missing {want:?} in\n{shown}");
+    }
+}

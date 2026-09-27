@@ -85,6 +85,36 @@ All run within the `openvibes-ingest` role's grants (the tests use
   keeping the newest observation and the first-seen time.
 - Certificate chains are stored as a JSON array in `certificates.chain_pem`.
 
+## Agent health (`health::…`, schema 23)
+
+Protocol P12. `agents` gains `health` and `health_previous` (the latest
+report and the one before it, JSONB) and `health_at`. `ingest::heartbeat`
+takes the report and writes it in its throttled UPDATE (every 5 minutes,
+or at once when hostname or capabilities change). The stored report moves
+to `health_previous`, and a heartbeat without one keeps it.
+
+`health::health_status(last_seen_at, health_at, health, previous, now)`
+gives `Healthy`, `Degraded` (with reasons), `Offline` (no heartbeat for
+`OFFLINE_AFTER_MINUTES`) or `Unknown` (no report, or one older than 15
+minutes). It is computed when read and never stored.
+`AgentInfo::health_status(now)` applies it to active agents only.
+
+Reasons, in this order:
+- `queue_dropping`: `dropped_total` rose;
+- `delivery_stalled`: oldest pending over `DELIVERY_STALLED_S` (3,600);
+- `queue_nearly_full`: over `QUEUE_NEARLY_FULL_PERCENT` (80) of the limit;
+- `scan_overdue`: more than twice the interval since the last scan;
+- `collector_failing`: an outcome other than `ok`, `unsupported` or
+  `not_found` (those mean nothing to read on this host); a code from a
+  later version counts as failing;
+- `rule_set_expiring`: within `RULE_SET_EXPIRING_DAYS` (7);
+- `rule_set_refused`;
+- `storage_errors`: rose;
+- `clock_jump`: over `CLOCK_JUMP_S` (300).
+
+Since the report is written with the throttle, "rose" compares reports
+about 5 minutes apart.
+
 ## Rule distribution (`rules::…`, schema 6)
 
 Tables: `rule_sets` (id, `created_at`, `retired_at`), `rule_trust_keys`

@@ -31,6 +31,12 @@ pub(crate) async fn heartbeat(
         .iter()
         .map(|capability| capability.as_str().to_owned())
         .collect();
+    let health = heartbeat
+        .health
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|_| ApiError::BadRequest)?;
     let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     ingest::heartbeat(
         &client,
@@ -38,6 +44,7 @@ pub(crate) async fn heartbeat(
         &heartbeat.scanner_version,
         heartbeat.hostname.as_deref(),
         &capabilities,
+        health.as_ref(),
         Utc::now(),
     )
     .await?;

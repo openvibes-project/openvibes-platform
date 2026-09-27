@@ -85,7 +85,7 @@ const MIGRATIONS: &[(i32, &str)] = &[
     ),
     (
         23,
-        include_str!("../../../migrations/0023_console_vulnerability_reads.sql"),
+        include_str!("../../../migrations/0023_agent_health.sql"),
     ),
     (
         24,

@@ -51,7 +51,9 @@ cat > "$W/rules.json" <<'RULES'
  {"id":"host.has.processes","version":1,"title":"Processes are running","severity":"info",
   "confidence":100,"expression":"facts['process.count'] >= 1","finding_message":"The host runs processes"}]}
 RULES
-"$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 7 "$W/bundle.json" >/dev/null
+# Valid for 30 days: a bundle expiring within 7 is reported as
+# rule_set_expiring (P12), and the agent must show as healthy below.
+"$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 30 "$W/bundle.json" >/dev/null
 python3 "$ROOT/scripts/tiny-gguf.py" "$W/tiny.gguf"
 
 printf 'FROM registry.fedoraproject.org/fedora:44
@@ -304,6 +306,16 @@ wait_for "the agent sent inventory changes (protocol P11)" 120 \
 [[ $(in_c "$SQL \"SELECT count(*) FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id WHERE v.name = 'tar'\"") == 0 ]] ||
     fail "the platform still lists tar after the change set"
 ok "a package change arrives as inventory changes"
+
+# P12: the agent reports its health with each heartbeat; the platform stores
+# it with the 5-minute heartbeat write, so each check can wait that long.
+# An unreadable package database turns the agent Degraded (collector_failing).
+AGENTS='runuser -u openvibes-admin -- openvibes-admin agent list'
+wait_for "the agent reports healthy (protocol P12)" 420 "$AGENTS | grep -q 'health healthy'"
+in_c 'chmod 000 /var/lib/rpm/rpmdb.sqlite && systemctl restart openvibes-agent' || fail "hide the RPM database"
+wait_for "the agent reports collector_failing" 420 "$AGENTS | grep -q 'health degraded (collector_failing'"
+in_c 'chmod 644 /var/lib/rpm/rpmdb.sqlite && systemctl restart openvibes-agent' || fail "restore the RPM database"
+ok "agent health reaches the platform"
 wait_for "the vulns service re-matched the host: bash vulnerable" 60 \
     "[[ \$($SQL \"SELECT count(*) FROM vulnerabilities WHERE advisory_id = 'FEDORA-TEST-bash' AND fixed_at IS NULL\") == 1 ]]"
 in_c 'runuser -u openvibes-admin -- openvibes-admin vulns list' | grep -q 'FEDORA-TEST-bash.*bash .* -> .*999.0-1.fc44' ||
