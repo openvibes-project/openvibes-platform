@@ -3,6 +3,7 @@
 //! `platform_host::Host`.
 
 pub mod app;
+pub mod form;
 mod services;
 #[cfg(test)]
 mod tests;
