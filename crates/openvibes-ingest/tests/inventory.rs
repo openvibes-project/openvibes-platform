@@ -332,6 +332,13 @@ async fn a_busy_inventory_endpoint_answers_503() {
     )
     .await;
     assert_eq!(second, Err(TransportError::Unavailable));
+    // The changes endpoint shares the slots (P11).
+    let base = report(&agent, vec![package("bash", "5.2.37")]);
+    let next = report(&agent, vec![package("bash", "5.2.38")]);
+    assert_eq!(
+        send_changes(&world, &chain, &key, changes(&base, &next)).await,
+        Err(TransportError::Unavailable)
+    );
     lock.rollback().await.unwrap();
     assert_eq!(first.await.unwrap(), Ok(()));
     world.stop().await;
@@ -410,5 +417,175 @@ async fn a_slow_inventory_upload_gets_the_longer_deadline() {
         Some(408),
         "other requests keep the short deadline"
     );
+    world.stop().await;
+}
+
+fn digest(report: &InventoryReport) -> String {
+    openvibes_core::hex(&openvibes_core::inventory_fingerprint(
+        &report.os,
+        report.running_kernel.as_deref(),
+        report
+            .packages
+            .iter()
+            .map(openvibes_core::NormalizedPackage::from),
+    ))
+}
+
+fn changes(base: &InventoryReport, next: &InventoryReport) -> openvibes_core::InventoryChanges {
+    let (added, removed) = openvibes_core::inventory_changes(&base.packages, &next.packages);
+    openvibes_core::InventoryChanges {
+        schema_version: SchemaVersion::V1,
+        agent_id: next.agent_id.clone(),
+        base_sha256: digest(base),
+        sha256: digest(next),
+        os: next.os.clone(),
+        running_kernel: next.running_kernel.clone(),
+        collected_at_unix_ms: next.collected_at_unix_ms,
+        added,
+        removed,
+    }
+}
+
+async fn send_changes(
+    world: &World,
+    chain: &[String],
+    key: &str,
+    changes: openvibes_core::InventoryChanges,
+) -> Result<(), TransportError> {
+    let transport = world.transport();
+    let (chain, key) = (chain.to_vec(), key.to_owned());
+    blocking(move || {
+        let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+        PlatformClient::new(&transport, Some(&identity))
+            .unwrap()
+            .report_inventory_changes(&changes)
+    })
+    .await
+}
+
+#[tokio::test]
+async fn changes_are_applied_when_base_and_result_match() {
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let first = report(
+        &agent,
+        vec![package("bash", "5.2.37"), package("openssl", "3.5.1")],
+    );
+    send(&world, &chain, &key, first.clone()).await.unwrap();
+    let next = report(
+        &agent,
+        vec![package("bash", "5.2.38"), package("openssl", "3.5.1")],
+    );
+    send_changes(&world, &chain, &key, changes(&first, &next))
+        .await
+        .unwrap();
+    assert_eq!(
+        stored(&world, &agent).await,
+        ["bash-5.2.38", "openssl-3.5.1"]
+    );
+    let sha: Vec<u8> = world
+        .db()
+        .await
+        .query_one(
+            "SELECT inventory_sha256 FROM agents WHERE agent_id = $1",
+            &[&agent],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(openvibes_core::hex(&sha.try_into().unwrap()), digest(&next));
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn a_wrong_base_or_result_is_a_resync_and_nothing_changes() {
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let first = report(&agent, vec![package("bash", "5.2.37")]);
+    send(&world, &chain, &key, first.clone()).await.unwrap();
+    let next = report(&agent, vec![package("bash", "5.2.38")]);
+    let good = changes(&first, &next);
+    let mut wrong_base = good.clone();
+    wrong_base.base_sha256 = "0".repeat(64); // e.g. a digest stored before P11
+    let mut wrong_result = good.clone();
+    wrong_result.sha256 = "0".repeat(64);
+    let mut missing = good.clone();
+    missing.removed = vec![package("never-installed", "1")];
+    let mut present = good.clone();
+    present.added.push(package("bash", "5.2.37"));
+    present.removed.clear();
+    for bad in [wrong_base, wrong_result, missing, present] {
+        assert_eq!(
+            send_changes(&world, &chain, &key, bad).await,
+            Err(TransportError::InventoryResync)
+        );
+        assert_eq!(stored(&world, &agent).await, ["bash-5.2.37"]);
+    }
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn a_kernel_only_change_updates_the_running_kernel() {
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let mut first = report(&agent, vec![package("kernel-core", "6.17.7")]);
+    first.running_kernel = Some("6.17.4-1.fc44.x86_64".into());
+    send(&world, &chain, &key, first.clone()).await.unwrap();
+    let mut next = first.clone();
+    next.running_kernel = Some("6.17.7-1.fc44.x86_64".into());
+    let set = changes(&first, &next);
+    assert!(set.added.is_empty() && set.removed.is_empty());
+    send_changes(&world, &chain, &key, set).await.unwrap();
+    let kernel: Option<String> = world
+        .db()
+        .await
+        .query_one(
+            "SELECT running_kernel FROM agents WHERE agent_id = $1",
+            &[&agent],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(kernel.as_deref(), Some("6.17.7-1.fc44.x86_64"));
+    world.stop().await;
+}
+
+#[tokio::test]
+async fn plain_bodies_still_work_and_bombs_and_unknown_encodings_do_not() {
+    use std::io::Write;
+    let world = World::start().await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let chain = chain.concat();
+    let client = Some((chain.as_str(), key.as_str()));
+    let plain = serde_json::to_vec(&report(&agent, vec![package("bash", "5.2.37")])).unwrap();
+    assert_eq!(
+        world
+            .raw("/v1/inventory", &plain, client)
+            .await
+            .map(|r| r.0),
+        Some(204),
+        "a pre-P11 agent"
+    );
+    let mut encoder = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::new(6));
+    encoder.write_all(&vec![b' '; 9 * 1024 * 1024]).unwrap();
+    let bomb = encoder.finish().unwrap();
+    for path in ["/v1/inventory", "/v1/inventory/changes"] {
+        assert_eq!(
+            world
+                .raw_encoded(path, &bomb, "gzip", client)
+                .await
+                .map(|r| r.0),
+            Some(400),
+            "{path}"
+        );
+        assert_eq!(
+            world
+                .raw_encoded(path, &plain, "br", client)
+                .await
+                .map(|r| r.0),
+            Some(400),
+            "{path}"
+        );
+    }
     world.stop().await;
 }

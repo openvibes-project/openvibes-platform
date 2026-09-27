@@ -185,6 +185,27 @@ impl World {
         (issued.chain_pem.concat(), key.serialize_pem())
     }
 
+    /// [`World::raw`] with a `Content-Encoding` header (P11).
+    #[allow(dead_code)]
+    pub async fn raw_encoded(
+        &self,
+        path: &str,
+        body: &[u8],
+        encoding: &str,
+        client: Option<(&str, &str)>,
+    ) -> Option<(u16, String)> {
+        raw_tls_with(
+            self.addr,
+            &self.root.cert_pem,
+            path,
+            body,
+            client,
+            &rustls::version::TLS13,
+            &format!("Content-Encoding: {encoding}\r\n"),
+        )
+        .await
+    }
+
     /// One HTTP/1.1 request over TLS 1.3; returns the status and body, or
     /// `None` when the server refused the connection or TLS.
     pub async fn raw(
@@ -250,6 +271,19 @@ pub async fn raw_tls(
     client: Option<(&str, &str)>,
     version: &'static rustls::SupportedProtocolVersion,
 ) -> Option<(u16, String)> {
+    raw_tls_with(addr, root_pem, path, body, client, version, "").await
+}
+
+/// [`raw_tls`] with extra header lines, each ending in `\r\n`.
+pub async fn raw_tls_with(
+    addr: SocketAddr,
+    root_pem: &str,
+    path: &str,
+    body: &[u8],
+    client: Option<(&str, &str)>,
+    version: &'static rustls::SupportedProtocolVersion,
+    extra_headers: &str,
+) -> Option<(u16, String)> {
     let mut roots = rustls::RootCertStore::empty();
     for cert in CertificateDer::pem_slice_iter(root_pem.as_bytes()) {
         roots.add(cert.unwrap()).unwrap();
@@ -281,7 +315,7 @@ pub async fn raw_tls(
         .ok()?;
     let head = format!(
         "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n",
+         {extra_headers}Content-Length: {}\r\nConnection: close\r\n\r\n",
         body.len()
     );
     tls.write_all(head.as_bytes()).await.ok()?;

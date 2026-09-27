@@ -252,7 +252,7 @@ async fn findings(
 }
 
 async fn inventory(
-    mut export: InventoryExport,
+    export: InventoryExport,
     client: &mut Client,
     now: DateTime<Utc>,
 ) -> Result<(String, Imported), String> {
@@ -261,8 +261,7 @@ async fn inventory(
     label("hostname", export.hostname.as_deref())?;
     label("scanner_version", Some(&export.scanner_version))?;
     let (rows, digest) =
-        wire::inventory(&os, export.running_kernel.as_deref(), &mut export.packages)
-            .map_err(store)?;
+        wire::inventory(&os, export.running_kernel.as_deref(), &export.packages).map_err(store)?;
     let host = ImportedHost {
         install_id: export.install_id.as_str(),
         claimed_agent_id: export.agent_id.as_ref().map(Identifier::as_str),

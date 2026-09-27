@@ -16,6 +16,9 @@ mod tls;
 
 pub use auth::AuthenticatedAgent;
 pub use error::{ApiError, ServerError};
-pub use request::{MAX_BODY_BYTES, MAX_INVENTORY_BYTES, body_limit, parse, parse_with_limit};
+pub use request::{
+    INVENTORY_PATHS, MAX_BODY_BYTES, MAX_INVENTORY_BYTES, body_limit, decoded_body, parse,
+    parse_with_limit,
+};
 pub use serve::{Settings, run};
 pub use tls::read_pem;
