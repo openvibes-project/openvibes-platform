@@ -12,7 +12,7 @@ use ratatui::{
 
 use super::app::App;
 
-const KEYS: &str = "Tab screens  j/k select  s start  t stop  r restart  R refresh  q quit";
+const KEYS: &str = "Tab screens  j/k  s start  t stop  r restart  e/d boot  R refresh  q quit";
 
 fn cells(status: &ServiceStatus) -> [String; 5] {
     let boot = match (status.installed, status.enabled) {
@@ -89,10 +89,16 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         ),
         logs,
     );
-    let line = match (&app.confirm, &app.message) {
-        (Some((unit, action)), _) => format!("{} {}? y/n", capitalised(*action), unit.name()),
-        (None, Some(message)) => message.clone(),
-        (None, None) => String::new(),
+    let line = match (&app.boot, &app.confirm, &app.message) {
+        (Some((unit, enable, prompt)), _, _) => format!(
+            "{} {} at boot: your password: {}",
+            if *enable { "Enable" } else { "Disable" },
+            unit.name(),
+            prompt.masked()
+        ),
+        (None, Some((unit, action)), _) => format!("{} {}? y/n", capitalised(*action), unit.name()),
+        (None, None, Some(message)) => message.clone(),
+        (None, None, None) => String::new(),
     };
     frame.render_widget(Paragraph::new(line), status);
     frame.render_widget(Paragraph::new(KEYS), keys);

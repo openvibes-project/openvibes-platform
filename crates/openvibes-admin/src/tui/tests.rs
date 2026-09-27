@@ -20,6 +20,8 @@ struct FakeHost {
     /// What a read returns instead, as if edited by hand meanwhile.
     hand_edit: RefCell<Option<String>>,
     refuse: bool,
+    /// (verb, password) of each privileged call.
+    privileged_calls: RefCell<Vec<(String, String)>>,
 }
 
 fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> ServiceStatus {
@@ -90,11 +92,11 @@ impl Host for FakeHost {
     fn is_set_up(&self) -> bool {
         true
     }
-    fn privileged(&self, verb: Privileged<'_>, _password: &Secret) -> Result<String, HostError> {
-        Err(HostError::Failed(format!(
-            "{} is not used in this test",
-            verb.journal()
-        )))
+    fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
+        self.privileged_calls
+            .borrow_mut()
+            .push((verb.args().join(" "), password.expose().to_owned()));
+        Ok(String::new())
     }
 }
 
@@ -105,6 +107,7 @@ fn app(refuse: bool) -> App<FakeHost> {
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
         refuse,
+        privileged_calls: RefCell::new(Vec::new()),
     })
 }
 
@@ -140,7 +143,7 @@ fn renders_services_at_80x24() {
         "not installed",
         "vulns",
         "failed",
-        "s start  t stop  r restart  R refresh  q quit",
+        "s start  t stop  r restart  e/d boot  R refresh  q quit",
         "first log line of ingest",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
@@ -451,4 +454,26 @@ fn a_long_value_being_typed_shows_its_end() {
     type_text(&mut app, "&application_name=tail");
     let text = screen(&app, 80, 24);
     assert!(text.contains("application_name=tail_"), "{text}");
+}
+
+#[test]
+fn enable_at_boot_asks_for_the_password() {
+    let mut app = app(false);
+    select(&mut app, Unit::Vulns);
+    app.key(Key::Char('e'));
+    for c in "pw".chars() {
+        app.key(Key::Char(c));
+    }
+    assert!(
+        screen(&app, 80, 24).contains("Enable openvibes-vulns.service at boot: your password: **")
+    );
+    app.key(Key::Enter);
+    assert_eq!(
+        *app.host.privileged_calls.borrow(),
+        [(
+            "unit-enable openvibes-vulns.service".to_owned(),
+            "pw".to_owned()
+        )]
+    );
+    assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }

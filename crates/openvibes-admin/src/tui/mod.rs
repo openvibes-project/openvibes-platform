@@ -129,7 +129,11 @@ pub fn run() -> ExitCode {
         if app.tab == Tab::Setup {
             app.setup_tick();
         }
-        if app.tab == Tab::Services && app.confirm.is_none() && refreshed.elapsed() >= REFRESH {
+        if app.tab == Tab::Services
+            && app.confirm.is_none()
+            && app.boot.is_none()
+            && refreshed.elapsed() >= REFRESH
+        {
             app.refresh();
             refreshed = Instant::now();
         }
