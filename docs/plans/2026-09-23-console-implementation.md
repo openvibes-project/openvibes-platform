@@ -2,7 +2,7 @@
 
 Status: **approved by the project owner, 2026-09-23**. As of 2026-09-27,
 milestones C2–C5 are implemented on the Codex branch and are **in progress
-overall** while PR #29's conflict resolution and review/merge remain. PM4 and
+overall** while PR #29's CI, review, and merge remain. PM4 and
 platform schema 3 are integrated. C0–C3 feature work is implemented, including authenticated
 SQL-scoped reads, access-control and audit operations, first-account bootstrap,
 and analyst triage. C5 is complete: direct TLS 1.3, trusted TCP and Unix
