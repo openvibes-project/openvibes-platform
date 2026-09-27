@@ -774,7 +774,7 @@ async fn trusted_proxy_only(
 fn trusted_forwarded_address(value: Option<&HeaderValue>) -> Option<IpAddr> {
     value
         .and_then(|value| value.to_str().ok())
-        .filter(|value| !value.contains(','))
+        .and_then(|value| value.rsplit(',').next())
         .and_then(|value| value.trim().parse().ok())
 }
 
@@ -802,17 +802,21 @@ mod trusted_proxy_header_tests {
     use std::net::IpAddr;
 
     #[test]
-    fn accepts_only_one_valid_forwarded_client_ip() {
+    fn uses_the_last_forwarded_ip_from_the_authenticated_proxy() {
         assert_eq!(
             trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8"))),
             Some("192.0.2.8".parse::<IpAddr>().unwrap())
         );
         assert_eq!(
             trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8, 198.51.100.4"))),
-            None
+            Some("198.51.100.4".parse::<IpAddr>().unwrap())
         );
         assert_eq!(
             trusted_forwarded_address(Some(&HeaderValue::from_static("host.invalid"))),
+            None
+        );
+        assert_eq!(
+            trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8, invalid"))),
             None
         );
     }

@@ -176,7 +176,7 @@ test("completes the browser login, session check, and sign-out journey", async (
     return route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ total: 12, active: 10, stale: 2, revoked: 0 }),
+      body: JSON.stringify({ total: 12, active: 10, stale: 2, revoked: 0, imported: 0 }),
     });
   });
   await page.route("**/api/v1/findings/summary", (route) => {

@@ -225,10 +225,12 @@ trusted_proxy_addresses = ["127.0.0.1"]
 ```
 
 The proxy must connect from an allow-listed loopback address and preserve the
-configured `Host` authority. For source-address login throttling, the proxy
-must overwrite `X-Forwarded-For` with exactly one client IP address. The
-console trusts that value only from an allow-listed proxy; missing or malformed
-values disable the source-address bucket while the per-account limit remains.
+configured `Host` authority. For source-address login throttling, the console
+uses the last address in `X-Forwarded-For` from an allow-listed proxy. This
+supports proxies that append their observed client address to an existing
+forwarded chain. The proxy must append the actual peer address; a missing or
+malformed final address disables the source-address bucket while the
+per-account limit remains.
 Public TLS
 terminates at the proxy; the console sends HSTS and uses the external HTTPS
 origin for authentication checks. For a Unix socket, configure

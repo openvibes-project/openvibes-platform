@@ -159,10 +159,10 @@ absolute `unix_socket_file` and 1–64 unique `trusted_proxy_uids`. The TCP and
 Unix trust lists are mutually exclusive. Requests from other peers are
 rejected. Unix sockets are created mode 0660; the proxy user must be able to
 traverse the parent directory and belong to the socket's group. The proxy must
-preserve the configured Host authority and overwrite `X-Forwarded-For` with
-exactly one client IP. The console uses that address for source-address login
-throttling only after authenticating the immediate proxy peer; absent or
-malformed values leave the per-account throttle in effect.
+preserve the configured Host authority and append its observed client address
+to `X-Forwarded-For`. The console uses the final address for source-address
+login throttling only after authenticating the immediate proxy peer; absent or
+malformed final values leave the per-account throttle in effect.
 HSTS is set for both direct TLS and reverse-proxy responses.
 
 ### Development seed (C1)
@@ -190,8 +190,8 @@ key/certificate paths are refused. Its deployment constraints are:
   origin plus an allow-list of trusted proxy peers (loopback TCP addresses or
   Unix effective UIDs);
 - Host/Origin checks use the configured external origin; for login throttling,
-  `X-Forwarded-For` is trusted only from an allow-listed proxy and only when
-  it contains one valid client IP;
+  the final `X-Forwarded-For` address is trusted only from an allow-listed
+  proxy, including when the proxy appends its observed client address;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
   non-loopback upstreams remain TLS protected;
 - the health listener must be loopback-only;
@@ -225,9 +225,9 @@ of local configuration, TLS files, the local account, and its active session.
 - Authenticated runtime startup refuses absent/unreachable databases and any
   schema version other than 19; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
-  peer information from the capped listener. In reverse-proxy mode, only a
-  single valid `X-Forwarded-For` address from an allow-listed proxy is used for
-  source-address throttling; other forwarded headers are ignored.
+  peer information from the capped listener. In reverse-proxy mode, the final
+  `X-Forwarded-For` address from an allow-listed proxy is used for source-address
+  throttling; other forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist
   through `platform-store` transactions. Login failures have a generic shape;
   password work has a four-operation concurrency bound.
