@@ -326,8 +326,9 @@ pub async fn revoke_agent_in_scope(
         .query_opt(&select, &[&agent_id, &global, &groups])
         .await?;
     tx.rollback().await?;
-    Ok(match status {
+    Ok(match status.map(|row| row.get::<_, String>(0)) {
         None => crate::agents::Revoke::Unknown,
+        Some(status) if status == "imported" => crate::agents::Revoke::Imported,
         Some(_) => crate::agents::Revoke::AlreadyRevoked,
     })
 }
@@ -1789,21 +1790,26 @@ pub async fn login_is_throttled(
     Ok(row.get(0))
 }
 
-/// Records one failed login in every supplied bucket. Window, limit, and lock
-/// duration are policy inputs held by the console configuration.
+/// Records one failed login in every supplied bucket. Each bucket carries an
+/// independent limit so source-address protection can be less restrictive
+/// than the per-account limit.
 pub async fn record_login_failure(
     client: &mut Client,
     bucket_sha256: &[&[u8]],
     now: DateTime<Utc>,
     window: Duration,
-    failure_limit: i32,
+    failure_limits: &[i32],
     lock_for: Duration,
     audit: &AuditContext<'_>,
 ) -> Result<(), StoreError> {
+    if bucket_sha256.len() != failure_limits.len() || failure_limits.iter().any(|limit| *limit < 1)
+    {
+        return Err(StoreError::Query);
+    }
     let tx = client.transaction().await?;
     let window_cutoff = now - window;
     let locked_until = now + lock_for;
-    for bucket in bucket_sha256 {
+    for (bucket, failure_limit) in bucket_sha256.iter().zip(failure_limits) {
         tx.execute(
             "INSERT INTO console_auth_throttle
                 (bucket_sha256, window_started_at, failures, locked_until, updated_at)
@@ -1823,7 +1829,7 @@ pub async fn record_login_failure(
                                       $5)
                     ELSE console_auth_throttle.locked_until END,
                 updated_at = $2",
-            &[&bucket, &now, &window_cutoff, &failure_limit, &locked_until],
+            &[bucket, &now, &window_cutoff, failure_limit, &locked_until],
         )
         .await?;
     }

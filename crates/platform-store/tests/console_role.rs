@@ -12,6 +12,7 @@ use platform_store::{
     },
     console_read::AgentScope,
     console_triage::{self, TriageUpdate},
+    imports::{self, ImportedHost},
     ingest::{self, StoredFinding},
     rules::{self, NewBundle, Published, TrustAdded},
 };
@@ -64,6 +65,19 @@ async fn console_store_writes_work_as_openvibes_console() {
             .unwrap(),
         TrustAdded::Added
     );
+    let imported_id = imports::upsert_host(
+        &client,
+        &ImportedHost {
+            install_id: "console-role-imported",
+            claimed_agent_id: None,
+            hostname: Some("imported-host"),
+            scanner_version: "0.1.0",
+            seen_at: now,
+        },
+        now,
+    )
+    .await
+    .unwrap();
     client
         .batch_execute("SET ROLE openvibes_console")
         .await
@@ -171,6 +185,19 @@ async fn console_store_writes_work_as_openvibes_console() {
         .await
         .unwrap(),
         platform_store::agents::Revoke::Revoked
+    );
+    assert_eq!(
+        revoke_agent_in_scope(
+            &mut client,
+            &imported_id,
+            &AgentScope::Global,
+            "operator",
+            "test",
+            now,
+        )
+        .await
+        .unwrap(),
+        platform_store::agents::Revoke::Imported
     );
     assert!(matches!(
         console_triage::update(

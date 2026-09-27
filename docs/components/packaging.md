@@ -187,7 +187,7 @@ Agents trust `root.crt` (their `platform_ca_file`).
 ## Console RPM setup
 
 The console RPM requires the platform database schema to be current through
-schema 22; those migrations create the least-privilege PostgreSQL role
+schema 24; those migrations create the least-privilege PostgreSQL role
 `openvibes_console`. Install the console RPM after the platform migrations so
 the matching operating-system user and database role can use PostgreSQL peer
 authentication. Its unit is disabled at install time.
@@ -225,7 +225,11 @@ trusted_proxy_addresses = ["127.0.0.1"]
 ```
 
 The proxy must connect from an allow-listed loopback address and preserve the
-configured `Host` authority. Forwarded headers are ignored. Public TLS
+configured `Host` authority. For source-address login throttling, the proxy
+must overwrite `X-Forwarded-For` with exactly one client IP address. The
+console trusts that value only from an allow-listed proxy; missing or malformed
+values disable the source-address bucket while the per-account limit remains.
+Public TLS
 terminates at the proxy; the console sends HSTS and uses the external HTTPS
 origin for authentication checks. For a Unix socket, configure
 `trusted_proxy_uids` to the numeric UID reported by `id -u <proxy-user>`;

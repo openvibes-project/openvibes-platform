@@ -26,6 +26,8 @@ pub struct TriageRecord {
     pub updated_at: Option<DateTime<Utc>>,
     /// Human actor for the last change, or `system` for automatic reopening.
     pub updated_by: Option<String>,
+    /// Time the finding entered mitigation, unchanged by note or assignment edits.
+    pub mitigated_at: Option<DateTime<Utc>>,
 }
 
 /// Outcome of a version-checked triage write.
@@ -53,7 +55,7 @@ pub async fn get(
     rule_id: &str,
 ) -> Result<Option<TriageRecord>, StoreError> {
     let row = client.query_opt(
-        "SELECT COALESCE(t.state,'open'),COALESCE(t.rule_version,c.rule_version),t.assigned_to::text,u.username,t.note,t.accepted_until,COALESCE(t.version,0),t.updated_at,t.updated_by
+        "SELECT COALESCE(t.state,'open'),COALESCE(t.rule_version,c.rule_version),t.assigned_to::text,u.username,t.note,t.accepted_until,COALESCE(t.version,0),t.updated_at,t.updated_by,t.mitigated_at
          FROM current_findings c LEFT JOIN console_finding_triage t USING(agent_id,rule_set_id,rule_id)
          LEFT JOIN console_users u ON u.user_id=t.assigned_to
          WHERE c.agent_id=$1 AND c.rule_set_id=$2 AND c.rule_id=$3",
@@ -90,7 +92,7 @@ pub async fn update(
     let tx = client.transaction().await?;
     let Some(current)=tx.query_opt("SELECT rule_version FROM current_findings WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await? else { tx.rollback().await?;return Ok(TriageUpdate::NotFound); };
     let rule_version: i64 = current.get(0);
-    let old=tx.query_opt("SELECT t.state,t.assigned_to::text,u.username,t.note,t.accepted_until,t.version,t.updated_at,t.updated_by,t.rule_version
+    let old=tx.query_opt("SELECT t.state,t.assigned_to::text,u.username,t.note,t.accepted_until,t.version,t.updated_at,t.updated_by,t.rule_version,t.mitigated_at
         FROM console_finding_triage t LEFT JOIN console_users u ON u.user_id=t.assigned_to
         WHERE t.agent_id=$1 AND t.rule_set_id=$2 AND t.rule_id=$3 FOR UPDATE OF t",&[&agent_id,&rule_set_id,&rule_id]).await?;
     let previous = old
@@ -106,6 +108,7 @@ pub async fn update(
             version: 0,
             updated_at: None,
             updated_by: None,
+            mitigated_at: None,
         });
     if previous.version != expected_version {
         tx.rollback().await?;
@@ -140,10 +143,19 @@ pub async fn update(
         return Ok(TriageUpdate::Updated(previous));
     }
     let version = expected_version + 1;
-    tx.execute("INSERT INTO console_finding_triage(agent_id,rule_set_id,rule_id,state,rule_version,assigned_to,note,accepted_until,version,updated_at,updated_by)
-        VALUES($1,$2,$3,$4,$5,$6::text::uuid,$7,$8,$9,$10,$11)
-        ON CONFLICT(agent_id,rule_set_id,rule_id) DO UPDATE SET state=EXCLUDED.state,rule_version=EXCLUDED.rule_version,assigned_to=EXCLUDED.assigned_to,note=EXCLUDED.note,accepted_until=EXCLUDED.accepted_until,version=EXCLUDED.version,updated_at=EXCLUDED.updated_at,updated_by=EXCLUDED.updated_by",
-        &[&agent_id,&rule_set_id,&rule_id,&state,&rule_version,&assigned_to_id,&note,&accepted_until,&version,&now,&actor_id]).await?;
+    let mitigated_at = if state == "mitigated" {
+        if previous.state == "mitigated" {
+            previous.mitigated_at
+        } else {
+            Some(now)
+        }
+    } else {
+        None
+    };
+    tx.execute("INSERT INTO console_finding_triage(agent_id,rule_set_id,rule_id,state,rule_version,assigned_to,note,accepted_until,version,updated_at,updated_by,mitigated_at)
+        VALUES($1,$2,$3,$4,$5,$6::text::uuid,$7,$8,$9,$10,$11,$12)
+        ON CONFLICT(agent_id,rule_set_id,rule_id) DO UPDATE SET state=EXCLUDED.state,rule_version=EXCLUDED.rule_version,assigned_to=EXCLUDED.assigned_to,note=EXCLUDED.note,accepted_until=EXCLUDED.accepted_until,version=EXCLUDED.version,updated_at=EXCLUDED.updated_at,updated_by=EXCLUDED.updated_by,mitigated_at=EXCLUDED.mitigated_at",
+        &[&agent_id,&rule_set_id,&rule_id,&state,&rule_version,&assigned_to_id,&note,&accepted_until,&version,&now,&actor_id,&mitigated_at]).await?;
     let target = format!("{agent_id}:{rule_set_id}:{rule_id}");
     tx.execute("INSERT INTO console_finding_triage_history(agent_id,rule_set_id,rule_id,from_state,to_state,note,changed_at,changed_by,assigned_to,accepted_until,rule_version)
         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::text::uuid,$10,$11)",&[&agent_id,&rule_set_id,&rule_id,&Some(previous.state.as_str()),&state,&note,&now,&actor_id,&assigned_to_id,&accepted_until,&rule_version]).await?;
@@ -160,6 +172,7 @@ pub async fn update(
         version,
         updated_at: Some(now),
         updated_by: Some(actor_id.to_owned()),
+        mitigated_at,
     }))
 }
 
@@ -185,6 +198,7 @@ fn record_from_row(row: tokio_postgres::Row) -> TriageRecord {
         version: row.get(6),
         updated_at: row.get(7),
         updated_by: row.get(8),
+        mitigated_at: row.get(9),
     }
 }
 
@@ -199,6 +213,7 @@ fn record_from_triage_row(row: &tokio_postgres::Row) -> TriageRecord {
         updated_at: row.get(6),
         updated_by: row.get(7),
         rule_version: row.get(8),
+        mitigated_at: row.get(9),
     }
 }
 
@@ -220,7 +235,8 @@ pub(crate) async fn reopen_on_observation(
         return Ok(());
     }
     let current_rule_version: i64 = latest.get(1);
-    let row=transaction.query_opt("SELECT state,rule_version,accepted_until,version,updated_at FROM console_finding_triage WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await?;
+    let row=transaction.query_opt("SELECT t.state,t.rule_version,t.accepted_until,t.version,t.mitigated_at
+        FROM console_finding_triage t WHERE t.agent_id=$1 AND t.rule_set_id=$2 AND t.rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await?;
     let Some(row) = row else {
         return Ok(());
     };
@@ -228,9 +244,9 @@ pub(crate) async fn reopen_on_observation(
     let old_rule_version: i64 = row.get(1);
     let accepted_until: Option<DateTime<Utc>> = row.get(2);
     let version: i64 = row.get(3);
-    let updated_at: Option<DateTime<Utc>> = row.get(4);
+    let mitigated_at: Option<DateTime<Utc>> = row.get(4);
     let reason = match state.as_str() {
-        "mitigated" if updated_at.is_some_and(|mitigated_at| observed_at > mitigated_at) => {
+        "mitigated" if mitigated_at.is_some_and(|mitigated_at| observed_at > mitigated_at) => {
             Some("new_observation")
         }
         "accepted_risk" if accepted_until.is_some_and(|expiry| observed_at > expiry) => {
@@ -242,7 +258,7 @@ pub(crate) async fn reopen_on_observation(
     let Some(reason) = reason else {
         return Ok(());
     };
-    transaction.execute("UPDATE console_finding_triage SET state='open',rule_version=$4,assigned_to=NULL,note=NULL,accepted_until=NULL,version=$5,updated_at=$6,updated_by='system' WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3",&[&agent_id,&rule_set_id,&rule_id,&current_rule_version,&(version+1),&now]).await?;
+    transaction.execute("UPDATE console_finding_triage SET state='open',rule_version=$4,assigned_to=NULL,note=NULL,accepted_until=NULL,mitigated_at=NULL,version=$5,updated_at=$6,updated_by='system' WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3",&[&agent_id,&rule_set_id,&rule_id,&current_rule_version,&(version+1),&now]).await?;
     transaction.execute("INSERT INTO console_finding_triage_history(agent_id,rule_set_id,rule_id,from_state,to_state,note,changed_at,changed_by,assigned_to,accepted_until,rule_version) VALUES($1,$2,$3,$4,'open',NULL,$5,'system',NULL,NULL,$6)",&[&agent_id,&rule_set_id,&rule_id,&state,&now,&current_rule_version]).await?;
     let target = format!("{agent_id}:{rule_set_id}:{rule_id}");
     transaction.execute("INSERT INTO audit_log(actor,action,target,result,detail,actor_kind,actor_id,actor_display,target_kind,target_id) VALUES('system','finding.triage.reopened','finding_triage','success',jsonb_build_object('reason',$1::text,'from_state',$2::text,'rule_version',$3::bigint),'system',NULL,'system','finding_triage',$4)",&[&reason,&state,&current_rule_version,&target]).await?;

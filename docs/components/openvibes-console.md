@@ -147,7 +147,7 @@ origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at 
 configuration"), and `run` refuses a listener that is not loopback even if
 bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
-1.3 only with a 10-second deadline. Startup checks that the database is already at schema 22; it
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 24; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -158,8 +158,11 @@ canonical HTTPS `public_origin`. It uses either a loopback TCP listener with
 absolute `unix_socket_file` and 1–64 unique `trusted_proxy_uids`. The TCP and
 Unix trust lists are mutually exclusive. Requests from other peers are
 rejected. Unix sockets are created mode 0660; the proxy user must be able to
-traverse the parent directory and belong to the socket's group. Forwarded
-headers are ignored; the proxy must preserve the configured Host authority.
+traverse the parent directory and belong to the socket's group. The proxy must
+preserve the configured Host authority and overwrite `X-Forwarded-For` with
+exactly one client IP. The console uses that address for source-address login
+throttling only after authenticating the immediate proxy peer; absent or
+malformed values leave the per-account throttle in effect.
 HSTS is set for both direct TLS and reverse-proxy responses.
 
 ### Development seed (C1)
@@ -186,8 +189,9 @@ key/certificate paths are refused. Its deployment constraints are:
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
   origin plus an allow-list of trusted proxy peers (loopback TCP addresses or
   Unix effective UIDs);
-- forwarded headers are ignored; Host/Origin checks use the configured
-  external origin;
+- Host/Origin checks use the configured external origin; for login throttling,
+  `X-Forwarded-For` is trusted only from an allow-listed proxy and only when
+  it contains one valid client IP;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
   non-loopback upstreams remain TLS protected;
 - the health listener must be loopback-only;
@@ -221,7 +225,9 @@ of local configuration, TLS files, the local account, and its active session.
 - Authenticated runtime startup refuses absent/unreachable databases and any
   schema version other than 19; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
-  peer information from the capped listener; forwarded headers are ignored.
+  peer information from the capped listener. In reverse-proxy mode, only a
+  single valid `X-Forwarded-For` address from an allow-listed proxy is used for
+  source-address throttling; other forwarded headers are ignored.
 - Login, logout, pre-auth, session refresh, and password-hash upgrade persist
   through `platform-store` transactions. Login failures have a generic shape;
   password work has a four-operation concurrency bound.

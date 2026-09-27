@@ -191,12 +191,13 @@ async fn administrative_user_listing_and_unlock_are_non_secret_and_audited() {
     digest.update(b"openvibes-console-login-throttle-v1\0account\0alice");
     let bucket: [u8; 32] = digest.finalize().into();
     let buckets: [&[u8]; 1] = [&bucket];
+    let limits = [1];
     record_login_failure(
         &mut client,
         &buckets,
         now,
         Duration::minutes(15),
-        1,
+        &limits,
         Duration::minutes(15),
         &platform_store::console_auth::AuditContext::default(),
     )
@@ -591,6 +592,7 @@ async fn account_and_source_login_buckets_lock_and_clear_together() {
     let now = Utc::now();
     let (account_bucket, source_bucket) = ([6_u8; 32], [7_u8; 32]);
     let buckets: [&[u8]; 2] = [&account_bucket, &source_bucket];
+    let limits = [3, 25];
     assert!(!login_is_throttled(&client, &buckets, now).await.unwrap());
     for _ in 0..3 {
         record_login_failure(
@@ -598,7 +600,7 @@ async fn account_and_source_login_buckets_lock_and_clear_together() {
             &buckets,
             now,
             Duration::minutes(10),
-            3,
+            &limits,
             Duration::minutes(5),
             &platform_store::console_auth::AuditContext {
                 request_id: Some("req-login-fail"),
@@ -609,7 +611,38 @@ async fn account_and_source_login_buckets_lock_and_clear_together() {
         .await
         .unwrap();
     }
-    assert!(login_is_throttled(&client, &buckets, now).await.unwrap());
+    assert!(
+        login_is_throttled(&client, &[&account_bucket], now)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !login_is_throttled(&client, &[&source_bucket], now)
+            .await
+            .unwrap()
+    );
+    for _ in 3..25 {
+        record_login_failure(
+            &mut client,
+            &buckets,
+            now,
+            Duration::minutes(10),
+            &limits,
+            Duration::minutes(5),
+            &platform_store::console_auth::AuditContext {
+                request_id: Some("req-login-fail"),
+                source_address: Some("127.0.0.1"),
+                user_agent: Some("integration-test"),
+            },
+        )
+        .await
+        .unwrap();
+    }
+    assert!(
+        login_is_throttled(&client, &[&source_bucket], now)
+            .await
+            .unwrap()
+    );
     let failures: i64 = client
         .query_one(
             "SELECT count(*) FROM audit_log
@@ -620,7 +653,7 @@ async fn account_and_source_login_buckets_lock_and_clear_together() {
         .await
         .unwrap()
         .get(0);
-    assert_eq!(failures, 3);
+    assert_eq!(failures, 25);
     clear_login_throttle(&client, &buckets, now + Duration::minutes(1))
         .await
         .unwrap();

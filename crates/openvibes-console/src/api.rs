@@ -747,6 +747,8 @@ pub enum AgentStatus {
     Stale,
     /// The agent was revoked by an operator.
     Revoked,
+    /// Host represented by a file import, with no online identity.
+    Imported,
 }
 
 /// Severity attached to the latest observation for a rule.
@@ -839,6 +841,8 @@ pub struct AgentSummary {
     pub stale: u64,
     /// Number of visible revoked agents.
     pub revoked: u64,
+    /// Number of visible imported hosts.
+    pub imported: u64,
 }
 
 /// Latest observation state for one agent, rule set, and rule.

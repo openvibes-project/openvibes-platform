@@ -715,7 +715,7 @@ export interface components {
          * @description Lifecycle state reported for an enrolled agent.
          * @enum {string}
          */
-        AgentStatus: "active" | "stale" | "revoked";
+        AgentStatus: "active" | "stale" | "revoked" | "imported";
         /** @description Fleet counts visible to the current principal. */
         AgentSummary: {
             /**
@@ -723,6 +723,11 @@ export interface components {
              * @description Number of visible active agents.
              */
             active: number;
+            /**
+             * Format: int64
+             * @description Number of visible imported hosts.
+             */
+            imported: number;
             /**
              * Format: int64
              * @description Number of visible revoked agents.
@@ -1699,7 +1704,7 @@ export interface operations {
     authenticated_agents: {
         parameters: {
             query?: {
-                /** @description active, stale, or revoked */
+                /** @description active, stale, revoked, or imported */
                 state?: string;
                 /** @description Opaque continuation cursor */
                 cursor?: string;

@@ -5,7 +5,10 @@ use std::sync::{
 
 use axum::{
     Router,
-    extract::{ConnectInfo, DefaultBodyLimit, Json, Path, Query, State, rejection::QueryRejection},
+    extract::{
+        ConnectInfo, DefaultBodyLimit, Extension, Json, Path, Query, State,
+        rejection::QueryRejection,
+    },
     http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header},
     middleware,
     response::{IntoResponse, Response},
@@ -2731,6 +2734,7 @@ pub(crate) async fn authenticated_agent_summary(
                 active: summary.active.try_into().unwrap_or_default(),
                 stale: summary.stale.try_into().unwrap_or_default(),
                 revoked: summary.revoked.try_into().unwrap_or_default(),
+                imported: summary.imported.try_into().unwrap_or_default(),
             }),
         )
             .into_response(),
@@ -2743,7 +2747,7 @@ pub(crate) async fn authenticated_agent_summary(
     path = "/api/v1/agents",
     tag = "agents",
     params(
-        ("state" = Option<String>, Query, description = "active, stale, or revoked"),
+        ("state" = Option<String>, Query, description = "active, stale, revoked, or imported"),
         ("cursor" = Option<String>, Query, description = "Opaque continuation cursor"),
         ("limit" = Option<u16>, Query, description = "Page size from 1 to 100")
     ),
@@ -2783,6 +2787,7 @@ pub(crate) async fn authenticated_agents(
         Some("active") => Some(AgentState::Active),
         Some("stale") => Some(AgentState::Stale),
         Some("revoked") => Some(AgentState::Revoked),
+        Some("imported") => Some(AgentState::Imported),
         Some(_) => return invalid_agent_query(),
     };
     let after = match params.cursor.as_deref() {
@@ -3034,6 +3039,7 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
             AgentState::Active => crate::AgentStatus::Active,
             AgentState::Stale => crate::AgentStatus::Stale,
             AgentState::Revoked => crate::AgentStatus::Revoked,
+            AgentState::Imported => crate::AgentStatus::Imported,
         },
         enrolled_at: agent.enrolled_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         revoked_at: agent
@@ -4789,6 +4795,7 @@ async fn preauth(State(state): State<AuthHttpState>) -> Response {
 async fn login(
     State(state): State<AuthHttpState>,
     ConnectInfo(peer): ConnectInfo<crate::TrustedPeer>,
+    proxy_client: Option<Extension<crate::server::TrustedProxyClient>>,
     headers: HeaderMap,
     payload: Result<axum::Json<crate::LoginRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
@@ -4859,9 +4866,25 @@ async fn login(
     }
 
     let username = canonical_username(&body.username);
-    let source = peer.source_label();
-    let [account_bucket, source_bucket] = login_throttle_buckets(username.as_deref(), &source);
-    let buckets: [&[u8]; 2] = [&account_bucket, &source_bucket];
+    let source = proxy_client
+        .as_ref()
+        .and_then(|Extension(proxy)| proxy.source)
+        .map(|address| address.to_string())
+        .unwrap_or_else(|| peer.source_label());
+    let source_for_limit = match proxy_client {
+        Some(Extension(proxy)) => proxy.source.map(|address| address.to_string()),
+        None => Some(peer.source_label()),
+    };
+    const ACCOUNT_FAILURE_LIMIT: i32 = 5;
+    const SOURCE_FAILURE_LIMIT: i32 = 25;
+    let (account_bucket, source_bucket) =
+        login_throttle_buckets(username.as_deref(), source_for_limit.as_deref());
+    let mut buckets: Vec<&[u8]> = vec![&account_bucket];
+    let mut failure_limits = vec![ACCOUNT_FAILURE_LIMIT];
+    if let Some(source_bucket) = source_bucket.as_ref() {
+        buckets.push(source_bucket);
+        failure_limits.push(SOURCE_FAILURE_LIMIT);
+    }
     let throttled = match console_auth::login_is_throttled(&client, &buckets, now).await {
         Ok(throttled) => throttled,
         Err(_) => return auth_unavailable(),
@@ -4937,7 +4960,7 @@ async fn login(
             &buckets,
             now,
             Duration::minutes(15),
-            5,
+            &failure_limits,
             Duration::minutes(15),
             &audit,
         )
@@ -5142,14 +5165,14 @@ fn throttle_digest(kind: &[u8], value: &[u8]) -> [u8; 32] {
     output
 }
 
-fn login_throttle_buckets(username: Option<&str>, source: &str) -> [[u8; 32]; 2] {
+fn login_throttle_buckets(
+    username: Option<&str>,
+    source: Option<&str>,
+) -> ([u8; 32], Option<[u8; 32]>) {
     let username = username.unwrap_or("invalid");
     let account = throttle_digest(b"account", username.as_bytes());
-    let mut source_account = username.as_bytes().to_vec();
-    source_account.push(0);
-    source_account.extend_from_slice(source.as_bytes());
-    let source_account = throttle_digest(b"source-account", &source_account);
-    [account, source_account]
+    let source = source.map(|source| throttle_digest(b"source-address", source.as_bytes()));
+    (account, source)
 }
 
 fn bounded_user_agent(headers: &HeaderMap) -> Option<String> {
@@ -5296,13 +5319,14 @@ mod login_throttle_tests {
     use super::login_throttle_buckets;
 
     #[test]
-    fn source_throttles_are_scoped_to_one_account_behind_a_shared_proxy() {
-        let alice = login_throttle_buckets(Some("alice"), "127.0.0.1");
-        let bob = login_throttle_buckets(Some("bob"), "127.0.0.1");
-        let alice_from_another_proxy = login_throttle_buckets(Some("alice"), "127.0.0.2");
-
-        assert_ne!(alice[1], bob[1]);
-        assert_eq!(alice[0], alice_from_another_proxy[0]);
-        assert_ne!(alice[1], alice_from_another_proxy[1]);
+    fn source_throttle_is_per_address_and_account_throttle_is_per_user() {
+        let alice = login_throttle_buckets(Some("alice"), Some("192.0.2.9"));
+        let bob = login_throttle_buckets(Some("bob"), Some("192.0.2.9"));
+        let alice_elsewhere = login_throttle_buckets(Some("alice"), Some("192.0.2.10"));
+        assert_ne!(alice.0, bob.0);
+        assert_eq!(alice.1, bob.1);
+        assert_eq!(alice.0, alice_elsewhere.0);
+        assert_ne!(alice.1, alice_elsewhere.1);
+        assert_eq!(login_throttle_buckets(Some("alice"), None).1, None);
     }
 }

@@ -209,6 +209,64 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
 }
 
 #[tokio::test]
+async fn imported_hosts_have_a_distinct_console_state_and_summary_bucket() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname)
+             VALUES ('import.console-test', 'imported', $1, 'offline-copy')",
+            &[&now],
+        )
+        .await
+        .unwrap();
+    let summary = platform_store::console_read::agent_summary(&client, now)
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            summary.total,
+            summary.active,
+            summary.stale,
+            summary.revoked,
+            summary.imported
+        ),
+        (1, 0, 0, 0, 1)
+    );
+    let imported = platform_store::console_read::agents(
+        &client,
+        &AgentQuery {
+            state: Some(platform_store::console_read::AgentState::Imported),
+            after: None,
+            limit: PageLimit::new(10).unwrap(),
+        },
+        now,
+    )
+    .await
+    .unwrap();
+    assert_eq!(imported.items.len(), 1);
+    assert_eq!(
+        imported.items[0].state,
+        platform_store::console_read::AgentState::Imported
+    );
+    let active = platform_store::console_read::agents(
+        &client,
+        &AgentQuery {
+            state: Some(platform_store::console_read::AgentState::Active),
+            after: None,
+            limit: PageLimit::new(10).unwrap(),
+        },
+        now,
+    )
+    .await
+    .unwrap();
+    assert!(active.items.is_empty());
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();

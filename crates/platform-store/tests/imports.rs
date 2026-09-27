@@ -91,6 +91,17 @@ async fn reimport_stores_nothing_new() {
         (row.get::<_, String>(0), row.get::<_, bool>(1)),
         ("import".to_owned(), false)
     );
+    let current = client
+        .query_one(
+            "SELECT origin, authenticated FROM current_findings WHERE agent_id=$1",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (current.get::<_, String>(0), current.get::<_, bool>(1)),
+        ("import".to_owned(), false)
+    );
     db.drop().await;
 }
 

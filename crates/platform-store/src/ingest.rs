@@ -384,7 +384,7 @@ pub async fn store_findings(
                      severity, first_observed_at, last_observed_at, rule_set_id,
                      last_observed_day, scan_id, confidence, message, evidence, received_at,
                      origin, authenticated)
-                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, 'online', true)
+                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
                  ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET
                      last_finding_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.last_finding_id ELSE current_findings.last_finding_id END,
@@ -424,6 +424,8 @@ pub async fn store_findings(
                     &finding.message,
                     &finding.evidence,
                     &now,
+                    &origin,
+                    &authenticated,
                 ],
             )
             .await?;

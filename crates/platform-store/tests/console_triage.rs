@@ -109,6 +109,24 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         .unwrap(),
         TriageUpdate::Updated(_)
     ));
+    assert!(matches!(
+        console_triage::update(
+            &mut client,
+            AGENT,
+            "base",
+            "rule-1",
+            2,
+            "mitigated",
+            None,
+            Some("mitigation reviewed"),
+            None,
+            "analyst",
+            now + Duration::minutes(1),
+        )
+        .await
+        .unwrap(),
+        TriageUpdate::Updated(_)
+    ));
     // A result can arrive after mitigation while carrying an observation time
     // from before the analyst's decision. It must not reopen or erase triage.
     ingest::store_findings(
@@ -116,7 +134,7 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         AGENT,
         &[observation("finding-queued", now - Duration::seconds(30))],
         ingest::Origin::Online,
-        now + Duration::minutes(1),
+        now + Duration::minutes(2),
     )
     .await
     .unwrap();
@@ -125,15 +143,15 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         .unwrap()
         .unwrap();
     assert_eq!(still_mitigated.state, "mitigated");
-    assert_eq!(still_mitigated.version, 2);
-    assert_eq!(still_mitigated.note.as_deref(), Some("fixed"));
+    assert_eq!(still_mitigated.version, 3);
+    assert_eq!(still_mitigated.note.as_deref(), Some("mitigation reviewed"));
 
     ingest::store_findings(
         &mut client,
         AGENT,
-        &[observation("finding-2", now + Duration::minutes(1))],
+        &[observation("finding-2", now + Duration::seconds(30))],
         ingest::Origin::Online,
-        now + Duration::minutes(2),
+        now + Duration::minutes(3),
     )
     .await
     .unwrap();
@@ -142,10 +160,10 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         .unwrap()
         .unwrap();
     assert_eq!(reopened.state, "open");
-    assert_eq!(reopened.version, 3);
+    assert_eq!(reopened.version, 4);
     let history:i64=client.query_one("SELECT count(*) FROM console_finding_triage_history WHERE agent_id=$1 AND rule_set_id='base' AND rule_id='rule-1'",&[&AGENT]).await.unwrap().get(0);
     let audit:i64=client.query_one("SELECT count(*) FROM audit_log WHERE action IN ('finding.triage.changed','finding.triage.reopened') AND target_id=$1",&[&format!("{AGENT}:base:rule-1")]).await.unwrap().get(0);
-    assert_eq!(history, 3);
-    assert_eq!(audit, 3);
+    assert_eq!(history, 4);
+    assert_eq!(audit, 4);
     db.drop().await;
 }

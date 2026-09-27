@@ -270,6 +270,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 message: format!("fixture finding {index}"),
                 evidence: vec!["package=fixture".into()],
             }],
+            ingest::Origin::Online,
             enrolled_at,
         )
         .await

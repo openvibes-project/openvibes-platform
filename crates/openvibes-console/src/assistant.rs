@@ -189,6 +189,7 @@ impl LookupRunner for ConsoleReadLookups {
                                 }
                             }
                             console_read::AgentState::Revoked => "revoked",
+                            console_read::AgentState::Imported => "imported",
                         };
                         json!({
                             "cite": format!("[agent:{}]", record.agent_id),

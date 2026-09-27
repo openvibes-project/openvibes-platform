@@ -101,6 +101,8 @@ pub enum AgentState {
     Stale,
     /// Revoked by an operator.
     Revoked,
+    /// Host represented by a file import; it has no online identity.
+    Imported,
 }
 
 impl AgentState {
@@ -109,6 +111,7 @@ impl AgentState {
             Self::Active => "active",
             Self::Stale => "stale",
             Self::Revoked => "revoked",
+            Self::Imported => "imported",
         }
     }
 }
@@ -174,6 +177,8 @@ pub struct AgentSummary {
     pub stale: i64,
     /// Revoked agents.
     pub revoked: i64,
+    /// Imported hosts with no online identity.
+    pub imported: i64,
 }
 
 /// Certificate metadata exposed to the console, with no PEM content.
@@ -392,7 +397,8 @@ pub async fn agent_summary_in_scope(
                         AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= $1),
                     count(*) FILTER (WHERE a.status = 'active'
                         AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)),
-                    count(*) FILTER (WHERE a.status = 'revoked')
+                    count(*) FILTER (WHERE a.status = 'revoked'),
+                    count(*) FILTER (WHERE a.status = 'imported')
              FROM agents a
              WHERE ($2::boolean OR EXISTS (
                     SELECT 1 FROM console_asset_group_selectors s
@@ -416,6 +422,7 @@ pub async fn agent_summary_in_scope(
         active: row.get(1),
         stale: row.get(2),
         revoked: row.get(3),
+        imported: row.get(4),
     })
 }
 
@@ -446,7 +453,8 @@ pub async fn agents_in_scope(
     let rows = client
         .query(
             "SELECT a.agent_id, a.hostname,
-                    CASE WHEN a.status = 'revoked' THEN 'revoked'
+                    CASE WHEN a.status = 'imported' THEN 'imported'
+                         WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN a.last_seen_at IS NULL OR a.last_seen_at < $1 THEN 'stale'
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
@@ -456,7 +464,8 @@ pub async fn agents_in_scope(
                         AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= $1) OR
                     ($2 = 'stale' AND a.status = 'active'
                         AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)) OR
-                    ($2 = 'revoked' AND a.status = 'revoked'))
+                    ($2 = 'revoked' AND a.status = 'revoked') OR
+                    ($2 = 'imported' AND a.status = 'imported'))
                AND ($7::boolean OR EXISTS (
                     SELECT 1 FROM console_asset_group_selectors s
                     WHERE s.asset_group_id::text = ANY($8::text[])
@@ -526,7 +535,8 @@ pub async fn agent_in_scope(
     let row = client
         .query_opt(
             "SELECT a.agent_id, a.hostname,
-                    CASE WHEN a.status = 'revoked' THEN 'revoked'
+                    CASE WHEN a.status = 'imported' THEN 'imported'
+                         WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN a.last_seen_at IS NULL OR a.last_seen_at < $2 THEN 'stale'
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
@@ -566,7 +576,8 @@ pub async fn agent_matches_in_scope(
     let visible = agent_visibility("a.agent_id", "$2", "$3");
     let query = format!(
         "SELECT a.agent_id, a.hostname,
-                CASE WHEN a.status = 'revoked' THEN 'revoked'
+                CASE WHEN a.status = 'imported' THEN 'imported'
+                     WHEN a.status = 'revoked' THEN 'revoked'
                      WHEN a.last_seen_at IS NULL OR a.last_seen_at < $4 THEN 'stale'
                      ELSE 'active' END AS state,
                 a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
@@ -901,6 +912,7 @@ fn agent_from_row(row: &Row) -> Agent {
         hostname: row.get(1),
         state: match row.get::<_, &str>(2) {
             "revoked" => AgentState::Revoked,
+            "imported" => AgentState::Imported,
             "stale" => AgentState::Stale,
             _ => AgentState::Active,
         },

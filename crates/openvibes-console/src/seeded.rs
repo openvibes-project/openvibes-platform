@@ -33,6 +33,7 @@ impl AgentStatus {
             Self::Active => "active",
             Self::Stale => "stale",
             Self::Revoked => "revoked",
+            Self::Imported => "imported",
         }
     }
 }
@@ -358,6 +359,7 @@ impl ConsoleRepository for SeededRepository {
                     active: 0,
                     stale: 0,
                     revoked: 0,
+                    imported: 0,
                 },
                 |mut summary, agent| {
                     summary.total += 1;
@@ -365,6 +367,7 @@ impl ConsoleRepository for SeededRepository {
                         AgentStatus::Active => summary.active += 1,
                         AgentStatus::Stale => summary.stale += 1,
                         AgentStatus::Revoked => summary.revoked += 1,
+                        AgentStatus::Imported => summary.imported += 1,
                     }
                     summary
                 },

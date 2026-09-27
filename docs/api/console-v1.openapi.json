@@ -246,7 +246,7 @@
           {
             "name": "state",
             "in": "query",
-            "description": "active, stale, or revoked",
+            "description": "active, stale, revoked, or imported",
             "required": false,
             "schema": {
               "type": "string"
@@ -2766,7 +2766,8 @@
         "enum": [
           "active",
           "stale",
-          "revoked"
+          "revoked",
+          "imported"
         ]
       },
       "AgentSummary": {
@@ -2776,13 +2777,20 @@
           "total",
           "active",
           "stale",
-          "revoked"
+          "revoked",
+          "imported"
         ],
         "properties": {
           "active": {
             "type": "integer",
             "format": "int64",
             "description": "Number of visible active agents.",
+            "minimum": 0
+          },
+          "imported": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Number of visible imported hosts.",
             "minimum": 0
           },
           "revoked": {

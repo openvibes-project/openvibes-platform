@@ -813,7 +813,9 @@ At minimum, test:
   is not cached, records success/failure without logging row contents, and
   creates/removes only private files inside its dedicated spool directory;
 - tag mutation requires global authority;
-- forwarded headers are ignored outside trusted proxies; proxy mode refuses
+- forwarded headers are ignored outside trusted proxies; reverse-proxy mode
+  trusts only a single valid `X-Forwarded-For` address from an allow-listed
+  peer for source-address login throttling, and refuses
   wildcard plaintext binds and rejects requests outside the canonical external
   HTTPS origin;
 - API/auth 404s cannot fall through to the SPA index;

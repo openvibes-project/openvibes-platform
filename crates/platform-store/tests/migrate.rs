@@ -161,7 +161,7 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     );
     assert_eq!(
         rights,
-        (true, true, true, true, true, false, true, true, false)
+        (true, true, false, true, true, false, false, true, false)
     );
     let write_rights = client
         .query_one(
@@ -184,7 +184,32 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
             write_rights.get::<_, bool>(4),
             write_rights.get::<_, bool>(5),
         ),
-        (true, true, true, true, true, true)
+        (true, true, true, false, false, true)
+    );
+    let column_rights = client
+        .query_one(
+            "SELECT has_column_privilege('openvibes_console', 'agents', 'status', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'agents', 'revoked_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'agents', 'enrolled_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'current_findings', 'received_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'current_findings', 'message', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'rule_sets', 'created_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'rule_sets', 'retired_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'added_at', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'public_key', 'UPDATE'),
+                    has_column_privilege('openvibes_console', 'rule_trust_keys', 'removed_at', 'UPDATE')",
+            &[],
+        )
+        .await
+        .unwrap();
+    let column_rights = (0..10)
+        .map(|index| column_rights.get::<_, bool>(index))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        column_rights,
+        [
+            true, true, false, true, false, true, false, true, false, false
+        ]
     );
     drop(client);
     db.drop().await;

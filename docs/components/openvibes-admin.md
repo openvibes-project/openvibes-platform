@@ -52,7 +52,7 @@ The user commands are audited, including failed attempts. Creation provisions
 the user, credential, initial role binding, and user-created audit event in one
 store transaction. Disable and password reset invalidate all browser sessions.
 Unlock clears only an active account bucket; IP/source throttles still protect
-the service. The first account can be created after schema 22 is applied.
+the service. The first account can be created after schema 24 is applied.
 
 ## Agent commands
 

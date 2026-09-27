@@ -100,6 +100,7 @@ export function OverviewReadPage({ seeded = false }: { seeded?: boolean }) {
             <div><dt>Active</dt><dd>{summary.active.toLocaleString()}</dd></div>
             <div><dt>Stale</dt><dd>{summary.stale.toLocaleString()}</dd></div>
             <div><dt>Revoked</dt><dd>{summary.revoked.toLocaleString()}</dd></div>
+            <div><dt>Imported</dt><dd>{summary.imported.toLocaleString()}</dd></div>
           </dl>
         )}</ReadStatus>
         <a href="/agents">Browse agents</a>
@@ -168,7 +169,7 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
           ))}</ul>
         )}
         <AgentTags agentId={agent.id} csrfToken={csrfToken} canManage={canManageTags && !seeded} />
-        <AgentRevoke agentId={agent.id} csrfToken={csrfToken} canRevoke={canRevoke && !seeded && agent.status !== "revoked"} />
+        <AgentRevoke agentId={agent.id} csrfToken={csrfToken} canRevoke={canRevoke && !seeded && agent.status !== "revoked" && agent.status !== "imported"} />
       </section>
     )}</ReadStatus>;
   }
@@ -181,7 +182,7 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
           <form className="filter-form" action="/agents" method="get">
             {seeded && <label>Search hostname or ID<input name="q" value={filterQuery} onChange={(event) => setFilterQuery(event.currentTarget.value)} maxLength={128} /></label>}
             <label>Status<select name={statusParam} value={filterStatus} onChange={(event) => setFilterStatus(event.currentTarget.value)}>
-              <option value="">All statuses</option><option value="active">Active</option><option value="stale">Stale</option><option value="revoked">Revoked</option>
+              <option value="">All statuses</option><option value="active">Active</option><option value="stale">Stale</option><option value="revoked">Revoked</option><option value="imported">Imported</option>
             </select></label>
             <button type="submit">Apply filters</button>
           </form>
