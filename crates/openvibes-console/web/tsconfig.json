@@ -37,6 +37,8 @@
     "playwright.config.ts",
     "vite.config.ts",
     "v2/src",
-    "vite.v2.config.ts"
+    "vite.v2.config.ts",
+    "v2/e2e",
+    "playwright.v2.config.ts"
   ]
 }

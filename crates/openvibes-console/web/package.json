@@ -14,7 +14,8 @@
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "dev:v2": "vite --config vite.v2.config.ts",
-    "build:v2": "tsc --noEmit && vite build --config vite.v2.config.ts"
+    "build:v2": "tsc --noEmit && vite build --config vite.v2.config.ts",
+    "test:e2e:v2": "playwright test --config playwright.v2.config.ts"
   },
   "dependencies": {
     "react": "19.2.7",

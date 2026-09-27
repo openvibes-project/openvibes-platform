@@ -139,3 +139,7 @@
   display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--r-2);
   border: 1px dashed var(--warn); background: var(--warn-soft); font: 12.5px var(--mono); overflow-wrap: anywhere;
 }
+
+/* Muted text keeps AA contrast on highlighted rows. */
+.table tbody tr[aria-selected="true"] .subtle,
+.table tbody tr[aria-selected="true"] .muted { color: var(--text-2); }

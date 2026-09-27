@@ -78,9 +78,17 @@ cd crates/openvibes-console/web
 npm ci
 npx vitest run --config vite.v2.config.ts   # location, client, table, demo server
 npx eslint v2 vite.v2.config.ts --max-warnings 0 && npx tsc --noEmit
+npm run test:e2e:v2                          # Playwright smoke + axe (both themes), Chromium and Firefox
 npm run dev:v2                               # http://127.0.0.1:5174 with demo data
 V2_LIVE=https://127.0.0.1:8443 npm run dev:v2 -- --open '/?live=1'   # against a running console
 ```
 
-The `Console v2 preview` workflow runs the same checks, builds with demo data
-and publishes to GitHub Pages on every push to `console-v2`.
+The `Console v2 preview` workflow runs the same checks and the end-to-end
+tests, then builds with demo data and publishes to GitHub Pages on every push to `console-v2`; a
+failing check stops the deploy.
+
+Tested against a real console (2026-09-28): a throwaway database from
+`scripts/test-db.sh`, `openvibes-admin migrate`, `user create`, and `import`
+of generated finding exports, with the console's `public_origin` set to the
+dev server. Covered: sign-in, every view, token creation (Idempotency-Key),
+bulk triage, the agent panel and the audit log.

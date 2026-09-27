@@ -5,3 +5,4 @@ test-results/
 dist/*
 !dist/.gitkeep
 dist-v2/
+dist-v2-e2e/

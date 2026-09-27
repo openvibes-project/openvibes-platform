@@ -45,6 +45,14 @@ jobs:
           npx tsc --noEmit
           npx vitest run --config vite.v2.config.ts
 
+      - name: Install pinned browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: End to end and accessibility (Chromium, Firefox)
+        env:
+          CI: "true"
+        run: npx playwright test --config playwright.v2.config.ts
+
       - name: Build with demo data
         env:
           V2_BASE: /${{ github.event.repository.name }}/
