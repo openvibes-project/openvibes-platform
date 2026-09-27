@@ -68,6 +68,29 @@ impl Fixture {
             .unwrap()
     }
 
+    /// As `run`, with `input` on standard input.
+    pub fn run_input(&self, args: &[&str], input: &str) -> Output {
+        use std::io::Write;
+        let mut child = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+            .arg("--config")
+            .arg(&self.config)
+            .args(args)
+            .env("USER", "ov-test")
+            .env_remove("SUDO_USER")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(input.as_bytes())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    }
+
     pub async fn audit(&self) -> Vec<(String, String, String)> {
         let pool = platform_store::connect(&self.url).await.unwrap();
         let client = pool.get().await.unwrap();

@@ -224,3 +224,35 @@ async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
     );
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn user_create_reads_one_password_line_from_stdin() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let create = |name: &'static str| {
+        [
+            "user",
+            "create",
+            "--username",
+            name,
+            "--display-name",
+            "Example",
+            "--password-stdin",
+        ]
+    };
+    let out = fixture.run_input(&create("admin"), "violet quartz lantern 2026\n");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        stdout(&fixture.run(&["user", "list"]))
+            .lines()
+            .any(|l| l.starts_with("admin\t"))
+    );
+    let short = fixture.run_input(&create("bob"), "short\n");
+    assert!(!short.status.success());
+    assert!(String::from_utf8_lossy(&short.stderr).contains("15 to 128"));
+    fixture.drop().await;
+}

@@ -1,8 +1,12 @@
 //! TUI state and key handling, free of terminal code so it can be tested.
 
-use platform_host::{Host, ServiceAction, ServiceStatus, Unit};
+use platform_host::{Host, Privileged, ServiceAction, ServiceStatus, Unit};
 
-use super::configuration::Configuration;
+use super::{
+    configuration::Configuration,
+    password::{PasswordPrompt, Typed},
+    setup::Setup,
+};
 
 /// Journal lines shown for the selected unit.
 pub const LOG_LINES: u16 = 50;
@@ -24,6 +28,7 @@ pub enum Key {
 /// The screen shown.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
+    Setup,
     Services,
     Configuration,
 }
@@ -33,11 +38,14 @@ pub enum Tab {
 pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
+    pub setup: Setup,
     pub config: Configuration,
     pub services: Vec<ServiceStatus>,
     pub selected: usize,
     /// An action waiting for y/n.
     pub confirm: Option<(Unit, ServiceAction)>,
+    /// Enable (true) or disable at boot, waiting for the password.
+    pub boot: Option<(Unit, bool, PasswordPrompt)>,
     /// The last outcome or error, shown above the key help.
     pub message: Option<String>,
     pub logs: Vec<String>,
@@ -46,13 +54,20 @@ pub struct App<H: Host> {
 
 impl<H: Host> App<H> {
     pub fn new(host: H) -> Self {
+        let set_up = host.is_set_up();
+        let hostname = std::fs::read_to_string("/etc/hostname")
+            .map(|h| h.trim().to_lowercase())
+            .unwrap_or_default();
+        let setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
         let mut app = App {
             host,
-            tab: Tab::Services,
+            tab: if set_up { Tab::Services } else { Tab::Setup },
+            setup,
             config: Configuration::default(),
             services: Vec::new(),
             selected: 0,
             confirm: None,
+            boot: None,
             message: None,
             logs: Vec::new(),
             quit: false,
@@ -90,6 +105,7 @@ impl<H: Host> App<H> {
     /// One key, handled by the screen shown.
     pub fn key(&mut self, key: Key) {
         match self.tab {
+            Tab::Setup => self.setup_key(key),
             Tab::Services => self.services_key(key),
             Tab::Configuration => self.config_key(key),
         }
@@ -98,6 +114,26 @@ impl<H: Host> App<H> {
     /// j/k (arrows) move, s/t/r ask to start/stop/restart, y answers, R
     /// refreshes, Tab opens Configuration, q quits.
     fn services_key(&mut self, key: Key) {
+        if let Some((unit, enable, mut prompt)) = self.boot.take() {
+            match prompt.key(key) {
+                Typed::Pending => self.boot = Some((unit, enable, prompt)),
+                Typed::Cancelled => {}
+                Typed::Entered(secret) => {
+                    let verb = if enable {
+                        Privileged::UnitEnable(unit)
+                    } else {
+                        Privileged::UnitDisable(unit)
+                    };
+                    let done = if enable { "enabled" } else { "disabled" };
+                    self.message = Some(match self.host.privileged(verb, &secret) {
+                        Ok(_) => format!("{done} {} at boot", unit.name()),
+                        Err(error) => error.to_string(),
+                    });
+                    self.refresh();
+                }
+            }
+            return;
+        }
         if let Some((unit, action)) = self.confirm.take() {
             if key == Key::Char('y') {
                 self.message = Some(match self.host.service_action(unit, action) {
@@ -121,6 +157,8 @@ impl<H: Host> App<H> {
             Key::Char('s') => self.ask(ServiceAction::Start),
             Key::Char('t') => self.ask(ServiceAction::Stop),
             Key::Char('r') => self.ask(ServiceAction::Restart),
+            Key::Char('e') => self.ask_boot(true),
+            Key::Char('d') => self.ask_boot(false),
             Key::Char('R') => {
                 self.message = None;
                 self.refresh();
@@ -142,6 +180,18 @@ impl<H: Host> App<H> {
         };
         if status.installed {
             self.confirm = Some((status.unit, action));
+            self.message = None;
+        } else {
+            self.message = Some(format!("{} is not installed", status.unit.name()));
+        }
+    }
+
+    fn ask_boot(&mut self, enable: bool) {
+        let Some(status) = self.services.get(self.selected) else {
+            return;
+        };
+        if status.installed {
+            self.boot = Some((status.unit, enable, PasswordPrompt::default()));
             self.message = None;
         } else {
             self.message = Some(format!("{} is not installed", status.unit.name()));

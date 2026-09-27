@@ -23,7 +23,23 @@ Who can use it: members of `openvibes-operators` (created by the RPM; add a
 person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
-without a password. `Tab` switches between the screens.
+without a password. `Tab` switches between the screens (Setup, Services,
+Configuration).
+
+**Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
+form: components (ingest and console always; distribution, vulns, rules,
+the agent on this host on by default; the assistant off), hostname, other
+names or addresses, CA mode (quick or careful) and the root key file.
+`Start` asks for the user's password once (masked; the user needs sudo
+rights, not operator membership), writes the plan through `helper
+setup-plan`, then runs one step per screen refresh through `helper
+setup-step`, showing each step's state. The first step that fails or waits
+stops the run and drops the password; `r` asks for it again and continues
+from that step. Three wrong passwords close the prompt. The finished screen
+shows the root certificate's fingerprint, the console address and admin
+password (shown only then), and an endpoint enrollment token. On a set-up
+host, `c` checks every step (`helper setup-status`). The steps are those of
+`setup --quick` (below).
 
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
 `llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
@@ -35,8 +51,10 @@ refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
 only on selection, `R` and after an action, since each read goes through
 sudo and the auth log. Not an operator:
 the TUI names the group to join. Every action is written to the journal
-(`journalctl -t openvibes-admin`). Enabling and disabling at boot come with
-the password-prompted steps (a later release).
+(`journalctl -t openvibes-admin`). `e` and `d` enable or disable the
+selected unit at boot after asking for the user's password (`helper
+unit-enable|unit-disable` through sudo; polkit cannot limit boot changes to
+OpenVIBES units).
 
 **Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
 `distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
@@ -87,7 +105,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
 | `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
 | `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
-| `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo |
+| `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin] [--password-stdin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo; with `--password-stdin`, reads one line from standard input instead (scripts and Setup), same password rules |
 | `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |
 | `user disable USERNAME` | disables the account and revokes its sessions atomically | `disabled local user NAME` |
 | `user unlock USERNAME` | clears an active per-account login lock and audits the recovery; source-address throttles remain active | `unlocked local user NAME` |
@@ -247,6 +265,41 @@ the installed file name.
 | `assistant check` | Probes the backend: URL and location (local, own network, external), whether the model is listed, time to first token and speed (streaming backends), native tool calls and JSON-schema output, the lookup mode that will be used, the profile, and the recommended models (with whether each has passed the gate here). Fails if the backend cannot answer a plain question. |
 | `assistant eval [--cases FILE]` | Asks the question set (built in: 53 cases, 6 of them injection tests) against the evaluation fleet, never platform data, and prints lookup accuracy, fact completeness, contradictions or leaks, injections resisted, errors, median and p95 latency, and each failed case. Exits non-zero when the gate (spec §10) fails. |
 | `assistant model install FILE --sha256 HEX [--alias NAME] [--name FILE.gguf]` | For `openvibes-llm`: copies the GGUF file into `/var/lib/openvibes-llm/models/` through a temporary file, hashing what it copies, and installs it read-only (0444) only if the digest matches; then sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and the alias in `/var/lib/openvibes-llm/model.conf`. Refuses names that are not plain `.gguf` file names and a different file under an installed name. The platform never downloads models. Run as `openvibes-admin` (its group owns the model store), then `systemctl restart openvibes-llm`. |
+
+## Setup command (admin TUI spec §6)
+
+`openvibes-admin setup --quick --components LIST --hostname NAME [--san
+ADDR]... [--ca quick|careful] [--root-key-out PATH]
+[--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]`
+runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
+arguments, then runs every Setup step in order and prints one line per step
+(`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
+step waits (careful CA: sign the request offline, then run it again), 1 on a
+failure, 2 on bad arguments (checked before the root check).
+`--components` must include `ingest`; `rules` needs `distribution`.
+Hostname and `--san` are lowercase DNS names or IP addresses; paths must be
+absolute. Without `--quick` the command refuses and points to the TUI.
+
+Steps (`src/setup/`, each checks before it acts, so re-running is safe and
+resumes): `packages` (dnf from the repository, or the one file per package
+in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
+`postgres`, `operators` (the sudo user joins `openvibes-operators`),
+`database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
+written once to `--root-key-out`, never over an existing file, otherwise
+deleted; careful: waits for the signed intermediate), `certificates`
+(hostname, `--san`, `localhost`, `127.0.0.1`), `console` (`public_origin`
+and the `admin` account; a generated password is shown once), `services`,
+`firewall` (skipped without firewalld), `rules` (skipped until
+`openvibes-rules-baseline` exists), `agent` (the agent on this host, waits
+up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
+uses).
+
+Root helper verbs for the TUI, run with the user's own sudo rights and
+password (no sudoers entry): `helper setup-plan PLANARGS` (writes
+`setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
+(`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP`
+(`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper unit-enable UNIT`,
+`helper unit-disable UNIT`. Arguments are checked before the root check.
 
 ## CA commands
 

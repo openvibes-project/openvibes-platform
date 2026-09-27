@@ -14,6 +14,20 @@ pub enum Program {
     Logger,
     /// Readiness probes on loopback.
     Curl,
+    /// Packages (Setup, as root).
+    Dnf,
+    /// Package queries.
+    Rpm,
+    /// Commands as a service account (Setup, as root).
+    Runuser,
+    /// PostgreSQL's first initialisation.
+    PostgresqlSetup,
+    /// Operator group membership.
+    Usermod,
+    /// Firewall ports.
+    FirewallCmd,
+    /// The admin CLI itself (offline CA commands as root).
+    Admin,
 }
 
 impl Program {
@@ -25,6 +39,13 @@ impl Program {
             Program::Sudo => "/usr/bin/sudo",
             Program::Logger => "/usr/bin/logger",
             Program::Curl => "/usr/bin/curl",
+            Program::Dnf => "/usr/bin/dnf",
+            Program::Rpm => "/usr/bin/rpm",
+            Program::Runuser => "/usr/sbin/runuser",
+            Program::PostgresqlSetup => "/usr/bin/postgresql-setup",
+            Program::Usermod => "/usr/sbin/usermod",
+            Program::FirewallCmd => "/usr/bin/firewall-cmd",
+            Program::Admin => "/usr/bin/openvibes-admin",
         }
     }
 }
@@ -67,7 +88,7 @@ pub struct SystemRunner;
 
 impl Runner for SystemRunner {
     // The one place the host backend starts processes (admin TUI spec §4):
-    // one of the four `Program`s, never a shell. clippy.toml forbids Command
+    // one of the `Program`s, never a shell. clippy.toml forbids Command
     // everywhere else.
     #[allow(clippy::disallowed_types)]
     fn run(&self, program: Program, args: &[&str]) -> std::io::Result<Output> {

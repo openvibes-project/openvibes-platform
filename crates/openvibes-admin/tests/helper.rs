@@ -67,3 +67,76 @@ fn config_verbs_need_root() {
         assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
     }
 }
+
+#[test]
+fn setup_verbs_check_their_arguments_before_the_root_check() {
+    for args in [
+        vec!["setup-step", "everything"],
+        vec!["setup-step", "../ca"],
+        vec!["unit-enable", "sshd.service"],
+        vec!["unit-disable", "openvibes-ingest"],
+        vec![
+            "setup-plan",
+            "--components",
+            "console",
+            "--hostname",
+            "platform.example.com",
+        ],
+        vec![
+            "setup-plan",
+            "--components",
+            "ingest",
+            "--hostname",
+            "Bad Name",
+        ],
+    ] {
+        let out = helper(&args);
+        assert_eq!(out.status.code(), Some(2), "{args:?}");
+        assert!(
+            String::from_utf8_lossy(&out.stderr).contains("not allowed"),
+            "{args:?}"
+        );
+    }
+    let out = helper(&["setup-step", "packages"]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("helper must run as root"));
+}
+
+#[test]
+fn setup_quick_needs_root_and_checks_its_plan() {
+    let run = |args: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    let out = run(&[
+        "setup",
+        "--quick",
+        "--components",
+        "ingest",
+        "--hostname",
+        "platform.example.com",
+    ]);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("must run as root"));
+    let out = run(&[
+        "setup",
+        "--quick",
+        "--components",
+        "vulns",
+        "--hostname",
+        "platform.example.com",
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("must include ingest"));
+    let out = run(&[
+        "setup",
+        "--components",
+        "ingest",
+        "--hostname",
+        "platform.example.com",
+    ]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("--quick"));
+}

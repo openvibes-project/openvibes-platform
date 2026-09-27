@@ -6,7 +6,12 @@ pub mod app;
 mod config_view;
 mod configuration;
 pub mod form;
+mod password;
 mod services;
+mod setup;
+#[cfg(test)]
+mod setup_tests;
+mod setup_view;
 #[cfg(test)]
 mod tests;
 
@@ -42,8 +47,9 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     }
     let [title, body] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
     let tabs = match app.tab {
-        Tab::Services => "[Services]  Configuration",
-        Tab::Configuration => "Services  [Configuration]",
+        Tab::Setup => "[Setup]  Services  Configuration",
+        Tab::Services => "Setup  [Services]  Configuration",
+        Tab::Configuration => "Setup  Services  [Configuration]",
     };
     frame.render_widget(
         Paragraph::new(format!("OpenVIBES administration   {tabs}"))
@@ -51,6 +57,7 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         title,
     );
     match app.tab {
+        Tab::Setup => setup_view::draw(frame, body, app),
         Tab::Services => services::draw(frame, body, app),
         Tab::Configuration => config_view::draw(frame, body, app),
     }
@@ -117,7 +124,16 @@ pub fn run() -> ExitCode {
             Ok(false) => {}
             Err(_) => app.quit = true,
         }
-        if app.tab == Tab::Services && app.confirm.is_none() && refreshed.elapsed() >= REFRESH {
+        // One Setup step per turn: the screen is redrawn between steps (a
+        // step blocks while it runs, e.g. dnf).
+        if app.tab == Tab::Setup {
+            app.setup_tick();
+        }
+        if app.tab == Tab::Services
+            && app.confirm.is_none()
+            && app.boot.is_none()
+            && refreshed.elapsed() >= REFRESH
+        {
             app.refresh();
             refreshed = Instant::now();
         }

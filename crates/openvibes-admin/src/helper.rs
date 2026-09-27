@@ -1,6 +1,8 @@
 //! `openvibes-admin helper VERB …`: the root helper of the administration
-//! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write`. A closed
-//! set of verbs, each its own function;
+//! TUI (admin TUI spec §3): `logs`, `config-read`, `config-write` (through
+//! the RPM's sudoers drop-in), and Setup's `setup-plan`, `setup-status`,
+//! `setup-step`, `unit-enable`, `unit-disable` (only with the user's own
+//! sudo rights and password). A closed set of verbs, each its own function;
 //! arguments are checked against the allow-lists before anything else, and
 //! nothing runs unless the effective uid is 0. Operators reach it through
 //! the RPM's sudoers drop-in. No shell, no paths, no free unit names.
@@ -8,7 +10,7 @@
 use std::{io::Read, path::Path, process::ExitCode};
 
 use clap::Subcommand;
-use platform_host::{CONFIG_DIR, Service, Unit};
+use platform_host::{CONFIG_DIR, Service, Step, Unit, runner::Runner};
 
 use crate::{config_file, configs::MAX_BYTES};
 
@@ -32,6 +34,23 @@ pub enum HelperCommand {
         /// ingest, distribution, vulns, console or admin.
         service: String,
     },
+    /// Checks Setup's arguments and writes /etc/openvibes/setup.toml.
+    SetupPlan {
+        #[command(flatten)]
+        args: crate::setup::plan::PlanArgs,
+    },
+    /// Prints every Setup step's state.
+    SetupStatus,
+    /// Checks one Setup step and runs it unless it is done.
+    SetupStep {
+        /// packages, postgres, operators, database, schema, ca,
+        /// certificates, console, services, firewall, rules, agent, ready.
+        step: String,
+    },
+    /// Starts an OpenVIBES unit at boot.
+    UnitEnable { unit: String },
+    /// Stops starting an OpenVIBES unit at boot.
+    UnitDisable { unit: String },
 }
 
 /// A verb whose arguments passed the allow-lists.
@@ -39,6 +58,10 @@ enum Verb {
     Logs(Unit, u16),
     ConfigRead(Service),
     ConfigWrite(Service),
+    SetupPlan(Box<crate::setup::plan::Plan>),
+    SetupStatus,
+    SetupStep(Step),
+    UnitFile(Unit, bool),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, &'static str> {
@@ -53,11 +76,28 @@ fn verb(command: &HelperCommand) -> Result<Verb, &'static str> {
         }
         HelperCommand::ConfigRead { service: name } => Verb::ConfigRead(service(name)?),
         HelperCommand::ConfigWrite { service: name } => Verb::ConfigWrite(service(name)?),
+        HelperCommand::SetupPlan { args } => {
+            // The plan's own checks; SUDO_USER is set by sudo, not the caller.
+            match args.plan(crate::setup::plan::operator_from_env()) {
+                Ok(plan) => Verb::SetupPlan(Box::new(plan)),
+                Err(_) => return Err("invalid Setup arguments (see openvibes-admin setup --help)"),
+            }
+        }
+        HelperCommand::SetupStatus => Verb::SetupStatus,
+        HelperCommand::SetupStep { step } => {
+            Verb::SetupStep(Step::parse(step).ok_or("not a Setup step")?)
+        }
+        HelperCommand::UnitEnable { unit } => {
+            Verb::UnitFile(Unit::parse(unit).ok_or("not an OpenVIBES unit")?, true)
+        }
+        HelperCommand::UnitDisable { unit } => {
+            Verb::UnitFile(Unit::parse(unit).ok_or("not an OpenVIBES unit")?, false)
+        }
     })
 }
 
 /// The effective uid, from `/proc/self/status` (no `unsafe`).
-fn effective_uid() -> Option<String> {
+pub(crate) fn effective_uid() -> Option<String> {
     let status = std::fs::read_to_string("/proc/self/status").ok()?;
     let ids = status.lines().find_map(|line| line.strip_prefix("Uid:"))?;
     ids.split_whitespace().nth(1).map(str::to_owned)
@@ -79,6 +119,26 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     }
     let dir = Path::new(CONFIG_DIR);
     match verb {
+        Verb::SetupPlan(plan) => match plan.save(Path::new("/")) {
+            Ok(()) => {
+                println!("{} written", platform_host::SETUP_FILE);
+                ExitCode::SUCCESS
+            }
+            Err(error) => failed(&error),
+        },
+        Verb::SetupStatus => crate::setup::status(),
+        Verb::SetupStep(step) => crate::setup::step(step),
+        Verb::UnitFile(unit, enable) => {
+            let action = if enable { "enable" } else { "disable" };
+            match platform_host::runner::SystemRunner.run(
+                platform_host::runner::Program::Systemctl,
+                &[action, unit.name()],
+            ) {
+                Ok(out) if out.status == 0 => ExitCode::SUCCESS,
+                Ok(out) => failed(out.stderr.trim()),
+                Err(error) => failed(&error.to_string()),
+            }
+        }
         Verb::Logs(unit, lines) => logs(unit, lines),
         Verb::ConfigRead(service) => match config_file::read(dir, service) {
             Ok(text) => {

@@ -5,6 +5,11 @@ awaiting review. Implements the "local administration TUI" decided on
 2026-09-23 (workspace `decisions.md`): the web console never controls host
 services or edits host configuration; this TUI does.
 
+Amended 2026-09-27 (the user, in conversation): Setup also installs,
+repairs and uninstalls the platform (§6), so the quick-setup guide is "run
+the install script, follow the TUI" (workspace `decisions.md`, "Easy
+setup").
+
 ## 1. Decisions (the user, 2026-09-27)
 
 - **`openvibes-admin` with no arguments opens the TUI.** Subcommands keep
@@ -22,6 +27,14 @@ services or edits host configuration; this TUI does.
 - **No sudo to open it; as little root as possible.** The TUI runs as the
   invoking user. Day-to-day work needs no password; the few actions that
   need root ask for the user's password inside the TUI.
+- **Install, repair and uninstall from the TUI.** The install script adds
+  the signed OpenVIBES package repository and installs only
+  `openvibes-admin`; Setup installs the chosen components, the baseline
+  rules and, optionally, the agent on this host. Repair re-checks and fixes
+  every step (it is also the reinstall). Update upgrades the OpenVIBES
+  packages (the local agent too), stopping the services and migrating the
+  database in between. Uninstall either keeps the data
+  or removes everything (typed hostname, backup offered first).
 - **Deployment-agnostic.** Native (RPM, systemd) is built now; rootless
   pods/Docker, Kubernetes and a virtual appliance come later, and SSH must
   land straight in the TUI where the deployment allows.
@@ -88,6 +101,29 @@ be allowed to use sudo (wheel on Fedora; the appliance's admin user is).
 Privileged steps: setup steps (§6), certificate installation and renewal,
 OS actions (§8).
 
+Exception for Setup: a Setup run (install, repair, change components,
+uninstall) asks for the password once when it starts, keeps it for that
+run only (zeroed on drop with `zeroize`; not `mlock`ed, because
+`openvibes-admin` forbids unsafe code), and wipes it when the run ends or
+fails. Every other screen asks per step. The operator group added in step
+3 takes effect only at the next login, so during Setup every step,
+including the ones an operator could run, goes through the helper as root
+(database commands as `runuser -u openvibes-admin`). Setup's helper verbs,
+each its own function:
+
+| Verb | Does |
+|---|---|
+| `setup-plan --components LIST --hostname NAME [--san ADDR]... [--ca quick\|careful] [--root-key-out PATH] [--repo-dir DIR] [--allow-unsigned-local]` | checks the arguments (components from an enum, hostname and addresses as DNS names or IPs) and writes `/etc/openvibes/setup.toml` |
+| `setup-status` | prints each step's state (done, to do, waiting, failed with a reason) |
+| `setup-step STEP` | runs one step (§6.3) for the components in `setup.toml`; packages come from each component's fixed package names, and signature checks stay on (`--nogpgcheck` is never passed; local package files are checked with `localpkg_gpgcheck=1` unless `--allow-unsigned-local` was given) |
+| `unit-enable UNIT` / `unit-disable UNIT` | enable or disable an allow-listed unit at boot (Services screen) |
+| `purge` | remove-everything uninstall (§6.5, PR 5); refuses unless the typed hostname is passed and matches |
+| `update-step STEP` | one step of Update (§6.5a, PR 5): `backup PATH`, `stop`, `upgrade`, `migrate`, `start`; `stop` records the active units in `/run/openvibes-admin/update-active` for `start` |
+
+These verbs run only with the user's password (their own sudo rights, no
+sudoers entry), so, unlike the password-free verbs, `setup-plan` may take
+paths.
+
 `openvibes-admin helper` is a hidden subcommand with a closed set of verbs.
 It refuses to run unless real or effective uid is 0, takes no paths or unit
 names except from the allow-lists, and never runs a shell. Each verb is its
@@ -121,13 +157,15 @@ pub trait Host {
     fn logs(&self, unit: Unit, lines: u16) -> Result<Vec<String>, HostError>;
     fn read_config(&self, service: Service) -> Result<String, HostError>;
     fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError>;
-    fn admin(&self, args: &[&str]) -> Result<Output, HostError>; // openvibes-admin as openvibes_admin
-    fn privileged(&self, step: Step, password: &Secret) -> Result<Output, HostError>;
+    fn is_set_up(&self) -> bool;                      // /etc/openvibes/setup.toml exists
+    fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError>;
 }
+// Privileged: SetupPlan(args), SetupStatus, SetupStep(Step), UnitEnable(Unit), UnitDisable(Unit)
 ```
 
 `Unit`, `Service` and `Step` are enums, so an unknown unit or step cannot
-be expressed.
+be expressed. The root side of Setup (the step checks and actions) lives in
+`openvibes-admin/src/setup/` and runs commands through the same `Runner`.
 
 ## 5. Screens
 
@@ -161,31 +199,150 @@ destructive action asks for confirmation.
 
 ## 6. Setup
 
-Opens first on a host that is not set up. A checklist; each step checks its
-own state first (so re-running is safe and resumes), shows the exact
-commands it runs, and marks root steps with a lock.
+### 6.1 Starting point
 
-1. PostgreSQL installed, initialised, running (root).
-2. Operator group membership for the current user (root, once).
-3. Database and `openvibes-admin` role (root, as `postgres`).
-4. Schema migrated, partitions created (operator).
-5. CA — quick or careful:
+The install script (its own sub-project: signed dnf repository on GitHub
+Pages, published by CI from release tags) adds the repository, installs
+`openvibes-admin` and opens the TUI as the invoking user (`SUDO_USER` when
+the script ran under sudo). `curl … | sh -s -- --agent …` installs only the
+agent on an endpoint. Setup installs from whatever dnf repository is
+configured and does not know where it lives. Before the published
+repository exists, `setup --repo-dir DIR` adds a temporary local repository
+of locally built packages; unsigned packages there are refused unless
+`--allow-unsigned-local` is given, shown in red.
+
+### 6.2 State
+
+What is installed is read from the system (`rpm -q`) and each step's own
+check; there is no state file that could drift. The chosen components are
+kept in `/etc/openvibes/setup.toml`, so Repair knows what complete means.
+A host without `setup.toml` and without an `openvibes` database is "not set
+up", and the TUI opens on Setup.
+
+### 6.3 Install
+
+**Components** (checkboxes): ingest and console (always in the TUI;
+`--components` must name ingest and may leave out the console, which the
+systemd end-to-end test installs separately for its upgrade check),
+distribution, vulns, assistant (off by default: heavy), baseline rules (on
+with distribution), agent on this host (on by default).
+
+**Checklist.** Each step checks its own state first (so re-running is safe
+and resumes), shows the exact commands it runs, and marks root steps with
+a lock. A failed step stops the run and shows the failing command and its
+last output lines; Retry continues from that step.
+
+1. Platform packages of the chosen components installed (root; the rules
+   and agent packages are installed by their own steps).
+2. PostgreSQL installed, initialised, running (root).
+3. Operator group membership for the current user (root, once).
+4. Database and `openvibes-admin` role (root, as `postgres`).
+5. Schema migrated, partitions created (operator).
+6. CA — quick or careful:
    - quick: root created in `/run` (tmpfs), intermediate signed, root key
      shown once and written to a path the user chooses (e.g. a USB stick),
      then deleted; only the root certificate stays;
    - careful: intermediate request written, the wizard waits with the
      exact offline commands shown, then imports the signed certificate.
-6. Server certificates for ingest and, if installed, distribution, with
-   the hostname and addresses to put in them (root: key install).
-7. Services enabled and started (operator).
-8. Firewall ports 18423 and, with distribution, 18424 (root).
-9. Readiness checks.
-10. First enrollment token, and the agent configuration snippet to paste on
-    endpoints (platform URL, CA certificate, token).
+7. Server certificates for ingest and, if chosen, distribution, with the
+   hostname and addresses to put in them, shown and editable (root: key
+   install).
+8. Console TLS and the first admin account (the console RPM's existing
+   setup, `packaging.md` "Console RPM setup"): a server certificate from
+   the intermediate (browsers trust it once the root certificate is
+   imported), `public_origin` set to `https://HOSTNAME`, and the account
+   `admin` with a generated password shown once on the last screen
+   (`--admin-password-file` sets it for scripts).
+9. Services enabled and started (root: enable).
+10. Firewall ports 18423 and, with distribution, 18424, and the console's
+    port (root).
+11. Baseline rules: install `openvibes-rules-baseline`, trust the project
+    rules key and publish the bundle it installs under
+    `/usr/share/openvibes/rules/` (`baseline.json`, and `baseline.key`:
+    one line `RULE_SET ISSUER_KEY_ID PUBLIC_KEY`) with `rules trust add`
+    and `rules publish`. Skipped while the package is not available.
+12. Agent on this host: install `openvibes-agent`, write its config
+    (platform at `https://localhost`, the root certificate, a single-use
+    token, the baseline rule set and its key), start it, and wait up to
+    60 seconds for it to show as active.
+13. Readiness checks, and an endpoint enrollment token (24 hours, 10
+    uses). The last screen shows the console address, the admin login,
+    the endpoint command (`curl … | sh -s -- --agent --platform …
+    --token …`; until the install script exists, the agent configuration
+    snippet) and the root certificate's path and SHA-256 fingerprint.
+
+### 6.4 Repair, change components
+
+On a set-up host, Setup shows the checklist with each step ok or failed,
+and three actions:
+
+- **Repair:** runs every step's check and fixes only failing steps:
+  missing package reinstalled, stopped service started, missing firewall
+  port opened, schema migrated, a newer installed baseline bundle
+  republished. The CA, certificates and database contents are never
+  replaced silently: a missing CA key or an expiring certificate is
+  reported with its action (Renew certificate), not regenerated.
+- **Change components:** ticking a component runs its install steps;
+  unticking one runs its uninstall part (keep data, below).
+- **Uninstall** (§6.5).
+
+### 6.5 Uninstall
+
+Two choices on one screen:
+
+- **Keep data:** stop and disable the services, close the firewall ports,
+  remove the packages (and the agent, if Setup installed it). The
+  database, CA, certificates and `/etc/openvibes` stay; a later install
+  finds them and continues with the same platform, so enrolled agents keep
+  working.
+- **Remove everything:** the above, then drop the `openvibes` database and
+  its roles, delete `/etc/openvibes`, `/var/lib/openvibes-*`, the CA and
+  certificates, and the service accounts and groups (`purge`). PostgreSQL
+  itself stays installed (other software may use it; the screen says so).
+  First "Export a database backup?" (default yes: `pg_dump` to a chosen
+  path, checked to be non-empty and readable), then the full list of what
+  will be deleted, then the hostname typed to confirm.
+
+The TUI cannot remove its own package while running: both choices end by
+showing the one remaining command, `sudo dnf remove openvibes-admin`.
+
+### 6.5a Update (the user, 2026-09-27)
+
+Setup shows, for each installed OpenVIBES package (the agent included when
+Setup installed it on this host), the installed version and any newer one
+in the configured repository (`dnf list --upgrades 'openvibes-*'`, no
+password). **Update** (password once per run, like the other Setup
+actions) runs, stopping at the first step that fails:
+
+1. Database backup offered first (default yes: `pg_dump` to a chosen path,
+   checked to be non-empty and readable), as uninstall does.
+2. Every OpenVIBES service and the maintenance timer stopped; which were
+   active is remembered for step 5. No service can start against a
+   half-migrated database.
+3. `dnf upgrade` of exactly the installed OpenVIBES packages (the agent
+   with them; signature checks on, as in §6.3). The RPMs' restart hooks
+   are harmless here because the units are stopped.
+4. `openvibes-admin migrate` (and `maintenance`).
+5. The previously active services started again, the local agent
+   restarted, then the readiness checks (step 13 of §6.3).
+
+A failed step leaves the host as it is and shows the error, the backup's
+path and the documented way back (`packaging.md` "Console update and
+recovery": restore the backup, install the previous packages). There is no
+automatic rollback: a half-applied rollback of a forward-only schema is
+worse than a clear stop. Other hosts' agents are updated on those hosts
+(`dnf upgrade openvibes-agent`); the platform accepts older agents.
+
+### 6.6 Without screens
 
 `openvibes-admin setup --quick --hostname NAME [--san ADDR]...
-[--root-key-out PATH]` runs the same steps without screens, as root, for
-scripts and the systemd end-to-end test.
+[--components LIST] [--root-key-out PATH] [--admin-password-file F]
+[--repo-dir DIR]` runs the install steps as root, for scripts and the
+systemd end-to-end test (replacing most of `scripts/systemd-e2e.sh`'s
+manual steps). `setup --repair`, `setup --update [--backup PATH]`,
+`setup --uninstall --keep-data` and
+`setup --uninstall --everything --confirm HOSTNAME` do the same for the
+other actions.
 
 ## 7. Audit
 
@@ -202,9 +359,12 @@ All privileged steps (password prompt), shown on every deployment where the
 backend supports them:
 
 - **Updates:** check (`dnf check-update`, no root) and apply
-  (`dnf upgrade --refresh`), with the output streamed; OpenVIBES packages
-  and the OS together. A reboot is offered when the kernel or core
-  libraries changed.
+  (`dnf upgrade --refresh --exclude='openvibes-*'`), with the output
+  streamed. OpenVIBES packages are left out: they are updated only through
+  Setup's Update (§6.5a), which stops the services and migrates the
+  database; otherwise an OS update could upgrade the platform without the
+  migration and leave services refusing to start. A reboot is offered when
+  the kernel or core libraries changed.
 - **Power:** reboot, power off (confirmation naming the host).
 - **Hostname:** show and set (`hostnamectl`).
 - **Network:** show interfaces, addresses, gateway, DNS; set an interface
@@ -270,6 +430,16 @@ The screens stay; a new `Host` implementation provides:
   then services ready, an agent enrolls with the printed snippet, a config
   save through the helper, a restart through polkit as an operator, and the
   read-only shell refusing a write.
+- Setup life cycle (systemd container, `--repo-dir` with the CI-built
+  packages): install with the local agent, which reports baseline-rule
+  findings; break things (stop a service, remove a package) and `--repair`
+  restores them; uninstall with keep-data, reinstall, and the same CA and
+  the agent's existing enrollment keep working; remove everything, then no
+  OpenVIBES packages, files, users, groups or database remain.
+- Update (same container): install from lower-version packages (built with
+  a lower release, as the console upgrade check does), `setup --update` to
+  the CI-built ones, then the schema is current, the previously active
+  services are running and ready, and the local agent keeps reporting.
 
 ## 13. Delivery
 
@@ -282,9 +452,17 @@ One PR each, in order:
    sudoers drop-in, helper `logs`.
 2. Configuration screen + helper `config-write`.
 3. Database and Health screens + `audit note`.
-4. Setup (screen and `setup` command) + privileged steps with the password
-   prompt (including enable and disable); e2e uses `setup --quick`.
-5. System screen + shell options.
+4. Setup install (§6.1–6.3, 6.6: screen and `setup` command, `--repo-dir`)
+   + privileged steps with the password prompt (including enable and
+   disable) + Setup's helper verbs; e2e uses `setup --quick`.
+5. Setup repair, change components, update and uninstall (§6.4–6.5a)
+   + the life cycle and update e2e (§12).
+6. System screen + shell options.
+
+Outside this spec, each with its own spec: the baseline rules package and
+`rules keygen|sign` (can go in parallel with 4–5; until it lands, step 11
+is skipped when the package is absent); releases, the signed repository
+and the install script (after 5); the quick-setup guide (last).
 
 Each PR updates `docs/components/` (new page `platform-host.md`; admin page
 for the TUI) and merges with the user's approval.
