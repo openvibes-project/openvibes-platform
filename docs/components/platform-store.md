@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 22; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 23; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -215,6 +215,11 @@ IDs and applied in SQL before priority selection, aggregation, or returning
 advisory enrichment. An empty scope returns no host rows or summary counts;
 advisory details are returned only when a visible host has a matching
 vulnerability.
+
+Schema 23 grants the console role read-only access to the vulnerability and
+inventory tables and adds the agent-scoped `vulnerabilities.read` permission
+to built-in roles. The role can still change no vulnerability or inventory
+rows; each console query must apply the resolved asset scope.
 
 Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
 each range as whole version strings with its `scheme` (`rpm` or `dpkg`),
