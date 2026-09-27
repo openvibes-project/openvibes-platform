@@ -27,6 +27,30 @@ pub struct Ctx<'a, R: Runner> {
     pub root: &'a Path,
     /// Between readiness polls: one second on a host, none in tests.
     pub pause: Duration,
+    /// Repair: steps may reinstall and restart, never make a new CA.
+    pub repair: bool,
+}
+
+/// Holds `/run/openvibes-admin/setup.lock` while one Setup run works; a
+/// second is refused rather than racing (e.g. both staging a CA).
+pub fn lock(root: &Path) -> Result<fs::File, String> {
+    let dir = root.join("run/openvibes-admin");
+    fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+    let path = dir.join("setup.lock");
+    let file = OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .write(true)
+        .mode(0o600)
+        .open(&path)
+        .map_err(|error| format!("{}: {error}", path.display()))?;
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(fs::TryLockError::WouldBlock) => {
+            Err("another Setup run is in progress on this host; wait for it to finish".into())
+        }
+        Err(fs::TryLockError::Error(error)) => Err(format!("{}: {error}", path.display())),
+    }
 }
 
 /// The last lines of an error, on one line, control characters escaped.

@@ -9,6 +9,8 @@ mod console;
 mod fake;
 mod fleet;
 mod pki;
+#[cfg(test)]
+mod pki_tests;
 pub mod plan;
 mod run;
 mod system;
@@ -71,7 +73,9 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         return apply(ctx, step);
     }
     match check(ctx, step) {
-        state @ (StepState::Done(_) | StepState::Skipped(_)) => state,
+        // A failed check (e.g. a certificate about to expire) is reported,
+        // not acted on.
+        state @ (StepState::Done(_) | StepState::Skipped(_) | StepState::Failed(_)) => state,
         _ => apply(ctx, step),
     }
 }
@@ -89,12 +93,13 @@ pub fn run_all<R: Runner>(ctx: &Ctx<R>, mut report: impl FnMut(Step, &StepState)
     true
 }
 
-fn host_ctx<'a>(plan: &'a Plan) -> Ctx<'a, SystemRunner> {
+fn host_ctx(plan: &Plan, repair: bool) -> Ctx<'_, SystemRunner> {
     Ctx {
         runner: &SystemRunner,
         plan,
         root: Path::new("/"),
         pause: Duration::from_secs(1),
+        repair,
     }
 }
 
@@ -107,7 +112,7 @@ pub fn status() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let ctx = host_ctx(&plan);
+    let ctx = host_ctx(&plan, false);
     for step in Step::ALL {
         println!("{}\t{}", step.name(), check(&ctx, step).line());
     }
@@ -123,7 +128,7 @@ pub fn step(step: Step) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    println!("{}", run_step(&host_ctx(&plan), step).line());
+    println!("{}", run_step(&host_ctx(&plan, false), step).line());
     ExitCode::SUCCESS
 }
 
@@ -146,7 +151,7 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
         return ExitCode::FAILURE;
     }
     let mut waiting = false;
-    let finished = run_all(&host_ctx(&plan), |step, state| {
+    let finished = run_all(&host_ctx(&plan, false), |step, state| {
         waiting = matches!(state, StepState::Waiting(_));
         println!("{}: {} {}", step.title(), state.label(), state.detail());
     });

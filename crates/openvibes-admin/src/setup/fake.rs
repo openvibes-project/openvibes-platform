@@ -118,6 +118,7 @@ impl Fake {
             plan,
             root: &self.root,
             pause: Duration::ZERO,
+            repair: false,
         }
     }
 }
