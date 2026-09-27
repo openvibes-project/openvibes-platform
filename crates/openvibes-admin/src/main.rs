@@ -7,6 +7,8 @@
 mod agent;
 mod assistant;
 mod ca;
+mod configs;
+mod fields;
 mod files;
 mod helper;
 mod import;
@@ -22,7 +24,6 @@ use std::{path::PathBuf, process::ExitCode};
 use chrono::{Duration, Utc};
 use clap::{Parser, Subcommand};
 use platform_store::{SCHEMA_VERSION, StoreError};
-use serde::Deserialize;
 
 /// Days of finding partitions created ahead of today.
 const PARTITIONS_AHEAD: u32 = 7;
@@ -130,12 +131,6 @@ impl Command {
     }
 }
 
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AdminConfig {
-    database_url: String,
-}
-
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
@@ -163,7 +158,7 @@ async fn main() -> ExitCode {
             }
         };
     }
-    let config: AdminConfig = match platform_config::load(&cli.config) {
+    let config: configs::AdminConfig = match platform_config::load(&cli.config) {
         Ok(config) => config,
         Err(error) => {
             eprintln!("openvibes-admin: {error}");
