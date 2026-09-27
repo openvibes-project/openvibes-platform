@@ -31,7 +31,9 @@ setup").
   the signed OpenVIBES package repository and installs only
   `openvibes-admin`; Setup installs the chosen components, the baseline
   rules and, optionally, the agent on this host. Repair re-checks and fixes
-  every step (it is also the reinstall). Uninstall either keeps the data
+  every step (it is also the reinstall). Update upgrades the OpenVIBES
+  packages (the local agent too), stopping the services and migrating the
+  database in between. Uninstall either keeps the data
   or removes everything (typed hostname, backup offered first).
 - **Deployment-agnostic.** Native (RPM, systemd) is built now; rootless
   pods/Docker, Kubernetes and a virtual appliance come later, and SSH must
@@ -116,6 +118,7 @@ each its own function:
 | `setup-step STEP` | runs one step (§6.3) for the components in `setup.toml`; packages come from each component's fixed package names, and signature checks stay on (`--nogpgcheck` is never passed; local package files are checked with `localpkg_gpgcheck=1` unless `--allow-unsigned-local` was given) |
 | `unit-enable UNIT` / `unit-disable UNIT` | enable or disable an allow-listed unit at boot (Services screen) |
 | `purge` | remove-everything uninstall (§6.5, PR 5); refuses unless the typed hostname is passed and matches |
+| `update-step STEP` | one step of Update (§6.5a, PR 5): `backup PATH`, `stop`, `upgrade`, `migrate`, `start`; `stop` records the active units in `/run/openvibes-admin/update-active` for `start` |
 
 These verbs run only with the user's password (their own sudo rights, no
 sudoers entry), so, unlike the password-free verbs, `setup-plan` may take
@@ -303,13 +306,41 @@ Two choices on one screen:
 The TUI cannot remove its own package while running: both choices end by
 showing the one remaining command, `sudo dnf remove openvibes-admin`.
 
+### 6.5a Update (the user, 2026-09-27)
+
+Setup shows, for each installed OpenVIBES package (the agent included when
+Setup installed it on this host), the installed version and any newer one
+in the configured repository (`dnf list --upgrades 'openvibes-*'`, no
+password). **Update** (password once per run, like the other Setup
+actions) runs, stopping at the first step that fails:
+
+1. Database backup offered first (default yes: `pg_dump` to a chosen path,
+   checked to be non-empty and readable), as uninstall does.
+2. Every OpenVIBES service and the maintenance timer stopped; which were
+   active is remembered for step 5. No service can start against a
+   half-migrated database.
+3. `dnf upgrade` of exactly the installed OpenVIBES packages (the agent
+   with them; signature checks on, as in §6.3). The RPMs' restart hooks
+   are harmless here because the units are stopped.
+4. `openvibes-admin migrate` (and `maintenance`).
+5. The previously active services started again, the local agent
+   restarted, then the readiness checks (step 13 of §6.3).
+
+A failed step leaves the host as it is and shows the error, the backup's
+path and the documented way back (`packaging.md` "Console update and
+recovery": restore the backup, install the previous packages). There is no
+automatic rollback: a half-applied rollback of a forward-only schema is
+worse than a clear stop. Other hosts' agents are updated on those hosts
+(`dnf upgrade openvibes-agent`); the platform accepts older agents.
+
 ### 6.6 Without screens
 
 `openvibes-admin setup --quick --hostname NAME [--san ADDR]...
 [--components LIST] [--root-key-out PATH] [--admin-password-file F]
 [--repo-dir DIR]` runs the install steps as root, for scripts and the
 systemd end-to-end test (replacing most of `scripts/systemd-e2e.sh`'s
-manual steps). `setup --repair`, `setup --uninstall --keep-data` and
+manual steps). `setup --repair`, `setup --update [--backup PATH]`,
+`setup --uninstall --keep-data` and
 `setup --uninstall --everything --confirm HOSTNAME` do the same for the
 other actions.
 
@@ -328,9 +359,12 @@ All privileged steps (password prompt), shown on every deployment where the
 backend supports them:
 
 - **Updates:** check (`dnf check-update`, no root) and apply
-  (`dnf upgrade --refresh`), with the output streamed; OpenVIBES packages
-  and the OS together. A reboot is offered when the kernel or core
-  libraries changed.
+  (`dnf upgrade --refresh --exclude='openvibes-*'`), with the output
+  streamed. OpenVIBES packages are left out: they are updated only through
+  Setup's Update (§6.5a), which stops the services and migrates the
+  database; otherwise an OS update could upgrade the platform without the
+  migration and leave services refusing to start. A reboot is offered when
+  the kernel or core libraries changed.
 - **Power:** reboot, power off (confirmation naming the host).
 - **Hostname:** show and set (`hostnamectl`).
 - **Network:** show interfaces, addresses, gateway, DNS; set an interface
@@ -402,6 +436,10 @@ The screens stay; a new `Host` implementation provides:
   restores them; uninstall with keep-data, reinstall, and the same CA and
   the agent's existing enrollment keep working; remove everything, then no
   OpenVIBES packages, files, users, groups or database remain.
+- Update (same container): install from lower-version packages (built with
+  a lower release, as the console upgrade check does), `setup --update` to
+  the CI-built ones, then the schema is current, the previously active
+  services are running and ready, and the local agent keeps reporting.
 
 ## 13. Delivery
 
@@ -417,8 +455,8 @@ One PR each, in order:
 4. Setup install (§6.1–6.3, 6.6: screen and `setup` command, `--repo-dir`)
    + privileged steps with the password prompt (including enable and
    disable) + Setup's helper verbs; e2e uses `setup --quick`.
-5. Setup repair, change components and uninstall (§6.4–6.5) + the life
-   cycle e2e (§12).
+5. Setup repair, change components, update and uninstall (§6.4–6.5a)
+   + the life cycle and update e2e (§12).
 6. System screen + shell options.
 
 Outside this spec, each with its own spec: the baseline rules package and
