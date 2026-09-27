@@ -186,6 +186,33 @@ async fn console_store_writes_work_as_openvibes_console() {
         .unwrap(),
         platform_store::agents::Revoke::Revoked
     );
+    assert!(
+        client
+            .execute(
+                "UPDATE agents SET status='active', revoked_at=NULL WHERE agent_id=$1",
+                &[&REVOKE_AGENT],
+            )
+            .await
+            .is_err()
+    );
+    let status: String = client
+        .query_one(
+            "SELECT status FROM agents WHERE agent_id=$1",
+            &[&REVOKE_AGENT],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(status, "revoked");
+    assert!(
+        client
+            .execute(
+                "UPDATE agents SET status='active' WHERE agent_id=$1",
+                &[&imported_id],
+            )
+            .await
+            .is_err()
+    );
     assert_eq!(
         revoke_agent_in_scope(
             &mut client,

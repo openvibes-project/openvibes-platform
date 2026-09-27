@@ -9,3 +9,22 @@ ALTER TABLE console_finding_triage_history
 GRANT SELECT, UPDATE ON console_finding_triage TO openvibes_ingest;
 GRANT INSERT ON console_finding_triage_history TO openvibes_ingest;
 GRANT USAGE ON SEQUENCE console_finding_triage_history_event_id_seq TO openvibes_ingest;
+
+-- Preserve the transition time into mitigation across later note/assignee edits.
+ALTER TABLE console_finding_triage
+    ADD COLUMN mitigated_at timestamptz;
+
+UPDATE console_finding_triage t
+SET mitigated_at = COALESCE(
+    (SELECT h.changed_at
+     FROM console_finding_triage_history h
+     WHERE h.agent_id = t.agent_id
+       AND h.rule_set_id = t.rule_set_id
+       AND h.rule_id = t.rule_id
+       AND h.to_state = 'mitigated'
+       AND h.from_state IS DISTINCT FROM 'mitigated'
+     ORDER BY h.event_id DESC
+     LIMIT 1),
+    t.updated_at
+)
+WHERE t.state = 'mitigated';

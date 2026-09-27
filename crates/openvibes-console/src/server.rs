@@ -13,7 +13,7 @@ use std::{
 use axum::{
     Router,
     extract::{ConnectInfo, State, connect_info::Connected},
-    http::{HeaderValue, StatusCode},
+    http::{HeaderMap, HeaderValue, StatusCode},
     middleware,
     response::{IntoResponse, Response},
     serve::{IncomingStream, Listener},
@@ -757,7 +757,7 @@ async fn trusted_proxy_only(
         .get::<ConnectInfo<TrustedPeer>>()
         .is_some_and(|ConnectInfo(peer)| peer.is_allowed(&allowed.addresses, &allowed.uids));
     if trusted {
-        let source = trusted_forwarded_address(request.headers().get("x-forwarded-for"));
+        let source = trusted_forwarded_address(request.headers());
         request
             .extensions_mut()
             .insert(TrustedProxyClient { source });
@@ -771,8 +771,11 @@ async fn trusted_proxy_only(
     }
 }
 
-fn trusted_forwarded_address(value: Option<&HeaderValue>) -> Option<IpAddr> {
-    value
+fn trusted_forwarded_address(headers: &HeaderMap) -> Option<IpAddr> {
+    headers
+        .get_all("x-forwarded-for")
+        .iter()
+        .last()
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.rsplit(',').next())
         .and_then(|value| value.trim().parse().ok())
@@ -798,26 +801,33 @@ async fn stop_requested(mut receiver: watch::Receiver<bool>) {
 #[cfg(test)]
 mod trusted_proxy_header_tests {
     use super::trusted_forwarded_address;
-    use axum::http::HeaderValue;
+    use axum::http::{HeaderMap, HeaderValue};
     use std::net::IpAddr;
 
     #[test]
     fn uses_the_last_forwarded_ip_from_the_authenticated_proxy() {
+        let mut headers = HeaderMap::new();
+        headers.append("x-forwarded-for", HeaderValue::from_static("198.51.100.23"));
+        headers.append("x-forwarded-for", HeaderValue::from_static("192.0.2.8"));
         assert_eq!(
-            trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8"))),
+            trusted_forwarded_address(&headers),
             Some("192.0.2.8".parse::<IpAddr>().unwrap())
         );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("192.0.2.8, 198.51.100.4"),
+        );
         assert_eq!(
-            trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8, 198.51.100.4"))),
+            trusted_forwarded_address(&headers),
             Some("198.51.100.4".parse::<IpAddr>().unwrap())
         );
-        assert_eq!(
-            trusted_forwarded_address(Some(&HeaderValue::from_static("host.invalid"))),
-            None
+        headers.insert("x-forwarded-for", HeaderValue::from_static("host.invalid"));
+        assert_eq!(trusted_forwarded_address(&headers), None);
+        headers.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("192.0.2.8, invalid"),
         );
-        assert_eq!(
-            trusted_forwarded_address(Some(&HeaderValue::from_static("192.0.2.8, invalid"))),
-            None
-        );
+        assert_eq!(trusted_forwarded_address(&headers), None);
     }
 }

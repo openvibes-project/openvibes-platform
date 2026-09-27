@@ -248,7 +248,7 @@ ok "offline feed and KEV imported"
 
 # Rules: trust the signing key and publish the signed bundle.
 in_c "set -e
-      runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules $KEY
+      runuser -u openvibes_admin -- openvibes-admin rules trust add baseline org.rules -- "$KEY"
       runuser -u openvibes_admin -- openvibes-admin rules publish /test/bundle.json" ||
     fail "publish rules"
 ok "rules trusted and published"

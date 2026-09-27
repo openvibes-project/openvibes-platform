@@ -158,7 +158,7 @@ wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_eq
 # accepted (a re-signed v1 would differ and be refused as a conflict).
 start_distribution
 [[ "$(bundle "$W/v2.json" 2)" == "$KEY" ]] || { echo "FAIL: v2 signed with another key"; exit 1; }
-admin rules trust add integration integration.test "$KEY" >/dev/null
+admin rules trust add integration integration.test -- "$KEY" >/dev/null
 admin rules publish "$W/agent/rules.json" >/dev/null
 echo "ok: rules v1 published"
 stop_agent

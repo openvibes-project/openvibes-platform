@@ -15,7 +15,7 @@
 - Order: protocol PR → agent PR (pins protocol) → platform PR (pins agent). Each merges only with the user's approval and green CI.
 - Migration **0015** is reserved for imported-host support. Console migrations
   in PR #29 follow as **0016–0021**, and the least-privilege console grant fix
-  is **0022–0024** (`SCHEMA_VERSION = 24`).
+  is **0022** (`SCHEMA_VERSION = 22`).
 - Imported id: `import.` + `install_id`; `install_id` matches `^[A-Za-z0-9._:-]{1,128}$` (protocol identifier).
 - Files over `ResourceLimits::V1.document_bytes` (1 MiB) are refused before decoding.
 - Imports never touch an `agent.` row; a file's `agent_id` goes only to `claimed_agent_id`.
