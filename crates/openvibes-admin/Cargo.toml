@@ -21,6 +21,7 @@ serde_json.workspace = true
 sha2.workspace = true
 platform-store = { path = "../platform-store" }
 platform-host = { path = "../platform-host" }
+ratatui = "0.30"
 openvibes-vulns = { path = "../openvibes-vulns" }
 serde.workspace = true
 tokio.workspace = true

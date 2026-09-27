@@ -9,6 +9,35 @@ or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
 (`sudo -u openvibes-admin …`), the person is appended from `SUDO_USER`:
 `openvibes-admin (uid 994) via sudo by alice`.
 
+## Administration TUI
+
+`openvibes-admin` with no subcommand opens the administration TUI: the
+host-side work the web console deliberately does not do (admin TUI spec,
+`docs/specs/2026-09-27-admin-tui-design.md`). It runs as the invoking user,
+never listens on the network, needs no config file to open, and works over
+SSH at 80×24 with the keyboard only; states are written as text. Without a
+terminal (a pipe, cron) it exits 2 with a message; subcommands work as
+before.
+
+Who can use it: members of `openvibes-operators` (created by the RPM; add a
+person with `usermod -aG openvibes-operators NAME`, then they log in again).
+They start, stop and restart the OpenVIBES units through a polkit rule and
+read their logs through the root helper, without a password.
+
+**Services** (this release): each unit (`ingest`, `distribution`, `vulns`,
+`llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
+installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
+`-`), and since when; below, the selected unit's last 50 journal lines.
+Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
+`y/n`), `R` refresh (also every 5 s), `q` or Ctrl-C quit. Not an operator:
+the TUI names the group to join. Every action is written to the journal
+(`journalctl -t openvibes-admin`). Enabling and disabling at boot come with
+the password-prompted steps (a later release).
+
+`openvibes-admin helper logs UNIT LINES` (hidden) is the root helper the TUI
+calls through sudo: the unit must be one of the five, LINES 1 to 500, and it
+refuses unless run as root.
+
 ## Configuration
 
 `/etc/openvibes/admin.toml` (or `--config PATH`), bounded and strict like
