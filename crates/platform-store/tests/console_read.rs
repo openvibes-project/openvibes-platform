@@ -568,7 +568,7 @@ async fn scoped_host_lookup_does_not_let_a_hidden_id_shadow_a_hostname() {
     client
         .execute(
             "INSERT INTO console_asset_groups (asset_group_id, name, created_at, created_by)
-             VALUES ($1, 'visible', $2, 'test')",
+             VALUES ($1::text::uuid, 'visible', $2, 'test')",
             &[&group, &now],
         )
         .await
@@ -577,7 +577,7 @@ async fn scoped_host_lookup_does_not_let_a_hidden_id_shadow_a_hostname() {
         .execute(
             "INSERT INTO console_asset_group_selectors
                  (asset_group_id, tag_key, tag_value, created_at)
-             VALUES ($1, 'env', 'prod', $2)",
+             VALUES ($1::text::uuid, 'env', 'prod', $2)",
             &[&group, &now],
         )
         .await
