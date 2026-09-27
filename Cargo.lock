@@ -1775,6 +1775,7 @@ dependencies = [
  "base64 0.23.1",
  "chrono",
  "ed25519-dalek",
+ "flate2",
  "openvibes-core",
  "openvibes-rules",
  "openvibes-transport",

@@ -133,6 +133,15 @@ links, never edit or delete versions (a test checks it).
   links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
+- `apply_changes(&mut client, agent_id, os, running_kernel, added, removed,
+  base, expected, now)` (protocol P11) locks the agent row; unless the
+  stored digest is `base`, every removed row is linked, every added row is
+  not, and the fingerprint of the result (computed from the host's stored
+  rows) is `expected`, it returns `Resync` and writes nothing. Otherwise it
+  inserts unknown versions, unlinks the removed rows, links the added ones,
+  records OS, kernel and digest and notifies, as `replace` does → `Stored`.
+- `PackageRow` is the normalised record of the P11 fingerprint:
+  `normalized()` and `From<&NormalizedPackage>`.
 
 ## Wire conversions (`wire::…`)
 
@@ -140,9 +149,10 @@ Shared by online delivery (ingest) and file import (admin), so both refuse
 and store alike: `finding(finding, oldest, latest, partitions) ->
 Result<StoredFinding, reason>` (`future_observation` beyond
 `MAX_FUTURE_MINUTES` = 60, `retention_expired`, `out_of_range`,
-`unstorable` without a partition) and `inventory(os, running_kernel,
-&mut packages) -> (rows, sha256)` (sorts packages canonically; the digest
-covers OS, kernel and packages). `ingest::store_findings` takes an
+`unstorable` without a partition), `inventory(os, running_kernel,
+packages) -> (rows, sha256)` (the distinct normalised rows, and the
+protocol's inventory fingerprint over OS, kernel and packages, P11) and
+`package_rows(packages)` (the rows alone, for change sets). `ingest::store_findings` takes an
 `Origin`: `Online` stores `origin = 'online'`, authenticated; `Import`
 stores `'import'`, unauthenticated.
 

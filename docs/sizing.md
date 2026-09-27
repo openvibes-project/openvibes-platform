@@ -230,6 +230,14 @@ test. An inventory has its own deadline, `inventory_request_timeout_seconds`
 `request_timeout_seconds` (10 s). A slow upload holds an inventory slot
 longer, so others get 503 and retry.
 
+Since protocol P11 an agent sends its full inventory once, then only what
+changed, and both gzip-compressed. Measured on the Fedora 44 workstation:
+the full inventory is 472 KB, 45 KB with gzip; the changes after a
+150-package `dnf upgrade` are about 35 KB, a few KB compressed; one package
+update is 0.4 KB. Applying a change set reads the host's stored rows to
+check the result's fingerprint and writes only the changed links, instead
+of rewriting the host's whole inventory.
+
 ## Open questions
 
 - **Vulnerability management storage:** 6.7 GB per 10,000 hosts for
