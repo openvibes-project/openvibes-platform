@@ -143,3 +143,7 @@
 /* Muted text keeps AA contrast on highlighted rows. */
 .table tbody tr[aria-selected="true"] .subtle,
 .table tbody tr[aria-selected="true"] .muted { color: var(--text-2); }
+
+:root[data-density="compact"] .table td { height: 34px; }
+:root[data-density="compact"] .table .cell-two > :last-child { display: none; }
+:root[data-density="compact"] .list__row { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }

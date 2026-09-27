@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import { App } from "./shell/App";
+import { applyStoredDensity } from "./shell/theme";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
@@ -22,6 +23,7 @@ try {
 const fallback = import.meta.env.VITE_V2_SOURCE ?? (import.meta.env.DEV ? "demo" : "live");
 const demo = (choice ?? fallback) === "demo";
 
+applyStoredDensity();
 const root = document.getElementById("root");
 if (root === null) throw new Error("OpenVIBES root element is missing");
 createRoot(root).render(<StrictMode><App demo={demo} /></StrictMode>);

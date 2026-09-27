@@ -10,7 +10,7 @@ import { views } from "../app/registry";
 import { useSession } from "../app/session";
 import { personas, type Persona } from "../demo/server";
 import { Icon } from "../ui/Icon";
-import { setTheme, useTheme } from "./theme";
+import { setDensity, setTheme, useDensity, useTheme } from "./theme";
 
 const pinKey = "openvibes.v2.rail.pinned";
 
@@ -63,6 +63,7 @@ export function TopBar({ title, onPalette, onLogout, persona, onPersona, onHelp 
   const { session, can } = useSession();
   const { open } = useAssistant();
   const theme = useTheme();
+  const density = useDensity();
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -111,6 +112,9 @@ export function TopBar({ title, onPalette, onLogout, persona, onPersona, onHelp 
                   ))}
                 </div>
               )}
+              <button type="button" role="menuitemcheckbox" aria-checked={density === "compact"} className="menu__item" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>
+                {density === "compact" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} Compact rows
+              </button>
               {!persona && <button type="button" role="menuitem" className="menu__item" onClick={onLogout}><Icon name="logout" size={14} /> Sign out</button>}
             </div>
           )}

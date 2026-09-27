@@ -25,3 +25,27 @@ export function setTheme(theme: Theme): void {
 export function useTheme(): Theme {
   return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, currentTheme);
 }
+
+const densityKey = "openvibes.v2.density";
+export type Density = "comfortable" | "compact";
+
+export function applyStoredDensity(): void {
+  try {
+    if (localStorage.getItem(densityKey) === "compact") document.documentElement.dataset.density = "compact";
+  } catch { /* default density */ }
+}
+
+export function currentDensity(): Density {
+  return document.documentElement.dataset.density === "compact" ? "compact" : "comfortable";
+}
+
+export function setDensity(density: Density): void {
+  if (density === "compact") document.documentElement.dataset.density = "compact";
+  else delete document.documentElement.dataset.density;
+  try { localStorage.setItem(densityKey, density); } catch { /* lasts until reload */ }
+  for (const listener of listeners) listener();
+}
+
+export function useDensity(): Density {
+  return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, currentDensity);
+}

@@ -12,7 +12,7 @@ import { useSession } from "../app/session";
 import { windowsStore } from "../app/windows";
 import { Icon, type IconName } from "../ui/Icon";
 import { matches } from "../ui/table";
-import { setTheme } from "./theme";
+import { currentDensity, setDensity, setTheme } from "./theme";
 
 type Item = { id: string; group: string; icon: IconName; label: string; hint?: string; run: () => void };
 
@@ -48,6 +48,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
     out.push({ id: "a-light", group: "Actions", icon: "sun", label: "Theme: light", run: () => setTheme("light") });
     out.push({ id: "a-system", group: "Actions", icon: "monitor", label: "Theme: follow the system", run: () => setTheme("system") });
     out.push({ id: "a-windows", group: "Actions", icon: "layers", label: "Close all windows", run: () => windowsStore.closeAll() });
+    out.push({ id: "a-density", group: "Actions", icon: "filter", label: "Toggle compact rows", run: () => setDensity(currentDensity() === "compact" ? "comfortable" : "compact") });
     if (query.trim() === "") {
       for (const ref of recent()) {
         const def = panels[ref.kind];
