@@ -27,6 +27,7 @@ Strict TOML (unknown keys refused), absolute paths only:
 | `database_url` | required | the `openvibes-ingest` role |
 | `client_certificate_days` | 30 | 1 to 365 |
 | `max_in_flight` | 4096 | at least 1 |
+| `inventory_request_timeout_seconds` | 180 | 1 to 900; deadline for a whole inventory report (8 MiB at 500 kbit/s); other requests keep `request_timeout_seconds` |
 | `max_inventory_in_flight` | 4 | 1 to 128; inventory reports handled at once (each up to 8 MiB; the slot is taken before the body is read), above it 503 |
 | `finding_retention_days` | 90 | 1 to 36500; match `openvibes-admin maintenance` |
 | `request_timeout_seconds` | 10 | 1 to 300; TLS handshake, request headers, and each whole request |

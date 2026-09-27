@@ -36,6 +36,10 @@ pub struct Settings {
     /// Deadline for the TLS handshake, the request headers, and each whole
     /// request, 1 to 300 seconds.
     pub request_timeout_seconds: u64,
+    /// Deadline for a whole `/v1/inventory` request, 1 to 900 seconds:
+    /// inventories may be up to 8 MiB, so slow links need longer (a service
+    /// without that route passes `request_timeout_seconds`).
+    pub inventory_request_timeout_seconds: u64,
     /// Open client connections at once, 1 to 65536.
     pub max_connections: usize,
     /// Database connections, 1 to 1024.
@@ -56,6 +60,7 @@ impl Settings {
         let valid = self.health_listen.ip().is_loopback()
             && self.max_in_flight >= 1
             && (1..=300).contains(&self.request_timeout_seconds)
+            && (1..=900).contains(&self.inventory_request_timeout_seconds)
             && (1..=65_536).contains(&self.max_connections)
             && (1..=1024).contains(&self.database_pool_size);
         if valid {
@@ -102,6 +107,7 @@ pub async fn run(
     let limits = Limits {
         in_flight: Arc::new(Semaphore::new(settings.max_in_flight)),
         request_timeout: Duration::from_secs(settings.request_timeout_seconds),
+        inventory_request_timeout: Duration::from_secs(settings.inventory_request_timeout_seconds),
     };
     let connections = Arc::new(Semaphore::new(settings.max_connections));
     let router = app(pool.clone())

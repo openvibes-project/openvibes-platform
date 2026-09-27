@@ -378,3 +378,37 @@ async fn a_busy_inventory_endpoint_answers_before_reading_the_body() {
     assert_eq!(first.await.unwrap(), Ok(()));
     world.stop().await;
 }
+
+// Inventories get their own, longer deadline (inventory_request_timeout_seconds)
+// so a large report on a slow link (500 kbit/s) arrives; every other request
+// keeps request_timeout_seconds.
+#[tokio::test]
+async fn a_slow_inventory_upload_gets_the_longer_deadline() {
+    let world = World::start_with(|config| {
+        config.request_timeout_seconds = 1;
+        config.inventory_request_timeout_seconds = 30;
+    })
+    .await;
+    let (agent, chain, key) = enrolled(&world).await;
+    let chain_pem = chain.concat();
+    let pause = std::time::Duration::from_secs(2);
+    let body = serde_json::to_vec(&report(&agent, vec![package("bash", "5.2.37")])).unwrap();
+    let inventory = world
+        .raw_slow("/v1/inventory", &body, (&chain_pem, &key), pause)
+        .await;
+    assert_eq!(inventory, Some(204), "slow inventory accepted");
+    let findings = world
+        .raw_slow(
+            "/v1/findings",
+            br#"{"schema_version":1}"#,
+            (&chain_pem, &key),
+            pause,
+        )
+        .await;
+    assert_eq!(
+        findings,
+        Some(408),
+        "other requests keep the short deadline"
+    );
+    world.stop().await;
+}

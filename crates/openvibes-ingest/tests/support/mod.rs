@@ -95,6 +95,7 @@ impl World {
             client_certificate_days: 30,
             max_in_flight: 64,
             max_inventory_in_flight: 4,
+            inventory_request_timeout_seconds: 180,
             finding_retention_days: 90,
             request_timeout_seconds: 10,
             max_connections: 256,
@@ -344,6 +345,59 @@ impl World {
             .ok()?
             .ok()?;
         let text = String::from_utf8_lossy(&buffer[..read]).into_owned();
+        text.split_whitespace().nth(1)?.parse().ok()
+    }
+}
+
+impl World {
+    /// Sends `body` in two halves with `pause` between them (a slow link),
+    /// then returns the status.
+    #[allow(dead_code)]
+    pub async fn raw_slow(
+        &self,
+        path: &str,
+        body: &[u8],
+        client: (&str, &str),
+        pause: std::time::Duration,
+    ) -> Option<u16> {
+        let (first, rest) = body.split_at(body.len() / 2);
+        let mut roots = rustls::RootCertStore::empty();
+        for cert in CertificateDer::pem_slice_iter(self.root.cert_pem.as_bytes()) {
+            roots.add(cert.unwrap()).unwrap();
+        }
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let chain: Vec<CertificateDer<'static>> =
+            CertificateDer::pem_slice_iter(client.0.as_bytes())
+                .map(Result::unwrap)
+                .collect();
+        let config = rustls::ClientConfig::builder_with_provider(provider)
+            .with_protocol_versions(&[&rustls::version::TLS13])
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_client_auth_cert(
+                chain,
+                PrivateKeyDer::from_pem_slice(client.1.as_bytes()).unwrap(),
+            )
+            .unwrap();
+        let tcp = TcpStream::connect(self.addr).await.ok()?;
+        let mut tls = TlsConnector::from(Arc::new(config))
+            .connect(ServerName::try_from("127.0.0.1").unwrap(), tcp)
+            .await
+            .ok()?;
+        let head = format!(
+            "POST {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
+             Content-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        );
+        tls.write_all(head.as_bytes()).await.ok()?;
+        tls.write_all(first).await.ok()?;
+        tls.flush().await.ok()?;
+        tokio::time::sleep(pause).await;
+        // The server may already have answered (408) and closed.
+        let _ = tls.write_all(rest).await;
+        let mut response = Vec::new();
+        let _ = tls.read_to_end(&mut response).await;
+        let text = String::from_utf8_lossy(&response).into_owned();
         text.split_whitespace().nth(1)?.parse().ok()
     }
 }

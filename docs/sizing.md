@@ -225,8 +225,10 @@ reading an inventory body; a request finding none free gets 503 unread. With
 the body (up to 8 MiB), the parsed packages and the rows built for storage,
 one 50,000-package report needs roughly 30 to 40 MiB, so about 150 MiB for
 four at once. Storage of 50,000 packages for one host is covered by a store
-test. `request_timeout_seconds` (default 10) covers the upload and storage:
-an 8 MiB body needs about 7 Mbit/s; raise it for large hosts on slow links.
+test. An inventory has its own deadline, `inventory_request_timeout_seconds`
+(default 180 s: 8 MiB at 500 kbit/s); every other request keeps
+`request_timeout_seconds` (10 s). A slow upload holds an inventory slot
+longer, so others get 503 and retry.
 
 ## Open questions
 
