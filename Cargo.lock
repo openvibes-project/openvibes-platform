@@ -1110,6 +1110,7 @@ dependencies = [
  "openvibes-vulns",
  "platform-assistant",
  "platform-config",
+ "platform-host",
  "platform-pki",
  "platform-store",
  "ring",

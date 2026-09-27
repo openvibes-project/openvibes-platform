@@ -1,0 +1,6 @@
+# Installed as /etc/sudoers.d/openvibes-operators (0440 root:root).
+# Operators run the admin CLI as its service account (database work, with
+# its peer login and audit log) and the root helper's fixed verbs, which
+# check their own arguments against allow-lists (admin TUI spec §3).
+%openvibes-operators ALL=(openvibes-admin) NOPASSWD: /usr/bin/openvibes-admin
+%openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper logs *

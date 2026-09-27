@@ -8,6 +8,7 @@ mod agent;
 mod assistant;
 mod ca;
 mod files;
+mod helper;
 mod import;
 mod model;
 mod rules;
@@ -87,6 +88,12 @@ enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// Root-only verbs for the administration TUI (run through sudo).
+    #[command(hide = true)]
+    Helper {
+        #[command(subcommand)]
+        command: helper::HelperCommand,
+    },
     /// The console's assistant: check its model backend and run the
     /// quality gate.
     Assistant {
@@ -109,6 +116,7 @@ impl Command {
             Self::Vulns { command } => command.name(),
             Self::Import { .. } => "import",
             Self::Assistant { command } => command.name(),
+            Self::Helper { .. } => "helper",
         }
     }
 }
@@ -122,6 +130,10 @@ struct AdminConfig {
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> ExitCode {
     let cli = Cli::parse();
+    // The root helper runs before any config or database access.
+    if let Command::Helper { command } = &cli.command {
+        return helper::run(command);
+    }
     // Offline CA commands run where no platform exists: no config, no
     // database, no audit row.
     if let Command::Ca { command } = &cli.command
@@ -291,6 +303,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Feeds { .. }
         | Command::Vulns { .. }
         | Command::Import { .. }
+        | Command::Helper { .. }
         | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
         }

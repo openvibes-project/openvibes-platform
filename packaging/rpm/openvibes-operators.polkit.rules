@@ -1,0 +1,19 @@
+// Installed as /usr/share/polkit-1/rules.d/50-openvibes-operators.rules.
+// Members of openvibes-operators may start, stop and restart the OpenVIBES
+// units without a password (admin TUI spec §3). Nothing else: enable and
+// disable (manage-unit-files) name no unit, so they stay privileged steps.
+polkit.addRule(function (action, subject) {
+    if (action.id != "org.freedesktop.systemd1.manage-units" ||
+        !subject.isInGroup("openvibes-operators")) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var units = ["openvibes-ingest.service", "openvibes-distribution.service",
+                 "openvibes-vulns.service", "openvibes-llm.service",
+                 "openvibes-maintenance.timer"];
+    var verbs = ["start", "stop", "restart"];
+    if (units.indexOf(action.lookup("unit")) >= 0 &&
+        verbs.indexOf(action.lookup("verb")) >= 0) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});
