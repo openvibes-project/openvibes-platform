@@ -149,26 +149,42 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
     return <ReadStatus state={detail}>{(agent) => (
       <section className="read-card read-detail" aria-labelledby="agent-detail-title">
         <a href="/agents">← Back to agents</a>
-        <p className="eyebrow">Agent detail</p>
+        <p className="eyebrow">{agent.status === "imported" ? "Imported installation" : "Agent detail"}</p>
         <h2 id="agent-detail-title">{agent.hostname ?? agent.id}</h2>
         <dl className="detail-list">
-          <div><dt>Agent ID</dt><dd>{agent.id}</dd></div>
-          {!agent.hostname && <div><dt>Hostname</dt><dd>Hostname not reported</dd></div>}
+          {agent.status === "imported" ? (
+            <>
+              <div><dt>Installation ID</dt><dd><code>{importedInstallationId(agent.id)}</code></dd></div>
+              <div><dt>Identity</dt><dd>Unauthenticated local file import; no online agent identity</dd></div>
+            </>
+          ) : <div><dt>Agent ID</dt><dd>{agent.id}</dd></div>}
+          {!agent.hostname && agent.status !== "imported" && <div><dt>Hostname</dt><dd>Hostname not reported</dd></div>}
           <div><dt>Status</dt><dd><StatusPill value={agent.status} /></dd></div>
-          <div><dt>Enrolled</dt><dd><time dateTime={agent.enrolled_at}>{dateLabel(agent.enrolled_at)}</time></dd></div>
-          <div><dt>Last contact</dt><dd>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "No heartbeat recorded"}</dd></div>
-          <div><dt>Scanner</dt><dd>{agent.scanner_version ?? "Not reported"}</dd></div>
-          <div><dt>Capabilities</dt><dd>{agent.capabilities.length > 0 ? agent.capabilities.join(", ") : "None reported"}</dd></div>
+          {agent.status === "imported" ? (
+            <>
+              <div><dt>First imported</dt><dd><time dateTime={agent.enrolled_at}>{dateLabel(agent.enrolled_at)}</time></dd></div>
+              <div><dt>Last export</dt><dd>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "No export time recorded"}</dd></div>
+              <div><dt>Agent version in export</dt><dd>{agent.scanner_version ?? "Not reported"}</dd></div>
+              <div><dt>Hostname</dt><dd>{agent.hostname ?? "Not reported"} · operator label; may be shared</dd></div>
+            </>
+          ) : (
+            <>
+              <div><dt>Enrolled</dt><dd><time dateTime={agent.enrolled_at}>{dateLabel(agent.enrolled_at)}</time></dd></div>
+              <div><dt>Last contact</dt><dd>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "No heartbeat recorded"}</dd></div>
+              <div><dt>Scanner</dt><dd>{agent.scanner_version ?? "Not reported"}</dd></div>
+              <div><dt>Capabilities</dt><dd>{agent.capabilities.length > 0 ? agent.capabilities.join(", ") : "None reported"}</dd></div>
+            </>
+          )}
         </dl>
         <h3>Certificates</h3>
-        {agent.certificates.length === 0 ? <p>No certificates recorded.</p> : (
+        {agent.status === "imported" ? <p>File imports have no enrolled-agent certificates.</p> : agent.certificates.length === 0 ? <p>No certificates recorded.</p> : (
           <ul className="certificate-list">{agent.certificates.map((certificate) => (
             <li key={certificate.serial}>
               <code>{certificate.serial}</code> · Issued {dateLabel(certificate.issued_at)} · Expires {dateLabel(certificate.not_after)}
             </li>
           ))}</ul>
         )}
-        <AgentTags agentId={agent.id} csrfToken={csrfToken} canManage={canManageTags && !seeded} />
+        <AgentTags agentId={agent.id} csrfToken={csrfToken} canManage={canManageTags && !seeded && agent.status !== "imported"} />
         <AgentRevoke agentId={agent.id} csrfToken={csrfToken} canRevoke={canRevoke && !seeded && agent.status !== "revoked" && agent.status !== "imported"} />
       </section>
     )}</ReadStatus>;
@@ -189,9 +205,9 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
         </div>
         {page.items.length === 0 ? <p className="read-state">No agents match these filters.</p> : (
           <div className="table-scroll"><table className="data-table">
-            <thead><tr><th scope="col">Hostname</th><th scope="col">Status</th><th scope="col">Last contact</th><th scope="col">Scanner</th></tr></thead>
+            <thead><tr><th scope="col">Hostname</th><th scope="col">Status</th><th scope="col">Last seen / export</th><th scope="col">Scanner</th></tr></thead>
             <tbody>{page.items.map((agent) => <tr key={agent.id}>
-              <th scope="row"><a href={`/agents?agent=${encodeURIComponent(agent.id)}`}>{agent.hostname ?? "Hostname not reported"}</a><span className="table-subtext">{agent.id}</span></th>
+              <th scope="row"><a href={`/agents?agent=${encodeURIComponent(agent.id)}`}>{agent.hostname ?? "Hostname not reported"}</a><span className="table-subtext">{agent.status === "imported" ? `Installation ${importedInstallationId(agent.id)}` : agent.id}</span></th>
               <td><StatusPill value={agent.status} /></td><td>{agent.last_seen_at ? <time dateTime={agent.last_seen_at}>{dateLabel(agent.last_seen_at)}</time> : "Never"}</td><td>{agent.scanner_version ?? "Not reported"}</td>
             </tr>)}</tbody>
           </table></div>
@@ -200,6 +216,10 @@ export function AgentsReadPage({ seeded = false, csrfToken, canManageTags = fals
       </>}</ReadStatus>
     </section>
   );
+}
+
+function importedInstallationId(agentId: string): string {
+  return agentId.startsWith("import.") ? agentId.slice("import.".length) : agentId;
 }
 
 export function FindingsReadPage({ seeded = false, csrfToken, canTriage = false }: { seeded?: boolean; csrfToken?: string | undefined; canTriage?: boolean }) {
@@ -375,7 +395,8 @@ export function AccessControlReadPage({ seeded = false, canManage = false, canMa
 }
 
 function StatusPill({ value }: { value: string }) {
-  return <span className={`status-pill status-pill--${value}`}>{value.replaceAll("_", " ")}</span>;
+  const label = value.replaceAll("_", " ");
+  return <span className={`status-pill status-pill--${value}`}>{label.charAt(0).toUpperCase() + label.slice(1)}</span>;
 }
 
 function PageFooter({ page, href, params }: { page: { next_cursor?: string | null; generated_at: string }; href: string; params: URLSearchParams }) {

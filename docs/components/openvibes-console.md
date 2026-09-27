@@ -16,9 +16,10 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved. C0 and C1 are complete. C2–C5 are implemented in the
-Codex branch and remain in progress overall while PR #29 is updated, reviewed,
-and merged. C3 local authentication is
+The design is approved. C0–C5 are implemented; PR #29 merged on 2026-09-27.
+The next console work adds scoped vulnerability views, groups duplicate
+findings across endpoints, and makes imported installation details explicit.
+C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
 the executable connects to PostgreSQL, requires schema version 22, and serves
@@ -120,6 +121,13 @@ latest-finding analyst triage with version-checked updates. Fedora 44 RPM
 installation, upgrade preservation, direct TLS, Unix proxy peer enforcement,
 and systemd sandboxing pass the C5 integration run. CA and rule-trust-key
 administration remain CLI-only.
+
+Imported installations use the Agents view with a distinct Imported status.
+Detail shows the `install_id`, import timestamps, and file-reported scanner
+version, labels the identity unauthenticated, and never offers certificate,
+tag, or revoke actions. Hostnames remain operator labels and are not treated as
+unique identities; hostname-based vulnerability lookup must refuse ambiguous
+matches while exact installation IDs remain addressable.
 
 ## Configuration
 
