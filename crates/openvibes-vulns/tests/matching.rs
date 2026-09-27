@@ -550,7 +550,7 @@ async fn exploited_first_then_likely_exploited_then_severity() {
 
 #[tokio::test]
 async fn reboot_filter_finds_rows_beyond_the_fleet_priority_cap() {
-    let (db, _admin, mut vulns) = setup().await;
+    let (db, _admin, vulns) = setup().await;
     let now = Utc::now();
     vulns
         .execute(
