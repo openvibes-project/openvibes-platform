@@ -13,6 +13,7 @@ mod pki;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;
+pub mod remove;
 mod run;
 mod system;
 pub mod update;

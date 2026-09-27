@@ -74,15 +74,26 @@ fn console_port<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {
     Ok(Some(format!("{port}/tcp")))
 }
 
-fn ports<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<String>, String> {
-    let mut ports = vec!["18423/tcp".to_owned()];
-    if ctx.plan.has(Component::Distribution) {
+/// The firewall ports of `components`.
+pub(super) fn ports_for<R: Runner>(
+    ctx: &Ctx<R>,
+    components: &[Component],
+) -> Result<Vec<String>, String> {
+    let mut ports = Vec::new();
+    if components.contains(&Component::Ingest) {
+        ports.push("18423/tcp".to_owned());
+    }
+    if components.contains(&Component::Distribution) {
         ports.push("18424/tcp".into());
     }
-    if ctx.plan.has(Component::Console) {
+    if components.contains(&Component::Console) {
         ports.extend(console_port(ctx)?);
     }
     Ok(ports)
+}
+
+fn ports<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<String>, String> {
+    ports_for(ctx, &ctx.plan.components)
 }
 
 pub fn firewall_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
