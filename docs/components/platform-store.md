@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 22; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 23; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -248,6 +248,23 @@ Schema 12 grants `openvibes-vulns` `MAINTAIN` on the tables it bulk-loads
 (PostgreSQL 17 or later), so `replace_advisories` can `ANALYZE` them.
 `vulns::list` combines each advisory's CVEs and enrichment once, then
 sorts and limits (0.63 s at 244,000 open vulnerabilities).
+
+Console reads use `vulns::list_in_scope`, `vulns::summary_in_scope`, and
+`vulns::cve_details_in_scope`. Asset-group membership is resolved to agent
+IDs and applied in SQL before priority selection, aggregation, or returning
+advisory enrichment. An empty scope returns no host rows or summary counts;
+advisory details are returned only when a visible host has a matching
+vulnerability.
+`ListFilter.exploited` and `ListFilter.reboot_needed` are applied inside the
+ranked/counting SQL before the 10,000-row fleet bound, so filtered fleet reads
+do not lose lower-priority matching rows. `hosts_named_in_scope` resolves an
+agent ID or hostname only among visible agents; a hidden ID cannot suppress a
+visible hostname match.
+
+Schema 23 grants the console role read-only access to the vulnerability and
+inventory tables and adds the agent-scoped `vulnerabilities.read` permission
+to built-in roles. The role can still change no vulnerability or inventory
+rows; each console query must apply the resolved asset scope.
 
 Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
 each range as whole version strings with its `scheme` (`rpm` or `dpkg`),

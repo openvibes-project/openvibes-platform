@@ -10,6 +10,10 @@ immutable evidence; triage notes and state are separate metadata.
   returns default `open` state or the saved state and an ETag version.
 - `PUT` on the same route requires `findings.triage`, browser origin and CSRF
   validation, and `If-Match`. Stale writes return 412.
+- `update_many` applies one transition to 1–100 endpoints in a single
+  transaction. It locks current findings in ID order, verifies each version
+  and SQL scope, and writes one history and audit record per changed endpoint;
+  any stale, missing, or invalid member aborts the entire batch.
 - States are `open`, `investigating`, `mitigated`, `accepted_risk`, and
   `false_positive`. Completed states need a note; accepted risk needs a future
   RFC 3339 expiry. Assignees must be enabled analysts or admins.
