@@ -27,6 +27,13 @@ export function configureDemo(persona: Persona | undefined): void {
 }
 
 export const isDemo = () => demo !== undefined;
+
+const signedOut = new Set<() => void>();
+/** Called when a live request finds the session gone (expired or signed out elsewhere). */
+export function onSignedOut(listener: () => void): () => void {
+  signedOut.add(listener);
+  return () => signedOut.delete(listener);
+}
 export const setCsrfToken = (token: string) => { csrfToken = token; };
 
 export async function request<T>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
@@ -52,6 +59,7 @@ export async function request<T>(method: string, path: string, body?: unknown, e
   } catch {
     payload = undefined;
   }
+  if (response.status === 401 && !demo && path !== "/api/v1/session") for (const listener of signedOut) listener();
   if (!response.ok) {
     const details = (payload ?? {}) as { code?: string; title?: string };
     throw new ApiError(response.status, details.code ?? "unavailable", details.title ?? `Request failed (${response.status})`);

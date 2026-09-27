@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { ApiError, configureDemo, request, setCsrfToken } from "../api/client";
+import { ApiError, configureDemo, onSignedOut, request, setCsrfToken } from "../api/client";
 import type { Permission, Session } from "../api/types";
 import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
@@ -42,6 +42,8 @@ export function App({ demo: startDemo }: { demo: boolean }) {
       setAuth("ok");
     }, (error: unknown) => setAuth(error instanceof ApiError && error.status === 401 ? "signin" : "down"));
   }, [persona]);
+
+  useEffect(() => onSignedOut(() => setAuth("signin")), []);
 
   const can = useCallback((permission: Permission, global = false) => allows(session, { permission, global }), [session]);
   const canView = useCallback((path: string) => views.find((v) => v.path === path)?.access.some((a) => can(a.permission, a.global)) === true, [can]);
