@@ -18,6 +18,13 @@ echo "$sql" >> "$STATE/log"
 exit 0
 FAKE
 chmod +x "$T/bin/runuser"
+# Fake `getent passwd NAME`: the users listed in $T/users exist.
+cat > "$T/bin/getent" <<'FAKE'
+#!/bin/bash
+grep -qx "$2" "$STATE/users" 2>/dev/null
+FAKE
+chmod +x "$T/bin/getent"
+printf '%s\n' openvibes-ingest openvibes-vulns openvibes-llm > "$T/users"
 export PATH=$T/bin:$PATH STATE=$T
 run() { : > "$T/log"; bash "$SCRIPT" "$@" 2> "$T/err" || { cat "$T/err" >&2; return 1; }; }
 
@@ -42,6 +49,25 @@ touch "$T/down"
 run post vulns || fail "failed the transaction"
 grep -q 'ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";' "$T/err" || fail "statement not printed"
 rm "$T/down"
+
+# The OS rename did not happen (old user still there): change nothing, say so.
+printf '%s\n' openvibes_ingest > "$T/users"
+cp "$T/before" "$cfg"; sed -i 's/user=openvibes-ingest"/user=openvibes_ingest"/' "$cfg"; cp "$cfg" "$T/kept"
+echo openvibes_ingest > "$T/roles"
+run post ingest "$cfg"
+cmp -s "$cfg" "$T/kept" || fail "config rewritten although the OS user was not renamed"
+grep -q ALTER "$T/log" && fail "role renamed although the OS user was not renamed"
+grep -q 'openvibes_ingest was not renamed' "$T/err" || fail "no message when the OS rename is missing: $(cat "$T/err")"
+printf '%s\n' openvibes-ingest openvibes-vulns openvibes-llm > "$T/users"
+
+# Roles in an unexpected state: both names, or neither: warn with the statement.
+printf '%s\n' openvibes_ingest openvibes-ingest > "$T/roles"
+run post ingest
+grep -q ALTER "$T/log" && fail "renamed with both roles present"
+grep -q 'both openvibes_ingest and openvibes-ingest exist' "$T/err" || fail "no warning with both roles: $(cat "$T/err")"
+: > "$T/roles"
+run post ingest
+grep -q 'neither openvibes_ingest nor openvibes-ingest' "$T/err" || fail "no warning with neither role: $(cat "$T/err")"
 
 # llm has no database role: no psql at all.
 run post llm

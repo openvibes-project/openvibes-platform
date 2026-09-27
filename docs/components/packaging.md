@@ -227,10 +227,17 @@ the admin TUI work (`openvibes-admin`, `openvibes-ingest`,
 `openvibes-distribution`, `openvibes-vulns`, `openvibes-llm`; before:
 `openvibes_admin`, …). Upgrading the RPMs renames an existing install:
 
-- `%pre` stops the unit and renames the OS user and group
-  (`usermod -l`, `groupmod -n`); uids, file ownership and group memberships
-  stay the same. If rpm already created the new name from the sysusers file,
-  that empty account is removed first.
+- `%pre` stops the unit (and the maintenance timer) and renames the OS user
+  and group (`usermod -l`, `groupmod -n`); uids, file ownership and group
+  memberships stay the same. If rpm already created the new name from the
+  sysusers file, that empty account is removed first. Units that were
+  running are started again at the end of the transaction (`%posttrans`).
+- If a process still runs as the old user (for example an operator's
+  `runuser -u openvibes_admin …`), that package's upgrade is refused with
+  its PIDs: `processes still run as openvibes_admin …; stop them and
+  upgrade again`. The package stays installed on the old name, consistent
+  and running; the other packages upgrade. Run the upgrade again once the
+  process has ended.
 - `%post` changes `user=openvibes_NAME` to `user=openvibes-NAME` in the kept
   `database_url` of `/etc/openvibes/NAME.toml` (nothing else in the file),
   then renames the PostgreSQL role as `postgres`
@@ -247,7 +254,9 @@ the admin TUI work (`openvibes-admin`, `openvibes-ingest`,
   ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";
   ```
 
-Every step checks first, so reinstalling changes nothing. In SQL the new
+`%post` only changes the config and the role once the OS account was
+renamed, and warns when the roles are not as expected (neither name, or
+both). Every step checks first, so reinstalling changes nothing. In SQL the new
 names need quotes (`GRANT … TO "openvibes-ingest"`).
 
 ## Renewing the server certificate

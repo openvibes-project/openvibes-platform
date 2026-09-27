@@ -4,8 +4,9 @@
 # the database, start openvibes-vulns, then replace the packages with the
 # new RPMs and check that users, groups, roles, configs and file owners were
 # renamed and the service works again. A second reinstall must change nothing.
-# The RPMs share a version, so `dnf reinstall` from local files stands in for
-# an upgrade; it runs the new package's %pre and %post the same way.
+# `rpm -U --replacepkgs` upgrades whether the new RPMs carry the same or a
+# newer version. A process still running as an old account makes that
+# package's %pre refuse, leaving it consistent on the old name.
 # Usage: scripts/upgrade-e2e.sh BASE_RPM_DIR NEW_RPM_DIR
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -59,8 +60,19 @@ in_c "sed -i -e 's|^metalink_url = .*|metalink_url = \"http://127.0.0.1:9/metali
 wait_for "base vulns ready" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'systemctl enable openvibes-maintenance.timer' >/dev/null 2>&1 || true
 
+# A process still runs as openvibes_admin: openvibes-admin's upgrade refuses
+# and keeps the old, consistent account; the others go ahead.
+in_c 'systemd-run -q --unit=ov-holder -p User=openvibes_admin sleep 600' || fail "start the holding process"
+out=$(in_c 'rpm -U --replacepkgs /test/new/*.rpm 2>&1') && fail "upgrade went ahead while openvibes_admin had a process"
+grep -q 'processes still run as openvibes_admin' <<<"$out" || fail "no message about the process: $out"
+in_c 'getent passwd openvibes_admin && ! getent passwd openvibes-admin' >/dev/null || fail "admin account changed despite the refusal: $(in_c 'getent passwd | grep openvibes; getent group | grep openvibes')"
+[[ "$(in_c 'stat -c %G /etc/openvibes/admin.toml')" == openvibes_admin ]] || fail "admin.toml group changed despite the refusal"
+in_c 'runuser -u openvibes_admin -- openvibes-admin status' >/dev/null || fail "admin CLI broken after the refused upgrade"
+ok "a process under the old account makes that package's upgrade refuse, consistently"
+in_c 'systemctl stop ov-holder' >/dev/null 2>&1 || true
+
 # The upgrade.
-in_c 'dnf -q -y reinstall /test/new/*.rpm' || fail "upgrade to the new RPMs"
+in_c 'rpm -U --replacepkgs /test/new/*.rpm' || fail "upgrade to the new RPMs"
 for p in "${PKGS[@]}"; do
     in_c "getent passwd openvibes-$p && getent group openvibes-$p && ! getent passwd openvibes_$p && ! getent group openvibes_$p" >/dev/null ||
         fail "account openvibes_$p not renamed to openvibes-$p"
@@ -78,8 +90,7 @@ for p in "${PKGS[@]}"; do
 done
 in_c "grep -q '^kev_url = \"\"' /etc/openvibes/vulns.toml" || fail "the operator's other vulns.toml edits were lost"
 ok "configs point at the renamed roles, other edits kept"
-in_c 'systemctl restart openvibes-vulns' >/dev/null 2>&1 || true
-wait_for "vulns ready as openvibes-vulns" 30 'curl -fsS http://127.0.0.1:18483/ready'
+wait_for "vulns running again after the upgrade, as openvibes-vulns" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes-admin -- openvibes-admin status' >/dev/null || fail "openvibes-admin status after the upgrade"
 ok "services and the admin CLI work after the upgrade"
 

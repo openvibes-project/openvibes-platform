@@ -8,16 +8,35 @@
 
 # Upgrade from openvibes_NAME service accounts (admin TUI spec §2): rename
 # the OS user and group before the new files are laid down. Inline because on
-# the first upgrade no file of the new package exists yet. If rpm already
-# created the new, empty account from the sysusers file, it is removed first
-# (no file of this package is installed yet). Stops the unit: usermod refuses
-# a user with processes. %%post then renames the PostgreSQL role.
+# the first upgrade no file of the new package exists yet. Stops the unit (and
+# timer) first, remembering whether it ran; %%posttrans starts it again. If a
+# process still runs as the old user, usermod could not rename it: start the
+# unit again, remove the empty new account rpm may already have created from
+# the sysusers file, and refuse, so rpm skips this package and the install
+# stays consistent on the old name.
+# An empty new account rpm may have created from the sysusers file is removed
+# just before the rename. %%post then renames the PostgreSQL role.
 %define rename_pre() \
 old=openvibes_%1; new=openvibes-%1; \
 if getent passwd $old >/dev/null; then \
-    if getent passwd $new >/dev/null && ! pgrep -u $new >/dev/null; then userdel $new; groupdel $new 2>/dev/null; fi; \
-    if ! getent passwd $new >/dev/null; then systemctl stop %2 2>/dev/null; usermod -l $new $old && groupmod -n $new $old; fi; \
-fi; :
+    for u in %2 %{?3}; do systemctl is-active -q $u && touch /run/openvibes-restart-$u; systemctl stop $u 2>/dev/null; done; \
+    if pgrep -u $old >/dev/null; then \
+        echo "openvibes: processes still run as $old (PIDs $(pgrep -d, -u $old)); stop them and upgrade again" >&2; \
+        for u in %2 %{?3}; do [ -e /run/openvibes-restart-$u ] && rm -f /run/openvibes-restart-$u && systemctl start $u; done; \
+        getent passwd $new >/dev/null && userdel $new; getent group $new >/dev/null && groupdel $new; exit 1; \
+    fi; \
+    if getent passwd $new >/dev/null; then userdel $new || exit 1; fi; \
+    if getent group $new >/dev/null && ! getent group $old >/dev/null; then :; elif getent group $new >/dev/null; then groupdel $new || exit 1; fi; \
+    usermod -l $new $old || exit 1; \
+fi; \
+if getent group $old >/dev/null && ! getent group $new >/dev/null; then groupmod -n $new $old || exit 1; fi; :
+
+# After the whole transaction: start again what %%rename_pre stopped, with the
+# new units (User=openvibes-NAME) loaded.
+%define restart_renamed() \
+for u in %1 %{?2}; do \
+    if [ -e /run/openvibes-restart-$u ]; then rm -f /run/openvibes-restart-$u; systemctl daemon-reload; systemctl start $u || :; fi; \
+done; :
 
 Name:           openvibes-platform
 Version:        %{ov_version}
@@ -31,6 +50,7 @@ BuildRequires:  systemd-rpm-macros
 OpenVIBES platform services.
 
 %package -n openvibes-ingest
+Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES agent-facing ingest service
 %{?systemd_requires}
 
@@ -38,6 +58,7 @@ Summary:        OpenVIBES agent-facing ingest service
 Receives enrollments, renewals, heartbeats, and findings from OpenVIBES agents over mTLS.
 
 %package -n openvibes-distribution
+Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES rule distribution service
 %{?systemd_requires}
 
@@ -45,6 +66,7 @@ Summary:        OpenVIBES rule distribution service
 Serves operator-published, offline-signed rule bundles to enrolled OpenVIBES agents over mTLS.
 
 %package -n openvibes-vulns
+Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES vulnerability feeds and matching
 %{?systemd_requires}
 
@@ -53,6 +75,7 @@ Fetches Fedora security advisories and matches them against the package
 inventories OpenVIBES agents report.
 
 %package -n openvibes-admin
+Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
 
@@ -61,6 +84,7 @@ Schema migration, built-in CA, tokens, agents, and daily partition maintenance.
 
 %if %{with llm}
 %package -n openvibes-llm
+Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES local model server for the console's assistant
 License:        MIT
 # Models are installed with openvibes-admin, whose group owns the model store.
@@ -135,6 +159,8 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %post -n openvibes-ingest
 %{_libexecdir}/openvibes/rename-account-ingest post ingest %{_sysconfdir}/openvibes/ingest.toml
 %systemd_post openvibes-ingest.service
+%posttrans -n openvibes-ingest
+%restart_renamed openvibes-ingest.service
 %preun -n openvibes-ingest
 %systemd_preun openvibes-ingest.service
 %postun -n openvibes-ingest
@@ -145,6 +171,8 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %post -n openvibes-distribution
 %{_libexecdir}/openvibes/rename-account-distribution post distribution %{_sysconfdir}/openvibes/distribution.toml
 %systemd_post openvibes-distribution.service
+%posttrans -n openvibes-distribution
+%restart_renamed openvibes-distribution.service
 %preun -n openvibes-distribution
 %systemd_preun openvibes-distribution.service
 %postun -n openvibes-distribution
@@ -155,16 +183,20 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %post -n openvibes-vulns
 %{_libexecdir}/openvibes/rename-account-vulns post vulns %{_sysconfdir}/openvibes/vulns.toml
 %systemd_post openvibes-vulns.service
+%posttrans -n openvibes-vulns
+%restart_renamed openvibes-vulns.service
 %preun -n openvibes-vulns
 %systemd_preun openvibes-vulns.service
 %postun -n openvibes-vulns
 %systemd_postun_with_restart openvibes-vulns.service
 
 %pre -n openvibes-admin
-%rename_pre admin openvibes-maintenance.service
+%rename_pre admin openvibes-maintenance.service openvibes-maintenance.timer
 %post -n openvibes-admin
 %{_libexecdir}/openvibes/rename-account-admin post admin %{_sysconfdir}/openvibes/admin.toml
 %systemd_post openvibes-maintenance.timer
+%posttrans -n openvibes-admin
+%restart_renamed openvibes-maintenance.service openvibes-maintenance.timer
 %preun -n openvibes-admin
 %systemd_preun openvibes-maintenance.timer
 %postun -n openvibes-admin
@@ -180,6 +212,8 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 if [ ! -s %{_sysconfdir}/openvibes/llm-api-key ]; then
     (umask 077 && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > %{_sysconfdir}/openvibes/llm-api-key)
 fi
+%posttrans -n openvibes-llm
+%restart_renamed openvibes-llm.service
 %preun -n openvibes-llm
 %systemd_preun openvibes-llm.service
 %postun -n openvibes-llm
