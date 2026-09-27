@@ -90,7 +90,12 @@ for p in "${PKGS[@]}"; do
 done
 in_c "grep -q '^kev_url = \"\"' /etc/openvibes/vulns.toml" || fail "the operator's other vulns.toml edits were lost"
 ok "configs point at the renamed roles, other edits kept"
-wait_for "vulns running again after the upgrade, as openvibes-vulns" 30 'curl -fsS http://127.0.0.1:18483/ready'
+wait_for "vulns running again after the upgrade, as openvibes-vulns" 30 \
+    'systemctl is-active -q openvibes-vulns && [[ $(ps -o uid= -C openvibes-vulns | tr -d " ") == $(id -u openvibes-vulns) ]]'
+# The new RPMs may carry newer migrations; services report not-ready until
+# the operator migrates, as after any upgrade.
+in_c 'runuser -u openvibes-admin -- openvibes-admin migrate' >/dev/null || fail "migrate after the upgrade"
+wait_for "vulns ready after migrate" 30 'curl -fsS http://127.0.0.1:18483/ready'
 in_c 'runuser -u openvibes-admin -- openvibes-admin status' >/dev/null || fail "openvibes-admin status after the upgrade"
 ok "services and the admin CLI work after the upgrade"
 
