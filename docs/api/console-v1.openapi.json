@@ -1289,6 +1289,204 @@
         }
       }
     },
+    "/api/v1/findings/groups": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_groups",
+        "parameters": [
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent scope-filtered findings grouped by rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingGroupPage"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "authenticated_finding_group_endpoints",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "include_older",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped endpoints reporting one recent rule group",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FindingGroupEndpointPage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Finding group not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/findings/groups/{rule_set_id}/{rule_id}/triage": {
+      "post": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "update_authenticated_finding_group_triage",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkFindingTriageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Atomic endpoint triage update",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkFindingTriageResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Group or endpoint is not visible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "At least one triage version is stale",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/findings/history": {
       "get": {
         "tags": [
@@ -2327,6 +2525,154 @@
         }
       }
     },
+    "/api/v1/vulnerabilities": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "operationId": "authenticated_vulnerabilities",
+        "parameters": [
+          {
+            "name": "host",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "advisory",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "severity",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cve",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fixed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "exploited",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "reboot_needed",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prioritised, scope-filtered vulnerabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilityPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid filters",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vulnerabilities/advisories/{advisory_id}": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "operationId": "authenticated_vulnerability_advisory",
+        "parameters": [
+          {
+            "name": "advisory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped advisory and CVE enrichment",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilityAdvisoryDetail"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Advisory not visible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vulnerabilities/summary": {
+      "get": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "operationId": "authenticated_vulnerability_summary",
+        "responses": {
+          "200": {
+            "description": "Scoped vulnerability summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilitySummary"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/v1/login": {
       "post": {
         "tags": [
@@ -3347,6 +3693,137 @@
           "saml"
         ]
       },
+      "BulkFindingTriageChange": {
+        "type": "object",
+        "description": "One endpoint and its expected triage version for a bulk transition.",
+        "required": [
+          "agent_id",
+          "version"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Enrolled-agent or imported-installation identifier."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Expected triage version for this endpoint."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BulkFindingTriageRequest": {
+        "type": "object",
+        "description": "Atomic workflow transition for selected endpoints in one rule group.",
+        "required": [
+          "changes",
+          "state"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required only for accepted risk; RFC 3339 timestamp."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Analyst username, or `null` to unassign."
+          },
+          "changes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkFindingTriageChange"
+            },
+            "description": "One through 100 unique endpoints to update atomically."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required when moving to a completed state."
+          },
+          "state": {
+            "type": "string",
+            "description": "Requested workflow state."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BulkFindingTriageResponse": {
+        "type": "object",
+        "description": "Successful endpoint-level triage results.",
+        "required": [
+          "updated"
+        ],
+        "properties": {
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "array",
+              "items": false,
+              "prefixItems": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "object",
+                  "description": "Human workflow state attached to the latest finding.",
+                  "required": [
+                    "state",
+                    "rule_version",
+                    "version"
+                  ],
+                  "properties": {
+                    "accepted_until": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Accepted risk expiry, if applicable."
+                    },
+                    "assigned_to": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Assigned analyst username."
+                    },
+                    "note": {
+                      "type": [
+                        "string",
+                        "null"
+                      ],
+                      "description": "Operator note."
+                    },
+                    "rule_version": {
+                      "type": "integer",
+                      "format": "int64",
+                      "description": "Rule version this state covers."
+                    },
+                    "state": {
+                      "type": "string",
+                      "description": "Workflow state."
+                    },
+                    "version": {
+                      "type": "integer",
+                      "format": "int64",
+                      "description": "Monotonic update version used with ETag and If-Match."
+                    }
+                  }
+                }
+              ]
+            },
+            "description": "New triage state and version for every updated endpoint."
+          }
+        }
+      },
       "CertificatePage": {
         "type": "object",
         "description": "A page of certificate metadata using the shared cursor response shape.",
@@ -3778,6 +4255,201 @@
           "message": {
             "type": "string",
             "description": "Bounded operator-facing explanation."
+          }
+        }
+      },
+      "FindingGroupEndpointPage": {
+        "type": "object",
+        "description": "Page of endpoints reporting one rule.",
+        "required": [
+          "items",
+          "generated_at",
+          "since"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 time when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindingGroupEndpointView"
+            },
+            "description": "Current page of visible endpoints reporting the rule."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque continuation cursor, or `null` after the final page."
+          },
+          "since": {
+            "type": "string",
+            "description": "RFC 3339 start of the endpoint query window."
+          }
+        }
+      },
+      "FindingGroupEndpointView": {
+        "type": "object",
+        "description": "One endpoint reporting a grouped finding.",
+        "required": [
+          "agent_id",
+          "first_observed_at",
+          "last_observed_at",
+          "rule_version",
+          "triage_state",
+          "triage_version",
+          "outside_window",
+          "origin",
+          "authenticated"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Enrolled-agent or imported-installation identifier."
+          },
+          "authenticated": {
+            "type": "boolean",
+            "description": "Whether the finding arrived over authenticated agent transport."
+          },
+          "first_observed_at": {
+            "type": "string",
+            "description": "RFC 3339 time when this endpoint first reported the finding."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname label, when reported."
+          },
+          "last_observed_at": {
+            "type": "string",
+            "description": "RFC 3339 time of the latest observation."
+          },
+          "origin": {
+            "$ref": "#/components/schemas/FindingOrigin",
+            "description": "Online or imported observation provenance."
+          },
+          "outside_window": {
+            "type": "boolean",
+            "description": "Whether this endpoint is older than the requested window."
+          },
+          "rule_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Signed rule version reported by this endpoint.",
+            "minimum": 0
+          },
+          "triage_state": {
+            "type": "string",
+            "description": "Current workflow state; missing triage records are `open`."
+          },
+          "triage_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Monotonic triage version used to reject stale writes."
+          }
+        }
+      },
+      "FindingGroupPage": {
+        "type": "object",
+        "description": "Page of unique rule groups.",
+        "required": [
+          "items",
+          "generated_at",
+          "since"
+        ],
+        "properties": {
+          "generated_at": {
+            "type": "string",
+            "description": "RFC 3339 time when this page was generated."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FindingGroupView"
+            },
+            "description": "Current page of unique rule groups."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque continuation cursor, or `null` after the final page."
+          },
+          "since": {
+            "type": "string",
+            "description": "RFC 3339 start of the grouping window."
+          }
+        }
+      },
+      "FindingGroupView": {
+        "type": "object",
+        "description": "One grouped current finding across visible endpoints.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "endpoint_count",
+          "severity",
+          "latest_message",
+          "rule_versions",
+          "first_observed_at",
+          "last_observed_at",
+          "older_endpoint_count",
+          "triage_counts"
+        ],
+        "properties": {
+          "endpoint_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible endpoints whose latest observation is inside the requested window.",
+            "minimum": 0
+          },
+          "first_observed_at": {
+            "type": "string",
+            "description": "Earliest first-observed timestamp in the group."
+          },
+          "last_observed_at": {
+            "type": "string",
+            "description": "Latest-observed timestamp in the group."
+          },
+          "latest_message": {
+            "type": "string",
+            "description": "Message from the most recently observed endpoint."
+          },
+          "older_endpoint_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible endpoints whose latest observation is older than the window.",
+            "minimum": 0
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule identifier within the rule set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule-set identifier; `~unknown` represents legacy findings without one."
+          },
+          "rule_versions": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 0
+            },
+            "description": "Distinct signed rule versions represented in the group."
+          },
+          "severity": {
+            "$ref": "#/components/schemas/Severity",
+            "description": "Highest severity among the current in-window endpoints."
+          },
+          "triage_counts": {
+            "description": "Counts by endpoint triage state, for current in-window observations."
           }
         }
       },
@@ -5120,6 +5792,10 @@
     {
       "name": "findings",
       "description": "Scope-filtered observation reads"
+    },
+    {
+      "name": "vulnerabilities",
+      "description": "Scope-filtered vulnerability review"
     },
     {
       "name": "assistant",

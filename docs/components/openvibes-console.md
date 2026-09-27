@@ -17,8 +17,11 @@ to `openvibes-admin tui`.
 ## Status
 
 The design is approved. C0–C5 are implemented; PR #29 merged on 2026-09-27.
-The next console work adds scoped vulnerability views, groups duplicate
-findings across endpoints, and makes imported installation details explicit.
+The vulnerability and grouped-finding API and UI work is implemented on the
+follow-up branch. It adds scoped fleet summaries, prioritized vulnerability
+views, CVE enrichment, grouped rule views, endpoint inspection, and atomic
+bulk triage. The merge-readiness check still requires the complete local gate,
+browser E2E, and CI/review confirmation for the final commit.
 C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
@@ -26,7 +29,9 @@ the executable connects to PostgreSQL, requires schema version 24, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
-certificate routes, plus finding summary, latest, and history reads. Access
+certificate routes, plus finding summary, latest, history, and grouped rule
+reads. Vulnerability summary, prioritized list, and advisory/CVE detail are
+available under the caller's `vulnerabilities.read` scope. Access
 control has a global read inventory for roles, bindings, and asset groups,
 plus CSRF-protected local-user role binding changes and audited asset-group
 selector management. Enrollment-token, service-account, and signed rule-bundle
@@ -73,7 +78,34 @@ the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
 Production data routes remain unavailable until their later milestones
 provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
-OpenAPI snapshot or package.
+OpenAPI snapshot or package. The seeded API also supplies deterministic
+vulnerability and grouped-finding data so both pages can be reviewed locally.
+
+### Vulnerability review and X-M7 grouped findings
+
+`GET /api/v1/vulnerabilities/summary`, `/vulnerabilities`, and
+`/vulnerabilities/advisories/{advisory_id}` require `vulnerabilities.read`.
+Every query applies the caller's asset scope in SQL before returning records.
+The summary reports severity, affected hosts, exploited advisories, no-fix
+matches, and reboot-needed hosts. The bounded prioritized list uses the same
+ranking as `vulns list`; host, advisory, severity, CVE, and fixed-state filters
+are available. Host names that match multiple visible hosts are refused with
+their visible IDs; an agent ID selects one exact host. Advisory details return
+CVE enrichment only if at least one affected host is visible to the caller.
+
+`GET /api/v1/findings/groups` shows each rule set and rule once in the recent
+window, after scope filtering. Its endpoint route pages visible current
+reporters and can include older matches on request. `~unknown` represents
+pre-P6 findings with no rule set. `POST .../triage` accepts at most 100
+endpoint/version pairs and performs one all-or-nothing state transition.
+Stale selections return 412 and no endpoint is updated. Imported rows are
+labelled with their installation ID and remain limited to global readers.
+
+The frontend modules `Vulnerabilities.tsx` and `GroupedFindings.tsx` own the
+two read experiences. They render API priority and provenance as supplied,
+link host/advisory views, preserve opaque cursors, disable triage for readers,
+and send mutations with the session CSRF token. The demo server supplies
+synthetic API models for these routes.
 
 ## Interfaces
 
@@ -231,7 +263,7 @@ of local configuration, TLS files, the local account, and its active session.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 19; it does not migrate. The configured Host
+  schema version other than 24; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener. In reverse-proxy mode, the final
   `X-Forwarded-For` address from an allow-listed proxy is used for source-address

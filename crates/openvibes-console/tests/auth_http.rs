@@ -1159,6 +1159,129 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .unwrap();
     assert_eq!(findings_summary["total"], 2);
     assert_eq!(findings_summary["critical"], 1);
+    let groups = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/groups?limit=10")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(groups.status(), StatusCode::OK);
+    let groups: Value =
+        serde_json::from_slice(&to_bytes(groups.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(groups["items"].as_array().unwrap().len(), 1);
+    assert_eq!(groups["items"][0]["endpoint_count"], 2);
+    let group_endpoints = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=1")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(group_endpoints.status(), StatusCode::OK);
+    let group_endpoints: Value =
+        serde_json::from_slice(&to_bytes(group_endpoints.into_body(), 8192).await.unwrap())
+            .unwrap();
+    assert_eq!(group_endpoints["items"].as_array().unwrap().len(), 1);
+    let endpoint_cursor = group_endpoints["next_cursor"].as_str().unwrap();
+    let group_since = group_endpoints["since"].as_str().unwrap();
+    let second_group_endpoint = router.clone().oneshot(Request::builder()
+        .uri(format!("/api/v1/findings/groups/base/credential/endpoints?limit=1&since={group_since}&cursor={endpoint_cursor}"))
+        .header(header::COOKIE, session_cookie.clone()).body(Body::empty()).unwrap()).await.unwrap();
+    assert_eq!(second_group_endpoint.status(), StatusCode::OK);
+    let second_group_endpoint: Value = serde_json::from_slice(
+        &to_bytes(second_group_endpoint.into_body(), 8192)
+            .await
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(second_group_endpoint["items"].as_array().unwrap().len(), 1);
+    let bulk = router.clone().oneshot(Request::builder().method("POST")
+        .uri("/api/v1/findings/groups/base/credential/triage")
+        .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
+        .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":0},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"investigating","assigned_to":null,"note":null,"accepted_until":null}"#)).unwrap()).await.unwrap();
+    assert_eq!(bulk.status(), StatusCode::OK);
+    let bulk_request_id = bulk
+        .headers()
+        .get("x-request-id")
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let bulk: Value =
+        serde_json::from_slice(&to_bytes(bulk.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(bulk["updated"].as_array().unwrap().len(), 2);
+    let audit_client = db.pool.get().await.unwrap();
+    let bulk_audit_count: i64 = audit_client
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action = 'finding.triage.changed' AND request_id = $1",
+            &[&bulk_request_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(bulk_audit_count, 2);
+    let stale_bulk = router.clone().oneshot(Request::builder().method("POST")
+        .uri("/api/v1/findings/groups/base/credential/triage")
+        .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
+        .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":1},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"mitigated","assigned_to":null,"note":"Reviewed","accepted_until":null}"#)).unwrap()).await.unwrap();
+    assert_eq!(stale_bulk.status(), StatusCode::PRECONDITION_FAILED);
+    let after_stale = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let after_stale: Value =
+        serde_json::from_slice(&to_bytes(after_stale.into_body(), 8192).await.unwrap()).unwrap();
+    assert!(
+        after_stale["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|item| item["triage_state"] == "investigating" && item["triage_version"] == 1)
+    );
+    let vuln_summary = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/vulnerabilities/summary")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(vuln_summary.status(), StatusCode::OK);
+    let vuln_list = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/vulnerabilities")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(vuln_list.status(), StatusCode::OK);
     let first_findings = router
         .clone()
         .oneshot(

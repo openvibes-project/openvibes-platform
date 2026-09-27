@@ -5,12 +5,14 @@ import { Brand } from "../components/Brand";
 import { HelpMenu } from "../components/HelpMenu";
 import { SeededBanner } from "../components/SeededBanner";
 import { ThemeControl } from "../components/ThemeControl";
-import { AccessControlReadPage, AgentsReadPage, AuditEventsReadPage, FindingsReadPage, OverviewReadPage } from "./ReadPages";
+import { AccessControlReadPage, AgentsReadPage, AuditEventsReadPage, OverviewReadPage } from "./ReadPages";
 import { canOpenPage, resolvePage, visibleNavigationGroups } from "./navigation";
 import { EnrollmentPage } from "./Enrollment";
 import { ServiceAccountsPage } from "./ServiceAccounts";
 import { RuleSetsPage } from "./RuleSets";
 import { AssistantPage } from "./Assistant";
+import { VulnerabilitiesPage } from "./Vulnerabilities";
+import { GroupedFindingsPage } from "./GroupedFindings";
 
 type AppProps = {
   path?: string;
@@ -187,10 +189,11 @@ export function App({ path = browserPath(), seeded = false }: AppProps) {
               {path === "/enrollment" ? <EnrollmentPage csrfToken={session?.csrf_token} canRead={seeded || session?.capabilities.some((capability) => capability.permission === "tokens.read" && capability.scope.kind === "global") === true} canCreate={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.create" && capability.scope.kind === "global") === true} canRevoke={!seeded && session?.capabilities.some((capability) => capability.permission === "tokens.revoke" && capability.scope.kind === "global") === true} /> : null}
               {path === "/service-accounts" ? <ServiceAccountsPage csrfToken={session?.csrf_token} canRead={!seeded && session?.capabilities.some((capability) => capability.permission === "service_accounts.read" && capability.scope.kind === "global") === true} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "service_accounts.manage" && capability.scope.kind === "global") === true} /> : null}
               {path === "/rule-sets" ? <RuleSetsPage csrfToken={session?.csrf_token} canRead={!seeded && session?.capabilities.some((capability) => capability.permission === "rules.read" && capability.scope.kind === "global") === true} canUpload={!seeded && session?.capabilities.some((capability) => capability.permission === "rules.upload" && capability.scope.kind === "global") === true} /> : null}
-              {path === "/findings" ? <FindingsReadPage seeded={seeded} csrfToken={session?.csrf_token} canTriage={!seeded && session?.capabilities.some((capability) => capability.permission === "findings.triage") === true} /> : null}
+              {path === "/findings" ? <GroupedFindingsPage seeded={seeded} csrfToken={session?.csrf_token} canTriage={!seeded && session?.capabilities.some((capability) => capability.permission === "findings.triage") === true} /> : null}
+              {path === "/vulnerabilities" ? <VulnerabilitiesPage seeded={seeded} /> : null}
               {path === "/audit" ? <AuditEventsReadPage seeded={seeded} canExport={seeded || session?.capabilities.some((capability) => capability.permission === "audit.export" && capability.scope.kind === "global") === true} /> : null}
               {path === "/access" ? <AccessControlReadPage seeded={seeded} csrfToken={session?.csrf_token} canManage={!seeded && session?.capabilities.some((capability) => capability.permission === "rbac.manage" && capability.scope.kind === "global") === true} canManageGroups={!seeded && session?.capabilities.some((capability) => capability.permission === "asset_groups.manage" && capability.scope.kind === "global") === true} /> : null}
-              {!["/", "/assistant", "/agents", "/enrollment", "/service-accounts", "/rule-sets", "/findings", "/audit", "/access"].includes(path) ? <div className="shell-panel">
+              {!["/", "/assistant", "/agents", "/enrollment", "/service-accounts", "/rule-sets", "/findings", "/vulnerabilities", "/audit", "/access"].includes(path) ? <div className="shell-panel">
                 <div className="shell-panel__marker" aria-hidden="true">01</div>
                 <div>
                   <p className="eyebrow">Interface foundation</p>

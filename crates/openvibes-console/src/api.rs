@@ -1073,6 +1073,115 @@ pub struct VulnerabilityAdvisoryDetail {
     pub cves: Vec<CveDetailView>,
 }
 
+/// One grouped current finding across visible endpoints.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupView {
+    /// Rule-set identifier; `~unknown` represents legacy findings without one.
+    pub rule_set_id: String,
+    /// Rule identifier within the rule set.
+    pub rule_id: String,
+    /// Visible endpoints whose latest observation is inside the requested window.
+    pub endpoint_count: u64,
+    /// Highest severity among the current in-window endpoints.
+    pub severity: Severity,
+    /// Message from the most recently observed endpoint.
+    pub latest_message: String,
+    /// Distinct signed rule versions represented in the group.
+    pub rule_versions: Vec<u64>,
+    /// Earliest first-observed timestamp in the group.
+    pub first_observed_at: String,
+    /// Latest-observed timestamp in the group.
+    pub last_observed_at: String,
+    /// Visible endpoints whose latest observation is older than the window.
+    pub older_endpoint_count: u64,
+    /// Counts by endpoint triage state, for current in-window observations.
+    pub triage_counts: serde_json::Value,
+}
+
+/// Page of unique rule groups.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupPage {
+    /// Current page of unique rule groups.
+    pub items: Vec<FindingGroupView>,
+    /// Opaque continuation cursor, or `null` after the final page.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 time when this page was generated.
+    pub generated_at: String,
+    /// RFC 3339 start of the grouping window.
+    pub since: String,
+}
+
+/// One endpoint reporting a grouped finding.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupEndpointView {
+    /// Enrolled-agent or imported-installation identifier.
+    pub agent_id: String,
+    /// Hostname label, when reported.
+    pub hostname: Option<String>,
+    /// RFC 3339 time when this endpoint first reported the finding.
+    pub first_observed_at: String,
+    /// RFC 3339 time of the latest observation.
+    pub last_observed_at: String,
+    /// Signed rule version reported by this endpoint.
+    pub rule_version: u64,
+    /// Current workflow state; missing triage records are `open`.
+    pub triage_state: String,
+    /// Monotonic triage version used to reject stale writes.
+    pub triage_version: i64,
+    /// Whether this endpoint is older than the requested window.
+    pub outside_window: bool,
+    /// Online or imported observation provenance.
+    pub origin: FindingOrigin,
+    /// Whether the finding arrived over authenticated agent transport.
+    pub authenticated: bool,
+}
+
+/// Page of endpoints reporting one rule.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct FindingGroupEndpointPage {
+    /// Current page of visible endpoints reporting the rule.
+    pub items: Vec<FindingGroupEndpointView>,
+    /// Opaque continuation cursor, or `null` after the final page.
+    pub next_cursor: Option<String>,
+    /// RFC 3339 time when this page was generated.
+    pub generated_at: String,
+    /// RFC 3339 start of the endpoint query window.
+    pub since: String,
+}
+
+/// One endpoint and its expected triage version for a bulk transition.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BulkFindingTriageChange {
+    /// Enrolled-agent or imported-installation identifier.
+    pub agent_id: String,
+    /// Expected triage version for this endpoint.
+    pub version: i64,
+}
+
+/// Atomic workflow transition for selected endpoints in one rule group.
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct BulkFindingTriageRequest {
+    /// One through 100 unique endpoints to update atomically.
+    pub changes: Vec<BulkFindingTriageChange>,
+    /// Requested workflow state.
+    pub state: String,
+    /// Analyst username, or `null` to unassign.
+    pub assigned_to: Option<String>,
+    /// Required when moving to a completed state.
+    pub note: Option<String>,
+    /// Required only for accepted risk; RFC 3339 timestamp.
+    pub accepted_until: Option<String>,
+}
+
+/// Successful endpoint-level triage results.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct BulkFindingTriageResponse {
+    /// New triage state and version for every updated endpoint.
+    pub updated: Vec<(String, FindingTriageView)>,
+}
+
 /// A page of agents using the shared cursor response shape.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct AgentPage {

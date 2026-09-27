@@ -24,6 +24,7 @@ const pageAccess: Readonly<Record<string, readonly NavigationAccess[]>> = {
   "/": [{ permission: "agents.read" }, { permission: "findings.read" }],
   "/assistant": [{ permission: "assistant.use", global: true }],
   "/findings": [{ permission: "findings.read" }],
+  "/vulnerabilities": [{ permission: "vulnerabilities.read" }],
   "/agents": [{ permission: "agents.read" }],
   "/enrollment": [{ permission: "tokens.read", global: true }],
   "/rule-sets": [{ permission: "rules.read", global: true }],
@@ -77,6 +78,7 @@ export const navigationGroups: readonly NavigationGroup[] = [
     label: "Investigate",
     items: [
       { label: "Findings", shortLabel: "Fi", path: "/findings" },
+      { label: "Vulnerabilities", shortLabel: "Vu", path: "/vulnerabilities" },
       { label: "Agents", shortLabel: "Ag", path: "/agents" },
     ],
   },
@@ -117,6 +119,11 @@ const pages: Readonly<Record<string, ConsolePage>> = {
     title: "Findings",
     group: "Investigate",
     description: "Review latest observed matches without implying remediation or compliance state.",
+  },
+  "/vulnerabilities": {
+    title: "Vulnerabilities",
+    group: "Investigate",
+    description: "Review prioritised open advisories, exposed hosts, and available CVE enrichment in your access scope.",
   },
   "/agents": {
     title: "Agents",

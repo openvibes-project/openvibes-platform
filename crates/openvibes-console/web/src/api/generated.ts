@@ -334,6 +334,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/findings/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_finding_groups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_finding_group_endpoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/groups/{rule_set_id}/{rule_id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["update_authenticated_finding_group_triage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/findings/history": {
         parameters: {
             query?: never;
@@ -576,6 +624,54 @@ export interface paths {
             cookie?: never;
         };
         get: operations["session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vulnerabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_vulnerabilities"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vulnerabilities/advisories/{advisory_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_vulnerability_advisory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vulnerabilities/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["authenticated_vulnerability_summary"];
         put?: never;
         post?: never;
         delete?: never;
@@ -916,6 +1012,56 @@ export interface components {
          * @enum {string}
          */
         AuthenticationMethod: "local_password" | "oidc" | "saml";
+        /** @description One endpoint and its expected triage version for a bulk transition. */
+        BulkFindingTriageChange: {
+            /** @description Enrolled-agent or imported-installation identifier. */
+            agent_id: string;
+            /**
+             * Format: int64
+             * @description Expected triage version for this endpoint.
+             */
+            version: number;
+        };
+        /** @description Atomic workflow transition for selected endpoints in one rule group. */
+        BulkFindingTriageRequest: {
+            /** @description Required only for accepted risk; RFC 3339 timestamp. */
+            accepted_until?: string | null;
+            /** @description Analyst username, or `null` to unassign. */
+            assigned_to?: string | null;
+            /** @description One through 100 unique endpoints to update atomically. */
+            changes: components["schemas"]["BulkFindingTriageChange"][];
+            /** @description Required when moving to a completed state. */
+            note?: string | null;
+            /** @description Requested workflow state. */
+            state: string;
+        };
+        /** @description Successful endpoint-level triage results. */
+        BulkFindingTriageResponse: {
+            /** @description New triage state and version for every updated endpoint. */
+            updated: [
+                string,
+                {
+                    /** @description Accepted risk expiry, if applicable. */
+                    accepted_until?: string | null;
+                    /** @description Assigned analyst username. */
+                    assigned_to?: string | null;
+                    /** @description Operator note. */
+                    note?: string | null;
+                    /**
+                     * Format: int64
+                     * @description Rule version this state covers.
+                     */
+                    rule_version: number;
+                    /** @description Workflow state. */
+                    state: string;
+                    /**
+                     * Format: int64
+                     * @description Monotonic update version used with ETag and If-Match.
+                     */
+                    version: number;
+                }
+            ][];
+        };
         /** @description A page of certificate metadata using the shared cursor response shape. */
         CertificatePage: {
             /** @description RFC 3339 instant when this page was generated. */
@@ -1084,6 +1230,86 @@ export interface components {
             field: string;
             /** @description Bounded operator-facing explanation. */
             message: string;
+        };
+        /** @description Page of endpoints reporting one rule. */
+        FindingGroupEndpointPage: {
+            /** @description RFC 3339 time when this page was generated. */
+            generated_at: string;
+            /** @description Current page of visible endpoints reporting the rule. */
+            items: components["schemas"]["FindingGroupEndpointView"][];
+            /** @description Opaque continuation cursor, or `null` after the final page. */
+            next_cursor?: string | null;
+            /** @description RFC 3339 start of the endpoint query window. */
+            since: string;
+        };
+        /** @description One endpoint reporting a grouped finding. */
+        FindingGroupEndpointView: {
+            /** @description Enrolled-agent or imported-installation identifier. */
+            agent_id: string;
+            /** @description Whether the finding arrived over authenticated agent transport. */
+            authenticated: boolean;
+            /** @description RFC 3339 time when this endpoint first reported the finding. */
+            first_observed_at: string;
+            /** @description Hostname label, when reported. */
+            hostname?: string | null;
+            /** @description RFC 3339 time of the latest observation. */
+            last_observed_at: string;
+            /** @description Online or imported observation provenance. */
+            origin: components["schemas"]["FindingOrigin"];
+            /** @description Whether this endpoint is older than the requested window. */
+            outside_window: boolean;
+            /**
+             * Format: int64
+             * @description Signed rule version reported by this endpoint.
+             */
+            rule_version: number;
+            /** @description Current workflow state; missing triage records are `open`. */
+            triage_state: string;
+            /**
+             * Format: int64
+             * @description Monotonic triage version used to reject stale writes.
+             */
+            triage_version: number;
+        };
+        /** @description Page of unique rule groups. */
+        FindingGroupPage: {
+            /** @description RFC 3339 time when this page was generated. */
+            generated_at: string;
+            /** @description Current page of unique rule groups. */
+            items: components["schemas"]["FindingGroupView"][];
+            /** @description Opaque continuation cursor, or `null` after the final page. */
+            next_cursor?: string | null;
+            /** @description RFC 3339 start of the grouping window. */
+            since: string;
+        };
+        /** @description One grouped current finding across visible endpoints. */
+        FindingGroupView: {
+            /**
+             * Format: int64
+             * @description Visible endpoints whose latest observation is inside the requested window.
+             */
+            endpoint_count: number;
+            /** @description Earliest first-observed timestamp in the group. */
+            first_observed_at: string;
+            /** @description Latest-observed timestamp in the group. */
+            last_observed_at: string;
+            /** @description Message from the most recently observed endpoint. */
+            latest_message: string;
+            /**
+             * Format: int64
+             * @description Visible endpoints whose latest observation is older than the window.
+             */
+            older_endpoint_count: number;
+            /** @description Rule identifier within the rule set. */
+            rule_id: string;
+            /** @description Rule-set identifier; `~unknown` represents legacy findings without one. */
+            rule_set_id: string;
+            /** @description Distinct signed rule versions represented in the group. */
+            rule_versions: number[];
+            /** @description Highest severity among the current in-window endpoints. */
+            severity: components["schemas"]["Severity"];
+            /** @description Counts by endpoint triage state, for current in-window observations. */
+            triage_counts: unknown;
         };
         /** @description One historical observation event. */
         FindingHistoryEntry: {
@@ -2620,6 +2846,112 @@ export interface operations {
             };
         };
     };
+    authenticated_finding_groups: {
+        parameters: {
+            query?: {
+                since?: string;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent scope-filtered findings grouped by rule */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingGroupPage"];
+                };
+            };
+        };
+    };
+    authenticated_finding_group_endpoints: {
+        parameters: {
+            query?: {
+                since?: string;
+                include_older?: boolean;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped endpoints reporting one recent rule group */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingGroupEndpointPage"];
+                };
+            };
+            /** @description Finding group not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_authenticated_finding_group_triage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkFindingTriageRequest"];
+            };
+        };
+        responses: {
+            /** @description Atomic endpoint triage update */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkFindingTriageResponse"];
+                };
+            };
+            /** @description Group or endpoint is not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description At least one triage version is stale */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     authenticated_finding_history: {
         parameters: {
             query: {
@@ -3375,6 +3707,94 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_vulnerabilities: {
+        parameters: {
+            query?: {
+                host?: string;
+                advisory?: string;
+                severity?: string;
+                cve?: string;
+                fixed?: boolean;
+                exploited?: boolean;
+                reboot_needed?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prioritised, scope-filtered vulnerabilities */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilityPage"];
+                };
+            };
+            /** @description Invalid filters */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_vulnerability_advisory: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advisory_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped advisory and CVE enrichment */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilityAdvisoryDetail"];
+                };
+            };
+            /** @description Advisory not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_vulnerability_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped vulnerability summary */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilitySummary"];
                 };
             };
         };
