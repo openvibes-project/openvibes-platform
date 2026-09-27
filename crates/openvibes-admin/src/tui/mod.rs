@@ -6,6 +6,7 @@ pub mod app;
 mod config_view;
 mod configuration;
 pub mod form;
+mod jobs;
 mod password;
 mod services;
 mod setup;

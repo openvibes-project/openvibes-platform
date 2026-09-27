@@ -20,6 +20,9 @@ struct SetupHost {
     answers: RefCell<VecDeque<Result<String, HostError>>>,
     /// (verb, password) of each call.
     calls: RefCell<Vec<(String, String)>>,
+    /// `setup.toml`'s text; empty: not set up.
+    plan: String,
+    packages: Vec<PackageUpdate>,
 }
 
 impl Host for SetupHost {
@@ -42,10 +45,14 @@ impl Host for SetupHost {
         self.set_up
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
-        Ok(Vec::new())
+        Ok(self.packages.clone())
     }
     fn setup_plan(&self) -> Result<String, HostError> {
-        Err(HostError::Failed("not set up".into()))
+        if self.plan.is_empty() {
+            Err(HostError::Failed("not set up".into()))
+        } else {
+            Ok(self.plan.clone())
+        }
     }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.calls
@@ -63,6 +70,8 @@ fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<SetupHost> 
         set_up,
         answers: RefCell::new(answers.into()),
         calls: RefCell::new(Vec::new()),
+        plan: String::new(),
+        packages: Vec::new(),
     });
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
@@ -243,5 +252,71 @@ fn rules_bring_distribution_and_the_finished_screen_shows_the_login() {
     assert!(
         screen(&app).contains("Abc123"),
         "the generated password is on the finished screen"
+    );
+}
+
+const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
+
+fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    let mut app = app(true, answers);
+    app.host.plan = PLAN.into();
+    app
+}
+
+#[test]
+fn a_set_up_host_offers_the_maintenance_actions() {
+    let mut app = set_up(vec![]);
+    app.key(Key::Tab);
+    app.key(Key::Tab); // Services → Configuration → Setup
+    let text = screen(&app);
+    for want in [
+        "c check",
+        "r repair",
+        "u update",
+        "m change components",
+        "x uninstall",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+}
+
+#[test]
+fn repair_runs_every_step_in_repair_mode() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('r'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.setup_tick();
+    assert_eq!(app.host.calls.borrow()[0].0, "setup-step packages --repair");
+}
+
+#[test]
+fn changing_components_installs_then_removes_the_unticked_ones() {
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.key(Key::Char('m'));
+    assert_eq!(app.setup.phase, Phase::Form);
+    assert_eq!(app.setup.hostname, "platform.example.com");
+    while app.setup.row != 3 {
+        app.key(Key::Down); // vulns
+    }
+    app.key(Key::Char(' '));
+    start(&mut app, "pw");
+    for _ in 0..Step::ALL.len() {
+        app.setup_tick();
+    }
+    app.setup_tick();
+    let calls = app.host.calls.borrow();
+    assert!(
+        calls[0]
+            .0
+            .starts_with("setup-plan --components ingest,console,distribution,rules,agent"),
+        "{}",
+        calls[0].0
+    );
+    assert_eq!(
+        calls.last().unwrap().0,
+        "remove-step backup --components vulns"
     );
 }
