@@ -1,36 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { components } from "../api/generated";
+import { useData } from "./Vulnerabilities";
 
 type GroupPage = components["schemas"]["FindingGroupPage"];
 type EndpointPage = components["schemas"]["FindingGroupEndpointPage"];
-
-function useData<T>(url: string, seeded: boolean): { data?: T; error?: string; status?: number | undefined } {
-  const [state, setState] = useState<{ url: string; data?: T; error?: string; status?: number | undefined }>({ url: "" });
-  useEffect(() => {
-    const controller = new AbortController();
-    if (!url) return () => controller.abort();
-    const headers = new Headers({ Accept: "application/json" });
-    if (seeded) {
-      headers.set("X-OpenVIBES-Dev-Persona", localStorage.getItem("openvibes.dev.persona") ?? "analyst");
-      headers.set("X-OpenVIBES-Dev-Mode", localStorage.getItem("openvibes.dev.mode") ?? "mixed");
-    }
-    void fetch(url, { headers, signal: controller.signal }).then(async (response) => {
-      if (!response.ok) {
-        const problem = await response.json() as { title?: string; field_errors?: { message: string }[] };
-        const detail = problem.field_errors?.map((item) => item.message).join(" ");
-        throw Object.assign(new Error([problem.title ?? "Finding data could not be loaded.", detail].filter(Boolean).join(" ")), { status: response.status });
-      }
-      return await response.json() as T;
-    }).then((data) => setState({ url, data })).catch((error: unknown) => {
-      if (!controller.signal.aborted) {
-        const detail = typeof error === "object" && error !== null ? error as { message?: string; status?: number } : {};
-        setState({ url, error: detail.message ?? "Read failed.", status: detail.status });
-      }
-    });
-    return () => controller.abort();
-  }, [url, seeded]);
-  return state.url === url ? state : {};
-}
 
 function when(value: string): string {
   const date = new Date(value);
