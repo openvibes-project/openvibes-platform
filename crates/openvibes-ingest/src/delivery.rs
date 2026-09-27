@@ -67,7 +67,9 @@ pub(crate) async fn findings(
             }),
         }
     }
-    if let Err(error) = ingest::store_findings(&mut client, &agent_id, &keep, now).await {
+    if let Err(error) =
+        ingest::store_findings(&mut client, &agent_id, &keep, ingest::Origin::Online, now).await
+    {
         tracing::warn!(
             endpoint = "/v1/findings",
             agent_id,

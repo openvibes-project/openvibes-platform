@@ -134,6 +134,35 @@ links, never edit or delete versions (a test checks it).
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
 
+## Wire conversions (`wire::…`)
+
+Shared by online delivery (ingest) and file import (admin), so both refuse
+and store alike: `finding(finding, oldest, latest, partitions) ->
+Result<StoredFinding, reason>` (`future_observation` beyond
+`MAX_FUTURE_MINUTES` = 60, `retention_expired`, `out_of_range`,
+`unstorable` without a partition) and `inventory(os, running_kernel,
+&mut packages) -> (rows, sha256)` (sorts packages canonically; the digest
+covers OS, kernel and packages). `ingest::store_findings` takes an
+`Origin`: `Online` stores `origin = 'online'`, authenticated; `Import`
+stores `'import'`, unauthenticated.
+
+## Imported hosts (`imports::…`, schema 15)
+
+Hosts from agent export files (protocol P3b), run as the admin role.
+Migration 15 lets `agents.status` be `imported` only with an id
+`import.<install_id>` (and `agent.<uuid>` only otherwise), and adds
+`claimed_agent_id`, the `agent_id` a file named, kept as a label.
+
+- `upsert_host(&client, &ImportedHost, now) -> id`: creates the row
+  (`enrolled_at` = first import) or updates it; `last_seen_at` is the newest
+  file time, and hostname, version and claimed id come from the newest file.
+  Never matches an enrolled row.
+- `replace_inventory(&mut client, id, os_id, os_version, running_kernel,
+  rows, sha256, collected_at) -> Stored | Unchanged | Older`: `Older` when
+  the stored `inventory_at` is later than `collected_at`; otherwise
+  `inventory::replace` with `collected_at` as the time, so newest wins
+  whatever order files arrive in.
+
 ## Vulnerabilities (`vulns::…`, schema 8)
 
 `advisories` (id, source, release, severity, title, times, url),
