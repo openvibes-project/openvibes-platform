@@ -246,6 +246,41 @@ the installed file name.
 | `assistant eval [--cases FILE]` | Asks the question set (built in: 53 cases, 6 of them injection tests) against the evaluation fleet, never platform data, and prints lookup accuracy, fact completeness, contradictions or leaks, injections resisted, errors, median and p95 latency, and each failed case. Exits non-zero when the gate (spec §10) fails. |
 | `assistant model install FILE --sha256 HEX [--alias NAME] [--name FILE.gguf]` | For `openvibes-llm`: copies the GGUF file into `/var/lib/openvibes-llm/models/` through a temporary file, hashing what it copies, and installs it read-only (0444) only if the digest matches; then sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and the alias in `/var/lib/openvibes-llm/model.conf`. Refuses names that are not plain `.gguf` file names and a different file under an installed name. The platform never downloads models. Run as `openvibes-admin` (its group owns the model store), then `systemctl restart openvibes-llm`. |
 
+## Setup command (admin TUI spec §6)
+
+`openvibes-admin setup --quick --components LIST --hostname NAME [--san
+ADDR]... [--ca quick|careful] [--root-key-out PATH]
+[--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]`
+runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
+arguments, then runs every Setup step in order and prints one line per step
+(`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
+step waits (careful CA: sign the request offline, then run it again), 1 on a
+failure, 2 on bad arguments (checked before the root check).
+`--components` must include `ingest`; `rules` needs `distribution`.
+Hostname and `--san` are lowercase DNS names or IP addresses; paths must be
+absolute. Without `--quick` the command refuses and points to the TUI.
+
+Steps (`src/setup/`, each checks before it acts, so re-running is safe and
+resumes): `packages` (dnf from the repository, or the one file per package
+in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
+`postgres`, `operators` (the sudo user joins `openvibes-operators`),
+`database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
+written once to `--root-key-out`, never over an existing file, otherwise
+deleted; careful: waits for the signed intermediate), `certificates`
+(hostname, `--san`, `localhost`, `127.0.0.1`), `console` (`public_origin`
+and the `admin` account; a generated password is shown once), `services`,
+`firewall` (skipped without firewalld), `rules` (skipped until
+`openvibes-rules-baseline` exists), `agent` (the agent on this host, waits
+up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
+uses).
+
+Root helper verbs for the TUI, run with the user's own sudo rights and
+password (no sudoers entry): `helper setup-plan PLANARGS` (writes
+`setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
+(`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP`
+(`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper unit-enable UNIT`,
+`helper unit-disable UNIT`. Arguments are checked before the root check.
+
 ## CA commands
 
 The built-in CA (architecture spec, section 5). Keys are written `0600`,

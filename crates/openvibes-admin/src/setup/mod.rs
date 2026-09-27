@@ -13,7 +13,13 @@ pub mod plan;
 mod run;
 mod system;
 
-use platform_host::{Step, StepState, runner::Runner};
+use std::{path::Path, process::ExitCode, time::Duration};
+
+use plan::{Plan, PlanArgs};
+use platform_host::{
+    Step, StepState,
+    runner::{Runner, SystemRunner},
+};
 
 pub use system::Ctx;
 
@@ -76,4 +82,72 @@ pub fn run_all<R: Runner>(ctx: &Ctx<R>, mut report: impl FnMut(Step, &StepState)
         }
     }
     true
+}
+
+fn host_ctx<'a>(plan: &'a Plan) -> Ctx<'a, SystemRunner> {
+    Ctx {
+        runner: &SystemRunner,
+        plan,
+        root: Path::new("/"),
+        pause: Duration::from_secs(1),
+    }
+}
+
+/// `helper setup-status`: `STEP<TAB>STATE<TAB>DETAIL` per step.
+pub fn status() -> ExitCode {
+    let plan = match Plan::load(Path::new("/")) {
+        Ok(plan) => plan,
+        Err(error) => {
+            eprintln!("openvibes-admin helper: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    let ctx = host_ctx(&plan);
+    for step in Step::ALL {
+        println!("{}\t{}", step.name(), check(&ctx, step).line());
+    }
+    ExitCode::SUCCESS
+}
+
+/// `helper setup-step STEP`: `STATE<TAB>DETAIL`; exit 0 whatever the state.
+pub fn step(step: Step) -> ExitCode {
+    let plan = match Plan::load(Path::new("/")) {
+        Ok(plan) => plan,
+        Err(error) => {
+            eprintln!("openvibes-admin helper: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
+    println!("{}", run_step(&host_ctx(&plan), step).line());
+    ExitCode::SUCCESS
+}
+
+/// `setup --quick`: as root, writes the plan and runs every step; exit 0
+/// when all finished, 3 when a step waits (careful CA), 1 on failure.
+pub fn quick(args: &PlanArgs) -> ExitCode {
+    let plan = match args.plan(plan::operator_from_env()) {
+        Ok(plan) => plan,
+        Err(error) => {
+            eprintln!("openvibes-admin: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    if crate::helper::effective_uid().as_deref() != Some("0") {
+        eprintln!("openvibes-admin: setup --quick must run as root");
+        return ExitCode::from(1);
+    }
+    if let Err(error) = plan.save(Path::new("/")) {
+        eprintln!("openvibes-admin: {error}");
+        return ExitCode::FAILURE;
+    }
+    let mut waiting = false;
+    let finished = run_all(&host_ctx(&plan), |step, state| {
+        waiting = matches!(state, StepState::Waiting(_));
+        println!("{}: {} {}", step.title(), state.label(), state.detail());
+    });
+    match (finished, waiting) {
+        (true, _) => ExitCode::SUCCESS,
+        (false, true) => ExitCode::from(3),
+        (false, false) => ExitCode::FAILURE,
+    }
 }

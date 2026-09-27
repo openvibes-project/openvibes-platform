@@ -15,12 +15,14 @@ use super::{
 };
 
 type Effect = Box<dyn Fn(&Path)>;
+/// (argv prefix, output, side effect on the root).
+type Answer = (Vec<String>, Output, Option<Effect>);
 
 pub struct Fake {
     pub root: PathBuf,
     pub calls: RefCell<Vec<Vec<String>>>,
     pub inputs: RefCell<Vec<String>>,
-    answers: RefCell<Vec<(Vec<String>, Output, Option<Effect>)>>,
+    answers: RefCell<Vec<Answer>>,
 }
 
 /// Users and groups the steps look up; all map to the test's own ids, so

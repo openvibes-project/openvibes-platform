@@ -99,6 +99,15 @@ enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
+    /// Install and set up the platform on this host without screens (as
+    /// root). Without --quick, run openvibes-admin with no arguments.
+    Setup {
+        /// Run every Setup step now.
+        #[arg(long)]
+        quick: bool,
+        #[command(flatten)]
+        plan: setup::plan::PlanArgs,
+    },
     /// Root-only verbs for the administration TUI (run through sudo).
     #[command(hide = true)]
     Helper {
@@ -129,6 +138,7 @@ impl Command {
             Self::Import { .. } => "import",
             Self::Assistant { command } => command.name(),
             Self::Helper { .. } => "helper",
+            Self::Setup { .. } => "setup",
         }
     }
 }
@@ -143,6 +153,15 @@ async fn main() -> ExitCode {
     // The root helper runs before any config or database access.
     if let Command::Helper { command } = command {
         return helper::run(command);
+    }
+    if let Command::Setup { quick, plan } = command {
+        if !*quick {
+            eprintln!(
+                "openvibes-admin: setup needs --quick; run openvibes-admin with no arguments for the Setup screen"
+            );
+            return ExitCode::from(2);
+        }
+        return setup::quick(plan);
     }
     // Offline CA commands run where no platform exists: no config, no
     // database, no audit row.
@@ -314,6 +333,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Vulns { .. }
         | Command::Import { .. }
         | Command::Helper { .. }
+        | Command::Setup { .. }
         | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
         }
