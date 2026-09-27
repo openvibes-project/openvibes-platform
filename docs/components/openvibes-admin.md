@@ -21,10 +21,11 @@ before.
 
 Who can use it: members of `openvibes-operators` (created by the RPM; add a
 person with `usermod -aG openvibes-operators NAME`, then they log in again).
-They start, stop and restart the OpenVIBES units through a polkit rule and
-read their logs through the root helper, without a password.
+They start, stop and restart the OpenVIBES units through a polkit rule, and
+read logs and read and save configuration files through the root helper,
+without a password. `Tab` switches between the screens.
 
-**Services** (this release): each unit (`ingest`, `distribution`, `vulns`,
+**Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
 `llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
 installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
 `-`), and since when; below, the selected unit's last 50 journal lines.
@@ -37,9 +38,35 @@ the TUI names the group to join. Every action is written to the journal
 (`journalctl -t openvibes-admin`). Enabling and disabling at boot come with
 the password-prompted steps (a later release).
 
-`openvibes-admin helper logs UNIT LINES` (hidden) is the root helper the TUI
-calls through sudo: the unit must be one of the five, LINES 1 to 500, and it
-refuses unless run as root.
+**Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
+`distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
+`[assistant]` section) and `admin.toml` (`llm.conf` is an environment file
+and is edited by hand). Only the fields listed for the service in
+`src/fields.rs` can be set; clearing a value (Enter on an empty value)
+removes the key, so the service default applies (shown as `(default)`).
+Every change is checked at once by the service's own configuration type,
+the same check the service runs at start, and the result is shown as
+`valid` or `invalid: REASON`; the help line under the form gives each
+field's range. Comments and layout in the file are kept. Keys: `h`/`l`
+file, `j`/`k` field, `Enter` edit (`Enter` sets, `Esc` cancels), `u` puts
+the file's value back, `w` save, `R` reload, `q` quit; leaving a file with
+unsaved changes asks first. Save lists each change as `field: before →
+after` and asks `y/n`; it refuses when the file was changed on disk since it
+was opened, writes through `helper config-write` (checked again as root; the
+file keeps its owner, group and mode, and the old one is kept as
+`NAME.toml.bak`), then offers to restart the service. Each save is written
+to the journal (`config-write SERVICE ok|failed`, never the content).
+
+`openvibes-admin helper` (hidden) is the root helper the TUI calls through
+sudo; it checks its arguments first and refuses unless run as root:
+
+- `logs UNIT LINES`: the unit must be one of the six, LINES 1 to 500;
+- `config-read SERVICE`: prints `/etc/openvibes/SERVICE.toml` (`ingest`,
+  `distribution`, `vulns`, `console`, `admin`; regular files only);
+- `config-write SERVICE`: replaces that file with standard input (at most
+  64 KiB of UTF-8) once the service's type accepts it: a temp file in
+  `/etc/openvibes`, the original owner, group and mode, `SERVICE.toml.bak`,
+  then an atomic rename. A refused or failed write leaves the old file.
 
 ## Configuration
 

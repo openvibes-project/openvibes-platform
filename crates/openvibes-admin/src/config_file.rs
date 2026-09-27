@@ -73,7 +73,7 @@ mod tests {
     use std::{
         fs,
         os::unix::fs::{MetadataExt, PermissionsExt},
-        path::PathBuf,
+        path::{Path, PathBuf},
     };
 
     use platform_host::Service;
@@ -90,7 +90,7 @@ mod tests {
         dir
     }
 
-    fn admin_file(dir: &PathBuf) -> PathBuf {
+    fn admin_file(dir: &Path) -> PathBuf {
         let path = dir.join("admin.toml");
         fs::write(&path, OLD).unwrap();
         fs::set_permissions(&path, fs::Permissions::from_mode(0o640)).unwrap();
