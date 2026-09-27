@@ -90,7 +90,10 @@ merges second renumbers its own files.
   the receipt time, so `openvibes-vulns` matches the host within a second
   as online. For an imported row `inventory_at` is always the snapshot
   time, which is what newest-wins compares.
-- Each file is one transaction; a refused file does not stop the others.
+- Each file is stored on its own; a refused file does not stop the
+  others. Its findings, and its inventory, are each written in one
+  transaction (the online store functions); the host row is written just
+  before and is harmless on its own.
 - Output: one line per file, e.g.
   `openvibes-export-…json: imported 12 findings (3 already present)`,
   `…: inventory accepted (412 packages)`, `…: older inventory ignored`,
