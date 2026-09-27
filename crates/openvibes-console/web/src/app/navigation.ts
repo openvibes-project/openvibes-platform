@@ -35,11 +35,11 @@ const pageAccess: Readonly<Record<string, readonly NavigationAccess[]>> = {
 export type NavigationCapability = { permission: string; scope: { kind: string } };
 
 const seededPermissions: Readonly<Record<string, readonly string[]>> = {
-  viewer: ["agents.read", "findings.read"],
-  analyst: ["agents.read", "findings.read", "findings.triage"],
-  operator: ["agents.read", "agents.revoke", "findings.read", "rules.upload", "tokens.read", "tokens.create", "tokens.revoke"],
-  scoped_operator: ["agents.read", "agents.revoke", "findings.read", "rules.upload", "tokens.read", "tokens.create", "tokens.revoke"],
-  admin: ["agents.read", "agents.revoke", "findings.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage"],
+  viewer: ["agents.read", "findings.read", "vulnerabilities.read"],
+  analyst: ["agents.read", "findings.read", "findings.triage", "vulnerabilities.read", "assistant.use"],
+  operator: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "rules.upload", "tokens.read", "tokens.create", "tokens.revoke"],
+  scoped_operator: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "rules.upload", "tokens.read", "tokens.create", "tokens.revoke"],
+  admin: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use"],
 };
 
 export function canOpenPage(path: string, capabilities: readonly NavigationCapability[], seeded = false): boolean {

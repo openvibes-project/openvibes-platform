@@ -758,54 +758,26 @@ async fn access_inventory(headers: HeaderMap) -> Response {
     if let Some(response) = read_error(mode) {
         return response;
     }
-    let role = |role_id: &str, name: &str, permissions: &[&str]| {
+    let role = |role_id: &str, name: &str, builtin_role: BuiltInRole| {
+        let permissions = resolve_capabilities(&[RoleBinding::global(builtin_role)])
+            .into_iter()
+            .map(|capability| {
+                serde_json::to_value(capability.permission)
+                    .expect("permissions serialize")
+                    .as_str()
+                    .expect("permissions serialize as strings")
+                    .to_owned()
+            })
+            .collect::<Vec<_>>();
         serde_json::json!({
             "role_id": role_id, "display_name": name, "builtin": true, "permissions": permissions
         })
     };
     let roles = vec![
-        role("viewer", "Viewer", &["agents.read", "findings.read"]),
-        role(
-            "analyst",
-            "Analyst",
-            &["agents.read", "findings.read", "findings.triage"],
-        ),
-        role(
-            "operator",
-            "Operator",
-            &[
-                "agents.read",
-                "agents.revoke",
-                "findings.read",
-                "rules.upload",
-                "tokens.read",
-                "tokens.create",
-                "tokens.revoke",
-            ],
-        ),
-        role(
-            "admin",
-            "Admin",
-            &[
-                "agents.read",
-                "agents.revoke",
-                "findings.read",
-                "findings.triage",
-                "tokens.read",
-                "tokens.create",
-                "tokens.revoke",
-                "rules.read",
-                "rules.upload",
-                "audit.read",
-                "audit.export",
-                "audit.retention.manage",
-                "rbac.read",
-                "rbac.manage",
-                "asset_groups.manage",
-                "service_accounts.read",
-                "service_accounts.manage",
-            ],
-        ),
+        role("viewer", "Viewer", BuiltInRole::Viewer),
+        role("analyst", "Analyst", BuiltInRole::Analyst),
+        role("operator", "Operator", BuiltInRole::Operator),
+        role("admin", "Admin", BuiltInRole::Admin),
     ];
     let bindings = if matches!(persona, Persona::Admin) {
         vec![serde_json::json!({
@@ -890,6 +862,14 @@ mod tests {
         assert!(Persona::Admin.permits(Permission::RulesRead, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::RulesUpload, SeedMode::Mixed));
         assert!(Persona::Operator.permits(Permission::TokensCreate, SeedMode::Mixed));
+        assert!(Persona::Viewer.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Analyst.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Operator.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::VulnerabilitiesRead, SeedMode::Mixed));
+        assert!(Persona::Analyst.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(Persona::Admin.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(!Persona::Viewer.permits(Permission::AssistantUse, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));
         assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
         assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));

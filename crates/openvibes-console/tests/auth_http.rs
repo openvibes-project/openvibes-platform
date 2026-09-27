@@ -1,4 +1,5 @@
 use std::{
+    collections::BTreeSet,
     hash::{BuildHasher, Hasher},
     net::SocketAddr,
 };
@@ -11,7 +12,10 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Utc;
 use ed25519_dalek::{Signer, SigningKey};
-use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
+use openvibes_console::{
+    BuiltInRole, NormalizedPassword, RoleBinding, TrustedPeer, authenticated_router, hash_password,
+    resolve_capabilities,
+};
 use openvibes_core::{
     Confidence, Identifier, PayloadEncoding, ResourceLimits, Rule, RuleSet, SchemaVersion,
     Severity, SignedRuleEnvelope,
@@ -208,6 +212,54 @@ async fn api_json_idempotent(
         )
         .await
         .unwrap()
+}
+
+#[tokio::test]
+async fn database_builtin_permissions_match_the_rust_role_table() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        eprintln!("skipping PostgreSQL role parity check: OPENVIBES_TEST_DATABASE_URL is unset");
+        return;
+    }
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+
+    let rows = client
+        .query(
+            "SELECT role_id, permission_id FROM console_role_permissions
+             ORDER BY role_id, permission_id",
+            &[],
+        )
+        .await
+        .unwrap();
+    let actual = rows
+        .into_iter()
+        .map(|row| (row.get::<_, String>(0), row.get::<_, String>(1)))
+        .collect::<BTreeSet<_>>();
+
+    let mut expected = BTreeSet::new();
+    for (role_id, role) in [
+        ("viewer", BuiltInRole::Viewer),
+        ("analyst", BuiltInRole::Analyst),
+        ("operator", BuiltInRole::Operator),
+        ("admin", BuiltInRole::Admin),
+    ] {
+        for capability in resolve_capabilities(&[RoleBinding::global(role)]) {
+            let permission = serde_json::to_value(capability.permission)
+                .unwrap()
+                .as_str()
+                .unwrap()
+                .to_owned();
+            expected.insert((role_id.to_owned(), permission));
+        }
+    }
+
+    assert_eq!(
+        actual, expected,
+        "PostgreSQL and Rust built-in roles diverged"
+    );
+    drop(client);
+    db.drop().await;
 }
 
 #[tokio::test]

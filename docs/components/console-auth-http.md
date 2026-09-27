@@ -66,7 +66,7 @@ permission-checked read models, enrollment-token management, and audit routes.
 The router constructor accepts a `platform_store::Pool` and canonical public
 origin. The executable constructs it when strict config supplies both
   `database_url` and `public_origin`, and requires that migrations have already
-advanced the database to schema 22. Startup never runs migrations. The current
+advanced the database to schema 23. Startup never runs migrations. The current
 listener is loopback-only and config accepts only canonical HTTP loopback
 origins. Login throttling has a five-failure per-account limit and a higher
 per-source limit; in reverse-proxy mode, the last address in `X-Forwarded-For`
