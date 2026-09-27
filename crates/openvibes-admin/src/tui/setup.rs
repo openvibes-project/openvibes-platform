@@ -293,6 +293,11 @@ impl<H: Host> App<H> {
                     Ok(_) => {
                         self.setup.prompt.failures = 0;
                         self.setup.job_args.clear();
+                        let job = if self.setup.previous.is_some() {
+                            Job::Repair
+                        } else {
+                            Job::Install
+                        };
                         if let Some(previous) = self.setup.previous.take() {
                             let removed: Vec<&str> = previous
                                 .difference(&self.setup.components)
@@ -303,7 +308,8 @@ impl<H: Host> App<H> {
                                     Some(vec!["--components".into(), removed.join(",")]);
                             }
                         }
-                        self.start_job(Job::Install, secret);
+                        // Change components keeps the CA: repair mode.
+                        self.start_job(job, secret);
                     }
                     Err(HostError::WrongPassword) => self.wrong_password(after),
                     Err(error) => {

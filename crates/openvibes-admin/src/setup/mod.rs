@@ -122,12 +122,21 @@ pub fn status() -> ExitCode {
     ExitCode::SUCCESS
 }
 
+/// Install and repair wait while an update or uninstall is half done.
+fn setup_guard() -> Result<(), ExitCode> {
+    system::job_guard(Path::new("/"), "setup").map_err(|error| {
+        eprintln!("openvibes-admin: {error}");
+        ExitCode::FAILURE
+    })
+}
+
 /// Loads the plan and holds the run lock; prints the error otherwise.
 fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
     let lock = system::lock(Path::new("/")).map_err(|error| {
         eprintln!("openvibes-admin: {error}");
         ExitCode::FAILURE
     })?;
+
     let plan = Plan::load(Path::new("/")).map_err(|error| {
         eprintln!("openvibes-admin: {error}");
         ExitCode::FAILURE
@@ -141,6 +150,9 @@ pub fn step(step: Step, repair: bool) -> ExitCode {
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(code) = setup_guard() {
+        return code;
+    }
     println!("{}", run_step(&host_ctx(&plan, repair), step).line());
     ExitCode::SUCCESS
 }
@@ -204,6 +216,9 @@ pub fn repair_all() -> ExitCode {
         Ok(v) => v,
         Err(code) => return code,
     };
+    if let Err(code) = setup_guard() {
+        return code;
+    }
     let ctx = host_ctx(&plan, true);
     report(
         Step::ALL
@@ -284,6 +299,9 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if let Err(code) = setup_guard() {
+        return code;
+    }
     if let Err(error) = plan.save(Path::new("/")) {
         eprintln!("openvibes-admin: {error}");
         return ExitCode::FAILURE;

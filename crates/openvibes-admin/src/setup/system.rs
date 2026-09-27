@@ -276,3 +276,34 @@ impl<R: Runner> Ctx<'_, R> {
         std::thread::sleep(self.pause);
     }
 }
+
+/// Marks an update or uninstall that is half done (between its Stop and its
+/// last step); other Setup runs refuse until it is finished, so nothing
+/// starts services against a half-migrated database. In /run: a reboot
+/// starts the services anyway.
+const JOB: &str = "run/openvibes-admin/job";
+
+/// Refuses when a job of another kind is half done.
+pub fn job_guard(root: &Path, kind: &str) -> Result<(), String> {
+    match fs::read_to_string(root.join(JOB)) {
+        Ok(text) if !text.trim().is_empty() && text.trim() != kind => {
+            let other = text.trim();
+            Err(format!(
+                "an {other} is half done on this host: finish it first (Setup tab, or setup --{other})"
+            ))
+        }
+        _ => Ok(()),
+    }
+}
+
+impl<R: Runner> Ctx<'_, R> {
+    /// Starts the half-done mark for `kind` (`update`, `uninstall`).
+    pub fn job_begin(&self, kind: &str) -> Result<(), String> {
+        self.put(&format!("/{JOB}"), kind.as_bytes(), None, 0o600)
+    }
+
+    /// Clears it once the job's last step is done.
+    pub fn job_end(&self) {
+        let _ = fs::remove_file(self.root.join(JOB));
+    }
+}

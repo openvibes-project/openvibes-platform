@@ -319,6 +319,8 @@ fn changing_components_installs_then_removes_the_unticked_ones() {
         calls.last().unwrap().0,
         "remove-step backup --components vulns"
     );
+    // The install part runs in repair mode: it may add packages, never a new CA.
+    assert_eq!(calls[1].0, "setup-step packages --repair");
 }
 
 #[test]

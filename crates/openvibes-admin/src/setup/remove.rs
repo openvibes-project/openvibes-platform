@@ -207,15 +207,28 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
 }
 
 pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> StepState {
+    // A mistyped name stops the first step, not only the last: the user
+    // asked for nothing to happen.
+    if let Some(confirm) = &args.confirm
+        && *confirm != ctx.plan.hostname
+    {
+        return StepState::Failed(format!(
+            "the typed name does not match this host's name ({}); nothing removed",
+            ctx.plan.hostname
+        ));
+    }
+    if let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
+        return StepState::Failed(error);
+    }
     let result = match step {
         RemoveStep::Backup => match &args.backup {
             None => Ok(StepState::Skipped("no backup chosen".into())),
             Some(path) => backup::dump(ctx, path).map(StepState::Done),
         },
-        RemoveStep::Stop => stop(ctx, args),
+        RemoveStep::Stop => ctx.job_begin("uninstall").and_then(|()| stop(ctx, args)),
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
-        RemoveStep::Purge => purge(ctx, args),
+        RemoveStep::Purge => purge(ctx, args).inspect(|_| ctx.job_end()),
     };
     result.unwrap_or_else(StepState::Failed)
 }
@@ -394,5 +407,23 @@ mod tests {
             state.detail().contains("PostgreSQL itself stays"),
             "{state:?}"
         );
+    }
+
+    #[test]
+    fn a_wrong_confirmation_stops_every_step() {
+        let fake = Fake::new("remove-wrong-name");
+        let plan = plan(&[Ingest]);
+        for step in RemoveStep::ALL {
+            let state = run(
+                &fake.ctx(&plan),
+                step,
+                &args(&[Ingest], Some("other.example.com")),
+            );
+            assert!(
+                state.detail().contains("does not match"),
+                "{step:?}: {state:?}"
+            );
+        }
+        assert!(fake.calls.borrow().is_empty(), "nothing ran");
     }
 }

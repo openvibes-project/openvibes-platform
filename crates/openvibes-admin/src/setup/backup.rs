@@ -3,14 +3,33 @@
 //! `pg_restore --list`, then handed to the user as a new 0600 file, with the
 //! roles next to it. Nothing is ever written over an existing file.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{fs, os::unix::fs::DirBuilderExt, path::Path};
 
 use platform_host::runner::Runner;
+use ring::rand::{SecureRandom, SystemRandom};
 
 use super::Ctx;
 
-const WORK: &str = "/var/tmp/openvibes-backup";
-const DUMP: &str = "/var/tmp/openvibes-backup/openvibes.dump";
+/// A new directory for postgres to dump into: a random name in /var/tmp
+/// (on disk, not in RAM), made with mkdir, which fails on anything already
+/// there and never follows a symlink. /var/tmp is sticky, so nobody else can
+/// replace the directory once it is ours.
+fn staging<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+    let mut bytes = [0_u8; 8];
+    SystemRandom::new()
+        .fill(&mut bytes)
+        .map_err(|_| "could not pick a staging directory name".to_owned())?;
+    let name: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let work = format!("/var/tmp/openvibes-backup-{name}");
+    let parent = ctx.path("/var/tmp");
+    fs::create_dir_all(&parent).map_err(|error| format!("/var/tmp: {error}"))?;
+    fs::DirBuilder::new()
+        .mode(0o700)
+        .create(ctx.path(&work))
+        .map_err(|error| format!("{work}: {error}"))?;
+    ctx.chown(&work, Some(("postgres", "postgres")))?;
+    Ok(work)
+}
 
 pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
     let shown = out.display().to_string();
@@ -20,40 +39,35 @@ pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
             return Err(format!("{file} already exists; choose another backup file"));
         }
     }
-    let work = ctx.path(WORK);
-    if work.exists() {
-        fs::remove_dir_all(&work).map_err(|error| format!("{WORK}: {error}"))?;
-    }
-    fs::create_dir_all(&work).map_err(|error| format!("{WORK}: {error}"))?;
-    fs::set_permissions(&work, fs::Permissions::from_mode(0o700))
-        .map_err(|error| format!("{WORK}: {error}"))?;
-    ctx.chown(WORK, Some(("postgres", "postgres")))?;
+    let work = staging(ctx)?;
+    let dump_file = format!("{work}/openvibes.dump");
+    let dump_file = dump_file.as_str();
     let result = (|| {
         ctx.as_postgres(&[
             "/usr/bin/pg_dump",
             "--format=custom",
             "--file",
-            DUMP,
+            dump_file,
             "openvibes",
         ])?;
         let roles =
             ctx.as_postgres(&["/usr/bin/pg_dumpall", "--roles-only", "--no-role-passwords"])?;
-        ctx.as_postgres(&["/usr/bin/pg_restore", "--list", DUMP])?;
-        let size = fs::metadata(ctx.path(DUMP))
-            .map_err(|error| format!("{DUMP}: {error}"))?
+        ctx.as_postgres(&["/usr/bin/pg_restore", "--list", dump_file])?;
+        let size = fs::metadata(ctx.path(dump_file))
+            .map_err(|error| format!("{dump_file}: {error}"))?
             .len();
         if size == 0 {
             return Err("the database dump is empty".to_owned());
         }
         let mut dump =
-            fs::File::open(ctx.path(DUMP)).map_err(|error| format!("{DUMP}: {error}"))?;
+            fs::File::open(ctx.path(dump_file)).map_err(|error| format!("{dump_file}: {error}"))?;
         let note = ctx.write_new(&shown, &mut dump)?;
         ctx.write_new(&roles_file, &mut roles.as_bytes())?;
         Ok(format!(
             "backup saved to {shown} ({size} bytes) and {roles_file}{note}"
         ))
     })();
-    let _ = fs::remove_dir_all(&work);
+    let _ = fs::remove_dir_all(ctx.path(&work));
     result
 }
 
@@ -64,13 +78,23 @@ mod tests {
 
     const PG: [&str; 4] = ["/usr/sbin/runuser", "-u", "postgres", "--"];
 
+    /// The staging directory the dump created under var/tmp.
+    fn staging(root: &std::path::Path) -> std::path::PathBuf {
+        std::fs::read_dir(root.join("var/tmp"))
+            .unwrap()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .find(|path| {
+                path.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with("openvibes-backup-"))
+            })
+            .expect("a fresh staging directory")
+    }
+
     fn postgres(fake: &Fake) {
         fake.effect(&[&PG[..], &["/usr/bin/pg_dump"]].concat(), |root| {
-            std::fs::write(
-                root.join("var/tmp/openvibes-backup/openvibes.dump"),
-                "PGDMP data",
-            )
-            .unwrap();
+            std::fs::write(staging(root).join("openvibes.dump"), "PGDMP data").unwrap();
         });
         fake.answer(
             &[&PG[..], &["/usr/bin/pg_dumpall"]].concat(),
@@ -132,7 +156,7 @@ mod tests {
     fn an_unreadable_dump_is_not_handed_over() {
         let fake = Fake::new("backup-bad");
         fake.effect(&[&PG[..], &["/usr/bin/pg_dump"]].concat(), |root| {
-            std::fs::write(root.join("var/tmp/openvibes-backup/openvibes.dump"), "").unwrap();
+            std::fs::write(staging(root).join("openvibes.dump"), "").unwrap();
         });
         fake.answer(&[&PG[..], &["/usr/bin/pg_dumpall"]].concat(), 0, "");
         fake.answer(&[&PG[..], &["/usr/bin/pg_restore"]].concat(), 1, "");
@@ -140,5 +164,21 @@ mod tests {
         let plan = plan(&[Ingest]);
         assert!(super::dump(&fake.ctx(&plan), std::path::Path::new("/home/alice/b.dump")).is_err());
         assert!(!fake.root.join("home/alice/b.dump").exists());
+    }
+
+    #[test]
+    fn the_staging_directory_is_created_fresh_never_reused() {
+        let fake = Fake::new("backup-fresh");
+        postgres(&fake);
+        // Anything already at a predictable name in /var/tmp (world-writable)
+        // is somebody else's: it must be neither used nor removed.
+        fake.file("/var/tmp/openvibes-backup/not-ours", "x");
+        std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+        let plan = plan(&[Ingest]);
+        super::dump(&fake.ctx(&plan), std::path::Path::new("/home/alice/b.dump")).unwrap();
+        assert!(fake.root.join("var/tmp/openvibes-backup/not-ours").exists());
+        let dump = fake.call(&[&PG[..], &["/usr/bin/pg_dump"]].concat());
+        let file = &dump[dump.iter().position(|a| a == "--file").unwrap() + 1];
+        assert!(file.starts_with("/var/tmp/openvibes-backup-"), "{file}");
     }
 }
