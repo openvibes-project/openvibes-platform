@@ -8,6 +8,7 @@ mod agent;
 mod assistant;
 mod ca;
 mod files;
+mod import;
 mod model;
 mod rules;
 mod token;
@@ -75,6 +76,17 @@ enum Command {
         #[command(subcommand)]
         command: vulns::VulnsCommand,
     },
+    /// Import agent export files (FindingExport, InventoryExport) as
+    /// imported hosts.
+    Import {
+        /// Keep findings for this many days (1 to 36500); must match
+        /// `maintenance --retention-days`.
+        #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u32).range(1..=36500))]
+        retention_days: u32,
+        /// Export files, or directories whose *.json files are imported.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
     /// The console's assistant: check its model backend and run the
     /// quality gate.
     Assistant {
@@ -95,6 +107,7 @@ impl Command {
             Self::Rules { command } => command.name(),
             Self::Feeds { command } => command.name(),
             Self::Vulns { command } => command.name(),
+            Self::Import { .. } => "import",
             Self::Assistant { command } => command.name(),
         }
     }
@@ -170,6 +183,13 @@ async fn main() -> ExitCode {
         },
         Command::Vulns { command } => match require_current_schema(&client).await {
             Ok(()) => vulns::run_vulns(command, &client).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::Import {
+            retention_days,
+            paths,
+        } => match require_current_schema(&client).await {
+            Ok(()) => import::run(paths, *retention_days, &mut client).await,
             Err(error) => (Err(error), None),
         },
         Command::Assistant { command } => match require_current_schema(&client).await {
@@ -270,6 +290,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Rules { .. }
         | Command::Feeds { .. }
         | Command::Vulns { .. }
+        | Command::Import { .. }
         | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
         }

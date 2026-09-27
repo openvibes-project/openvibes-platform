@@ -101,6 +101,42 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 
 All are audited; `feeds import` with the source as target.
 
+## Import command (protocol P3b)
+
+`import [--retention-days 90] PATH...` stores agent export files written by
+`openvibes-agent export` on a host with no platform. `PATH` is a file or a
+directory, whose `*.json` files are imported in name order (not
+recursive; other files are skipped).
+
+- Each file is refused above 1 MiB before it is read, then decoded and
+  validated with the same types and limits as online deliveries. Its kind
+  comes from its members: `findings` (`FindingExport`) or `packages`
+  (`InventoryExport`).
+- The host is `import.<install_id>`, status `imported`: its own host, never
+  an enrolled agent. A file's `agent_id` is kept only as
+  `claimed_agent_id`; `hostname` is a label.
+- Findings are refused one by one by the online rules (more than an hour in
+  the future, older than `--retention-days`, no partition) and stored as
+  `origin = 'import'`, unauthenticated; ones already stored are counted.
+- An inventory replaces the host's packages when it is newer than the
+  stored one, and the vulnerability service matches the host within a
+  second. One without `os` (from an agent before P3b) is refused.
+- One line per file, then totals:
+
+```
+/exports/openvibes-export-….json: imported 12 findings (3 already present, 1 refused: retention_expired)
+/exports/openvibes-inventory-….json: inventory accepted (412 packages)
+/exports/notes.json: refused: not an OpenVIBES export file
+3 files: 12 findings, 1 inventories, 1 refused
+```
+
+Other lines: `inventory unchanged`, `older inventory ignored`, `refused:
+larger than 1 MiB`, `not valid JSON`, `invalid: …`, `no operating system:
+export again with a newer agent`, `database error: …`. A refused file does
+not stop the others; any refusal makes the exit code 1 (lines then go to
+stderr). Re-running an import is always safe. One audit entry per run,
+with the totals line as its target.
+
 ## Assistant commands
 
 `check` and `eval` read the `[assistant]` section of the console's configuration
