@@ -19,11 +19,11 @@ pub enum AgentScope {
 }
 
 impl AgentScope {
-    fn is_global(&self) -> bool {
+    pub(crate) fn is_global(&self) -> bool {
         matches!(self, Self::Global)
     }
 
-    fn group_ids(&self) -> Vec<String> {
+    pub(crate) fn group_ids(&self) -> Vec<String> {
         match self {
             Self::Global => Vec::new(),
             Self::AssetGroups(ids) => ids.clone(),
@@ -53,7 +53,7 @@ pub async fn agent_ids_in_scope(
 
 /// Builds the SQL predicate shared by finding reads; its only interpolated
 /// values are internal aliases and positional parameter numbers.
-fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
+pub(crate) fn agent_visibility(agent_id: &str, global: &str, groups: &str) -> String {
     format!(
         "({global}::boolean OR EXISTS (
             SELECT 1 FROM console_asset_group_selectors s
