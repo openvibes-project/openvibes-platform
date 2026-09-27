@@ -2,7 +2,7 @@
 
 `platform_store::console_read` supplies bounded, typed read queries for
 the OpenVIBES web console. It contains all SQL for agent summaries and pages,
-certificate metadata, latest findings, finding summaries, and retained finding
+certificate metadata, latest and grouped findings, finding summaries, and retained finding
 history. The console crate converts these records to its HTTP DTOs and applies
 authentication and scope rules before calling them. The unscoped functions
 are global read primitives. `agents_in_scope` and `agent_in_scope` enforce
@@ -19,7 +19,9 @@ agent visibility in SQL for the supplied global or asset-group scope.
   any authorized asset group matches. Empty group sets match no agents.
   `agent_summary_in_scope`, `agents_in_scope`, and `agent_in_scope` apply that
   predicate before aggregation, status filtering, cursor traversal, ordering,
-  and limiting. `agent_in_scope` hides out-of-scope IDs as absent.
+  and limiting. Imported installations are excluded from asset-group scopes
+  until an association contract exists; global readers can see them.
+  `agent_in_scope` hides out-of-scope IDs as absent.
 - `certificates_in_scope` verifies the owning agent's scope in the same SQL
   query before paging certificate metadata. Out-of-scope agents return an
   empty page.
@@ -30,6 +32,14 @@ agent visibility in SQL for the supplied global or asset-group scope.
   rows are returned as absent. The authenticated console does not expose
   production data routes until these store functions are wired to permission
   checks.
+- `finding_groups_in_scope` groups current snapshots by rule set and rule
+  only after applying asset scope, and returns in-window endpoint counts,
+  severity, version and triage rollups plus older endpoint counts.
+  `finding_group_endpoints_in_scope` pages the visible endpoints and hides a
+  group with no recent in-scope endpoint. The authenticated console exposes
+  opaque cursors bound to the time window and caller scope, and provides
+  atomic endpoint triage through the companion `console_triage` store module.
+  Imported installations remain global only until association is implemented.
 - `agent` reads one agent. `certificates` pages certificate serial and
   validity metadata and never selects the stored PEM chain.
 - `latest_findings` and `latest_finding` read the complete snapshot in

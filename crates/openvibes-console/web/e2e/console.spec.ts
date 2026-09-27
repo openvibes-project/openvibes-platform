@@ -334,7 +334,7 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
   await selectDemoOption(page, "Data scenario", "stale");
   await page.goto("/agents");
   await expect(page.locator("tbody tr")).toHaveCount(50);
-  await expect(page.getByText("stale", { exact: true })).toHaveCount(50);
+  await expect(page.locator("tbody .status-pill")).toHaveText(Array(50).fill("Stale"));
   await page.goto("/agents?agent=agent-00199");
   await expect(page.getByText("No heartbeat recorded")).toBeVisible();
 
@@ -347,13 +347,26 @@ test("shows stale, removed-permission, and expired-session states", async ({ pag
   await expect(page.getByRole("heading", { name: "Session expired" })).toBeVisible();
 });
 
-test("shows latest finding provenance and evidence", async ({ page }) => {
+test("groups findings and shows every endpoint with import provenance", async ({ page }) => {
   await page.goto("/?seeded=1");
-  await page.goto("/findings?finding=agent-00041%2F~unknown%2FOV-0120");
+  await page.goto("/findings?finding=%7Eunknown%2FOV-0120");
 
   await expect(page.getByRole("heading", { level: 2, name: "OV-0120 · rule set unknown (earlier agent)" })).toBeVisible();
-  await expect(page.getByText("Imported · unauthenticated", { exact: true })).toBeVisible();
-  await expect(page.getByText("82%", { exact: true })).toBeVisible();
-  await expect(page.getByText("scan-00120", { exact: true })).toBeVisible();
-  await expect(page.getByText("synthetic.observation=0120", { exact: true })).toBeVisible();
+  await expect(page.getByText("agent-00041 · Imported installation agent-00041", { exact: true })).toBeVisible();
+  await expect(page.getByText("Imported", { exact: true })).toBeVisible();
+});
+
+test("shows scoped vulnerability priorities and advisory enrichment", async ({ page }) => {
+  await page.goto("/?seeded=1");
+  await page.goto("/vulnerabilities");
+  await expect(page.getByRole("heading", { level: 2, name: "Vulnerabilities" })).toBeVisible();
+  await expect(page.getByText("Exploited", { exact: true })).toBeVisible();
+  await page.getByRole("link", { name: /Exploited/ }).click();
+  await expect(page).toHaveURL(/exploited=true/);
+  await page.goto("/vulnerabilities");
+  const advisory = page.getByRole("link", { name: "FEDORA-2026-0001" }).first();
+  await expect(advisory).toBeVisible();
+  await advisory.click();
+  await expect(page.getByRole("heading", { name: "CVE enrichment for FEDORA-2026-0001" })).toBeVisible();
+  await expect(page.getByRole("listitem").filter({ hasText: "CVE-2026-1001" })).toBeVisible();
 });

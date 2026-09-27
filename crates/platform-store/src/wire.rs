@@ -4,7 +4,9 @@
 use std::collections::BTreeSet;
 
 use chrono::{DateTime, NaiveDate, Utc};
-use openvibes_core::{Finding, InstalledPackage, OsRelease, PackageManager, Severity};
+use openvibes_core::{
+    Finding, InstalledPackage, NormalizedPackage, OsRelease, Severity, inventory_fingerprint,
+};
 
 use crate::{StoreError, ingest::StoredFinding, inventory::PackageRow};
 
@@ -67,40 +69,32 @@ pub fn finding(
     })
 }
 
-/// Package rows for the store and the inventory digest. Sorts `packages`
-/// into a canonical order first, so the digest ignores how the agent listed
-/// them; the digest covers the OS and running kernel too.
+/// The distinct normalised records of `packages` (protocol P11), as stored.
+#[must_use]
+pub fn package_rows(packages: &[InstalledPackage]) -> Vec<PackageRow> {
+    packages
+        .iter()
+        .map(NormalizedPackage::from)
+        .collect::<BTreeSet<_>>()
+        .iter()
+        .map(PackageRow::from)
+        .collect()
+}
+
+/// Package rows for the store and the inventory's fingerprint (the
+/// protocol's, P11), which covers the OS and running kernel too and ignores
+/// the order the agent listed the packages in.
 pub fn inventory(
     os: &OsRelease,
     running_kernel: Option<&str>,
-    packages: &mut [InstalledPackage],
+    packages: &[InstalledPackage],
 ) -> Result<(Vec<PackageRow>, [u8; 32]), StoreError> {
-    use sha2::Digest;
-    packages.sort_by_cached_key(|package| serde_json::to_string(package).unwrap_or_default());
-    let bytes =
-        serde_json::to_vec(&(os, running_kernel, &*packages)).map_err(|_| StoreError::Query)?;
-    let digest: [u8; 32] = sha2::Sha256::digest(&bytes).into();
-    let rows = packages
-        .iter()
-        .map(|package| PackageRow {
-            manager: match package.manager {
-                PackageManager::Rpm => "rpm",
-                PackageManager::Dpkg => "dpkg",
-            }
-            .to_owned(),
-            name: package.name.clone(),
-            epoch: package
-                .epoch
-                .and_then(|e| i32::try_from(e).ok())
-                .unwrap_or(0),
-            version: package.version.clone(),
-            release: package.release.clone().unwrap_or_default(),
-            arch: package.arch.clone().unwrap_or_default(),
-            source: package.source.clone(),
-            source_version: package.source_version.clone(),
-        })
-        .collect();
-    Ok((rows, digest))
+    let digest = inventory_fingerprint(
+        os,
+        running_kernel,
+        packages.iter().map(NormalizedPackage::from),
+    );
+    Ok((package_rows(packages), digest))
 }
 
 #[cfg(test)]
@@ -138,19 +132,28 @@ mod tests {
         assert_eq!((kept.rule_version, kept.severity.as_str()), (3, "medium"));
     }
 
-    // Two orders of the same packages give one digest and the same rows.
     #[test]
-    fn inventory_digest_ignores_package_order() {
-        let os: OsRelease = serde_json::from_str(r#"{"id":"fedora","version_id":"44"}"#).unwrap();
-        let a: InstalledPackage =
-            serde_json::from_str(r#"{"manager":"rpm","name":"a","version":"1"}"#).unwrap();
-        let b: InstalledPackage =
-            serde_json::from_str(r#"{"manager":"dpkg","name":"b","version":"2","epoch":1}"#)
-                .unwrap();
-        let (rows1, d1) = inventory(&os, None, &mut [a.clone(), b.clone()]).unwrap();
-        let (rows2, d2) = inventory(&os, None, &mut [b, a]).unwrap();
-        assert_eq!(d1, d2);
-        assert_eq!(rows1, rows2);
-        assert!(rows1.iter().any(|row| row.epoch == 1));
+    fn the_inventory_digest_is_the_contract_fingerprint() {
+        let text = include_str!("../../../protocol/vectors/inventory-fingerprint.json");
+        let vectors: Vec<serde_json::Value> = serde_json::from_str(text).unwrap();
+        assert_eq!(vectors.len(), 3);
+        for vector in vectors {
+            let input = &vector["inventory"];
+            let os: OsRelease = serde_json::from_value(input["os"].clone()).unwrap();
+            let packages: Vec<InstalledPackage> =
+                serde_json::from_value(input["packages"].clone()).unwrap();
+            let kernel = input["running_kernel"].as_str();
+            let (rows, digest) = inventory(&os, kernel, &packages).unwrap();
+            assert_eq!(
+                openvibes_core::hex(&digest),
+                vector["sha256"].as_str().unwrap()
+            );
+            let again = openvibes_core::inventory_fingerprint(
+                &os,
+                kernel,
+                rows.iter().map(PackageRow::normalized),
+            );
+            assert_eq!(again, digest, "the stored rows give the same fingerprint");
+        }
     }
 }

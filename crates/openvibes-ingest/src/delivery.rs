@@ -1,9 +1,14 @@
-use axum::{Json, body::Bytes, extract::State, http::StatusCode};
+use axum::{
+    Json,
+    body::Bytes,
+    extract::State,
+    http::{HeaderMap, StatusCode},
+};
 
 use chrono::{Duration, Utc};
 use openvibes_core::{
-    DeliveryAcknowledgement, FindingBatch, Heartbeat, Identifier, InventoryReport, RejectedFinding,
-    SchemaVersion,
+    DeliveryAcknowledgement, FindingBatch, Heartbeat, Identifier, InventoryChanges,
+    InventoryReport, RejectedFinding, SchemaVersion,
 };
 use platform_store::{ingest, inventory, wire};
 
@@ -26,6 +31,12 @@ pub(crate) async fn heartbeat(
         .iter()
         .map(|capability| capability.as_str().to_owned())
         .collect();
+    let health = heartbeat
+        .health
+        .as_ref()
+        .map(serde_json::to_value)
+        .transpose()
+        .map_err(|_| ApiError::BadRequest)?;
     let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     ingest::heartbeat(
         &client,
@@ -33,6 +44,7 @@ pub(crate) async fn heartbeat(
         &heartbeat.scanner_version,
         heartbeat.hostname.as_deref(),
         &capabilities,
+        health.as_ref(),
         Utc::now(),
     )
     .await?;
@@ -91,12 +103,19 @@ pub(crate) async fn findings(
 
 /// `POST /v1/inventory` (protocol P8): replaces the authenticated agent's
 /// package inventory, unless it is unchanged, for vulnerability matching.
+/// The body may be gzip-compressed (P11).
 pub(crate) async fn inventory(
     State(state): State<AppState>,
     AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    headers: HeaderMap,
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
-    let mut report: InventoryReport =
+    let body = platform_agent_server::decoded_body(
+        &headers,
+        &body,
+        platform_agent_server::MAX_INVENTORY_BYTES,
+    )?;
+    let report: InventoryReport =
         platform_agent_server::parse_with_limit(&body, platform_agent_server::MAX_INVENTORY_BYTES)?;
     if report.agent_id.as_str() != agent_id {
         return Err(ApiError::BadRequest);
@@ -104,7 +123,7 @@ pub(crate) async fn inventory(
     let (rows, digest) = wire::inventory(
         &report.os,
         report.running_kernel.as_deref(),
-        &mut report.packages,
+        &report.packages,
     )?;
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     inventory::replace(
@@ -119,4 +138,47 @@ pub(crate) async fn inventory(
     )
     .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /v1/inventory/changes` (protocol P11): applies a change set to the
+/// authenticated agent's inventory, or answers 409 `inventory_resync`.
+pub(crate) async fn inventory_changes(
+    State(state): State<AppState>,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let body = platform_agent_server::decoded_body(
+        &headers,
+        &body,
+        platform_agent_server::MAX_INVENTORY_BYTES,
+    )?;
+    let changes: InventoryChanges =
+        platform_agent_server::parse_with_limit(&body, platform_agent_server::MAX_INVENTORY_BYTES)?;
+    if changes.agent_id.as_str() != agent_id {
+        return Err(ApiError::BadRequest);
+    }
+    let (Some(base), Some(expected)) = (
+        openvibes_core::digest_from_hex(&changes.base_sha256),
+        openvibes_core::digest_from_hex(&changes.sha256),
+    ) else {
+        return Err(ApiError::BadRequest);
+    };
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    match inventory::apply_changes(
+        &mut client,
+        &agent_id,
+        &changes.os,
+        changes.running_kernel.as_deref(),
+        &wire::package_rows(&changes.added),
+        &wire::package_rows(&changes.removed),
+        base,
+        expected,
+        Utc::now(),
+    )
+    .await?
+    {
+        inventory::ChangesOutcome::Stored => Ok(StatusCode::NO_CONTENT),
+        inventory::ChangesOutcome::Resync => Err(ApiError::Resync),
+    }
 }

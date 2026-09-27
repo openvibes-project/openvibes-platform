@@ -51,6 +51,9 @@ pub enum ApiError {
     Busy,
     /// The request missed its deadline (408).
     Timeout,
+    /// A change set does not fit the stored inventory (409
+    /// `inventory_resync`, P11): the agent sends the full inventory.
+    Resync,
 }
 
 impl IntoResponse for ApiError {
@@ -75,6 +78,14 @@ impl IntoResponse for ApiError {
             }
             Self::Busy => (StatusCode::SERVICE_UNAVAILABLE, "busy").into_response(),
             Self::Timeout => (StatusCode::REQUEST_TIMEOUT, "request timeout").into_response(),
+            Self::Resync => (
+                StatusCode::CONFLICT,
+                Json(PlatformError {
+                    schema_version: SchemaVersion::V1,
+                    code: PlatformErrorCode::InventoryResync,
+                }),
+            )
+                .into_response(),
         }
     }
 }

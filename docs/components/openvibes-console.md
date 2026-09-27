@@ -16,16 +16,22 @@ to `openvibes-admin tui`.
 
 ## Status
 
-The design is approved. C0 and C1 are complete. C2–C5 are implemented in the
-Codex branch and remain in progress overall while PR #29 is updated, reviewed,
-and merged. C3 local authentication is
+The design is approved. C0–C5 are implemented; PR #29 merged on 2026-09-27.
+The vulnerability and grouped-finding API and UI work is implemented on the
+follow-up branch. It adds scoped fleet summaries, prioritized vulnerability
+views, CVE enrichment, grouped rule views, endpoint inspection, and atomic
+bulk triage. The merge-readiness check still requires the complete local gate,
+browser E2E, and CI/review confirmation for the final commit.
+C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 22, and serves
+the executable connects to PostgreSQL, requires schema version 25, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
-certificate routes, plus finding summary, latest, and history reads. Access
+certificate routes, plus finding summary, latest, history, and grouped rule
+reads. Vulnerability summary, prioritized list, and advisory/CVE detail are
+available under the caller's `vulnerabilities.read` scope. Access
 control has a global read inventory for roles, bindings, and asset groups,
 plus CSRF-protected local-user role binding changes and audited asset-group
 selector management. Enrollment-token, service-account, and signed rule-bundle
@@ -72,7 +78,38 @@ the committed 32, 192, and 512 pixel PNG derivatives from that SVG source.
 Production data routes remain unavailable until their later milestones
 provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
-OpenAPI snapshot or package.
+OpenAPI snapshot or package. The seeded API also supplies deterministic
+vulnerability and grouped-finding data so both pages can be reviewed locally.
+
+### Vulnerability review and X-M7 grouped findings
+
+`GET /api/v1/vulnerabilities/summary`, `/vulnerabilities`, and
+`/vulnerabilities/advisories/{advisory_id}` require `vulnerabilities.read`.
+Every query applies the caller's asset scope in SQL before returning records.
+The summary reports severity, affected hosts, exploited advisories, no-fix
+matches, and reboot-needed hosts. The bounded prioritized list uses the same
+ranking as `vulns list`; host, advisory, severity, CVE, and fixed-state filters
+are available, with exploited and reboot-needed filters applied before the
+store's fleet row cap. Host names that match multiple visible hosts are refused
+with their visible IDs; an agent ID selects one exact host. Advisory details
+return CVE enrichment only if at least one affected host is visible to the
+caller.
+
+`GET /api/v1/findings/groups` shows each rule set and rule once in the recent
+window, after scope filtering. Its endpoint route pages visible current
+reporters with a cursor-bound window (the response's `since` is reused for
+subsequent pages) and can include older matches on request. Triage counts are
+typed by state in OpenAPI. `~unknown` represents
+pre-P6 findings with no rule set. `POST .../triage` accepts at most 100
+endpoint/version pairs and performs one all-or-nothing state transition.
+Stale selections return 412 and no endpoint is updated. Imported rows are
+labelled with their installation ID and remain limited to global readers.
+
+The frontend modules `Vulnerabilities.tsx` and `GroupedFindings.tsx` own the
+two read experiences. They render API priority and provenance as supplied,
+link host/advisory views, preserve opaque cursors, disable triage for readers,
+and send mutations with the session CSRF token. The demo server supplies
+synthetic API models for these routes.
 
 ## Interfaces
 
@@ -121,6 +158,13 @@ installation, upgrade preservation, direct TLS, Unix proxy peer enforcement,
 and systemd sandboxing pass the C5 integration run. CA and rule-trust-key
 administration remain CLI-only.
 
+Imported installations use the Agents view with a distinct Imported status.
+Detail shows the `install_id`, import timestamps, and file-reported scanner
+version, labels the identity unauthenticated, and never offers certificate,
+tag, or revoke actions. Hostnames remain operator labels and are not treated as
+unique identities; hostname-based vulnerability lookup must refuse ambiguous
+matches while exact installation IDs remain addressable.
+
 ## Configuration
 
 ### Current
@@ -147,7 +191,7 @@ origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at 
 configuration"), and `run` refuses a listener that is not loopback even if
 bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
-1.3 only with a 10-second deadline. Startup checks that the database is already at schema 22; it
+1.3 only with a 10-second deadline. Startup checks that the database is already at schema 23; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
 requests must use the configured Host authority. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
@@ -223,7 +267,7 @@ of local configuration, TLS files, the local account, and its active session.
   `127.0.0.1`, `[::1]`, any port); any other `Host` gets 421, so a
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
-  schema version other than 19; it does not migrate. The configured Host
+  schema version other than 24; it does not migrate. The configured Host
   authority is enforced for authenticated requests. Login uses trusted socket
   peer information from the capped listener. In reverse-proxy mode, the final
   `X-Forwarded-For` address from an allow-listed proxy is used for source-address

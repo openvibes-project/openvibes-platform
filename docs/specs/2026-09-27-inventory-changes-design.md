@@ -45,11 +45,22 @@ Today the agent and the platform each compute an inventory digest the same
 way in code; P11 makes it a contract, because both sides must agree byte
 for byte:
 
-`sha256` = SHA-256 of the compact JSON array `[os, running_kernel,
-packages]`, where `running_kernel` is `null` when absent and `packages` is
-sorted by each package's own compact JSON text, members in schema order,
-absent optional members omitted. Test vectors (inventory → hex digest) are
-fixtures in the protocol repository.
+`sha256` = SHA-256 of the UTF-8 compact JSON
+`[[os.id, os.version_id], running_kernel, [record, …]]`, where
+`running_kernel` is `null` when absent and each record is
+`[manager, name, epoch, version, release, arch, source, source_version]`
+(epoch 0, release and arch `""`, source and source_version `null` when
+absent; `vendor` left out), deduplicated and sorted by its compact JSON
+text in byte order. Test vectors (inventory → hex digest) are in the
+protocol repository (`vectors/inventory-fingerprint.json`).
+
+Amended 2026-09-27 while planning: the first wording hashed each package's
+full record. The platform stores packages normalised (`package_versions`
+is unique over exactly these eight fields; `vendor` is not kept), so it
+could not recompute that fingerprint from what it holds. Hashing the
+normalised record lets it check a change set's result against its own
+rows. Cost: the digest changes once, so each agent sends one full report
+after upgrading.
 
 ## 4. `InventoryChanges` (new document)
 

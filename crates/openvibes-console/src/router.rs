@@ -98,6 +98,57 @@ pub(crate) struct LatestFindingListParams {
     limit: Option<u16>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct VulnerabilityListParams {
+    host: Option<String>,
+    advisory: Option<String>,
+    severity: Option<String>,
+    cve: Option<String>,
+    fixed: Option<bool>,
+    exploited: Option<bool>,
+    reboot_needed: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FindingGroupsParams {
+    since: Option<String>,
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct FindingGroupEndpointsParams {
+    since: Option<String>,
+    include_older: Option<bool>,
+    cursor: Option<String>,
+    limit: Option<u16>,
+}
+
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct FindingGroupCursorToken {
+    since: String,
+    scope: platform_store::console_read::AgentScope,
+    last_observed_at: String,
+    rule_set_id: String,
+    rule_id: String,
+}
+
+#[derive(Deserialize, serde::Serialize)]
+#[serde(deny_unknown_fields)]
+struct FindingGroupEndpointCursorToken {
+    since: String,
+    include_older: bool,
+    scope: platform_store::console_read::AgentScope,
+    rule_set_id: String,
+    rule_id: String,
+    last_observed_at: String,
+    agent_id: String,
+}
+
 #[derive(Deserialize, serde::Serialize)]
 #[serde(deny_unknown_fields)]
 struct LatestFindingCursorToken {
@@ -344,6 +395,15 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(authenticated_agent_certificates),
         )
         .route("/v1/findings/summary", get(authenticated_finding_summary))
+        .route("/v1/findings/groups", get(authenticated_finding_groups))
+        .route(
+            "/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints",
+            get(authenticated_finding_group_endpoints),
+        )
+        .route(
+            "/v1/findings/groups/{rule_set_id}/{rule_id}/triage",
+            axum::routing::post(update_authenticated_finding_group_triage),
+        )
         .route("/v1/findings/latest", get(authenticated_latest_findings))
         .route(
             "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}",
@@ -354,6 +414,15 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(authenticated_finding_triage).put(update_authenticated_finding_triage),
         )
         .route("/v1/findings/history", get(authenticated_finding_history))
+        .route(
+            "/v1/vulnerabilities/summary",
+            get(authenticated_vulnerability_summary),
+        )
+        .route("/v1/vulnerabilities", get(authenticated_vulnerabilities))
+        .route(
+            "/v1/vulnerabilities/advisories/{advisory_id}",
+            get(authenticated_vulnerability_advisory),
+        )
         .route(
             "/v1/findings/history/{observed_day}/{finding_id}",
             get(authenticated_finding_event),
@@ -4532,6 +4601,708 @@ fn history_event_view(
         },
         observed_at: event.observed_at.to_rfc3339_opts(SecondsFormat::Secs, true),
         received_at: event.received_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+#[utoipa::path(get, path="/api/v1/vulnerabilities/summary", tag="vulnerabilities", responses((status=200, description="Scoped vulnerability summary", body=crate::VulnerabilitySummary)))]
+pub(crate) async fn authenticated_vulnerability_summary(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::VulnerabilitiesRead)
+            .await
+        {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let summary = match platform_store::vulns::summary_in_scope(&client, &scope).await {
+        Ok(summary) => summary,
+        Err(_) => return unavailable_auth(),
+    };
+    let by_severity = summary
+        .by_severity
+        .into_iter()
+        .map(|(severity, count)| crate::VulnerabilitySeverityCount {
+            severity: match severity.as_str() {
+                "critical" => crate::VulnerabilitySeverity::Critical,
+                "important" => crate::VulnerabilitySeverity::Important,
+                "moderate" => crate::VulnerabilitySeverity::Moderate,
+                "low" => crate::VulnerabilitySeverity::Low,
+                _ => crate::VulnerabilitySeverity::Unrated,
+            },
+            count: count.max(0) as u64,
+        })
+        .collect();
+    let top_hosts = summary
+        .top_hosts
+        .into_iter()
+        .map(
+            |(agent_id, hostname, open, serious)| crate::VulnerabilityTopHost {
+                agent_id,
+                hostname,
+                open: open.max(0) as u64,
+                serious: serious.max(0) as u64,
+            },
+        )
+        .collect();
+    Json(crate::VulnerabilitySummary {
+        by_severity,
+        hosts: summary.hosts.max(0) as u64,
+        top_hosts,
+        reboot_hosts: summary.reboot_hosts.max(0) as u64,
+        no_fix: summary.no_fix.max(0) as u64,
+        exploited: summary.exploited.max(0) as u64,
+    })
+    .into_response()
+}
+
+#[utoipa::path(get, path="/api/v1/vulnerabilities", tag="vulnerabilities", params(("host"=Option<String>, Query), ("advisory"=Option<String>, Query), ("severity"=Option<String>, Query), ("cve"=Option<String>, Query), ("fixed"=Option<bool>, Query), ("exploited"=Option<bool>, Query), ("reboot_needed"=Option<bool>, Query)), responses((status=200, description="Prioritised, scope-filtered vulnerabilities", body=crate::VulnerabilityPage), (status=400, description="Invalid filters", body=crate::ProblemDetails)))]
+pub(crate) async fn authenticated_vulnerabilities(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    query: Result<Query<VulnerabilityListParams>, QueryRejection>,
+) -> Response {
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::VulnerabilitiesRead)
+            .await
+        {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    let Query(params) = match query {
+        Ok(value) => value,
+        Err(_) => return invalid_finding_query(),
+    };
+    for value in [
+        &params.host,
+        &params.advisory,
+        &params.severity,
+        &params.cve,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if value.is_empty() || value.len() > 256 || value.chars().any(char::is_control) {
+            return invalid_finding_query();
+        }
+    }
+    if params
+        .severity
+        .as_deref()
+        .is_some_and(|s| !matches!(s, "critical" | "important" | "moderate" | "low" | "unrated"))
+    {
+        return invalid_finding_query();
+    }
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    if let Some(host) = params.host.as_deref() {
+        let matches = match platform_store::vulns::hosts_named_in_scope(&client, host, &scope).await
+        {
+            Ok(ids) => ids,
+            Err(_) => return unavailable_auth(),
+        };
+        if matches.len() > 1 {
+            let mut problem = ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "ambiguous_host",
+                "Host name matches multiple visible hosts; use an agent ID",
+            );
+            problem.field_errors = Some(vec![crate::FieldError {
+                field: "host".into(),
+                code: "ambiguous_host".into(),
+                message: matches.join(", "),
+            }]);
+            return problem_response(problem);
+        }
+    }
+    let rows = match platform_store::vulns::list_in_scope(
+        &client,
+        &platform_store::vulns::ListFilter {
+            host: params.host.as_deref(),
+            advisory: params.advisory.as_deref(),
+            severity: params.severity.as_deref(),
+            cve: params.cve.as_deref(),
+            fixed: params.fixed.unwrap_or(false),
+            exploited: params.exploited,
+            reboot_needed: params.reboot_needed,
+        },
+        &scope,
+    )
+    .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return unavailable_auth(),
+    };
+    let mut rows = rows;
+    let more_available = rows.len() > 100;
+    rows.truncate(100);
+    let items = rows.into_iter().map(vulnerability_view).collect();
+    Json(crate::VulnerabilityPage {
+        items,
+        more_available,
+        generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    })
+    .into_response()
+}
+
+#[utoipa::path(get, path="/api/v1/vulnerabilities/advisories/{advisory_id}", tag="vulnerabilities", params(("advisory_id"=String, Path)), responses((status=200, description="Scoped advisory and CVE enrichment", body=crate::VulnerabilityAdvisoryDetail), (status=404, description="Advisory not visible", body=crate::ProblemDetails)))]
+pub(crate) async fn authenticated_vulnerability_advisory(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(advisory_id): Path<String>,
+) -> Response {
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::VulnerabilitiesRead)
+            .await
+        {
+            Ok(scope) => scope,
+            Err(response) => return response,
+        };
+    if advisory_id.is_empty()
+        || advisory_id.len() > 128
+        || advisory_id.chars().any(char::is_control)
+    {
+        return invalid_finding_query();
+    }
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let cves =
+        match platform_store::vulns::cve_details_in_scope(&client, &advisory_id, &scope).await {
+            Ok(Some(cves)) => cves,
+            Ok(None) => {
+                return problem_response(ProblemDetails::not_found(
+                    "advisory_not_found",
+                    "Advisory not found",
+                ));
+            }
+            Err(_) => return unavailable_auth(),
+        };
+    let rows = match platform_store::vulns::list_in_scope(
+        &client,
+        &platform_store::vulns::ListFilter {
+            advisory: Some(&advisory_id),
+            ..Default::default()
+        },
+        &scope,
+    )
+    .await
+    {
+        Ok(rows) => rows,
+        Err(_) => return unavailable_auth(),
+    };
+    let mut rows = rows;
+    let more_available = rows.len() > 100;
+    rows.truncate(100);
+    let hosts = crate::VulnerabilityPage {
+        items: rows.into_iter().map(vulnerability_view).collect(),
+        more_available,
+        generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+    };
+    let cves = cves
+        .into_iter()
+        .map(|c| crate::CveDetailView {
+            cve_id: c.cve_id,
+            cvss_score: c.cvss_score,
+            cvss_version: c.cvss_version,
+            cwe: c.cwe,
+            description: c.description,
+            kev: c.kev,
+            euvd_exploited: c.euvd_exploited,
+            epss: c.epss,
+        })
+        .collect();
+    Json(crate::VulnerabilityAdvisoryDetail { hosts, cves }).into_response()
+}
+
+fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::VulnerabilityView {
+    crate::VulnerabilityView {
+        agent_id: row.agent_id,
+        hostname: row.hostname,
+        advisory_id: row.advisory_id,
+        severity: match row.severity.as_str() {
+            "critical" => crate::VulnerabilitySeverity::Critical,
+            "important" => crate::VulnerabilitySeverity::Important,
+            "moderate" => crate::VulnerabilitySeverity::Moderate,
+            "low" => crate::VulnerabilitySeverity::Low,
+            _ => crate::VulnerabilitySeverity::Unrated,
+        },
+        title: row.title,
+        url: row.url,
+        cves: row.cves,
+        packages: row.packages,
+        first_seen_at: row.first_seen_at.to_rfc3339_opts(SecondsFormat::Secs, true),
+        fixed_at: row
+            .fixed_at
+            .map(|v| v.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        reboot_needed: row.reboot_needed,
+        exploited: row.exploited,
+        kev: row.kev,
+        euvd: row.euvd,
+        kev_due: row.kev_due.map(|v| v.to_string()),
+        ransomware: row.ransomware,
+        epss: row.epss,
+        epss_percentile: row.epss_percentile,
+        cvss: row.cvss,
+    }
+}
+
+#[utoipa::path(get, path="/api/v1/findings/groups", tag="findings", params(("since"=Option<String>, Query), ("cursor"=Option<String>, Query), ("limit"=Option<u16>, Query)), responses((status=200, description="Recent scope-filtered findings grouped by rule", body=crate::FindingGroupPage)))]
+pub(crate) async fn authenticated_finding_groups(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    query: Result<Query<FindingGroupsParams>, QueryRejection>,
+) -> Response {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::console_read::{
+        FindingGroupCursor, FindingGroupQuery, finding_groups_in_scope,
+    };
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+    let Query(params) = match query {
+        Ok(v) => v,
+        Err(_) => return invalid_finding_query(),
+    };
+    let cursor_token = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(v) => v,
+                Err(_) => return invalid_finding_query(),
+            };
+            match serde_json::from_slice::<FindingGroupCursorToken>(&bytes) {
+                Ok(token) => Some(token),
+                Err(_) => return invalid_finding_query(),
+            }
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let since_text = params
+        .since
+        .or_else(|| cursor_token.as_ref().map(|v| v.since.clone()))
+        .unwrap_or_else(|| {
+            (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
+        });
+    let since = match chrono::DateTime::parse_from_rfc3339(&since_text) {
+        Ok(v) => v.with_timezone(&Utc),
+        Err(_) => return invalid_finding_query(),
+    };
+    if since > Utc::now() || since < Utc::now() - Duration::days(90) {
+        return invalid_finding_query();
+    }
+    let limit = match platform_store::console_read::PageLimit::new(
+        params.limit.unwrap_or(crate::DEFAULT_PAGE_SIZE),
+    ) {
+        Some(v) => v,
+        None => return invalid_finding_query(),
+    };
+    let after = match cursor_token {
+        None => None,
+        Some(token) if token.since == since_text && token.scope == scope => {
+            let timestamp = match chrono::DateTime::parse_from_rfc3339(&token.last_observed_at) {
+                Ok(v) => v.with_timezone(&Utc),
+                Err(_) => return invalid_finding_query(),
+            };
+            Some(FindingGroupCursor {
+                last_observed_at: timestamp,
+                rule_set_id: token.rule_set_id,
+                rule_id: token.rule_id,
+            })
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let client = match state.pool.get().await {
+        Ok(v) => v,
+        Err(_) => return unavailable_auth(),
+    };
+    let page = match finding_groups_in_scope(
+        &client,
+        &FindingGroupQuery {
+            since,
+            after,
+            limit,
+        },
+        &scope,
+    )
+    .await
+    {
+        Ok(v) => v,
+        Err(_) => return unavailable_auth(),
+    };
+    let items = page
+        .items
+        .into_iter()
+        .map(|g| crate::FindingGroupView {
+            rule_set_id: if g.rule_set_id.is_empty() {
+                "~unknown".into()
+            } else {
+                g.rule_set_id
+            },
+            rule_id: g.rule_id,
+            endpoint_count: g.endpoint_count.max(0) as u64,
+            severity: match g.severity {
+                platform_store::console_read::Severity::Critical => crate::Severity::Critical,
+                platform_store::console_read::Severity::High => crate::Severity::High,
+                platform_store::console_read::Severity::Medium => crate::Severity::Medium,
+                platform_store::console_read::Severity::Low => crate::Severity::Low,
+            },
+            latest_message: g.latest_message,
+            rule_versions: g
+                .rule_versions
+                .into_iter()
+                .map(|v| v.max(0) as u64)
+                .collect(),
+            first_observed_at: g
+                .first_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            last_observed_at: g
+                .last_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            older_endpoint_count: g.older_endpoint_count.max(0) as u64,
+            triage_counts: crate::FindingTriageCounts {
+                open: g.open.max(0) as u64,
+                investigating: g.investigating.max(0) as u64,
+                mitigated: g.mitigated.max(0) as u64,
+                accepted_risk: g.accepted_risk.max(0) as u64,
+                false_positive: g.false_positive.max(0) as u64,
+            },
+        })
+        .collect();
+    let next_cursor = match page.next {
+        None => None,
+        Some(c) => match serde_json::to_vec(&FindingGroupCursorToken {
+            since: since_text.clone(),
+            scope,
+            last_observed_at: c
+                .last_observed_at
+                .to_rfc3339_opts(SecondsFormat::Micros, true),
+            rule_set_id: c.rule_set_id,
+            rule_id: c.rule_id,
+        }) {
+            Ok(v) => Some(URL_SAFE_NO_PAD.encode(v)),
+            Err(_) => return unavailable_auth(),
+        },
+    };
+    Json(crate::FindingGroupPage {
+        items,
+        next_cursor,
+        generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        since: since_text,
+    })
+    .into_response()
+}
+
+#[utoipa::path(get, path="/api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints", tag="findings", params(("rule_set_id"=String,Path),("rule_id"=String,Path),("since"=Option<String>,Query),("include_older"=Option<bool>,Query),("cursor"=Option<String>,Query),("limit"=Option<u16>,Query)), responses((status=200,description="Scoped endpoints reporting one recent rule group",body=crate::FindingGroupEndpointPage),(status=404,description="Finding group not found",body=crate::ProblemDetails)))]
+pub(crate) async fn authenticated_finding_group_endpoints(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path((rule_set_id, rule_id)): Path<(String, String)>,
+    query: Result<Query<FindingGroupEndpointsParams>, QueryRejection>,
+) -> Response {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::console_read::{
+        FindingGroupEndpointCursor, FindingGroupEndpointQuery, finding_group_endpoints_in_scope,
+    };
+    let scope =
+        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+    let Query(params) = match query {
+        Ok(v) => v,
+        Err(_) => return invalid_finding_query(),
+    };
+    let cursor_token = match params.cursor.as_deref() {
+        None => None,
+        Some(encoded) if encoded.len() <= crate::MAX_CURSOR_LENGTH => {
+            let bytes = match URL_SAFE_NO_PAD.decode(encoded) {
+                Ok(v) => v,
+                Err(_) => return invalid_finding_query(),
+            };
+            match serde_json::from_slice::<FindingGroupEndpointCursorToken>(&bytes) {
+                Ok(token) => Some(token),
+                Err(_) => return invalid_finding_query(),
+            }
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let since_text = params
+        .since
+        .or_else(|| cursor_token.as_ref().map(|v| v.since.clone()))
+        .unwrap_or_else(|| {
+            (Utc::now() - Duration::hours(24)).to_rfc3339_opts(SecondsFormat::Secs, true)
+        });
+    let since = match chrono::DateTime::parse_from_rfc3339(&since_text) {
+        Ok(v) => v.with_timezone(&Utc),
+        Err(_) => return invalid_finding_query(),
+    };
+    if since > Utc::now() || since < Utc::now() - Duration::days(90) {
+        return invalid_finding_query();
+    }
+    let include_older = params.include_older.unwrap_or(false);
+    let limit = match platform_store::console_read::PageLimit::new(
+        params.limit.unwrap_or(crate::DEFAULT_PAGE_SIZE),
+    ) {
+        Some(v) => v,
+        None => return invalid_finding_query(),
+    };
+    let actual_rule_set = if rule_set_id == "~unknown" {
+        ""
+    } else {
+        &rule_set_id
+    };
+    let after = match cursor_token {
+        None => None,
+        Some(token)
+            if token.since == since_text
+                && token.include_older == include_older
+                && token.scope == scope
+                && token.rule_set_id == rule_set_id
+                && token.rule_id == rule_id =>
+        {
+            let ts = match chrono::DateTime::parse_from_rfc3339(&token.last_observed_at) {
+                Ok(v) => v.with_timezone(&Utc),
+                Err(_) => return invalid_finding_query(),
+            };
+            Some(FindingGroupEndpointCursor {
+                last_observed_at: ts,
+                agent_id: token.agent_id,
+            })
+        }
+        Some(_) => return invalid_finding_query(),
+    };
+    let client = match state.pool.get().await {
+        Ok(v) => v,
+        Err(_) => return unavailable_auth(),
+    };
+    let page = match finding_group_endpoints_in_scope(
+        &client,
+        actual_rule_set,
+        &rule_id,
+        &FindingGroupEndpointQuery {
+            since,
+            include_older,
+            after,
+            limit,
+        },
+        &scope,
+    )
+    .await
+    {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return problem_response(ProblemDetails::not_found(
+                "finding_not_found",
+                "Finding group not found",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    let items = page
+        .items
+        .into_iter()
+        .map(|e| crate::FindingGroupEndpointView {
+            agent_id: e.agent_id,
+            hostname: e.hostname,
+            first_observed_at: e
+                .first_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            last_observed_at: e
+                .last_observed_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true),
+            rule_version: e.rule_version.max(0) as u64,
+            triage_state: e.triage_state,
+            triage_version: e.triage_version,
+            outside_window: e.outside_window,
+            origin: if e.origin == "import" {
+                crate::FindingOrigin::Import
+            } else {
+                crate::FindingOrigin::Online
+            },
+            authenticated: e.authenticated,
+        })
+        .collect();
+    let next_cursor = match page.next {
+        None => None,
+        Some(c) => match serde_json::to_vec(&FindingGroupEndpointCursorToken {
+            since: since_text.clone(),
+            include_older,
+            scope,
+            rule_set_id,
+            rule_id,
+            last_observed_at: c
+                .last_observed_at
+                .to_rfc3339_opts(SecondsFormat::Micros, true),
+            agent_id: c.agent_id,
+        }) {
+            Ok(v) => Some(URL_SAFE_NO_PAD.encode(v)),
+            Err(_) => return unavailable_auth(),
+        },
+    };
+    Json(crate::FindingGroupEndpointPage {
+        items,
+        next_cursor,
+        generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
+        since: since_text,
+    })
+    .into_response()
+}
+
+#[utoipa::path(post,path="/api/v1/findings/groups/{rule_set_id}/{rule_id}/triage",tag="findings",params(("rule_set_id"=String,Path),("rule_id"=String,Path)),request_body=crate::BulkFindingTriageRequest,responses((status=200,description="Atomic endpoint triage update",body=crate::BulkFindingTriageResponse),(status=412,description="At least one triage version is stale",body=crate::ProblemDetails),(status=404,description="Group or endpoint is not visible",body=crate::ProblemDetails)))]
+pub(crate) async fn update_authenticated_finding_group_triage(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path((rule_set_id, rule_id)): Path<(String, String)>,
+    payload: Result<Json<crate::BulkFindingTriageRequest>, axum::extract::rejection::JsonRejection>,
+) -> Response {
+    let (scope, user_id) =
+        match authenticated_permission(&state, &headers, crate::Permission::FindingsTriage, true)
+            .await
+        {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+    let Json(payload) = match payload {
+        Ok(v) => v,
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_request",
+                "Triage request is invalid",
+            ));
+        }
+    };
+    if payload.changes.is_empty()
+        || payload.changes.len() > 100
+        || payload.changes.iter().any(|x| {
+            x.agent_id.is_empty()
+                || x.agent_id.len() > 128
+                || x.agent_id.chars().any(char::is_control)
+        })
+    {
+        return problem_response(ProblemDetails::new(
+            StatusCode::BAD_REQUEST,
+            "invalid_triage",
+            "Select between 1 and 100 endpoints",
+        ));
+    }
+    let expiry = match payload
+        .accepted_until
+        .as_deref()
+        .map(chrono::DateTime::parse_from_rfc3339)
+        .transpose()
+    {
+        Ok(v) => v.map(|v| v.with_timezone(&Utc)),
+        Err(_) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_expiry",
+                "accepted_until must be an RFC 3339 timestamp",
+            ));
+        }
+    };
+    let actual_rule_set = if rule_set_id == "~unknown" {
+        ""
+    } else {
+        &rule_set_id
+    };
+    let changes: Vec<_> = payload
+        .changes
+        .iter()
+        .map(|v| (v.agent_id.clone(), v.version))
+        .collect();
+    let mut client = match state.pool.get().await {
+        Ok(v) => v,
+        Err(_) => return unavailable_auth(),
+    };
+    let request_id = next_request_id();
+    match platform_store::console_triage::update_many_with_request_id(
+        &mut client,
+        actual_rule_set,
+        &rule_id,
+        &changes,
+        &scope,
+        &payload.state,
+        payload.assigned_to.as_deref(),
+        payload.note.as_deref(),
+        expiry,
+        &user_id,
+        Some(&request_id),
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(platform_store::console_triage::BulkTriageUpdate::Updated(records)) => {
+            let updated = changes
+                .iter()
+                .zip(records)
+                .map(|((id, _), record)| (id.clone(), triage_view(record)))
+                .collect();
+            let mut response = Json(crate::BulkFindingTriageResponse { updated }).into_response();
+            response.headers_mut().insert(
+                HeaderName::from_static("x-request-id"),
+                HeaderValue::from_str(&request_id)
+                    .expect("generated request IDs are valid headers"),
+            );
+            response
+        }
+        Ok(platform_store::console_triage::BulkTriageUpdate::Stale(items)) => {
+            let mut p = ProblemDetails::new(
+                StatusCode::PRECONDITION_FAILED,
+                "stale_triage",
+                "One or more selected endpoints changed; reload before saving",
+            );
+            p.field_errors = Some(
+                items
+                    .into_iter()
+                    .map(|item| crate::FieldError {
+                        field: "changes".into(),
+                        code: "stale_version".into(),
+                        message: format!(
+                            "{} now has triage version {}",
+                            item.agent_id, item.actual_version
+                        ),
+                    })
+                    .collect(),
+            );
+            problem_response(p)
+        }
+        Ok(platform_store::console_triage::BulkTriageUpdate::NotFound) => problem_response(
+            ProblemDetails::not_found("finding_not_found", "Finding group or endpoint not found"),
+        ),
+        Ok(platform_store::console_triage::BulkTriageUpdate::InvalidTransition) => {
+            problem_response(ProblemDetails::new(
+                StatusCode::CONFLICT,
+                "invalid_transition",
+                "Requested triage transition is not allowed",
+            ))
+        }
+        Ok(platform_store::console_triage::BulkTriageUpdate::InvalidFields) => {
+            problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_triage",
+                "Triage state, note, expiry, or selection is invalid",
+            ))
+        }
+        Ok(platform_store::console_triage::BulkTriageUpdate::AssigneeUnavailable) => {
+            problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_assignee",
+                "Assignee must be an enabled analyst or admin",
+            ))
+        }
+        Err(_) => unavailable_auth(),
     }
 }
 

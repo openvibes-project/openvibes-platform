@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 22; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 24; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -85,6 +85,36 @@ All run within the `openvibes-ingest` role's grants (the tests use
   keeping the newest observation and the first-seen time.
 - Certificate chains are stored as a JSON array in `certificates.chain_pem`.
 
+## Agent health (`health::…`, schema 23)
+
+Protocol P12. `agents` gains `health` and `health_previous` (the latest
+report and the one before it, JSONB) and `health_at`. `ingest::heartbeat`
+takes the report and writes it in its throttled UPDATE (every 5 minutes,
+or at once when hostname or capabilities change). The stored report moves
+to `health_previous`, and a heartbeat without one keeps it.
+
+`health::health_status(last_seen_at, health_at, health, previous, now)`
+gives `Healthy`, `Degraded` (with reasons), `Offline` (no heartbeat for
+`OFFLINE_AFTER_MINUTES`) or `Unknown` (no report, or one older than 15
+minutes). It is computed when read and never stored.
+`AgentInfo::health_status(now)` applies it to active agents only.
+
+Reasons, in this order:
+- `queue_dropping`: `dropped_total` rose;
+- `delivery_stalled`: oldest pending over `DELIVERY_STALLED_S` (3,600);
+- `queue_nearly_full`: over `QUEUE_NEARLY_FULL_PERCENT` (80) of the limit;
+- `scan_overdue`: more than twice the interval since the last scan;
+- `collector_failing`: an outcome other than `ok`, `unsupported` or
+  `not_found` (those mean nothing to read on this host); a code from a
+  later version counts as failing;
+- `rule_set_expiring`: within `RULE_SET_EXPIRING_DAYS` (7);
+- `rule_set_refused`;
+- `storage_errors`: rose;
+- `clock_jump`: over `CLOCK_JUMP_S` (300).
+
+Since the report is written with the throttle, "rose" compares reports
+about 5 minutes apart.
+
 ## Rule distribution (`rules::…`, schema 6)
 
 Tables: `rule_sets` (id, `created_at`, `retired_at`), `rule_trust_keys`
@@ -133,6 +163,15 @@ links, never edit or delete versions (a test checks it).
   links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
+- `apply_changes(&mut client, agent_id, os, running_kernel, added, removed,
+  base, expected, now)` (protocol P11) locks the agent row; unless the
+  stored digest is `base`, every removed row is linked, every added row is
+  not, and the fingerprint of the result (computed from the host's stored
+  rows) is `expected`, it returns `Resync` and writes nothing. Otherwise it
+  inserts unknown versions, unlinks the removed rows, links the added ones,
+  records OS, kernel and digest and notifies, as `replace` does → `Stored`.
+- `PackageRow` is the normalised record of the P11 fingerprint:
+  `normalized()` and `From<&NormalizedPackage>`.
 
 ## Wire conversions (`wire::…`)
 
@@ -140,9 +179,10 @@ Shared by online delivery (ingest) and file import (admin), so both refuse
 and store alike: `finding(finding, oldest, latest, partitions) ->
 Result<StoredFinding, reason>` (`future_observation` beyond
 `MAX_FUTURE_MINUTES` = 60, `retention_expired`, `out_of_range`,
-`unstorable` without a partition) and `inventory(os, running_kernel,
-&mut packages) -> (rows, sha256)` (sorts packages canonically; the digest
-covers OS, kernel and packages). `ingest::store_findings` takes an
+`unstorable` without a partition), `inventory(os, running_kernel,
+packages) -> (rows, sha256)` (the distinct normalised rows, and the
+protocol's inventory fingerprint over OS, kernel and packages, P11) and
+`package_rows(packages)` (the rows alone, for change sets). `ingest::store_findings` takes an
 `Origin`: `Online` stores `origin = 'online'`, authenticated; `Import`
 stores `'import'`, unauthenticated.
 
@@ -208,6 +248,23 @@ Schema 12 grants `openvibes-vulns` `MAINTAIN` on the tables it bulk-loads
 (PostgreSQL 17 or later), so `replace_advisories` can `ANALYZE` them.
 `vulns::list` combines each advisory's CVEs and enrichment once, then
 sorts and limits (0.63 s at 244,000 open vulnerabilities).
+
+Console reads use `vulns::list_in_scope`, `vulns::summary_in_scope`, and
+`vulns::cve_details_in_scope`. Asset-group membership is resolved to agent
+IDs and applied in SQL before priority selection, aggregation, or returning
+advisory enrichment. An empty scope returns no host rows or summary counts;
+advisory details are returned only when a visible host has a matching
+vulnerability.
+`ListFilter.exploited` and `ListFilter.reboot_needed` are applied inside the
+ranked/counting SQL before the 10,000-row fleet bound, so filtered fleet reads
+do not lose lower-priority matching rows. `hosts_named_in_scope` resolves an
+agent ID or hostname only among visible agents; a hidden ID cannot suppress a
+visible hostname match.
+
+Schema 25 grants the console role read-only access to the vulnerability and
+inventory tables and adds the agent-scoped `vulnerabilities.read` permission
+to built-in roles. The role can still change no vulnerability or inventory
+rows; each console query must apply the resolved asset scope.
 
 Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
 each range as whole version strings with its `scheme` (`rpm` or `dpkg`),
@@ -355,13 +412,22 @@ trigger prevents it from restoring or reclassifying an agent.
 `SET ROLE "openvibes-console"` and checks forbidden status changes;
 `tests/migrate.rs` asserts the exact table and column grants.
 
+## Built-in console permissions (schema 23)
+
+Migration 23 adds agent-scoped `vulnerabilities.read` to all built-in roles.
+It removes the older `rules.read` grants from Viewer, Analyst, and Operator;
+only Admin receives that global permission by default. The console integration
+test compares the complete database role-permission mapping with the canonical
+Rust role resolver.
+
 Migration 20 stores the time a finding entered `mitigated` separately from
 general `updated_at`, so note or assignment edits do not hide a recurrence
 observed after mitigation.
 
 Migration 15 is reserved for imported-host support. Console migrations were
 renumbered to 16–21 when import support landed; migration 22 adds the
-reviewed console write grants.
+reviewed console write grants, and migration 23 adds vulnerability reads to
+the built-in role inventory.
 
 ## Test
 

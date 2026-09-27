@@ -161,9 +161,37 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         .unwrap();
     assert_eq!(reopened.state, "open");
     assert_eq!(reopened.version, 4);
+    let bulk = console_triage::update_many_with_request_id(
+        &mut client,
+        "base",
+        "rule-1",
+        &[(AGENT.to_owned(), reopened.version)],
+        &platform_store::console_read::AgentScope::Global,
+        "investigating",
+        None,
+        None,
+        None,
+        "analyst",
+        Some("bulk-triage-request-1"),
+        now + Duration::minutes(4),
+    )
+    .await
+    .unwrap();
+    assert!(matches!(bulk, console_triage::BulkTriageUpdate::Updated(_)));
+    let request_ids: Vec<String> = client
+        .query(
+            "SELECT request_id FROM audit_log WHERE action = 'finding.triage.changed' AND request_id = 'bulk-triage-request-1'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    assert_eq!(request_ids, vec!["bulk-triage-request-1"]);
     let history:i64=client.query_one("SELECT count(*) FROM console_finding_triage_history WHERE agent_id=$1 AND rule_set_id='base' AND rule_id='rule-1'",&[&AGENT]).await.unwrap().get(0);
     let audit:i64=client.query_one("SELECT count(*) FROM audit_log WHERE action IN ('finding.triage.changed','finding.triage.reopened') AND target_id=$1",&[&format!("{AGENT}:base:rule-1")]).await.unwrap().get(0);
-    assert_eq!(history, 4);
-    assert_eq!(audit, 4);
+    assert_eq!(history, 5);
+    assert_eq!(audit, 5);
     db.drop().await;
 }

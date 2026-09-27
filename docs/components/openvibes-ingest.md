@@ -72,15 +72,31 @@ Shared with distribution: implemented in
   an absent hostname keeps the stored one. Capabilities name the agent's
   enabled collectors (`collector.processes`, `collector.packages`,
   `collector.ports`; protocol P7), and each list replaces the stored one.
+  The optional `health` report (protocol P12) is stored in the same
+  throttled write, and the report before it is kept to compare totals; a
+  heartbeat without one keeps the stored report. An invalid `health`
+  makes the heartbeat invalid (400).
   204.
 - `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
-  `agent_id` must be the authenticated agent's (else 400); at most 10,000
-  packages (else 400). The packages are put in canonical order and hashed
-  (SHA-256 with the OS and the optional `running_kernel`, protocol P9, so a
-  reboot alone is stored); an unchanged inventory writes nothing, otherwise
+  `agent_id` must be the authenticated agent's (else 400); at most 50,000
+  packages (else 400). The body may be gzip-compressed (P11). The
+  protocol's inventory fingerprint (P11) covers the normalised packages, the
+  OS and the optional `running_kernel` (protocol P9, so a reboot alone is
+  stored); an unchanged inventory writes nothing, otherwise
   the host's inventory is replaced in one transaction and the vulnerability
   service is notified (`inventory_changed`). Each package's `source` and
   `source_version` (protocol P10) are stored with it. 204.
+- `POST /v1/inventory/changes` (authenticated, protocol P11):
+  `InventoryChanges`, usually gzip-compressed; `agent_id` must be the
+  authenticated agent's (else 400). Under the host's row lock the change
+  set is applied only if the stored fingerprint is `base_sha256`, every
+  `removed` package is present, every `added` one absent, and the result's
+  fingerprint is `sha256`; then the host's links are updated (only the
+  changed rows), OS, kernel and fingerprint recorded, and
+  `inventory_changed` notified, as for a full report. 204. Anything else is
+  409 `inventory_resync` with nothing stored, and the agent sends the full
+  report. It shares the 8 MiB limit, the longer deadline and the
+  `max_inventory_in_flight` slots with `/v1/inventory`.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so
@@ -108,8 +124,10 @@ Shared with distribution: implemented in
 
 - Accepted sockets set `TCP_NODELAY`: without it every request waited about
   40 ms for the client's delayed ACK (found by the PM5 load test).
-- Bodies over 1 MiB → 400 (never read past the limit); `/v1/inventory` takes
-  up to 8 MiB and 50,000 packages (M1 limits review).
+- Bodies over 1 MiB → 400 (never read past the limit); the two inventory
+  endpoints take up to 8 MiB and 50,000 packages (M1 limits review). A
+  gzip body is decompressed as a stream and refused (400) once it expands
+  past 8 MiB; any other `Content-Encoding` is 400.
 - The TLS handshake, the request headers, and each whole request (body
   included) must finish within `request_timeout_seconds`; otherwise the
   connection is dropped or the request gets 408, and its slot is freed.

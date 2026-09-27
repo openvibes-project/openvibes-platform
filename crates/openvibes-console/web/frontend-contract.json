@@ -4,6 +4,7 @@
     "/assistant",
     "/login",
     "/findings",
+    "/vulnerabilities",
     "/agents",
     "/enrollment",
     "/rule-sets",

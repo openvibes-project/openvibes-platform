@@ -137,17 +137,19 @@ The user commands are audited, including failed attempts. Creation provisions
 the user, credential, initial role binding, and user-created audit event in one
 store transaction. Disable and password reset invalidate all browser sessions.
 Unlock clears only an active account bucket; IP/source throttles still protect
-the service. The first account can be created after schema 22 is applied.
+the service. The first account can be created after schema 23 is applied.
 
 ## Agent commands
 
 | Command | Prints |
 |---|---|
-| `agent list [--offline \| --revoked \| --imported]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id. `--offline` = active with no heartbeat for 15 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`). |
-| `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; `unknown agent` (exit 1) if absent |
+| `agent list [--offline \| --revoked \| --imported \| --health STATUS]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id; active agents end with `health <status>` and, when degraded, the reasons in brackets (protocol P12). `--offline` = active with no heartbeat for 15 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`); `--health healthy\|degraded\|offline\|unknown` = active agents with that health. |
+| `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; for an active agent, its health and reasons, then the latest report: queue (pending, oldest age, dropped, rejected by reason), last scan and rule counts, each collector's outcome, each rule set's version, expiry and refusal, storage errors, clock jump, and when the report was written; `unknown agent` (exit 1) if absent |
 | `agent revoke ID` | `revoked ID`; `agent already revoked`, `unknown agent`, or `imported hosts have no identity to revoke` are errors. The agent's next request gets `identity_revoked` (PM3). |
 
-`show` and `revoke` are audited with the agent id as target.
+`show` and `revoke` are audited with the agent id as target. Health is
+computed by `platform_store::health` (thresholds in the platform-store
+page); an agent before P12 shows `unknown`.
 
 ## Token commands
 

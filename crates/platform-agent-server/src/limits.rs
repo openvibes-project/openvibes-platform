@@ -41,7 +41,7 @@ pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: N
     };
     // The whole request, body included, must finish within the deadline,
     // so a slow client cannot keep its permit.
-    let deadline = if request.uri().path() == "/v1/inventory" {
+    let deadline = if crate::request::INVENTORY_PATHS.contains(&request.uri().path()) {
         state.inventory_request_timeout
     } else {
         state.request_timeout

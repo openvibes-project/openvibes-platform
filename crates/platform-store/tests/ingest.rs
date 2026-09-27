@@ -2,7 +2,7 @@
 
 mod common;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, SubsecRound, Utc};
 use common::TestDb;
 use platform_store::{
     Client, StoreError,
@@ -277,6 +277,7 @@ async fn heartbeats_are_throttled_and_findings_stored_once() {
                 version,
                 hostname,
                 &[],
+                None,
                 now + Duration::minutes(minutes),
             )
             .await
@@ -474,14 +475,22 @@ async fn changed_capabilities_are_written_at_once() {
     ];
     let fewer = ["collector.processes".to_owned()];
     assert!(
-        ingest::heartbeat(&client, id, "0.2.0", None, &all, now)
+        ingest::heartbeat(&client, id, "0.2.0", None, &all, None, now)
             .await
             .unwrap()
     );
     assert!(
-        !ingest::heartbeat(&client, id, "0.2.0", None, &all, now + Duration::minutes(1))
-            .await
-            .unwrap(),
+        !ingest::heartbeat(
+            &client,
+            id,
+            "0.2.0",
+            None,
+            &all,
+            None,
+            now + Duration::minutes(1)
+        )
+        .await
+        .unwrap(),
         "unchanged capabilities stay throttled"
     );
     // Protocol P7: each heartbeat's list replaces the stored one, so a
@@ -493,6 +502,7 @@ async fn changed_capabilities_are_written_at_once() {
             "0.2.0",
             None,
             &fewer,
+            None,
             now + Duration::minutes(2)
         )
         .await
@@ -509,5 +519,91 @@ async fn changed_capabilities_are_written_at_once() {
         .unwrap()
         .get(0);
     assert_eq!(stored, fewer);
+    db.drop().await;
+}
+
+/// P12: the health report is written with the throttled heartbeat write;
+/// the report before it moves to `health_previous`.
+#[tokio::test]
+async fn health_follows_the_heartbeat_throttle() {
+    let (db, _, multi) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [6; 32], now, issued(6, 6))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    let id = identity.agent_id.as_str();
+    let report = |pending: u64| {
+        serde_json::json!({
+            "queue": {"pending": pending, "bytes": 1, "max_bytes": 10, "dropped_total": 0},
+            "storage_errors": 0
+        })
+    };
+    let stored = || async {
+        let row = client
+            .query_one(
+                "SELECT health->'queue'->>'pending', health_previous->'queue'->>'pending', health_at
+                 FROM agents WHERE agent_id = $1",
+                &[&id],
+            )
+            .await
+            .unwrap();
+        (
+            row.get::<_, Option<String>>(0),
+            row.get::<_, Option<String>>(1),
+            row.get::<_, Option<chrono::DateTime<Utc>>>(2),
+        )
+    };
+    ingest::heartbeat(&client, id, "0.2.0", None, &[], Some(&report(1)), now)
+        .await
+        .unwrap();
+    assert_eq!(
+        stored().await,
+        (Some("1".into()), None, Some(now.trunc_subsecs(6)))
+    );
+    // Within the throttle: nothing is written.
+    ingest::heartbeat(
+        &client,
+        id,
+        "0.2.0",
+        None,
+        &[],
+        Some(&report(2)),
+        now + Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    assert_eq!(stored().await.0, Some("1".into()));
+    // Past it: the report before moves to health_previous.
+    ingest::heartbeat(
+        &client,
+        id,
+        "0.2.0",
+        None,
+        &[],
+        Some(&report(3)),
+        now + Duration::minutes(6),
+    )
+    .await
+    .unwrap();
+    assert_eq!(stored().await.0, Some("3".into()));
+    assert_eq!(stored().await.1, Some("1".into()));
+    // A heartbeat without health (an agent before P12) keeps the report.
+    ingest::heartbeat(
+        &client,
+        id,
+        "0.2.0",
+        None,
+        &[],
+        None,
+        now + Duration::minutes(12),
+    )
+    .await
+    .unwrap();
+    assert_eq!(stored().await.0, Some("3".into()));
+    drop(client);
     db.drop().await;
 }
