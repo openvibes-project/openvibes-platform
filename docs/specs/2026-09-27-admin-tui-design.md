@@ -46,17 +46,21 @@ configuration (PM4). Human operators are the separate group
 `openvibes-operators`, which cannot be mistaken for the `openvibes-admin`
 service account.
 
-- **Database:** one migration renames every role
+- **Database:** new databases create the hyphenated roles directly: the
+  role statements in the earlier migrations are edited (applied migrations
+  never re-run and carry no checksum; a rename migration would instead
+  recreate old roles in every further database of a cluster, as the tests
+  create). Existing installs are renamed once by the RPM as `postgres`
   (`ALTER ROLE openvibes_admin RENAME TO "openvibes-admin"`, …); ownership
-  and grants move with the rename. Later SQL quotes the names. Applied
-  migrations are not edited.
-- **OS:** the RPM `%pre`/`%post` scripts rename existing users and groups
-  (`usermod -l`, `groupmod -n`) on upgrade and the sysusers files create
+  and grants move with the rename. SQL quotes the names.
+- **OS:** the RPM `%pre` renames existing users and groups (`usermod -l`,
+  `groupmod -n`, stopping the unit first) and `%post` rewrites `user=` in
+  the kept configs, on upgrade; and the sysusers files create
   the new names on fresh installs; unit files, file ownership, sudoers and
   docs use the new names.
-- **Upgrade order:** the OS rename and the role rename happen in the same
-  upgrade (`openvibes-admin migrate` runs from `%post` as the renamed
-  user), so the admin CLI never loses its database login. The upgrade is
+- **Upgrade order:** the OS rename, config rewrite and role rename happen in
+  the same upgrade, so the admin CLI never loses its database login. A
+  remote database gets the printed `ALTER ROLE` statements. The upgrade is
   tested in the systemd container from the previous release's RPMs.
 - **Console:** PR #29 (Codex) must name its role `openvibes-console`.
 
