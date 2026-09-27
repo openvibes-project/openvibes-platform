@@ -46,7 +46,7 @@ export function Findings() {
             { key: "severity", header: "Severity", width: "110px", sort: (g) => (severityOrder[g.severity] ?? 9) * 100000 - g.triage_counts.open, render: (g) => <SeverityBadge severity={g.severity} /> },
             { key: "finding", header: "Finding", sort: (g) => g.latest_message, render: (g) => <div className="cell-two"><span className="truncate">{g.latest_message}</span><span className="mono subtle">{g.rule_id} · {g.rule_set_id}</span></div> },
             { key: "open", header: "Open", numeric: true, width: "80px", sort: (g) => g.triage_counts.open, render: (g) => <strong className="num">{g.triage_counts.open}</strong> },
-            { key: "hosts", header: "Hosts", numeric: true, width: "80px", sort: (g) => g.endpoint_count, render: (g) => <span className="num">{g.endpoint_count}</span> },
+            { key: "hosts", header: "Hosts", numeric: true, width: "80px", hideBelow: 560, sort: (g) => g.endpoint_count, render: (g) => <span className="num">{g.endpoint_count}</span> },
             { key: "triage", header: "Triage", width: "140px", hideBelow: 760, render: (g) => <TriageBar counts={g.triage_counts} /> },
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (g) => g.last_observed_at, render: (g) => <span className="subtle"><Ago value={g.last_observed_at} /></span> },
           ]} />

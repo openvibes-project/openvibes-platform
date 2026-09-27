@@ -1,0 +1,76 @@
+# Publishes the experimental console v2 as a static preview with in-browser
+# synthetic data (no server, nothing real) to GitHub Pages, from the
+# console-v2 branch only. Every action is pinned to a full commit SHA.
+name: Console v2 preview
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [console-v2]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: console-v2-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build the v2 preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: crates/openvibes-console/web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: crates/openvibes-console/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Lint, typecheck and test v2
+        run: |
+          npx eslint v2 vite.v2.config.ts --max-warnings 0
+          npx tsc --noEmit
+          npx vitest run --config vite.v2.config.ts
+
+      - name: Build with demo data
+        env:
+          V2_BASE: /${{ github.event.repository.name }}/
+          VITE_V2_SOURCE: demo
+        run: |
+          npx vite build --config vite.v2.config.ts
+          # Deep links: Pages serves 404.html for unknown paths.
+          cp dist-v2/index.html dist-v2/404.html
+
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: crates/openvibes-console/web/dist-v2
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
