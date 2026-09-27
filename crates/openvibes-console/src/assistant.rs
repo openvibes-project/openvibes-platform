@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use platform_assistant::{
     Assistant, BackendClient, Location, Lookup, LookupError, LookupOutput, LookupRunner,
@@ -147,53 +147,47 @@ impl ConsoleReadLookups {
 }
 
 impl LookupRunner for ConsoleReadLookups {
-    fn run(
-        &self,
-        lookup: &Lookup,
-        items: u32,
-    ) -> impl Future<Output = Result<LookupOutput, LookupError>> + Send {
-        async move {
-            match lookup {
-                Lookup::SearchFindings { .. } | Lookup::FindingEndpoints { .. } => {
-                    self.lookups.run(lookup, items).await
-                }
-                Lookup::AgentSummary { agent } => {
-                    let client = self.pool.get().await.map_err(|_| LookupError::Store)?;
-                    let mut matches =
-                        console_read::agent_matches_in_scope(&client, agent, self.now, &self.scope)
-                            .await
-                            .map_err(|_| LookupError::Store)?;
-                    if matches.len() > 1 {
-                        return Err(LookupError::Ambiguous);
-                    }
-                    let records = matches
-                        .drain(..)
-                        .map(|record| {
-                            let state = match record.state {
-                                console_read::AgentState::Active => "seen recently",
-                                console_read::AgentState::Stale => {
-                                    if record.last_seen_at.is_some() {
-                                        "offline"
-                                    } else {
-                                        "never seen"
-                                    }
-                                }
-                                console_read::AgentState::Revoked => "revoked",
-                            };
-                            json!({
-                                "cite": format!("[agent:{}]", record.agent_id),
-                                "hostname": record.hostname,
-                                "state": state,
-                                "last_seen": record.last_seen_at.map(|value| value.to_rfc3339()),
-                            })
-                        })
-                        .collect::<Vec<_>>();
-                    Ok(LookupOutput {
-                        data: json!({ "items": records, "omitted": 0 }),
-                    })
-                }
-                _ => Err(LookupError::Unknown),
+    async fn run(&self, lookup: &Lookup, items: u32) -> Result<LookupOutput, LookupError> {
+        match lookup {
+            Lookup::SearchFindings { .. } | Lookup::FindingEndpoints { .. } => {
+                self.lookups.run(lookup, items).await
             }
+            Lookup::AgentSummary { agent } => {
+                let client = self.pool.get().await.map_err(|_| LookupError::Store)?;
+                let mut matches =
+                    console_read::agent_matches_in_scope(&client, agent, self.now, &self.scope)
+                        .await
+                        .map_err(|_| LookupError::Store)?;
+                if matches.len() > 1 {
+                    return Err(LookupError::Ambiguous);
+                }
+                let records = matches
+                    .drain(..)
+                    .map(|record| {
+                        let state = match record.state {
+                            console_read::AgentState::Active => "seen recently",
+                            console_read::AgentState::Stale => {
+                                if record.last_seen_at.is_some() {
+                                    "offline"
+                                } else {
+                                    "never seen"
+                                }
+                            }
+                            console_read::AgentState::Revoked => "revoked",
+                        };
+                        json!({
+                            "cite": format!("[agent:{}]", record.agent_id),
+                            "hostname": record.hostname,
+                            "state": state,
+                            "last_seen": record.last_seen_at.map(|value| value.to_rfc3339()),
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                Ok(LookupOutput {
+                    data: json!({ "items": records, "omitted": 0 }),
+                })
+            }
+            _ => Err(LookupError::Unknown),
         }
     }
 }
