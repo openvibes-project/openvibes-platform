@@ -27,6 +27,7 @@ mod status;
 pub mod tokens;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;
+pub mod wire;
 
 use std::{fmt, str::FromStr, time::Duration};
 
