@@ -12,6 +12,7 @@ mod import;
 mod model;
 mod rules;
 mod token;
+mod user;
 mod vulns;
 
 use std::{path::PathBuf, process::ExitCode};
@@ -66,6 +67,11 @@ enum Command {
         #[command(subcommand)]
         command: rules::RulesCommand,
     },
+    /// Local console accounts: create, list, disable, unlock, and reset passwords.
+    User {
+        #[command(subcommand)]
+        command: user::UserCommand,
+    },
     /// Vulnerability feeds: import (offline) and status.
     Feeds {
         #[command(subcommand)]
@@ -105,6 +111,7 @@ impl Command {
             Self::Token { command } => command.name(),
             Self::Agent { command } => command.name(),
             Self::Rules { command } => command.name(),
+            Self::User { command } => command.name(),
             Self::Feeds { command } => command.name(),
             Self::Vulns { command } => command.name(),
             Self::Import { .. } => "import",
@@ -175,6 +182,10 @@ async fn main() -> ExitCode {
         },
         Command::Rules { command } => match require_current_schema(&client).await {
             Ok(()) => rules::run(command, &mut client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
+        Command::User { command } => match require_current_schema(&client).await {
+            Ok(()) => user::run(command, &mut client, &actor).await,
             Err(error) => (Err(error), None),
         },
         Command::Feeds { command } => match require_current_schema(&client).await {
@@ -288,6 +299,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Token { .. }
         | Command::Agent { .. }
         | Command::Rules { .. }
+        | Command::User { .. }
         | Command::Feeds { .. }
         | Command::Vulns { .. }
         | Command::Import { .. }
@@ -330,7 +342,12 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             let dropped = platform_store::drop_partitions_before(client, cutoff)
                 .await
                 .map_err(fail)?;
-            Ok(format!("created {created} partitions, dropped {dropped}\n"))
+            let audit_deleted = platform_store::audit::cleanup_expired_events(client, Utc::now())
+                .await
+                .map_err(fail)?;
+            Ok(format!(
+                "created {created} partitions, dropped {dropped}, deleted {audit_deleted} expired audit events\n"
+            ))
         }
     }
 }

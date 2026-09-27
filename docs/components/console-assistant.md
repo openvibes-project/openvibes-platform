@@ -1,0 +1,79 @@
+# Console assistant
+
+The opt-in Assistant page lets an authorized analyst ask questions about
+agents and observed findings using an operator-hosted OpenAI-compatible model.
+The console authenticates every request, applies the caller's existing
+`agents.read` and `findings.read` scopes to SQL lookups, and returns only
+sanitized answer text, verified citations, and a short lookup summary. The
+model cannot run SQL, commands, arbitrary URLs, or mutations. Vulnerability
+lookups are refused until they have console read pages and permissions.
+
+## Interfaces
+
+- `GET /api/v1/assistant/status` returns availability, model label, and
+  whether the endpoint is local or on the operator's network.
+- `POST /api/v1/assistant/messages` accepts one question plus bounded recent
+  turns from the current browser tab. It requires an authenticated session,
+  `assistant.use`, and the same effective scope for `agents.read` and
+  `findings.read`.
+- `/assistant` is shown in navigation only to a principal with
+  `assistant.use`. The UI renders plain text and links built by the console.
+
+## Configuration
+
+The `[assistant]` section is disabled when omitted. To enable it, set
+`enabled = true`, choose `lookup_mode` (or `auto`), and configure a
+`[assistant.backend]` with an OpenAI-compatible endpoint and model. Loopback
+URLs may use HTTP. A network backend must use HTTPS, an explicit CA file, and
+a private literal IP address; third-party endpoints and DNS names are
+refused. The optional API key is read from an owner-only file. Configuration
+validation fails closed. The operator must run a local model service such as
+Ollama or llama.cpp separately.
+
+Example:
+
+```toml
+[assistant]
+enabled = true
+lookup_mode = "auto"
+profile = "small"
+
+[assistant.backend]
+url = "http://127.0.0.1:8080/v1"
+model = "local-security-model"
+```
+
+## Data handling and limits
+
+No connection is attempted unless enabled with a valid backend configuration.
+The question, bounded recent turns, and scoped lookup results are sent only
+to that configured model endpoint. The browser keeps chat history in memory;
+reload, sign-out, and New chat clear it. The server does not persist prompts
+or answers. Logs and audit rows exclude question text, answers, and retrieved
+records. Each question is audited with actor, outcome, duration, and model.
+
+Questions are limited to 4,000 UTF-8 bytes; a chat to 20 turns; tool cycles to
+the platform assistant's configured maximum; the output budget follows the
+selected model profile; and the HTTP deadline is 30 seconds. One question may
+run per user at a time, with a global backend concurrency limit.
+Each blocking model call is also capped at 30 seconds. If the browser stops
+waiting, an in-flight call may continue until that cap, and keeps its per-user
+and global capacity permits until it finishes.
+
+## Failure behavior
+
+Disabled assistant routes return `assistant_disabled`. An unreachable or
+unsupported model reports unavailable; backend errors, invalid model output,
+rate capacity, and timeouts return fixed problem codes without upstream
+response bodies. Permission failures do not reveal hidden record existence.
+An aborted browser request is not saved. The Stop waiting action ends the
+browser wait; an already-running blocking model call can continue until its
+30-second limit.
+
+## How to operate and verify
+
+Run `openvibes-admin assistant check` and `openvibes-admin assistant eval`
+against the configured local endpoint before enabling the section. Verify
+that an Analyst can open the page, a user without `assistant.use` cannot, and
+scoped users only receive citations to records in their asset groups. Review
+the Console API specification and browser behavior with a local mock model.

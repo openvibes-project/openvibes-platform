@@ -46,8 +46,11 @@ async fn finding(
     client
         .execute(
             "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id,
-                 rule_version, severity, first_observed_at, last_observed_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz - interval '1 day', $7)",
+                 rule_version, severity, first_observed_at, last_observed_at,
+                 last_observed_day, scan_id, confidence, message, evidence, received_at,
+                 origin, authenticated)
+             VALUES ($1, $2, $3, $4, $5, $6, $7::timestamptz - interval '1 day', $7,
+                 $7::date, 'scan.1', 90, $8, '{}', $7, 'online', true)",
             &[
                 &agent_id,
                 &rule_set,
@@ -56,6 +59,7 @@ async fn finding(
                 &version,
                 &severity,
                 &observed,
+                &message,
             ],
         )
         .await
@@ -156,18 +160,8 @@ async fn seed() -> (TestDb, Client, DateTime<Utc>) {
         "Firewall 50%_off",
     )
     .await;
-    // A pre-P6 finding (no rule set) and an unrecognised severity.
-    finding(
-        &client,
-        WEB,
-        "",
-        "legacy.rule",
-        "weird",
-        1,
-        recent,
-        "Legacy",
-    )
-    .await;
+    // A pre-P6 finding with no rule set.
+    finding(&client, WEB, "", "legacy.rule", "info", 1, recent, "Legacy").await;
     client
         .batch_execute(
             "INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title,
@@ -219,7 +213,7 @@ async fn finding_groups_count_only_endpoints_in_scope_and_window() {
         ssh.message.as_deref(),
         Some("SSH listens on all interfaces")
     );
-    assert_eq!(page.items[2].severity, "unknown");
+    assert_eq!(page.items[2].severity, "info");
     // With every agent in scope, telnet leads and ssh counts three.
     let all = assistant::finding_groups(
         &client,

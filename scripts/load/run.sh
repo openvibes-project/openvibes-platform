@@ -64,7 +64,7 @@ admin token create --expires 1h --uses "$AGENTS" --label load |
 if [[ "$MODE" == distribution ]]; then
     start_distribution
     KEY=$(bundle "$W/bundle.json" 1 100)
-    admin rules trust add integration integration.test "$KEY" >/dev/null
+    admin rules trust add integration integration.test -- "$KEY" >/dev/null
     admin rules publish "$W/bundle.json" >/dev/null 2>&1
     LOAD_ARGS="--distribution-url https://127.0.0.1:$DIST_PORT --distribution-pid $DIST_PID ${LOAD_ARGS:-}"
 fi

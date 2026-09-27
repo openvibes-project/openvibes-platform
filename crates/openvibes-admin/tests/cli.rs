@@ -6,7 +6,9 @@ mod common;
 
 use std::process::Command;
 
+use chrono::Utc;
 use common::{Fixture, row, stdout};
+use platform_store::console_auth::{NewLocalUser, create_local_user, credential_by_username};
 
 #[tokio::test]
 async fn migrate_status_and_maintenance_are_audited() {
@@ -132,6 +134,77 @@ async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
         audit[0].0.starts_with("ov-test (uid ") && audit[0].0.ends_with(" via sudo by alice"),
         "{}",
         audit[0].0
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    let mut client = platform_store::connect(&fixture.url)
+        .await
+        .unwrap()
+        .get()
+        .await
+        .unwrap();
+    create_local_user(
+        &mut client,
+        &NewLocalUser {
+            user_id: "11111111-1111-4111-8111-111111111111",
+            binding_id: "22222222-2222-4222-8222-222222222222",
+            username: "alice",
+            display_name: "Alice Example",
+            password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
+            role_id: "admin",
+            actor_id: "test-bootstrap",
+            now: Utc::now(),
+        },
+    )
+    .await
+    .unwrap();
+    drop(client);
+
+    let listing = stdout(&fixture.run(&["user", "list"]));
+    assert!(
+        listing
+            .lines()
+            .any(|line| { line == "alice\tenabled\tadmin\tAlice Example\tnever" })
+    );
+    assert!(!listing.contains("opaque-hash"));
+    assert!(
+        stdout(&fixture.run(&["user", "disable", "ALICE"])).contains("disabled local user alice")
+    );
+    let disabled = credential_by_username(
+        &platform_store::connect(&fixture.url)
+            .await
+            .unwrap()
+            .get()
+            .await
+            .unwrap(),
+        "alice",
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert!(!disabled.enabled);
+    assert_eq!(
+        fixture.audit_targets().await,
+        [
+            ("migrate".into(), None, "ok".into()),
+            (
+                "user.created".into(),
+                Some("alice".into()),
+                "success".into()
+            ),
+            ("user.list".into(), None, "ok".into()),
+            (
+                "user.disabled".into(),
+                Some("11111111-1111-4111-8111-111111111111".into()),
+                "success".into()
+            ),
+            ("user.disable".into(), Some("alice".into()), "ok".into()),
+        ]
     );
     fixture.drop().await;
 }
