@@ -807,12 +807,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .items
                     .iter()
                     .map(|a| {
-                        let state = match (a.status.as_str(), a.last_seen_at) {
-                            ("revoked", _) => "revoked",
-                            (_, None) => "never seen",
-                            (_, Some(seen)) if seen < offline_before => "offline",
-                            _ => "seen recently",
-                        };
+                        let state = agent_state(&a.status, a.last_seen_at, offline_before);
                         json!({
                             "cite": agent_cite(&a.agent_id),
                             "hostname": a.hostname,
@@ -897,6 +892,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                         "offline": overview.agents.offline,
                         "never_seen": overview.agents.never_seen,
                         "revoked": overview.agents.revoked,
+                        "imported": overview.agents.imported,
                     }),
                 );
                 summary.insert(
@@ -971,4 +967,42 @@ fn rule_json(served: Served, rule_set: &str, rule: &str) -> Value {
                 "expression": found.expression.chars().take(MAX_EXPRESSION).collect::<String>(),
             })
         })
+}
+
+/// How the assistant describes an agent; imported hosts (export files) are
+/// never called online or offline.
+fn agent_state(
+    status: &str,
+    last_seen: Option<DateTime<Utc>>,
+    offline_before: DateTime<Utc>,
+) -> &'static str {
+    match (status, last_seen) {
+        ("revoked", _) => "revoked",
+        ("imported", _) => "imported",
+        (_, None) => "never seen",
+        (_, Some(seen)) if seen < offline_before => "offline",
+        _ => "seen recently",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn imported_hosts_are_never_described_as_online_or_offline() {
+        let now = Utc::now();
+        let offline_before = now - Duration::minutes(15);
+        assert_eq!(
+            agent_state("imported", Some(now), offline_before),
+            "imported"
+        );
+        assert_eq!(agent_state("imported", None, offline_before), "imported");
+        assert_eq!(agent_state("revoked", Some(now), offline_before), "revoked");
+        assert_eq!(
+            agent_state("active", Some(now), offline_before),
+            "seen recently"
+        );
+        assert_eq!(agent_state("active", None, offline_before), "never seen");
+    }
 }

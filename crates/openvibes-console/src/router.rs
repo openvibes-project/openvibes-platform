@@ -1012,6 +1012,11 @@ pub(crate) async fn revoke_authenticated_agent(
             "agent_not_found",
             "Agent not found",
         )),
+        Ok(platform_store::agents::Revoke::Imported) => problem_response(ProblemDetails::new(
+            StatusCode::CONFLICT,
+            "imported_host_cannot_be_revoked",
+            "Imported hosts cannot be revoked",
+        )),
         Err(_) => unavailable_auth(),
     }
 }
@@ -4855,11 +4860,7 @@ async fn login(
 
     let username = canonical_username(&body.username);
     let source = peer.source_label();
-    let account_bucket = throttle_digest(
-        b"account",
-        username.as_deref().unwrap_or("invalid").as_bytes(),
-    );
-    let source_bucket = throttle_digest(b"source", source.as_bytes());
+    let [account_bucket, source_bucket] = login_throttle_buckets(username.as_deref(), &source);
     let buckets: [&[u8]; 2] = [&account_bucket, &source_bucket];
     let throttled = match console_auth::login_is_throttled(&client, &buckets, now).await {
         Ok(throttled) => throttled,
@@ -5141,6 +5142,16 @@ fn throttle_digest(kind: &[u8], value: &[u8]) -> [u8; 32] {
     output
 }
 
+fn login_throttle_buckets(username: Option<&str>, source: &str) -> [[u8; 32]; 2] {
+    let username = username.unwrap_or("invalid");
+    let account = throttle_digest(b"account", username.as_bytes());
+    let mut source_account = username.as_bytes().to_vec();
+    source_account.push(0);
+    source_account.extend_from_slice(source.as_bytes());
+    let source_account = throttle_digest(b"source-account", &source_account);
+    [account, source_account]
+}
+
 fn bounded_user_agent(headers: &HeaderMap) -> Option<String> {
     headers
         .get(header::USER_AGENT)
@@ -5277,5 +5288,21 @@ async fn ready(axum::extract::State(readiness): axum::extract::State<Readiness>)
         StatusCode::NO_CONTENT
     } else {
         StatusCode::SERVICE_UNAVAILABLE
+    }
+}
+
+#[cfg(test)]
+mod login_throttle_tests {
+    use super::login_throttle_buckets;
+
+    #[test]
+    fn source_throttles_are_scoped_to_one_account_behind_a_shared_proxy() {
+        let alice = login_throttle_buckets(Some("alice"), "127.0.0.1");
+        let bob = login_throttle_buckets(Some("bob"), "127.0.0.1");
+        let alice_from_another_proxy = login_throttle_buckets(Some("alice"), "127.0.0.2");
+
+        assert_ne!(alice[1], bob[1]);
+        assert_eq!(alice[0], alice_from_another_proxy[0]);
+        assert_ne!(alice[1], alice_from_another_proxy[1]);
     }
 }

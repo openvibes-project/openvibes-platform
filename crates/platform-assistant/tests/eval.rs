@@ -71,7 +71,7 @@ async fn the_fleet_answers_like_the_database() {
     let overview = run("fleet_overview", "{}").await;
     assert_eq!(
         overview["agents"],
-        serde_json::json!({ "seen_recently": 8, "offline": 1, "never_seen": 1, "revoked": 1 })
+        serde_json::json!({ "seen_recently": 8, "offline": 1, "never_seen": 1, "revoked": 1, "imported": 0 })
     );
     assert_eq!(overview["open_vulnerabilities"], 8);
     assert_eq!(overview["hosts_with_exploited"], 3);

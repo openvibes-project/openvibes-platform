@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 20: enable the local assistant for
+-- OpenVIBES platform schema version 21: enable the local assistant for
 -- Analyst/Admin while keeping every request subject to read permissions.
 INSERT INTO console_permissions (permission_id, scope_class)
 VALUES ('assistant.use', 'global');

@@ -183,7 +183,9 @@ pretend to be systemd.
   model plans for it now), the agent configuration format promoted to a
   protocol contract, and per-OS agent installers (agent Milestone 6).
 - **File import** of `FindingExport` and `InventoryExport` (protocol P3),
-  stored as imported and unauthenticated.
+  stored as imported and unauthenticated. Done by `openvibes-admin import`
+  on the platform host rather than an ingest endpoint (spec
+  `2026-09-27-file-import-design.md`).
 
 ## 8. Deployment
 

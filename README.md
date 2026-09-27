@@ -121,6 +121,9 @@ Design principles, shared by every repository:
 - **Rules:** `rules trust add|list|remove` and `rules publish|list|show`
   for signed bundles.
 - **Vulnerabilities:** `feeds status|import` and `vulns list|summary|show`.
+- **File import:** `import PATH...` stores export files from agents
+  without a platform (air-gapped hosts) as imported hosts: their findings,
+  and their inventory matched for vulnerabilities like any other host.
 - **Audit:** every command is recorded in an append-only audit log. The log
   records the real user who ran it, not a name the caller can choose.
 
@@ -172,8 +175,6 @@ Design principles, shared by every repository:
   and AlmaLinux. Debian and Ubuntu are matched by source package with
   dpkg version order. Vulnerabilities without a fix are shown and labelled
   as such. Alpine follows.
-- **File import:** agent exports (findings and inventory from air-gapped
-  hosts), stored and marked as imported.
 - **Assistant options:** an external AI provider, opt-in only, with host
   names and addresses pseudonymised before anything leaves the platform.
 - **Correlation** (`openvibes-correlation`) across findings and inventory.

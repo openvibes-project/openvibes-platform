@@ -75,6 +75,15 @@ pub enum Authenticated {
     Unknown,
 }
 
+/// How a finding reached the platform.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Origin {
+    /// Delivered by an authenticated agent over mTLS.
+    Online,
+    /// Read from an unsigned export file (protocol P3b); never authenticated.
+    Import,
+}
+
 /// A finding to store, attributed to the authenticated agent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredFinding {
@@ -325,13 +334,19 @@ pub async fn heartbeat(
 }
 
 /// Stores a batch in one transaction; findings already stored are skipped.
+/// `origin` marks online deliveries authenticated and imports not.
 /// Updates the current-state row per rule. Returns how many were new.
 pub async fn store_findings(
     client: &mut Client,
     agent_id: &str,
     findings: &[StoredFinding],
+    origin: Origin,
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
+    let (origin, authenticated) = match origin {
+        Origin::Online => ("online", true),
+        Origin::Import => ("import", false),
+    };
     let transaction = client.transaction().await?;
     let mut stored = 0;
     for finding in findings {
@@ -341,7 +356,7 @@ pub async fn store_findings(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
                      origin, authenticated, rule_set_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'online', true, $13)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $13)
                  ON CONFLICT DO NOTHING",
                 &[
                     &finding.finding_id,
@@ -357,6 +372,8 @@ pub async fn store_findings(
                     &finding.evidence,
                     &now,
                     &finding.rule_set_id,
+                    &origin,
+                    &authenticated,
                 ],
             )
             .await?;

@@ -21,6 +21,7 @@ pub mod console_triage;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
 /// Queries the ingest service runs.
+pub mod imports;
 pub mod ingest;
 /// Host package inventories (vulnerability management).
 pub mod inventory;
@@ -33,6 +34,7 @@ mod status;
 pub mod tokens;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;
+pub mod wire;
 
 use std::{fmt, str::FromStr, time::Duration};
 

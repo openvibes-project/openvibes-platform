@@ -301,13 +301,13 @@ async fn heartbeats_are_throttled_and_findings_stored_once() {
         finding("f.3", "r.b", now - Duration::days(1)),
     ];
     assert_eq!(
-        ingest::store_findings(&mut client, id, &batch, now)
+        ingest::store_findings(&mut client, id, &batch, ingest::Origin::Online, now)
             .await
             .unwrap(),
         3
     );
     assert_eq!(
-        ingest::store_findings(&mut client, id, &batch, now)
+        ingest::store_findings(&mut client, id, &batch, ingest::Origin::Online, now)
             .await
             .unwrap(),
         0
@@ -415,9 +415,15 @@ async fn current_state_is_kept_per_rule_set() {
         finding("f.a", "ssh.root_login", now - Duration::minutes(2)),
         other,
     ];
-    ingest::store_findings(&mut client, &identity.agent_id, &batch, now)
-        .await
-        .unwrap();
+    ingest::store_findings(
+        &mut client,
+        &identity.agent_id,
+        &batch,
+        ingest::Origin::Online,
+        now,
+    )
+    .await
+    .unwrap();
     let admin = db.pool.get().await.unwrap();
     let rows: Vec<(String, String)> = admin
         .query(

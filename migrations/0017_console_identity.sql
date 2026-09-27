@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 16: local console identity, RBAC, asset
+-- OpenVIBES platform schema version 17: local console identity, RBAC, asset
 -- scopes, service accounts, triage, and structured audit metadata.
 
 CREATE TABLE console_users (

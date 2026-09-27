@@ -40,7 +40,7 @@ impl AssistantRuntime {
         let capacity = assistant
             .backend
             .as_ref()
-            .map_or(1, |backend| backend.concurrency as usize);
+            .map_or(1, |backend| semaphore_capacity(backend.concurrency));
         let runtime = Self {
             assistant: Arc::new(assistant),
             backend,
@@ -87,6 +87,21 @@ impl AssistantRuntime {
             .entry(principal_id.to_owned())
             .or_insert_with(|| Arc::new(Semaphore::new(1)))
             .clone()
+    }
+}
+
+fn semaphore_capacity(configured: u32) -> usize {
+    configured.max(1) as usize
+}
+
+#[cfg(test)]
+mod tests {
+    use super::semaphore_capacity;
+
+    #[test]
+    fn assistant_capacity_never_disables_all_requests() {
+        assert_eq!(semaphore_capacity(0), 1);
+        assert_eq!(semaphore_capacity(4), 4);
     }
 }
 

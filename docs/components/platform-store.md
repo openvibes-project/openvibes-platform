@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 20; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 22; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -133,6 +133,36 @@ links, never edit or delete versions (a test checks it).
   links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
   the agent id (delivered at commit) → `Stored`. Several installed versions
   of one package (kernels) are all kept.
+
+## Wire conversions (`wire::…`)
+
+Shared by online delivery (ingest) and file import (admin), so both refuse
+and store alike: `finding(finding, oldest, latest, partitions) ->
+Result<StoredFinding, reason>` (`future_observation` beyond
+`MAX_FUTURE_MINUTES` = 60, `retention_expired`, `out_of_range`,
+`unstorable` without a partition) and `inventory(os, running_kernel,
+&mut packages) -> (rows, sha256)` (sorts packages canonically; the digest
+covers OS, kernel and packages). `ingest::store_findings` takes an
+`Origin`: `Online` stores `origin = 'online'`, authenticated; `Import`
+stores `'import'`, unauthenticated.
+
+## Imported hosts (`imports::…`, schema 15)
+
+Hosts from agent export files (protocol P3b), run as the admin role.
+Migration 15 lets `agents.status` be `imported` only with an id
+`import.<install_id>` (and `agent.<uuid>` only otherwise), and adds
+`claimed_agent_id`, the `agent_id` a file named, kept as a label.
+
+- `upsert_host(&client, &ImportedHost, now) -> id`: creates the row
+  (`enrolled_at` = first import) or updates it; `last_seen_at` is the newest
+  file time, and hostname, version and claimed id come from the newest file.
+  Never matches an enrolled row.
+- `replace_inventory(&mut client, id, os_id, os_version, running_kernel,
+  rows, sha256, collected_at) -> Stored | Unchanged | Older`: `Older` when
+  the stored `inventory_at` is later than `collected_at`; otherwise
+  `inventory::replace` with `collected_at` as the time; on `Unchanged` the
+  snapshot time still moves forward (content can repeat after a rollback),
+  so newest wins whatever order files arrive in.
 
 ## Vulnerabilities (`vulns::…`, schema 8)
 
@@ -305,12 +335,24 @@ findings, performs ETag-versioned state changes with history and audit in the
 same transaction, and reopens completed triage when a new applicable latest
 observation arrives during ingest.
 
-## Assistant permission (schema 20)
+## Assistant permission (schema 21)
 
-Migration 20 grants the global `assistant.use` permission to the built-in
+Migration 21 grants the global `assistant.use` permission to the built-in
 Analyst and Admin roles. The console only advertises it when the assistant is
 enabled; each request also requires the caller's scoped agent and finding read
 permissions.
+
+## Console write grants (schema 22)
+
+Migration 22 grants `openvibes_console` only the row operations used by
+console stores: DELETE for idempotency and selector/tag replacement, UPDATE
+for agent revocation, finding triage and rule publication locks, and INSERT
+for published rule bundles. `tests/console_role.rs` runs representative
+console writes after `SET ROLE openvibes_console` to catch missing grants.
+
+Migration 15 is reserved for imported-host support. Console migrations were
+renumbered to 16–21 when import support landed; migration 22 adds the reviewed
+console write grants.
 
 ## Test
 

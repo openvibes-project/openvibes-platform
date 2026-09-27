@@ -26,7 +26,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | Command | Does | Prints |
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
-| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
+| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
 | `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
 | `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo |
 | `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |
@@ -52,15 +52,15 @@ The user commands are audited, including failed attempts. Creation provisions
 the user, credential, initial role binding, and user-created audit event in one
 store transaction. Disable and password reset invalidate all browser sessions.
 Unlock clears only an active account bucket; IP/source throttles still protect
-the service. The first account can be created after schema 20 is applied.
+the service. The first account can be created after schema 22 is applied.
 
 ## Agent commands
 
 | Command | Prints |
 |---|---|
-| `agent list [--offline \| --revoked]` | one line per agent: id, status, last seen, version. `--offline` = active with no heartbeat for 15 minutes. |
-| `agent show ID` | id, status, enrolled, revoked, last seen, version, certificate count; `unknown agent` (exit 1) if absent |
-| `agent revoke ID` | `revoked ID`; `agent already revoked` or `unknown agent` are errors. The agent's next request gets `identity_revoked` (PM3). |
+| `agent list [--offline \| --revoked \| --imported]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id. `--offline` = active with no heartbeat for 15 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`). |
+| `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; `unknown agent` (exit 1) if absent |
+| `agent revoke ID` | `revoked ID`; `agent already revoked`, `unknown agent`, or `imported hosts have no identity to revoke` are errors. The agent's next request gets `identity_revoked` (PM3). |
 
 `show` and `revoke` are audited with the agent id as target.
 
@@ -120,6 +120,49 @@ an envelope), `SET/ISSUER` for the trust commands, the set for `show`,
 | `vulns show ADVISORY\|HOST` | an advisory with its link, one line per CVE (`CVE-… CVSS 6.1 (3.1) CWE-79 KEV EUVD-… EPSS 94.0%: description`, first 200 characters), and hosts; or a host with its open vulnerabilities |
 
 All are audited; `feeds import` with the source as target.
+
+## Import command (protocol P3b)
+
+`import [--retention-days 90] PATH...` stores agent export files written by
+`openvibes-agent export` on a host with no platform. `PATH` is a file or a
+directory, whose `*.json` files are imported in name order (not
+recursive; other files are skipped).
+
+- Only regular files are read (a symlink to a device, a FIFO or a socket
+  is refused), at most 1 MiB, then decoded and validated with the same
+  types and limits as online deliveries. A file time
+  (`exported_at`, `collected_at`) more than an hour in the future is
+  refused, since it would win newest-wins forever, and so is a `hostname`
+  or `scanner_version` with control characters. Its kind
+  comes from its members: `findings` (`FindingExport`) or `packages`
+  (`InventoryExport`).
+- The host is `import.<install_id>`, status `imported`: its own host, never
+  an enrolled agent. A file's `agent_id` is kept only as
+  `claimed_agent_id`; `hostname` is a label.
+- Findings are refused one by one by the online rules (more than an hour in
+  the future, older than `--retention-days`, no partition) and stored as
+  `origin = 'import'`, unauthenticated; ones already stored are counted.
+- An inventory replaces the host's packages when it is newer than the
+  stored one, and the vulnerability service matches the host within a
+  second. One without `os` (from an agent before P3b) is refused.
+- One line per file, then totals:
+
+```
+/exports/openvibes-export-….json: imported 12 findings (3 already present, 1 refused: retention_expired)
+/exports/openvibes-inventory-….json: inventory accepted (412 packages)
+/exports/notes.json: refused: not an OpenVIBES export file
+3 files: 12 findings, 1 inventories, 1 refused
+```
+
+Other lines: `inventory unchanged`, `older inventory ignored`, `refused:
+larger than 1 MiB`, `not a regular file`, `not valid JSON`, `invalid: …`,
+`no operating system: export again with a newer agent`, `database error:
+…`. Control characters from files and file names are printed escaped
+(`\u{1b}`), never raw. A refused file does
+not stop the others; any refusal makes the exit code 1 (lines then go to
+stderr). Re-running an import is always safe. One audit entry per run:
+the totals and the paths given (`… from /exports`, at most 1,000
+characters), so the log keeps where unsigned data came from.
 
 ## Assistant commands
 

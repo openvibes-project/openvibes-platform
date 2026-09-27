@@ -220,7 +220,7 @@ pub(crate) async fn reopen_on_observation(
         return Ok(());
     }
     let current_rule_version: i64 = latest.get(1);
-    let row=transaction.query_opt("SELECT state,rule_version,accepted_until,version FROM console_finding_triage WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await?;
+    let row=transaction.query_opt("SELECT state,rule_version,accepted_until,version,updated_at FROM console_finding_triage WHERE agent_id=$1 AND rule_set_id=$2 AND rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await?;
     let Some(row) = row else {
         return Ok(());
     };
@@ -228,8 +228,11 @@ pub(crate) async fn reopen_on_observation(
     let old_rule_version: i64 = row.get(1);
     let accepted_until: Option<DateTime<Utc>> = row.get(2);
     let version: i64 = row.get(3);
+    let updated_at: Option<DateTime<Utc>> = row.get(4);
     let reason = match state.as_str() {
-        "mitigated" => Some("new_observation"),
+        "mitigated" if updated_at.is_some_and(|mitigated_at| observed_at > mitigated_at) => {
+            Some("new_observation")
+        }
         "accepted_risk" if accepted_until.is_some_and(|expiry| observed_at > expiry) => {
             Some("accepted_risk_expired")
         }

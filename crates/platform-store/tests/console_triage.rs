@@ -46,6 +46,7 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         &mut client,
         AGENT,
         &[observation("finding-1", now - Duration::minutes(1))],
+        ingest::Origin::Online,
         now,
     )
     .await
@@ -108,10 +109,30 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         .unwrap(),
         TriageUpdate::Updated(_)
     ));
+    // A result can arrive after mitigation while carrying an observation time
+    // from before the analyst's decision. It must not reopen or erase triage.
+    ingest::store_findings(
+        &mut client,
+        AGENT,
+        &[observation("finding-queued", now - Duration::seconds(30))],
+        ingest::Origin::Online,
+        now + Duration::minutes(1),
+    )
+    .await
+    .unwrap();
+    let still_mitigated = console_triage::get(&client, AGENT, "base", "rule-1")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(still_mitigated.state, "mitigated");
+    assert_eq!(still_mitigated.version, 2);
+    assert_eq!(still_mitigated.note.as_deref(), Some("fixed"));
+
     ingest::store_findings(
         &mut client,
         AGENT,
         &[observation("finding-2", now + Duration::minutes(1))],
+        ingest::Origin::Online,
         now + Duration::minutes(2),
     )
     .await

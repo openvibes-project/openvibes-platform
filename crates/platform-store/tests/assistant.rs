@@ -413,10 +413,19 @@ async fn the_overview_counts_only_the_scope() {
     assert_eq!(scoped.top_findings.total, 3);
     assert_eq!(scoped.top_advisories.items[0].advisory_id, "FEDORA-2026-1");
     assert_eq!(scoped.top_advisories.items[0].hosts, 2);
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at)
+             VALUES ('import.inst-1', 'imported', now(), now())",
+            &[],
+        )
+        .await
+        .unwrap();
     let all = assistant::overview(&client, &AgentScope::All, since, now, 5)
         .await
         .unwrap();
     assert_eq!(all.agents.seen_recently, 2);
+    assert_eq!(all.agents.imported, 1, "imported hosts are counted apart");
     assert_eq!(all.open_vulnerabilities, 5);
     assert_eq!(all.hosts_with_exploited, 3);
     let nobody = assistant::overview(&client, &AgentScope::Only(Vec::new()), since, now, 5)

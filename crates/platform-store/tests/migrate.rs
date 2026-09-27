@@ -45,7 +45,7 @@ async fn migration_applies_once_and_is_idempotent() {
 }
 
 #[tokio::test]
-async fn schema_eleven_upgrades_to_eighteen() {
+async fn schema_eleven_upgrades_to_current() {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     client
@@ -161,7 +161,30 @@ async fn the_console_role_has_only_its_declared_schema_rights() {
     );
     assert_eq!(
         rights,
-        (true, true, false, true, true, false, false, true, false)
+        (true, true, true, true, true, false, true, true, false)
+    );
+    let write_rights = client
+        .query_one(
+            "SELECT has_table_privilege('openvibes_console', 'console_idempotency', 'DELETE'),
+                    has_table_privilege('openvibes_console', 'console_asset_group_selectors', 'DELETE'),
+                    has_table_privilege('openvibes_console', 'console_agent_tags', 'DELETE'),
+                    has_table_privilege('openvibes_console', 'current_findings', 'UPDATE'),
+                    has_table_privilege('openvibes_console', 'rule_sets', 'UPDATE'),
+                    has_table_privilege('openvibes_console', 'rule_bundles', 'INSERT')",
+            &[],
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        (
+            write_rights.get::<_, bool>(0),
+            write_rights.get::<_, bool>(1),
+            write_rights.get::<_, bool>(2),
+            write_rights.get::<_, bool>(3),
+            write_rights.get::<_, bool>(4),
+            write_rights.get::<_, bool>(5),
+        ),
+        (true, true, true, true, true, true)
     );
     drop(client);
     db.drop().await;

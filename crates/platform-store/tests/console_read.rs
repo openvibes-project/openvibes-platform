@@ -82,7 +82,7 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
             evidence: vec!["pkg=new".into()],
         },
     ];
-    ingest::store_findings(&mut client, RECENT, &findings, now)
+    ingest::store_findings(&mut client, RECENT, &findings, ingest::Origin::Online, now)
         .await
         .unwrap();
 
@@ -302,6 +302,7 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
                 message: format!("{finding_id} message"),
                 evidence: vec!["safe evidence".into()],
             }],
+            ingest::Origin::Online,
             now,
         )
         .await
