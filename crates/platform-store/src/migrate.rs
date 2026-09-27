@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 24;
+pub const SCHEMA_VERSION: i32 = 25;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -91,6 +91,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
         24,
         include_str!("../../../migrations/0024_console_rules_permission_cleanup.sql"),
     ),
+    (
+        25,
+        include_str!("../../../migrations/0025_console_vulnerability_reads.sql"),
+    ),
 ];
 
 // The build fails if a migration is added without bumping SCHEMA_VERSION or
@@ -153,4 +157,36 @@ pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
     }
     transaction.commit().await?;
     Ok(SCHEMA_VERSION.max(applied))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::MIGRATIONS;
+
+    // Two branches once both added a 0023 migration and the merge kept only
+    // one: every file in migrations/ must be embedded, each number once.
+    #[test]
+    fn every_migration_file_is_embedded_once_in_order() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../migrations");
+        let mut files: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().into_string().unwrap())
+            .filter(|n| n.ends_with(".sql"))
+            .collect();
+        files.sort();
+        assert_eq!(files.len(), MIGRATIONS.len(), "migrations/ has {files:?}");
+        for (i, (file, (version, sql))) in files.iter().zip(MIGRATIONS).enumerate() {
+            assert_eq!(
+                *version,
+                i as i32 + 1,
+                "{file}: versions must be 1, 2, 3, ..."
+            );
+            assert_eq!(file[..4].parse::<i32>().unwrap(), *version, "{file}");
+            let text = std::fs::read_to_string(format!("{dir}/{file}")).unwrap();
+            assert_eq!(
+                text, *sql,
+                "{file} is not the migration embedded as {version}"
+            );
+        }
+    }
 }

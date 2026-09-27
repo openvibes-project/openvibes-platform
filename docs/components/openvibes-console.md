@@ -25,7 +25,7 @@ browser E2E, and CI/review confirmation for the final commit.
 C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 24, and serves
+the executable connects to PostgreSQL, requires schema version 25, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
