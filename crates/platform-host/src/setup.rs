@@ -91,6 +91,104 @@ impl Step {
     }
 }
 
+/// One step of Update (§6.5a), in order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum UpdateStep {
+    Backup,
+    Stop,
+    Upgrade,
+    Migrate,
+    Start,
+    Ready,
+}
+
+impl UpdateStep {
+    pub const ALL: [UpdateStep; 6] = [
+        UpdateStep::Backup,
+        UpdateStep::Stop,
+        UpdateStep::Upgrade,
+        UpdateStep::Migrate,
+        UpdateStep::Start,
+        UpdateStep::Ready,
+    ];
+
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            UpdateStep::Backup => "backup",
+            UpdateStep::Stop => "stop",
+            UpdateStep::Upgrade => "upgrade",
+            UpdateStep::Migrate => "migrate",
+            UpdateStep::Start => "start",
+            UpdateStep::Ready => "ready",
+        }
+    }
+
+    #[must_use]
+    pub fn title(self) -> &'static str {
+        match self {
+            UpdateStep::Backup => "Database backup",
+            UpdateStep::Stop => "Stop services",
+            UpdateStep::Upgrade => "Upgrade packages",
+            UpdateStep::Migrate => "Migrate the database",
+            UpdateStep::Start => "Start services",
+            UpdateStep::Ready => "Readiness",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(name: &str) -> Option<UpdateStep> {
+        UpdateStep::ALL.into_iter().find(|step| step.name() == name)
+    }
+}
+
+/// One step of removing components or uninstalling (§6.5), in order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+pub enum RemoveStep {
+    Backup,
+    Stop,
+    Firewall,
+    Packages,
+    Purge,
+}
+
+impl RemoveStep {
+    pub const ALL: [RemoveStep; 5] = [
+        RemoveStep::Backup,
+        RemoveStep::Stop,
+        RemoveStep::Firewall,
+        RemoveStep::Packages,
+        RemoveStep::Purge,
+    ];
+
+    #[must_use]
+    pub fn name(self) -> &'static str {
+        match self {
+            RemoveStep::Backup => "backup",
+            RemoveStep::Stop => "stop",
+            RemoveStep::Firewall => "firewall",
+            RemoveStep::Packages => "packages",
+            RemoveStep::Purge => "purge",
+        }
+    }
+
+    #[must_use]
+    pub fn title(self) -> &'static str {
+        match self {
+            RemoveStep::Backup => "Database backup",
+            RemoveStep::Stop => "Stop and disable services",
+            RemoveStep::Firewall => "Close firewall ports",
+            RemoveStep::Packages => "Remove packages",
+            RemoveStep::Purge => "Remove all data",
+        }
+    }
+
+    #[must_use]
+    pub fn parse(name: &str) -> Option<RemoveStep> {
+        RemoveStep::ALL.into_iter().find(|step| step.name() == name)
+    }
+}
+
 /// What a step's check found, or what running it achieved.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum StepState {
@@ -206,6 +304,12 @@ pub enum Privileged<'a> {
     SetupStatus,
     /// `setup-step STEP`: checks the step and runs it unless done.
     SetupStep(Step),
+    /// `setup-step STEP --repair`: as `SetupStep`, but never makes a new CA.
+    Repair(Step),
+    /// `update-step STEP [--backup PATH]`.
+    Update(UpdateStep, &'a [String]),
+    /// `remove-step STEP --components LIST [--backup PATH] [--confirm HOSTNAME]`.
+    Remove(RemoveStep, &'a [String]),
     /// `unit-enable UNIT`: start at boot.
     UnitEnable(Unit),
     /// `unit-disable UNIT`: do not start at boot.
@@ -224,16 +328,31 @@ impl Privileged<'_> {
             }
             Privileged::SetupStatus => vec!["setup-status".into()],
             Privileged::SetupStep(step) => vec!["setup-step".into(), step.name().into()],
+            Privileged::Repair(step) => {
+                vec!["setup-step".into(), step.name().into(), "--repair".into()]
+            }
+            Privileged::Update(step, args) => {
+                let mut all = vec!["update-step".to_owned(), step.name().to_owned()];
+                all.extend(args.iter().cloned());
+                all
+            }
+            Privileged::Remove(step, args) => {
+                let mut all = vec!["remove-step".to_owned(), step.name().to_owned()];
+                all.extend(args.iter().cloned());
+                all
+            }
             Privileged::UnitEnable(unit) => vec!["unit-enable".into(), unit.name().into()],
             Privileged::UnitDisable(unit) => vec!["unit-disable".into(), unit.name().into()],
         }
     }
 
-    /// What the journal records (no arguments of `setup-plan`).
+    /// What the journal records (no arguments of `setup-plan`, `update-step`, `remove-step`).
     #[must_use]
     pub fn journal(&self) -> String {
         match self {
             Privileged::SetupPlan(_) => "setup-plan".into(),
+            Privileged::Update(step, _) => format!("update-step {}", step.name()),
+            Privileged::Remove(step, _) => format!("remove-step {}", step.name()),
             other => other.args().join(" "),
         }
     }

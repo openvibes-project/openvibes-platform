@@ -10,7 +10,7 @@ pub mod setup;
 pub mod unit;
 
 pub use service::{CONFIG_DIR, Service};
-pub use setup::{Privileged, SETUP_FILE, Secret, Step, StepState};
+pub use setup::{Privileged, RemoveStep, SETUP_FILE, Secret, Step, StepState, UpdateStep};
 pub use unit::Unit;
 
 /// A lifecycle action an operator may take without a password.
@@ -51,6 +51,16 @@ pub struct ServiceStatus {
     pub ready: Option<bool>,
     /// When it became active.
     pub since: Option<String>,
+}
+
+/// An installed OpenVIBES package and the newer version the repository has.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PackageUpdate {
+    pub name: String,
+    /// `VERSION-RELEASE`.
+    pub installed: String,
+    /// A newer `VERSION-RELEASE`, when there is one.
+    pub available: Option<String>,
 }
 
 /// Why a host operation failed.
@@ -102,4 +112,8 @@ pub trait Host {
     fn is_set_up(&self) -> bool;
     /// Runs a password-gated helper verb through sudo; its standard output.
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError>;
+    /// Installed OpenVIBES packages with any newer version (no password).
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError>;
+    /// `/etc/openvibes/setup.toml` as text (world-readable, no secrets).
+    fn setup_plan(&self) -> Result<String, HostError>;
 }

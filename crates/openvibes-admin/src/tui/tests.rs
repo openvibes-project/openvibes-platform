@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
+    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
 };
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -91,6 +91,12 @@ impl Host for FakeHost {
     }
     fn is_set_up(&self) -> bool {
         true
+    }
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
+        Ok(Vec::new())
+    }
+    fn setup_plan(&self) -> Result<String, HostError> {
+        Err(HostError::Failed("not set up".into()))
     }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.privileged_calls

@@ -28,6 +28,10 @@ pub enum Program {
     FirewallCmd,
     /// The admin CLI itself (offline CA commands as root).
     Admin,
+    /// Service accounts (Remove everything).
+    Userdel,
+    /// Service groups (Remove everything).
+    Groupdel,
 }
 
 impl Program {
@@ -46,6 +50,8 @@ impl Program {
             Program::Usermod => "/usr/sbin/usermod",
             Program::FirewallCmd => "/usr/bin/firewall-cmd",
             Program::Admin => "/usr/bin/openvibes-admin",
+            Program::Userdel => "/usr/sbin/userdel",
+            Program::Groupdel => "/usr/sbin/groupdel",
         }
     }
 }
@@ -94,6 +100,8 @@ impl Runner for SystemRunner {
     fn run(&self, program: Program, args: &[&str]) -> std::io::Result<Output> {
         let result = std::process::Command::new(program.path())
             .args(args)
+            // C locale: sudo's, dnf's and systemctl's messages are parsed.
+            .env("LC_ALL", "C")
             .stdin(std::process::Stdio::null())
             .output()?;
         Ok(output(result))
@@ -110,6 +118,8 @@ impl Runner for SystemRunner {
         use std::io::Write;
         let mut child = std::process::Command::new(program.path())
             .args(args)
+            // C locale: sudo's, dnf's and systemctl's messages are parsed.
+            .env("LC_ALL", "C")
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())

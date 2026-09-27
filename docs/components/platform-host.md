@@ -61,10 +61,22 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
   the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
   password") and `NotSudoer` (not in sudoers).
-- `Host::is_set_up`: whether `/etc/openvibes/setup.toml` exists.
+- `UpdateStep` (`backup`, `stop`, `upgrade`, `migrate`, `start`, `ready`) and
+  `RemoveStep` (`backup`, `stop`, `firewall`, `packages`, `purge`), with
+  the verbs `Privileged::Update` (`update-step STEP [ARGS]`),
+  `Privileged::Remove` (`remove-step STEP ARGS`) and `Privileged::Repair`
+  (`setup-step STEP --repair`). The journal names the step only, never the
+  arguments, and records the state a step ended in (`ok`, `failed`,
+  `waiting`, `todo`), not just the exit status.
+- `Host::is_set_up`: whether `/etc/openvibes/setup.toml` exists;
+  `Host::setup_plan`: that file's text (world-readable, no secrets).
+- `Host::packages`: installed `openvibes-*` packages (`rpm -qa`,
+  debuginfo left out) with any newer version (`dnf -q list --upgrades`, as
+  the user; offline, none are shown).
 - `Program` also covers `dnf`, `rpm`, `runuser`, `postgresql-setup`,
-  `usermod`, `firewall-cmd` and `openvibes-admin`, which Setup's root side
-  runs.
+  `usermod`, `firewall-cmd`, `userdel`, `groupdel` and `openvibes-admin`,
+  which Setup's root side runs. `SystemRunner` runs every command with
+  `LC_ALL=C`, because sudo's, dnf's and systemctl's messages are parsed.
 
 ## Configuration
 

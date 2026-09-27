@@ -5,9 +5,10 @@
 use zeroize::Zeroizing;
 
 use crate::{
-    Host, HostError, Privileged, SETUP_FILE, Secret, Service, ServiceAction, ServiceStatus, Unit,
+    Host, HostError, PackageUpdate, Privileged, SETUP_FILE, Secret, Service, ServiceAction,
+    ServiceStatus, Unit,
     runner::{
-        Program::{Curl, Logger, Sudo, Systemctl},
+        Program::{Curl, Dnf, Logger, Rpm, Sudo, Systemctl},
         Runner,
     },
 };
@@ -204,7 +205,12 @@ impl<R: Runner> Host for Native<R> {
             .runner
             .run_with_input(Sudo, &argv, &input)
             .map_err(|error| HostError::Io(format!("{}: {error}", Sudo.path())))?;
-        let outcome = if out.status == 0 { "ok" } else { "failed" };
+        // A step that ran but failed exits 0 with its state first.
+        let outcome = match (out.status, out.stdout.split('\t').next()) {
+            (0, Some(state @ ("failed" | "waiting" | "todo"))) => state,
+            (0, _) => "ok",
+            _ => "failed",
+        };
         self.journal(&format!("{} {outcome}", verb.journal()));
         if out.status == 0 {
             Ok(out.stdout)
@@ -220,5 +226,55 @@ impl<R: Runner> Host for Native<R> {
         } else {
             Err(HostError::Failed(printable(&out.stderr)))
         }
+    }
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
+        let out = self.run(
+            Rpm,
+            &[
+                "-qa",
+                "--qf",
+                "%{NAME} %{VERSION}-%{RELEASE}\n",
+                "openvibes-*",
+            ],
+        )?;
+        if out.status != 0 {
+            return Err(HostError::Failed(printable(&out.stderr)));
+        }
+        let mut packages: Vec<PackageUpdate> = out
+            .stdout
+            .lines()
+            .filter_map(|line| {
+                let (name, version) = line.split_once(' ')?;
+                (!name.ends_with("-debuginfo") && !name.ends_with("-debugsource")).then(|| {
+                    PackageUpdate {
+                        name: name.into(),
+                        installed: version.into(),
+                        available: None,
+                    }
+                })
+            })
+            .collect();
+        packages.sort_by(|a, b| a.name.cmp(&b.name));
+        // ponytail: dnf as the user reads its own metadata cache; offline or
+        // failing, the list simply shows no newer versions.
+        let upgrades = self.run(Dnf, &["-q", "list", "--upgrades", "openvibes-*"])?;
+        if upgrades.status == 0 {
+            for line in upgrades.stdout.lines() {
+                let fields: Vec<&str> = line.split_whitespace().collect();
+                let [full, version, _repo] = fields[..] else {
+                    continue;
+                };
+                let name = full.rsplit_once('.').map_or(full, |(name, _arch)| name);
+                if let Some(package) = packages.iter_mut().find(|p| p.name == name) {
+                    package.available = Some(version.to_owned());
+                }
+            }
+        }
+        Ok(packages)
+    }
+
+    fn setup_plan(&self) -> Result<String, HostError> {
+        std::fs::read_to_string(SETUP_FILE)
+            .map_err(|error| HostError::Failed(format!("{SETUP_FILE}: {error}")))
     }
 }

@@ -3,7 +3,8 @@
 use std::{cell::RefCell, collections::VecDeque};
 
 use platform_host::{
-    Host, HostError, Privileged, Secret, Service, ServiceAction, ServiceStatus, Step, Unit,
+    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus,
+    Step, Unit,
 };
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -39,6 +40,12 @@ impl Host for SetupHost {
     }
     fn is_set_up(&self) -> bool {
         self.set_up
+    }
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
+        Ok(Vec::new())
+    }
+    fn setup_plan(&self) -> Result<String, HostError> {
+        Err(HostError::Failed("not set up".into()))
     }
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         self.calls
