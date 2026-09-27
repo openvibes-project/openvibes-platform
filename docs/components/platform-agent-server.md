@@ -16,11 +16,13 @@ pub async fn run(settings: &Settings, listener: TcpListener, health: TcpListener
                  app: impl FnOnce(Pool) -> Router, shutdown: impl Future<Output = ()>)
                  -> Result<(), ServerError>;
 pub struct AuthenticatedAgent(pub String);  // extractor; needs Pool: FromRef<S>
-pub enum ApiError { BadRequest, Unauthorized, Revoked, NotFound, Unavailable, Busy, Timeout }
+pub enum ApiError { BadRequest, Unauthorized, Revoked, NotFound, Unavailable, Busy, Timeout, Resync }
 pub enum ServerError { Config, Tls, Database, Listen }
 pub const MAX_BODY_BYTES: usize;            // 1 MiB, the V1 document limit
-pub const MAX_INVENTORY_BYTES: usize;       // 8 MiB, /v1/inventory only
+pub const MAX_INVENTORY_BYTES: usize;       // 8 MiB, the inventory paths only
+pub const INVENTORY_PATHS: [&str; 2];       // /v1/inventory, /v1/inventory/changes (P11)
 pub fn body_limit(path: &str) -> usize;     // the limit for a path
+pub fn decoded_body(headers, body, limit);  // gzip or plain; output capped at limit
 pub fn parse_with_limit<T>(body, limit);    // parse with another limit
 pub fn parse<T: DeserializeOwned + Validate>(body: &[u8]) -> Result<T, ApiError>;
 pub fn read_pem(path: &Path) -> Result<String, ServerError>;
@@ -47,10 +49,12 @@ requires absolute certificate and key paths, a loopback `health_listen`,
 | Expired or not-yet-valid certificate that otherwise chains | handshake passes; 401 (or 403 if revoked) |
 | Unknown certificate, or none on an authenticated route | 401 |
 | Revoked agent | 403 `{"schema_version":1,"code":"identity_revoked"}` |
-| Declared or actual body over 1 MiB (8 MiB on `/v1/inventory`), malformed or invalid body | 400 |
+| Declared or actual body over 1 MiB (8 MiB on the inventory paths), malformed or invalid body | 400 |
+| Inventory body with `Content-Encoding` other than `gzip` or `identity`, a broken gzip stream, or one that expands past 8 MiB (`decoded_body` stops reading at the limit) | 400 |
+| `ApiError::Resync` from a handler (a P11 change set that does not fit) | 409 `{"schema_version":1,"code":"inventory_resync"}` |
 | More than `max_in_flight` requests | 503 `busy` |
 | Database unreachable or query failed | 503, one warning log line |
-| Request (body included) past `request_timeout_seconds` | 408 |
+| Request (body included) past `request_timeout_seconds` (`inventory_request_timeout_seconds` on both inventory paths) | 408 |
 | `ApiError::NotFound` from a handler | 404 |
 | Peer accepts no response bytes for `request_timeout_seconds` | connection closed (a slow reader that keeps draining is served) |
 | At startup: bad certificate/key file and bad database URL | the TLS error first: local files are checked before the database |

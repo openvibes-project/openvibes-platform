@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+flate2 = { version = "1.1.10", default-features = false, features = ["rust_backend"] }
 axum = { workspace = true, features = ["matched-path"] }
 chrono.workspace = true
 hyper.workspace = true
