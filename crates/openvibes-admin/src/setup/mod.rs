@@ -22,11 +22,11 @@ use std::{path::Path, process::ExitCode, time::Duration};
 
 use plan::{Plan, PlanArgs};
 use platform_host::{
-    Step, StepState,
+    RemoveStep, Step, StepState, UpdateStep,
     runner::{Runner, SystemRunner},
 };
 
-pub use system::Ctx;
+pub use system::{Ctx, lock};
 
 /// Whether the step is done (a check that cannot run is `Failed`).
 pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
@@ -122,17 +122,145 @@ pub fn status() -> ExitCode {
     ExitCode::SUCCESS
 }
 
-/// `helper setup-step STEP`: `STATE<TAB>DETAIL`; exit 0 whatever the state.
-pub fn step(step: Step) -> ExitCode {
-    let plan = match Plan::load(Path::new("/")) {
-        Ok(plan) => plan,
-        Err(error) => {
-            eprintln!("openvibes-admin helper: {error}");
-            return ExitCode::FAILURE;
-        }
+/// Loads the plan and holds the run lock; prints the error otherwise.
+fn begin() -> Result<(std::fs::File, Plan), ExitCode> {
+    let lock = system::lock(Path::new("/")).map_err(|error| {
+        eprintln!("openvibes-admin: {error}");
+        ExitCode::FAILURE
+    })?;
+    let plan = Plan::load(Path::new("/")).map_err(|error| {
+        eprintln!("openvibes-admin: {error}");
+        ExitCode::FAILURE
+    })?;
+    Ok((lock, plan))
+}
+
+/// `helper setup-step STEP [--repair]`.
+pub fn step(step: Step, repair: bool) -> ExitCode {
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
     };
-    println!("{}", run_step(&host_ctx(&plan, false), step).line());
+    println!("{}", run_step(&host_ctx(&plan, repair), step).line());
     ExitCode::SUCCESS
+}
+
+/// `helper update-step STEP …`.
+pub fn update(step: UpdateStep, args: &update::UpdateArgs) -> ExitCode {
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    println!(
+        "{}",
+        update::run(&host_ctx(&plan, false), step, args).line()
+    );
+    ExitCode::SUCCESS
+}
+
+/// `helper remove-step STEP …`.
+pub fn remove(step: RemoveStep, args: &remove::RemoveArgs) -> ExitCode {
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    println!(
+        "{}",
+        remove::run(&host_ctx(&plan, false), step, args).line()
+    );
+    ExitCode::SUCCESS
+}
+
+fn root_or_exit() -> Result<(), ExitCode> {
+    if crate::helper::effective_uid().as_deref() == Some("0") {
+        Ok(())
+    } else {
+        eprintln!("openvibes-admin: setup must run as root");
+        Err(ExitCode::from(1))
+    }
+}
+
+/// Prints one line per step; exit 0 when all finished, 3 waiting, 1 failed.
+fn report(results: impl Iterator<Item = (&'static str, StepState)>) -> ExitCode {
+    for (title, state) in results {
+        println!("{title}: {} {}", state.label(), state.detail());
+        if !state.finished() {
+            return ExitCode::from(if matches!(state, StepState::Waiting(_)) {
+                3
+            } else {
+                1
+            });
+        }
+    }
+    ExitCode::SUCCESS
+}
+
+/// `setup --repair`.
+pub fn repair_all() -> ExitCode {
+    if let Err(code) = root_or_exit() {
+        return code;
+    }
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    let ctx = host_ctx(&plan, true);
+    report(
+        Step::ALL
+            .into_iter()
+            .map(|step| (step.title(), run_step(&ctx, step))),
+    )
+}
+
+/// `setup --update [--backup PATH] [--repo-dir DIR]`.
+pub fn update_all(args: &update::UpdateArgs) -> ExitCode {
+    if let Err(error) = args.check() {
+        eprintln!("openvibes-admin: {error}");
+        return ExitCode::from(2);
+    }
+    if let Err(code) = root_or_exit() {
+        return code;
+    }
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    let ctx = host_ctx(&plan, false);
+    report(
+        UpdateStep::ALL
+            .into_iter()
+            .map(|step| (step.title(), update::run(&ctx, step, args))),
+    )
+}
+
+/// `setup --uninstall --keep-data|--everything [--confirm HOST] [--backup PATH]`.
+pub fn uninstall_all(
+    everything: bool,
+    confirm: Option<String>,
+    backup: Option<std::path::PathBuf>,
+) -> ExitCode {
+    if let Err(code) = root_or_exit() {
+        return code;
+    }
+    let (_lock, plan) = match begin() {
+        Ok(v) => v,
+        Err(code) => return code,
+    };
+    let args = remove::RemoveArgs {
+        components: plan.components.clone(),
+        backup,
+        confirm: if everything { confirm } else { None },
+    };
+    if let Err(error) = args.check() {
+        eprintln!("openvibes-admin: {error}");
+        return ExitCode::from(2);
+    }
+    let ctx = host_ctx(&plan, false);
+    report(
+        RemoveStep::ALL
+            .into_iter()
+            .map(|step| (step.title(), remove::run(&ctx, step, &args))),
+    )
 }
 
 /// `setup --quick`: as root, writes the plan and runs every step; exit 0
@@ -149,6 +277,13 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
         eprintln!("openvibes-admin: setup --quick must run as root");
         return ExitCode::from(1);
     }
+    let _lock = match system::lock(Path::new("/")) {
+        Ok(lock) => lock,
+        Err(error) => {
+            eprintln!("openvibes-admin: {error}");
+            return ExitCode::FAILURE;
+        }
+    };
     if let Err(error) = plan.save(Path::new("/")) {
         eprintln!("openvibes-admin: {error}");
         return ExitCode::FAILURE;

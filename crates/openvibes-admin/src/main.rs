@@ -101,10 +101,38 @@ enum Command {
     },
     /// Install and set up the platform on this host without screens (as
     /// root). Without --quick, run openvibes-admin with no arguments.
+    /// Set up, repair, update or uninstall the platform on this host without
+    /// screens (as root). Without an action, run openvibes-admin with no
+    /// arguments for the Setup screen.
+    #[command(group(clap::ArgGroup::new("action").args(["quick", "repair", "update", "uninstall"]).required(true)))]
     Setup {
-        /// Run every Setup step now.
+        /// Install and set up (needs --components and --hostname).
         #[arg(long)]
         quick: bool,
+        /// Check every step and fix what failed (never a new CA).
+        #[arg(long)]
+        repair: bool,
+        /// Upgrade the OpenVIBES packages (the local agent too).
+        #[arg(long)]
+        update: bool,
+        /// Remove the platform: with --keep-data or --everything.
+        #[arg(long)]
+        uninstall: bool,
+        /// With --uninstall: keep the database, CA and configuration.
+        #[arg(long, conflicts_with = "everything")]
+        keep_data: bool,
+        /// With --uninstall: also delete the database, CA, configuration and accounts.
+        #[arg(long)]
+        everything: bool,
+        /// With --everything: this host's name, to confirm.
+        #[arg(long)]
+        confirm: Option<String>,
+        /// With --update or --uninstall: write a database backup here first.
+        #[arg(long)]
+        backup: Option<PathBuf>,
+        /// With --update: upgrade from this folder of package files.
+        #[arg(long)]
+        update_repo_dir: Option<PathBuf>,
         #[command(flatten)]
         plan: setup::plan::PlanArgs,
     },
@@ -154,14 +182,38 @@ async fn main() -> ExitCode {
     if let Command::Helper { command } = command {
         return helper::run(command);
     }
-    if let Command::Setup { quick, plan } = command {
-        if !*quick {
-            eprintln!(
-                "openvibes-admin: setup needs --quick; run openvibes-admin with no arguments for the Setup screen"
-            );
-            return ExitCode::from(2);
-        }
-        return setup::quick(plan);
+    if let Command::Setup {
+        quick,
+        repair,
+        update,
+        uninstall,
+        keep_data,
+        everything,
+        confirm,
+        backup,
+        update_repo_dir,
+        plan,
+    } = command
+    {
+        return match (*quick, *repair, *update, *uninstall) {
+            (true, ..) => setup::quick(plan),
+            (_, true, ..) => setup::repair_all(),
+            (_, _, true, _) => setup::update_all(&setup::update::UpdateArgs {
+                backup: backup.clone(),
+                repo_dir: update_repo_dir.clone(),
+            }),
+            _ if !keep_data && !everything => {
+                eprintln!("openvibes-admin: --uninstall needs --keep-data or --everything");
+                ExitCode::from(2)
+            }
+            _ if *everything && confirm.is_none() => {
+                eprintln!(
+                    "openvibes-admin: --everything needs --confirm HOSTNAME (this host's name)"
+                );
+                ExitCode::from(2)
+            }
+            _ => setup::uninstall_all(*everything, confirm.clone(), backup.clone()),
+        };
     }
     // Offline CA commands run where no platform exists: no config, no
     // database, no audit row.
