@@ -46,8 +46,14 @@ The last screen shows, once:
 - the root certificate's fingerprint;
 - the one-line command that installs an agent on another host.
 
-Without a terminal, `sudo openvibes-admin setup --quick --components
-ingest,console,distribution,vulns,agent --hostname NAME` does the same.
+Without a terminal, this does the same (keep the `--root-key-out` file as
+above; without it the root key is deleted):
+
+```sh
+sudo openvibes-admin setup --quick --components ingest,console,distribution,vulns,agent \
+  --hostname NAME --root-key-out /root/openvibes-root-ca.key
+```
+
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
 the setup command).
 
