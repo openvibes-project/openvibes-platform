@@ -22,7 +22,17 @@ function notify() {
   for (const listener of listeners) listener();
 }
 
-window.addEventListener("popstate", notify);
+let guard: (() => boolean) | null = null;
+
+// Back and Forward consult the leave guard too; staying restores the URL.
+window.addEventListener("popstate", () => {
+  const next = read();
+  if (guard && next.view !== snapshot.view && !guard()) {
+    window.history.pushState(null, "", snapshotKey);
+    return;
+  }
+  notify();
+});
 
 function go(next: AppLocation, replace = false) {
   const url = formatLocation(next, base);
@@ -31,8 +41,6 @@ function go(next: AppLocation, replace = false) {
   else window.history.pushState(null, "", url);
   notify();
 }
-
-let guard: (() => boolean) | null = null;
 
 export const nav = {
   /** A check `view()` consults first, e.g. "leave without saving?". */

@@ -36,7 +36,8 @@ export function WidgetSettingsPanel({ id }: { id: string }) {
   const { draft } = useEditor();
   const widget = draft?.widgets.find((w) => w.id === id);
   if (!widget) return <div className="panel-body"><Empty icon="filter" title="No such widget">It was removed, or the dashboard is not being edited.</Empty></div>;
-  const def = widgetDefs[widget.type];
+  const def = (widgetDefs as Partial<Record<string, (typeof widgetDefs)[keyof typeof widgetDefs]>>)[widget.type];
+  if (!def) return <div className="panel-body"><Empty icon="alert" title="Unsupported widget">This widget type needs a newer console; you can remove it.</Empty></div>;
   const title = typeof widget.config.title === "string" ? widget.config.title : "";
   return (
     <>

@@ -81,3 +81,46 @@ for (const scheme of ["light", "dark"] as const) {
     expect((await new AxeBuilder({ page }).analyze()).violations.map((v) => v.id)).toEqual([]);
   });
 }
+
+test("New dashboard while editing keeps the draft when you choose to stay", async ({ page }) => {
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await page.getByLabel("Dashboard name").fill("Changed");
+  const url = page.url();
+  page.once("dialog", (dialog) => void dialog.dismiss());
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await page.getByRole("menuitem", { name: "New dashboard" }).click();
+  await expect(page.getByLabel("Dashboard name")).toHaveValue("Changed");
+  expect(page.url()).toBe(url);
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Untitled dashboard" })).toHaveCount(0);
+});
+
+test("Back with unsaved edits asks first", async ({ page }) => {
+  await page.getByRole("link", { name: "Findings" }).click();
+  await page.getByRole("link", { name: "Dashboards" }).click();
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await page.getByLabel("Dashboard name").fill("Changed");
+  let asked = false;
+  page.once("dialog", (dialog) => { asked = true; void dialog.dismiss(); });
+  await page.goBack();
+  await expect.poll(() => asked).toBe(true);
+  await expect(page.getByLabel("Dashboard name")).toHaveValue("Changed");
+});
+
+test("a dashboard with a widget type this console does not know still renders", async ({ page }) => {
+  await page.evaluate(() => {
+    const layout = { schema: 1, widgets: [
+      { id: "future", type: "future-widget", x: 0, y: 0, w: 4, h: 2, config: {} },
+      { id: "stale", type: "number", x: 4, y: 0, w: 3, h: 2, config: { metric: "agents.stale" } },
+    ] };
+    const now = new Date().toISOString();
+    localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
+      { dashboard_id: "d-future", owner: "u-admin", name: "From a newer console", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+    ], homes: [["u-admin", "d-future"]] }));
+  });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("From a newer console");
+  await expect(page.locator(".tile", { hasText: "Unsupported widget" })).toBeVisible();
+  await expect(page.locator(".tile", { hasText: "Stale hosts" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Findings" })).toBeVisible();
+});

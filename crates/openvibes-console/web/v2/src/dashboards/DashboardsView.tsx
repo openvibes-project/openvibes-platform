@@ -176,15 +176,20 @@ function DashboardSwitcher({ current }: { current: string | null }) {
   const list = useResource<DashboardPage>("/api/v1/dashboards");
   const [open, setOpen] = useState(false);
   const items = list.data?.items ?? [];
-  const go = (target: string) => {
-    if (editor.state().dirty && !window.confirm("Leave without saving your changes?")) return;
+  // Every way out of an edited dashboard asks first, before anything happens.
+  const leave = () => {
+    if (editor.state().dirty && !window.confirm("Leave without saving your changes?")) return false;
     editor.cancel();
-    nav.view(`/dashboards/${target}`);
+    return true;
+  };
+  const go = (target: string) => {
+    if (leave()) nav.view(`/dashboards/${target}`);
   };
   const create = async () => {
+    if (!leave()) return;
     const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Untitled dashboard", layout: { schema: 1, widgets: [] } });
     invalidate("/api/v1/dashboards");
-    go(created.dashboard_id);
+    nav.view(`/dashboards/${created.dashboard_id}`);
     editor.begin(created);
     nav.open({ kind: "widget-gallery", id: "new" }, true);
   };

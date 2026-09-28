@@ -31,7 +31,10 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
   }, []);
   const phone = width < 720;
   const column = (width + GAP) / COLUMNS;
-  const height = layout.widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0) * ROW_HEIGHT;
+  // A layout from another console version may lack widgets or hold types this
+  // build does not know; neither may take the dashboard (or the app) down.
+  const widgets = Array.isArray(layout?.widgets) ? layout.widgets : [];
+  const height = widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0) * ROW_HEIGHT;
   const canEdit = editing && !phone;
 
   const drag = (event: ReactPointerEvent, widget: Widget, mode: "move" | "resize") => {
@@ -66,11 +69,11 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
     }
   };
 
-  const tiles = phone ? readingOrder(layout.widgets) : layout.widgets;
+  const tiles = phone ? readingOrder(widgets) : widgets;
   return (
     <div ref={box} className={phone ? "grid grid--stacked" : canEdit ? "grid grid--editing" : "grid"} style={phone ? undefined : { height }}>
       {tiles.map((widget) => {
-        const Def = widgetDefs[widget.type];
+        const Def = (widgetDefs as Partial<Record<string, (typeof widgetDefs)[keyof typeof widgetDefs]>>)[widget.type];
         const title = widgetTitle(widget);
         const style = phone ? undefined : {
           left: widget.x * column, top: widget.y * ROW_HEIGHT,
@@ -88,12 +91,12 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
                 </span>
               )}
             </header>
-            <div className="tile__body"><TileBoundary><Def.View widget={widget} /></TileBoundary></div>
+            <div className="tile__body"><TileBoundary>{Def ? <Def.View widget={widget} /> : <div className="tile-empty"><Icon name="alert" size={18} /> This widget needs a newer console ({String(widget.type)})</div>}</TileBoundary></div>
             {canEdit && <span className="tile__grip" onPointerDown={(event) => drag(event, widget, "resize")} aria-hidden="true" />}
           </section>
         );
       })}
-      {layout.widgets.length === 0 && <div className="tile-empty grid__empty"><Icon name="plus" size={18} /> {editing ? "Add a widget to start." : "This dashboard is empty."}</div>}
+      {widgets.length === 0 && <div className="tile-empty grid__empty"><Icon name="plus" size={18} /> {editing ? "Add a widget to start." : "This dashboard is empty."}</div>}
     </div>
   );
 }

@@ -34,5 +34,5 @@ export function widgetTitle(widget: Widget): string {
   if (widget.type === "breakdown") {
     return { findings: "Open findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "findings", ["findings", "vulnerabilities", "agents"] as const)];
   }
-  return widgetDefs[widget.type].label;
+  return (widgetDefs as Partial<Record<string, WidgetDef>>)[widget.type]?.label ?? "Unsupported widget";
 }
