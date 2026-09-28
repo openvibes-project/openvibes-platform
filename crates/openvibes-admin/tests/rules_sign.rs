@@ -53,3 +53,119 @@ fn keygen_refuses_bad_identifier() {
     assert!(!keygen(&key, "../x").status.success());
     assert!(!key.exists(), "no key written for a refused id");
 }
+
+const RULES: &str = r#"{"schema_version":1,"rules":[{"id":"port.redis.exposed","version":1,"title":"Redis is exposed","severity":"high","confidence":90,"expression":"'6379' in facts['port.tcp.exposed']","finding_message":"Redis listens on a non-loopback address (tcp 6379)"}]}"#;
+
+/// A fresh key and rules file in `dir`; returns (key, rules) paths.
+fn setup(dir: &std::path::Path) -> (String, String) {
+    let key = dir.join("rules.key");
+    let rules = dir.join("rules.json");
+    std::fs::write(&rules, RULES).unwrap();
+    stdout(&keygen(&key, "baseline"));
+    (
+        key.to_str().unwrap().to_owned(),
+        rules.to_str().unwrap().to_owned(),
+    )
+}
+
+fn sign_args<'a>(key: &'a str, rules: &'a str, out: &'a str) -> Vec<&'a str> {
+    vec![
+        "rules",
+        "sign",
+        key,
+        rules,
+        "--rule-set",
+        "baseline",
+        "--version",
+        "3",
+        "--issuer",
+        "openvibes-1",
+        "-o",
+        out,
+    ]
+}
+
+#[test]
+fn sign_writes_an_envelope_over_the_exact_rules_bytes() {
+    let dir = scratch_dir("sign");
+    let (key, rules) = setup(&dir);
+    let out = dir.join("baseline.json");
+    let printed = stdout(&offline(&sign_args(&key, &rules, out.to_str().unwrap())));
+    assert!(
+        printed.starts_with("signed baseline v3, expires "),
+        "{printed}"
+    );
+    let envelope: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&out).unwrap()).unwrap();
+    assert_eq!(envelope["payload"], RULES);
+    assert_eq!(envelope["rule_set_version"], 3);
+    assert_eq!(envelope["issuer_key_id"], "openvibes-1");
+    let lifetime = envelope["expires_at_unix_ms"].as_i64().unwrap()
+        - envelope["created_at_unix_ms"].as_i64().unwrap();
+    assert_eq!(lifetime, 730 * 86_400_000);
+    assert_eq!(
+        std::fs::metadata(&out).unwrap().permissions().mode() & 0o777,
+        0o644
+    );
+}
+
+#[test]
+fn sign_refuses_group_readable_key() {
+    for mode in [0o640, 0o604] {
+        let dir = scratch_dir(&format!("sign-mode-{mode:o}"));
+        let (key, rules) = setup(&dir);
+        std::fs::set_permissions(&key, std::fs::Permissions::from_mode(mode)).unwrap();
+        let out = dir.join("baseline.json");
+        let output = offline(&sign_args(&key, &rules, out.to_str().unwrap()));
+        assert!(!output.status.success(), "mode {mode:o} accepted");
+        assert!(String::from_utf8_lossy(&output.stderr).contains("chmod 600"));
+        assert!(!out.exists());
+    }
+}
+
+#[test]
+fn sign_refuses_short_key() {
+    let dir = scratch_dir("sign-short");
+    let (key, rules) = setup(&dir);
+    std::fs::write(&key, [7u8; 31]).unwrap();
+    let out = dir.join("baseline.json");
+    let output = offline(&sign_args(&key, &rules, out.to_str().unwrap()));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("exactly 32 bytes"));
+    assert!(!out.exists());
+}
+
+#[test]
+fn sign_refuses_invalid_rules() {
+    let dir = scratch_dir("sign-invalid");
+    let (key, rules) = setup(&dir);
+    std::fs::write(&rules, r#"{"schema_version":1,"rules":[]}"#).unwrap();
+    let out = dir.join("baseline.json");
+    let output = offline(&sign_args(&key, &rules, out.to_str().unwrap()));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("invalid rule set"));
+    assert!(!out.exists());
+}
+
+#[test]
+fn sign_refuses_existing_output() {
+    let dir = scratch_dir("sign-exists");
+    let (key, rules) = setup(&dir);
+    let out = dir.join("baseline.json");
+    std::fs::write(&out, b"previous release").unwrap();
+    let output = offline(&sign_args(&key, &rules, out.to_str().unwrap()));
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("File exists"));
+    assert_eq!(std::fs::read(&out).unwrap(), b"previous release");
+}
+
+#[test]
+fn sign_refuses_zero_days() {
+    let dir = scratch_dir("sign-days");
+    let (key, rules) = setup(&dir);
+    let out = dir.join("baseline.json");
+    let mut args = sign_args(&key, &rules, out.to_str().unwrap());
+    args.extend(["--days", "0"]);
+    assert!(!offline(&args).status.success());
+    assert!(!out.exists());
+}
