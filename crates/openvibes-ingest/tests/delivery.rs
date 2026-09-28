@@ -57,6 +57,7 @@ fn heartbeat(agent_id: &str) -> Heartbeat {
         observed_at_unix_ms: Utc::now().timestamp_millis(),
         capabilities: Vec::new(),
         health: None,
+        match_sha256: None,
     }
 }
 

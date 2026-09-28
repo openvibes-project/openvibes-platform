@@ -351,11 +351,25 @@ pub async fn store_findings(
     origin: Origin,
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
+    let transaction = client.transaction().await?;
+    let stored = store_findings_in(&transaction, agent_id, findings, origin, now).await?;
+    transaction.commit().await?;
+    Ok(stored)
+}
+
+/// [`store_findings`] inside the caller's transaction (P13 applies finding
+/// changes in the same transaction as its digest check).
+pub(crate) async fn store_findings_in(
+    transaction: &tokio_postgres::Transaction<'_>,
+    agent_id: &str,
+    findings: &[StoredFinding],
+    origin: Origin,
+    now: DateTime<Utc>,
+) -> Result<u64, StoreError> {
     let (origin, authenticated) = match origin {
         Origin::Online => ("online", true),
         Origin::Import => ("import", false),
     };
-    let transaction = client.transaction().await?;
     let mut stored = 0;
     for finding in findings {
         let day = finding.observed_at.date_naive();
@@ -439,7 +453,7 @@ pub async fn store_findings(
             .await?;
         if inserted == 1 {
             crate::console_triage::reopen_on_observation(
-                &transaction,
+                transaction,
                 agent_id,
                 &finding.rule_set_id,
                 &finding.rule_id,
@@ -450,6 +464,5 @@ pub async fn store_findings(
             .await?;
         }
     }
-    transaction.commit().await?;
     Ok(stored)
 }

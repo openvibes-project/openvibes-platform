@@ -190,6 +190,7 @@ mod tests {
             }],
             storage_errors: 1,
             clock_jump_s: None,
+            matches_truncated: None,
         }
     }
 
