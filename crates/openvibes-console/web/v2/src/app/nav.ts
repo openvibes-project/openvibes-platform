@@ -32,13 +32,18 @@ function go(next: AppLocation, replace = false) {
   notify();
 }
 
+let guard: (() => boolean) | null = null;
+
 export const nav = {
+  /** A check `view()` consults first, e.g. "leave without saving?". */
+  guard(check: (() => boolean) | null) { guard = check; },
   get location() { return snapshot; },
   href(view: string, params?: Record<string, string>) {
     return formatLocation({ view, panels: [], params: new URLSearchParams(params) }, base);
   },
   /** Switches view; open panels stay so switching does not lose context. */
   view(view: string, params?: Record<string, string>) {
+    if (guard && !guard()) return;
     go({ view, panels: snapshot.panels, params: new URLSearchParams(params) });
   },
   open(panel: PanelRef, fromList = false) { go(pushPanel(snapshot, panel, fromList)); },

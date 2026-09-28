@@ -187,3 +187,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile__body .stat__value { font-size: 30px; }
 .tile__grip { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize;
   background: linear-gradient(135deg, transparent 55%, var(--line-strong) 55%, var(--line-strong) 65%, transparent 65%, transparent 75%, var(--line-strong) 75%); }
+
+.gallery { list-style: none; margin: 0; padding: 0 12px 12px; display: grid; gap: 6px; }
+.gallery__item { all: unset; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-2); cursor: pointer; width: 100%; box-sizing: border-box; }
+.gallery__item:hover, .gallery__item:focus-visible { background: var(--surface-2); }
+.gallery__item span.grow { display: grid; }
+.dashboard-name { font-size: 20px; font-weight: 600; height: 40px; width: min(420px, 100%); }
+.dashboard-header .view-header__title h1 { font-size: 22px; }

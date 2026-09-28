@@ -5,8 +5,8 @@ import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
-import { useAttention } from "../views/Overview";
 import { useListRows } from "../views/rows";
+import { useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import type { WidgetProps } from "./widgets";
 

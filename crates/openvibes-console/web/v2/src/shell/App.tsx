@@ -46,9 +46,12 @@ export function App({ demo: startDemo }: { demo: boolean }) {
   useEffect(() => onSignedOut(() => setAuth("signin")), []);
 
   const can = useCallback((permission: Permission, global = false) => allows(session, { permission, global }), [session]);
-  const canView = useCallback((path: string) => views.find((v) => v.path === path)?.access.some((a) => can(a.permission, a.global)) === true, [can]);
+  const canView = useCallback((path: string) => {
+    const found = views.find((v) => v.path === path);
+    return found !== undefined && (found.access.length === 0 || found.access.some((a) => can(a.permission, a.global)));
+  }, [can]);
   const context = useMemo(() => ({ session, demo: persona !== undefined, can }), [session, persona, can]);
-  const current = views.find((v) => v.path === view);
+  const current = views.find((v) => v.path === view || (v.prefix !== undefined && view.startsWith(v.prefix)));
   const top = panels[panels.length - 1];
 
   useEffect(() => { if (top) rememberRecent(top); }, [top]);

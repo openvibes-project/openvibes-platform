@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAllPages, useResource } from "../api/client";
-import type { Agent, FindingGroup, VulnerabilityPage } from "../api/types";
+import type { Agent, DashboardPage, FindingGroup, VulnerabilityPage } from "../api/types";
 import { assistant } from "../app/assistant";
 import type { PanelRef } from "../app/location";
 import { nav } from "../app/nav";
@@ -35,12 +35,17 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
   const list = useRef<HTMLUListElement>(null);
   const agents = useAllPages<Agent>(can("agents.read") ? "/api/v1/agents" : null);
   const vulns = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities" : null);
+  const dashboards = useResource<DashboardPage>("/api/v1/dashboards");
   const groups = useAllPages<FindingGroup>(can("findings.read") ? "/api/v1/findings/groups" : null);
 
 
   const items = useMemo(() => {
     const out: Item[] = [];
     const openObject = (ref: PanelRef) => () => nav.open(ref, true);
+    const boards = [{ id: "overview", name: "Overview (built-in)", hint: "built-in" }, ...(dashboards.data?.items ?? []).map((d) => ({ id: d.dashboard_id, name: d.name, hint: d.mine ? "" : "shared" }))];
+    for (const board of query.trim() === "" ? boards.slice(0, 5) : boards) {
+      out.push({ id: `b${board.id}`, group: "Dashboards", icon: "overview", label: board.name, ...(board.hint ? { hint: board.hint } : {}), run: () => nav.view(`/dashboards/${board.id}`) });
+    }
     for (const view of views) if (canView(view.path)) out.push({ id: `v${view.path}`, group: "Go to", icon: view.icon, label: view.label, hint: view.keys, run: () => nav.view(view.path) });
     if (can("assistant.use")) out.push({ id: "a-assistant", group: "Actions", icon: "sparkles", label: "Ask the assistant", hint: "Ctrl J", run: () => assistant.toggle() });
     if (can("tokens.create", true)) out.push({ id: "a-token", group: "Actions", icon: "enrollment", label: "New enrollment token", run: () => { nav.view("/enrollment"); nav.open({ kind: "enrollment-token", id: "new" }, true); } });
@@ -71,7 +76,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
       filtered.push({ id: `f${group.rule_set_id}/${group.rule_id}`, group: "Findings", icon: "findings", label: group.latest_message, hint: group.rule_id, run: openObject({ kind: "finding", id: `${group.rule_set_id}/${group.rule_id}` }) });
     }
     return filtered;
-  }, [query, agents.data, vulns.data, groups.data, can, canView]);
+  }, [query, agents.data, vulns.data, groups.data, dashboards.data, can, canView]);
 
   useEffect(() => { list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView({ block: "nearest" }); }, [active]);
 
