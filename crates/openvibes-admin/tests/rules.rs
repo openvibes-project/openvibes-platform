@@ -365,3 +365,46 @@ async fn publish_refuses_every_invalid_protocol_fixture() {
     assert_eq!(stored(&fixture).await, 0);
     fixture.drop().await;
 }
+
+#[tokio::test]
+async fn signed_envelope_publishes() {
+    let (fixture, dir) = ready("signed-publishes").await;
+    let key = dir.join("rules.key");
+    let rules = write(
+        &dir,
+        "rules.json",
+        br#"{"schema_version":1,"rules":[{"id":"port.ssh.exposed","version":1,"title":"SSH is exposed","severity":"low","confidence":90,"expression":"'22' in facts['port.tcp.exposed']","finding_message":"SSH listens on a non-loopback address (tcp 22)"}]}"#,
+    );
+    let out = dir.join("baseline.json");
+    let line = stdout(&common::offline(&[
+        "rules",
+        "keygen",
+        key.to_str().unwrap(),
+        "--rule-set",
+        "baseline",
+        "--issuer",
+        "openvibes-1",
+    ]));
+    let [set, issuer, public]: [&str; 3] = line
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
+    stdout(&common::offline(&[
+        "rules",
+        "sign",
+        key.to_str().unwrap(),
+        rules.to_str().unwrap(),
+        "--rule-set",
+        "baseline",
+        "--version",
+        "1",
+        "--issuer",
+        "openvibes-1",
+        "-o",
+        out.to_str().unwrap(),
+    ]));
+    stdout(&fixture.run(&["rules", "trust", "add", set, issuer, public]));
+    assert_eq!(stdout(&publish(&fixture, &out)), "published baseline v1\n");
+    fixture.drop().await;
+}
