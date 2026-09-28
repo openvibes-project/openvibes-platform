@@ -1,23 +1,32 @@
-# Publishes the experimental console v2 as a static preview with in-browser
-# synthetic data (no server, nothing real) to GitHub Pages, from the
-# console-v2 branch only. Every action is pinned to a full commit SHA.
+# Tests console v2 in real browsers and publishes it as a static preview
+# with in-browser synthetic data (no server, nothing real) to GitHub Pages.
+# Pull requests run the tests only; pushes to main also deploy. Every
+# action is pinned to a full commit SHA.
 name: Console v2 preview
 
 on:
   workflow_dispatch:
   push:
-    branches: [console-v2]
+    branches: [main]
+    paths:
+      - crates/openvibes-console/web/**
+      - .github/workflows/console-v2-pages.yml
+  pull_request:
+    branches: [main]
+    paths:
+      - crates/openvibes-console/web/**
+      - .github/workflows/console-v2-pages.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: console-v2-pages
+  group: console-v2-pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Build the v2 preview
+    name: Console v2 browser tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -63,12 +72,14 @@ jobs:
           cp dist-v2/index.html dist-v2/404.html
 
       - name: Upload the site
+        if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: crates/openvibes-console/web/dist-v2
 
   deploy:
     name: Deploy to GitHub Pages
+    if: github.event_name != 'pull_request'
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10

@@ -1,7 +1,7 @@
 # Console v2: design
 
-Status: experimental, branch `console-v2`, not for merge until the user
-has tried it. Written 2026-09-28 by Claude on the user's instruction to
+Status: approved by the user on 2026-09-28 ("I love the new UI") and merged
+beside v1; replacing v1 in the RPM is a follow-up. Written 2026-09-28 by Claude on the user's instruction to
 "completely redo the design of the console" without questions.
 
 ## What the user asked for
@@ -109,7 +109,7 @@ viewer) as the first step of "customisable everything".
   http://127.0.0.1:5174 with demo data (live data when a console is
   proxied, see the component page).
 - `.github/workflows/console-v2-pages.yml` builds v2 in demo mode and
-  deploys it to GitHub Pages on every push to `console-v2`.
+  deploys it to GitHub Pages on every push to `main` that changes the web console; pull requests run its tests.
 
 ## Out of scope
 

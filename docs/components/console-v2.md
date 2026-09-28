@@ -1,8 +1,10 @@
 # console-v2 (experimental web console)
 
-A redesign of the console's web interface, on the `console-v2` branch for
-review. It talks to the same `/api/v1` as v1 and changes nothing on the
-server. v1 (`crates/openvibes-console/web/src`) is still what the RPM ships.
+A redesign of the console's web interface (approved by the user on
+2026-09-28), in `crates/openvibes-console/web/v2` beside v1. It talks to the same
+`/api/v1` as v1 and changes nothing on the server. v1
+(`crates/openvibes-console/web/src`) is still what the RPM embeds until v2
+replaces it there.
 Design: [2026-09-28-console-v2-design.md](../superpowers/specs/2026-09-28-console-v2-design.md).
 
 ## Purpose
@@ -97,8 +99,9 @@ V2_LIVE=https://127.0.0.1:8443 npm run dev:v2 -- --open '/?live=1'   # against a
 ```
 
 The `Console v2 preview` workflow runs the same checks and the end-to-end
-tests, then builds with demo data and publishes to GitHub Pages on every push to `console-v2`; a
-failing check stops the deploy.
+tests on pull requests; on pushes to `main` it also builds with demo data
+and publishes to GitHub Pages (https://openvibes-project.github.io/openvibes-platform/).
+A failing check stops the deploy.
 
 Tested against a real console (2026-09-28): a throwaway database from
 `scripts/test-db.sh`, `openvibes-admin migrate`, `user create`, and `import`
