@@ -3,7 +3,7 @@
 //! holds a rule-signing key.
 
 use std::{
-    fs::{self, OpenOptions},
+    fs::{self, File, OpenOptions},
     io::Write,
     os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
@@ -42,9 +42,14 @@ fn identifier(label: &str, value: &str) -> Result<Identifier, String> {
     Identifier::new(value).map_err(|e| format!("{label}: {e}"))
 }
 
-/// Writes `bytes` to a file that must not exist yet, and flushes it to
-/// disk: a key's trust line is printed only once the key is durable.
+/// Writes `bytes` to a file that must not exist yet, and flushes the file
+/// and its directory entry to disk: a key's trust line is printed only once
+/// the key is durable.
 fn create_new(path: &Path, mode: u32, bytes: &[u8]) -> Result<(), String> {
+    let parent = match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => dir,
+        _ => Path::new("."),
+    };
     OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -54,6 +59,7 @@ fn create_new(path: &Path, mode: u32, bytes: &[u8]) -> Result<(), String> {
             file.write_all(bytes)?;
             file.sync_all()
         })
+        .and_then(|()| File::open(parent)?.sync_all())
         .map_err(|e| format!("cannot create {}: {e}", path.display()))
 }
 
