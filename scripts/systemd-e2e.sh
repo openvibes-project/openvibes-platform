@@ -54,6 +54,9 @@ RULES
 # Valid for 30 days: a bundle expiring within 7 is reported as
 # rule_set_expiring (P12), and the agent must show as healthy below.
 "$W/sign_bundle" sign "$W/signing.key" "$W/rules.json" baseline 1 org.rules 30 "$W/bundle.json" >/dev/null
+# Version 2 of the same rule never matches: the P13 check below ends it.
+sed -e 's/"version":1/"version":2/' -e "s/>= 1/< 0/" "$W/rules.json" > "$W/rules-v2.json"
+"$W/sign_bundle" sign "$W/signing.key" "$W/rules-v2.json" baseline 2 org.rules 30 "$W/bundle-v2.json" >/dev/null
 python3 "$ROOT/scripts/tiny-gguf.py" "$W/tiny.gguf"
 
 printf 'FROM registry.fedoraproject.org/fedora:44
@@ -285,6 +288,21 @@ wait_for "the agent sent inventory changes (protocol P11)" 120 \
 [[ $(in_c "$SQL \"SELECT count(*) FROM host_packages h JOIN package_versions v ON v.id = h.package_version_id WHERE v.name = 'tar'\"") == 0 ]] ||
     fail "the platform still lists tar after the change set"
 ok "a package change arrives as inventory changes"
+
+# P13: the agent reports its rule matches as changes. A platform that lost
+# its copy (match_sha256 cleared) asks through the next heartbeat and gets a
+# replace; a rule that stops matching ends its match.
+RULE="agent_id = (SELECT agent_id FROM agents WHERE status = 'active') AND rule_id = 'host.has.processes'"
+wait_for "the match arrived as finding changes (protocol P13)" 120 \
+    "[[ \$($SQL \"SELECT count(*) FROM current_findings WHERE $RULE AND source = 'changes' AND ended_at IS NULL\") == 1 ]]"
+in_c "$SQL \"UPDATE agents SET match_sha256 = NULL WHERE status = 'active'\"" >/dev/null || fail "clear match_sha256"
+wait_for "a heartbeat resync brought a replace" 180 \
+    "[[ \$($SQL \"SELECT count(*) FROM agents WHERE status = 'active' AND match_sha256 IS NOT NULL\") == 1 ]]"
+in_c "runuser -u openvibes-admin -- openvibes-admin rules publish /test/bundle-v2.json && systemctl restart openvibes-agent" \
+    >/dev/null 2>&1 || fail "publish the never-matching rule"
+wait_for "the match ended when the rule stopped matching" 180 \
+    "[[ \$($SQL \"SELECT count(*) FROM current_findings WHERE $RULE AND ended_at IS NOT NULL\") == 1 ]]"
+ok "finding changes: resync and a match that ends (protocol P13)"
 
 # P12: the agent reports its health with each heartbeat; the platform stores
 # it with the 5-minute heartbeat write, so each check can wait that long.

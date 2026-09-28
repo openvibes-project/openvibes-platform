@@ -496,3 +496,88 @@ async fn triage_state(client: &Client, agent: &str) -> String {
         .unwrap()
         .get(0)
 }
+
+/// Scale check for the hourly refresh (review): 1,000 agents × 500 open P13
+/// matches, every match due. Run by hand and record the numbers in
+/// docs/sizing.md: `cargo test --release -p platform-store --test
+/// finding_changes scale -- --ignored --nocapture`.
+#[tokio::test]
+#[ignore = "scale measurement, run by hand"]
+async fn scale_hourly_refresh_and_console_list() {
+    const AGENTS: i32 = 1_000;
+    const MATCHES: i32 = 500;
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let today = Utc::now().date_naive();
+    platform_store::ensure_partitions(&admin, today - Duration::days(2), 9)
+        .await
+        .unwrap();
+    admin
+        .batch_execute(&format!(
+            "SET statement_timeout = 0;
+             INSERT INTO agents (agent_id, status, enrolled_at, match_sha256)
+             SELECT 'agent.' || lpad(a::text, 36, '0'), 'active', now(), '\\x00'
+             FROM generate_series(1, {AGENTS}) a;
+             INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id,
+                 rule_version, severity, first_observed_at, last_observed_at, last_observed_day,
+                 scan_id, confidence, message, evidence, received_at, origin, authenticated,
+                 source)
+             SELECT 'agent.' || lpad(a::text, 36, '0'), 'base', 'rule.' || r,
+                 'finding.' || a || '.' || r, 1, 'high', now() - interval '3 hours',
+                 now() - interval '2 hours', current_date, 'scan.1', 100, 'matched',
+                 ARRAY['port.tcp.exposed'], now(), 'online', true, 'changes'
+             FROM generate_series(1, {AGENTS}) a, generate_series(1, {MATCHES}) r;
+             ANALYZE current_findings;"
+        ))
+        .await
+        .unwrap();
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let started = std::time::Instant::now();
+    for a in 1..=AGENTS {
+        let agent = format!("agent.{a:036}");
+        client
+            .execute(
+                "UPDATE agents SET match_sha256 = NULL WHERE agent_id = $1",
+                &[&agent],
+            )
+            .await
+            .unwrap();
+        let resync = finding_changes::heartbeat(&mut client, &agent, match_digest(&[]), None, now)
+            .await
+            .unwrap();
+        assert!(!resync);
+    }
+    let refresh = started.elapsed();
+    let refreshed: i64 = client
+        .query_one(
+            "SELECT count(*) FROM current_findings WHERE last_observed_at >= $1",
+            &[&now],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let query = platform_store::console_read::FindingGroupQuery {
+        since: now - Duration::hours(24),
+        after: None,
+        limit: platform_store::console_read::PageLimit::new(50).unwrap(),
+    };
+    let started = std::time::Instant::now();
+    let page = platform_store::console_read::finding_groups_in_scope(
+        &admin,
+        &query,
+        &platform_store::console_read::AgentScope::Global,
+    )
+    .await
+    .unwrap();
+    let list = started.elapsed();
+    println!(
+        "SCALE agents={AGENTS} matches={MATCHES} refreshed_rows={refreshed} refresh_all={refresh:?} \
+         per_heartbeat={:?} group_list={list:?} groups={}",
+        refresh / u32::try_from(AGENTS).unwrap(),
+        page.items.len()
+    );
+    assert_eq!(refreshed, i64::from(AGENTS * MATCHES));
+    db.drop().await;
+}
