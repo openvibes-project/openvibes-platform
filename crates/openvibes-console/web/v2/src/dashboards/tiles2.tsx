@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { type ReactElement, cloneElement, useMemo } from "react";
 
 import { useAllPages } from "../api/client";
 import { useSession } from "../app/session";
@@ -35,7 +35,10 @@ export function NoteTile({ widget }: WidgetProps) {
   );
 }
 
-const field = (label: string, control: React.ReactNode) => <label className="field">{label}{control}</label>;
+// The label text names the control exactly (a wrapping label alone would
+// also read out a select's option texts).
+const field = (label: string, control: ReactElement<{ "aria-label"?: string }>) =>
+  <label className="field">{label}{cloneElement(control, { "aria-label": label })}</label>;
 
 export function NumberSettings({ widget, onChange }: SettingsProps) {
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);

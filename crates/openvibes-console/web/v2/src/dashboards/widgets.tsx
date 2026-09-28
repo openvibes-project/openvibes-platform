@@ -31,5 +31,8 @@ export function widgetTitle(widget: Widget): string {
   const custom = widget.config.title;
   if (typeof custom === "string" && custom.trim()) return custom.trim();
   if (widget.type === "number") return METRICS[str(widget.config, "metric", "agents.active", METRIC_KEYS)].label;
+  if (widget.type === "breakdown") {
+    return { findings: "Open findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "findings", ["findings", "vulnerabilities", "agents"] as const)];
+  }
   return widgetDefs[widget.type].label;
 }

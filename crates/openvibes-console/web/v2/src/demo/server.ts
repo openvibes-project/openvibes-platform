@@ -36,6 +36,15 @@ export const MAX_PAGE = 100;
 
 const severityRank: Record<string, number> = { critical: 0, important: 1, high: 1, moderate: 2, medium: 2, low: 3, unrated: 4 };
 
+/** Browser storage for demo state, when there is a browser; never required. */
+function browserPersistence(key: string) {
+  if (typeof localStorage === "undefined") return undefined;
+  return {
+    load: () => { try { return JSON.parse(localStorage.getItem(key) ?? "null") as unknown; } catch { return undefined; } },
+    save: (state: unknown) => { try { localStorage.setItem(key, JSON.stringify(state)); } catch { /* the demo still works without storage */ } },
+  };
+}
+
 export function createDemoServer({ persona = "admin" as Persona, now = Date.now() } = {}) {
   const data = buildDemoData(now);
   const iso = (ms = Date.now()) => new Date(ms).toISOString();
@@ -423,6 +432,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     data.dashboards,
     (userId) => (scoped && userId === `u-${actor}` ? ["operator"] : data.access.bindings.filter((b) => b.user_id === userId).map((b) => b.role_id)),
     (userId) => data.access.users.find((u) => u.user_id === userId)?.display_name ?? userId,
+    browserPersistence("openvibes.v2.demo.dashboards"),
   );
   const send = (result: { status: number; body?: unknown; etag?: string }) => {
     if (result.status === 204) return new Response(null, { status: 204 });

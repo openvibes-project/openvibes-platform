@@ -31,7 +31,8 @@ function DashboardById({ id }: { id: string }) {
   const builtin = id === BUILTIN_ID;
   const stored = useResource<Dashboard>(builtin ? null : `/api/v1/dashboards/${encodeURIComponent(id)}`);
   const state = useEditor();
-  useEffect(() => () => editor.cancel(), [id]);
+  // Leaving this dashboard ends its edit, but never one that started on the next page.
+  useEffect(() => () => { if (editor.state().dashboard?.dashboard_id === id) editor.cancel(); }, [id]);
   useEffect(() => {
     if (!state.dirty) return;
     nav.guard(() => !editor.state().dirty || window.confirm("Leave without saving your changes?"));
