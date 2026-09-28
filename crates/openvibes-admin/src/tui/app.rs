@@ -50,6 +50,8 @@ pub struct App<H: Host> {
     pub message: Option<String>,
     pub logs: Vec<String>,
     pub quit: bool,
+    /// Colour in the banner; off when `NO_COLOR` is set (no-color.org).
+    pub color: bool,
 }
 
 impl<H: Host> App<H> {
@@ -60,6 +62,7 @@ impl<H: Host> App<H> {
             .unwrap_or_default();
         let setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
         let mut app = App {
+            color: std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty()),
             host,
             tab: if set_up { Tab::Services } else { Tab::Setup },
             setup,

@@ -3,6 +3,9 @@
 //! `platform_host::Host`.
 
 pub mod app;
+mod banner;
+#[cfg(test)]
+mod banner_tests;
 mod config_view;
 mod configuration;
 pub mod form;
@@ -30,7 +33,6 @@ use ratatui::{
     Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     layout::{Constraint, Layout},
-    style::{Modifier, Style},
     widgets::Paragraph,
 };
 
@@ -48,17 +50,9 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         frame.render_widget(Paragraph::new(text), area);
         return;
     }
-    let [title, body] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
-    let tabs = match app.tab {
-        Tab::Setup => "[Setup]  Services  Configuration",
-        Tab::Services => "Setup  [Services]  Configuration",
-        Tab::Configuration => "Setup  Services  [Configuration]",
-    };
-    frame.render_widget(
-        Paragraph::new(format!("OpenVIBES administration   {tabs}"))
-            .style(Style::new().add_modifier(Modifier::BOLD)),
-        title,
-    );
+    let [title, body] =
+        Layout::vertical([Constraint::Length(banner::HEIGHT), Constraint::Min(0)]).areas(area);
+    banner::draw(frame, title, app);
     match app.tab {
         Tab::Setup => setup_view::draw(frame, body, app),
         Tab::Services => services::draw(frame, body, app),
