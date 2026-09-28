@@ -108,6 +108,20 @@ The usual request limits apply. Test: `tests/ca.rs`.
   409 `inventory_resync` with nothing stored, and the agent sends the full
   report. It shares the 8 MiB limit, the longer deadline and the
   `max_inventory_in_flight` slots with `/v1/inventory`.
+- `POST /v1/findings/changes` (authenticated, protocol P13):
+  `FindingChanges`, usually gzip-compressed, under the same 8 MiB limit,
+  deadline and slots as the inventory endpoints; `agent_id` must be the
+  authenticated agent's and the document valid (else 400). Entries are never
+  refused one by one: a started, changed or transient finding whose start is
+  outside retention, more than an hour ahead or on a day without a partition
+  is stored as observed at receipt; a value the store cannot hold (e.g. a
+  `rule_version` above 2^63 − 1) is 400, never 409. The change set is
+  applied by `platform_store::finding_changes::apply` (204), or answered 409
+  `findings_resync` with nothing stored, and the agent sends a replace. A
+  heartbeat carrying `match_sha256` is stored as usual, then checked by
+  `finding_changes::heartbeat` with its `health.last_scan.finished_at`; a
+  digest that is not the stored one is 409 `findings_resync` (a malformed
+  one 400). A heartbeat without it never gets a 409.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

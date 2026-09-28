@@ -246,3 +246,72 @@ async fn mark(
         .await?;
     Ok(())
 }
+
+/// A P13 heartbeat's `match_sha256`: returns `true` (the agent must send a
+/// replace, 409 `findings_resync`) when it is not the stored digest.
+/// Otherwise keeps the agent's open P13 matches current and reopens
+/// completed triage that a scan after it confirmed (`last_scan_at`).
+///
+/// ponytail: `last_observed_at` of open matches is refreshed at most once an
+/// hour (the console's shortest window is 24 h); if that write rate is ever
+/// measured hot, read `greatest(last_observed_at, agents.last_seen_at)` for
+/// open P13 rows instead, with an expression index.
+///
+/// # Errors
+///
+/// A database error.
+pub async fn heartbeat(
+    client: &mut Client,
+    agent_id: &str,
+    match_sha256: [u8; 32],
+    last_scan_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Result<bool, StoreError> {
+    let transaction = client.transaction().await?;
+    let stored: Option<Vec<u8>> = transaction
+        .query_one(
+            "SELECT match_sha256 FROM agents WHERE agent_id = $1 FOR UPDATE",
+            &[&agent_id],
+        )
+        .await?
+        .get(0);
+    if stored.unwrap_or_else(|| match_digest(&[]).to_vec()) != match_sha256 {
+        return Ok(true);
+    }
+    transaction
+        .execute(
+            "UPDATE current_findings SET last_observed_at = $2, last_observed_day = $3
+             WHERE agent_id = $1 AND source = 'changes' AND ended_at IS NULL
+               AND last_observed_at < $2::timestamptz - interval '1 hour'",
+            &[&agent_id, &now, &now.date_naive()],
+        )
+        .await?;
+    // A scan finished after the triage closed still has the match open.
+    if let Some(confirmed_at) = last_scan_at.map(|at| at.min(now)) {
+        let rows = transaction
+            .query(
+                "SELECT c.rule_set_id, c.rule_id, c.rule_version
+                 FROM current_findings c
+                 JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+                 WHERE c.agent_id = $1 AND c.source = 'changes' AND c.ended_at IS NULL
+                   AND t.state IN ('mitigated', 'accepted_risk')",
+                &[&agent_id],
+            )
+            .await?;
+        for row in rows {
+            let (set, rule): (String, String) = (row.get(0), row.get(1));
+            crate::console_triage::reopen_if_due(
+                &transaction,
+                agent_id,
+                &set,
+                &rule,
+                row.get(2),
+                confirmed_at,
+                now,
+            )
+            .await?;
+        }
+    }
+    transaction.commit().await?;
+    Ok(false)
+}

@@ -54,6 +54,9 @@ pub enum ApiError {
     /// A change set does not fit the stored inventory (409
     /// `inventory_resync`, P11): the agent sends the full inventory.
     Resync,
+    /// A finding change set or a heartbeat's match digest does not fit the
+    /// stored matches (409 `findings_resync`, P13): the agent sends a replace.
+    FindingsResync,
 }
 
 impl IntoResponse for ApiError {
@@ -83,6 +86,14 @@ impl IntoResponse for ApiError {
                 Json(PlatformError {
                     schema_version: SchemaVersion::V1,
                     code: PlatformErrorCode::InventoryResync,
+                }),
+            )
+                .into_response(),
+            Self::FindingsResync => (
+                StatusCode::CONFLICT,
+                Json(PlatformError {
+                    schema_version: SchemaVersion::V1,
+                    code: PlatformErrorCode::FindingsResync,
                 }),
             )
                 .into_response(),

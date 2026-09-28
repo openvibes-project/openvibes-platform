@@ -430,7 +430,31 @@ pub(crate) async fn reopen_on_observation(
     if latest.get::<_, String>(0) != finding_id {
         return Ok(());
     }
-    let current_rule_version: i64 = latest.get(1);
+    reopen_if_due(
+        transaction,
+        agent_id,
+        rule_set_id,
+        rule_id,
+        latest.get(1),
+        observed_at,
+        now,
+    )
+    .await
+}
+
+/// Reopens completed triage whose reason to stay closed no longer holds
+/// for a match still seen at `observed_at` (a new observation, or a P13
+/// scan that confirmed the open match): mitigated before it, accepted risk
+/// expired before it, or a false positive whose rule version rose.
+pub(crate) async fn reopen_if_due(
+    transaction: &Transaction<'_>,
+    agent_id: &str,
+    rule_set_id: &str,
+    rule_id: &str,
+    current_rule_version: i64,
+    observed_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
     let row=transaction.query_opt("SELECT t.state,t.rule_version,t.accepted_until,t.version,t.mitigated_at
         FROM console_finding_triage t WHERE t.agent_id=$1 AND t.rule_set_id=$2 AND t.rule_id=$3 FOR UPDATE",&[&agent_id,&rule_set_id,&rule_id]).await?;
     let Some(row) = row else {

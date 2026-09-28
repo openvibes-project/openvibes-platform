@@ -193,6 +193,15 @@ for a `replace`, every open match it omits, as approximate at
 `scanned_at`), and records the new digest. `Rows` holds the document's
 findings already converted by `wire::finding`.
 
+`finding_changes::heartbeat(client, agent_id, match_sha256, last_scan_at,
+now)` handles a P13 heartbeat's digest: `true` (409 `findings_resync`)
+when it is not the stored one; otherwise it sets the agent's open P13
+matches' `last_observed_at` to now when it is over an hour old (so the
+console's window keeps them current; ended matches and offline hosts age
+out), and, when `last_scan_at` is given, reopens mitigated or
+accepted-risk triage a later scan confirmed (`console_triage::reopen_if_due`,
+shared with the reopen on a new observation).
+
 ## Wire conversions (`wire::…`)
 
 Shared by online delivery (ingest) and file import (admin), so both refuse

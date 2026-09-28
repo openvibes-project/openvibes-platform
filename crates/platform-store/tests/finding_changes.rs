@@ -341,3 +341,158 @@ async fn concurrent_change_sets_serialise() {
     assert_eq!(outcomes, [Outcome::Stored, Outcome::Resync]);
     db.drop().await;
 }
+
+async fn last_observed(client: &Client, agent: &str, rule: &str) -> DateTime<Utc> {
+    client
+        .query_one(
+            "SELECT last_observed_at FROM current_findings WHERE agent_id = $1 AND rule_id = $2",
+            &[&agent, &rule],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
+
+/// Every row of the agent last observed `by` ago.
+async fn age(client: &Client, agent: &str, by: Duration) {
+    client
+        .execute(
+            "UPDATE current_findings SET last_observed_at = $2 WHERE agent_id = $1",
+            &[&agent, &(Utc::now() - by)],
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn an_agreeing_heartbeat_keeps_open_matches_current_at_most_hourly() {
+    let (db, agent) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let (a, b) = (finding("a", 1, now), finding("b", 1, now));
+    let mut first = doc(&agent, &digest(&[]), &[a.clone(), b.clone()], true);
+    first.started = vec![a.clone(), b.clone()];
+    apply(&mut client, &agent, &first).await;
+    let mut second = doc(&agent, &first.sha256, std::slice::from_ref(&a), false);
+    second.ended = vec![EndedMatch {
+        rule_set_id: id("base"),
+        rule_id: id("b"),
+        ended_at_unix_ms: now.timestamp_millis(),
+    }];
+    apply(&mut client, &agent, &second).await;
+    let digest_now = digest_from_hex(&second.sha256);
+
+    // Within the hour: nothing written.
+    let before = last_observed(&client, &agent, "a").await;
+    assert!(
+        !finding_changes::heartbeat(&mut client, &agent, digest_now, None, now)
+            .await
+            .unwrap()
+    );
+    assert_eq!(last_observed(&client, &agent, "a").await, before);
+
+    // Two hours later: the open match is current again, the ended one is not.
+    age(&client, &agent, Duration::hours(2)).await;
+    let ended_before = last_observed(&client, &agent, "b").await;
+    assert!(
+        !finding_changes::heartbeat(&mut client, &agent, digest_now, None, now)
+            .await
+            .unwrap()
+    );
+    assert!(last_observed(&client, &agent, "a").await >= now - Duration::seconds(1));
+    assert_eq!(last_observed(&client, &agent, "b").await, ended_before);
+
+    // Another digest: resync, nothing written.
+    age(&client, &agent, Duration::hours(2)).await;
+    let aged = last_observed(&client, &agent, "a").await;
+    assert!(
+        finding_changes::heartbeat(&mut client, &agent, [0; 32], None, now)
+            .await
+            .unwrap()
+    );
+    assert_eq!(last_observed(&client, &agent, "a").await, aged);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn per_scan_rows_are_never_touched_by_a_heartbeat() {
+    let (db, agent) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let days = partitions(&client).await;
+    let row = wire::finding(
+        &finding("s", 1, now),
+        now - Duration::days(90),
+        now + Duration::hours(1),
+        &days,
+    )
+    .unwrap();
+    ingest::store_findings(&mut client, &agent, &[row], ingest::Origin::Online, now)
+        .await
+        .unwrap();
+    age(&client, &agent, Duration::hours(2)).await;
+    let before = last_observed(&client, &agent, "s").await;
+    let empty = match_digest(&[]);
+    assert!(
+        !finding_changes::heartbeat(&mut client, &agent, empty, None, now)
+            .await
+            .unwrap()
+    );
+    assert_eq!(last_observed(&client, &agent, "s").await, before);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_later_confirming_scan_reopens_mitigated_triage() {
+    let (db, agent) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let admin = db.pool.get().await.unwrap();
+    let now = Utc::now();
+    let a = finding("a", 1, now - Duration::hours(3));
+    let mut first = doc(&agent, &digest(&[]), std::slice::from_ref(&a), true);
+    first.started = vec![a];
+    apply(&mut client, &agent, &first).await;
+    let mitigated_at = now - Duration::hours(1);
+    admin
+        .execute(
+            "INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state,
+                 rule_version, note, version, updated_at, updated_by, mitigated_at)
+             VALUES ($1, 'base', 'a', 'mitigated', 1, 'patched', 1, $2, 'test', $2)",
+            &[&agent, &mitigated_at],
+        )
+        .await
+        .unwrap();
+    let d = digest_from_hex(&first.sha256);
+    // The last scan ran before the mitigation: it proves nothing.
+    finding_changes::heartbeat(&mut client, &agent, d, Some(now - Duration::hours(2)), now)
+        .await
+        .unwrap();
+    assert_eq!(triage_state(&admin, &agent).await, "mitigated");
+    // A scan after it still has the match open: reopen.
+    finding_changes::heartbeat(
+        &mut client,
+        &agent,
+        d,
+        Some(now - Duration::minutes(5)),
+        now,
+    )
+    .await
+    .unwrap();
+    assert_eq!(triage_state(&admin, &agent).await, "open");
+    db.drop().await;
+}
+
+fn digest_from_hex(text: &str) -> [u8; 32] {
+    openvibes_core::digest_from_hex(text).unwrap()
+}
+
+async fn triage_state(client: &Client, agent: &str) -> String {
+    client
+        .query_one(
+            "SELECT state FROM console_finding_triage WHERE agent_id = $1 AND rule_id = 'a'",
+            &[&agent],
+        )
+        .await
+        .unwrap()
+        .get(0)
+}
