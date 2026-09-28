@@ -40,6 +40,16 @@ pub enum AgentCommand {
         /// Agent id.
         id: String,
     },
+    /// Print the one-line command that installs and enrolls an agent on
+    /// another host, with a new token (24 hours, 10 enrollments).
+    Command {
+        /// This platform's name as agents reach it (default: Setup's hostname).
+        #[arg(long)]
+        platform: Option<String>,
+        /// The root certificate agents will trust.
+        #[arg(long, default_value = "/etc/openvibes/pki/root.crt")]
+        root_cert: std::path::PathBuf,
+    },
 }
 
 impl AgentCommand {
@@ -48,6 +58,7 @@ impl AgentCommand {
             Self::List { .. } => "agent list",
             Self::Show { .. } => "agent show",
             Self::Revoke { .. } => "agent revoke",
+            Self::Command { .. } => "agent command",
         }
     }
 }
@@ -168,6 +179,7 @@ fn health_lines(agent: &AgentInfo, now: DateTime<Utc>) -> String {
 pub async fn run(
     command: &AgentCommand,
     client: &platform_store::Client,
+    actor: &str,
 ) -> (Result<String, String>, Option<String>) {
     let store = |error: platform_store::StoreError| error.to_string();
     match command {
@@ -240,5 +252,55 @@ pub async fn run(
             };
             (revoked, target)
         }
+        AgentCommand::Command {
+            platform,
+            root_cert,
+        } => agent_command(platform.as_deref(), root_cert, client, actor).await,
     }
+}
+
+/// `agent command`: a new endpoint token and the install line around it.
+async fn agent_command(
+    platform: Option<&str>,
+    root_cert: &std::path::Path,
+    client: &platform_store::Client,
+    actor: &str,
+) -> (Result<String, String>, Option<String>) {
+    let platform = match platform {
+        Some(name) => name.to_owned(),
+        None => match crate::setup::plan::Plan::load(std::path::Path::new("/")) {
+            Ok(plan) => plan.hostname,
+            Err(_) => {
+                return (
+                    Err("--platform is required (no Setup plan on this host)".into()),
+                    None,
+                );
+            }
+        },
+    };
+    if platform.parse::<std::net::IpAddr>().is_err()
+        && let Err(error) = crate::setup::plan::check_name(&platform)
+    {
+        return (Err(format!("--platform: {error}")), None);
+    }
+    let fingerprint = match std::fs::read_to_string(root_cert)
+        .map_err(|error| format!("{}: {error}", root_cert.display()))
+        .and_then(|pem| crate::setup::fingerprint(&pem))
+    {
+        Ok(fingerprint) => fingerprint,
+        Err(error) => return (Err(error), None),
+    };
+    let create = crate::token::TokenCommand::Create {
+        expires: chrono::Duration::hours(24),
+        uses: 10,
+        label: Some("agent command".into()),
+    };
+    let (created, target) = crate::token::run(&create, client, actor).await;
+    let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
+        format!(
+            "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",
+            crate::setup::agent_install_command(&platform, &token, &fingerprint)
+        )
+    });
+    (output, target)
 }
