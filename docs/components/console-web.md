@@ -171,7 +171,10 @@ retired `/assistant`, bulk triage, one host's accepted risk with an
 assignee and date (refused for an unknown assignee, shown again on
 reselect), a dashboard shared with a role and seen
 read-only, and axe in both themes.
-The live tests also check the service accounts empty state on a fresh server.
+The live tests also check the service accounts empty state on a fresh server
+and the Access and Audit filtered empty states at narrow widths in light and
+dark themes. Access keeps asset groups visible when no people match; Audit
+distinguishes an empty date range from filters that hide existing events.
 
 The `Console demo preview` workflow (`console-demo-pages.yml`) runs lint,
 types, unit tests and the demo end-to-end tests on pull requests; on pushes

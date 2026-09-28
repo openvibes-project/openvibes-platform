@@ -110,7 +110,11 @@ export function Access() {
       <ViewHeader title="Access" count={rows.length} refresh="/api/v1/access-control" placeholder="Filter people or roles…" />
       {inventory.error ? <div className="view-pad"><ErrorBox error={inventory.error} /></div> : !data ? <Loading /> : (
         <>
-          <DataTable label="People" rows={rows} rowKey={(u) => u.user_id}
+          {rows.length === 0 ? (
+            <Empty icon="access" title={data.users.length === 0 ? "No people" : "Nothing matches these filters"}>
+              {data.users.length === 0 ? "Create a local user with openvibes-admin to grant access." : "Clear a filter to see more."}
+            </Empty>
+          ) : <DataTable label="People" rows={rows} rowKey={(u) => u.user_id}
             onOpen={(u) => nav.open({ kind: "user", id: u.user_id }, true)}
             isOpen={(u) => top?.kind === "user" && top.id === u.user_id}
             defaultSort={{ key: "name", direction: "asc" }}
@@ -119,7 +123,7 @@ export function Access() {
               { key: "roles", header: "Roles", render: (u) => <span className="row row--wrap">{u.bindings.length === 0 ? <span className="subtle">None</span> : u.bindings.map((b) => (
                 <span key={b.binding_id} className="badge badge--accent badge--plain">{data.roles.find((r) => r.role_id === b.role_id)?.display_name ?? b.role_id}{b.asset_group_name ? ` · ${b.asset_group_name}` : ""}</span>
               ))}</span> },
-            ]} />
+            ]} />}
           <section className="view-pad stack">
             <div className="row row--between">
               <h2 className="section-title">Asset groups</h2>
@@ -195,7 +199,11 @@ export function Audit() {
             ? <button type="button" className="button" onClick={() => downloadCsv(rows)}><Icon name="download" size={15} /> Export CSV</button>
             : <a className="button" href={`/api/v1/audit-export.csv?since=${encodeURIComponent(since)}`} download><Icon name="download" size={15} /> Export CSV</a>)}
         </>} />
-      {page.error ? <div className="view-pad"><ErrorBox error={page.error} /></div> : !page.data ? <Loading /> : (
+      {page.error ? <div className="view-pad"><ErrorBox error={page.error} /></div> : !page.data ? <Loading /> : rows.length === 0 ? (
+        <Empty icon="audit" title={page.data.length === 0 ? "No audit events in this range" : "Nothing matches these filters"}>
+          {page.data.length === 0 ? "Actions recorded by the platform appear here." : "Clear a filter to see more."}
+        </Empty>
+      ) : (
         <DataTable label="Audit events" compact rows={rows} rowKey={(e) => e.id}
           onOpen={(e) => nav.open({ kind: "audit-event", id: e.id }, true)}
           isOpen={(e) => top?.kind === "audit-event" && top.id === e.id}
