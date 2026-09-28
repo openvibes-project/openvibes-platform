@@ -15,6 +15,8 @@ mod assets;
 mod assistant;
 mod auth;
 mod config;
+#[allow(dead_code, reason = "used by the handlers in the next commit")]
+mod dashboards;
 mod error;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
@@ -35,17 +37,18 @@ pub use api::{
     BulkFindingTriageResponse, CertificatePage, CertificateView, CreateAccessBindingRequest,
     CreateEnrollmentTokenRequest, CreateServiceAccountRequest, CreateServiceTokenRequest,
     CreatedEnrollmentToken, CreatedServiceToken, CursorPage, CursorPagination, CveDetailView,
-    DEFAULT_PAGE_SIZE, EffectiveCapability, EnrollmentTokenPage, EnrollmentTokenView,
-    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
-    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
-    FindingTriageCounts, FindingTriageView, FindingView, LoginRequest, LoginResponse,
-    MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
-    PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
-    RuleSetPage, RuleSetView, SaveAssetGroupRequest, ServiceAccountPage, ServiceAccountView,
-    ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse, Severity,
-    SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest, UpdateFindingTriageRequest,
-    VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,
-    VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost, VulnerabilityView,
+    DEFAULT_PAGE_SIZE, DashboardPage, DashboardView, EffectiveCapability, EnrollmentTokenPage,
+    EnrollmentTokenView, FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage,
+    FindingGroupView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
+    FindingSummary, FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard,
+    LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission,
+    PermissionScope, PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview,
+    RuleBundleView, RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest,
+    ServiceAccountPage, ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal,
+    SessionResponse, Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest,
+    UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
+    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
+    VulnerabilityTopHost, VulnerabilityView,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
