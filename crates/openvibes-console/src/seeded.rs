@@ -820,6 +820,8 @@ async fn finding_group_endpoints(
             rule_version: item.rule_version,
             triage_state: "open".into(),
             triage_version: 0,
+            assigned_to: None,
+            accepted_until: None,
             outside_window: false,
             origin: item.origin,
             authenticated: item.authenticated,

@@ -28,6 +28,13 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
   await expect(page.locator(".panel-header__kind")).toContainText("Finding");
 });
 
+test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
+  await page.goto("/findings?open=finding%3Ahardening-ssh%2FSSH-002");
+  const hosts = page.locator(".inspector tbody tr");
+  await expect(hosts.filter({ hasText: "mail-04.lab.example.test" })).toContainText("analyst");
+  await expect(hosts.filter({ hasText: "api-01.lab.example.test" })).toContainText(/until /);
+});
+
 test("the palette finds a host and opens it", async ({ page }) => {
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search" }).fill("web-01");

@@ -35,8 +35,9 @@ agent visibility in SQL for the supplied global or asset-group scope.
 - `finding_groups_in_scope` groups current snapshots by rule set and rule
   only after applying asset scope, and returns in-window endpoint counts,
   severity, version and triage rollups plus older endpoint counts.
-  `finding_group_endpoints_in_scope` pages the visible endpoints and hides a
-  group with no recent in-scope endpoint. The authenticated console exposes
+  `finding_group_endpoints_in_scope` pages the visible endpoints (with each
+  one's triage state, version, assignee username and accepted-until) and
+  hides a group with no recent in-scope endpoint. The authenticated console exposes
   opaque cursors bound to the time window and caller scope, and provides
   atomic endpoint triage through the companion `console_triage` store module.
   Imported installations remain global only until association is implemented.

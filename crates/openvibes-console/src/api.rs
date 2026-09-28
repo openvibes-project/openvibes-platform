@@ -1204,6 +1204,10 @@ pub struct FindingGroupEndpointView {
     pub triage_state: String,
     /// Monotonic triage version used to reject stale writes.
     pub triage_version: i64,
+    /// Assigned analyst username, or `null` when unassigned.
+    pub assigned_to: Option<String>,
+    /// RFC 3339 accepted-risk expiry, or `null`.
+    pub accepted_until: Option<String>,
     /// Whether this endpoint is older than the requested window.
     pub outside_window: bool,
     /// Online or imported observation provenance.

@@ -7,7 +7,7 @@ import type { FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
-import { date, daysAgo, triageLabel } from "../ui/format";
+import { date, daysAgo, isPast, triageLabel } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
@@ -157,7 +157,7 @@ export function FindingPanel({ id }: { id: string }) {
               <tr>
                 {canTriage && <th className="check"><input type="checkbox" aria-label="Select all hosts" checked={items.length > 0 && items.every((item) => selected.has(item.agent_id))}
                   onChange={(event) => setSelected(event.target.checked ? new Set(items.map((item) => item.agent_id)) : new Set())} /></th>}
-                <th>Host</th><th>State</th><th>Last seen</th>
+                <th>Host</th><th>State</th><th>Assignee</th><th>Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -166,7 +166,10 @@ export function FindingPanel({ id }: { id: string }) {
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
                   <td><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
-                  <td><TriageBadge state={item.triage_state} /></td>
+                  <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
+                    ? <span className="badge badge--bad badge--plain" style={{ marginLeft: 6 }}>expired {date(item.accepted_until)}</span>
+                    : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}</td>
+                  <td className={item.assigned_to ? undefined : "subtle"}>{item.assigned_to ?? "—"}</td>
                   <td className="subtle"><Ago value={item.last_observed_at} /></td>
                 </tr>
               ))}

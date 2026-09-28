@@ -1209,7 +1209,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":0},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"investigating","assigned_to":null,"note":null,"accepted_until":null}"#)).unwrap()).await.unwrap();
+        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":0},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"investigating","assigned_to":"alice","note":null,"accepted_until":null}"#)).unwrap()).await.unwrap();
     assert_eq!(bulk.status(), StatusCode::OK);
     let bulk_request_id = bulk
         .headers()
@@ -1256,8 +1256,40 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|item| item["triage_state"] == "investigating" && item["triage_version"] == 1)
+            .all(|item| item["triage_state"] == "investigating"
+                && item["triage_version"] == 1
+                && item["assigned_to"] == "alice"
+                && item["accepted_until"].is_null())
     );
+    let accept = router.clone().oneshot(Request::builder().method("POST")
+        .uri("/api/v1/findings/groups/base/credential/triage")
+        .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
+        .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
+        .header(header::CONTENT_TYPE, "application/json")
+        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":1}],"state":"accepted_risk","assigned_to":null,"note":"Compensating control","accepted_until":"2099-01-01T00:00:00Z"}"#)).unwrap()).await.unwrap();
+    assert_eq!(accept.status(), StatusCode::OK);
+    let after_accept = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let after_accept: Value =
+        serde_json::from_slice(&to_bytes(after_accept.into_body(), 8192).await.unwrap()).unwrap();
+    let accepted = after_accept["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["agent_id"] == "agent.00000000-0000-4000-8000-000000000101")
+        .unwrap();
+    assert_eq!(accepted["triage_state"], "accepted_risk");
+    assert!(accepted["assigned_to"].is_null());
+    assert_eq!(accepted["accepted_until"], "2099-01-01T00:00:00+00:00");
     let vuln_summary = router
         .clone()
         .oneshot(

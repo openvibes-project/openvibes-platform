@@ -105,6 +105,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         origin: finding.origin, first_observed_at: finding.first_observed_at, last_observed_at: finding.last_observed_at,
         outside_window: false, rule_version: finding.rule_version,
         triage_state: triage?.state ?? "open", triage_version: triage?.version ?? 0,
+        assigned_to: triage?.assigned_to ?? null, accepted_until: triage?.accepted_until ?? null,
       };
     });
 
