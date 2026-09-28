@@ -1337,8 +1337,12 @@ export interface components {
         };
         /** @description One endpoint reporting a grouped finding. */
         FindingGroupEndpointView: {
+            /** @description RFC 3339 accepted-risk expiry, or `null`. */
+            accepted_until?: string | null;
             /** @description Enrolled-agent or imported-installation identifier. */
             agent_id: string;
+            /** @description Assigned analyst username, or `null` when unassigned. */
+            assigned_to?: string | null;
             /** @description Whether the finding arrived over authenticated agent transport. */
             authenticated: boolean;
             /** @description RFC 3339 time when this endpoint first reported the finding. */

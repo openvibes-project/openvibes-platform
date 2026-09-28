@@ -370,6 +370,10 @@ pub struct FindingGroupEndpoint {
     pub triage_state: String,
     /// Current triage version (missing rows are version 0).
     pub triage_version: i64,
+    /// Username of the assigned analyst, if any.
+    pub assigned_to: Option<String>,
+    /// Accepted-risk expiry, if any.
+    pub accepted_until: Option<DateTime<Utc>>,
     /// Whether this endpoint is older than the requested window.
     pub outside_window: bool,
     /// `online` or `import` provenance.
@@ -1017,9 +1021,11 @@ pub async fn finding_group_endpoints_in_scope(
             &format!(
                 "SELECT c.agent_id, a.hostname, c.first_observed_at, c.last_observed_at,
                         c.rule_version, COALESCE(t.state, 'open'), COALESCE(t.version, 0),
-                        c.last_observed_at < $1, c.origin, c.authenticated
+                        c.last_observed_at < $1, c.origin, c.authenticated,
+                        u.username, t.accepted_until
                  FROM current_findings c JOIN agents a USING(agent_id)
                  LEFT JOIN console_finding_triage t USING(agent_id, rule_set_id, rule_id)
+                 LEFT JOIN console_users u ON u.user_id = t.assigned_to
                  WHERE c.rule_set_id = $3 AND c.rule_id = $4
                    AND (c.last_observed_at >= $1 OR $2::boolean)
                    AND {visible_page}
@@ -1055,6 +1061,8 @@ pub async fn finding_group_endpoints_in_scope(
             outside_window: row.get(7),
             origin: row.get(8),
             authenticated: row.get(9),
+            assigned_to: row.get(10),
+            accepted_until: row.get(11),
         })
         .collect();
     let next = if items.len() > usize::from(query.limit.0) {

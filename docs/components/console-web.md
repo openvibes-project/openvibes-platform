@@ -45,7 +45,9 @@ Show everything, without page changes for details:
   to states every selected host can reach. Mitigated, accepted risk and
   false positive need a note. With one host selected, the form loads and
   shows its saved triage first (fields stay disabled until it arrives).
-  A stale selection (412) reloads the list.
+  A stale selection (412) reloads the list. The Hosts table shows each
+  host's assignee and, for accepted risk, the date it is accepted until
+  (marked expired once past).
 
 ## Dashboards
 

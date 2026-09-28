@@ -4973,9 +4973,23 @@
           "authenticated"
         ],
         "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 accepted-risk expiry, or `null`."
+          },
           "agent_id": {
             "type": "string",
             "description": "Enrolled-agent or imported-installation identifier."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assigned analyst username, or `null` when unassigned."
           },
           "authenticated": {
             "type": "boolean",

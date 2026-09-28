@@ -87,6 +87,9 @@ describe("demo server", () => {
     expect((await post({ state: "accepted_risk", accepted_until: future, assigned_to: "sam", note: "vendor fix due" })).status).toBe(200);
     const saved = await json(await server.handle("GET", `/api/v1/findings/latest/${endpoint.agent_id}/${group.rule_set_id}/${group.rule_id}/triage`));
     expect(saved).toMatchObject({ state: "accepted_risk", assigned_to: "sam", accepted_until: future });
+    const listed = ((await json(await server.handle("GET", `${base}/endpoints?limit=100`))).items as { agent_id: string }[])
+      .find((item) => item.agent_id === endpoint.agent_id);
+    expect(listed).toMatchObject({ assigned_to: "sam", accepted_until: future });
   });
 
   it("filters vulnerabilities and details an advisory with its CVEs and hosts", async () => {
