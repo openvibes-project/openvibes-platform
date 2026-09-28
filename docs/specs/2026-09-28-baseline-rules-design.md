@@ -11,10 +11,12 @@ this as its own sub-project.
 A fresh platform gets useful, quiet findings without anyone writing a rule:
 the project ships a signed baseline rule set as the RPM
 `openvibes-rules-baseline`; Setup (step 11) trusts its key and publishes it,
-and the local agent and every enrolled agent evaluate it. Operators never
-need the agent repository's `sign_bundle` example: `openvibes-admin rules
-keygen|sign` replace it, for the project and for anyone signing their own
-rule sets.
+and the local agent and every enrolled agent evaluate it. Operators no
+longer use the agent repository's `sign_bundle` example: `openvibes-admin
+rules keygen|sign` replace it, for the project and for anyone signing their
+own rule sets (the example remains the agent's own test tool: its systemd container test
+in CI signs with it, and no operator-facing agent doc names it, so the
+agent repository needs no change).
 
 Success: on a host set up with the Rules component, `openvibes-admin rules
 list` shows `baseline` published, an agent on a host with an exposed Redis
@@ -36,19 +38,17 @@ platform or agent release.
 Each is one PR, reviewed by `@claude`, merged by the user:
 
 1. **platform:** `openvibes-admin rules keygen` and `rules sign` (§4),
-   component page `docs/components/admin.md` (rules section) and
+   component page `docs/components/openvibes-admin.md` (rules section) and
    `packaging.md` (single-host test steps use them).
-2. **agent:** remove `crates/openvibes-rules/examples/sign_bundle.rs` and
-   point its docs at `openvibes-admin rules keygen|sign`.
-3. **rules:** the new repository (§5, §6): created by the user (admins
+2. **rules:** the new repository (§5, §6): created by the user (admins
    only) with the same settings as the others; the first PR adds the
    baseline, the checker, CI and the RPM.
-4. **Pages:** `publish.yml` and `ci.yml` also take RPMs from
+3. **Pages:** `publish.yml` and `ci.yml` also take RPMs from
    `openvibes-rules` (§7).
-5. **platform:** Health check for the published bundle's expiry (§8),
+4. **platform:** Health check for the published bundle's expiry (§8),
    after the Health screen (board #7) merges.
 
-The first signed release (`v1`) follows 3 and 4: the user generates the
+The first signed release (`v1`) follows 2 and 3: the user generates the
 project key and signs.
 
 ## 4. `openvibes-admin rules keygen|sign`
@@ -63,8 +63,8 @@ openvibes-admin rules sign KEY_FILE RULES_JSON --rule-set baseline --version N
                           --issuer openvibes-1 [--days 730] -o ENVELOPE_JSON
 ```
 
-- **keygen** reads 32 bytes from `/dev/urandom` (the admin tool is
-  Linux-only), writes them to `KEY_FILE` created new (`create_new`, mode 0600; an
+- **keygen** takes 32 bytes from `ring::rand::SystemRandom` (ring is
+  already an admin dependency), writes them to `KEY_FILE` created new (`create_new`, mode 0600; an
   existing file is an error, never overwritten), and prints the key line
   `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` (base64url public key), the format of
   `baseline.key` and of `rules trust add`'s arguments.
