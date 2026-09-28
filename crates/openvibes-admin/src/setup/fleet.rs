@@ -33,6 +33,14 @@ fn published<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<Option<u64>, String> 
     }))
 }
 
+/// Whether `rules list` marks `set` retired (its line ends in ` retired`).
+fn retired<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<bool, String> {
+    Ok(ctx
+        .as_admin(&["rules", "list"])?
+        .lines()
+        .any(|line| line.split_whitespace().next() == Some(set) && line.ends_with(" retired")))
+}
+
 /// The version of the envelope the installed package carries, if any.
 fn installed<R: Runner>(ctx: &Ctx<R>) -> Option<u64> {
     let text = ctx.read(&format!("{RULES}/baseline.json")).ok()?;
@@ -47,6 +55,11 @@ pub fn rules_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("baseline rules not chosen".into()));
     }
     let set = baseline_key(ctx).map_or_else(|_| "baseline".to_owned(), |[set, _, _]| set);
+    // An admin who retired the set stopped serving it on purpose, and
+    // `rules publish` refuses a retired set: nothing for Repair to fix.
+    if retired(ctx, &set)? {
+        return Ok(StepState::Skipped(format!("rule set {set} retired")));
+    }
     Ok(match published(ctx, &set)? {
         Some(version) if installed(ctx).is_none_or(|newest| newest <= version) => {
             StepState::Done(format!("rule set {set} v{version} published"))
