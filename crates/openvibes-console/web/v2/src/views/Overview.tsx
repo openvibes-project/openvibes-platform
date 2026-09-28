@@ -11,24 +11,24 @@ import { Ago, ObjectLink, SeverityBadge, Stat } from "../ui/bits";
 import { count, plural } from "../ui/format";
 import { Icon, type IconName } from "../ui/Icon";
 
-type Item = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
+export type AttentionItem = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
 
-function greeting(now = new Date()) {
+export function greeting(now = new Date()) {
   const hour = now.getHours();
   return hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-export function Overview() {
-  const { can, session } = useSession();
-  const agents = useResource<AgentSummary>(can("agents.read") ? "/api/v1/agents/summary" : null);
-  const findings = useResource<FindingSummary>(can("findings.read") ? "/api/v1/findings/summary" : null);
-  const vulns = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
-  const groups = useAllPages<FindingGroup>(can("findings.read") ? "/api/v1/findings/groups" : null);
-  const exploited = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities?exploited=true" : null);
-  const stale = useAllPages<Agent>(can("agents.read") ? "/api/v1/agents?state=stale" : null);
+/** The "Needs attention" list: exploited vulnerabilities, open critical and
+ *  high findings, and hosts that stopped reporting, most urgent first. */
+export function useAttention(include: readonly string[], limit: number): { items: AttentionItem[]; loading: boolean } {
+  const { can } = useSession();
+  const want = (kind: string) => include.includes(kind);
+  const groups = useAllPages<FindingGroup>(want("findings") && can("findings.read") ? "/api/v1/findings/groups" : null);
+  const exploited = useResource<VulnerabilityPage>(want("exploited") && can("vulnerabilities.read") ? "/api/v1/vulnerabilities?exploited=true" : null);
+  const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
 
-  const attention = useMemo(() => {
-    const items: Item[] = [];
+  const items = useMemo(() => {
+    const items: AttentionItem[] = [];
     const byAdvisory = new Map<string, { title: string; severity: string; hosts: number }>();
     for (const item of exploited.data?.items ?? []) {
       const entry = byAdvisory.get(item.advisory_id) ?? { title: item.title, severity: item.severity, hosts: 0 };
@@ -48,10 +48,19 @@ export function Overview() {
     }
     return items.sort((a, b) => a.rank - b.rank);
   }, [exploited.data, groups.data, stale.data]);
+  return { items: items.slice(0, limit), loading: groups.loading || exploited.loading || stale.loading };
+}
+
+export function Overview() {
+  const { can, session } = useSession();
+  const agents = useResource<AgentSummary>(can("agents.read") ? "/api/v1/agents/summary" : null);
+  const findings = useResource<FindingSummary>(can("findings.read") ? "/api/v1/findings/summary" : null);
+  const vulns = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
+  const { items: attention, loading } = useAttention(["exploited", "findings", "stale"], 100);
+  const stale = useAllPages<Agent>(can("agents.read") ? "/api/v1/agents?state=stale" : null);
 
   const name = session?.principal.display_name.split(" ")[0];
   const vulnTotal = vulns.data?.by_severity.reduce((sum, row) => sum + row.count, 0) ?? 0;
-  const loading = groups.loading || exploited.loading || stale.loading;
 
   return (
     <div className="view view--overview">
