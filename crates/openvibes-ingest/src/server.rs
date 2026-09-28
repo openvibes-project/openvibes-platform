@@ -16,6 +16,8 @@ pub(crate) struct AppState {
     pub finding_retention_days: u32,
     /// Inventory reports being handled; at most `max_inventory_in_flight`.
     pub inventory_slots: Arc<tokio::sync::Semaphore>,
+    /// The root certificate `GET /v1/ca` serves; `None`: 503.
+    pub root_pem: Option<Arc<str>>,
 }
 
 impl FromRef<AppState> for Pool {
@@ -69,6 +71,7 @@ fn routes(state: AppState) -> Router {
         )
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))
+        .route("/v1/ca", axum::routing::get(crate::ca::ca))
         .with_state(state)
 }
 
@@ -106,6 +109,11 @@ pub async fn run(
         config.finding_retention_days,
     );
     let inventory_slots = Arc::new(tokio::sync::Semaphore::new(config.max_inventory_in_flight));
+    // Read once at start, like the other TLS material; absent → 503.
+    let root_pem = std::fs::read_to_string(&config.root_certificate_file)
+        .ok()
+        .filter(|pem| pem.contains("-----BEGIN CERTIFICATE-----"))
+        .map(Arc::<str>::from);
     platform_agent_server::run(
         &config.settings(),
         listener,
@@ -117,6 +125,7 @@ pub async fn run(
                 client_certificate_days,
                 finding_retention_days,
                 inventory_slots,
+                root_pem,
             })
         },
         shutdown,

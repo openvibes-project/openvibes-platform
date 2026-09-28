@@ -1,0 +1,61 @@
+# A tag vX.Y.Z: build the RPMs, sign and check them, publish the GitHub
+# Release, then tell the package repository to rebuild (releases spec §2).
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    container: registry.fedoraproject.org/fedora:44
+    steps:
+      - name: Install build packages
+        run: >-
+          dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build rpm-sign gnupg2
+          systemd-rpm-macros ImageMagick gh jq
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned Node.js for console RPM
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+      - name: The tag is the workspace version
+        run: |
+          version=$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME, Cargo.toml $version"; exit 1; }
+      - name: Build RPMs
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git submodule update --init
+          bash scripts/build-rpm.sh
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          bash scripts/build-console-rpm.sh "$archive" "$(sha256sum "$archive" | cut -d ' ' -f1)"
+          mkdir dist
+          cp target/rpm/RPMS/x86_64/openvibes-*.rpm target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
+          rm -f dist/*-debuginfo-*.rpm dist/*-debugsource-*.rpm
+      - name: Sign and check
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+          RPM_SIGNING_PASSPHRASE: ${{ secrets.RPM_SIGNING_PASSPHRASE }}
+        run: |
+          bash scripts/sign-rpms.sh dist packaging/rpm/openvibes-packages.gpg
+          (cd dist && sha256sum *.rpm > SHA256SUMS)
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --draft --verify-tag \
+            --title "openvibes-platform $GITHUB_REF_NAME" --generate-notes dist/*
+          gh release edit "$GITHUB_REF_NAME" --draft=false
+      - name: Tell the package repository
+        env:
+          GH_TOKEN: ${{ secrets.PAGES_DISPATCH_TOKEN }}
+        run: gh api repos/openvibes-project/openvibes-project.github.io/dispatches -f event_type=release-published

@@ -4,6 +4,10 @@ use serde::Deserialize;
 
 use crate::IngestError;
 
+fn default_root_certificate_file() -> PathBuf {
+    "/etc/openvibes/pki/root.crt".into()
+}
+
 fn default_days() -> u32 {
     30
 }
@@ -43,6 +47,10 @@ pub struct IngestConfig {
     pub server_key_file: PathBuf,
     /// CA that issued accepted client certificates.
     pub client_ca_file: PathBuf,
+    /// The root certificate `GET /v1/ca` serves (installers check it by
+    /// fingerprint). Missing: the endpoint answers 503.
+    #[serde(default = "default_root_certificate_file")]
+    pub root_certificate_file: PathBuf,
     /// Intermediate that signs agent certificates.
     pub issuing_certificate_file: PathBuf,
     /// Its private key (0600, ingest user only).

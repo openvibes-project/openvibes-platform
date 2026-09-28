@@ -4,6 +4,7 @@
 //! The agent-facing ingest service: enrollment, renewal, heartbeats, and
 //! finding delivery over TLS 1.3 with per-request mTLS authentication.
 
+mod ca;
 mod config;
 mod delivery;
 mod enroll;
