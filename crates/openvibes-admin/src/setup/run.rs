@@ -186,10 +186,21 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let token =
         token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
     let root = ctx.read(super::pki::ROOT_CERT)?;
+    // `rules list`: `SET vN keys K expires TIME [flags]` (rules.rs).
+    let published: Vec<String> = ctx
+        .as_admin(&["rules", "list"])
+        .unwrap_or_default()
+        .lines()
+        .filter(|line| {
+            let mut fields = line.split_whitespace();
+            fields.nth(1).is_some_and(|v| v.starts_with('v')) && !line.ends_with(" retired")
+        })
+        .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
+        .collect();
     let rules = ctx
         .read(super::BASELINE_KEY)
         .ok()
-        .and_then(|line| super::rules_arg(&line));
+        .and_then(|line| super::published_rules_arg(&line, &published));
     let command = super::agent_install_command(
         &ctx.plan.hostname,
         &token,
@@ -331,10 +342,31 @@ mod tests {
             !state.detail().contains("--rules"),
             "no rules package: {state:?}"
         );
-        // With the baseline package installed, remote agents get its key.
+        // The package alone is not enough: until the set is published,
+        // remote agents would be told to fetch what does not exist.
         fake.file(
             "/usr/share/openvibes/rules/baseline.key",
             "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
+        assert!(state.detail().contains(&command), "{state:?}");
+        assert!(
+            !state.detail().contains("--rules"),
+            "not published: {state:?}"
+        );
+        // Published: remote agents get its key.
+        fake.answer(
+            &[
+                "/usr/sbin/runuser",
+                "-u",
+                "openvibes-admin",
+                "--",
+                "/usr/bin/openvibes-admin",
+                "rules",
+                "list",
+            ],
+            0,
+            "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
         );
         let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
         assert!(

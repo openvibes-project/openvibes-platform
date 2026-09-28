@@ -50,6 +50,18 @@ pub fn agent_install_command(
     )
 }
 
+/// `--rules` for the install line: the package's trust line, only while its
+/// set is among `published` (sets with a current, non-retired bundle), so
+/// remote agents are never told to fetch a set the platform does not serve.
+pub fn published_rules_arg(key_line: &str, published: &[String]) -> Option<String> {
+    let set = key_line.split_whitespace().next()?;
+    published
+        .iter()
+        .any(|p| p == set)
+        .then(|| rules_arg(key_line))
+        .flatten()
+}
+
 /// `SET,ISSUER,KEY` from a `baseline.key` line, or `None` when any part has
 /// characters outside identifiers and base64url (nothing to quote).
 pub fn rules_arg(key_line: &str) -> Option<String> {
