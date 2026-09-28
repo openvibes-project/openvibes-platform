@@ -4904,7 +4904,8 @@
           "asset_groups.manage",
           "service_accounts.read",
           "service_accounts.manage",
-          "assistant.use"
+          "assistant.use",
+          "dashboards.share"
         ]
       },
       "PermissionScope": {

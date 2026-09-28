@@ -266,6 +266,10 @@ inventory tables and adds the agent-scoped `vulnerabilities.read` permission
 to built-in roles. The role can still change no vulnerability or inventory
 rows; each console query must apply the resolved asset scope.
 
+Schema 26 adds `console_dashboards` (a layout per dashboard, owner,
+optional shared role, version) and `console_user_home`, and grants the new
+global permission `dashboards.share` to Admin.
+
 Schema 13 (other distributions via OSV.dev): `advisory_packages` keeps
 each range as whole version strings with its `scheme` (`rpm` or `dpkg`),
 `match_on` (`binary`, or `source`), `introduced`, `fixed` (null: no fix

@@ -169,6 +169,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::ServiceAccountsRead,
     Permission::ServiceAccountsManage,
     Permission::AssistantUse,
+    Permission::DashboardsShare,
 ];
 
 #[cfg(test)]

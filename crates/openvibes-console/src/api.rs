@@ -163,6 +163,9 @@ pub enum Permission {
     /// Ask the read-only local assistant questions about permitted data.
     #[serde(rename = "assistant.use")]
     AssistantUse,
+    /// Share one's own dashboards with a role (global only).
+    #[serde(rename = "dashboards.share")]
+    DashboardsShare,
 }
 
 /// Effective object scope attached to one permission.
