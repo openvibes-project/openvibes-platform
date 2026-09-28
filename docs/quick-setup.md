@@ -36,8 +36,8 @@ and press `r` to continue from it.
 **The CA's root key.** In the default (quick) CA mode, Setup writes the
 root key once to the form's *Root key file*, by default
 `~/openvibes-root-ca.key`, and keeps no other copy. It is the only way to
-issue a new intermediate certificate later, so move it off the host
-(offline storage) and delete it there. Without it, a new CA means
+issue a new intermediate certificate later, so copy it to offline
+storage and then delete it from the host. Without it, a new CA means
 re-enrolling every agent.
 
 The last screen shows, once:
