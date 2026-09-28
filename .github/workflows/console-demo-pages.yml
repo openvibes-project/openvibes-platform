@@ -1,8 +1,9 @@
-# Tests console v2 in real browsers and publishes it as a static preview
+# Tests the console in real browsers with its in-browser demo data and
+# publishes that demo build as a static preview
 # with in-browser synthetic data (no server, nothing real) to GitHub Pages.
 # Pull requests run the tests only; pushes to main also deploy. Every
 # action is pinned to a full commit SHA.
-name: Console v2 preview
+name: Console demo preview
 
 on:
   workflow_dispatch:
@@ -10,23 +11,23 @@ on:
     branches: [main]
     paths:
       - crates/openvibes-console/web/**
-      - .github/workflows/console-v2-pages.yml
+      - .github/workflows/console-demo-pages.yml
   pull_request:
     branches: [main]
     paths:
       - crates/openvibes-console/web/**
-      - .github/workflows/console-v2-pages.yml
+      - .github/workflows/console-demo-pages.yml
 
 permissions:
   contents: read
 
 concurrency:
-  group: console-v2-pages-${{ github.ref }}
+  group: console-demo-pages-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    name: Console v2 browser tests and build
+    name: Console demo browser tests and build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -48,11 +49,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
 
-      - name: Lint, typecheck and test v2
+      - name: Lint, typecheck and unit tests
         run: |
-          npx eslint v2 vite.v2.config.ts --max-warnings 0
+          npx eslint . --max-warnings 0
           npx tsc --noEmit
-          npx vitest run --config vite.v2.config.ts
+          npx vitest run
 
       - name: Install pinned browsers
         run: npx playwright install --with-deps chromium firefox
@@ -60,22 +61,22 @@ jobs:
       - name: End to end and accessibility (Chromium, Firefox)
         env:
           CI: "true"
-        run: npx playwright test --config playwright.v2.config.ts
+        run: npx playwright test --config playwright.demo.config.ts
 
       - name: Build with demo data
         env:
-          V2_BASE: /${{ github.event.repository.name }}/
-          VITE_V2_SOURCE: demo
+          CONSOLE_BASE: /${{ github.event.repository.name }}/
+          VITE_DEMO: "true"
         run: |
-          npx vite build --config vite.v2.config.ts
+          npx vite build --outDir dist-demo
           # Deep links: Pages serves 404.html for unknown paths.
-          cp dist-v2/index.html dist-v2/404.html
+          cp dist-demo/index.html dist-demo/404.html
 
       - name: Upload the site
         if: github.event_name != 'pull_request'
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
-          path: crates/openvibes-console/web/dist-v2
+          path: crates/openvibes-console/web/dist-demo
 
   deploy:
     name: Deploy to GitHub Pages

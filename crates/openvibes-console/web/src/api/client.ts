@@ -4,7 +4,7 @@
 // data under it reloads.
 import { useEffect, useState, useSyncExternalStore } from "react";
 
-import { createDemoServer, type Persona } from "../demo/server";
+import type { Persona } from "../demo/personas";
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, title: string, readonly fieldErrors?: { field: string; code: string; message: string }[]) {
@@ -12,15 +12,22 @@ export class ApiError extends Error {
   }
 }
 
-type Demo = ReturnType<typeof createDemoServer>;
+type Demo = { handle(method: string, url: string, body?: unknown, headers?: Record<string, string>): Promise<Response> };
 let demo: Demo | undefined;
+let demoFactory: ((persona: Persona) => Demo) | undefined;
+
+/** Makes the in-browser demo available (loaded only in demo-capable builds). */
+export function registerDemo(factory: (persona: Persona) => Demo): void {
+  demoFactory = factory;
+}
 let csrfToken = "";
 const cache = new Map<string, Promise<unknown>>();
 const listeners = new Set<() => void>();
 let generation = 0;
 
 export function configureDemo(persona: Persona | undefined): void {
-  demo = persona === undefined ? undefined : createDemoServer({ persona });
+  if (persona !== undefined && !demoFactory) throw new Error("The demo is not part of this build");
+  demo = persona === undefined || !demoFactory ? undefined : demoFactory(persona);
   cache.clear();
   generation += 1;
   for (const listener of listeners) listener();

@@ -8,7 +8,7 @@ import { assistant, useAssistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { useSession } from "../app/session";
-import { personas, type Persona } from "../demo/server";
+import { personas, type Persona } from "../demo/personas";
 import { Icon } from "../ui/Icon";
 import { setDensity, setTheme, useDensity, useTheme } from "./theme";
 

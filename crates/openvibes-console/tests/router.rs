@@ -373,6 +373,10 @@ async fn known_browser_routes_serve_the_no_store_spa_entry() {
         "/access",
         "/service-accounts",
         "/audit",
+        "/vulnerabilities",
+        "/login",
+        "/dashboards/overview",
+        "/dashboards/3f2b9c1e-6a4d-4e2f-9b1a-7c5d8e0f1a2b",
     ] {
         let response = public_router()
             .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
@@ -389,6 +393,18 @@ async fn known_browser_routes_serve_the_no_store_spa_entry() {
             response.headers().get(header::CACHE_CONTROL).unwrap(),
             "no-store"
         );
+    }
+}
+
+#[cfg(feature = "embedded-ui")]
+#[tokio::test]
+async fn retired_v1_routes_and_nested_dashboard_paths_are_not_served() {
+    for path in ["/assistant", "/dashboards", "/dashboards/a/b"] {
+        let response = public_router()
+            .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND, "{path}");
     }
 }
 

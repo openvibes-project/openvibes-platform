@@ -18,7 +18,9 @@ digest must come from trusted release/source metadata independently of the
 archive and its checksum sidecar. The script verifies the cache, installs npm
 dependencies in offline mode (and uses `unshare -rn` when supported to isolate
 build scripts), builds Cargo offline, and passes the cache as RPM `Source0`.
-The console unit ships disabled until the operator configures its
+The embedded interface is the live-only build of
+[console-web](console-web.md): it has no demo data or demo switch. The
+console unit ships disabled until the operator configures its
 database and TLS certificate.
 
 ```sh

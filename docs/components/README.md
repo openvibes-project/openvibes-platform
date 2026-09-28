@@ -25,9 +25,8 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
 | `console-auth-http` | console module | pre-auth, local login/logout, scoped reads, token/service-account/rule APIs, bearer-read auth, and per-request capabilities (C3) | [console-auth-http.md](console-auth-http.md) |
 | `console-triage` | console module | latest-finding analyst workflow, stale-write protection, audit/history, and observation-triggered reopen (C3) | [console-triage.md](console-triage.md) |
-| `console-auth-ui` | web module | local login page, session gate, logout, enrollment, service-account, signed rule-bundle, and finding triage workflows (C3) | [console-auth-ui.md](console-auth-ui.md) |
 | `console-assistant` | console module and web page | opt-in local model chat with permission-scoped agent and finding lookups, safe citations, and in-tab-only history | [console-assistant.md](console-assistant.md) |
-| `console-v2` | web application (beside v1; RPM still embeds v1) | redesigned console: inspector panel stack, floating windows, assistant dock, command palette, saved views; in-browser demo API; GitHub Pages preview | [console-v2.md](console-v2.md) |
+| `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards; demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |

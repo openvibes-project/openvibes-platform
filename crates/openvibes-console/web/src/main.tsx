@@ -1,36 +1,34 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./app/App";
+import { registerDemo } from "./api/client";
+import { chooseSource } from "./app/source";
+import { App } from "./shell/App";
+import { applyStoredDensity } from "./shell/theme";
 import "./styles/tokens.css";
-import "./styles/global.css";
+import "./styles/base.css";
+import "./styles/components.css";
 import "./styles/shell.css";
-import "./styles/pages.css";
+import "./styles/panels.css";
 
-const rootElement = document.getElementById("root");
+const sourceKey = "openvibes.v2.source";
+let stored: string | null = null;
+try { stored = sessionStorage.getItem(sourceKey); } catch { /* the build default applies */ }
+const source = chooseSource(window.location.search, stored, { DEV: import.meta.env.DEV, VITE_DEMO: import.meta.env.VITE_DEMO as string | undefined });
+if (source.remember) {
+  try { sessionStorage.setItem(sourceKey, source.remember); } catch { /* per tab only */ }
+}
 
-const demoRequested = new URLSearchParams(window.location.search).get("seeded") === "1";
-if (demoRequested) {
-  try {
-    sessionStorage.setItem("openvibes.demo", "true");
-  } catch {
-    // This only controls whether the loopback demo banner is shown.
+async function start() {
+  // A constant per build: an installed console's bundle does not contain the demo at all.
+  if (import.meta.env.DEV || import.meta.env.VITE_DEMO === "true") {
+    const { createDemoServer } = await import("./demo/server");
+    registerDemo((persona) => createDemoServer({ persona }));
   }
-}
-let persistedDemo = false;
-try {
-  persistedDemo = sessionStorage.getItem("openvibes.demo") === "true";
-} catch {
-  // Without browser storage the demo banner can still be enabled by the build.
-}
-const seeded = import.meta.env.DEV || import.meta.env.VITE_OPENVIBES_SEEDED === "true" || persistedDemo;
-
-if (rootElement === null) {
-  throw new Error("OpenVIBES Console root element is missing");
+  applyStoredDensity();
+  const root = document.getElementById("root");
+  if (root === null) throw new Error("OpenVIBES root element is missing");
+  createRoot(root).render(<StrictMode><App demo={source.demo} demoAllowed={source.demoAllowed} /></StrictMode>);
 }
 
-createRoot(rootElement).render(
-  <StrictMode>
-    <App seeded={seeded} />
-  </StrictMode>,
-);
+void start();

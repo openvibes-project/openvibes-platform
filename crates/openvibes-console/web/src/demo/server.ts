@@ -9,8 +9,9 @@ import type {
 import { createDashboardStore } from "./dashboards";
 import { buildDemoData } from "./data";
 
-export const personas = ["viewer", "analyst", "operator", "scoped_operator", "admin"] as const;
-export type Persona = (typeof personas)[number];
+import type { Persona } from "./personas";
+
+export { personas, type Persona } from "./personas";
 
 type Params = Record<string, string>;
 type Handler = (params: Params, query: URLSearchParams, body: Record<string, unknown>, headers: Record<string, string>) => Response | Promise<Response>;
