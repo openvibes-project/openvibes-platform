@@ -206,6 +206,12 @@ offline; the platform never holds a rule-signing key.
 | `rules list` | `SET vN\|none keys K expires TIME\|- [signer-removed] [retired]`. `signer-removed`: the current bundle's key was removed; it is still served, but agents that dropped the key refuse it, so publish one signed by a trusted key. |
 | `rules show RULE_SET` | per bundle, newest first: version, SHA-256, issuer, size, when and by whom published, expiry |
 | `rules retire RULE_SET` | stops serving the set (404 to agents) and refuses further publishing; bundles are kept |
+| `rules keygen KEY_FILE --rule-set SET --issuer ISSUER` | offline (no config or database): writes a new Ed25519 private key to `KEY_FILE` (32 bytes, 0600, never overwritten) and prints `SET ISSUER PUBLIC_KEY`, the arguments of `rules trust add` and the line of a package's `.key` file |
+| `rules sign KEY_FILE RULES_JSON --rule-set SET --version N --issuer ISSUER [--days 730] -o OUT` | offline: signs the exact bytes of a schema-1 rule set into a new envelope (0644; valid from now for `--days`, 1–3650), checks that the agent's loader accepts it, and prints `signed SET vN, expires TIME, sha256 HEX`. Refuses a key file that group or others can access, a key that is not 32 bytes, an invalid rule set, and an existing `OUT`. |
+
+Keep the key file off the platform host: `keygen` and `sign` are meant for
+the signer's machine and write no audit row. The project's baseline rule
+set is signed this way (the `openvibes-rules` repository).
 
 `publish` refuses (exit 1, nothing stored):
 - a file over 1,048,576 bytes (`envelope is larger than 1048576 bytes`), or

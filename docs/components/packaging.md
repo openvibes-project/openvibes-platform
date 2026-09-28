@@ -325,10 +325,11 @@ can share the machine, as below; normally the agent runs on the endpoints.
    distribution and vulns. On a test host, `issue-server localhost --san 127.0.0.1`
    for ingest and `issue-server rules.localhost --san 127.0.0.1` for
    distribution.
-2. **Rules:** on your signing machine, make a key and sign a rule set with
-   the agent repository's `sign_bundle` example (`cargo run --example
-   sign_bundle -- keygen KEY` prints the public key; `… sign KEY rules.json
-   baseline 1 org.rules 30 bundle.json`), then on the platform:
+2. **Rules:** on your signing machine, make a key and sign a rule set
+   (`openvibes-admin rules keygen KEY --rule-set baseline --issuer org.rules`
+   prints the trust line; `openvibes-admin rules sign KEY rules.json
+   --rule-set baseline --version 1 --issuer org.rules --days 30 -o
+   bundle.json`), then on the platform:
 
    ```sh
    sudo -u openvibes-admin openvibes-admin rules trust add baseline org.rules PUBLIC_KEY

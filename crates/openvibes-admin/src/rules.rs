@@ -40,6 +40,41 @@ pub enum RulesCommand {
         /// Rule set id.
         rule_set: String,
     },
+    /// Make a rule-signing key (offline: no config or database). Prints
+    /// the line `rules trust add` and `baseline.key` take.
+    Keygen {
+        /// New private key file (created 0600; never overwritten).
+        key_file: PathBuf,
+        /// Rule set the key signs.
+        #[arg(long)]
+        rule_set: String,
+        /// Issuer key id named in envelopes.
+        #[arg(long)]
+        issuer: String,
+    },
+    /// Sign a rule set file into an envelope (offline: no config or
+    /// database). The envelope wraps the file's exact bytes.
+    Sign {
+        /// Private key file from `rules keygen` (must be 0600).
+        key_file: PathBuf,
+        /// Rule set JSON (schema 1).
+        rules_file: PathBuf,
+        /// Rule set id.
+        #[arg(long)]
+        rule_set: String,
+        /// Rule set version; must be above the published one.
+        #[arg(long, value_parser = clap::value_parser!(u64).range(1..))]
+        version: u64,
+        /// Issuer key id (as given to keygen).
+        #[arg(long)]
+        issuer: String,
+        /// Days until the envelope expires.
+        #[arg(long, default_value_t = 730, value_parser = clap::value_parser!(u32).range(1..=3650))]
+        days: u32,
+        /// New envelope file (never overwritten).
+        #[arg(short, long)]
+        out: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -83,7 +118,47 @@ impl RulesCommand {
             Self::List => "rules list",
             Self::Show { .. } => "rules show",
             Self::Retire { .. } => "rules retire",
+            Self::Keygen { .. } => "rules keygen",
+            Self::Sign { .. } => "rules sign",
         }
+    }
+
+    /// Keygen and sign run on the signer's machine, before any config or
+    /// database is opened.
+    pub fn is_offline(&self) -> bool {
+        matches!(self, Self::Keygen { .. } | Self::Sign { .. })
+    }
+}
+
+/// Runs an offline command (`is_offline`).
+pub fn run_offline(command: &RulesCommand) -> Result<String, String> {
+    match command {
+        RulesCommand::Keygen {
+            key_file,
+            rule_set,
+            issuer,
+        } => crate::rules_sign::keygen(key_file, rule_set, issuer),
+        RulesCommand::Sign {
+            key_file,
+            rules_file,
+            rule_set,
+            version,
+            issuer,
+            days,
+            out,
+        } => crate::rules_sign::sign(
+            &crate::rules_sign::SignArgs {
+                key: key_file,
+                rules: rules_file,
+                rule_set,
+                version: *version,
+                issuer,
+                days: *days,
+                out,
+            },
+            Utc::now().timestamp_millis(),
+        ),
+        _ => unreachable!("run_offline takes only offline commands"),
     }
 }
 
@@ -135,6 +210,9 @@ pub async fn run(
                 Err(error) => Err(store(error)),
             };
             (result, Some(rule_set.clone()))
+        }
+        RulesCommand::Keygen { .. } | RulesCommand::Sign { .. } => {
+            unreachable!("offline, handled in main")
         }
     }
 }
