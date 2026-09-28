@@ -3,7 +3,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["coverage/**", "dist/**", "node_modules/**"] },
+  { ignores: ["coverage/**", "dist/**", "dist-v2/**", "dist-v2-e2e/**", "test-results/**", "playwright-report/**", "node_modules/**"] },
   js.configs.recommended,
   ...tseslint.configs.strict,
   {
@@ -13,7 +13,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}", "vite.config.ts"],
+    files: ["src/**/*.{ts,tsx}", "v2/src/**/*.{ts,tsx}", "vite.config.ts", "vite.v2.config.ts"],
     plugins: { "react-hooks": reactHooks },
     rules: reactHooks.configs.flat.recommended.rules,
   },

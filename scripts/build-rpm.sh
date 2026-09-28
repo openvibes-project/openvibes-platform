@@ -7,10 +7,11 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-cargo build --release --locked -p openvibes-ingest -p openvibes-distribution -p openvibes-vulns -p openvibes-admin
+packages=(-p openvibes-ingest -p openvibes-distribution -p openvibes-vulns -p openvibes-admin)
+[[ ${OV_LLM:-1} == 1 ]] && packages+=(-p openvibes-llm)
+cargo build --release --locked "${packages[@]}"
 llm=(--without llm)
 if [[ ${OV_LLM:-1} == 1 ]]; then
-    cargo build --release --locked -p openvibes-llm
     scripts/build-llama-server.sh cpu
     llm=(--with llm)
     if [[ ${OV_LLM_VULKAN:-0} == 1 ]]; then
