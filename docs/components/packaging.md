@@ -466,7 +466,8 @@ OpenVIBES package key (organisation secrets `RPM_SIGNING_KEY`,
 `packaging/rpm/openvibes-packages.gpg` by `scripts/sign-rpms.sh`, which
 refuses the whole set if any package is unsigned or signed by another key.
 The GitHub Release is created as a draft and published only after that
-check, with the RPMs and `SHA256SUMS`; then `openvibes-project.github.io`
+check, with the RPMs and `SHA256SUMS` (a release already made by hand for
+the tag gets them uploaded instead); then `openvibes-project.github.io`
 is told to rebuild the dnf repository (`PAGES_DISPATCH_TOKEN`). Spec:
 `docs/specs/2026-09-27-releases-design.md`. `scripts/test-sign-rpms.sh`
 tests the signing script with a throwaway key (CI's Fedora job).
