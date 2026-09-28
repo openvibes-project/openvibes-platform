@@ -1,0 +1,108 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
+  await page.mouse.move(900, 500);
+});
+
+test("overview lists what needs attention and opens it beside the page", async ({ page }) => {
+  const first = page.locator(".attention__row").first();
+  await expect(first).toBeVisible();
+  await first.click();
+  await expect(page.locator(".inspector")).toBeVisible();
+  await expect(page).toHaveURL(/open=/);
+  await page.goBack();
+  await expect(page.locator(".inspector")).toHaveCount(0);
+});
+
+test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
+  await page.getByRole("link", { name: "Findings" }).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+  await page.locator(".inspector tbody a").first().click();
+  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".crumbs__item")).toHaveCount(2);
+  await page.keyboard.press("Escape");
+  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+});
+
+test("the palette finds a host and opens it", async ({ page }) => {
+  await page.keyboard.press("Control+k");
+  await page.getByRole("combobox", { name: "Search" }).fill("web-01");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".panel-header__title")).toContainText("web-01");
+});
+
+test("a panel pops out into a window and docks back", async ({ page }) => {
+  await page.goto("/findings");
+  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await page.getByRole("button", { name: "Open in a window" }).click();
+  await expect(page.locator(".window")).toBeVisible();
+  await expect(page.locator(".inspector")).toHaveCount(0);
+  await page.getByRole("button", { name: "Back into the details pane" }).click();
+  await expect(page.locator(".window")).toHaveCount(0);
+  await expect(page.locator(".inspector")).toBeVisible();
+});
+
+test("the assistant answers with citations that open objects", async ({ page }) => {
+  await page.keyboard.press("Control+j");
+  await page.getByRole("button", { name: "Which hosts are stale?" }).click();
+  const cite = page.locator(".cite").first();
+  await expect(cite).toBeVisible();
+  await cite.click();
+  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".assistant")).toBeVisible();
+});
+
+test("a viewer does not see administration", async ({ page }) => {
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitemradio", { name: "viewer" }).click();
+  await expect(page.getByRole("link", { name: "Audit log" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Assistant" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitemradio", { name: "admin" }).click();
+});
+
+for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/findings?open=finding%3Ahardening-ssh%2FSSH-002", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/agents?open=agent%3Aagent-00005", "/audit"]) {
+  test(`no accessibility violations on ${path} (${scheme})`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(path);
+    await page.mouse.move(900, 500);
+    await expect(page.locator(".view")).toBeVisible();
+    await page.waitForTimeout(400);
+    const result = await new AxeBuilder({ page }).analyze();
+    expect(result.violations.flatMap((v) => v.nodes.map((n) => `${v.id}: ${n.target.join(" ")} ${n.any[0]?.message ?? ""}`))).toEqual([]);
+  });
+}
+
+test("a service account is created and issues a token shown once", async ({ page }) => {
+  await page.goto("/service-accounts");
+  await page.getByRole("button", { name: "New account" }).click();
+  await page.getByLabel("Name").fill("Backup job");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page.locator(".panel-header__title")).toContainText("Backup job");
+  await page.getByLabel("Token label").fill("nightly");
+  await page.getByRole("button", { name: "Issue" }).click();
+  await expect(page.locator(".secret")).toContainText("ovst_demo_");
+});
+
+test("audit retention changes from its panel", async ({ page }) => {
+  await page.goto("/audit");
+  await page.getByRole("button", { name: /Kept 365 days/ }).click();
+  await page.getByLabel("Keep audit events for (days)").fill("400");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: /Kept 400 days/ })).toBeVisible();
+});
+
+test("an asset group is created from the access view", async ({ page }) => {
+  await page.goto("/access");
+  await page.getByRole("button", { name: "New group" }).click();
+  await page.getByLabel("Name").fill("Web servers");
+  await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
+  await page.getByRole("button", { name: "Create group" }).click();
+  await expect(page.locator(".panel-header__title")).toContainText("Web servers");
+  await expect(page.locator(".group-card", { hasText: "Web servers" })).toBeVisible();
+});
