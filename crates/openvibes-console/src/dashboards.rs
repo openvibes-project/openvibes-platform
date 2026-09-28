@@ -2,9 +2,23 @@
 //! handlers. A layout is data the UI renders; the server keeps it bounded
 //! and well-formed, and forward-compatible through an allow-list of types.
 
+use axum::{
+    Json,
+    extract::{Path, State, rejection::JsonRejection},
+    http::{HeaderMap, HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+};
+use chrono::{SecondsFormat, Utc};
+use platform_store::dashboards::{self as store, Dashboard, Refusal};
+
 use serde_json::Value;
 
-use crate::FieldError;
+use crate::{
+    DashboardPage, DashboardView, FieldError, HomeDashboard, Permission, PermissionScope,
+    ProblemDetails, SaveDashboardRequest, ShareDashboardRequest,
+    problem::problem_response,
+    router::{AuthHttpState, parse_if_match_version, session_user, unavailable_auth},
+};
 
 pub(crate) const WIDGET_TYPES: [&str; 7] = [
     "number",
@@ -184,6 +198,337 @@ pub(crate) fn validate_layout(layout: &Value) -> Result<(), Vec<FieldError>> {
         Ok(())
     } else {
         Err(errors)
+    }
+}
+
+fn view(dashboard: Dashboard, user_id: &str) -> DashboardView {
+    DashboardView {
+        mine: dashboard.owner_user_id == user_id,
+        dashboard_id: dashboard.dashboard_id,
+        name: dashboard.name,
+        owner_display_name: dashboard.owner_display_name,
+        shared_role_id: dashboard.shared_role_id,
+        version: dashboard.version.try_into().unwrap_or_default(),
+        layout: dashboard.layout,
+        created_at: dashboard
+            .created_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+        updated_at: dashboard
+            .updated_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true),
+    }
+}
+
+fn with_etag(status: StatusCode, dashboard: DashboardView) -> Response {
+    let etag = format!("\"{}\"", dashboard.version);
+    let mut response = (status, Json(dashboard)).into_response();
+    response
+        .headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    if let Ok(value) = HeaderValue::from_str(&etag) {
+        response.headers_mut().insert(header::ETAG, value);
+    }
+    response
+}
+
+fn refused(refusal: Refusal) -> Response {
+    problem_response(match refusal {
+        Refusal::NotFound => {
+            ProblemDetails::not_found("dashboard_not_found", "Dashboard not found")
+        }
+        Refusal::NotOwner => ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "not_dashboard_owner",
+            "Only the owner can change this dashboard; duplicate it instead",
+        ),
+        Refusal::Stale => ProblemDetails::new(
+            StatusCode::PRECONDITION_FAILED,
+            "stale_dashboard",
+            "The dashboard changed since you loaded it",
+        ),
+        Refusal::TooMany => ProblemDetails::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "too_many_dashboards",
+            "You already have 100 dashboards",
+        ),
+        Refusal::UnknownRole => ProblemDetails::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unknown_role",
+            "No such role",
+        ),
+    })
+}
+
+fn invalid(errors: Vec<crate::FieldError>) -> Response {
+    let mut problem = ProblemDetails::new(
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "invalid_dashboard",
+        "The dashboard is invalid",
+    );
+    problem.field_errors = Some(errors);
+    problem_response(problem)
+}
+
+fn bad_request() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::BAD_REQUEST,
+        "invalid_request",
+        "The request body is invalid",
+    ))
+}
+
+/// Validates name and layout; the trimmed name, or every field problem.
+fn checked(request: &SaveDashboardRequest) -> Result<String, Vec<crate::FieldError>> {
+    let name = validate_name(&request.name);
+    let layout = validate_layout(&request.layout);
+    match (name, layout) {
+        (Ok(name), Ok(())) => Ok(name),
+        (name, layout) => {
+            let mut errors: Vec<_> = name.err().into_iter().collect();
+            errors.extend(layout.err().unwrap_or_default());
+            errors.truncate(32);
+            Err(errors)
+        }
+    }
+}
+
+#[utoipa::path(get, path = "/api/v1/dashboards", tag = "dashboards",
+    responses((status = 200, description = "Own and shared dashboards", body = crate::DashboardPage), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn list_dashboards(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let user = match session_user(&state, &headers, false).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::list_visible(&client, &user.user_id).await {
+        Ok(items) => Json(DashboardPage {
+            items: items.into_iter().map(|d| view(d, &user.user_id)).collect(),
+        })
+        .into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(post, path = "/api/v1/dashboards", tag = "dashboards", request_body = crate::SaveDashboardRequest,
+    responses((status = 201, description = "Created", body = crate::DashboardView), (status = 400, description = "Invalid body", body = ProblemDetails, content_type = "application/problem+json"), (status = 422, description = "Invalid name or layout, or 100 dashboards already", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn create_dashboard(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    payload: Result<Json<SaveDashboardRequest>, JsonRejection>,
+) -> Response {
+    let user = match session_user(&state, &headers, true).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(Json(request)) = payload else {
+        return bad_request();
+    };
+    let name = match checked(&request) {
+        Ok(name) => name,
+        Err(errors) => return invalid(errors),
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::create(
+        &mut client,
+        &user.user_id,
+        &name,
+        &request.layout,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(Ok(dashboard)) => with_etag(StatusCode::CREATED, view(dashboard, &user.user_id)),
+        Ok(Err(refusal)) => refused(refusal),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(get, path = "/api/v1/dashboards/{dashboard_id}", tag = "dashboards", params(("dashboard_id" = String, Path)),
+    responses((status = 200, description = "The dashboard", body = crate::DashboardView), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn get_dashboard(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let user = match session_user(&state, &headers, false).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::get_visible(&client, &user.user_id, &id).await {
+        Ok(Some(dashboard)) => with_etag(StatusCode::OK, view(dashboard, &user.user_id)),
+        Ok(None) => refused(Refusal::NotFound),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(put, path = "/api/v1/dashboards/{dashboard_id}", tag = "dashboards", params(("dashboard_id" = String, Path), ("If-Match" = String, Header, description = "Quoted version from ETag")), request_body = crate::SaveDashboardRequest,
+    responses((status = 200, description = "Saved", body = crate::DashboardView), (status = 400, description = "Invalid body or If-Match", body = ProblemDetails, content_type = "application/problem+json"), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 412, description = "Stale version", body = ProblemDetails, content_type = "application/problem+json"), (status = 422, description = "Invalid name or layout", body = ProblemDetails, content_type = "application/problem+json"), (status = 428, description = "If-Match is required", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn update_dashboard(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    payload: Result<Json<SaveDashboardRequest>, JsonRejection>,
+) -> Response {
+    let user = match session_user(&state, &headers, true).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let expected = match parse_if_match_version(&headers) {
+        Ok(Some(version)) => version,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::PRECONDITION_REQUIRED,
+                "precondition_required",
+                "If-Match is required",
+            ));
+        }
+        Err(()) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::BAD_REQUEST,
+                "invalid_precondition",
+                "If-Match must contain one quoted version",
+            ));
+        }
+    };
+    let Ok(Json(request)) = payload else {
+        return bad_request();
+    };
+    let name = match checked(&request) {
+        Ok(name) => name,
+        Err(errors) => return invalid(errors),
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::update(
+        &mut client,
+        &user.user_id,
+        &id,
+        &name,
+        &request.layout,
+        expected,
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(Ok(dashboard)) => with_etag(StatusCode::OK, view(dashboard, &user.user_id)),
+        Ok(Err(refusal)) => refused(refusal),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(delete, path = "/api/v1/dashboards/{dashboard_id}", tag = "dashboards", params(("dashboard_id" = String, Path)),
+    responses((status = 204, description = "Deleted"), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn delete_dashboard(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+) -> Response {
+    let user = match session_user(&state, &headers, true).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::delete(&mut client, &user.user_id, &id).await {
+        Ok(Ok(())) => StatusCode::NO_CONTENT.into_response(),
+        Ok(Err(refusal)) => refused(refusal),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(put, path = "/api/v1/dashboards/{dashboard_id}/sharing", tag = "dashboards", params(("dashboard_id" = String, Path)), request_body = crate::ShareDashboardRequest,
+    responses((status = 200, description = "Sharing changed", body = crate::DashboardView), (status = 404, description = "Not found or not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 422, description = "Unknown role", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn share_dashboard(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    payload: Result<Json<ShareDashboardRequest>, JsonRejection>,
+) -> Response {
+    let user = match session_user(&state, &headers, true).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let may_share = user
+        .capabilities
+        .iter()
+        .any(|c| c.permission == Permission::DashboardsShare && c.scope == PermissionScope::Global);
+    if !may_share {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let Ok(Json(request)) = payload else {
+        return bad_request();
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::set_sharing(
+        &mut client,
+        &user.user_id,
+        &id,
+        request.role_id.as_deref(),
+        Utc::now(),
+    )
+    .await
+    {
+        Ok(Ok(dashboard)) => with_etag(StatusCode::OK, view(dashboard, &user.user_id)),
+        Ok(Err(refusal)) => refused(refusal),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(get, path = "/api/v1/me/home", tag = "dashboards",
+    responses((status = 200, description = "Home dashboard, or null for the built-in", body = crate::HomeDashboard), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn get_home(State(state): State<AuthHttpState>, headers: HeaderMap) -> Response {
+    let user = match session_user(&state, &headers, false).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::home(&client, &user.user_id).await {
+        Ok(dashboard_id) => Json(HomeDashboard { dashboard_id }).into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(put, path = "/api/v1/me/home", tag = "dashboards", request_body = crate::HomeDashboard,
+    responses((status = 200, description = "Home changed", body = crate::HomeDashboard), (status = 404, description = "Dashboard not visible", body = ProblemDetails, content_type = "application/problem+json"), (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"), (status = 403, description = "Bearer tokens and missing permissions are refused", body = ProblemDetails, content_type = "application/problem+json"), (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn set_home(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    payload: Result<Json<HomeDashboard>, JsonRejection>,
+) -> Response {
+    let user = match session_user(&state, &headers, true).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Ok(Json(request)) = payload else {
+        return bad_request();
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    match store::set_home(&mut client, &user.user_id, request.dashboard_id.as_deref()).await {
+        Ok(Ok(())) => Json(request).into_response(),
+        Ok(Err(refusal)) => refused(refusal),
+        Err(_) => unavailable_auth(),
     }
 }
 

@@ -15,7 +15,6 @@ mod assets;
 mod assistant;
 mod auth;
 mod config;
-#[allow(dead_code, reason = "used by the handlers in the next commit")]
 mod dashboards;
 mod error;
 #[cfg(feature = "embedded-ui")]

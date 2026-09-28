@@ -151,6 +151,12 @@ selectors in SQL before pagination or aggregation. Access-control, audit,
 enrollment, service-account, rule-set, triage, and agent-revocation operations
 use authenticated, permission-checked routes with transactional audit records.
 
+Dashboards (`/api/v1/dashboards`, `/api/v1/dashboards/{id}`,
+`/api/v1/dashboards/{id}/sharing`, `/api/v1/me/home`) belong to browser
+users: any signed-in user keeps their own, sees those shared with a role they
+hold, and chooses a home; service-account bearer tokens get 403. See
+[console-dashboards.md](console-dashboards.md).
+
 The implemented production UI covers sign-in, overview, agents, findings,
 enrollment, service accounts, rule sets, access control, audit, and
 latest-finding analyst triage with version-checked updates. Fedora 44 RPM

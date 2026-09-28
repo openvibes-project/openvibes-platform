@@ -78,9 +78,22 @@ use crate::{
         crate::router::authenticated_audit_retention,
         crate::router::authenticated_audit_events,
         crate::router::authenticated_audit_export,
-        crate::router::update_authenticated_audit_retention
+        crate::router::update_authenticated_audit_retention,
+        crate::dashboards::list_dashboards,
+        crate::dashboards::create_dashboard,
+        crate::dashboards::get_dashboard,
+        crate::dashboards::update_dashboard,
+        crate::dashboards::delete_dashboard,
+        crate::dashboards::share_dashboard,
+        crate::dashboards::get_home,
+        crate::dashboards::set_home
     ),
     components(schemas(
+        crate::api::DashboardView,
+        crate::api::DashboardPage,
+        crate::api::SaveDashboardRequest,
+        crate::api::ShareDashboardRequest,
+        crate::api::HomeDashboard,
         AssetGroupSelectorInput,
         SaveAssetGroupRequest,
         RevokeAgentRequest,
