@@ -45,6 +45,10 @@ pub enum RulesCommand {
     Keygen {
         /// New private key file (created 0600; never overwritten).
         key_file: PathBuf,
+        /// Print the trust line of the existing KEY_FILE instead (nothing
+        /// is written), e.g. when keygen's output was lost.
+        #[arg(long)]
+        show_public: bool,
         /// Rule set the key signs.
         #[arg(long)]
         rule_set: String,
@@ -135,6 +139,13 @@ pub fn run_offline(command: &RulesCommand) -> Result<String, String> {
     match command {
         RulesCommand::Keygen {
             key_file,
+            show_public: true,
+            rule_set,
+            issuer,
+        } => crate::rules_sign::show_public(key_file, rule_set, issuer),
+        RulesCommand::Keygen {
+            key_file,
+            show_public: false,
             rule_set,
             issuer,
         } => crate::rules_sign::keygen(key_file, rule_set, issuer),
