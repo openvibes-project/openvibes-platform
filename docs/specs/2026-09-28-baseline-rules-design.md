@@ -94,7 +94,7 @@ existing output; the signed envelope is accepted by `rules publish`
 baseline/rules.json        source rule set (schema 1)
 baseline/baseline.json     the signed envelope (committed by the signer)
 baseline/baseline.key      baseline openvibes-1 PUBLIC_KEY
-tests/<rule-id>.json       facts and the expected outcome, ≥1 match and ≥1 no-match per rule
+tests/cases.json           facts and the expected outcome, ≥1 match and ≥1 no-match per rule
 facts.allowlist            facts the oldest supported agent (v0.1.0) collects
 checker/                   small Rust binary: the checks in §6
 openvibes-rules-baseline.spec
