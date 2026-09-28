@@ -54,9 +54,19 @@ const COLUMNS: &str =
     d.shared_role_id, d.version::bigint, d.created_at, d.updated_at";
 
 /// Visible to `$1`: owned, or shared with a role of one of `$1`'s live bindings.
-const VISIBLE: &str = "(d.owner_user_id::text = $1 OR d.shared_role_id IN (
+const VISIBLE: &str = "(d.owner_user_id = $1::text::uuid OR d.shared_role_id IN (
     SELECT b.role_id FROM console_role_bindings b
-    WHERE b.user_id::text = $1 AND b.revoked_at IS NULL))";
+    WHERE b.user_id = $1::text::uuid AND b.revoked_at IS NULL))";
+
+/// True for a canonical UUID (8-4-4-4-12 hex, any case). Other ids are simply
+/// not found, before any query, so a cast can never fail.
+fn is_uuid(id: &str) -> bool {
+    id.len() == 36
+        && id.char_indices().all(|(index, c)| match index {
+            8 | 13 | 18 | 23 => c == '-',
+            _ => c.is_ascii_hexdigit(),
+        })
+}
 
 fn dashboard(row: &Row) -> Dashboard {
     Dashboard {
@@ -80,7 +90,7 @@ pub async fn list_visible(client: &Client, user_id: &str) -> Result<Vec<Dashboar
                 "SELECT {COLUMNS} FROM console_dashboards d
                  JOIN console_users u ON u.user_id = d.owner_user_id
                  WHERE {VISIBLE}
-                 ORDER BY d.owner_user_id::text <> $1, lower(d.name), d.dashboard_id"
+                 ORDER BY d.owner_user_id <> $1::text::uuid, lower(d.name), d.dashboard_id"
             ),
             &[&user_id],
         )
@@ -95,12 +105,15 @@ pub async fn get_visible(
     user_id: &str,
     dashboard_id: &str,
 ) -> Result<Option<Dashboard>, StoreError> {
+    if !is_uuid(dashboard_id) {
+        return Ok(None);
+    }
     let row = client
         .query_opt(
             &format!(
                 "SELECT {COLUMNS} FROM console_dashboards d
                  JOIN console_users u ON u.user_id = d.owner_user_id
-                 WHERE d.dashboard_id::text = $2 AND {VISIBLE}"
+                 WHERE d.dashboard_id = $2::text::uuid AND {VISIBLE}"
             ),
             &[&user_id, &dashboard_id],
         )
@@ -119,7 +132,7 @@ async fn audit(
         "INSERT INTO audit_log (actor, action, target, result, detail,
              actor_kind, actor_id, actor_display, target_kind, target_id)
          SELECT $1, $2, $3, 'success', $4, 'user', $1, u.display_name, 'dashboard', $3
-         FROM console_users u WHERE u.user_id::text = $1",
+         FROM console_users u WHERE u.user_id = $1::text::uuid",
         &[&user_id, &action, &dashboard_id, &detail],
     )
     .await?;
@@ -133,11 +146,14 @@ async fn lock_owned(
     user_id: &str,
     dashboard_id: &str,
 ) -> Result<Option<(bool, i64)>, StoreError> {
+    if !is_uuid(dashboard_id) {
+        return Ok(None);
+    }
     let row = tx
         .query_opt(
             &format!(
-                "SELECT d.owner_user_id::text = $1, d.version::bigint FROM console_dashboards d
-                 WHERE d.dashboard_id::text = $2 AND {VISIBLE} FOR UPDATE OF d"
+                "SELECT d.owner_user_id = $1::text::uuid, d.version::bigint FROM console_dashboards d
+                 WHERE d.dashboard_id = $2::text::uuid AND {VISIBLE} FOR UPDATE OF d"
             ),
             &[&user_id, &dashboard_id],
         )
@@ -154,7 +170,7 @@ async fn reread(
             &format!(
                 "SELECT {COLUMNS} FROM console_dashboards d
                  JOIN console_users u ON u.user_id = d.owner_user_id
-                 WHERE d.dashboard_id::text = $1"
+                 WHERE d.dashboard_id = $1::text::uuid"
             ),
             &[&dashboard_id],
         )
@@ -173,13 +189,13 @@ pub async fn create(
     let tx = client.transaction().await?;
     // Serialises concurrent creates by one owner so the limit holds.
     tx.execute(
-        "SELECT 1 FROM console_users WHERE user_id::text = $1 FOR UPDATE",
+        "SELECT 1 FROM console_users WHERE user_id = $1::text::uuid FOR UPDATE",
         &[&user_id],
     )
     .await?;
     let owned: i64 = tx
         .query_one(
-            "SELECT count(*) FROM console_dashboards WHERE owner_user_id::text = $1",
+            "SELECT count(*) FROM console_dashboards WHERE owner_user_id = $1::text::uuid",
             &[&user_id],
         )
         .await?
@@ -234,7 +250,7 @@ pub async fn update(
     }
     tx.execute(
         "UPDATE console_dashboards SET name = $2, layout = $3, version = version + 1, updated_at = $4
-         WHERE dashboard_id::text = $1",
+         WHERE dashboard_id = $1::text::uuid",
         &[&dashboard_id, &name, layout, &now],
     )
     .await?;
@@ -270,7 +286,7 @@ pub async fn delete(
         Some(_) => {}
     }
     tx.execute(
-        "DELETE FROM console_dashboards WHERE dashboard_id::text = $1",
+        "DELETE FROM console_dashboards WHERE dashboard_id = $1::text::uuid",
         &[&dashboard_id],
     )
     .await?;
@@ -320,14 +336,14 @@ pub async fn set_sharing(
     }
     let old: Option<String> = tx
         .query_one(
-            "SELECT shared_role_id FROM console_dashboards WHERE dashboard_id::text = $1",
+            "SELECT shared_role_id FROM console_dashboards WHERE dashboard_id = $1::text::uuid",
             &[&dashboard_id],
         )
         .await?
         .get(0);
     tx.execute(
         "UPDATE console_dashboards SET shared_role_id = $2, version = version + 1, updated_at = $3
-         WHERE dashboard_id::text = $1",
+         WHERE dashboard_id = $1::text::uuid",
         &[&dashboard_id, &role_id, &now],
     )
     .await?;
@@ -351,7 +367,7 @@ pub async fn home(client: &Client, user_id: &str) -> Result<Option<String>, Stor
             &format!(
                 "SELECT d.dashboard_id::text FROM console_user_home h
                  JOIN console_dashboards d ON d.dashboard_id = h.dashboard_id
-                 WHERE h.user_id::text = $1 AND {VISIBLE}"
+                 WHERE h.user_id = $1::text::uuid AND {VISIBLE}"
             ),
             &[&user_id],
         )
@@ -369,7 +385,7 @@ pub async fn set_home(
     match dashboard_id {
         None => {
             tx.execute(
-                "DELETE FROM console_user_home WHERE user_id::text = $1",
+                "DELETE FROM console_user_home WHERE user_id = $1::text::uuid",
                 &[&user_id],
             )
             .await?;
