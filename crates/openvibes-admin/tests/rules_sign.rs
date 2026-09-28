@@ -118,7 +118,9 @@ fn sign_refuses_group_readable_key() {
         let out = dir.join("baseline.json");
         let output = offline(&sign_args(&key, &rules, out.to_str().unwrap()));
         assert!(!output.status.success(), "mode {mode:o} accepted");
-        assert!(String::from_utf8_lossy(&output.stderr).contains("chmod 600"));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(stderr.contains("chmod 600"), "{stderr}");
+        assert!(stderr.contains("FAT/exFAT"), "{stderr}");
         assert!(!out.exists());
     }
 }

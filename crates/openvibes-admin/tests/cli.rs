@@ -45,14 +45,30 @@ async fn migrate_status_and_maintenance_are_audited() {
         status.lines().any(|l| l == window),
         "missing {window:?} in {status}"
     );
+    // A successful `status` is a status read: no audit row (board #20).
     assert_eq!(
         fixture.audit().await,
-        [
-            row("migrate", "ok"),
-            row("status", "ok"),
-            row("maintenance", "ok"),
-            row("status", "ok"),
-        ]
+        [row("migrate", "ok"), row("maintenance", "ok")]
+    );
+    fixture.drop().await;
+}
+
+#[tokio::test]
+async fn status_reads_are_not_audited_but_data_reads_are() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    for read in [
+        &["feeds", "status"][..],
+        &["rules", "list"],
+        &["rules", "trust", "list"],
+        &["agent", "list"],
+    ] {
+        stdout(&fixture.run(read));
+    }
+    stdout(&fixture.run(&["token", "list"]));
+    assert_eq!(
+        fixture.audit().await,
+        [row("migrate", "ok"), row("token list", "ok")]
     );
     fixture.drop().await;
 }

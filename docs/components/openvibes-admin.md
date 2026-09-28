@@ -3,7 +3,11 @@
 Local operator CLI. Until the admin API exists it is **break-glass access**:
 whoever can run it with the admin database role has full rights. Every
 command, including failed ones, appends an `audit_log` entry with the
-invoking OS user and `ok` or `error`. The actor is the real uid, which the
+invoking OS user and `ok` or `error`, except a successful status read that
+shows no host or finding data (`status`, `feeds status`, `rules list`,
+`rules show`, `rules trust list`, `agent list`): the TUI's Health and
+Database screens run those on every refresh. `agent show`, `vulns …`,
+`token list` and `user …` stay audited. The actor is the real uid, which the
 caller cannot choose, with `$USER` as a readable hint: `alice (uid 1000)`,
 or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
 (`sudo -u openvibes-admin …`), the person is appended from `SUDO_USER`:
