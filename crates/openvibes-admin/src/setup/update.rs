@@ -124,9 +124,16 @@ fn migrate<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let maintained = ctx.as_admin(&["maintenance"])?;
     let mut detail = format!("{}; {}", migrated.trim(), maintained.trim());
     // A newer rules package arrived with the upgrade: publish it now, so
-    // agents get it without a separate Repair.
-    if fleet::rules_check(ctx)? == StepState::Todo {
-        detail = format!("{detail}; {}", fleet::rules_apply(ctx)?.detail());
+    // agents get it without a separate Repair. Never fatal: a rules problem
+    // must not leave the services stopped (Health and Repair show it).
+    let rules = fleet::rules_check(ctx).and_then(|state| match state {
+        StepState::Todo => fleet::rules_apply(ctx).map(|done| Some(done.detail().to_owned())),
+        _ => Ok(None),
+    });
+    match rules {
+        Ok(Some(done)) => detail = format!("{detail}; {done}"),
+        Ok(None) => {}
+        Err(error) => detail = format!("{detail}; rules not published: {error}"),
     }
     Ok(StepState::Done(detail))
 }
@@ -431,6 +438,61 @@ mod tests {
             StepState::Done(
                 "schema version 26; created 0 partitions; rule set baseline published".into()
             )
+        );
+    }
+
+    #[test]
+    fn a_failing_rules_publish_never_stops_the_update() {
+        let fake = Fake::new("update-rules-fail");
+        fake.answer(
+            &[&ADMIN[..], &["migrate"]].concat(),
+            0,
+            "schema version 26\n",
+        );
+        fake.answer(
+            &[&ADMIN[..], &["maintenance"]].concat(),
+            0,
+            "created 0 partitions\n",
+        );
+        fake.answer(
+            &[&ADMIN[..], &["rules", "list"]].concat(),
+            0,
+            "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
+        );
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
+            0,
+            "",
+        );
+        fake.answer(
+            &[&ADMIN[..], &["rules", "trust", "add"]].concat(),
+            0,
+            "already trusted\n",
+        );
+        fake.answer(
+            &[&ADMIN[..], &["rules", "publish"]].concat(),
+            1,
+            "openvibes-admin: the envelope expired\n",
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.json",
+            "{\"rule_set_version\":2}",
+        );
+        let plan = plan(&[Ingest, Distribution, Rules]);
+        let state = run(
+            &fake.ctx(&plan),
+            UpdateStep::Migrate,
+            &UpdateArgs::default(),
+        );
+        // The services still start: Health and Repair show the rules problem.
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(
+            state.detail().contains("rules not published: "),
+            "{state:?}"
         );
     }
 
