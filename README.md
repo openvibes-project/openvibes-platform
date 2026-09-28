@@ -205,7 +205,10 @@ Design principles, shared by every repository:
 
 ## Getting started
 
-Build and install on Fedora (details, including first-time CA and database
+Install from the package repository: [`docs/quick-setup.md`](docs/quick-setup.md)
+(one script, then Setup in the admin TUI).
+
+Build from source and install on Fedora (details, including first-time CA and database
 setup, in [`docs/components/packaging.md`](docs/components/packaging.md)):
 
 ```sh
