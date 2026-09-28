@@ -76,6 +76,8 @@ pub fn checks(
     }
     match feeds {
         Ok(out) => {
+            // `feeds status` ends a failing feed's line with ` error: TEXT`
+            // (vulns.rs, `FeedsCommand::Status`).
             let errors: Vec<&str> = out.lines().filter(|l| l.contains(" error: ")).collect();
             if errors.is_empty() {
                 let feeds = out.lines().filter(|l| *l != "no feeds yet").count();

@@ -722,3 +722,16 @@ fn disk_use_parses_df() {
     );
     assert!(host.df(&[]).unwrap().is_empty());
 }
+
+#[test]
+fn a_status_check_is_journalled_but_not_noted_in_the_audit_log() {
+    let host = fake(vec![
+        (vec!["/usr/bin/sudo", "-S"], out(0, "", "")),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    host.privileged(Privileged::SetupStatus, &Secret::new("pw".into()))
+        .unwrap();
+    let calls = host.runner.calls.borrow();
+    assert_eq!(calls.len(), 2, "no audit note: {calls:?}");
+    assert!(calls[1][3].ends_with(" setup-status ok"), "{:?}", calls[1]);
+}

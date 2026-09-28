@@ -221,8 +221,18 @@ impl<R: Runner> Host for Native<R> {
             _ => "failed",
         };
         let journal = verb.journal();
-        let (action, target) = journal.split_once(' ').unwrap_or((&journal, "-"));
-        self.journal(action, target, outcome);
+        match journal.split_once(' ') {
+            Some((action, target)) => self.journal(action, target, outcome),
+            // One-word verbs: `setup-status` only reads, so it is journalled
+            // but not noted (the console exports audit_log); `setup-plan`
+            // is noted with the file it writes.
+            None => {
+                self.log(&format!("{journal} {outcome}"));
+                if !matches!(verb, Privileged::SetupStatus) {
+                    let _ = self.as_admin(&["audit", "note", &journal, SETUP_FILE, outcome]);
+                }
+            }
+        }
         if out.status == 0 {
             Ok(out.stdout)
         } else if out.stderr.contains("incorrect password")
