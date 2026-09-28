@@ -45,3 +45,6 @@ export type AssistantStatus = S["AssistantStatusResponse"];
 export type AssistantReply = S["AssistantMessageResponse"];
 export type AssistantSegment = S["AssistantSegment"];
 export type Problem = S["ProblemDetails"];
+export type Dashboard = S["DashboardView"];
+export type DashboardPage = S["DashboardPage"];
+export type HomeDashboard = S["HomeDashboard"];

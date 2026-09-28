@@ -6,6 +6,7 @@ import type {
   Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission,
   Severity, TriageCounts, Vulnerability,
 } from "../api/types";
+import { createDashboardStore } from "./dashboards";
 import { buildDemoData } from "./data";
 
 export const personas = ["viewer", "analyst", "operator", "scoped_operator", "admin"] as const;
@@ -417,6 +418,28 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: true, model: "demo (synthetic answers)", location: "in your browser" }));
   route("POST", "/api/v1/assistant/messages", "assistant.use", (_, __, body) =>
     json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }] }));
+
+  const dashboards = createDashboardStore(
+    data.dashboards,
+    (userId) => (scoped && userId === `u-${actor}` ? ["operator"] : data.access.bindings.filter((b) => b.user_id === userId).map((b) => b.role_id)),
+    (userId) => data.access.users.find((u) => u.user_id === userId)?.display_name ?? userId,
+  );
+  const send = (result: { status: number; body?: unknown; etag?: string }) => {
+    if (result.status === 204) return new Response(null, { status: 204 });
+    const headers: Record<string, string> = { "content-type": result.status >= 400 ? "application/problem+json" : "application/json" };
+    if (result.etag) headers.etag = result.etag;
+    return new Response(JSON.stringify(result.body), { status: result.status, headers });
+  };
+  const me = `u-${actor}`;
+  route("GET", "/api/v1/dashboards", null, () => send(dashboards.list(me)));
+  route("POST", "/api/v1/dashboards", null, (_, __, body) => send(dashboards.create(me, body)));
+  route("GET", "/api/v1/dashboards/{id}", null, ({ id = "" }) => send(dashboards.get(me, id)));
+  route("PUT", "/api/v1/dashboards/{id}", null, ({ id = "" }, _, body, headers) => send(dashboards.update(me, id, body, headers["if-match"])));
+  route("DELETE", "/api/v1/dashboards/{id}", null, ({ id = "" }) => send(dashboards.remove(me, id)));
+  route("PUT", "/api/v1/dashboards/{id}/sharing", null, ({ id = "" }, _, body) =>
+    send(dashboards.share(me, id, body.role_id ?? null, permissions.includes("dashboards.share"), data.access.roles.map((r) => r.role_id))));
+  route("GET", "/api/v1/me/home", null, () => send(dashboards.home(me)));
+  route("PUT", "/api/v1/me/home", null, (_, __, body) => send(dashboards.setHome(me, body.dashboard_id ?? null)));
 
   return {
     persona,
