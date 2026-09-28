@@ -8,7 +8,7 @@ readonly repository_root="$(cd -- "${script_dir}/.." && pwd -P)"
 readonly web_root="${repository_root}/crates/openvibes-console/web"
 : "${OPENVIBES_TEST_DATABASE_URL:?set OPENVIBES_TEST_DATABASE_URL, for example eval \"\$(scripts/test-db.sh)\"}"
 
-for required_command in node npm cargo psql; do
+for required_command in node npm cargo psql openssl; do
     if ! command -v "${required_command}" >/dev/null 2>&1; then
         printf 'error: required command is unavailable: %s\n' "${required_command}" >&2
         exit 1

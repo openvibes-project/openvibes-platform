@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Starts the real openvibes-console (embedded web UI, production CSP) on a
-# fresh throwaway database for the browser tests: schema migrated, users
+# Starts the real openvibes-console (embedded web UI, production CSP, direct
+# TLS 1.3 with a throwaway self-signed certificate) on a fresh throwaway
+# database for the browser tests: schema migrated, users
 # alex (admin) and sam (analyst), imported findings for six hosts. Needs
 # OPENVIBES_TEST_DATABASE_URL (scripts/test-db.sh locally; the CI job sets it)
 # and the binaries built by scripts/test-console-e2e.sh.
@@ -21,13 +22,18 @@ psql -q "${OPENVIBES_TEST_DATABASE_URL}" -c "DROP DATABASE IF EXISTS ${name} WIT
 
 rm -rf -- "${work}"
 mkdir -p -- "${work}/exports"
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
+    -subj "/CN=127.0.0.1" -addext "subjectAltName=IP:127.0.0.1" \
+    -keyout "${work}/key.pem" -out "${work}/cert.pem" 2>/dev/null
 printf 'database_url = "%s"\n' "${database_url}" > "${work}/admin.toml"
 cat > "${work}/console.toml" <<EOF
 development_listen = "127.0.0.1:18490"
 health_listen = "127.0.0.1:18491"
-transport_mode = "development"
+transport_mode = "direct_tls"
 database_url = "${database_url}"
-public_origin = "http://127.0.0.1:18490"
+public_origin = "https://127.0.0.1:18490"
+server_certificate_file = "${work}/cert.pem"
+server_key_file = "${work}/key.pem"
 EOF
 
 admin() { "${root}/target/debug/openvibes-admin" --config "${work}/admin.toml" "$@"; }

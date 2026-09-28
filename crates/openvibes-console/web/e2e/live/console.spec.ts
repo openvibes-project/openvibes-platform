@@ -5,7 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
 
 const PASSWORD = "e2e-console-Passw0rd!";
-const origin = "http://127.0.0.1:18490";
+const origin = "https://127.0.0.1:18490";
 
 declare global {
   interface Window { cspViolations?: string[] }

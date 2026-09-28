@@ -148,12 +148,14 @@ npm run dev                  # http://127.0.0.1:5174 with demo data; add ?live=1
 ```
 
 From the repository root, `scripts/test-console-e2e.sh` (needs
-`OPENVIBES_TEST_DATABASE_URL`, e.g. `eval "$(scripts/test-db.sh)"`, and
-`psql`) builds the embedded UI and runs `e2e/live` against the real console
+`OPENVIBES_TEST_DATABASE_URL`, e.g. `eval "$(scripts/test-db.sh)"`,
+`psql` and `openssl`) builds the embedded UI and runs `e2e/live` against the real console
 in Chromium, Firefox and WebKit. `scripts/console-e2e-server.sh` prepares a
 fresh `ov_console_e2e` database (migrate, users alex/admin and sam/analyst,
 imported findings for six hosts) and starts the console on
-`127.0.0.1:18490` with its production CSP. The tests check sign-in, every
+`https://127.0.0.1:18490` with direct TLS 1.3 (a throwaway self-signed
+certificate; WebKit keeps the `__Host-` Secure session cookie only over
+HTTPS) and its production CSP. The tests check sign-in, every
 view (no error, no CSP violation, no third-party request), `/login` and
 retired `/assistant`, bulk triage, a dashboard shared with a role and seen
 read-only, and axe in both themes.

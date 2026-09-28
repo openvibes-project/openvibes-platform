@@ -2,8 +2,10 @@ import { defineConfig, devices } from "@playwright/test";
 
 // The real console (embedded UI, CSP and all) on a throwaway database;
 // scripts/test-console-e2e.sh builds it and scripts/console-e2e-server.sh
-// prepares the data and starts it.
-const origin = "http://127.0.0.1:18490";
+// prepares the data and starts it with direct TLS 1.3 (the production
+// transport; WebKit keeps the __Host- Secure session cookie only over HTTPS)
+// and a throwaway self-signed certificate.
+const origin = "https://127.0.0.1:18490";
 
 export default defineConfig({
   testDir: "./e2e/live",
@@ -12,10 +14,11 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "github" : "list",
-  use: { baseURL: origin, screenshot: "only-on-failure", trace: "retain-on-failure" },
+  use: { baseURL: origin, ignoreHTTPSErrors: true, screenshot: "only-on-failure", trace: "retain-on-failure" },
   webServer: {
     command: "bash ../../../scripts/console-e2e-server.sh",
     url: `${origin}/login`,
+    ignoreHTTPSErrors: true,
     reuseExistingServer: false,
     timeout: 120_000,
     // The console logs every request; failures carry traces and screenshots instead.
