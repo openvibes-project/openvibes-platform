@@ -338,7 +338,9 @@ deleted; careful: waits for the signed intermediate), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`), `console` (`public_origin`
 and the `admin` account; a generated password is shown once), `services`,
 `firewall` (skipped without firewalld), `rules` (skipped until
-`openvibes-rules-baseline` exists), `agent` (the agent on this host, waits
+`openvibes-rules-baseline` exists; done while the published version is at
+least the installed package's, so Repair publishes a newer package),
+`agent` (the agent on this host, waits
 up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
 uses).
 
@@ -354,7 +356,9 @@ refused while one works):
   the active OpenVIBES units (remembered in
   `/run/openvibes-admin/update-active`), `dnf upgrade` of exactly the
   installed `openvibes-*` packages (the agent too), `migrate` and
-  `maintenance`, start the remembered units, readiness.
+  `maintenance` (and, with the rules component, publishing the upgraded
+  baseline rule set when it is newer than the published one), start the
+  remembered units, readiness.
 - `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
