@@ -50,7 +50,7 @@ Design principles, shared by every repository:
 | Repository | What it is |
 |---|---|
 | [openvibes-agent](https://github.com/openvibes-project/openvibes-agent) | The endpoint agent (Rust; Linux, Windows, macOS): collectors, signed-rule evaluation, a durable local queue, and the mTLS client. |
-| **openvibes-platform** (this one) | The server side: ingest, rule distribution, vulnerability matching, the admin CLI, the built-in PKI, and packaging. The web console and the AI assistant are being built here. |
+| **openvibes-platform** (this one) | The server side: ingest, rule distribution, vulnerability matching, the admin CLI, the built-in PKI, the web console with its AI assistant, and packaging. |
 | [openvibes-protocol](https://github.com/openvibes-project/openvibes-protocol) | The single source of truth for everything exchanged between agent and platform: the spec, JSON Schemas, shared valid and invalid fixtures, and the paired plan. |
 
 ```
@@ -73,13 +73,15 @@ Design principles, shared by every repository:
   then renew their certificates before they expire.
 - **Revocation:** a structured "identity revoked" answer, so an agent knows
   to re-enroll instead of retrying forever.
-- **Heartbeats:** each agent reports its host name, versions, and enabled
-  collectors (capabilities).
+- **Heartbeats:** each agent reports its host name, versions, enabled
+  collectors (capabilities), and its own health; the platform rates each
+  agent Healthy, Degraded, Offline, or Unknown with the reasons.
 - **Findings:** accepted or refused one by one within a batch, and stored
   exactly once. History is partitioned by day, with a current-state table
   per agent, rule set, and rule.
 - **Inventory:** package reports (operating system, packages, running
-  kernel) arrive only when they change and are stored compactly.
+  kernel) arrive only when they change, as gzip-compressed change sets
+  after the first full list, and are stored compactly.
 - **Operations:** per-connection and per-request limits, structured logs,
   health and readiness endpoints, and a graceful drain on shutdown.
 - **Scale:** horizontally scalable. Load-tested with the `openvibes-load`
@@ -100,6 +102,10 @@ Design principles, shared by every repository:
   network. Every file is checked against the SHA-256 chain that starts at
   the HTTPS mirror list. The service checks hourly and downloads only when
   the index changes.
+- **More distributions via OSV.dev:** Debian, Ubuntu, Rocky Linux, and
+  AlmaLinux. Debian and Ubuntu are matched by source package with dpkg
+  version order. Vulnerabilities without a fix are shown and labelled as
+  such.
 - **Matching:** exact RPM version order (epoch, version, release, and
   architecture) against every host's inventory.
 - **Lifecycle:** each host–advisory pair is a record that opens, is closed
@@ -117,6 +123,10 @@ Design principles, shared by every repository:
 
 ### Administration (`openvibes-admin`)
 
+- **TUI:** `openvibes-admin` with no subcommand opens host administration
+  over SSH (keyboard only): Setup (install, repair, update, uninstall),
+  configuration, and service lifecycle, kept out of the web console by
+  design. `setup --quick` runs the same install unattended.
 - **Schema and data:** `migrate`, `status`, and daily `maintenance`
   (partitions and retention) from a systemd timer.
 - **Built-in PKI (`ca`):** an offline root, an online intermediate, and
@@ -146,46 +156,48 @@ Design principles, shared by every repository:
   agent RPMs in which the agent enrolls, fetches its rules, reports
   findings and inventory, and gets vulnerabilities matched.
 
+### Web console (`openvibes-console`, port 443)
+
+- **Access:** local accounts first; OIDC, SAML, and MFA come later as
+  adapters. Access is role-based and scoped by asset group, and service
+  accounts get expiring tokens.
+- **Findings:** each finding is shown once however many endpoints report
+  it, and its detail lists every endpoint. Analysts can triage and assign.
+- **Dashboards:** a built-in overview plus your own grid dashboards,
+  shareable with other users.
+- **Operations:** agents (seen recently, offline, revoked), enrollment
+  tokens, previews of signed bundles, and an exportable audit log.
+- **Wording:** the console never claims more certainty than the data
+  supports; it shows "latest observed matches", not "resolved".
+
+### AI assistant (opt-in, in the console)
+
+- **Questions in plain language:** "which hosts are exposed to
+  CVE-…?", answered from fixed, read-only lookups that run with the
+  asking user's own permissions and scope. Every answer cites the
+  agents and findings it is based on.
+- **Model:** runs on a local model by default. The optional
+  `openvibes-llm` package runs llama.cpp's `llama-server` from a pinned
+  build: CPU or Vulkan GPU, loopback only, sandboxed, and a model file
+  with a pinned SHA-256.
+- **Replaceable:** both the runtime and the model can be swapped. Any
+  OpenAI-compatible server on your own network works.
+- **Quality gate:** a question set, including prompt-injection cases,
+  that a model must pass before the assistant is enabled.
+
 ## In progress
 
-- **Web console** (`openvibes-console`, port 443; specs approved, built by
-  Codex on `console-current`).
-  - **Access:** local accounts first; OIDC, SAML, and MFA come later as
-    adapters. Access is role-based and scoped by asset group, and service
-    accounts get expiring tokens.
-  - **Findings:** each finding is shown once however many endpoints report
-    it, and its detail lists every endpoint. Analysts can triage and assign.
-  - **Operations:** agents (seen recently, offline, revoked), enrollment
-    tokens, previews of signed bundles, and an exportable audit log.
-  - **Wording:** the console never claims more certainty than the data
-    supports; it shows "latest observed matches", not "resolved".
-- **AI assistant in the console**
-  ([pull request #28](https://github.com/openvibes-project/openvibes-platform/pull/28)).
-  - **Questions in plain language:** "which hosts are exposed to
-    CVE-…?", answered from fixed, read-only lookups that run with the
-    asking user's own permissions and scope. Every answer cites the
-    agents and findings it is based on.
-  - **Model:** runs on a local model by default. The optional
-    `openvibes-llm` package runs llama.cpp's `llama-server` from a pinned
-    build: CPU or Vulkan GPU, loopback only, sandboxed, and a model file
-    with a pinned SHA-256.
-  - **Replaceable:** both the runtime and the model can be swapped. Any
-    OpenAI-compatible server on your own network works.
-  - **Quality gate:** a question set, including prompt-injection cases,
-    that a model must pass before the assistant is enabled.
+- **Admin TUI:** Database and Health screens.
+- **Baseline rules package:** a signed starter rule set from the new
+  `openvibes-rules` repository, which Setup trusts and publishes.
 
 ## Planned
 
-- **More Linux distributions via OSV.dev:** Debian, Ubuntu, Rocky Linux,
-  and AlmaLinux. Debian and Ubuntu are matched by source package with
-  dpkg version order. Vulnerabilities without a fix are shown and labelled
-  as such. Alpine follows.
+- **Alpine** via OSV.dev.
 - **Assistant options:** an external AI provider, opt-in only, with host
   names and addresses pseudonymised before anything leaves the platform.
 - **Correlation** (`openvibes-correlation`) across findings and inventory.
 - **Third-party inventory and CMDB sync** (`openvibes-cmdb`).
-- **`openvibes-admin tui`:** local host administration (configuration and
-  service lifecycle), kept out of the web console by design.
 - **Fewer repeat findings:** a protocol change so agents report when a
   match starts and ends, instead of on every scan.
 - **Trust-root rotation:** rotate rule-signing keys and the platform CA
