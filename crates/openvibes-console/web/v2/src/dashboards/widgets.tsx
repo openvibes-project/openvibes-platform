@@ -4,8 +4,10 @@
 import type { ReactNode } from "react";
 
 import type { IconName } from "../ui/Icon";
+import { str } from "./config";
+import { WIDGET_DEFAULTS } from "./defaults";
 import type { Widget, WidgetType } from "./layout";
-import { AttentionTile, BreakdownTile, ListTile, NumberTile, TopHostsTile } from "./tiles";
+import { AttentionTile, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
 import { AttentionSettings, BreakdownSettings, ListSettings, NoteSettings, NoteTile, NumberSettings, TopHostsSettings, TrendSettings, TrendTile } from "./tiles2";
 
 export type WidgetProps = { widget: Widget };
@@ -16,16 +18,18 @@ export type WidgetDef = {
 };
 
 export const widgetDefs: Readonly<Record<WidgetType, WidgetDef>> = {
-  number: { type: "number", label: "Number", description: "One count that opens its list", icon: "activity", size: { w: 3, h: 2 }, defaults: { metric: "findings.open.critical" }, View: NumberTile, Settings: NumberSettings },
-  breakdown: { type: "breakdown", label: "Breakdown", description: "A severity or status bar", icon: "filter", size: { w: 4, h: 3 }, defaults: { source: "findings" }, View: BreakdownTile, Settings: BreakdownSettings },
-  attention: { type: "attention", label: "Needs attention", description: "Exploited, serious and silent, in one list", icon: "alert", size: { w: 7, h: 7 }, defaults: { include: ["exploited", "findings", "stale"], limit: 8 }, View: AttentionTile, Settings: AttentionSettings },
-  list: { type: "list", label: "List", description: "The first rows of any list, with its filters", icon: "findings", size: { w: 6, h: 6 }, defaults: { view: "/findings", query: "severity=critical", limit: 8 }, View: ListTile, Settings: ListSettings },
-  trend: { type: "trend", label: "Trend", description: "Hosts reporting a finding per day", icon: "activity", size: { w: 4, h: 3 }, defaults: { finding: "", days: 14 }, View: TrendTile, Settings: TrendSettings },
-  "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious vulnerabilities", icon: "agents", size: { w: 5, h: 6 }, defaults: { limit: 6 }, View: TopHostsTile, Settings: TopHostsSettings },
-  note: { type: "note", label: "Note", description: "Plain text for your team", icon: "help", size: { w: 4, h: 3 }, defaults: { text: [] }, View: NoteTile, Settings: NoteSettings },
+  number: { type: "number", label: "Number", description: "One count that opens its list", icon: "activity", size: WIDGET_DEFAULTS["number"].size, defaults: WIDGET_DEFAULTS["number"].config, View: NumberTile, Settings: NumberSettings },
+  breakdown: { type: "breakdown", label: "Breakdown", description: "A severity or status bar", icon: "filter", size: WIDGET_DEFAULTS["breakdown"].size, defaults: WIDGET_DEFAULTS["breakdown"].config, View: BreakdownTile, Settings: BreakdownSettings },
+  attention: { type: "attention", label: "Needs attention", description: "Exploited, serious and silent, in one list", icon: "alert", size: WIDGET_DEFAULTS["attention"].size, defaults: WIDGET_DEFAULTS["attention"].config, View: AttentionTile, Settings: AttentionSettings },
+  list: { type: "list", label: "List", description: "The first rows of any list, with its filters", icon: "findings", size: WIDGET_DEFAULTS["list"].size, defaults: WIDGET_DEFAULTS["list"].config, View: ListTile, Settings: ListSettings },
+  trend: { type: "trend", label: "Trend", description: "Hosts reporting a finding per day", icon: "activity", size: WIDGET_DEFAULTS["trend"].size, defaults: WIDGET_DEFAULTS["trend"].config, View: TrendTile, Settings: TrendSettings },
+  "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious vulnerabilities", icon: "agents", size: WIDGET_DEFAULTS["top-hosts"].size, defaults: WIDGET_DEFAULTS["top-hosts"].config, View: TopHostsTile, Settings: TopHostsSettings },
+  note: { type: "note", label: "Note", description: "Plain text for your team", icon: "help", size: WIDGET_DEFAULTS["note"].size, defaults: WIDGET_DEFAULTS["note"].config, View: NoteTile, Settings: NoteSettings },
 };
 
 export function widgetTitle(widget: Widget): string {
   const custom = widget.config.title;
-  return typeof custom === "string" && custom.trim() ? custom.trim() : widgetDefs[widget.type].label;
+  if (typeof custom === "string" && custom.trim()) return custom.trim();
+  if (widget.type === "number") return METRICS[str(widget.config, "metric", "agents.active", METRIC_KEYS)].label;
+  return widgetDefs[widget.type].label;
 }

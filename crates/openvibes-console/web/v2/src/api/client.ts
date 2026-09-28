@@ -7,7 +7,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { createDemoServer, type Persona } from "../demo/server";
 
 export class ApiError extends Error {
-  constructor(readonly status: number, readonly code: string, title: string) {
+  constructor(readonly status: number, readonly code: string, title: string, readonly fieldErrors?: { field: string; code: string; message: string }[]) {
     super(title);
   }
 }
@@ -61,8 +61,8 @@ export async function request<T>(method: string, path: string, body?: unknown, e
   }
   if (response.status === 401 && !demo && path !== "/api/v1/session") for (const listener of signedOut) listener();
   if (!response.ok) {
-    const details = (payload ?? {}) as { code?: string; title?: string };
-    throw new ApiError(response.status, details.code ?? "unavailable", details.title ?? `Request failed (${response.status})`);
+    const details = (payload ?? {}) as { code?: string; title?: string; field_errors?: { field: string; code: string; message: string }[] | null };
+    throw new ApiError(response.status, details.code ?? "unavailable", details.title ?? `Request failed (${response.status})`, details.field_errors ?? undefined);
   }
   return payload as T;
 }
