@@ -35,6 +35,11 @@ test("a finding's hosts show their assignee and accepted-risk expiry", async ({ 
   await expect(hosts.filter({ hasText: "api-01.lab.example.test" })).toContainText(/until /);
 });
 
+test("a host whose match ended shows when it was fixed", async ({ page }) => {
+  await page.goto("/findings?open=finding%3Abaseline-linux%2FLNX-033");
+  await expect(page.locator(".inspector tbody tr").filter({ hasText: "web-03.prod.example.test" })).toContainText(/fixed /);
+});
+
 test("the palette finds a host and opens it", async ({ page }) => {
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search" }).fill("web-01");

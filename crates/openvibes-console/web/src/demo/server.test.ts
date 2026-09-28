@@ -92,6 +92,20 @@ describe("demo server", () => {
     expect(listed).toMatchObject({ assigned_to: "sam", accepted_until: future });
   });
 
+  it("lists a mitigated host's match as ended (P13), and open ones without an end", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const groups = (await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"))).items as { rule_set_id: string; rule_id: string }[];
+    const all: { triage_state: string; ended_at: string | null; end_approximate: boolean }[] = [];
+    for (const group of groups) {
+      const page = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
+      all.push(...(page.items as typeof all));
+    }
+    const mitigated = all.filter((e) => e.triage_state === "mitigated");
+    expect(mitigated.length).toBeGreaterThan(0);
+    expect(mitigated.every((e) => typeof e.ended_at === "string" && e.end_approximate === false)).toBe(true);
+    expect(all.filter((e) => e.triage_state === "open").every((e) => e.ended_at === null)).toBe(true);
+  });
+
   it("filters vulnerabilities and details an advisory with its CVEs and hosts", async () => {
     const server = createDemoServer({ persona: "admin" });
     const exploited = await json(await server.handle("GET", "/api/v1/vulnerabilities?exploited=true"));

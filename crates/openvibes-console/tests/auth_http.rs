@@ -1290,6 +1290,42 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     assert_eq!(accepted["triage_state"], "accepted_risk");
     assert!(accepted["assigned_to"].is_null());
     assert_eq!(accepted["accepted_until"], "2099-01-01T00:00:00+00:00");
+    assert!(accepted["ended_at"].is_null(), "an open match");
+    assert_eq!(accepted["end_approximate"], false);
+    // A P13 agent reported the other host's match ended (approximately).
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .execute(
+            "UPDATE current_findings SET source = 'changes',
+                 ended_at = '2026-09-28T12:00:00Z', end_approximate = true
+             WHERE agent_id = 'agent.00000000-0000-4000-8000-000000000102'",
+            &[],
+        )
+        .await
+        .unwrap();
+    let after_end = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let after_end: Value =
+        serde_json::from_slice(&to_bytes(after_end.into_body(), 8192).await.unwrap()).unwrap();
+    let ended = after_end["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|item| item["agent_id"] == "agent.00000000-0000-4000-8000-000000000102")
+        .unwrap();
+    assert_eq!(ended["ended_at"], "2026-09-28T12:00:00+00:00");
+    assert_eq!(ended["end_approximate"], true);
     let vuln_summary = router
         .clone()
         .oneshot(

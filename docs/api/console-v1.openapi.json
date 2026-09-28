@@ -4968,6 +4968,7 @@
           "rule_version",
           "triage_state",
           "triage_version",
+          "end_approximate",
           "outside_window",
           "origin",
           "authenticated"
@@ -4994,6 +4995,17 @@
           "authenticated": {
             "type": "boolean",
             "description": "Whether the finding arrived over authenticated agent transport."
+          },
+          "end_approximate": {
+            "type": "boolean",
+            "description": "The end time is approximate (known only to be before a resync)."
+          },
+          "ended_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time the match ended (protocol P13), or `null` while open."
           },
           "first_observed_at": {
             "type": "string",

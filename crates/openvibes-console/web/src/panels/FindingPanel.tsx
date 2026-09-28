@@ -168,7 +168,9 @@ export function FindingPanel({ id }: { id: string }) {
                   <td><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
                     ? <span className="badge badge--bad badge--plain" style={{ marginLeft: 6 }}>expired {date(item.accepted_until)}</span>
-                    : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}</td>
+                    : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}
+                    {item.ended_at && <span className="badge badge--ok badge--plain" style={{ marginLeft: 6 }}
+                      title="The agent reported this match ended">fixed {item.end_approximate ? "about " : ""}{date(item.ended_at)}</span>}</td>
                   <td className={item.assigned_to ? undefined : "subtle"}>{item.assigned_to ?? "—"}</td>
                   <td className="subtle"><Ago value={item.last_observed_at} /></td>
                 </tr>

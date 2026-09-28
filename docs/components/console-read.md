@@ -36,7 +36,8 @@ agent visibility in SQL for the supplied global or asset-group scope.
   only after applying asset scope, and returns in-window endpoint counts,
   severity, version and triage rollups plus older endpoint counts.
   `finding_group_endpoints_in_scope` pages the visible endpoints (with each
-  one's triage state, version, assignee username and accepted-until) and
+  one's triage state, version, assignee username and accepted-until, and
+  for a P13 agent `ended_at`/`end_approximate` once the match ended) and
   hides a group with no recent in-scope endpoint. The authenticated console exposes
   opaque cursors bound to the time window and caller scope, and provides
   atomic endpoint triage through the companion `console_triage` store module.

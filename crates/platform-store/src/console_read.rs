@@ -374,6 +374,10 @@ pub struct FindingGroupEndpoint {
     pub assigned_to: Option<String>,
     /// Accepted-risk expiry, if any.
     pub accepted_until: Option<DateTime<Utc>>,
+    /// When a P13 agent reported the match ended; `None` while it is open.
+    pub ended_at: Option<DateTime<Utc>>,
+    /// The end time is only known to be before a resync.
+    pub end_approximate: bool,
     /// Whether this endpoint is older than the requested window.
     pub outside_window: bool,
     /// `online` or `import` provenance.
@@ -1022,7 +1026,7 @@ pub async fn finding_group_endpoints_in_scope(
                 "SELECT c.agent_id, a.hostname, c.first_observed_at, c.last_observed_at,
                         c.rule_version, COALESCE(t.state, 'open'), COALESCE(t.version, 0),
                         c.last_observed_at < $1, c.origin, c.authenticated,
-                        u.username, t.accepted_until
+                        u.username, t.accepted_until, c.ended_at, c.end_approximate
                  FROM current_findings c JOIN agents a USING(agent_id)
                  LEFT JOIN console_finding_triage t USING(agent_id, rule_set_id, rule_id)
                  LEFT JOIN console_users u ON u.user_id = t.assigned_to
@@ -1063,6 +1067,8 @@ pub async fn finding_group_endpoints_in_scope(
             authenticated: row.get(9),
             assigned_to: row.get(10),
             accepted_until: row.get(11),
+            ended_at: row.get(12),
+            end_approximate: row.get(13),
         })
         .collect();
     let next = if items.len() > usize::from(query.limit.0) {
