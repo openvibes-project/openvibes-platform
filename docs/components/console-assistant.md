@@ -1,6 +1,6 @@
 # Console assistant
 
-The opt-in Assistant page lets an authorized analyst ask questions about
+The opt-in assistant dock (Ctrl+J, from any view of the web console) lets an authorized analyst ask questions about
 agents and observed findings using an operator-hosted OpenAI-compatible model.
 The console authenticates every request, applies the caller's existing
 `agents.read` and `findings.read` scopes to SQL lookups, and returns only
@@ -16,8 +16,9 @@ lookups are refused until they have console read pages and permissions.
   turns from the current browser tab. It requires an authenticated session,
   `assistant.use`, and the same effective scope for `agents.read` and
   `findings.read`.
-- `/assistant` is shown in navigation only to a principal with
-  `assistant.use`. The UI renders plain text and links built by the console.
+- The dock is offered only to a principal with `assistant.use`. It renders
+  plain text, and its citations open the cited objects in the inspector.
+  (The first interface's `/assistant` page was retired on 2026-09-28.)
 
 ## Configuration
 
@@ -74,6 +75,6 @@ browser wait; an already-running blocking model call can continue until its
 
 Run `openvibes-admin assistant check` and `openvibes-admin assistant eval`
 against the configured local endpoint before enabling the section. Verify
-that an Analyst can open the page, a user without `assistant.use` cannot, and
+that an Analyst can open the dock, a user without `assistant.use` cannot, and
 scoped users only receive citations to records in their asset groups. Review
 the Console API specification and browser behavior with a local mock model.

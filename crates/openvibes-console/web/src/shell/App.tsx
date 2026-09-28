@@ -6,7 +6,7 @@ import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { SessionContext, allows } from "../app/session";
-import type { Persona } from "../demo/server";
+import type { Persona } from "../demo/personas";
 import { Empty } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { Toasts } from "../ui/toast";
@@ -26,7 +26,7 @@ function readPersona(): Persona {
   }
 }
 
-export function App({ demo: startDemo }: { demo: boolean }) {
+export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllowed: boolean }) {
   const [persona, setPersona] = useState<Persona | undefined>(() => (startDemo ? readPersona() : undefined));
   const [session, setSession] = useState<Session>();
   const [auth, setAuth] = useState<"loading" | "ok" | "signin" | "down">("loading");
@@ -55,6 +55,8 @@ export function App({ demo: startDemo }: { demo: boolean }) {
   const top = panels[panels.length - 1];
 
   useEffect(() => { if (top) rememberRecent(top); }, [top]);
+  // Old sign-in bookmarks: once signed in, /login is just the home dashboard.
+  useEffect(() => { if (auth === "ok" && view === "/login") nav.view("/"); }, [auth, view]);
   useEffect(() => { document.title = `${current?.label ?? "OpenVIBES"} · OpenVIBES`; }, [current]);
 
   useEffect(() => {
@@ -88,13 +90,13 @@ export function App({ demo: startDemo }: { demo: boolean }) {
     request("POST", "/auth/v1/logout").finally(() => window.location.reload());
   };
 
-  if (auth === "signin") return <SignIn onDemo={() => choosePersona("admin")} />;
+  if (auth === "signin") return <SignIn onDemo={demoAllowed ? () => choosePersona("admin") : undefined} />;
   if (auth === "down") {
     return (
       <main className="signin">
         <div className="signin__card">
           <Empty icon="alert" title="The console is not reachable">Check that openvibes-console is running, then reload.</Empty>
-          <button type="button" className="button" onClick={() => choosePersona("admin")}>Explore the demo instead</button>
+          {demoAllowed && <button type="button" className="button" onClick={() => choosePersona("admin")}>Explore the demo instead</button>}
         </div>
       </main>
     );

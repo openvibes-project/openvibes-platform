@@ -1,5 +1,5 @@
 // Wire types, generated from the console's OpenAPI document and shared with v1.
-import type { components } from "../../../src/api/generated";
+import type { components } from "./generated";
 
 type S = components["schemas"];
 export type Agent = S["AgentView"];

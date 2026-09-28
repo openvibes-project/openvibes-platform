@@ -105,8 +105,8 @@ endpoint/version pairs and performs one all-or-nothing state transition.
 Stale selections return 412 and no endpoint is updated. Imported rows are
 labelled with their installation ID and remain limited to global readers.
 
-The frontend modules `Vulnerabilities.tsx` and `GroupedFindings.tsx` own the
-two read experiences. They render API priority and provenance as supplied,
+The web console's Vulnerabilities and Findings views
+([console-web.md](console-web.md)) own the two read experiences. They render API priority and provenance as supplied,
 link host/advisory views, preserve opaque cursors, disable triage for readers,
 and send mutations with the session CSRF token. The demo server supplies
 synthetic API models for these routes.
@@ -219,10 +219,11 @@ HSTS is set for both direct TLS and reverse-proxy responses.
 
 Run the API with `cargo run -p openvibes-console --example seeded_server
 --features dev-seed` (defaults to loopback ports 18490/18491), then run
-`npm run dev` from `crates/openvibes-console/web` for the Vite UI. The Vite
-server proxies API requests to the seeded API. API requests accept the
-demo-only `x-openvibes-dev-persona` and `x-openvibes-dev-mode` headers; the UI
-controls persist those values in local storage. The persona names use the
+`npm run dev` from `crates/openvibes-console/web` for the Vite UI; with
+`?live=1` the Vite server proxies API requests to the seeded API. API
+requests accept the demo-only `x-openvibes-dev-persona` and
+`x-openvibes-dev-mode` headers (the API contract tests send them; the web
+console has its own in-browser demo instead). The persona names use the
 same built-in role resolver as C3, with a fixed demo asset-group binding for
 `scoped_operator`. Data is deterministic and synthetic; the 50,000-agent mode
 returns bounded pages and never loads all rows into the browser. These
@@ -409,12 +410,12 @@ browser contract does not match the snapshot.
 
 Current frontend verification includes strict type checking, linting, unit
 tests, dependency audit, production asset generation, and Rust-side embedded
-asset tests. Playwright starts the embedded `dev-seed` example on loopback in
-Chromium, Firefox, and WebKit. It covers axe accessibility analysis, target
-CSP headers and browser violations, first-paint theme persistence, keyboard
-entry, native menu/dialog/combobox focus behaviour, reserved-route fall-through,
-bounded 50,000-agent rendering, and seeded permission/error states. The seeded
-server is test-only and is not the production binary. Later contract tests
+asset tests. `scripts/test-console-e2e.sh` runs Playwright in Chromium,
+Firefox and WebKit against the real console binary with the embedded UI and
+its production CSP, on a throwaway PostgreSQL database; it covers sign-in,
+every view, CSP violations, third-party requests, triage, dashboards and axe
+([console-web.md](console-web.md#how-to-test)). The seeded server is
+test-only and is not the production binary. Later contract tests
 exercise the complete Axum router first against deterministic seeded data and
 then against PostgreSQL. Security coverage expands from the current route
 fall-through, cache-header, and CSP checks to session/CSRF handling, object

@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useState } from "react";
 
-export function SignIn({ onDemo }: { onDemo: () => void }) {
+export function SignIn({ onDemo }: { onDemo?: (() => void) | undefined }) {
   const [csrf, setCsrf] = useState<string>();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -51,7 +51,7 @@ export function SignIn({ onDemo }: { onDemo: () => void }) {
         <label className="field">Password<input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <button className="button button--primary" type="submit" disabled={!csrf || busy}>{busy ? "Signing in…" : "Sign in"}</button>
-        <button className="link-button" type="button" onClick={onDemo}>Explore the demo instead</button>
+        {onDemo && <button className="link-button" type="button" onClick={onDemo}>Explore the demo instead</button>}
       </form>
     </main>
   );

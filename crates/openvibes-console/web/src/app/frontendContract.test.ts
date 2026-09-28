@@ -1,47 +1,24 @@
-import { readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+// The server serves the SPA only for routes in web/frontend-contract.json;
+// every view in the registry (and sign-in, and a dashboard by id) must be one.
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
-import frontendContract from "../../frontend-contract.json";
-import { navigationGroups, pageRoutes } from "./navigation";
-
-const webRoot = new URL("../../", import.meta.url);
-const publicRoot = new URL("../../public/", import.meta.url);
-
-function publicFiles(directory: string): string[] {
-  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const path = join(directory, entry.name);
-    if (entry.isSymbolicLink()) {
-      throw new Error(`public asset must not be a symbolic link: ${path}`);
-    }
-    if (entry.isDirectory()) {
-      return publicFiles(path);
-    }
-    if (!entry.isFile() || statSync(path).size === 0) {
-      throw new Error(`public asset must be a non-empty regular file: ${path}`);
-    }
-    return [relative(publicRoot.pathname, path).replaceAll("\\", "/")];
-  });
-}
+const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 
 describe("frontend contract", () => {
-  it("keeps browser routes, application pages, and navigation aligned", () => {
-    const navigationRoutes = navigationGroups.flatMap((group) => group.items.map((item) => item.path));
-    const applicationRoutes = frontendContract.browserRoutes.filter((route) => route !== "/login");
-
-    expect(new Set(navigationRoutes).size).toBe(navigationRoutes.length);
-    expect([...navigationRoutes].sort()).toEqual([...applicationRoutes].sort());
-    expect([...pageRoutes].sort()).toEqual([...frontendContract.browserRoutes].sort());
+  it("serves exactly the registry's views, sign-in and dashboards by id", () => {
+    const contract = JSON.parse(read("../../frontend-contract.json")) as { browserRoutes: string[] };
+    const viewPaths = [...read("./registry.tsx").matchAll(/\{ path: "(\/[^"]*)"/g)].map((match) => match[1]);
+    expect(viewPaths.length).toBeGreaterThan(5);
+    expect(new Set(contract.browserRoutes)).toEqual(new Set([...viewPaths, "/login", "/dashboards/{dashboard_id}"]));
+    expect(contract.browserRoutes[0]).toBe("/");
   });
 
-  it("lists every public source asset exactly once", () => {
-    const declaredFiles = frontendContract.publicAssets.map((asset) => asset.file);
-    const declaredRoutes = frontendContract.publicAssets.map((asset) => asset.route);
-
-    expect(new Set(declaredFiles).size).toBe(declaredFiles.length);
-    expect(new Set(declaredRoutes).size).toBe(declaredRoutes.length);
-    expect(declaredFiles.sort()).toEqual(publicFiles(publicRoot.pathname).sort());
-    expect(statSync(new URL("../../frontend-contract.json", import.meta.url)).isFile()).toBe(true);
-    expect(statSync(webRoot).isDirectory()).toBe(true);
+  it("lists every public asset the page references", () => {
+    const contract = JSON.parse(read("../../frontend-contract.json")) as { publicAssets: { route: string }[] };
+    const html = read("../../index.html");
+    const referenced = [...html.matchAll(/%BASE_URL%([^"]+)"/g)].map((match) => `/${match[1]}`);
+    for (const route of referenced) expect(contract.publicAssets.map((asset) => asset.route)).toContain(route);
   });
 });

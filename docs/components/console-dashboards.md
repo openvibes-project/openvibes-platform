@@ -43,11 +43,11 @@ the layout.
 
 ## User interface
 
-In console v2 (`web/v2/src/dashboards`). The grid rules live in `layout.ts`
+In the web console (`web/src/dashboards`). The grid rules live in `layout.ts`
 and mirror this module's validation. The widgets are in `widgets.tsx`,
 `tiles.tsx` and `tiles2.tsx`. The editor store is `editor.ts`, and the page
-is `DashboardsView.tsx`. See [console-v2.md](console-v2.md#dashboards) for
-behaviour. The in-browser demo API (`web/v2/src/demo/dashboards.ts`)
+is `DashboardsView.tsx`. See [console-web.md](console-web.md#dashboards) for
+behaviour. The in-browser demo API (`web/src/demo/dashboards.ts`)
 applies the same rules and status codes as this API.
 
 ## Configuration
@@ -76,6 +76,6 @@ cargo test -p platform-store --test console_dashboards       # ownership, sharin
 cargo test -p openvibes-console --lib dashboards              # layout and name validation
 cargo test -p openvibes-console --all-features --test dashboards_http   # routes, auth, audit
 cd crates/openvibes-console/web
-npx vitest run --config vite.v2.config.ts src/dashboards src/demo        # grid, config, editor, demo API
-npx playwright test --config playwright.v2.config.ts dashboards          # create, edit, keyboard, share, home, axe
+npx vitest run src/dashboards src/demo                                  # grid, config, editor, demo API
+npx playwright test --config playwright.demo.config.ts dashboards        # create, edit, keyboard, share, home, axe
 ```

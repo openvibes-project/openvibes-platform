@@ -35,10 +35,7 @@
     "e2e",
     "src",
     "playwright.config.ts",
-    "vite.config.ts",
-    "v2/src",
-    "vite.v2.config.ts",
-    "v2/e2e",
-    "playwright.v2.config.ts"
+    "playwright.demo.config.ts",
+    "vite.config.ts"
   ]
 }

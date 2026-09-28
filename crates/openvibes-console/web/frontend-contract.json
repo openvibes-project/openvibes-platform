@@ -1,7 +1,6 @@
 {
   "browserRoutes": [
     "/",
-    "/assistant",
     "/login",
     "/findings",
     "/vulnerabilities",
@@ -10,7 +9,8 @@
     "/rule-sets",
     "/access",
     "/service-accounts",
-    "/audit"
+    "/audit",
+    "/dashboards/{dashboard_id}"
   ],
   "publicAssets": [
     {
