@@ -82,6 +82,14 @@ export function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+/** Stores a value the client already has (e.g. a save's response) as the
+ *  load of `path`, so views show it at once instead of refetching. */
+export function prime<T>(path: string, value: T): void {
+  cache.set(path, Promise.resolve(value));
+  generation += 1;
+  for (const listener of listeners) listener();
+}
+
 /** Drops cached loads under `prefix` (all when omitted) and refreshes views. */
 export function invalidate(prefix = "/"): void {
   for (const key of [...cache.keys()]) if (key.startsWith(prefix)) cache.delete(key);

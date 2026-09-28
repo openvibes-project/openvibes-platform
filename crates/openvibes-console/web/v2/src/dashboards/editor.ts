@@ -3,7 +3,7 @@
 // carry the version so a second tab cannot overwrite silently.
 import { useSyncExternalStore } from "react";
 
-import { ApiError, invalidate, request } from "../api/client";
+import { ApiError, invalidate, prime, request } from "../api/client";
 import type { Dashboard } from "../api/types";
 import { type FieldProblem, type Layout, type Widget, type WidgetType, addWidget, removeWidget, validateLayout, validateName } from "./layout";
 import { WIDGET_DEFAULTS } from "./defaults";
@@ -59,6 +59,8 @@ export const editor = {
     try {
       const saved = await request<Dashboard>("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}`, { name, layout: draft }, { "if-match": `"${dashboard.version}"` });
       invalidate("/api/v1/dashboards");
+      // The saved dashboard is shown at once; no flash of the old layout.
+      prime(`/api/v1/dashboards/${saved.dashboard_id}`, saved);
       set({ ...empty });
       return saved;
     } catch (error) {

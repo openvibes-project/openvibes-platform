@@ -129,7 +129,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <>
               <button type="button" className="button" onClick={() => nav.open({ kind: "widget-gallery", id: "new" }, true)}><Icon name="plus" size={15} /> Add widget</button>
               <button type="button" className="button button--ghost" onClick={() => { if (!state.dirty || window.confirm("Discard your changes?")) { editor.cancel(); nav.closeAll(); } }}>Cancel</button>
-              <button type="button" className="button button--primary" disabled={state.saving} onClick={() => void editor.save().then((saved) => { if (saved) { invalidate(`/api/v1/dashboards/${saved.dashboard_id}`); nav.closeAll(); toast("Dashboard saved"); } })}>
+              <button type="button" className="button button--primary" disabled={state.saving} onClick={() => void editor.save().then((saved) => { if (saved) { nav.closeAll(); toast("Dashboard saved"); } })}>
                 {state.saving ? "Saving…" : "Save"}</button>
             </>
           ) : mine && dashboard ? (
