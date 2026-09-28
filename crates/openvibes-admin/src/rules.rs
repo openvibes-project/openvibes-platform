@@ -40,6 +40,18 @@ pub enum RulesCommand {
         /// Rule set id.
         rule_set: String,
     },
+    /// Make a rule-signing key (offline: no config or database). Prints
+    /// the line `rules trust add` and `baseline.key` take.
+    Keygen {
+        /// New private key file (created 0600; never overwritten).
+        key_file: PathBuf,
+        /// Rule set the key signs.
+        #[arg(long)]
+        rule_set: String,
+        /// Issuer key id named in envelopes.
+        #[arg(long)]
+        issuer: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -83,7 +95,26 @@ impl RulesCommand {
             Self::List => "rules list",
             Self::Show { .. } => "rules show",
             Self::Retire { .. } => "rules retire",
+            Self::Keygen { .. } => "rules keygen",
         }
+    }
+
+    /// Keygen and sign run on the signer's machine, before any config or
+    /// database is opened.
+    pub fn is_offline(&self) -> bool {
+        matches!(self, Self::Keygen { .. })
+    }
+}
+
+/// Runs an offline command (`is_offline`).
+pub fn run_offline(command: &RulesCommand) -> Result<String, String> {
+    match command {
+        RulesCommand::Keygen {
+            key_file,
+            rule_set,
+            issuer,
+        } => crate::rules_sign::keygen(key_file, rule_set, issuer),
+        _ => unreachable!("run_offline takes only offline commands"),
     }
 }
 
@@ -136,6 +167,7 @@ pub async fn run(
             };
             (result, Some(rule_set.clone()))
         }
+        RulesCommand::Keygen { .. } => unreachable!("offline, handled in main"),
     }
 }
 

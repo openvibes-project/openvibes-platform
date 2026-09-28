@@ -15,6 +15,7 @@ mod helper;
 mod import;
 mod model;
 mod rules;
+mod rules_sign;
 mod setup;
 mod token;
 mod tui;
@@ -211,6 +212,22 @@ async fn main() -> ExitCode {
                 ExitCode::from(2)
             }
             _ => setup::uninstall_all(*everything, confirm.clone(), backup.clone()),
+        };
+    }
+    // Offline rule signing runs on the signer's machine: no config, no
+    // database, no audit row.
+    if let Command::Rules { command } = command
+        && command.is_offline()
+    {
+        return match rules::run_offline(command) {
+            Ok(output) => {
+                print!("{output}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("openvibes-admin: {error}");
+                ExitCode::FAILURE
+            }
         };
     }
     // Offline CA commands run where no platform exists: no config, no
