@@ -260,6 +260,32 @@ pub async fn run(
 }
 
 /// `agent command`: a new endpoint token and the install line around it.
+/// What the platform serves for `set`: its current, non-retired bundle's
+/// issuer and that issuer's active trusted key.
+async fn served(client: &platform_store::Client, set: &str) -> Option<crate::setup::Served> {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::rules;
+    rules::list(client).await.ok()?.into_iter().find(|row| {
+        row.rule_set_id == set && row.current_version.is_some() && row.retired_at.is_none()
+    })?;
+    let issuer = rules::bundles(client, set)
+        .await
+        .ok()?
+        .into_iter()
+        .next()?
+        .issuer_key_id;
+    let (key, _) = rules::active_trust_keys(client, set)
+        .await
+        .ok()?
+        .into_iter()
+        .find(|(_, id)| *id == issuer)?;
+    Some(crate::setup::Served {
+        set: set.to_owned(),
+        issuer,
+        key: URL_SAFE_NO_PAD.encode(key),
+    })
+}
+
 async fn agent_command(
     platform: Option<&str>,
     root_cert: &std::path::Path,
@@ -296,16 +322,15 @@ async fn agent_command(
         label: Some("agent command".into()),
     };
     let (created, target) = crate::token::run(&create, client, actor).await;
-    let published: Vec<String> = platform_store::rules::list(client)
-        .await
-        .unwrap_or_default()
-        .into_iter()
-        .filter(|set| set.current_version.is_some() && set.retired_at.is_none())
-        .map(|set| set.rule_set_id)
-        .collect();
-    let rules = std::fs::read_to_string(crate::setup::BASELINE_KEY)
-        .ok()
-        .and_then(|line| crate::setup::published_rules_arg(&line, &published));
+    let key_line = std::fs::read_to_string(crate::setup::BASELINE_KEY).ok();
+    let set = key_line
+        .as_deref()
+        .and_then(|line| line.split_whitespace().next())
+        .unwrap_or("baseline");
+    let served: Vec<crate::setup::Served> = served(client, set).await.into_iter().collect();
+    let rules = key_line
+        .as_deref()
+        .and_then(|line| crate::setup::published_rules_arg(line, &served));
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
             "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",

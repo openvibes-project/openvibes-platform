@@ -50,16 +50,29 @@ pub fn agent_install_command(
     )
 }
 
-/// `--rules` for the install line: the package's trust line, only while its
-/// set is among `published` (sets with a current, non-retired bundle), so
-/// remote agents are never told to fetch a set the platform does not serve.
-pub fn published_rules_arg(key_line: &str, published: &[String]) -> Option<String> {
-    let set = key_line.split_whitespace().next()?;
-    published
+/// `--rules` for the install line: the package's trust line, only while the
+/// platform serves its set with a bundle signed by that same key, so remote
+/// agents are never told to fetch what they cannot verify.
+pub fn published_rules_arg(key_line: &str, served: &[Served]) -> Option<String> {
+    let [set, issuer, key] = key_line.split_whitespace().collect::<Vec<_>>()[..] else {
+        return None;
+    };
+    served
         .iter()
-        .any(|p| p == set)
+        .any(|s| s.set == set && s.issuer == issuer && s.key == key)
         .then(|| rules_arg(key_line))
         .flatten()
+}
+
+/// A rule set the platform serves: its current, non-retired bundle's issuer
+/// and that issuer's active trusted key (base64url). Remote agents get
+/// `--rules` only when baseline.key names exactly this, so they can verify
+/// what they fetch.
+#[derive(Debug)]
+pub struct Served {
+    pub set: String,
+    pub issuer: String,
+    pub key: String,
 }
 
 /// `SET,ISSUER,KEY` from a `baseline.key` line, or `None` when any part has
@@ -380,6 +393,36 @@ mod command_tests {
             "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
              --agent --platform h.example --token T --ca-sha256 AB:CD"
         );
+    }
+
+    #[test]
+    fn rules_ride_along_only_when_the_served_bundle_uses_that_key() {
+        const K: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+        const OTHER: &str = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+        let line = format!("baseline openvibes-1 {K}\n");
+        let served = |set: &str, issuer: &str, key: &str| super::Served {
+            set: set.into(),
+            issuer: issuer.into(),
+            key: key.into(),
+        };
+        assert_eq!(
+            super::published_rules_arg(&line, &[served("baseline", "openvibes-1", K)]).as_deref(),
+            Some(format!("baseline,openvibes-1,{K}").as_str())
+        );
+        // Not published, another set, another signer, or another key for
+        // the same issuer: the agent could not verify what is served.
+        for others in [
+            vec![],
+            vec![served("other", "openvibes-1", K)],
+            vec![served("baseline", "org.rules", K)],
+            vec![served("baseline", "openvibes-1", OTHER)],
+        ] {
+            assert_eq!(
+                super::published_rules_arg(&line, &others),
+                None,
+                "{others:?}"
+            );
+        }
     }
 
     #[test]

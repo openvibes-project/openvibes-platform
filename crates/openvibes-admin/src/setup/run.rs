@@ -26,6 +26,40 @@ fn names(units: &[Unit]) -> Vec<&'static str> {
     units.iter().map(|u| u.name()).collect()
 }
 
+/// What the platform serves for `set`, from the CLI's own output (rules.rs):
+/// `rules list` (`SET vN keys K expires TIME [flags]`), `rules show SET`
+/// (newest first: `vN sha256:… issuer ISSUER …`) and `rules trust list SET`
+/// (`SET ISSUER KEY added TIME [removed TIME]`).
+fn served<R: Runner>(ctx: &Ctx<R>, set: &str) -> Option<super::Served> {
+    let list = ctx.as_admin(&["rules", "list"]).ok()?;
+    list.lines().find(|line| {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        fields.first() == Some(&set)
+            && fields.get(1).is_some_and(|v| v.starts_with('v'))
+            && !line.ends_with(" retired")
+    })?;
+    let show = ctx.as_admin(&["rules", "show", set]).ok()?;
+    let issuer = show
+        .lines()
+        .next()?
+        .split_whitespace()
+        .skip_while(|word| *word != "issuer")
+        .nth(1)?
+        .to_owned();
+    let keys = ctx.as_admin(&["rules", "trust", "list", set]).ok()?;
+    let key = keys.lines().find_map(|line| {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        (fields.get(1) == Some(&issuer.as_str()) && !line.contains(" removed "))
+            .then(|| fields.get(2).map(|k| (*k).to_owned()))
+            .flatten()
+    })?;
+    Some(super::Served {
+        set: set.to_owned(),
+        issuer,
+        key,
+    })
+}
+
 pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
     let running = units.iter().all(|unit| {
@@ -186,21 +220,11 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let token =
         token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
     let root = ctx.read(super::pki::ROOT_CERT)?;
-    // `rules list`: `SET vN keys K expires TIME [flags]` (rules.rs).
-    let published: Vec<String> = ctx
-        .as_admin(&["rules", "list"])
-        .unwrap_or_default()
-        .lines()
-        .filter(|line| {
-            let mut fields = line.split_whitespace();
-            fields.nth(1).is_some_and(|v| v.starts_with('v')) && !line.ends_with(" retired")
-        })
-        .filter_map(|line| line.split_whitespace().next().map(str::to_owned))
-        .collect();
-    let rules = ctx
-        .read(super::BASELINE_KEY)
-        .ok()
-        .and_then(|line| super::published_rules_arg(&line, &published));
+    let rules = ctx.read(super::BASELINE_KEY).ok().and_then(|line| {
+        let set = line.split_whitespace().next()?.to_owned();
+        let served: Vec<super::Served> = served(ctx, &set).into_iter().collect();
+        super::published_rules_arg(&line, &served)
+    });
     let command = super::agent_install_command(
         &ctx.plan.hostname,
         &token,
@@ -354,7 +378,61 @@ mod tests {
             !state.detail().contains("--rules"),
             "not published: {state:?}"
         );
-        // Published: remote agents get its key.
+        // Published, but the current bundle is signed by another trusted
+        // key (an admin's own bundle): agents could not verify it.
+        let admin = |args: &[&'static str]| -> Vec<&'static str> {
+            [
+                &[
+                    "/usr/sbin/runuser",
+                    "-u",
+                    "openvibes-admin",
+                    "--",
+                    "/usr/bin/openvibes-admin",
+                ][..],
+                args,
+            ]
+            .concat()
+        };
+        let other = Fake::new("ready-other-signer");
+        other.answer(&["/usr/bin/curl"], 0, "");
+        other.answer(&admin(&["token", "create"]), 0, &format!("token {TOKEN}\n"));
+        other.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
+        other.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        );
+        other.answer(
+            &admin(&["rules", "list"]),
+            0,
+            "baseline v2 keys 2 expires 2028-09-27T00:00:00Z\n",
+        );
+        other.answer(
+            &admin(&["rules", "show", "baseline"]),
+            0,
+            "v2 sha256:ab issuer org.rules bytes 9 published 2026-09-28T00:00:00Z by x expires 2028-09-27T00:00:00Z\n",
+        );
+        other.answer(
+            &admin(&["rules", "trust", "list", "baseline"]),
+            0,
+            "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA added 2026-09-28T00:00:00Z\n\
+             baseline org.rules BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB added 2026-09-28T00:00:00Z\n",
+        );
+        let state = run_step(&other.ctx(&plan(&[Ingest])), Step::Ready);
+        assert!(
+            !state.detail().contains("--rules"),
+            "other signer: {state:?}"
+        );
+        // Published and signed with baseline.key's key: remote agents get it.
+        fake.answer(
+            &admin(&["rules", "show", "baseline"]),
+            0,
+            "v1 sha256:ab issuer openvibes-1 bytes 9 published 2026-09-28T00:00:00Z by x expires 2028-09-27T00:00:00Z\n",
+        );
+        fake.answer(
+            &admin(&["rules", "trust", "list", "baseline"]),
+            0,
+            "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA added 2026-09-28T00:00:00Z\n",
+        );
         fake.answer(
             &[
                 "/usr/sbin/runuser",
