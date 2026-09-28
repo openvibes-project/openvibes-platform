@@ -10,6 +10,7 @@ import { createDashboardStore } from "./dashboards";
 import { buildDemoData } from "./data";
 
 import type { Persona } from "./personas";
+import { allowedStates, noteRequired } from "../panels/triage";
 
 export { personas, type Persona } from "./personas";
 
@@ -119,6 +120,19 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return next;
   };
 
+  // The server's rules: an expiry in the future exactly when the risk is
+  // accepted, and an assignee who is an analyst or admin.
+  const triageProblem = (body: Record<string, unknown>) => {
+    const until = typeof body.accepted_until === "string" ? Date.parse(body.accepted_until) : null;
+    if ((body.state === "accepted_risk") !== (until !== null) || (until !== null && !(until > Date.now()))) {
+      return problem(400, "invalid_triage", "Triage state, note, expiry, or selection is invalid");
+    }
+    if (typeof body.assigned_to === "string" && !data.access.bindings.some((b) => b.username === body.assigned_to && ["analyst", "admin"].includes(b.role_id))) {
+      return problem(400, "invalid_assignee", "Assignee must be an enabled analyst or admin");
+    }
+    return null;
+  };
+
   const assistant = (question: string): AssistantSegment[] => {
     const q = question.toLowerCase();
     const text = (value: string): AssistantSegment => ({ kind: "text", text: value });
@@ -204,10 +218,16 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     json({ ...page(endpoints(set, rule), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
   route("POST", "/api/v1/findings/groups/{set}/{rule}/triage", "findings.triage", ({ set = "", rule = "" }, _, body) => {
     const changes = (body.changes ?? []) as { agent_id: string; version: number }[];
+    // The server's order: fields, then versions, then the workflow.
+    const invalid = triageProblem(body) ?? (noteRequired.has(String(body.state)) && typeof body.note !== "string"
+      ? problem(400, "invalid_triage", "Triage state, note, expiry, or selection is invalid") : null);
+    if (invalid) return invalid;
     for (const change of changes) {
       const current = data.triage.get(triageKey(change.agent_id, set, rule))?.version ?? 0;
-      if (current !== change.version) return problem(409, "triage_conflict", "Someone changed this triage; reload and try again");
+      if (current !== change.version) return problem(412, "stale_triage", "One or more selected endpoints changed; reload before saving");
     }
+    const from = changes.map((change) => data.triage.get(triageKey(change.agent_id, set, rule))?.state ?? "open");
+    if (!allowedStates(from).includes(String(body.state))) return problem(409, "invalid_transition", "Requested triage transition is not allowed");
     const updated = changes.map((change) => [change.agent_id, setTriage(change.agent_id, set, rule, body)]);
     audit("finding.triage", `${set}/${rule}`, "finding");
     return json({ updated });
@@ -239,6 +259,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.read", ({ agent = "", set = "", rule = "" }) =>
     json(data.triage.get(triageKey(agent, set, rule)) ?? { state: "open", version: 0, rule_version: 3, note: null, assigned_to: null, accepted_until: null }));
   route("PUT", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.triage", ({ agent = "", set = "", rule = "" }, _, body) => {
+    const invalid = triageProblem(body);
+    if (invalid) return invalid;
     audit("finding.triage", `${set}/${rule}`, "finding");
     return json(setTriage(agent, set, rule, body));
   });

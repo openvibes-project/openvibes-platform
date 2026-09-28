@@ -2,7 +2,7 @@
 // with triage for one host or many at once.
 import { useMemo, useState } from "react";
 
-import { ApiError, invalidate, request, useAllPages } from "../api/client";
+import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
@@ -11,6 +11,7 @@ import { date, daysAgo, triageLabel } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
+import { allowedStates, noteRequired, triageBody } from "./triage";
 
 export const triageStates = ["open", "investigating", "mitigated", "accepted_risk", "false_positive"] as const;
 
@@ -47,9 +48,30 @@ export function FindingPanel({ id }: { id: string }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, setState] = useState<string>("investigating");
   const [note, setNote] = useState("");
+  const [assignee, setAssignee] = useState("");
+  const [acceptedUntil, setAcceptedUntil] = useState("");
+  const [tomorrow] = useState(() => localDay(new Date(Date.now() + 86_400_000)));
+  // One host selected: its saved triage fills the form, as a per-host editor.
+  const single = selected.size === 1 ? [...selected][0] : undefined;
+  const current = useResource<{ state: string; assigned_to: string | null; note: string | null; accepted_until: string | null; version: number }>(single === undefined ? null
+    : `/api/v1/findings/latest/${encodeURIComponent(single)}/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`);
+  const [filledFrom, setFilledFrom] = useState<unknown>(undefined);
+  // Until that host's triage is in, the fields stay disabled so a late load can't overwrite an edit.
+  const filling = single !== undefined && current.data === undefined && current.error === undefined;
+  if (single !== undefined && current.data !== undefined && current.data !== filledFrom) {
+    setFilledFrom(current.data);
+    setState(current.data.state);
+    setAssignee(current.data.assigned_to ?? "");
+    setNote(current.data.note ?? "");
+    setAcceptedUntil(current.data.accepted_until ? localDay(new Date(current.data.accepted_until)) : "");
+  }
   const [filter, setFilter] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const items = useMemo(() => (endpoints.data ?? []).filter((item) => filter === "all" || item.triage_state === filter), [endpoints.data, filter]);
+
+  // The server's workflow limits where the selected hosts can go together.
+  const options = allowedStates((endpoints.data ?? []).filter((item) => selected.has(item.agent_id)).map((item) => item.triage_state));
+  const choice = options.includes(state) ? state : options.includes("investigating") ? "investigating" : options[0] ?? "";
 
   useProvideTitle({ kind: "finding", id }, group?.latest_message);
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
@@ -61,14 +83,17 @@ export function FindingPanel({ id }: { id: string }) {
     const changes = all.filter((item) => agentIds.includes(item.agent_id)).map((item) => ({ agent_id: item.agent_id, version: item.triage_version }));
     setBusy(true);
     try {
-      await request("POST", `/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`, { state, note: note.trim() || null, changes });
-      toast(`${changes.length === 1 ? "1 host" : `${changes.length} hosts`} set to ${triageLabel[state]?.toLowerCase()}`);
+      await request("POST", `/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`, { ...triageBody({ state: choice, assignee, note, acceptedUntil }), changes });
+      toast(`${changes.length === 1 ? "1 host" : `${changes.length} hosts`} set to ${triageLabel[choice]?.toLowerCase()}`);
       setSelected(new Set());
       setNote("");
+      setAssignee("");
+      setAcceptedUntil("");
+      setFilledFrom(undefined);
       invalidate("/api/v1/findings");
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Triage failed", true);
-      if (error instanceof ApiError && error.status === 409) invalidate("/api/v1/findings");
+      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) invalidate("/api/v1/findings");
     } finally {
       setBusy(false);
     }
@@ -107,11 +132,22 @@ export function FindingPanel({ id }: { id: string }) {
       {canTriage && selected.size > 0 && (
         <form className="bulk-bar" onSubmit={(event) => { event.preventDefault(); void apply([...selected]); }}>
           <strong className="num">{selected.size} selected</strong>
-          <select className="select" value={state} onChange={(event) => setState(event.target.value)} aria-label="New triage state">
-            {triageStates.map((value) => <option key={value} value={value}>{triageLabel[value]}</option>)}
+          {options.length === 0 && <span className="subtle">These hosts have no next state in common; select fewer.</span>}
+          <select className="select" disabled={filling || options.length === 0} value={choice} onChange={(event) => setState(event.target.value)} aria-label="New triage state">
+            {options.map((value) => <option key={value} value={value}>{triageLabel[value]}</option>)}
           </select>
-          <input className="input grow" value={note} onChange={(event) => setNote(event.target.value)} placeholder="Note (optional)" aria-label="Triage note" />
-          <button className="button button--primary button--small" type="submit" disabled={busy}>{busy ? "Saving…" : "Apply"}</button>
+          {choice === "accepted_risk" && (
+            <label className="row">
+              <span className="subtle">until</span>
+              <input className="input" type="date" required disabled={filling} min={tomorrow} value={acceptedUntil}
+                onChange={(event) => setAcceptedUntil(event.target.value)} aria-label="Accepted until" />
+            </label>
+          )}
+          <input className="input" disabled={filling} value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="Assignee (username)" aria-label="Assignee"
+            autoComplete="off" spellCheck={false} />
+          <input className="input grow" disabled={filling} value={note} onChange={(event) => setNote(event.target.value)} required={noteRequired.has(choice)}
+            placeholder={noteRequired.has(choice) ? "Note (required)" : "Note (optional)"} aria-label="Triage note" />
+          <button className="button button--primary button--small" type="submit" disabled={busy || filling || options.length === 0}>{busy ? "Saving…" : "Apply"}</button>
         </form>
       )}
       <Section title="Hosts" flush>
@@ -142,3 +178,7 @@ export function FindingPanel({ id }: { id: string }) {
   );
 }
 
+function localDay(value: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
