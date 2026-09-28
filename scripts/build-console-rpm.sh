@@ -45,6 +45,9 @@ readonly cache_dir="${build_dir}/npm-cache"
 "${script_dir}/check-console-npm-cache.sh" \
     "${cache_archive}" "${cache_dir}" "${expected_sha256}"
 cd -- "${repository_root}"
+# The offline builds below need every locked crate, including those of
+# optional features (include_dir for embedded-ui) that no earlier build fetched.
+cargo fetch --locked
 scripts/build-console.sh --offline-cache-dir "${cache_dir}"
 env CARGO_NET_OFFLINE=true cargo build --release --locked -p openvibes-console --features embedded-ui
 
