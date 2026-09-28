@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError, configureDemo, invalidate, load, request, subscribe } from "./client";
+import { ApiError, configureDemo, invalidate, load, prime, request, subscribe } from "./client";
 
 describe("client", () => {
   it("serves demo requests and raises problem details as ApiError", async () => {
@@ -20,6 +20,16 @@ describe("client", () => {
     invalidate("/api/v1/agents");
     expect(told).toBe(1);
     expect(await load("/api/v1/agents/summary")).not.toBe(first);
+    stop();
+  });
+
+  it("serves a primed value without asking the server, and tells subscribers", async () => {
+    configureDemo("admin");
+    let told = 0;
+    const stop = subscribe(() => { told += 1; });
+    prime("/api/v1/no-such-endpoint", { saved: true });
+    expect(told).toBe(1);
+    expect(await load("/api/v1/no-such-endpoint")).toEqual({ saved: true });
     stop();
   });
 });

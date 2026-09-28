@@ -5,7 +5,7 @@ import { useSession } from "../app/session";
 import { daysAgo } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
 import { LIST_VIEWS } from "../views/rows";
-import { int, list, noteParts, str } from "./config";
+import { int, list, noteLines, noteParts, str, toInt } from "./config";
 import { METRICS, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
 
@@ -63,7 +63,7 @@ export function AttentionSettings({ widget, onChange }: SettingsProps) {
         <label key={value} className="row"><input type="checkbox" checked={include.length === 0 || include.includes(value)} onChange={() => toggle(value)} />
           {{ exploited: "Exploited vulnerabilities", findings: "Open critical and high findings", stale: "Hosts that stopped reporting" }[value]}</label>
       ))}
-      {field("Show at most", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: Number(e.target.value) })} />)}
+      {field("Show at most", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 20, 8) })} />)}
     </div>
   );
 }
@@ -75,7 +75,7 @@ export function ListSettings({ widget, onChange }: SettingsProps) {
         {LIST_VIEWS.map((v) => <option key={v} value={v}>{v.slice(1)}</option>)}
       </select>)}
       {field("Filters (as in the list's address, e.g. severity=critical)", <input className="input mono" value={str(widget.config, "query", "")} onChange={(e) => onChange({ ...widget.config, query: e.target.value })} />)}
-      {field("Rows", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: Number(e.target.value) })} />)}
+      {field("Rows", <input className="input" type="number" min={1} max={20} step={1} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 20, 8) })} />)}
     </div>
   );
 }
@@ -84,18 +84,18 @@ export function TrendSettings({ widget, onChange }: SettingsProps) {
   return (
     <div className="stack">
       {field("Finding (rule set/rule, e.g. hardening-ssh/SSH-002)", <input className="input mono" value={str(widget.config, "finding", "")} onChange={(e) => onChange({ ...widget.config, finding: e.target.value })} />)}
-      {field("Days", <select className="select" value={int(widget.config, "days", 14, 7, 30)} onChange={(e) => onChange({ ...widget.config, days: Number(e.target.value) })}>
+      {field("Days", <select className="select" value={int(widget.config, "days", 14, 7, 30)} onChange={(e) => onChange({ ...widget.config, days: toInt(e.target.value, 7, 30, 14) })}>
         <option value={7}>7</option><option value={14}>14</option><option value={30}>30</option></select>)}
     </div>
   );
 }
 
 export function TopHostsSettings({ widget, onChange }: SettingsProps) {
-  return field("Hosts", <input className="input" type="number" min={1} max={10} value={int(widget.config, "limit", 6, 1, 10)} onChange={(e) => onChange({ ...widget.config, limit: Number(e.target.value) })} />);
+  return field("Hosts", <input className="input" type="number" min={1} max={10} value={int(widget.config, "limit", 6, 1, 10)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 10, 6) })} />);
 }
 
 export function NoteSettings({ widget, onChange }: SettingsProps) {
   const text = Array.isArray(widget.config.text) ? (widget.config.text as string[]).join("\n") : "";
   return field("Text (plain; https:// links become clickable)", <textarea className="textarea" rows={6} maxLength={16 * 257} value={text}
-    onChange={(e) => onChange({ ...widget.config, text: e.target.value.split("\n").slice(0, 16).map((line) => line.slice(0, 256)) })} />);
+    onChange={(e) => onChange({ ...widget.config, text: noteLines(e.target.value) })} />);
 }

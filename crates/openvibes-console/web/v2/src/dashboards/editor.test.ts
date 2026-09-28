@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
+// A per-tab store like the browser's, for draft recovery.
+const store = new Map<string, string>();
+Object.assign(globalThis, { sessionStorage: {
+  getItem: (key: string) => store.get(key) ?? null,
+  setItem: (key: string, value: string) => { store.set(key, value); },
+  removeItem: (key: string) => { store.delete(key); },
+} });
+
 import { configureDemo, request } from "../api/client";
 import type { Dashboard } from "../api/types";
 import { BUILTIN_LAYOUT } from "./builtin";
@@ -53,5 +61,37 @@ describe("editor", () => {
     expect(await editor.save()).toBeUndefined();
     expect(editorState().problems.map((p) => p.field)).toEqual(["name"]);
     expect(editorState().draft).not.toBeNull();
+  });
+
+  it("removing a tile can be undone", async () => {
+    const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Undo", layout });
+    editor.begin(created);
+    editor.remove("w1");
+    expect(editorState().draft?.widgets).toHaveLength(0);
+    expect(editorState().removed?.id).toBe("w1");
+    editor.undo();
+    expect(editorState().draft?.widgets.map((w) => w.id)).toEqual(["w1"]);
+    expect(editorState().removed).toBeNull();
+  });
+
+  it("keeps an unsaved draft across a lost session and offers it back", async () => {
+    const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Long edit", layout });
+    editor.begin(created);
+    editor.rename("Half done");
+    editor.suspend();
+    expect(editorState().draft).toBeNull();
+    expect(editor.recoverable(created.dashboard_id)?.name).toBe("Half done");
+    editor.recover(created);
+    expect(editorState()).toMatchObject({ name: "Half done", dirty: true });
+    editor.cancel();
+    expect(editor.recoverable(created.dashboard_id)).toBeNull();
+  });
+
+  it("a saved dashboard leaves no draft behind", async () => {
+    const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Saved", layout });
+    editor.begin(created);
+    editor.rename("Saved again");
+    await editor.save();
+    expect(editor.recoverable(created.dashboard_id)).toBeNull();
   });
 });

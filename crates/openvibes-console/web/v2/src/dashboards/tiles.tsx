@@ -103,8 +103,10 @@ export function ListTile({ widget }: WidgetProps) {
 function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof parseListConfig>>) {
   const { can } = useSession();
   const permission = { "/findings": "findings.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "agents.read", "/audit": "audit.read" }[view] as "findings.read";
-  const { rows, total, loading, error } = useListRows(view, params);
-  if (!can(permission, view === "/audit")) return <Unavailable />;
+  // Nothing is requested for a list the viewer's role cannot read.
+  const allowed = can(permission, view === "/audit");
+  const { rows, total, loading, error } = useListRows(allowed ? view : null, params);
+  if (!allowed) return <Unavailable />;
   if (error) return <div className="tile-empty"><Icon name="alert" size={18} /> {error.message}</div>;
   if (loading) return <div className="skeleton" />;
   return (

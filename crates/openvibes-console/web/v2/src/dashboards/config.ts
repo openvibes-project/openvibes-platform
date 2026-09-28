@@ -46,3 +46,16 @@ export function parseListConfig(config: Config): { view: ListView; params: URLSe
   for (const key of [...params.keys()]) if (params.get(key) === "") params.delete(key);
   return { view: view as ListView, params, limit: int(config, "limit", 8, 1, 20) };
 }
+
+/** A number field's text as a whole number within bounds (the fallback when empty or not a number). */
+export function toInt(raw: string, min: number, max: number, fallback: number): number {
+  const value = Number(raw);
+  if (raw.trim() === "" || !Number.isFinite(value)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+/** Note text as at most 16 lines of at most 256 characters, cut by code point
+ *  so an emoji is never split into an unpaired surrogate. */
+export function noteLines(text: string): string[] {
+  return text.split("\n").slice(0, 16).map((line) => [...line].slice(0, 256).join(""));
+}

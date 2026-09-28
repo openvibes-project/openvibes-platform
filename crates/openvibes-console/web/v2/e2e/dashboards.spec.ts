@@ -124,3 +124,28 @@ test("a dashboard with a widget type this console does not know still renders", 
   await expect(page.locator(".tile", { hasText: "Stale hosts" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Findings" })).toBeVisible();
 });
+
+test("a tile deleted from the keyboard comes back with Undo", async ({ page }) => {
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  const tiles = page.locator(".tile");
+  const count = await tiles.count();
+  await tiles.first().focus();
+  await page.keyboard.press("Delete");
+  await expect(tiles).toHaveCount(count - 1);
+  await page.getByRole("button", { name: "Undo" }).click();
+  await expect(tiles).toHaveCount(count);
+});
+
+test("unsaved edits survive a reload and can be restored", async ({ page }) => {
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Dashboard name").fill("Half done");
+  await page.reload();
+  await page.getByRole("button", { name: "Restore" }).click();
+  await expect(page.getByLabel("Dashboard name")).toHaveValue("Half done");
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Half done");
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
+});

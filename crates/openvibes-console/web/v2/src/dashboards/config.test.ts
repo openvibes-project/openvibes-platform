@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { int, list, noteParts, parseListConfig, str } from "./config";
+import { int, list, noteLines, noteParts, parseListConfig, str, toInt } from "./config";
 
 describe("widget configs", () => {
   it("reads configs defensively", () => {
@@ -23,5 +23,24 @@ describe("widget configs", () => {
     expect(parseListConfig({ view: "/findings", query: "severity=critical", limit: 3 })?.params.get("severity")).toBe("critical");
     expect(parseListConfig({ view: "/etc/passwd" })).toBeUndefined();
     expect(parseListConfig({ view: "/agents", query: "%%%" })?.params.toString()).toBe("");
+  });
+});
+
+describe("settings input", () => {
+  it("number fields keep whole numbers within bounds", () => {
+    expect(toInt("1.5", 1, 20, 8)).toBe(2);
+    expect(toInt("", 1, 20, 8)).toBe(8);
+    expect(toInt("abc", 1, 20, 8)).toBe(8);
+    expect(toInt("99", 1, 20, 8)).toBe(20);
+    expect(toInt("0", 1, 20, 8)).toBe(1);
+  });
+
+  it("note lines are cut by character, never inside an emoji", () => {
+    const line = `${"a".repeat(255)}😀tail`;
+    const [cut] = noteLines(line);
+    expect([...(cut ?? "")].length).toBe(256);
+    expect(cut?.endsWith("😀")).toBe(true);
+    expect(JSON.parse(JSON.stringify(cut))).toBe(cut);
+    expect(noteLines(Array(20).fill("x").join("\n"))).toHaveLength(16);
   });
 });

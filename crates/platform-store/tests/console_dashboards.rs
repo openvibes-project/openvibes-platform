@@ -401,3 +401,39 @@ async fn an_owner_may_keep_at_most_one_hundred_dashboards() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn ids_are_uuids_in_any_case_and_malformed_ids_are_not_found() {
+    let (db, mut client) = setup().await;
+    let created = dashboards::create(&mut client, ALICE, "Case", &layout(), Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    let upper = created.dashboard_id.to_uppercase();
+    assert_eq!(
+        dashboards::get_visible(&client, ALICE, &upper)
+            .await
+            .unwrap()
+            .map(|d| d.name),
+        Some("Case".to_owned())
+    );
+    assert!(
+        dashboards::get_visible(&client, ALICE, "not-a-uuid")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert!(
+        dashboards::get_visible(&client, ALICE, "'; DROP TABLE console_dashboards; --")
+            .await
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        dashboards::delete(&mut client, ALICE, "0000")
+            .await
+            .unwrap(),
+        Err(Refusal::NotFound)
+    );
+    db.drop().await;
+}

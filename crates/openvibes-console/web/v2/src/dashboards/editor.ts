@@ -3,20 +3,39 @@
 // carry the version so a second tab cannot overwrite silently.
 import { useSyncExternalStore } from "react";
 
-import { ApiError, invalidate, request } from "../api/client";
+import { ApiError, invalidate, prime, request } from "../api/client";
 import type { Dashboard } from "../api/types";
-import { type FieldProblem, type Layout, type Widget, type WidgetType, addWidget, removeWidget, validateLayout, validateName } from "./layout";
+import { type FieldProblem, type Layout, type Widget, type WidgetType, addWidget, moveWidget, removeWidget, validateLayout, validateName } from "./layout";
 import { WIDGET_DEFAULTS } from "./defaults";
 
 export type EditorState = {
   dashboard: Dashboard | null; name: string; draft: Layout | null; dirty: boolean;
   saving: boolean; conflict: boolean; problems: FieldProblem[]; selected: string | null;
+  /** The last removed tile, for Undo. */
+  removed: Widget | null;
 };
 
-const empty: EditorState = { dashboard: null, name: "", draft: null, dirty: false, saving: false, conflict: false, problems: [], selected: null };
+const empty: EditorState = { dashboard: null, name: "", draft: null, dirty: false, saving: false, conflict: false, problems: [], selected: null, removed: null };
 let state = empty;
 const listeners = new Set<() => void>();
-const set = (next: Partial<EditorState>) => { state = { ...state, ...next }; for (const listener of listeners) listener(); };
+// Unsaved drafts are kept per tab, so a lost session, reload or crash does not
+// lose them; leaving on purpose, Cancel and Save clear them.
+const draftKey = (id: string) => `openvibes.v2.draft.${id}`;
+type StoredDraft = { name: string; draft: Layout; at: string };
+function storeDraft() {
+  if (!state.dashboard || !state.draft || !state.dirty) return;
+  try { sessionStorage.setItem(draftKey(state.dashboard.dashboard_id), JSON.stringify({ name: state.name, draft: state.draft, at: new Date().toISOString() })); } catch { /* recovery is a convenience */ }
+}
+function dropDraft(id: string | undefined) {
+  if (!id) return;
+  try { sessionStorage.removeItem(draftKey(id)); } catch { /* nothing stored */ }
+}
+
+const set = (next: Partial<EditorState>) => {
+  state = { ...state, ...next };
+  storeDraft();
+  for (const listener of listeners) listener();
+};
 export const editorState = () => state;
 
 function problemsOf(error: unknown): FieldProblem[] {
@@ -31,7 +50,24 @@ export const editor = {
     set({ ...empty, dashboard, name: dashboard.name, draft: dashboard.layout as unknown as Layout });
     return true;
   },
-  cancel() { set(empty); },
+  /** Ends editing and forgets the draft (the user chose to leave or cancel). */
+  cancel() { dropDraft(state.dashboard?.dashboard_id); set(empty); },
+  /** Ends editing but keeps the stored draft (the page went away, e.g. the session ended). */
+  suspend() { state = empty; for (const listener of listeners) listener(); },
+  /** A stored draft for this dashboard, if one was left unsaved. */
+  recoverable(id: string): StoredDraft | null {
+    try {
+      const parsed = JSON.parse(sessionStorage.getItem(draftKey(id)) ?? "null") as StoredDraft | null;
+      return parsed && typeof parsed.name === "string" && typeof parsed.draft === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  },
+  recover(dashboard: Dashboard) {
+    const stored = editor.recoverable(dashboard.dashboard_id);
+    if (!stored || !editor.begin(dashboard)) return;
+    set({ name: stored.name, draft: stored.draft, dirty: true });
+  },
   rename(name: string) { set({ name, dirty: true }); },
   change(layout: Layout) { set({ draft: layout, dirty: true }); },
   add(type: WidgetType): string {
@@ -46,7 +82,13 @@ export const editor = {
   },
   remove(id: string) {
     if (!state.draft) return;
-    set({ draft: removeWidget(state.draft, id), dirty: true, selected: state.selected === id ? null : state.selected });
+    const removed = state.draft.widgets.find((w) => w.id === id) ?? null;
+    set({ draft: removeWidget(state.draft, id), dirty: true, selected: state.selected === id ? null : state.selected, removed });
+  },
+  undo() {
+    if (!state.draft || !state.removed) return;
+    const back = state.removed;
+    set({ draft: moveWidget({ ...state.draft, widgets: [...state.draft.widgets, back] }, back.id, back.x, back.y), removed: null, selected: back.id });
   },
   select(id: string | null) { set({ selected: id }); },
   async save(): Promise<Dashboard | undefined> {
@@ -59,6 +101,9 @@ export const editor = {
     try {
       const saved = await request<Dashboard>("PUT", `/api/v1/dashboards/${dashboard.dashboard_id}`, { name, layout: draft }, { "if-match": `"${dashboard.version}"` });
       invalidate("/api/v1/dashboards");
+      // The saved dashboard is shown at once; no flash of the old layout.
+      prime(`/api/v1/dashboards/${saved.dashboard_id}`, saved);
+      dropDraft(saved.dashboard_id);
       set({ ...empty });
       return saved;
     } catch (error) {
@@ -73,6 +118,7 @@ export const editor = {
     try {
       const copy = await request<Dashboard>("POST", "/api/v1/dashboards", { name: state.name.trim() || "Untitled dashboard", layout: state.draft });
       invalidate("/api/v1/dashboards");
+      dropDraft(state.dashboard?.dashboard_id);
       set({ ...empty });
       return copy;
     } catch (error) {
@@ -82,6 +128,7 @@ export const editor = {
   },
   async reloadTheirs() {
     if (!state.dashboard) return;
+    dropDraft(state.dashboard.dashboard_id);
     invalidate(`/api/v1/dashboards/${state.dashboard.dashboard_id}`);
     const fresh = await request<Dashboard>("GET", `/api/v1/dashboards/${state.dashboard.dashboard_id}`);
     editor.begin(fresh);
