@@ -22,22 +22,49 @@ fn baseline_key<R: Runner>(ctx: &Ctx<R>) -> Result<[String; 3], String> {
         .map_err(|_| format!("{RULES}/baseline.key: want RULE_SET ISSUER_KEY_ID PUBLIC_KEY"))
 }
 
-fn published<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<bool, String> {
+/// The published version of `set` (`rules list`: `SET vN keys …`).
+fn published<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<Option<u64>, String> {
+    Ok(ctx.as_admin(&["rules", "list"])?.lines().find_map(|line| {
+        line.strip_prefix(&format!("{set} v"))?
+            .split_whitespace()
+            .next()?
+            .parse()
+            .ok()
+    }))
+}
+
+/// Whether `rules list` marks `set` retired (its line ends in ` retired`).
+fn retired<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<bool, String> {
     Ok(ctx
         .as_admin(&["rules", "list"])?
         .lines()
-        .any(|line| line.starts_with(&format!("{set} v"))))
+        .any(|line| line.split_whitespace().next() == Some(set) && line.ends_with(" retired")))
 }
 
+/// The version of the envelope the installed package carries, if any.
+fn installed<R: Runner>(ctx: &Ctx<R>) -> Option<u64> {
+    let text = ctx.read(&format!("{RULES}/baseline.json")).ok()?;
+    serde_json::from_str::<serde_json::Value>(&text).ok()?["rule_set_version"].as_u64()
+}
+
+/// Done while the published version is at least the installed package's,
+/// so a newer package (Update, or dnf) makes the step Todo and Repair or
+/// Update publishes it.
 pub fn rules_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Rules) {
         return Ok(StepState::Skipped("baseline rules not chosen".into()));
     }
     let set = baseline_key(ctx).map_or_else(|_| "baseline".to_owned(), |[set, _, _]| set);
-    Ok(if published(ctx, &set)? {
-        StepState::Done(format!("rule set {set} published"))
-    } else {
-        StepState::Todo
+    // An admin who retired the set stopped serving it on purpose, and
+    // `rules publish` refuses a retired set: nothing for Repair to fix.
+    if retired(ctx, &set)? {
+        return Ok(StepState::Skipped(format!("rule set {set} retired")));
+    }
+    Ok(match published(ctx, &set)? {
+        Some(version) if installed(ctx).is_none_or(|newest| newest <= version) => {
+            StepState::Done(format!("rule set {set} v{version} published"))
+        }
+        _ => StepState::Todo,
     })
 }
 
@@ -148,6 +175,7 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 mod tests {
     use platform_host::{Step, StepState};
 
+    use super::rules_check;
     use crate::setup::{
         fake::{Fake, plan},
         plan::Component::*,
@@ -219,6 +247,83 @@ mod tests {
         assert_eq!(
             fake.call(&admin(&["rules", "publish"]))[7],
             "/usr/share/openvibes/rules/baseline.json"
+        );
+    }
+
+    /// A platform with `baseline v1` published and the package's
+    /// envelope at `installed`.
+    fn rules_at(test: &str, installed: u64) -> Fake {
+        let fake = Fake::new(test);
+        fake.answer(
+            &admin(&["rules", "list"]),
+            0,
+            "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            &format!("{KEY}\n"),
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.json",
+            &format!("{{\"rule_set_version\":{installed},\"payload\":\"x\"}}"),
+        );
+        fake
+    }
+
+    #[test]
+    fn the_published_version_is_done() {
+        let fake = rules_at("rules-current", 1);
+        let state = rules_check(&fake.ctx(&plan(&[Ingest, Distribution, Rules]))).unwrap();
+        assert_eq!(
+            state,
+            StepState::Done("rule set baseline v1 published".into())
+        );
+    }
+
+    #[test]
+    fn a_newer_installed_package_is_todo_and_gets_published() {
+        let fake = rules_at("rules-newer", 2);
+        let plan = plan(&[Ingest, Distribution, Rules]);
+        assert_eq!(rules_check(&fake.ctx(&plan)).unwrap(), StepState::Todo);
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
+            0,
+            "",
+        );
+        fake.answer(&admin(&["rules", "trust", "add"]), 0, "already trusted\n");
+        fake.answer(&admin(&["rules", "publish"]), 0, "published baseline v2\n");
+        let state = run_step(&fake.ctx(&plan), Step::Rules);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert_eq!(
+            fake.call(&admin(&["rules", "publish"]))[7],
+            "/usr/share/openvibes/rules/baseline.json"
+        );
+    }
+
+    /// Tester: an admin who retired `baseline` chose to stop serving it; a
+    /// newer package must not turn the step into a failure it can never fix
+    /// (`rules publish` refuses a retired set).
+    #[test]
+    fn a_retired_baseline_is_not_todo_after_a_newer_package() {
+        let fake = Fake::new("rules-retired");
+        fake.answer(
+            &admin(&["rules", "list"]),
+            0,
+            "baseline v1 keys 1 expires 2028-09-27T00:00:00Z retired\n",
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            &format!("{KEY}\n"),
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.json",
+            "{\"rule_set_version\":2,\"payload\":\"x\"}",
+        );
+        let state = rules_check(&fake.ctx(&plan(&[Ingest, Distribution, Rules]))).unwrap();
+        assert_ne!(
+            state,
+            StepState::Todo,
+            "Repair would fail forever: {state:?}"
         );
     }
 
