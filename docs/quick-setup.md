@@ -50,7 +50,7 @@ Without a terminal, this does the same (keep the `--root-key-out` file as
 above; without it the root key is deleted):
 
 ```sh
-sudo openvibes-admin setup --quick --components ingest,console,distribution,vulns,agent \
+sudo openvibes-admin setup --quick --components ingest,console,distribution,vulns,rules,agent \
   --hostname NAME --root-key-out /root/openvibes-root-ca.key
 ```
 
