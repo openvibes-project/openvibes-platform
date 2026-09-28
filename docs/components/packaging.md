@@ -12,7 +12,8 @@ deployment, not for inclusion in Fedora itself.
 
 The web console has a separate `openvibes-console.spec` because its embedded
 frontend is built from a distinct, checksummed npm cache artefact. Build it
-with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256`; the expected
+with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256 [RPM_VERSION...]`
+(one package per version from one build; default: the workspace version); the expected
 digest must come from trusted release/source metadata independently of the
 archive and its checksum sidecar. The script verifies the cache, installs npm
 dependencies in offline mode (and uses `unshare -rn` when supported to isolate
