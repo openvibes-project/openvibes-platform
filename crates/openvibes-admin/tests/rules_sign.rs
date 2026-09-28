@@ -169,3 +169,25 @@ fn sign_refuses_zero_days() {
     assert!(!offline(&args).status.success());
     assert!(!out.exists());
 }
+
+#[test]
+fn keygen_accepts_a_bare_file_name() {
+    // The directory to flush is "." when the path has no parent part.
+    let dir = scratch_dir("keygen-bare");
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .current_dir(&dir)
+        .args(["--config", "/nonexistent/openvibes-admin.toml"])
+        .args([
+            "rules",
+            "keygen",
+            "rules.key",
+            "--rule-set",
+            "baseline",
+            "--issuer",
+            "openvibes-1",
+        ])
+        .output()
+        .unwrap();
+    stdout(&output);
+    assert_eq!(std::fs::metadata(dir.join("rules.key")).unwrap().len(), 32);
+}
