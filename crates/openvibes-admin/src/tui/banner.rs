@@ -1,7 +1,7 @@
 //! The OpenVIBES wordmark every screen shows (spec §5, "the interface comes
 //! first"): figlet's standard font, "Open" in white and "VIBES" in the brand
 //! teal (a solid colour: the logo's gradient stays brand artwork), the tabs
-//! on the row of the "p"'s descender, the host and version on the right.
+//! on the row of the "p"'s descender, the version on the right.
 //! Six rows; plain text without colour (`NO_COLOR`), so nothing depends on
 //! it.
 
@@ -72,8 +72,8 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     }
     lines.push(Line::from(last));
     frame.render_widget(Paragraph::new(lines), area);
-    // The host and version, right-aligned beside the wordmark.
-    let about = format!("{} · v{} ", app.machine, env!("CARGO_PKG_VERSION"));
+    // The version, right-aligned beside the wordmark.
+    let about = format!("v{} ", env!("CARGO_PKG_VERSION"));
     let width = u16::try_from(about.chars().count()).unwrap_or(area.width);
     if width + 58 <= area.width {
         let right = Rect::new(area.x + area.width - width, area.y + 1, width, 1);

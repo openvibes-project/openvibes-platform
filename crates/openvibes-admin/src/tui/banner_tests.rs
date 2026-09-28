@@ -44,7 +44,6 @@ impl Host for BannerHost {
 
 fn app() -> App<BannerHost> {
     let mut app = App::new(BannerHost);
-    app.machine = "platform.lan".into();
     app.color = true;
     app
 }
@@ -89,10 +88,6 @@ fn the_wordmark_and_tabs_head_every_screen() {
         );
         assert!(rows[5].contains("|_|"), "the p's descender: {rows:#?}");
         assert!(rows[5].contains(current), "{tab:?}: {:?}", rows[5]);
-        assert!(
-            rows[..6].iter().any(|r| r.contains("platform.lan")),
-            "{rows:#?}"
-        );
         assert!(
             rows[..6]
                 .iter()

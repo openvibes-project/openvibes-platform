@@ -173,8 +173,8 @@ Keyboard only; works at 80×24 over SSH; readable without colour (state is
 also written as text; `NO_COLOR` turns colour off); no mouse needed. Every
 screen starts with the OpenVIBES wordmark (the user, 2026-09-28): six rows
 in figlet's standard font, "Open" white and "VIBES" brand teal (solid; the
-logo's gradient stays brand artwork), the tabs on its last row, host and
-version on the right; longer screens scroll to keep the selection visible. Tabs: Setup · Services ·
+logo's gradient stays brand artwork), the tabs on its last row, the version
+on the right; longer screens scroll to keep the selection visible. Tabs: Setup · Services ·
 Configuration · Database · Health · System. `?` shows keys; every
 destructive action asks for confirmation.
 

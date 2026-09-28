@@ -27,7 +27,7 @@ without a password. `Tab` switches between the screens (Setup, Services,
 Configuration). Every screen starts with the OpenVIBES wordmark (six rows,
 figlet's standard font: "Open" in white, "VIBES" in the brand teal
 `#36b9e0`), the tabs on its last row (the current one highlighted), and the
-host name and version on the right; with `NO_COLOR` set it is plain text.
+version on the right; with `NO_COLOR` set it is plain text.
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,

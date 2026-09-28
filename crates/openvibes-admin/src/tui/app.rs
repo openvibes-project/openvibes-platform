@@ -50,8 +50,6 @@ pub struct App<H: Host> {
     pub message: Option<String>,
     pub logs: Vec<String>,
     pub quit: bool,
-    /// This host's name, for the banner.
-    pub machine: String,
     /// Colour in the banner; off when `NO_COLOR` is set (no-color.org).
     pub color: bool,
 }
@@ -62,9 +60,8 @@ impl<H: Host> App<H> {
         let hostname = std::fs::read_to_string("/etc/hostname")
             .map(|h| h.trim().to_lowercase())
             .unwrap_or_default();
-        let setup = Setup::new(set_up, hostname.clone(), std::env::var("HOME").ok());
+        let setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
         let mut app = App {
-            machine: hostname,
             color: std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty()),
             host,
             tab: if set_up { Tab::Services } else { Tab::Setup },
