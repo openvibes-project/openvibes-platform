@@ -186,8 +186,16 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let token =
         token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
     let root = ctx.read(super::pki::ROOT_CERT)?;
-    let command =
-        super::agent_install_command(&ctx.plan.hostname, &token, &super::pki::fingerprint(&root)?);
+    let rules = ctx
+        .read(super::BASELINE_KEY)
+        .ok()
+        .and_then(|line| super::rules_arg(&line));
+    let command = super::agent_install_command(
+        &ctx.plan.hostname,
+        &token,
+        &super::pki::fingerprint(&root)?,
+        rules.as_deref(),
+    );
     Ok(StepState::Done(format!(
         "ready: {}; add an agent on another host (token valid 24 hours, 10 enrollments; \
          visible in its process list while it runs): {command}",
@@ -319,6 +327,22 @@ mod tests {
              --agent --platform platform.example.com --token {TOKEN} --ca-sha256 {fingerprint}"
         );
         assert!(state.detail().contains(&command), "{state:?}");
+        assert!(
+            !state.detail().contains("--rules"),
+            "no rules package: {state:?}"
+        );
+        // With the baseline package installed, remote agents get its key.
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
+        assert!(
+            state.detail().contains(&format!(
+                "{command} --rules baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            )),
+            "{state:?}"
+        );
         // Only a status check leaves the token alone.
         fake.calls.borrow_mut().clear();
         assert!(matches!(

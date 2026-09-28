@@ -296,10 +296,13 @@ async fn agent_command(
         label: Some("agent command".into()),
     };
     let (created, target) = crate::token::run(&create, client, actor).await;
+    let rules = std::fs::read_to_string(crate::setup::BASELINE_KEY)
+        .ok()
+        .and_then(|line| crate::setup::rules_arg(&line));
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
             "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",
-            crate::setup::agent_install_command(&platform, &token, &fingerprint)
+            crate::setup::agent_install_command(&platform, &token, &fingerprint, rules.as_deref())
         )
     });
     (output, target)

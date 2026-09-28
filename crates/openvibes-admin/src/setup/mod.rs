@@ -31,12 +31,42 @@ pub use system::{Ctx, lock};
 pub(crate) use pki::fingerprint;
 pub(crate) use run::token_from;
 
-/// The one line that installs and enrolls an agent (releases spec §5).
-pub fn agent_install_command(platform: &str, token: &str, fingerprint: &str) -> String {
+/// Where the baseline rules package puts its trust line.
+pub const BASELINE_KEY: &str = "/usr/share/openvibes/rules/baseline.key";
+
+/// The one line that installs and enrolls an agent (releases spec §5), with
+/// `--rules SET,ISSUER,KEY` when the platform has the baseline rules, so the
+/// agent trusts the same key the platform published with.
+pub fn agent_install_command(
+    platform: &str,
+    token: &str,
+    fingerprint: &str,
+    rules: Option<&str>,
+) -> String {
+    let rules = rules.map_or_else(String::new, |rules| format!(" --rules {rules}"));
     format!(
         "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
-         --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}"
+         --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}{rules}"
     )
+}
+
+/// `SET,ISSUER,KEY` from a `baseline.key` line, or `None` when any part has
+/// characters outside identifiers and base64url (nothing to quote).
+pub fn rules_arg(key_line: &str) -> Option<String> {
+    let fields: Vec<&str> = key_line.split_whitespace().collect();
+    let [set, issuer, key] = fields.as_slice() else {
+        return None;
+    };
+    let id = |s: &str| {
+        !s.is_empty()
+            && s.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b".:_-".contains(&b))
+    };
+    let key_ok = key.len() == 43
+        && key
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
+    (id(set) && id(issuer) && key_ok).then(|| format!("{set},{issuer},{key}"))
 }
 
 /// Whether the step is done (a check that cannot run is `Failed`).
@@ -334,9 +364,34 @@ mod command_tests {
     #[test]
     fn the_agent_install_command_is_one_line() {
         assert_eq!(
-            super::agent_install_command("h.example", "T", "AB:CD"),
+            super::agent_install_command("h.example", "T", "AB:CD", None),
             "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
              --agent --platform h.example --token T --ca-sha256 AB:CD"
         );
+    }
+
+    #[test]
+    fn the_baseline_trust_line_rides_along() {
+        let key = "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n";
+        let rules = super::rules_arg(key);
+        assert_eq!(
+            rules.as_deref(),
+            Some("baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+        );
+        assert!(
+            super::agent_install_command("h.example", "T", "AB:CD", rules.as_deref()).ends_with(
+                " --rules baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+            )
+        );
+        // Anything that could break the shell line or the installer's check
+        // is left out rather than quoted.
+        for bad in [
+            "baseline openvibes-1",
+            "baseline openvibes-1 A B",
+            "base line x y",
+            "b;rm x A",
+        ] {
+            assert_eq!(super::rules_arg(bad), None, "{bad}");
+        }
     }
 }
