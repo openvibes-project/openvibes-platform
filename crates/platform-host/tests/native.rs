@@ -676,6 +676,7 @@ fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
         ["feeds", "status"],
         "the CLI's own subcommand"
     );
+    assert_eq!(Database::RulesList.args(), ["rules", "list"]);
 }
 
 #[test]

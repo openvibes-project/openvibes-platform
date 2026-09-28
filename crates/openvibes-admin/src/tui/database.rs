@@ -10,6 +10,9 @@ use crate::setup::pki::RENEW_DAYS;
 
 /// Disk use from which Health reports a problem.
 const DISK_FULL_PERCENT: u8 = 90;
+/// A published rule bundle expiring sooner than this is a problem
+/// (baseline rules spec §8).
+const RULES_WARN_DAYS: i64 = 90;
 
 /// Both screens' state.
 #[derive(Default)]
@@ -39,6 +42,7 @@ pub fn checks(
     certificates: &[(&str, Result<String, HostError>)],
     feeds: Result<String, HostError>,
     disk: Result<Vec<DiskUse>, HostError>,
+    rules: Result<String, HostError>,
     now: DateTime<Utc>,
 ) -> Vec<Check> {
     let mut checks = Vec::new();
@@ -103,9 +107,44 @@ pub fn checks(
         })),
         Err(error) => checks.push(check(true, format!("disk use: {error}"))),
     }
+    match rules {
+        Ok(out) => checks.extend(out.lines().filter_map(|line| rule_set(line, now))),
+        Err(error) => checks.push(check(true, format!("rule sets: {error}"))),
+    }
     // Stable: within problems and within the rest, the order above stays.
     checks.sort_by_key(|check| !check.problem);
     checks
+}
+
+/// One `rules list` line (`SET vN keys K expires TIME [flags]`, rules.rs):
+/// the current bundle's expiry. Sets that are retired or have no bundle
+/// are left out.
+fn rule_set(line: &str, now: DateTime<Utc>) -> Option<Check> {
+    let fields: Vec<&str> = line.split_whitespace().collect();
+    let [set, version, "keys", _, "expires", time, flags @ ..] = fields.as_slice() else {
+        return None;
+    };
+    if *version == "none" || flags.contains(&"retired") {
+        return None;
+    }
+    let name = format!("rule set {set} {version}");
+    let Ok(expires) = DateTime::parse_from_rfc3339(time) else {
+        return Some(check(true, format!("{name}: no readable expiry ({time})")));
+    };
+    let expires = expires.with_timezone(&Utc);
+    let date = expires.format("%Y-%m-%d");
+    let fix = "install the newer rules package and run Repair, or publish a newer bundle";
+    let days = (expires - now).num_days();
+    Some(if expires <= now {
+        check(true, format!("{name}: expired on {date}; {fix}"))
+    } else if days < RULES_WARN_DAYS {
+        check(
+            true,
+            format!("{name}: expires in {days} days ({date}); {fix}"),
+        )
+    } else {
+        check(false, format!("{name}: expires in {days} days ({date})"))
+    })
 }
 
 impl<H: Host> App<H> {
@@ -162,6 +201,7 @@ impl<H: Host> App<H> {
             &self.host.certificates(),
             self.host.database(Database::FeedsStatus),
             self.host.disk(),
+            self.host.database(Database::RulesList),
             Utc::now(),
         );
     }

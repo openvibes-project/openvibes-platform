@@ -75,6 +75,8 @@ pub enum Database {
     Maintenance,
     /// `feeds status`.
     FeedsStatus,
+    /// `rules list`.
+    RulesList,
 }
 
 impl Database {
@@ -86,6 +88,7 @@ impl Database {
             Database::Migrate => &["migrate"],
             Database::Maintenance => &["maintenance"],
             Database::FeedsStatus => &["feeds", "status"],
+            Database::RulesList => &["rules", "list"],
         }
     }
 }

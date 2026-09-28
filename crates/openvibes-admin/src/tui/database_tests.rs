@@ -1,6 +1,6 @@
 //! The Database and Health screens against the fake host, at 80×24.
 
-use chrono::{Duration, Utc};
+use chrono::{DateTime, Duration, Utc};
 use platform_host::{Database, DiskUse, HostError, ServiceStatus, Unit};
 
 use super::{
@@ -83,6 +83,7 @@ fn certificates_disk_and_feeds_become_problems_at_their_thresholds() {
             &certificate,
             Ok(feeds.into()),
             disk(used),
+            Ok(String::new()),
             now,
         )
     };
@@ -115,8 +116,64 @@ fn an_unreachable_database_is_a_problem_and_uninstalled_units_are_left_out() {
         &[],
         Err(HostError::Failed("connection refused".into())),
         Ok(Vec::new()),
+        Ok(String::new()),
         Utc::now(),
     );
     assert_eq!(checks.len(), 1);
     assert!(checks[0].problem && checks[0].text == "database: failed: connection refused");
+}
+
+#[test]
+fn rule_sets_near_expiry_are_problems() {
+    let now = DateTime::parse_from_rfc3339("2026-09-28T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let list = "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n\
+                soon v3 keys 1 expires 2026-10-20T00:00:00Z\n\
+                gone v2 keys 1 expires 2026-09-01T00:00:00Z\n\
+                old v1 keys 1 expires 2026-09-02T00:00:00Z retired\n\
+                empty none keys 1 expires -\n";
+    let got = checks(
+        &[] as &[ServiceStatus],
+        &[],
+        Ok(String::new()),
+        Ok(Vec::new()),
+        Ok(list.into()),
+        now,
+    );
+    let text = |set: &str| got.iter().find(|c| c.text.contains(set)).cloned();
+    let fine = text("rule set baseline v1").unwrap();
+    assert!(
+        !fine.problem && fine.text.contains("expires in 730 days (2028-09-27)"),
+        "{got:?}"
+    );
+    let soon = text("rule set soon v3").unwrap();
+    assert!(
+        soon.problem && soon.text.contains("expires in 22 days"),
+        "{got:?}"
+    );
+    assert!(soon.text.contains("run Repair"), "{got:?}");
+    let gone = text("rule set gone v2").unwrap();
+    assert!(
+        gone.problem && gone.text.contains("expired on 2026-09-01"),
+        "{got:?}"
+    );
+    assert!(text("old").is_none() && text("empty").is_none(), "{got:?}");
+}
+
+#[test]
+fn unreadable_rule_sets_are_a_problem() {
+    let got = checks(
+        &[] as &[ServiceStatus],
+        &[],
+        Ok(String::new()),
+        Ok(Vec::new()),
+        Err(HostError::NotOperator),
+        Utc::now(),
+    );
+    assert!(
+        got.iter()
+            .any(|c| c.problem && c.text.starts_with("rule sets: ")),
+        "{got:?}"
+    );
 }
