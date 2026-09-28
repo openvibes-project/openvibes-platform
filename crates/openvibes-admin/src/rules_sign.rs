@@ -82,6 +82,17 @@ pub fn keygen(path: &Path, rule_set: &str, issuer: &str) -> Result<String, Strin
     ))
 }
 
+/// The trust line of an existing key file (the same checks as `sign`).
+pub fn show_public(path: &Path, rule_set: &str, issuer: &str) -> Result<String, String> {
+    identifier("rule set", rule_set)?;
+    identifier("issuer key id", issuer)?;
+    let public = read_key(path)?.verifying_key().to_bytes();
+    Ok(format!(
+        "{rule_set} {issuer} {}\n",
+        URL_SAFE_NO_PAD.encode(public)
+    ))
+}
+
 /// Reads a private key that only its owner can access.
 fn read_key(path: &Path) -> Result<SigningKey, String> {
     let shown = path.display();

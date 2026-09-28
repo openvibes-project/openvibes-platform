@@ -191,3 +191,35 @@ fn keygen_accepts_a_bare_file_name() {
     stdout(&output);
     assert_eq!(std::fs::metadata(dir.join("rules.key")).unwrap().len(), 32);
 }
+
+#[test]
+fn show_public_prints_the_trust_line_of_an_existing_key() {
+    let dir = scratch_dir("show-public");
+    let key = dir.join("rules.key");
+    let line = stdout(&keygen(&key, "baseline"));
+    let show = |key: &std::path::Path| {
+        offline(&[
+            "rules",
+            "keygen",
+            "--show-public",
+            key.to_str().unwrap(),
+            "--rule-set",
+            "baseline",
+            "--issuer",
+            "openvibes-1",
+        ])
+    };
+    assert_eq!(stdout(&show(&key)), line, "the same line keygen printed");
+    assert_eq!(
+        std::fs::metadata(&key).unwrap().len(),
+        32,
+        "nothing written"
+    );
+    std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644)).unwrap();
+    let output = show(&key);
+    assert!(
+        !output.status.success(),
+        "a readable key is refused here too"
+    );
+    assert!(!show(&dir.join("missing.key")).status.success());
+}
