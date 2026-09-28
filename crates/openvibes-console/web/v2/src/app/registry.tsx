@@ -6,6 +6,8 @@ import type { ReactNode } from "react";
 
 import type { Permission } from "../api/types";
 import { panelTitle } from "./titles";
+import { DashboardsView } from "../dashboards/DashboardsView";
+import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
 import { AssetGroupPanel, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
@@ -15,22 +17,23 @@ import type { IconName } from "../ui/Icon";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
 import { Agents } from "../views/Agents";
 import { Findings } from "../views/Findings";
-import { Overview } from "../views/Overview";
 import { Vulnerabilities } from "../views/Vulnerabilities";
 
 export type ViewDef = {
   path: string;
+  /** Paths below this prefix belong to the view too (e.g. /dashboards/{id}). */
+  prefix?: string;
   label: string;
   icon: IconName;
   group: "Investigate" | "Operate" | "Administer";
-  /** Any of these opens the view; `global` requires an unscoped grant. */
+  /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
   access: readonly { permission: Permission; global?: boolean }[];
   keys: string;
   render: () => ReactNode;
 };
 
 export const views: readonly ViewDef[] = [
-  { path: "/", label: "Overview", icon: "overview", group: "Investigate", keys: "g o", access: [{ permission: "agents.read" }, { permission: "findings.read" }], render: () => <Overview /> },
+  { path: "/", prefix: "/dashboards/", label: "Dashboards", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/findings", label: "Findings", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Agents", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
@@ -64,6 +67,8 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
   user: { label: "User", icon: "user", title: (id) => id, render: (id) => <UserPanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
+  "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },
+  widget: { label: "Widget", icon: "filter", title: (id) => id, render: (id) => <WidgetSettingsPanel id={id} /> },
   "asset-group": { label: "Asset group", icon: "access", title: (id) => id === "new" ? "New group" : id, render: (id) => <AssetGroupPanel id={id} /> },
   "audit-retention": { label: "Audit log", icon: "audit", title: () => "Retention", render: () => <RetentionPanel /> },
 };

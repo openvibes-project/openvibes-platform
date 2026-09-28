@@ -207,7 +207,7 @@ export function buildDemoData(now = Date.now()) {
       { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read"] },
       { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read", "findings.triage", "assistant.use"] },
       { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use"] },
+      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share"] },
     ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
@@ -286,6 +286,20 @@ export function buildDemoData(now = Date.now()) {
   return {
     now, rules: RULES, agents, tags, certificates, findings, triage, advisories, vulnerabilities, access,
     enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit,
+    dashboards: [
+      { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", shared_role_id: null as string | null,
+        layout: { schema: 1 as const, widgets: [
+          { id: "exploited", type: "number" as const, x: 0, y: 0, w: 3, h: 2, config: { metric: "vulns.exploited" } },
+          { id: "stale", type: "number" as const, x: 3, y: 0, w: 3, h: 2, config: { metric: "agents.stale" } },
+          { id: "attention", type: "attention" as const, x: 0, y: 2, w: 8, h: 6, config: { include: ["exploited", "findings"], limit: 8 } },
+          { id: "note", type: "note" as const, x: 8, y: 2, w: 4, h: 3, config: { text: ["Patch window: Thursday 20:00", "https://wiki.example.test/patching"] } },
+        ] } },
+      { dashboard_id: "d-ola-triage", owner: "u-ola", name: "Analyst triage", shared_role_id: "analyst" as string | null,
+        layout: { schema: 1 as const, widgets: [
+          { id: "critical", type: "list" as const, x: 0, y: 0, w: 8, h: 6, config: { view: "/findings", query: "severity=critical", limit: 10 } },
+          { id: "trend", type: "trend" as const, x: 8, y: 0, w: 4, h: 3, config: { finding: "hardening-ssh/SSH-002", days: 14 } },
+        ] } },
+    ],
     retention: { retention_days: 365, updated_at: iso(now - 90 * DAY), updated_by: "admin", version: 1 },
   };
 }

@@ -7,20 +7,15 @@ import { TriageBar } from "../panels/FindingPanel";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { severityOrder } from "../ui/format";
-import { matches } from "../ui/table";
+import { selectFindings } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 
 export function Findings() {
   const { params, panels } = useLocation();
   const groups = useAllPages<FindingGroup>("/api/v1/findings/groups");
-  const severity = params.get("severity");
   const onlyOpen = params.get("state") !== "all";
-  const ruleSet = params.get("set");
-  const q = params.get("q") ?? "";
   const all = useMemo(() => groups.data ?? [], [groups.data]);
-  const rows = useMemo(() => all.filter((group) =>
-    (!severity || group.severity === severity) && (!onlyOpen || group.triage_counts.open > 0) && (!ruleSet || group.rule_set_id === ruleSet) &&
-    matches([group.latest_message, group.rule_id, group.rule_set_id], q)), [all, severity, onlyOpen, ruleSet, q]);
+  const rows = useMemo(() => selectFindings(all, params), [all, params]);
   const top = panels[panels.length - 1];
   const sets = [...new Set(all.map((group) => group.rule_set_id))].sort();
   const bySeverity = (s: string) => all.filter((g) => g.severity === s && (!onlyOpen || g.triage_counts.open > 0)).length;

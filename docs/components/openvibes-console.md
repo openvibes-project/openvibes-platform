@@ -25,7 +25,7 @@ browser E2E, and CI/review confirmation for the final commit.
 C3 local authentication is
 implemented through pre-auth, login, session validation/refresh, logout, and
 password hash upgrade. When both `database_url` and `public_origin` are set,
-the executable connects to PostgreSQL, requires schema version 25, and serves
+the executable connects to PostgreSQL, requires schema version 26, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
@@ -150,6 +150,12 @@ resolve current permission scopes for each request and apply asset-group
 selectors in SQL before pagination or aggregation. Access-control, audit,
 enrollment, service-account, rule-set, triage, and agent-revocation operations
 use authenticated, permission-checked routes with transactional audit records.
+
+Dashboards (`/api/v1/dashboards`, `/api/v1/dashboards/{id}`,
+`/api/v1/dashboards/{id}/sharing`, `/api/v1/me/home`) belong to browser
+users: any signed-in user keeps their own, sees those shared with a role they
+hold, and chooses a home; service-account bearer tokens get 403. See
+[console-dashboards.md](console-dashboards.md).
 
 The implemented production UI covers sign-in, overview, agents, findings,
 enrollment, service accounts, rule sets, access control, audit, and

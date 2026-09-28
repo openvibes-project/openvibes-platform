@@ -6,6 +6,8 @@ the `EffectiveCapability` DTOs returned by the session API. Agent and finding
 permissions can be scoped to one or more asset groups. Scoped bindings ignore
 control-plane permissions; a global grant for a permission dominates any
 scoped grants. Group IDs are deduplicated and sorted for stable output.
+`dashboards.share` (global, Admin only) lets an owner share their own
+dashboards with a role (schema 26).
 
 The resolver is pure and has no configuration or database access. Persisted
 bindings are loaded from PostgreSQL for each authenticated request. The

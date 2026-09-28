@@ -38,6 +38,41 @@ Show everything v1 shows, without page changes for details:
   Not yet in v2: per-host triage fields for assignee and "accepted until"
   (v1's single-finding form).
 
+## Dashboards
+
+The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)).
+
+- **Home:** the built-in Overview (read-only, rebuilt from widgets; its
+  header keeps the greeting) until a user picks another with the pin button.
+  `/` shows the home dashboard, and `/dashboards/{id}` shows a specific one
+  (`/dashboards/overview` is the built-in).
+- **Switcher:** Built-in, Mine and Shared with me, plus New dashboard.
+  Dashboards also appear in the Ctrl+K palette.
+- **Edit mode** (own dashboards only; built-in and shared ones offer
+  "Duplicate to edit"):
+  - drag a tile's header to move it and its corner to resize it; tiles
+    below are pushed down;
+  - with a tile focused, arrows move it, Shift+arrows resize it, Delete
+    removes it and Enter opens its settings;
+  - Add widget opens the gallery in the inspector, and widget settings open
+    there too.
+- **Saving:** Save sends the version (`If-Match`). If someone else saved
+  first, the editor offers "Reload theirs" or "Save as a copy" and keeps
+  your edits. Leaving with unsaved changes asks first.
+- **Widgets:** Number, Breakdown, Needs attention, List (any list view with
+  its filters), Trend, Most exposed hosts, and Note (plain text; only
+  whole `https://` words become links).
+  - Each tile loads data with the viewer's own permissions.
+  - A tile the viewer's role can't read says so.
+  - A tile that fails to render doesn't take the dashboard down.
+- **Phones:** tiles stack in reading order, and editing is hidden.
+- **Menu:**
+  - Duplicate, Rename and Delete;
+  - Share with role (owner with `dashboards.share`);
+  - Set as home.
+- **The demo** keeps dashboards and home choices in the browser's
+  `localStorage` (`openvibes.v2.demo.dashboards`).
+
 ## Interfaces
 
 - **Entry:** `web/v2/index.html` → `v2/src/main.tsx` → `shell/App.tsx`.
@@ -93,7 +128,7 @@ cd crates/openvibes-console/web
 npm ci
 npx vitest run --config vite.v2.config.ts   # location, client, table, demo server
 npx eslint v2 vite.v2.config.ts --max-warnings 0 && npx tsc --noEmit
-npm run test:e2e:v2                          # Playwright smoke + axe (both themes), Chromium and Firefox
+npm run test:e2e:v2                          # Playwright smoke, dashboards + axe (both themes), Chromium and Firefox
 npm run dev:v2                               # http://127.0.0.1:5174 with demo data
 V2_LIVE=https://127.0.0.1:8443 npm run dev:v2 -- --open '/?live=1'   # against a running console
 ```

@@ -18,6 +18,8 @@ pub mod console_auth;
 pub mod console_read;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
+/// User dashboards: layouts, sharing by role, home (schema 26).
+pub mod dashboards;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
 /// Host package inventories (vulnerability management).

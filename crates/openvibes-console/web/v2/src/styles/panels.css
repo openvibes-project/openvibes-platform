@@ -164,3 +164,33 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .trend__bar:hover { opacity: 1; }
 .trend__bar[data-empty] { background: var(--surface-3); }
 .trend figcaption { font-size: 11.5px; }
+.tile-empty { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; padding: 8px 0; }
+.tile-number { all: unset; cursor: pointer; display: block; }
+.tile-number:focus-visible { outline: 2px solid var(--focus); border-radius: var(--r-1); }
+.tile-list { display: grid; gap: 6px; }
+.tile-more { justify-self: start; font-size: 13px; }
+.tile-note p { margin: 0 0 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
+.grid { position: relative; margin: 0 24px 24px; }
+.grid--stacked { display: grid; gap: 12px; }
+.grid--stacked .tile { position: static; min-height: 140px; }
+.grid__empty { padding: 32px; justify-content: center; border: 2px dashed var(--line-strong); border-radius: var(--r-3); }
+.tile {
+  position: absolute; display: flex; flex-direction: column; overflow: hidden; background: var(--surface);
+  border: 1px solid var(--line); border-radius: var(--r-3); box-shadow: var(--shadow-1); transition: box-shadow var(--fast), border-color var(--fast);
+}
+.grid--editing .tile { transition: left var(--fast), top var(--fast), width var(--fast), height var(--fast); }
+.grid--editing .tile__head { cursor: grab; }
+.grid--editing .tile:focus-visible, .tile[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.tile__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 0 14px; min-height: 36px; user-select: none; }
+.tile__title { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.tile__body { flex: 1; min-height: 0; overflow: auto; padding: 8px 14px 12px; }
+.tile__body .stat__value { font-size: 30px; }
+.tile__grip { position: absolute; right: 2px; bottom: 2px; width: 14px; height: 14px; cursor: nwse-resize;
+  background: linear-gradient(135deg, transparent 55%, var(--line-strong) 55%, var(--line-strong) 65%, transparent 65%, transparent 75%, var(--line-strong) 75%); }
+
+.gallery { list-style: none; margin: 0; padding: 0 12px 12px; display: grid; gap: 6px; }
+.gallery__item { all: unset; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: var(--r-2); cursor: pointer; width: 100%; box-sizing: border-box; }
+.gallery__item:hover, .gallery__item:focus-visible { background: var(--surface-2); }
+.gallery__item span.grow { display: grid; }
+.dashboard-name { font-size: 20px; font-weight: 600; height: 40px; width: min(420px, 100%); }
+.dashboard-header .view-header__title h1 { font-size: 22px; }

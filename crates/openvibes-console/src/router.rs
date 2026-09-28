@@ -49,7 +49,7 @@ pub struct Readiness(Arc<AtomicBool>);
 
 #[derive(Clone)]
 pub(crate) struct AuthHttpState {
-    pool: Pool,
+    pub(crate) pool: Pool,
     public_origin: Arc<str>,
     public_origin_valid: bool,
     dummy_password_phc: Option<String>,
@@ -490,6 +490,24 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/access-control/bindings/{binding_id}",
             axum::routing::delete(revoke_authenticated_access_binding),
+        )
+        .route(
+            "/v1/dashboards",
+            get(crate::dashboards::list_dashboards).post(crate::dashboards::create_dashboard),
+        )
+        .route(
+            "/v1/dashboards/{dashboard_id}",
+            get(crate::dashboards::get_dashboard)
+                .put(crate::dashboards::update_dashboard)
+                .delete(crate::dashboards::delete_dashboard),
+        )
+        .route(
+            "/v1/dashboards/{dashboard_id}/sharing",
+            axum::routing::put(crate::dashboards::share_dashboard),
+        )
+        .route(
+            "/v1/me/home",
+            get(crate::dashboards::get_home).put(crate::dashboards::set_home),
         )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
@@ -3865,7 +3883,7 @@ pub(crate) async fn update_authenticated_audit_retention(
     }
 }
 
-fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
+pub(crate) fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
     let values = headers.get_all(header::IF_MATCH);
     let mut iter = values.iter();
     let Some(value) = iter.next() else {
@@ -5322,7 +5340,7 @@ async fn authenticated_permission(
     permission: crate::Permission,
     csrf_required: bool,
 ) -> Result<(platform_store::console_read::AgentScope, String), Response> {
-    use crate::auth::{PresentedCredentials, presented_credentials, session_csrf, session_digest};
+    use crate::auth::{PresentedCredentials, presented_credentials, session_digest};
     use platform_store::console_read::AgentScope;
 
     let now = Utc::now();
@@ -5380,8 +5398,65 @@ async fn authenticated_permission(
         }
         _ => return Err(authentication_required()),
     };
-    let digest = session_digest(secret.expose_secret());
-    let csrf = session_csrf(secret.expose_secret()).0;
+    let user = session_capabilities(state, headers, secret.expose_secret(), csrf_required).await?;
+    match user
+        .capabilities
+        .iter()
+        .find(|capability| capability.permission == permission)
+    {
+        Some(capability) => match &capability.scope {
+            crate::PermissionScope::Global => Ok((AgentScope::Global, user.user_id)),
+            crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
+                AgentScope::AssetGroups(asset_group_ids.clone()),
+                user.user_id,
+            )),
+        },
+        None => Err(problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ))),
+    }
+}
+
+/// A signed-in browser user and their effective capabilities. Bearer
+/// tokens are refused: dashboards and preferences belong to people.
+pub(crate) struct SessionUser {
+    pub(crate) user_id: String,
+    pub(crate) capabilities: Vec<crate::EffectiveCapability>,
+}
+
+pub(crate) async fn session_user(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    csrf_required: bool,
+) -> Result<SessionUser, Response> {
+    use crate::auth::{PresentedCredentials, presented_credentials};
+    match presented_credentials(headers) {
+        Ok(PresentedCredentials::Session(secret)) => {
+            session_capabilities(state, headers, secret.expose_secret(), csrf_required).await
+        }
+        Ok(PresentedCredentials::Bearer(_)) => Err(problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ))),
+        _ => Err(authentication_required()),
+    }
+}
+
+/// The session path shared by `authenticated_permission` and `session_user`:
+/// verifies the session and CSRF, touches it, and resolves capabilities.
+async fn session_capabilities(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    secret: &str,
+    csrf_required: bool,
+) -> Result<SessionUser, Response> {
+    use crate::auth::{session_csrf, session_digest};
+    let now = Utc::now();
+    let digest = session_digest(secret);
+    let csrf = session_csrf(secret).0;
     let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
     let active = console_auth::session(&client, &digest, now)
         .await
@@ -5432,26 +5507,13 @@ async fn authenticated_permission(
         }
     }
     let capabilities = crate::resolve_capabilities(&resolved);
-    match capabilities
-        .iter()
-        .find(|capability| capability.permission == permission)
-    {
-        Some(capability) => match &capability.scope {
-            crate::PermissionScope::Global => Ok((AgentScope::Global, active.user_id)),
-            crate::PermissionScope::AssetGroups { asset_group_ids } => Ok((
-                AgentScope::AssetGroups(asset_group_ids.clone()),
-                active.user_id,
-            )),
-        },
-        None => Err(problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ))),
-    }
+    Ok(SessionUser {
+        user_id: active.user_id,
+        capabilities,
+    })
 }
 
-fn authentication_required() -> Response {
+pub(crate) fn authentication_required() -> Response {
     problem_response(ProblemDetails::new(
         StatusCode::UNAUTHORIZED,
         "authentication_required",
@@ -5459,7 +5521,7 @@ fn authentication_required() -> Response {
     ))
 }
 
-fn unavailable_auth() -> Response {
+pub(crate) fn unavailable_auth() -> Response {
     problem_response(ProblemDetails::new(
         StatusCode::SERVICE_UNAVAILABLE,
         "authentication_unavailable",
