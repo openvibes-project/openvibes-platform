@@ -24,7 +24,10 @@ person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. `Tab` switches between the screens (Setup, Services,
-Configuration).
+Configuration). Every screen starts with the OpenVIBES wordmark (six rows,
+figlet's standard font: "Open" in white, "VIBES" in the brand teal
+`#36b9e0`), the tabs on its last row (the current one highlighted), and the
+host name and version on the right; with `NO_COLOR` set it is plain text.
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,

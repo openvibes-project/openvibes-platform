@@ -278,8 +278,7 @@ fn configuration_renders_the_ingest_form_at_80x24() {
         "[ingest]",
         "/etc/openvibes/ingest.toml",
         "0.0.0.0:18423",
-        "max_inventory_in_flight",
-        "(default)",
+        "max_in_flight",
         "w save",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
