@@ -59,6 +59,12 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
 - **Saving:** Save sends the version (`If-Match`). If someone else saved
   first, the editor offers "Reload theirs" or "Save as a copy" and keeps
   your edits. Leaving with unsaved changes asks first.
+- **Unsaved drafts** are kept per tab (`sessionStorage`,
+  `openvibes.v2.draft.{id}`) while you edit. After a lost session, a reload
+  or a crash, the dashboard offers to Restore or Discard them. Save, Cancel
+  or a confirmed leave clears them.
+- **Undo:** removing a tile (button or Delete) shows an Undo bar. In edit
+  mode, a screen-reader hint on each tile describes its keys.
 - **Widgets:** Number, Breakdown, Needs attention, List (any list view with
   its filters), Trend, Most exposed hosts, and Note (plain text; only
   whole `https://` words become links).

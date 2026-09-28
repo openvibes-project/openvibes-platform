@@ -460,6 +460,9 @@ permission-checked console API, so sharing never exposes data.
   `set_sharing(role | None)` (owner only; the caller checks
   `dashboards.share`), `home` (only if still visible) and
   `set_home(id | None)` (must be visible).
+- Ids are checked to be UUIDs in Rust (malformed ids are not found without a
+  query) and compared as `uuid`, so lookups use the primary key and any case
+  works.
 - Refusals are values, not errors: `Refusal::{NotFound, NotOwner, Stale,
   TooMany, UnknownRole}`.
 - Every change writes its audit row (`dashboard.create`, `.update`,

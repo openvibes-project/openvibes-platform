@@ -81,7 +81,7 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
         };
         return (
           <section key={widget.id} className="tile" style={style} aria-label={title} data-selected={canEdit && selected === widget.id || undefined}
-            tabIndex={canEdit ? 0 : undefined} onKeyDown={(event) => onKey(event, widget)} onFocus={() => canEdit && editor.select(widget.id)}>
+            tabIndex={canEdit ? 0 : undefined} aria-describedby={canEdit ? "grid-keys" : undefined} onKeyDown={(event) => onKey(event, widget)} onFocus={() => canEdit && editor.select(widget.id)}>
             <header className="tile__head" onPointerDown={(event) => drag(event, widget, "move")}>
               <h2 className="tile__title truncate">{title}</h2>
               {canEdit && (
@@ -96,6 +96,7 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
           </section>
         );
       })}
+      {canEdit && <p id="grid-keys" className="sr-only">Arrow keys move this tile, Shift and arrow keys resize it, Delete removes it (Undo appears above), Enter opens its settings.</p>}
       {widgets.length === 0 && <div className="tile-empty grid__empty"><Icon name="plus" size={18} /> {editing ? "Add a widget to start." : "This dashboard is empty."}</div>}
     </div>
   );

@@ -32,10 +32,17 @@ function DashboardById({ id }: { id: string }) {
   const stored = useResource<Dashboard>(builtin ? null : `/api/v1/dashboards/${encodeURIComponent(id)}`);
   const state = useEditor();
   // Leaving this dashboard ends its edit, but never one that started on the next page.
-  useEffect(() => () => { if (editor.state().dashboard?.dashboard_id === id) editor.cancel(); }, [id]);
+  // Leaving ends this dashboard's edit but keeps its stored draft (a lost session
+  // can then restore it); a confirmed leave or Cancel forgets it.
+  useEffect(() => () => { if (editor.state().dashboard?.dashboard_id === id) editor.suspend(); }, [id]);
   useEffect(() => {
     if (!state.dirty) return;
-    nav.guard(() => !editor.state().dirty || window.confirm("Leave without saving your changes?"));
+    nav.guard(() => {
+      if (!editor.state().dirty) return true;
+      if (!window.confirm("Leave without saving your changes?")) return false;
+      editor.cancel();
+      return true;
+    });
     return () => nav.guard(null);
   }, [state.dirty]);
   useEffect(() => {
@@ -67,6 +74,19 @@ function DashboardById({ id }: { id: string }) {
           <button type="button" className="button button--small" onClick={() => void editor.saveAsCopy().then((copy) => copy && nav.view(`/dashboards/${copy.dashboard_id}`))}>Save as a copy</button>
         </div>
       )}
+      {!editing && dashboard?.mine && editor.recoverable(dashboard.dashboard_id) && (
+        <div className="view-note" role="status">
+          <Icon name="clock" size={14} /> You have unsaved changes to this dashboard.
+          <button type="button" className="button button--small" onClick={() => editor.recover(dashboard)}>Restore</button>
+          <button type="button" className="button button--small button--ghost" onClick={() => { editor.begin(dashboard); editor.cancel(); }}>Discard</button>
+        </div>
+      )}
+      {editing && state.removed && (
+        <div className="view-note" role="status">
+          <Icon name="close" size={14} /> Removed “{state.removed.config.title && typeof state.removed.config.title === "string" ? state.removed.config.title : state.removed.type}”.
+          <button type="button" className="button button--small" onClick={() => editor.undo()}>Undo</button>
+        </div>
+      )}
       {editing && state.problems.length > 0 && (
         <ul className="view-note" role="alert">{state.problems.map((p) => <li key={p.field + p.code}><code>{p.field}</code>: {p.message}</li>)}</ul>
       )}
@@ -82,7 +102,8 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
   const agents = useResource<AgentSummary>(builtin && can("agents.read") ? "/api/v1/agents/summary" : null);
   const [menu, setMenu] = useState(false);
   const id = builtin ? null : dashboard?.dashboard_id ?? null;
-  const isHome = (home.data?.dashboard_id ?? null) === id;
+  // Unknown until loaded, so the pin never flickers "pressed" on the built-in.
+  const isHome = home.data !== undefined && (home.data.dashboard_id ?? null) === id;
   const mine = dashboard?.mine === true;
   const name = session?.principal.display_name.split(" ")[0];
 

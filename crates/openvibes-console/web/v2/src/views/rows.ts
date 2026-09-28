@@ -69,7 +69,7 @@ export function selectAudit(all: readonly AuditEvent[], params: URLSearchParams)
 const sev = (s: string) => severityOrder[s] ?? 9;
 
 /** The first rows of a list view for a query, ready for a compact list. */
-export function useListRows(view: ListView, params: URLSearchParams): { rows: ListRow[]; total: number; loading: boolean; error: ApiError | undefined } {
+export function useListRows(view: ListView | null, params: URLSearchParams): { rows: ListRow[]; total: number; loading: boolean; error: ApiError | undefined } {
   const groups = useAllPages<FindingGroup>(view === "/findings" ? "/api/v1/findings/groups" : null);
   const agents = useAllPages<Agent>(view === "/agents" ? "/api/v1/agents" : null);
   const vulns = useResource<VulnerabilityPage>(view === "/vulnerabilities" ? vulnerabilityQuery(params) : null);
