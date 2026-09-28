@@ -71,3 +71,55 @@ export function validateLayout(layout: unknown): FieldProblem[] {
   });
   return problems.slice(0, 32);
 }
+
+export const COLUMNS = 12;
+export const ROW_HEIGHT = 56;
+const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, Math.round(value)));
+
+export function overlaps(a: Widget, b: Widget): boolean {
+  return a.id !== b.id && a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+}
+
+/** Keeps `fixedId` in place and moves every colliding tile straight down,
+ *  top to bottom, so no two tiles overlap. Input order is preserved. */
+export function settle(widgets: readonly Widget[], fixedId: string): Widget[] {
+  const fixed = widgets.find((w) => w.id === fixedId);
+  if (!fixed) return [...widgets];
+  const placed: Widget[] = [fixed];
+  const others = widgets.filter((w) => w.id !== fixedId).sort((a, b) => a.y - b.y || a.x - b.x);
+  const moved = new Map<string, Widget>([[fixed.id, fixed]]);
+  for (const widget of others) {
+    let candidate = widget;
+    while (placed.some((p) => overlaps(candidate, p)) && candidate.y < 199) candidate = { ...candidate, y: candidate.y + 1 };
+    placed.push(candidate);
+    moved.set(candidate.id, candidate);
+  }
+  return widgets.map((w) => moved.get(w.id) ?? w);
+}
+
+export function moveWidget(layout: Layout, id: string, x: number, y: number): Layout {
+  const widgets = layout.widgets.map((w) => w.id === id ? { ...w, x: clamp(x, 0, COLUMNS - w.w), y: clamp(y, 0, 199) } : w);
+  return { ...layout, widgets: settle(widgets, id) };
+}
+
+export function resizeWidget(layout: Layout, id: string, w: number, h: number): Layout {
+  const widgets = layout.widgets.map((widget) => widget.id === id ? { ...widget, w: clamp(w, 1, COLUMNS - widget.x), h: clamp(h, 1, 12) } : widget);
+  return { ...layout, widgets: settle(widgets, id) };
+}
+
+export function addWidget(layout: Layout, type: WidgetType, size: { w: number; h: number }, config: Widget["config"]): { layout: Layout; id: string } {
+  let n = 1;
+  while (layout.widgets.some((w) => w.id === `${type}-${n}`)) n += 1;
+  const id = `${type}-${n}`;
+  const bottom = layout.widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
+  const widget: Widget = { id, type, x: 0, y: Math.min(bottom, 199), w: Math.min(size.w, COLUMNS), h: size.h, config };
+  return { layout: { ...layout, widgets: [...layout.widgets, widget] }, id };
+}
+
+export function removeWidget(layout: Layout, id: string): Layout {
+  return { ...layout, widgets: layout.widgets.filter((w) => w.id !== id) };
+}
+
+export function readingOrder(widgets: readonly Widget[]): Widget[] {
+  return [...widgets].sort((a, b) => a.y - b.y || a.x - b.x);
+}
