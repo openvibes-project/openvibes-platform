@@ -34,28 +34,59 @@ describe("demo server", () => {
   it("applies bulk triage to a finding group and records it in the audit log", async () => {
     const server = createDemoServer({ persona: "admin" });
     const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
-    const group = (groups.items as { rule_set_id: string; rule_id: string; endpoint_count: number }[])[0];
+    const group = (groups.items as { rule_set_id: string; rule_id: string; triage_counts: { open: number } }[]).find((g) => g.triage_counts.open > 0);
     if (group === undefined) throw new Error("no groups");
     const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
-    const changes = (endpoints.items as { agent_id: string; triage_version: number }[]).map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
-    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", changes });
+    const open = (endpoints.items as { agent_id: string; triage_state: string; triage_version: number }[]).filter((e) => e.triage_state === "open");
+    const changes = open.map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
+    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "investigating", changes });
     expect(response.status).toBe(200);
     const after = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
-    const updated = (after.items as { rule_id: string; triage_counts: { mitigated: number } }[]).find((g) => g.rule_id === group.rule_id);
-    expect(updated?.triage_counts.mitigated).toBe(group.endpoint_count);
+    const updated = (after.items as { rule_id: string; triage_counts: { open: number } }[]).find((g) => g.rule_id === group.rule_id);
+    expect(changes.length).toBeGreaterThan(0);
+    expect(updated?.triage_counts.open).toBe(0);
     const audit = await json(await server.handle("GET", `/api/v1/audit-events?limit=1&since=${new Date(Date.now() - 86_400_000).toISOString()}`));
     expect((audit.items as { action: string }[])[0]?.action).toBe("finding.triage");
   });
 
-  it("rejects a stale triage version with 409", async () => {
+  it("rejects a stale triage version with 412", async () => {
     const server = createDemoServer({ persona: "admin" });
     const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=1"));
     const group = (groups.items as { rule_set_id: string; rule_id: string }[])[0];
     if (group === undefined) throw new Error("no groups");
     const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=1`));
     const endpoint = (endpoints.items as { agent_id: string }[])[0];
-    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", changes: [{ agent_id: endpoint?.agent_id, version: 99 }] });
-    expect(response.status).toBe(409);
+    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", note: "patched", changes: [{ agent_id: endpoint?.agent_id, version: 99 }] });
+    expect(response.status).toBe(412);
+  });
+
+  it("applies the server's triage field rules: expiry only for accepted risk, known assignees", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=1"));
+    const group = (groups.items as { rule_set_id: string; rule_id: string }[])[0];
+    if (group === undefined) throw new Error("no groups");
+    const base = `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}`;
+    const endpoint = ((await json(await server.handle("GET", `${base}/endpoints?limit=100`))).items as { agent_id: string; triage_state: string; triage_version: number }[])
+      .find((item) => item.triage_state === "open");
+    if (endpoint === undefined) throw new Error("no endpoints");
+    const changes = [{ agent_id: endpoint.agent_id, version: endpoint.triage_version }];
+    const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
+    const post = (body: Record<string, unknown>) => server.handle("POST", `${base}/triage`, { changes, ...body });
+    if (endpoint.triage_state === "open") {
+      expect((await json(await post({ state: "mitigated", note: "skipped a step" }))).code).toBe("invalid_transition");
+    }
+    expect((await post({ state: "accepted_risk" })).status).toBe(400);
+    expect((await post({ state: "mitigated" })).status).toBe(400);
+    expect((await post({ state: "accepted_risk", accepted_until: new Date(Date.now() - 1000).toISOString() })).status).toBe(400);
+    expect((await post({ state: "investigating", accepted_until: future })).status).toBe(400);
+    expect((await json(await post({ state: "investigating", assigned_to: "nobody" }))).code).toBe("invalid_assignee");
+    expect((await post({ state: "investigating", assigned_to: "vic" })).status).toBe(400);
+    expect((await post({ state: "investigating" })).status).toBe(200);
+    changes[0] = { agent_id: endpoint.agent_id, version: endpoint.triage_version + 1 };
+    expect((await post({ state: "accepted_risk", accepted_until: future })).status).toBe(400);
+    expect((await post({ state: "accepted_risk", accepted_until: future, assigned_to: "sam", note: "vendor fix due" })).status).toBe(200);
+    const saved = await json(await server.handle("GET", `/api/v1/findings/latest/${endpoint.agent_id}/${group.rule_set_id}/${group.rule_id}/triage`));
+    expect(saved).toMatchObject({ state: "accepted_risk", assigned_to: "sam", accepted_until: future });
   });
 
   it("filters vulnerabilities and details an advisory with its CVEs and hosts", async () => {

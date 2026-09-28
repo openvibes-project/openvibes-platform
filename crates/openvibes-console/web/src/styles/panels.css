@@ -50,7 +50,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .triage-bar { display: flex; height: 8px; gap: 2px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 80px; }
 .triage-bar span { display: block; height: 100%; }
 .bulk-bar {
-  position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 8px; margin: 0 12px; padding: 8px 10px;
+  position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 12px; padding: 8px 10px;
   border-radius: var(--r-2); background: var(--accent-soft); border: 1px solid var(--accent); animation: rise var(--fast);
 }
 .confirm { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-2); border: 1px solid var(--line-strong); background: var(--surface-2); width: 100%; animation: rise var(--fast); }

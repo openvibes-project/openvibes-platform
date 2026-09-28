@@ -37,9 +37,15 @@ Show everything, without page changes for details:
   - access: roles, bindings and asset groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
-
-  Not yet here: per-host triage fields for assignee and "accepted until"
-  (v1's single-finding form; the API still accepts them).
+- **Triage** (finding panel, `panels/triage.ts`): select one host or many,
+  then set state, assignee (an analyst or admin username), note and, for
+  accepted risk, the date it is accepted until (end of that local day).
+  The state list follows the server's workflow (open → investigating →
+  mitigated, accepted risk or false positive; closed states stay), limited
+  to states every selected host can reach. Mitigated, accepted risk and
+  false positive need a note. With one host selected, the form loads and
+  shows its saved triage first (fields stay disabled until it arrives).
+  A stale selection (412) reloads the list.
 
 ## Dashboards
 
@@ -157,7 +163,9 @@ imported findings for six hosts) and starts the console on
 certificate; WebKit keeps the `__Host-` Secure session cookie only over
 HTTPS) and its production CSP. The tests check sign-in, every
 view (no error, no CSP violation, no third-party request), `/login` and
-retired `/assistant`, bulk triage, a dashboard shared with a role and seen
+retired `/assistant`, bulk triage, one host's accepted risk with an
+assignee and date (refused for an unknown assignee, shown again on
+reselect), a dashboard shared with a role and seen
 read-only, and axe in both themes.
 
 The `Console demo preview` workflow (`console-demo-pages.yml`) runs lint,

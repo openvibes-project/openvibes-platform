@@ -128,6 +128,9 @@ test("a dashboard with a widget type this console does not know still renders", 
 test("a tile deleted from the keyboard comes back with Undo", async ({ page }) => {
   await page.getByRole("button", { name: "Duplicate to edit" }).click();
   const tiles = page.locator(".tile");
+  // The duplicate opens in edit mode; count its tiles only once they are there.
+  await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+  await expect(tiles.first()).toBeVisible();
   const count = await tiles.count();
   await tiles.first().focus();
   await page.keyboard.press("Delete");
