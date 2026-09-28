@@ -5,10 +5,10 @@
 use zeroize::Zeroizing;
 
 use crate::{
-    Host, HostError, PackageUpdate, Privileged, SETUP_FILE, Secret, Service, ServiceAction,
-    ServiceStatus, Unit,
+    CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
+    Secret, Service, ServiceAction, ServiceStatus, Unit,
     runner::{
-        Program::{Curl, Dnf, Logger, Rpm, Sudo, Systemctl},
+        Program::{Curl, Df, Dnf, Logger, Rpm, Sudo, Systemctl},
         Runner,
     },
 };
@@ -78,23 +78,32 @@ impl<R: Runner> Native<R> {
             None => self.runner.run(Sudo, &argv),
         }
         .map_err(|error| HostError::Io(format!("{}: {error}", Sudo.path())))?;
-        if out.status == 0 {
-            Ok(out)
-        } else if out.stderr.contains("password is required")
-            || out.stderr.contains("is not allowed to execute")
-        {
-            Err(HostError::NotOperator)
-        } else {
-            Err(HostError::Failed(printable(&out.stderr)))
-        }
+        operator(out)
     }
 
-    /// A journal entry for an operator action (spec §7).
+    /// `sudo -n -u openvibes-admin openvibes-admin ARGS…`: the CLI with its
+    /// peer login and audit log (sudoers entry for operators).
+    fn as_admin(&self, args: &[&str]) -> Result<crate::runner::Output, HostError> {
+        let mut argv = vec!["-n", "-u", "openvibes-admin", ADMIN];
+        argv.extend_from_slice(args);
+        operator(self.run(Sudo, &argv)?)
+    }
+
+    /// A journal line (spec §7).
     // ponytail: a journal write that fails is not reported; the action's own
     // outcome is what the operator needs to see.
-    fn journal(&self, what: &str) {
+    fn log(&self, what: &str) {
         let entry = format!("{} {what}", who());
         let _ = self.run(Logger, &["-t", "openvibes-admin", &entry]);
+    }
+
+    /// An operator action: journalled, and recorded in `audit_log` through
+    /// `audit note` when the database is reachable (spec §7).
+    // ponytail: the note is best effort (no database yet during Setup, no
+    // operator group before the next login); the journal line is the record.
+    fn journal(&self, action: &str, target: &str, outcome: &str) {
+        self.log(&format!("{action} {target} {outcome}"));
+        let _ = self.as_admin(&["audit", "note", action, target, outcome]);
     }
 
     fn ready(&self, unit: Unit) -> Option<bool> {
@@ -159,7 +168,7 @@ impl<R: Runner> Host for Native<R> {
             ],
         )?;
         let outcome = if out.status == 0 { "ok" } else { "failed" };
-        self.journal(&format!("{} {} {outcome}", action.verb(), unit.name()));
+        self.journal(action.verb(), unit.name(), outcome);
         if out.status == 0 {
             return Ok(());
         }
@@ -185,7 +194,7 @@ impl<R: Runner> Host for Native<R> {
     fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError> {
         let result = self.helper(&["config-write", service.name()], Some(toml.as_bytes()));
         let outcome = if result.is_ok() { "ok" } else { "failed" };
-        self.journal(&format!("config-write {} {outcome}", service.name()));
+        self.journal("config-write", service.name(), outcome);
         result.map(drop)
     }
 
@@ -211,7 +220,9 @@ impl<R: Runner> Host for Native<R> {
             (0, _) => "ok",
             _ => "failed",
         };
-        self.journal(&format!("{} {outcome}", verb.journal()));
+        let journal = verb.journal();
+        let (action, target) = journal.split_once(' ').unwrap_or((&journal, "-"));
+        self.journal(action, target, outcome);
         if out.status == 0 {
             Ok(out.stdout)
         } else if out.stderr.contains("incorrect password")
@@ -276,5 +287,83 @@ impl<R: Runner> Host for Native<R> {
     fn setup_plan(&self) -> Result<String, HostError> {
         std::fs::read_to_string(SETUP_FILE)
             .map_err(|error| HostError::Failed(format!("{SETUP_FILE}: {error}")))
+    }
+
+    fn database(&self, command: Database) -> Result<String, HostError> {
+        let result = self.as_admin(command.args());
+        // The CLI writes its own audit_log row; the journal gets the change.
+        if matches!(command, Database::Migrate | Database::Maintenance) {
+            let outcome = if result.is_ok() { "ok" } else { "failed" };
+            self.log(&format!("{} {outcome}", command.args().join(" ")));
+        }
+        result.map(|out| out.stdout)
+    }
+
+    fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        CERTIFICATES
+            .into_iter()
+            .filter_map(|path| match std::fs::read_to_string(path) {
+                Ok(pem) => Some((path, Ok(pem))),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => Some((path, Err(HostError::Failed(format!("{path}: {error}"))))),
+            })
+            .collect()
+    }
+
+    fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
+        let mut paths = vec!["/var/lib/pgsql".to_owned()];
+        if let Ok(entries) = std::fs::read_dir("/var/lib") {
+            let mut ours: Vec<String> = entries
+                .filter_map(|entry| entry.ok()?.file_name().into_string().ok())
+                .filter(|name| name.starts_with("openvibes-"))
+                .map(|name| format!("/var/lib/{name}"))
+                .collect();
+            ours.sort();
+            paths.extend(ours);
+        }
+        paths.retain(|path| std::path::Path::new(path).exists());
+        self.df(&paths)
+    }
+}
+
+impl<R: Runner> Native<R> {
+    /// `df` for `paths` (the argument is the row's name, so no mount point
+    /// needs reading).
+    pub fn df(&self, paths: &[String]) -> Result<Vec<DiskUse>, HostError> {
+        if paths.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut args = vec!["--output=file,pcent,avail", "-h"];
+        args.extend(paths.iter().map(String::as_str));
+        let out = self.run(Df, &args)?;
+        if out.status != 0 {
+            return Err(HostError::Failed(printable(&out.stderr)));
+        }
+        Ok(out
+            .stdout
+            .lines()
+            .skip(1)
+            .filter_map(|line| {
+                let mut fields = line.split_whitespace();
+                Some(DiskUse {
+                    path: fields.next()?.to_owned(),
+                    used_percent: fields.next()?.trim_end_matches('%').parse().ok()?,
+                    available: fields.next()?.to_owned(),
+                })
+            })
+            .collect())
+    }
+}
+
+/// sudo's outcome: refusal means the user is not an operator.
+fn operator(out: crate::runner::Output) -> Result<crate::runner::Output, HostError> {
+    if out.status == 0 {
+        Ok(out)
+    } else if out.stderr.contains("password is required")
+        || out.stderr.contains("is not allowed to execute")
+    {
+        Err(HostError::NotOperator)
+    } else {
+        Err(HostError::Failed(printable(&out.stderr)))
     }
 }

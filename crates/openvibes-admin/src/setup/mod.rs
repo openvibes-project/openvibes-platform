@@ -9,7 +9,7 @@ mod console;
 #[cfg(test)]
 mod fake;
 mod fleet;
-mod pki;
+pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;

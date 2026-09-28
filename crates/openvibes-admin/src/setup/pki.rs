@@ -238,7 +238,8 @@ fn chosen<'a, R: Runner>(ctx: &'a Ctx<'a, R>) -> impl Iterator<Item = &'static T
 }
 
 const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
-const RENEW_DAYS: i64 = 14;
+/// Certificates this close to expiry are renewed (and Health reports them).
+pub(crate) const RENEW_DAYS: i64 = 14;
 
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let names = ctx.plan.names();

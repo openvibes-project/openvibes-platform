@@ -6,7 +6,7 @@
 use platform_host::{Host, Service, ServiceAction, Unit};
 
 use super::{
-    app::{App, Key, Tab},
+    app::{App, Key},
     form::Form,
 };
 
@@ -29,8 +29,8 @@ pub enum Prompt {
 pub enum Then {
     /// Open this service's file (index into `Service::ALL`); the same index reloads.
     Service(usize),
-    /// The Setup screen.
-    Setup,
+    /// The Database screen (the next tab).
+    Database,
     Quit,
 }
 
@@ -104,7 +104,7 @@ impl<H: Host> App<H> {
                 self.leave(Then::Service((self.config.service + count - 1) % count))
             }
             Key::Char('R') => self.leave(Then::Service(self.config.service)),
-            Key::Tab => self.leave(Then::Setup),
+            Key::Tab => self.leave(Then::Database),
             Key::Char('q') => self.leave(Then::Quit),
             Key::Enter => {
                 if let Some(form) = &self.config.form {
@@ -170,10 +170,7 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_config();
             }
-            Then::Setup => {
-                self.tab = Tab::Setup;
-                self.message = None;
-            }
+            Then::Database => self.open_database(),
             Then::Quit => self.quit = true,
         }
     }

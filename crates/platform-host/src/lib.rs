@@ -63,6 +63,52 @@ pub struct PackageUpdate {
     pub available: Option<String>,
 }
 
+/// A database command the Database and Health screens run: the admin CLI
+/// as `openvibes-admin`, through the operators' sudoers entry (spec §3).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Database {
+    /// `status`: schema, partitions, size.
+    Status,
+    /// `migrate`.
+    Migrate,
+    /// `maintenance`, as the daily timer runs it.
+    Maintenance,
+    /// `feeds status`.
+    FeedsStatus,
+}
+
+impl Database {
+    /// The CLI arguments.
+    #[must_use]
+    pub fn args(self) -> &'static [&'static str] {
+        match self {
+            Database::Status => &["status"],
+            Database::Migrate => &["migrate"],
+            Database::Maintenance => &["maintenance"],
+            Database::FeedsStatus => &["feeds", "status"],
+        }
+    }
+}
+
+/// The public certificates Health checks (spec §5): the ingest and
+/// distribution server certificates and the intermediate, all 0644.
+pub const CERTIFICATES: [&str; 3] = [
+    "/etc/openvibes/tls/ingest.crt",
+    "/etc/openvibes/tls/distribution.crt",
+    "/etc/openvibes/pki/intermediate.crt",
+];
+
+/// Disk use of the file system holding one data directory.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiskUse {
+    /// The directory, e.g. `/var/lib/pgsql`.
+    pub path: String,
+    /// Percent of the file system used.
+    pub used_percent: u8,
+    /// Space left, as `df -h` writes it.
+    pub available: String,
+}
+
 /// Why a host operation failed.
 #[derive(Debug, Eq, PartialEq)]
 pub enum HostError {
@@ -116,4 +162,18 @@ pub trait Host {
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError>;
     /// `/etc/openvibes/setup.toml` as text (world-readable, no secrets).
     fn setup_plan(&self) -> Result<String, HostError>;
+    /// Runs a database command; its standard output. Hosts without a local
+    /// database do not support it (spec §10).
+    fn database(&self, command: Database) -> Result<String, HostError> {
+        let _ = command;
+        Err(HostError::Failed("not supported on this host".into()))
+    }
+    /// Each of [`CERTIFICATES`] that exists, as PEM text.
+    fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        Vec::new()
+    }
+    /// Disk use of `/var/lib/pgsql` and each `/var/lib/openvibes-*`.
+    fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
+        Ok(Vec::new())
+    }
 }

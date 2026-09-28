@@ -62,6 +62,8 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         (Tab::Setup, "Setup"),
         (Tab::Services, "Services"),
         (Tab::Configuration, "Configuration"),
+        (Tab::Database, "Database"),
+        (Tab::Health, "Health"),
     ] {
         last.push(if tab == app.tab {
             Span::styled(format!("[{name}]"), current)

@@ -3,7 +3,8 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
+    Database, DiskUse, Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction,
+    ServiceStatus, Unit,
 };
 use ratatui::{Terminal, backend::TestBackend};
 
@@ -13,7 +14,7 @@ use super::{
     render,
 };
 
-struct FakeHost {
+pub(super) struct FakeHost {
     actions: RefCell<Vec<(Unit, ServiceAction)>>,
     log_reads: RefCell<usize>,
     writes: RefCell<Vec<(Service, String)>>,
@@ -22,6 +23,8 @@ struct FakeHost {
     refuse: bool,
     /// (verb, password) of each privileged call.
     privileged_calls: RefCell<Vec<(String, String)>>,
+    /// Database commands run.
+    pub(super) database_calls: RefCell<Vec<Database>>,
 }
 
 fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> ServiceStatus {
@@ -104,9 +107,38 @@ impl Host for FakeHost {
             .push((verb.args().join(" "), password.expose().to_owned()));
         Ok(String::new())
     }
+    fn database(&self, command: Database) -> Result<String, HostError> {
+        self.database_calls.borrow_mut().push(command);
+        match command {
+            _ if self.refuse => Err(HostError::NotOperator),
+            Database::Status => Ok("schema version 25\npartitions 2026-06-30..2026-10-05\n\
+                                    partition count 98\ndatabase size 42 MiB\n"
+                .into()),
+            Database::Migrate => Ok("schema version 25\n".into()),
+            Database::Maintenance => Ok("created 1 partitions, dropped 1\n".into()),
+            Database::FeedsStatus => {
+                Ok("osv-rocky 10 advisories checked 2026-09-28 changed never \
+                                         error: HTTP 503\n"
+                    .into())
+            }
+        }
+    }
+    fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        vec![(
+            "/etc/openvibes/tls/ingest.crt",
+            Err(HostError::Failed("permission denied".into())),
+        )]
+    }
+    fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
+        Ok(vec![DiskUse {
+            path: "/var/lib/pgsql".into(),
+            used_percent: 40,
+            available: "20G".into(),
+        }])
+    }
 }
 
-fn app(refuse: bool) -> App<FakeHost> {
+pub(super) fn app(refuse: bool) -> App<FakeHost> {
     App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
         log_reads: RefCell::new(0),
@@ -114,10 +146,11 @@ fn app(refuse: bool) -> App<FakeHost> {
         hand_edit: RefCell::new(None),
         refuse,
         privileged_calls: RefCell::new(Vec::new()),
+        database_calls: RefCell::new(Vec::new()),
     })
 }
 
-fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {
+pub(super) fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {
     let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
     terminal.draw(|frame| render(frame, app)).unwrap();
     let buffer = terminal.backend().buffer();
@@ -444,6 +477,10 @@ fn a_refused_save_keeps_the_edits() {
 fn tab_switches_screens() {
     let mut app = configuration(false);
     assert_eq!(app.tab, Tab::Configuration);
+    app.key(Key::Tab);
+    assert_eq!(app.tab, Tab::Database);
+    app.key(Key::Tab);
+    assert_eq!(app.tab, Tab::Health);
     app.key(Key::Tab);
     assert_eq!(app.tab, Tab::Setup);
     assert!(screen(&app, 80, 24).contains("[Setup]"));

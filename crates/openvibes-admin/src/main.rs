@@ -136,6 +136,12 @@ enum Command {
         #[command(flatten)]
         plan: setup::plan::PlanArgs,
     },
+    /// Audit entries for the administration TUI's actions (spec §7).
+    #[command(hide = true)]
+    Audit {
+        #[command(subcommand)]
+        command: AuditCommand,
+    },
     /// Root-only verbs for the administration TUI (run through sudo).
     #[command(hide = true)]
     Helper {
@@ -148,6 +154,30 @@ enum Command {
         #[command(subcommand)]
         command: assistant::AssistantCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum AuditCommand {
+    /// Record one action the TUI took, as the operator (via sudo) did it.
+    Note {
+        /// What was done, e.g. `restart`.
+        #[arg(value_parser = short_text)]
+        action: String,
+        /// What it was done to, e.g. a unit name.
+        #[arg(value_parser = short_text)]
+        target: String,
+        /// How it went.
+        #[arg(value_parser = ["ok", "failed", "waiting", "todo"])]
+        result: String,
+    },
+}
+
+/// A printable audit field of at most 128 characters.
+fn short_text(value: &str) -> Result<String, String> {
+    if value.is_empty() || value.chars().count() > 128 || value.chars().any(char::is_control) {
+        return Err("1 to 128 printable characters".into());
+    }
+    Ok(value.to_owned())
 }
 
 impl Command {
@@ -166,6 +196,7 @@ impl Command {
             Self::Import { .. } => "import",
             Self::Assistant { command } => command.name(),
             Self::Helper { .. } => "helper",
+            Self::Audit { .. } => "audit note",
             Self::Setup { .. } => "setup",
         }
     }
@@ -253,6 +284,27 @@ async fn main() -> ExitCode {
         }
     };
     let actor = actor();
+    // The note is the audit entry; it needs no current schema (audit_log is
+    // in the first migration).
+    if let Command::Audit {
+        command:
+            AuditCommand::Note {
+                action,
+                target,
+                result,
+            },
+    } = command
+    {
+        return match platform_store::audit::record(&client, &actor, action, Some(target), result)
+            .await
+        {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("openvibes-admin: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let (result, target) = match command {
         Command::Ca { command } => match require_current_schema(&client).await {
             Ok(()) => ca::run_host(command, &client).await,
@@ -385,6 +437,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         | Command::Vulns { .. }
         | Command::Import { .. }
         | Command::Helper { .. }
+        | Command::Audit { .. }
         | Command::Setup { .. }
         | Command::Assistant { .. } => {
             unreachable!("handled by the caller")
@@ -399,13 +452,16 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             };
             Ok(format!(
                 "schema version {}\nagents active {}\nagents offline {}\nagents revoked {}\n\
-                 imported hosts {}\ntokens usable {}\npartitions {partitions}\n",
+                 imported hosts {}\ntokens usable {}\npartitions {partitions}\n\
+                 partition count {}\ndatabase size {} MiB\n",
                 SCHEMA_VERSION,
                 status.agents_active,
                 status.agents_offline,
                 status.agents_revoked,
                 status.imported_hosts,
                 status.tokens_usable,
+                status.partitions,
+                status.database_bytes / (1024 * 1024),
             ))
         }
         Command::Maintenance { retention_days } => {

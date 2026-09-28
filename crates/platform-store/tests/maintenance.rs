@@ -63,6 +63,7 @@ async fn retention_drops_only_older_partitions() {
     let status = platform_store::status(&client, Utc::now()).await.unwrap();
     assert_eq!(status.oldest_partition, Some(cutoff));
     assert_eq!(status.newest_partition, Some(today));
+    assert_eq!(status.partitions, 91);
     drop(client);
     db.drop().await;
 }
@@ -85,6 +86,8 @@ async fn status_of_an_empty_database_is_all_zero() {
         (status.oldest_partition, status.newest_partition),
         (None, None)
     );
+    assert_eq!(status.partitions, 0);
+    assert!(status.database_bytes > 0);
     drop(client);
     db.drop().await;
 }
