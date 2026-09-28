@@ -287,6 +287,33 @@ mod tests {
         );
     }
 
+    /// Tester: an admin who retired `baseline` chose to stop serving it; a
+    /// newer package must not turn the step into a failure it can never fix
+    /// (`rules publish` refuses a retired set).
+    #[test]
+    fn a_retired_baseline_is_not_todo_after_a_newer_package() {
+        let fake = Fake::new("rules-retired");
+        fake.answer(
+            &admin(&["rules", "list"]),
+            0,
+            "baseline v1 keys 1 expires 2028-09-27T00:00:00Z retired\n",
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            &format!("{KEY}\n"),
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.json",
+            "{\"rule_set_version\":2,\"payload\":\"x\"}",
+        );
+        let state = rules_check(&fake.ctx(&plan(&[Ingest, Distribution, Rules]))).unwrap();
+        assert_ne!(
+            state,
+            StepState::Todo,
+            "Repair would fail forever: {state:?}"
+        );
+    }
+
     #[test]
     fn the_local_agent_is_configured_started_and_awaited() {
         let fake = Fake::new("agent");
