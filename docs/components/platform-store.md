@@ -443,3 +443,27 @@ cargo test --locked -p platform-store --test console_read -- --nocapture
 
 Each test creates and drops its own database. Tests fail, never skip,
 when `OPENVIBES_TEST_DATABASE_URL` is unset.
+
+## Dashboards (`dashboards::…`, schema 26)
+
+A dashboard is a named layout owned by one console user, optionally shared
+with a role. Only the layout is stored; widgets read their data through the
+permission-checked console API, so sharing never exposes data.
+
+- `list_visible(user)`: own dashboards first, then those shared with a role
+  the user holds through any unrevoked binding (global or asset-group), each
+  group by name. `get_visible(user, id)` returns `None` for unknown,
+  invisible and malformed ids (ids are compared as text).
+- `create` (at most `MAX_DASHBOARDS_PER_OWNER` = 100 per owner, serialised
+  per owner), `update` (owner only, `expected_version` must match),
+  `delete` (owner only; homes pointing at it go by cascade),
+  `set_sharing(role | None)` (owner only; the caller checks
+  `dashboards.share`), `home` (only if still visible) and
+  `set_home(id | None)` (must be visible).
+- Refusals are values, not errors: `Refusal::{NotFound, NotOwner, Stale,
+  TooMany, UnknownRole}`.
+- Every change writes its audit row (`dashboard.create`, `.update`,
+  `.delete`, `.share`, `.home`; target kind `dashboard`) in the same
+  transaction. The row carries the name, never the layout.
+- Tested by `tests/console_dashboards.rs` (ownership, sharing through global
+  and scoped bindings, revoked binding, versions, limit, home fallback).
