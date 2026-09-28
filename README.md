@@ -188,8 +188,8 @@ Design principles, shared by every repository:
 ## In progress
 
 - **Admin TUI:** Database and Health screens.
-- **Baseline rules package:** a signed starter rule set that Setup trusts
-  and publishes.
+- **Baseline rules package:** a signed starter rule set from the new
+  `openvibes-rules` repository, which Setup trusts and publishes.
 
 ## Planned
 
