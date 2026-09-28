@@ -144,16 +144,21 @@ export function Access() {
 
 export function ServiceAccounts() {
   const { can } = useSession();
+  const canManage = can("service_accounts.manage", true);
   const accounts = useResource<{ items: ServiceAccount[] }>("/api/v1/service-accounts");
   const top = useTop();
   const rows = accounts.data?.items ?? [];
   return (
     <div className="view">
       <ViewHeader title="Service accounts" count={rows.length} refresh="/api/v1/service-accounts"
-        actions={can("service_accounts.manage", true) && (
+        actions={canManage && (
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "service-account", id: "new" }, true)}><Icon name="plus" size={15} /> New account</button>
         )} />
-      {accounts.error ? <div className="view-pad"><ErrorBox error={accounts.error} /></div> : !accounts.data ? <Loading /> : (
+      {accounts.error ? <div className="view-pad"><ErrorBox error={accounts.error} /></div> : !accounts.data ? <Loading /> : rows.length === 0 ? (
+        <Empty icon="service" title="No service accounts">
+          {canManage ? "Create one for integrations that need API access." : "An administrator can create one for integrations that need API access."}
+        </Empty>
+      ) : (
         <DataTable label="Service accounts" rows={rows} rowKey={(a) => a.service_account_id}
           onOpen={(a) => nav.open({ kind: "service-account", id: a.service_account_id }, true)}
           isOpen={(a) => top?.kind === "service-account" && top.id === a.service_account_id}

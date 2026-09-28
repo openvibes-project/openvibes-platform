@@ -58,6 +58,13 @@ test("/login shows home once signed in, and /assistant is gone", async ({ page }
   expect(response.status()).toBe(404);
 });
 
+test("an empty service accounts view explains the next step", async ({ page }) => {
+  await signIn(page, "alex");
+  await page.goto("/service-accounts");
+  await expect(page.getByText("No service accounts")).toBeVisible();
+  await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
+});
+
 test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
   await signIn(page, "alex");
   await page.goto("/findings");
