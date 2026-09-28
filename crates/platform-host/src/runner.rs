@@ -32,6 +32,8 @@ pub enum Program {
     Userdel,
     /// Service groups (Remove everything).
     Groupdel,
+    /// Disk use (Health).
+    Df,
 }
 
 impl Program {
@@ -52,6 +54,7 @@ impl Program {
             Program::Admin => "/usr/bin/openvibes-admin",
             Program::Userdel => "/usr/sbin/userdel",
             Program::Groupdel => "/usr/sbin/groupdel",
+            Program::Df => "/usr/bin/df",
         }
     }
 }

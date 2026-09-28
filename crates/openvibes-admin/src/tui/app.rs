@@ -4,6 +4,7 @@ use platform_host::{Host, Privileged, ServiceAction, ServiceStatus, Unit};
 
 use super::{
     configuration::Configuration,
+    database::DatabaseScreen,
     password::{PasswordPrompt, Typed},
     setup::Setup,
 };
@@ -31,6 +32,8 @@ pub enum Tab {
     Setup,
     Services,
     Configuration,
+    Database,
+    Health,
 }
 
 /// The TUI's state: the Services screen's fields, and the Configuration
@@ -40,6 +43,7 @@ pub struct App<H: Host> {
     pub tab: Tab,
     pub setup: Setup,
     pub config: Configuration,
+    pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
     pub selected: usize,
     /// An action waiting for y/n.
@@ -67,6 +71,7 @@ impl<H: Host> App<H> {
             tab: if set_up { Tab::Services } else { Tab::Setup },
             setup,
             config: Configuration::default(),
+            database: DatabaseScreen::default(),
             services: Vec::new(),
             selected: 0,
             confirm: None,
@@ -111,6 +116,8 @@ impl<H: Host> App<H> {
             Tab::Setup => self.setup_key(key),
             Tab::Services => self.services_key(key),
             Tab::Configuration => self.config_key(key),
+            Tab::Database => self.database_key(key),
+            Tab::Health => self.health_key(key),
         }
     }
 

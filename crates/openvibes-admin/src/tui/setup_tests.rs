@@ -266,8 +266,9 @@ fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
 #[test]
 fn a_set_up_host_offers_the_maintenance_actions() {
     let mut app = set_up(vec![]);
-    app.key(Key::Tab);
-    app.key(Key::Tab); // Services → Configuration → Setup
+    for _ in 0..4 {
+        app.key(Key::Tab); // Services → Configuration → Database → Health → Setup
+    }
     let text = screen(&app);
     for want in [
         "c check",

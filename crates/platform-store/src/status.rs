@@ -26,6 +26,10 @@ pub struct Status {
     pub oldest_partition: Option<NaiveDate>,
     /// Newest day with a findings partition.
     pub newest_partition: Option<NaiveDate>,
+    /// How many findings partitions exist.
+    pub partitions: usize,
+    /// `pg_database_size` of the current database, in bytes.
+    pub database_bytes: i64,
 }
 
 /// The current summary, with `now` as the reference time.
@@ -52,6 +56,10 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
         .await?
         .get(0);
     let days = partition_days(client).await?;
+    let database_bytes: i64 = client
+        .query_one("SELECT pg_database_size(current_database())", &[])
+        .await?
+        .get(0);
     Ok(Status {
         schema_version: schema_version(client).await?,
         agents_active: agents.get(0),
@@ -61,5 +69,7 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
         tokens_usable: tokens,
         oldest_partition: days.first().copied(),
         newest_partition: days.last().copied(),
+        partitions: days.len(),
+        database_bytes,
     })
 }

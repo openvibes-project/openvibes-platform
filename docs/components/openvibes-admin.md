@@ -24,7 +24,7 @@ person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. `Tab` switches between the screens (Setup, Services,
-Configuration). Every screen starts with the OpenVIBES wordmark (six rows,
+Configuration, Database, Health). Every screen starts with the OpenVIBES wordmark (six rows,
 figlet's standard font: "Open" in white, "VIBES" in the brand teal
 `#36b9e0`), the tabs on its last row (the current one highlighted), and the
 version on the right; with `NO_COLOR` set it is plain text.
@@ -86,6 +86,33 @@ file keeps its owner, group and mode, and the old one is kept as
 `NAME.toml.bak`), then offers to restart the service. Each save is written
 to the journal (`config-write SERVICE ok|failed`, never the content).
 
+**Database**: the output of `status` (schema version, agents, partitions
+oldest..newest, partition count, database size). A schema that is not
+current, a newer one, or an unreachable database shows the CLI's error
+instead. `m` migrate and `n` run maintenance now (as the daily timer does:
+90-day retention) each ask `y/n`; the result is shown under the box. The
+screen runs the CLI as `openvibes-admin` (`sudo -n -u openvibes-admin
+openvibes-admin …`, the operators' sudoers entry), so each command keeps its
+peer login, schema check and `audit_log` row; migrate and maintenance are
+also journalled. `R` reloads.
+
+**Health**: one line per check, problems first, each marked `problem` or
+`ok`, with the problem count in the title: each installed unit (a problem
+unless active and, where it has an endpoint, ready); the ingest and
+distribution server certificates and the intermediate (a problem under 14
+days to expiry, when Setup's repair renews them); feed errors from `feeds
+status` (an unreachable database is a problem here); disk use of
+`/var/lib/pgsql` and each `/var/lib/openvibes-*` (a problem from 90 %).
+Loaded on opening and on `R`.
+
+Every TUI action (service action, boot change, config save, Setup step) is
+also recorded in `audit_log` when the database is reachable, through
+`openvibes-admin audit note ACTION TARGET RESULT` (hidden; run as
+`openvibes-admin`, so the actor names the operator via `SUDO_USER`). ACTION
+and TARGET are 1 to 128 printable characters, RESULT is `ok`, `failed`,
+`waiting` or `todo`; the note is the only row written. The journal line is
+the record when the note cannot be written (no database yet during Setup).
+
 `openvibes-admin helper` (hidden) is the root helper the TUI calls through
 sudo; it checks its arguments first and refuses unless run as root:
 
@@ -114,7 +141,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 | Command | Does | Prints |
 |---|---|---|
 | `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
-| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none` |
+| `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none`, `partition count N`, `database size N MiB` |
 | `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
 | `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin] [--password-stdin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo; with `--password-stdin`, reads one line from standard input instead (scripts and Setup), same password rules |
 | `user list` | lists usernames, status, active roles, display names, and last activity; never reads or prints password hashes | tab-separated rows |

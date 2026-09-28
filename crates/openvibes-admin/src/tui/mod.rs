@@ -8,6 +8,10 @@ mod banner;
 mod banner_tests;
 mod config_view;
 mod configuration;
+mod database;
+#[cfg(test)]
+mod database_tests;
+mod database_view;
 pub mod form;
 mod jobs;
 mod maintain;
@@ -57,6 +61,8 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         Tab::Setup => setup_view::draw(frame, body, app),
         Tab::Services => services::draw(frame, body, app),
         Tab::Configuration => config_view::draw(frame, body, app),
+        Tab::Database => database_view::draw_database(frame, body, app),
+        Tab::Health => database_view::draw_health(frame, body, app),
     }
 }
 

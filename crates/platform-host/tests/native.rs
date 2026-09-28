@@ -4,8 +4,8 @@
 use std::cell::RefCell;
 
 use platform_host::{
-    Host, HostError, PackageUpdate, Privileged, RemoveStep, Secret, Service, ServiceAction, Step,
-    StepState, Unit, UpdateStep,
+    Database, DiskUse, Host, HostError, PackageUpdate, Privileged, RemoveStep, Secret, Service,
+    ServiceAction, Step, StepState, Unit, UpdateStep,
     native::Native,
     runner::{Output, Program, Runner},
 };
@@ -142,6 +142,22 @@ fn actions_are_exact_argument_vectors_and_journalled() {
         calls[1][3].contains("restart openvibes-vulns.service ok"),
         "{:?}",
         calls[1]
+    );
+    // Then the audit_log row, through the CLI as its service account.
+    assert_eq!(
+        calls[2],
+        [
+            "/usr/bin/sudo",
+            "-n",
+            "-u",
+            "openvibes-admin",
+            "/usr/bin/openvibes-admin",
+            "audit",
+            "note",
+            "restart",
+            "openvibes-vulns.service",
+            "ok"
+        ]
     );
 }
 
@@ -620,4 +636,102 @@ fn the_journal_records_the_state_a_step_ended_in() {
         .find(|call| call[0] == "/usr/bin/logger")
         .unwrap();
     assert!(journal[3].ends_with(" setup-step ca failed"), "{journal:?}");
+}
+
+#[test]
+fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
+    let admin = [
+        "/usr/bin/sudo",
+        "-n",
+        "-u",
+        "openvibes-admin",
+        "/usr/bin/openvibes-admin",
+    ];
+    let host = fake(vec![
+        (
+            [&admin[..], &["status"]].concat(),
+            out(0, "schema version 25\n", ""),
+        ),
+        (
+            [&admin[..], &["migrate"]].concat(),
+            out(1, "", "openvibes-admin: database unavailable\n"),
+        ),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    assert_eq!(
+        host.database(Database::Status).unwrap(),
+        "schema version 25\n"
+    );
+    assert_eq!(
+        host.database(Database::Migrate),
+        Err(HostError::Failed(
+            "openvibes-admin: database unavailable".into()
+        ))
+    );
+    let calls = host.runner.calls.borrow();
+    assert_eq!(calls.len(), 3, "status is not journalled: {calls:?}");
+    assert!(calls[2][3].ends_with(" migrate failed"), "{:?}", calls[2]);
+    assert_eq!(
+        Database::FeedsStatus.args(),
+        ["feeds", "status"],
+        "the CLI's own subcommand"
+    );
+}
+
+#[test]
+fn a_database_command_refused_by_sudo_names_the_group() {
+    let host = fake(vec![(
+        vec!["/usr/bin/sudo"],
+        out(1, "", "sudo: a password is required\n"),
+    )]);
+    assert_eq!(host.database(Database::Status), Err(HostError::NotOperator));
+}
+
+#[test]
+fn disk_use_parses_df() {
+    let df = "File           Use% Avail\n/var/lib/pgsql  45%   20G\n/var/lib/openvibes-ingest 91% 1.2G\n";
+    let host = fake(vec![(vec!["/usr/bin/df"], out(0, df, ""))]);
+    let paths = [
+        "/var/lib/pgsql".to_owned(),
+        "/var/lib/openvibes-ingest".to_owned(),
+    ];
+    assert_eq!(
+        host.df(&paths).unwrap(),
+        [
+            DiskUse {
+                path: "/var/lib/pgsql".into(),
+                used_percent: 45,
+                available: "20G".into()
+            },
+            DiskUse {
+                path: "/var/lib/openvibes-ingest".into(),
+                used_percent: 91,
+                available: "1.2G".into()
+            }
+        ]
+    );
+    assert_eq!(
+        host.runner.calls.borrow()[0],
+        [
+            "/usr/bin/df",
+            "--output=file,pcent,avail",
+            "-h",
+            "/var/lib/pgsql",
+            "/var/lib/openvibes-ingest"
+        ]
+    );
+    assert!(host.df(&[]).unwrap().is_empty());
+}
+
+#[test]
+fn a_status_check_is_journalled_but_not_noted_in_the_audit_log() {
+    let host = fake(vec![
+        (vec!["/usr/bin/sudo", "-S"], out(0, "", "")),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    host.privileged(Privileged::SetupStatus, &Secret::new("pw".into()))
+        .unwrap();
+    let calls = host.runner.calls.borrow();
+    assert_eq!(calls.len(), 2, "no audit note: {calls:?}");
+    assert!(calls[1][3].ends_with(" setup-status ok"), "{:?}", calls[1]);
 }

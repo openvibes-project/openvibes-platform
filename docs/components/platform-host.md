@@ -20,7 +20,11 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   names, so no path ever comes from input.
 - `Host`: `services()` (installed, enabled, active state, readiness, since),
   `service_action(unit, Start | Stop | Restart)`, `logs(unit, lines)`,
-  `read_config(service)`, `write_config(service, text)`.
+  `read_config(service)`, `write_config(service, text)`; for the Database
+  and Health screens `database(Status | Migrate | Maintenance |
+  FeedsStatus)`, `certificates()` and `disk()`. These three have defaults
+  (not supported, none, none) for hosts without a local database or files
+  (spec §10).
 - `native::Native<R: Runner>`: the systemd implementation.
   - services: one `systemctl show --property=… UNITS…`; readiness by
     `curl --silent --fail --max-time 1` on the default loopback endpoints
@@ -36,7 +40,19 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   - config: `sudo -n /usr/bin/openvibes-admin helper config-read SERVICE`,
     and `config-write SERVICE` with the file on stdin (the helper checks it
     again as root); each save is journalled as `config-write SERVICE
-    ok|failed`, never with the file's content.
+    ok|failed`, never with the file's content;
+  - audit: every journalled action (service action, config save,
+    privileged verb) is also sent to `sudo -n -u openvibes-admin
+    /usr/bin/openvibes-admin audit note ACTION TARGET OUTCOME`, best effort
+    (no database or operator group yet during Setup);
+  - database: `sudo -n -u openvibes-admin /usr/bin/openvibes-admin status |
+    migrate | maintenance | feeds status` (the operators' sudoers entry);
+    migrate and maintenance are journalled, the CLI writes their audit row;
+  - certificates: reads `CERTIFICATES` (`/etc/openvibes/tls/ingest.crt`,
+    `distribution.crt`, `/etc/openvibes/pki/intermediate.crt`, all 0644);
+    missing files are left out;
+  - disk: `df --output=file,pcent,avail -h` on `/var/lib/pgsql` and each
+    existing `/var/lib/openvibes-*`.
 - `runner::Runner` / `SystemRunner`: every command is one of a closed set of
   `Program`s (`/usr/bin/systemctl`, `sudo`, `logger`, `curl`) with an
   argument vector, never a shell; `run_with_input` also writes stdin (the
@@ -74,7 +90,7 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   debuginfo left out) with any newer version (`dnf -q list --upgrades`, as
   the user; offline, none are shown).
 - `Program` also covers `dnf`, `rpm`, `runuser`, `postgresql-setup`,
-  `usermod`, `firewall-cmd`, `userdel`, `groupdel` and `openvibes-admin`,
+  `usermod`, `firewall-cmd`, `userdel`, `groupdel`, `df` and `openvibes-admin`,
   which Setup's root side runs. `SystemRunner` runs every command with
   `LC_ALL=C`, because sudo's, dnf's and systemctl's messages are parsed.
 
@@ -95,6 +111,7 @@ None. Readiness uses the packaged default ports.
 
 `cargo test -p platform-host`: the backend against a fake runner (exact
 argument vectors, parsing of `systemctl show`, refusal mapping, the unit
-and service allow-lists, config read and write through the helper, and that
+and service allow-lists, config read and write through the helper, database commands as the admin
+account, the audit note after each action, `df` parsing, and that
 the RPM's polkit rule names exactly the units in `Unit::ALL`). The real rights are exercised by `scripts/systemd-e2e.sh`
 (section "Operators").

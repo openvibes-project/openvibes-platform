@@ -24,6 +24,7 @@ async fn migrate_status_and_maintenance_are_audited() {
         "agents revoked 0",
         "tokens usable 0",
         "partitions none",
+        "partition count 0",
     ] {
         assert!(
             status.lines().any(|l| l == line),
@@ -134,6 +135,34 @@ async fn a_command_run_through_sudo_names_the_person_in_the_audit() {
         audit[0].0.starts_with("ov-test (uid ") && audit[0].0.ends_with(" via sudo by alice"),
         "{}",
         audit[0].0
+    );
+    fixture.drop().await;
+}
+
+// The TUI records its actions with `audit note` (admin TUI spec §7): the
+// note is the only row, and bad fields are refused before the database.
+#[tokio::test]
+async fn audit_note_records_exactly_one_row() {
+    let fixture = Fixture::create().await;
+    stdout(&fixture.run(&["migrate"]));
+    stdout(&fixture.run(&["audit", "note", "restart", "openvibes-vulns.service", "ok"]));
+    for bad in [
+        &["audit", "note", "restart", "x", "maybe"][..],
+        &["audit", "note", "", "x", "ok"][..],
+        &["audit", "note", "a\u{1b}[2J", "x", "ok"][..],
+    ] {
+        assert_eq!(fixture.run(bad).status.code(), Some(2), "{bad:?}");
+    }
+    assert_eq!(
+        fixture.audit_targets().await,
+        [
+            ("migrate".into(), None, "ok".into()),
+            (
+                "restart".into(),
+                Some("openvibes-vulns.service".into()),
+                "ok".into()
+            ),
+        ]
     );
     fixture.drop().await;
 }
