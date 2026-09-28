@@ -29,7 +29,7 @@ async function signIn(page: Page, username: string) {
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Password").fill(PASSWORD);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("link", { name: "Findings" })).toBeVisible();
+  await expect(page.locator(".view")).toBeVisible();
   await page.mouse.move(900, 600);
 }
 
@@ -63,6 +63,24 @@ test("an empty service accounts view explains the next step", async ({ page }) =
   await page.goto("/service-accounts");
   await expect(page.getByText("No service accounts")).toBeVisible();
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
+});
+
+test("an Access filter with no matches explains the empty list", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "light" });
+  await signIn(page, "alex");
+  await page.goto("/access?q=no-such-person");
+  await expect(page.getByText("Nothing matches these filters")).toBeVisible();
+  await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
+});
+
+test("an Audit filter with no matches explains the empty list", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.emulateMedia({ colorScheme: "dark" });
+  await signIn(page, "alex");
+  await page.goto("/audit?q=no-such-action");
+  await expect(page.getByText("Nothing matches these filters")).toBeVisible();
+  await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
 });
 
 test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
