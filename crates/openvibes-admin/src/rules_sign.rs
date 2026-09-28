@@ -91,7 +91,9 @@ fn read_key(path: &Path) -> Result<SigningKey, String> {
     }
     if meta.permissions().mode() & 0o077 != 0 {
         return Err(format!(
-            "{shown} is accessible to group or others: chmod 600 {shown}"
+            "{shown} is accessible to group or others: chmod 600 {shown} \
+             (a FAT/exFAT stick cannot hold 0600: sign from a copy in \
+             $XDG_RUNTIME_DIR, then delete it)"
         ));
     }
     let mut bytes = fs::read(path).map_err(|e| format!("cannot read {shown}: {e}"))?;

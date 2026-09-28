@@ -363,9 +363,15 @@ async fn main() -> ExitCode {
         other => (run(other, &mut client).await, None),
     };
     let outcome = if result.is_ok() { "ok" } else { "error" };
-    let audited =
+    // A successful status read shows platform state, not host or finding
+    // data; auditing it only buried real entries under Health's refreshes
+    // (board #20). Failures and every other command stay audited.
+    let audited = if result.is_ok() && STATUS_READS.contains(&command.name()) {
+        Ok(())
+    } else {
         platform_store::audit::record(&client, &actor, command.name(), target.as_deref(), outcome)
-            .await;
+            .await
+    };
     match (result, audited) {
         (Ok(output), Ok(())) => {
             print!("{output}");
@@ -434,6 +440,18 @@ async fn require_current_schema(client: &platform_store::Client) -> Result<(), S
 }
 
 /// Runs one command and returns what to print.
+/// Commands whose successful runs write no audit row: status reads that
+/// show no host or finding data (board #20). Data reads (`agent show`,
+/// `vulns …`, `token list`, `user …`) stay audited.
+const STATUS_READS: &[&str] = &[
+    "status",
+    "feeds status",
+    "rules list",
+    "rules show",
+    "rules trust list",
+    "agent list",
+];
+
 async fn run(command: &Command, client: &mut platform_store::Client) -> Result<String, String> {
     let fail = store_error;
     if let Command::Migrate = command {

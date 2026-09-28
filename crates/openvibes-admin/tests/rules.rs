@@ -337,7 +337,11 @@ async fn every_rules_command_is_audited() {
         Some("baseline/org.rules".into()),
         "ok".into()
     )));
-    assert!(actions.contains(&("rules list".into(), None, "ok".into())));
+    // `rules list` is a status read: not audited when it succeeds (#20).
+    assert!(
+        !actions.iter().any(|(action, _, _)| action == "rules list"),
+        "{actions:?}"
+    );
     fixture.drop().await;
 }
 
