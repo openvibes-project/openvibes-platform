@@ -42,14 +42,18 @@ fn identifier(label: &str, value: &str) -> Result<Identifier, String> {
     Identifier::new(value).map_err(|e| format!("{label}: {e}"))
 }
 
-/// Writes `bytes` to a file that must not exist yet.
+/// Writes `bytes` to a file that must not exist yet, and flushes it to
+/// disk: a key's trust line is printed only once the key is durable.
 fn create_new(path: &Path, mode: u32, bytes: &[u8]) -> Result<(), String> {
     OpenOptions::new()
         .write(true)
         .create_new(true)
         .mode(mode)
         .open(path)
-        .and_then(|mut file| file.write_all(bytes))
+        .and_then(|mut file| {
+            file.write_all(bytes)?;
+            file.sync_all()
+        })
         .map_err(|e| format!("cannot create {}: {e}", path.display()))
 }
 

@@ -103,10 +103,10 @@ fn sign_writes_an_envelope_over_the_exact_rules_bytes() {
     let lifetime = envelope["expires_at_unix_ms"].as_i64().unwrap()
         - envelope["created_at_unix_ms"].as_i64().unwrap();
     assert_eq!(lifetime, 730 * 86_400_000);
-    assert_eq!(
-        std::fs::metadata(&out).unwrap().permissions().mode() & 0o777,
-        0o644
-    );
+    // Created 0644, then narrowed by the umask: never writable by others.
+    let mode = std::fs::metadata(&out).unwrap().permissions().mode();
+    assert_eq!(mode & 0o022, 0, "mode {mode:o}");
+    assert_ne!(mode & 0o400, 0, "mode {mode:o}");
 }
 
 #[test]
