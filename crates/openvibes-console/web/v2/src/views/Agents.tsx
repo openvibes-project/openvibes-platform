@@ -6,18 +6,15 @@ import { nav, useLocation } from "../app/nav";
 import { Ago, Empty, ErrorBox, Loading, StatusBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
-import { matches } from "../ui/table";
+import { selectAgents } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 
 export function Agents() {
   const { params, panels } = useLocation();
   const agents = useAllPages<Agent>("/api/v1/agents");
   const summary = useResource<AgentSummary>("/api/v1/agents/summary");
-  const status = params.get("status");
-  const q = params.get("q") ?? "";
   const all = useMemo(() => agents.data ?? [], [agents.data]);
-  const rows = useMemo(() => all.filter((agent) => (!status || agent.status === status) &&
-    matches([agent.hostname, agent.id, agent.scanner_version], q)), [all, status, q]);
+  const rows = useMemo(() => selectAgents(all, params), [all, params]);
   const top = panels[panels.length - 1];
   const versions = [...new Set(all.map((a) => a.scanner_version).filter(Boolean))].sort().reverse();
   const newest = versions[0];

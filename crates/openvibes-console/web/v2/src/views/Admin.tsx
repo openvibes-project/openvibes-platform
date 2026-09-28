@@ -14,6 +14,7 @@ import { auditSince, within } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { matches } from "../ui/table";
 import { ViewHeader } from "../ui/ViewHeader";
+import { selectAudit } from "./rows";
 
 /** The demo has no server to export from: build the same columns in the browser. */
 function downloadCsv(events: readonly AuditEvent[]) {
@@ -175,8 +176,7 @@ export function Audit() {
   const page = useAllPages<AuditEvent>(`/api/v1/audit-events?since=${encodeURIComponent(since)}`, 1000);
   const retention = useResource<AuditRetention>("/api/v1/audit-retention");
   const top = useTop();
-  const failed = params.get("result") === "failure";
-  const rows = (page.data ?? []).filter((e) => (!failed || e.result !== "success") && matches([e.action, e.actor, e.target], params.get("q") ?? ""));
+  const rows = selectAudit(page.data ?? [], params);
   return (
     <div className="view">
       <ViewHeader title="Audit log" count={rows.length} refresh="/api/v1/audit" placeholder="Filter by action, person or target…"

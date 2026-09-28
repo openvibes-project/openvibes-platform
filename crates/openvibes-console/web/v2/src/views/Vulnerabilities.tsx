@@ -3,45 +3,20 @@
 import { useMemo } from "react";
 
 import { useResource } from "../api/client";
-import type { Vulnerability, VulnerabilityPage } from "../api/types";
+import type { VulnerabilityPage } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { pct, severityOrder } from "../ui/format";
 import { Icon } from "../ui/Icon";
-import { matches } from "../ui/table";
 import { ViewHeader } from "../ui/ViewHeader";
-
-type Row = {
-  id: string; title: string; severity: string; cves: string[]; cvss: number | null; epss: number | null;
-  exploited: boolean; kev: boolean; ransomware: boolean; hosts: number; reboot: number; noFix: boolean;
-};
-
-export function groupByAdvisory(items: readonly Vulnerability[]): Row[] {
-  const rows = new Map<string, Row>();
-  for (const item of items) {
-    const row = rows.get(item.advisory_id) ?? {
-      id: item.advisory_id, title: item.title, severity: item.severity, cves: item.cves, cvss: item.cvss ?? null, epss: item.epss ?? null,
-      exploited: item.exploited, kev: item.kev, ransomware: item.ransomware, hosts: 0, reboot: 0,
-      noFix: Array.isArray(item.packages) && (item.packages as { fixed?: unknown }[]).every((p) => p?.fixed == null),
-    };
-    row.hosts += 1;
-    if (item.reboot_needed) row.reboot += 1;
-    rows.set(item.advisory_id, row);
-  }
-  return [...rows.values()];
-}
+import { groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "./rows";
 
 export function Vulnerabilities() {
   const { params, panels } = useLocation();
-  const query = new URLSearchParams();
-  if (params.get("exploited") === "true") query.set("exploited", "true");
-  if (params.get("reboot") === "true") query.set("reboot_needed", "true");
-  if (params.get("severity")) query.set("severity", params.get("severity") ?? "");
-  const list = useResource<VulnerabilityPage>(`/api/v1/vulnerabilities${query.size ? `?${query}` : ""}`);
-  const q = params.get("q") ?? "";
+  const list = useResource<VulnerabilityPage>(vulnerabilityQuery(params));
   const all = useMemo(() => groupByAdvisory(list.data?.items ?? []), [list.data]);
-  const rows = useMemo(() => all.filter((row) => (params.get("nofix") !== "true" || row.noFix) && matches([row.title, row.id, ...row.cves], q)), [all, q, params]);
+  const rows = useMemo(() => selectAdvisories(all, params), [all, params]);
   const top = panels[panels.length - 1];
 
   return (
