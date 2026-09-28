@@ -217,6 +217,15 @@ describe("demo server", () => {
     expect((await analyst.handle("PUT", "/api/v1/me/home", { dashboard_id: "d-admin-morning" })).status).toBe(404);
   });
 
+  it("checks a save in the server's order: If-Match, then the body, then ownership and version", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const created = await json(await server.handle("POST", "/api/v1/dashboards", { name: "Order", layout }));
+    const uri = `/api/v1/dashboards/${String(created.dashboard_id)}`;
+    expect((await server.handle("PUT", uri, { name: "", layout }, { "if-match": '"9"' })).status).toBe(422);
+    expect((await server.handle("PUT", uri, { name: "" })).status).toBe(428);
+    expect((await server.handle("PUT", "/api/v1/dashboards/d-ola-triage", { name: "", layout }, { "if-match": '"1"' })).status).toBe(422);
+  });
+
   it("limits an owner to 100 dashboards", async () => {
     const server = createDemoServer({ persona: "viewer" });
     for (let index = 0; index < 100; index += 1) await server.handle("POST", "/api/v1/dashboards", { name: `D${index}`, layout });

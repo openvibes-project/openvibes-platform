@@ -52,12 +52,13 @@ export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: st
       return ok(201, userId, row);
     },
     update: (userId: string, id: string, body: Record<string, unknown>, ifMatch: string | undefined): Result => {
+      // The server's order: If-Match, the body, then ownership and version.
       if (ifMatch === undefined) return problem(428, "precondition_required", "If-Match is required");
+      const input = checked(body);
+      if (isResult(input)) return input;
       const row = owned(userId, id);
       if (isResult(row)) return row;
       if (ifMatch !== `"${row.version}"`) return problem(412, "stale_dashboard", "The dashboard changed since you loaded it");
-      const input = checked(body);
-      if (isResult(input)) return input;
       Object.assign(row, input, { version: row.version + 1, updated_at: now() });
       persist();
       return ok(200, userId, row);
