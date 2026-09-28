@@ -33,6 +33,13 @@ PostgreSQL, database, CA, certificates, console, services, firewall
 (443, 18423, 18424), agent and readiness. If a step fails, fix the cause
 and press `r` to continue from it.
 
+**The CA's root key.** In the default (quick) CA mode, Setup writes the
+root key once to the form's *Root key file*, by default
+`~/openvibes-root-ca.key`, and keeps no other copy. It is the only way to
+issue a new intermediate certificate later, so move it off the host
+(offline storage) and delete it there. Without it, a new CA means
+re-enrolling every agent.
+
 The last screen shows, once:
 
 - the console address and the `admin` password: **write the password down**;
@@ -82,7 +89,8 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 ## Next
 
 - Other hosts: repeat step 3; `openvibes-admin agent list` shows them all.
-- Check, repair, update or uninstall: the Setup tab (`c`, `r`, `u`, `x`).
+- Check, repair, update, change components or uninstall: the Setup tab
+  (`c`, `r`, `u`, `m`, `x`).
 - Services and configuration: the Services and Configuration tabs. Setup
   added you to `openvibes-operators`; log in again before using them.
 - Hosts without network access: the agent's `export`, then
