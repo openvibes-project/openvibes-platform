@@ -99,8 +99,6 @@ enum Command {
         #[arg(required = true)]
         paths: Vec<PathBuf>,
     },
-    /// Install and set up the platform on this host without screens (as
-    /// root). Without --quick, run openvibes-admin with no arguments.
     /// Set up, repair, update or uninstall the platform on this host without
     /// screens (as root). Without an action, run openvibes-admin with no
     /// arguments for the Setup screen.
