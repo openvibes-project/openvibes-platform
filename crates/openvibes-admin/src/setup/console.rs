@@ -11,14 +11,27 @@ use crate::config_file;
 
 const CONSOLE_TOML: &str = "/etc/openvibes/console.toml";
 
+/// The console's URL: the port only when it is not HTTPS's own.
 fn origin<R: Runner>(ctx: &Ctx<R>) -> String {
-    format!("https://{}", ctx.plan.hostname)
+    match ctx.plan.console_port {
+        443 => format!("https://{}", ctx.plan.hostname),
+        port => format!("https://{}:{port}", ctx.plan.hostname),
+    }
 }
 
+fn listen<R: Runner>(ctx: &Ctx<R>) -> String {
+    format!("0.0.0.0:{}", ctx.plan.console_port)
+}
+
+/// The origin, and with direct TLS the listener, are the plan's. Behind a
+/// proxy the listener is the proxy's business.
 fn origin_set<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
     let table: toml::Table = toml::from_str(&ctx.read(CONSOLE_TOML)?)
         .map_err(|error| format!("{CONSOLE_TOML}: {error}"))?;
-    Ok(table.get("public_origin").and_then(toml::Value::as_str) == Some(origin(ctx).as_str()))
+    let text = |key: &str| table.get(key).and_then(toml::Value::as_str);
+    Ok(text("public_origin") == Some(origin(ctx).as_str())
+        && (text("transport_mode") != Some("direct_tls")
+            || text("development_listen") == Some(listen(ctx).as_str())))
 }
 
 fn admin_exists<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
@@ -59,6 +72,9 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             .parse()
             .map_err(|error| format!("{CONSOLE_TOML}: {error}"))?;
         doc["public_origin"] = toml_edit::value(origin(ctx));
+        if doc.get("transport_mode").and_then(|v| v.as_str()) == Some("direct_tls") {
+            doc["development_listen"] = toml_edit::value(listen(ctx));
+        }
         config_file::replace(
             &ctx.path("/etc/openvibes"),
             Service::Console,
@@ -188,6 +204,30 @@ mod tests {
         let state = run_step(&fake.ctx(&plan), Step::Console);
         assert_eq!(fake.inputs.borrow()[0], "correct horse battery staple\n");
         assert!(!state.detail().contains("correct horse"), "{state:?}");
+    }
+
+    #[test]
+    fn a_chosen_port_is_listened_on_and_in_the_origin() {
+        let fake = Fake::new("console-port");
+        console(&fake);
+        let mut plan = plan(&[Ingest, Console]);
+        plan.console_port = 8443;
+        let state = run_step(&fake.ctx(&plan), Step::Console);
+        let toml = fake.text("/etc/openvibes/console.toml");
+        assert!(
+            toml.contains("development_listen = \"0.0.0.0:8443\""),
+            "{toml}"
+        );
+        assert!(
+            toml.contains("public_origin = \"https://platform.example.com:8443\""),
+            "{toml}"
+        );
+        assert!(
+            state
+                .detail()
+                .starts_with("https://platform.example.com:8443 "),
+            "{state:?}"
+        );
     }
 
     #[test]

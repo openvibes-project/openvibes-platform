@@ -14,7 +14,7 @@ use super::{
     app::App,
     jobs::Job,
     maintain_view,
-    setup::{CA_ROW, HOSTNAME_ROW, KEY_ROW, Phase, SANS_ROW, START_ROW},
+    setup::{CA_ROW, HOSTNAME_ROW, KEY_ROW, PORT_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
 
@@ -123,6 +123,13 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         setup.row == KEY_ROW,
         format!("Root key file:  {}{}", setup.root_key_out, edit(KEY_ROW)),
     ));
+    lines.push(mark(
+        setup.row == PORT_ROW,
+        format!("Console port:  {}{}", setup.console_port, edit(PORT_ROW)),
+    ));
+    if let Some(note) = &setup.port_note {
+        lines.push(Line::from(format!("    {note}")));
+    }
     lines.push(mark(setup.row == START_ROW, "[ Start ]".into()));
     lines
 }

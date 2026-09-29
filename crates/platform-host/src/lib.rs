@@ -179,4 +179,10 @@ pub trait Host {
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         Ok(Vec::new())
     }
+    /// `ss -ltnpH` lines for TCP `port` on any address; empty when nobody
+    /// listens there (Setup's port check).
+    fn listeners(&self, port: u16) -> Result<String, HostError> {
+        let _ = port;
+        Ok(String::new())
+    }
 }

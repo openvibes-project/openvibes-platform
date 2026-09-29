@@ -8,7 +8,7 @@ use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
     runner::{
-        Program::{Curl, Df, Dnf, Logger, Rpm, Sudo, Systemctl},
+        Program::{Curl, Df, Dnf, Logger, Rpm, Ss, Sudo, Systemctl},
         Runner,
     },
 };
@@ -318,6 +318,15 @@ impl<R: Runner> Host for Native<R> {
                 Err(error) => Some((path, Err(HostError::Failed(format!("{path}: {error}"))))),
             })
             .collect()
+    }
+
+    fn listeners(&self, port: u16) -> Result<String, HostError> {
+        let filter = format!(":{port}");
+        let out = self.run(Ss, &["-ltnpH", "sport", "=", &filter])?;
+        if out.status != 0 {
+            return Err(HostError::Failed(printable(&out.stderr)));
+        }
+        Ok(out.stdout)
     }
 
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {

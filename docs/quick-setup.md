@@ -29,11 +29,15 @@ fingerprint), installs `openvibes-admin` and opens its **Setup** screen.
 
 The Setup form has the components ticked (ingest, console, distribution,
 vulnerabilities, rules and an agent on this host), a hostname and a CA
-mode. The defaults are right for a first install: enter the hostname the
-other hosts will use to reach this one and press `Start`. Setup asks for
+mode, and the console port. The defaults are right for a first install:
+enter the hostname the other hosts will use to reach this one and press
+`Start`. The console port is 443 unless another web server already holds
+it; then the form proposes the first free port from 8443 and says so, and
+the console is at `https://HOST:PORT`. Setup asks for
 your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
-(443, 18423, 18424), agent and readiness. If a step fails, fix the cause
+(the console port, 18423, 18424), agent and readiness. A port another
+process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
 and press `r` to continue from it.
 
 **The CA's root key.** In the default (quick) CA mode, Setup writes the

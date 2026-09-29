@@ -122,6 +122,13 @@ pub struct Plan {
     /// The user who ran Setup through sudo; becomes an operator.
     #[serde(default)]
     pub operator: Option<String>,
+    /// The console's HTTPS port (plans from before board #45: 443).
+    #[serde(default = "console_default")]
+    pub console_port: u16,
+}
+
+fn console_default() -> u16 {
+    super::ports::CONSOLE_DEFAULT
 }
 
 impl Plan {
@@ -213,6 +220,9 @@ pub struct PlanArgs {
     /// With --repo-dir: accept unsigned package files (test builds only).
     #[arg(long)]
     pub allow_unsigned_local: bool,
+    /// The console's HTTPS port; Setup refuses one another process holds.
+    #[arg(long, default_value_t = super::ports::CONSOLE_DEFAULT)]
+    pub console_port: u16,
 }
 
 /// A lowercase DNS name.
@@ -273,6 +283,7 @@ impl PlanArgs {
             return Err("rules need distribution (agents fetch rules from it)".into());
         }
         check_name(&self.hostname)?;
+        super::ports::check_console_port(self.console_port)?;
         if self.san.len() > 16 {
             return Err("at most 16 --san".into());
         }
@@ -301,6 +312,7 @@ impl PlanArgs {
             repo_dir: self.repo_dir.clone(),
             allow_unsigned_local: self.allow_unsigned_local,
             operator,
+            console_port: self.console_port,
         })
     }
 }
@@ -333,6 +345,7 @@ mod tests {
             admin_password_file: None,
             repo_dir: None,
             allow_unsigned_local: false,
+            console_port: 443,
         }
     }
 

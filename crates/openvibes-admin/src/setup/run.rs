@@ -4,7 +4,7 @@
 use platform_host::{
     StepState, Unit,
     runner::{
-        Program::{Curl, FirewallCmd, Systemctl},
+        Program::{Curl, FirewallCmd, Journalctl, Systemctl},
         Runner,
     },
 };
@@ -84,6 +84,8 @@ fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
 }
 
 pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // Again here, not only at the start: the port may have been taken since.
+    super::ports::check(ctx)?;
     let units = units(ctx);
     let mut args = vec!["enable", "--now"];
     args.extend(names(&units));
@@ -208,9 +210,17 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == READY_ATTEMPTS {
+                let why = ctx
+                    .ok(
+                        Journalctl,
+                        &["-u", unit.name(), "-n", "1", "-o", "cat", "--no-pager"],
+                    )
+                    .ok()
+                    .map(|line| line.trim().to_owned())
+                    .filter(|line| !line.is_empty())
+                    .unwrap_or_else(|| format!("see journalctl -u {}", unit.name()));
                 return Err(format!(
-                    "{} is not ready after {READY_ATTEMPTS} seconds; see journalctl -u {}",
-                    unit.name(),
+                    "{} is not ready after {READY_ATTEMPTS} seconds: {why}",
                     unit.name()
                 ));
             }
@@ -253,6 +263,7 @@ mod tests {
     #[test]
     fn chosen_services_are_enabled_and_started() {
         let fake = Fake::new("services");
+        fake.answer(&["/usr/sbin/ss"], 0, "");
         fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
         fake.answer(&["/usr/bin/systemctl", "enable", "--now"], 0, "");
         let state = run_step(

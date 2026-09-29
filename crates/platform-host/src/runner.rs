@@ -34,6 +34,10 @@ pub enum Program {
     Groupdel,
     /// Disk use (Health).
     Df,
+    /// Listening ports and their holders (Setup's port check).
+    Ss,
+    /// A unit's last log line (Setup's readiness failure).
+    Journalctl,
 }
 
 impl Program {
@@ -55,6 +59,8 @@ impl Program {
             Program::Userdel => "/usr/sbin/userdel",
             Program::Groupdel => "/usr/sbin/groupdel",
             Program::Df => "/usr/bin/df",
+            Program::Ss => "/usr/sbin/ss",
+            Program::Journalctl => "/usr/bin/journalctl",
         }
     }
 }

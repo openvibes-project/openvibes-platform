@@ -64,7 +64,10 @@ impl<H: Host> App<H> {
         let hostname = std::fs::read_to_string("/etc/hostname")
             .map(|h| h.trim().to_lowercase())
             .unwrap_or_default();
-        let setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
+        let mut setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
+        if !set_up {
+            setup.propose_port(&host);
+        }
         let mut app = App {
             color: std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty()),
             host,

@@ -322,7 +322,8 @@ the installed file name.
 
 `openvibes-admin setup --quick --components LIST --hostname NAME [--san
 ADDR]... [--ca quick|careful] [--root-key-out PATH]
-[--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]`
+[--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]
+[--console-port PORT]`
 runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
 arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
@@ -332,6 +333,20 @@ failure, 2 on bad arguments (checked before the root check).
 Hostname and `--san` are lowercase DNS names or IP addresses; paths must be
 absolute. Without `--quick` the command refuses and points to the TUI.
 
+Ports (board #45, `src/setup/ports.rs`): the console listens on
+`--console-port` (default 443; never 18423, 18424 or 18480-18483, the
+platform's own). Before anything changes, and again in `services` just
+before the units start, Setup asks `ss -ltnpH` who listens on each port the
+plan needs: the console's, 18423 (ingest), 18424 (distribution). Any
+listener counts, on any address, IPv4 or IPv6, except our own unit while it
+runs (Repair, Update). A taken port stops Setup with the holder
+(`nginx (pid N)` as root, "another process" when `ss` cannot name it) and,
+for the console, the first free port from 8443 to choose instead; nothing
+is started, and the firewall step never opens a port another process
+holds. The TUI's form has a "Console port" row: 443 when free, otherwise
+the first free port from 8443 with a line saying 443 is taken; it is
+editable. Ingest and distribution ports are not choosable yet.
+
 Steps (`src/setup/`, each checks before it acts, so re-running is safe and
 resumes): `packages` (dnf from the repository, or the one file per package
 in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
@@ -340,13 +355,16 @@ in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
 written once to `--root-key-out`, never over an existing file, otherwise
 deleted; careful: waits for the signed intermediate), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`), `console` (`public_origin`
-and the `admin` account; a generated password is shown once), `services`,
+`https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
+port with direct TLS, and the `admin` account; a generated password is
+shown once), `services` (after the port check),
 `firewall` (skipped without firewalld), `rules` (skipped until
 `openvibes-rules-baseline` exists; done while the published version is at
 least the installed package's, so Repair publishes a newer package),
 `agent` (the agent on this host, waits
 up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
-uses).
+uses; a unit not ready after 30 s fails with its last journal line, e.g.
+`Address already in use`).
 
 The same command maintains a set-up host (one action per call; each takes
 the run lock `/run/openvibes-admin/setup.lock`, so a second Setup run is

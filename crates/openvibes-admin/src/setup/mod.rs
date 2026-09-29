@@ -13,6 +13,7 @@ pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;
+pub(crate) mod ports;
 pub mod remove;
 mod run;
 mod system;
@@ -367,6 +368,11 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
     };
     if let Err(code) = setup_guard() {
         return code;
+    }
+    // Before anything changes: a port another process holds stops here.
+    if let Err(error) = ports::check(&host_ctx(&plan, false)) {
+        eprintln!("openvibes-admin: {error} (nothing changed)");
+        return ExitCode::FAILURE;
     }
     if let Err(error) = plan.save(Path::new("/")) {
         eprintln!("openvibes-admin: {error}");
