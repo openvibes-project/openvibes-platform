@@ -315,7 +315,8 @@ pub async fn heartbeat(
     let stale_before = now - Duration::minutes(HEARTBEAT_WRITE_MINUTES);
     // P12: the health report rides on this throttled write; the one before
     // it is kept to tell a total that rose. No report (an agent before P12)
-    // keeps the stored one.
+    // keeps the stored one. Changed rule sets (a bundle just accepted or
+    // refused) are written at once: they are rare, and the console shows them.
     let changed = client
         .execute(
             "UPDATE agents SET last_seen_at = $2, scanner_version = $3, capabilities = $4,
@@ -326,7 +327,9 @@ pub async fn heartbeat(
              WHERE agent_id = $1
                AND (last_seen_at IS NULL OR last_seen_at < $5
                     OR hostname IS DISTINCT FROM COALESCE($6, hostname)
-                    OR capabilities IS DISTINCT FROM $4)",
+                    OR capabilities IS DISTINCT FROM $4
+                    OR health->'rule_sets' IS DISTINCT FROM
+                       COALESCE($7::jsonb->'rule_sets', health->'rule_sets'))",
             &[
                 &agent_id,
                 &now,

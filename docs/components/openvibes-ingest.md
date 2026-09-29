@@ -79,7 +79,8 @@ The usual request limits apply. Test: `tests/ca.rs`.
 - `POST /v1/heartbeat` (authenticated): `Heartbeat`; its `agent_id` must be
   the authenticated agent's (else 400). Stores version, capabilities, and the
   optional `hostname` (a spoofable operator label, never identity), writing
-  at most every 5 minutes unless the hostname or the capabilities changed;
+  at most every 5 minutes unless the hostname, the capabilities or the
+  health report's `rule_sets` changed;
   an absent hostname keeps the stored one. Capabilities name the agent's
   enabled collectors (`collector.processes`, `collector.packages`,
   `collector.ports`; protocol P7), and each list replaces the stored one.
