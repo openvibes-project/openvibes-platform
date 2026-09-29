@@ -76,8 +76,8 @@ All run within the `openvibes-ingest` role's grants (the tests use
   Authenticated::{Active(id), Revoked, Unknown}`: the serial **and** the key
   hash must match a recorded certificate.
 - `heartbeat` writes `last_seen_at`, version, capabilities, and the hostname
-  at most every 5 minutes, or at once when the hostname or the capabilities
-  change; an absent
+  at most every 5 minutes, or at once when the hostname, the capabilities
+  or the health report's `rule_sets` change; an absent
   hostname keeps the stored one (migration 3 adds `agents.hostname`,
   indexed). Returns whether it wrote.
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
@@ -90,7 +90,8 @@ All run within the `openvibes-ingest` role's grants (the tests use
 Protocol P12. `agents` gains `health` and `health_previous` (the latest
 report and the one before it, JSONB) and `health_at`. `ingest::heartbeat`
 takes the report and writes it in its throttled UPDATE (every 5 minutes,
-or at once when hostname or capabilities change). The stored report moves
+or at once when hostname, capabilities or the report's `rule_sets` change,
+so an accepted bundle shows in `agent show` within a minute). The stored report moves
 to `health_previous`, and a heartbeat without one keeps it.
 
 `health::health_status(last_seen_at, health_at, health, previous, now)`

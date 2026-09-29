@@ -607,3 +607,64 @@ async fn health_follows_the_heartbeat_throttle() {
     drop(client);
     db.drop().await;
 }
+
+/// A changed rule set (a bundle just accepted) is written at once, inside
+/// the throttle, so `agent show` does not lag five minutes behind it.
+#[tokio::test]
+async fn a_changed_rule_set_skips_the_heartbeat_throttle() {
+    let (db, _, multi) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let Enrolled::New(identity) = ingest::enroll(&mut client, &multi, [7; 32], now, issued(7, 7))
+        .await
+        .unwrap()
+    else {
+        panic!();
+    };
+    let id = identity.agent_id.as_str();
+    let report = |pending: u64, version: Option<u64>| {
+        serde_json::json!({
+            "queue": {"pending": pending, "bytes": 1, "max_bytes": 10, "dropped_total": 0},
+            "rule_sets": [{"id": "baseline", "version": version}],
+            "storage_errors": 0
+        })
+    };
+    let stored = || async {
+        client
+            .query_one(
+                "SELECT health->'queue'->>'pending' FROM agents WHERE agent_id = $1",
+                &[&id],
+            )
+            .await
+            .unwrap()
+            .get::<_, Option<String>>(0)
+    };
+    let beat = |pending, version, minutes| {
+        let health = report(pending, version);
+        let client = &client;
+        async move {
+            ingest::heartbeat(
+                client,
+                id,
+                "0.2.0",
+                None,
+                &[],
+                Some(&health),
+                now + Duration::minutes(minutes),
+            )
+            .await
+            .unwrap()
+        }
+    };
+    assert!(beat(1, None, 0).await);
+    // Same rule sets within the throttle: nothing is written.
+    assert!(!beat(2, None, 1).await);
+    assert_eq!(stored().await, Some("1".into()));
+    // The bundle is accepted: written at once.
+    assert!(beat(3, Some(1), 2).await);
+    assert_eq!(stored().await, Some("3".into()));
+    assert!(!beat(4, Some(1), 3).await);
+    assert_eq!(stored().await, Some("3".into()));
+    drop(client);
+    db.drop().await;
+}
