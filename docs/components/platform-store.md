@@ -191,7 +191,10 @@ rows' rule set, rule, version, severity, message and evidence) is not
 changed and transient row's content and `source = 'changes'` (open and
 current as of `now`, or ended for a transient), ends the `ended` ones (and,
 for a `replace`, every open match it omits, as approximate at
-`scanned_at`), and records the new digest. `Rows` holds the document's
+`scanned_at`), and records the new digest. A replace ends only P13
+rows: when an agent upgrades to P13, its rows from per-scan delivery that
+the first replace omits keep `source = 'scan'` and are never ended; they
+age out of the console's window like any match no longer observed. `Rows` holds the document's
 findings already converted by `wire::finding`.
 
 `finding_changes::heartbeat(client, agent_id, match_sha256, last_scan_at,
