@@ -16,28 +16,30 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    ingest on loopback until `/ready` answers.
 2. The agent, with a signed test bundle (`integration_bundle` example, two
    always-true rules) and a token from `openvibes-admin token create`,
-   enrolls, sends an accepted heartbeat, and delivers its findings **exactly
-   once**: its queue is empty and the ids it recorded as acknowledged equal
-   the ids in `findings`, and every stored finding names its rule set.
+   enrolls, sends an accepted heartbeat, and reports its two matches once
+   as started (protocol P13): two open `current_findings` rows with source
+   `changes` for the agent and two history rows in `findings`, each naming
+   its rule set.
 3. **Restart:** the agent is stopped and started; it reconnects (a new
-   accepted heartbeat) and nothing is delivered twice.
+   accepted heartbeat), scans again, and with unchanged matches nothing new
+   is stored.
 4. **Renewal:** with the agent stopped, `obtained_at_ms` in its
    `identity.sqlite` is set to 0, which makes renewal due at once (it is due
    at two thirds of the lifetime). This avoids faking the clock, which would
    future-date findings that ingest then refuses. The agent gets a second
    certificate, and that certificate authenticates the next heartbeat.
 5. **Revocation and re-enrollment:** with the agent stopped, it is revoked
-   and its scan interval set to 60 s. On restart it queues findings, gets
-   403 `identity_revoked`, forgets its identity, and keeps the findings
-   queued. With a new token it re-enrolls as a new `agent_id` (the old one
-   stays `revoked`) and delivers the findings it queued while revoked, again
-   exactly once. The ids queued while revoked are recorded and each must
-   be stored under the new `agent_id`, so a dropped batch cannot hide behind
-   a later scan.
+   and its scan interval set to 60 s. On restart it gets 403
+   `identity_revoked` and forgets its identity. With a new token it
+   re-enrolls as a new `agent_id` (the old one stays `revoked`); the
+   platform has no match state for that id, so the agent's first change set
+   is refused and it sends a replace: both matches are open again under the
+   new `agent_id`.
 
 6. **Expired certificate:** with the agent stopped, its stored certificate
    is marked expired; given a token with a use left, it re-enrolls on its
-   own as a new `agent_id` and keeps delivering exactly once (protocol P5).
+   own as a new `agent_id` and reports its matches again by replace
+   (protocols P5, P13).
    With only its used single-use token it would stay refused (401), which
    the run checked before adding the token.
 
@@ -50,8 +52,8 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    - it polls and gets 204 for its current v1;
    - after v2 is published it gets 200, and findings from v2's new rule
      `integration.v2` arrive;
-   - with distribution stopped it keeps scanning on v2 (more `integration.v2`
-     findings) and does not exit;
+   - with distribution stopped it keeps scanning on v2 (a new scan in its
+     log; with P13 an unchanged match stores nothing) and does not exit;
    - distribution then serves a v3 signed by a key only the platform
      trusts (`integration.seed8`): the agent refuses it, keeps scanning on
      v2, and no `integration.v3` finding is stored;

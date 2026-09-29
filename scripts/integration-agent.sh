@@ -75,14 +75,21 @@ heartbeats_ok() {
 more_heartbeats_than() { (($(heartbeats_ok) > $1)); }
 wait_for "heartbeat accepted" 20 more_heartbeats_than 0
 
-acked_equals_stored() {
-    local pending acked stored
-    pending=$(sqlite3 "$W/agent/state/queue.sqlite" "SELECT count(*) FROM pending")
-    acked=$(sqlite3 "$W/agent/state/queue.sqlite" "SELECT finding_id FROM acknowledged ORDER BY 1")
-    stored=$(sql "SELECT finding_id FROM findings ORDER BY 1")
-    [[ "$pending" == 0 && -n "$acked" && "$acked" == "$stored" ]]
+# Protocol P13: the agent reports a match when it starts, changes or ends,
+# not on every scan. A match is a current_findings row with source
+# 'changes'; each start or change adds one history row to findings.
+open_matches() {
+    sql "SELECT count(*) FROM current_findings
+         WHERE agent_id = '$1' AND source = 'changes' AND ended_at IS NULL"
 }
-wait_for "findings delivered exactly once" 20 acked_equals_stored
+findings_total() { sql "SELECT count(*) FROM findings"; }
+# The newest active agent (re-enrollment makes a new one).
+active_agent() { sql "SELECT agent_id FROM agents WHERE status = 'active' ORDER BY enrolled_at DESC LIMIT 1"; }
+matches_open() { [[ "$(open_matches "$(active_agent)")" == 2 ]]; }
+scans() { grep -c 'scan matched' "$W/agent.log" 2>/dev/null || true; }
+more_scans_than() { (($(scans) > $1)); }
+wait_for "matches reported once as started (P13)" 20 matches_open
+[[ "$(findings_total)" == 2 ]] || { echo "FAIL: expected 2 history rows, got $(findings_total)"; exit 1; }
 [[ "$(sql "SELECT count(*) FROM findings WHERE rule_set_id <> 'integration'")" == 0 ]] ||
     { echo "FAIL: a stored finding does not name its rule set"; exit 1; }
 echo "ok: findings name their rule set"
@@ -94,9 +101,15 @@ wait_for "the agent's package inventory is stored (protocol P8)" 75 inventory_st
 [[ "$(sql "SELECT count(*) FROM findings")" == 2 ]] || { echo "FAIL: expected 2 findings"; exit 1; }
 
 BEFORE=$(heartbeats_ok)
+SCANS=$(scans)
 restart_agent
 wait_for "agent reconnected after restart" 20 more_heartbeats_than "$BEFORE"
-wait_for "no finding delivered twice after restart" 10 acked_equals_stored
+wait_for "agent scanned again after restart" 20 more_scans_than "$SCANS"
+# Unchanged matches: nothing new is stored, nothing ends.
+if [[ "$(findings_total)" != 2 ]] || ! matches_open; then
+    echo "FAIL: a restart with unchanged matches changed what is stored"; exit 1
+fi
+echo "ok: a restart with unchanged matches stores nothing new"
 
 # Renewal is due at obtained + 2/3 of the lifetime; obtained = 0 makes it due
 # now without faking the clock (which would future-date findings).
@@ -122,22 +135,14 @@ revoked_answer() {
     [[ -n "$(jq -r 'select(.fields.status == 403) | 1' "$W/ingest.log")" ]]
 }
 wait_for "revoked agent told identity_revoked" 75 revoked_answer
-queued() { (($(sqlite3 "$W/agent/state/queue.sqlite" "SELECT count(*) FROM pending") > 0)); }
-wait_for "findings stay queued while revoked" 5 queued
-REVOKED_IDS=$(sqlite3 "$W/agent/state/queue.sqlite" "SELECT finding_id FROM pending ORDER BY 1")
 reenrolled() {
     [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active' AND agent_id <> '$FIRST_AGENT'")" == 1 ]]
 }
 wait_for "agent re-enrolled with a new token" 75 reenrolled
 [[ "$(sql "SELECT status FROM agents WHERE agent_id = '$FIRST_AGENT'")" == revoked ]]
-wait_for "no finding lost or duplicated across re-enrollment" 75 acked_equals_stored
-# Exactly the findings queued while revoked (not just any later scan) must
-# arrive under the new identity.
-for id in $REVOKED_IDS; do
-    [[ "$(sql "SELECT count(*) FROM findings WHERE finding_id = '$id' AND agent_id <> '$FIRST_AGENT'")" == 1 ]] ||
-        { echo "FAIL: finding $id queued while revoked was not delivered under the new identity"; exit 1; }
-done
-echo "ok: findings queued while revoked delivered under the new identity"
+# The new identity has no match state on the platform: its first change set
+# is refused (409) and the agent sends a replace with every open match.
+wait_for "matches reported again under the new identity (replace)" 75 matches_open
 # An expired certificate (a laptop off past its renewal window) cannot renew;
 # the agent drops it, keeps its queue, and enrolls again with its token file.
 SECOND_AGENT=$(sql "SELECT agent_id FROM agents WHERE status = 'active'")
@@ -150,7 +155,7 @@ third_agent() {
                 AND agent_id NOT IN ('$FIRST_AGENT', '$SECOND_AGENT')")" == 1 ]]
 }
 wait_for "expired certificate: agent re-enrolled from its token file" 30 third_agent
-wait_for "no finding lost or duplicated across expiry re-enrollment" 75 acked_equals_stored
+wait_for "matches reported again after expiry re-enrollment" 75 matches_open
 ((${#PIDS[@]} == 2)) || { echo "FAIL: tracking ${#PIDS[@]} PIDs, want ingest and the live agent"; exit 1; }
 
 # Rule distribution (SP2): the agent switches from its provisioned bundle to
@@ -175,10 +180,10 @@ more_v2_than() { (($(v2_findings) > $1)); }
 restart_agent
 wait_for "agent fetched v2 (200)" 30 distribution_answered 200
 wait_for "agent runs v2: its new rule's findings arrive" 75 more_v2_than 0
-BEFORE=$(v2_findings)
 stop_distribution
+SCANS=$(scans)
 restart_agent
-wait_for "scans continue on v2 while distribution is down" 75 more_v2_than "$BEFORE"
+wait_for "scans continue on v2 while distribution is down" 75 more_scans_than "$SCANS"
 kill -0 "$AGENT_PID" || { echo "FAIL: agent exited without distribution"; exit 1; }
 start_distribution
 # A refused envelope: v3 is signed by a key the platform trusts but the agent
@@ -193,10 +198,10 @@ served_200() {
 }
 more_200_than() { (($(served_200) > $1)); }
 SERVED=$(served_200)
-BEFORE=$(v2_findings)
+SCANS=$(scans)
 restart_agent
 wait_for "distribution serves v3 (200)" 30 more_200_than "$SERVED"
-wait_for "agent refuses v3 and keeps scanning on v2" 75 more_v2_than "$BEFORE"
+wait_for "agent refuses v3 and keeps scanning on v2" 75 more_scans_than "$SCANS"
 [[ "$(sql "SELECT count(*) FROM findings WHERE rule_id = 'integration.v3'")" == 0 ]] ||
     { echo "FAIL: the agent ran a bundle signed by a key it does not trust"; exit 1; }
 echo "ok: no finding from the refused v3"
