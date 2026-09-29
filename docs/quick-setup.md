@@ -13,8 +13,11 @@ reach each other, and sudo on both.
 On the platform host, as your own user (not root):
 
 ```sh
-curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh
+sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 ```
+
+(Piped as `curl … | sudo sh`, it installs but cannot open Setup, because a
+pipe is not a terminal; it then tells you to run `openvibes-admin`.)
 
 Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/install.sh`,
 read it, then `sudo sh install.sh`.
