@@ -130,9 +130,12 @@ export function TopHostsTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const summary = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
   if (!can("vulnerabilities.read")) return <Unavailable />;
+  if (summary.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {summary.error.message}</div>;
+  if (!summary.data) return <div className="skeleton" />;
+  if (summary.data.top_hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> No host has an open vulnerability</div>;
   return (
     <ul className="list list--plain">
-      {(summary.data?.top_hosts ?? []).slice(0, int(widget.config, "limit", 6, 1, 10)).map((host) => (
+      {summary.data.top_hosts.slice(0, int(widget.config, "limit", 6, 1, 10)).map((host) => (
         <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
           <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
           {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num">{host.open}</span>
