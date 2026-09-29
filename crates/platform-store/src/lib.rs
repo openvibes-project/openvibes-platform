@@ -22,6 +22,7 @@ pub mod console_triage;
 pub mod dashboards;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
+pub mod finding_changes;
 /// Host package inventories (vulnerability management).
 pub mod health;
 /// Queries the ingest service runs.

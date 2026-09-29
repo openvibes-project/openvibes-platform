@@ -173,6 +173,35 @@ links, never edit or delete versions (a test checks it).
 - `PackageRow` is the normalised record of the P11 fingerprint:
   `normalized()` and `From<&NormalizedPackage>`.
 
+## Finding changes (`finding_changes::…`, schema 27, protocol P13)
+
+`current_findings` gains `ended_at` (NULL: the match is open),
+`end_approximate` and `source` (`scan` for agents that report every scan,
+`changes` for P13); `agents` gains `match_sha256`, the digest of the
+agent's open P13 matches the platform acknowledged (NULL: none, the empty
+set's digest). `finding_changes::apply(client, agent_id, changes, rows,
+now)` runs in one transaction under the agent row's lock: it answers
+`Outcome::Resync` and stores nothing when the stored digest is not
+`base_sha256` (unless `replace`), a `started` match is already open, a
+`changed` or `ended` one is not, or the digest of the result (from the open
+rows' rule set, rule, version, severity, message and evidence) is not
+`sha256`. Otherwise it writes history through `ingest::store_findings_in`
+(the idempotent insert and the automatic triage reopen), sets each started,
+changed and transient row's content and `source = 'changes'` (open and
+current as of `now`, or ended for a transient), ends the `ended` ones (and,
+for a `replace`, every open match it omits, as approximate at
+`scanned_at`), and records the new digest. `Rows` holds the document's
+findings already converted by `wire::finding`.
+
+`finding_changes::heartbeat(client, agent_id, match_sha256, last_scan_at,
+now)` handles a P13 heartbeat's digest: `true` (409 `findings_resync`)
+when it is not the stored one; otherwise it sets the agent's open P13
+matches' `last_observed_at` to now when it is over an hour old (so the
+console's window keeps them current; ended matches and offline hosts age
+out), and, when `last_scan_at` is given, reopens mitigated or
+accepted-risk triage a later scan confirmed (`console_triage::reopen_if_due`,
+shared with the reopen on a new observation).
+
 ## Wire conversions (`wire::…`)
 
 Shared by online delivery (ingest) and file import (admin), so both refuse

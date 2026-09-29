@@ -254,3 +254,28 @@ of rewriting the host's whole inventory.
   host would give different numbers.
 - **Not covered:** vacuum and `maintenance` partition drops while under load
   were not measured.
+
+## Finding changes (protocol P13), measured 2026-09-28
+
+Agents that report matches as changes send nothing while nothing changes,
+so the `findings` history grows with real changes instead of every scan.
+What stays is the hourly refresh that keeps a quiet host's open matches
+inside the console's window: one heartbeat per agent updates its open
+matches when they were last refreshed more than an hour ago.
+
+Measured with the ignored store test `scale_hourly_refresh_and_console_list`
+(release build, one desktop, PostgreSQL in `target/pg`): 1,000 agents × 500
+open matches, every match due at once.
+
+| Measure | Result |
+|---|---|
+| Refresh, all 500,000 rows (1,000 heartbeats) | 31.6 s, 31.6 ms per heartbeat |
+| Console finding group list over those rows (50 groups) | 1.6 s |
+
+Extrapolated linearly: the worst case of 10,000 agents × 500 open matches
+is 5,000,000 row updates an hour, about 5 minutes of database time spread
+over the hour; typical hosts match a handful of rules. The group list's
+cost is the existing query over 500,000 current rows, unchanged by P13. If
+the refresh is ever measured hot, the documented upgrade is a read-side
+`greatest(last_observed_at, agents.last_seen_at)` for open P13 rows with an
+expression index (`finding_changes::heartbeat`).

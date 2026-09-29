@@ -7,10 +7,10 @@ use axum::{
 
 use chrono::{Duration, Utc};
 use openvibes_core::{
-    DeliveryAcknowledgement, FindingBatch, Heartbeat, Identifier, InventoryChanges,
-    InventoryReport, RejectedFinding, SchemaVersion,
+    DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges, Heartbeat, Identifier,
+    InventoryChanges, InventoryReport, RejectedFinding, ResourceLimits, SchemaVersion, Validate,
 };
-use platform_store::{ingest, inventory, wire};
+use platform_store::{finding_changes, ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
@@ -37,7 +37,13 @@ pub(crate) async fn heartbeat(
         .map(serde_json::to_value)
         .transpose()
         .map_err(|_| ApiError::BadRequest)?;
-    let client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    let match_sha256 = heartbeat
+        .match_sha256
+        .as_deref()
+        .map(|digest| openvibes_core::digest_from_hex(digest).ok_or(ApiError::BadRequest))
+        .transpose()?;
+    let now = Utc::now();
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
     ingest::heartbeat(
         &client,
         &agent_id,
@@ -45,9 +51,21 @@ pub(crate) async fn heartbeat(
         heartbeat.hostname.as_deref(),
         &capabilities,
         health.as_ref(),
-        Utc::now(),
+        now,
     )
     .await?;
+    // P13: the heartbeat is stored; a digest that is not ours asks for the
+    // whole match set.
+    if let Some(digest) = match_sha256 {
+        let last_scan_at = heartbeat
+            .health
+            .as_ref()
+            .and_then(|health| health.last_scan.as_ref())
+            .and_then(|scan| chrono::DateTime::from_timestamp_millis(scan.finished_at_unix_ms));
+        if finding_changes::heartbeat(&mut client, &agent_id, digest, last_scan_at, now).await? {
+            return Err(ApiError::FindingsResync);
+        }
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -180,5 +198,63 @@ pub(crate) async fn inventory_changes(
     {
         inventory::ChangesOutcome::Stored => Ok(StatusCode::NO_CONTENT),
         inventory::ChangesOutcome::Resync => Err(ApiError::Resync),
+    }
+}
+
+/// `POST /v1/findings/changes` (protocol P13): applies a change set to the
+/// authenticated agent's matches, or answers 409 `findings_resync`. Entries
+/// are never refused one by one: a start the store cannot date (outside
+/// retention, in the future, a day without a partition) is stored at
+/// receipt; only a value it cannot hold, or an invalid document, is 400.
+pub(crate) async fn finding_changes(
+    State(state): State<AppState>,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let body = platform_agent_server::decoded_body(
+        &headers,
+        &body,
+        platform_agent_server::MAX_INVENTORY_BYTES,
+    )?;
+    let changes: FindingChanges =
+        platform_agent_server::parse_with_limit(&body, platform_agent_server::MAX_INVENTORY_BYTES)?;
+    if changes.agent_id.as_str() != agent_id || changes.validate(ResourceLimits::V1).is_err() {
+        return Err(ApiError::BadRequest);
+    }
+    let now = Utc::now();
+    let oldest = now - Duration::days(i64::from(state.finding_retention_days));
+    let latest = now + Duration::minutes(wire::MAX_FUTURE_MINUTES);
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    let partitions = platform_store::partition_days(&client).await?;
+    let row = |finding: &Finding| -> Result<ingest::StoredFinding, ApiError> {
+        match wire::finding(finding, oldest, latest, &partitions) {
+            Ok(row) => Ok(row),
+            Err("out_of_range") => Err(ApiError::BadRequest),
+            // Stored at receipt; the match keeps its reported start.
+            Err(_) => {
+                let mut at_receipt = finding.clone();
+                at_receipt.observed_at_unix_ms = now.timestamp_millis();
+                wire::finding(&at_receipt, oldest, latest, &partitions)
+                    .map_err(|_| ApiError::Unavailable)
+            }
+        }
+    };
+    let rows = finding_changes::Rows {
+        started: changes.started.iter().map(row).collect::<Result<_, _>>()?,
+        changed: changes.changed.iter().map(row).collect::<Result<_, _>>()?,
+        transient: changes
+            .transient
+            .iter()
+            .map(|transient| {
+                let ended = chrono::DateTime::from_timestamp_millis(transient.ended_at_unix_ms)
+                    .ok_or(ApiError::BadRequest)?;
+                Ok((row(&transient.finding)?, ended))
+            })
+            .collect::<Result<_, ApiError>>()?,
+    };
+    match finding_changes::apply(&mut client, &agent_id, &changes, &rows, now).await? {
+        finding_changes::Outcome::Stored => Ok(StatusCode::NO_CONTENT),
+        finding_changes::Outcome::Resync => Err(ApiError::FindingsResync),
     }
 }

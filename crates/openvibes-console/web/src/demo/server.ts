@@ -106,6 +106,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         outside_window: false, rule_version: finding.rule_version,
         triage_state: triage?.state ?? "open", triage_version: triage?.version ?? 0,
         assigned_to: triage?.assigned_to ?? null, accepted_until: triage?.accepted_until ?? null,
+        // Demo: a mitigated host's agent later reported the match ended (P13).
+        ended_at: triage?.state === "mitigated" ? finding.last_observed_at : null, end_approximate: false,
       };
     });
 

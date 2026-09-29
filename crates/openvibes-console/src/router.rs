@@ -5144,6 +5144,8 @@ pub(crate) async fn authenticated_finding_group_endpoints(
             triage_version: e.triage_version,
             assigned_to: e.assigned_to,
             accepted_until: e.accepted_until.map(|value| value.to_rfc3339()),
+            ended_at: e.ended_at.map(|value| value.to_rfc3339()),
+            end_approximate: e.end_approximate,
             outside_window: e.outside_window,
             origin: if e.origin == "import" {
                 crate::FindingOrigin::Import

@@ -41,8 +41,9 @@ async fn inventory_slot(
     next.run(request).await
 }
 
-/// Both inventory endpoints: the 8 MiB body limit and the shared inventory
-/// slots, built in one place so they cannot drift apart.
+/// Both inventory endpoints and finding changes (P13): the 8 MiB body limit
+/// and the shared inventory slots, built in one place so they cannot drift
+/// apart.
 fn inventory_route(
     route: axum::routing::MethodRouter<AppState>,
     state: &AppState,
@@ -68,6 +69,10 @@ fn routes(state: AppState) -> Router {
         .route(
             "/v1/inventory/changes",
             inventory_route(post(crate::delivery::inventory_changes), &state),
+        )
+        .route(
+            "/v1/findings/changes",
+            inventory_route(post(crate::delivery::finding_changes), &state),
         )
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))

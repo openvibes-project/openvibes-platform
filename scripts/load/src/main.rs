@@ -213,6 +213,7 @@ fn tick(
         observed_at_unix_ms: now_ms(),
         capabilities: Vec::new(),
         health: None,
+        match_sha256: None,
     };
     let started = Instant::now();
     let result = client.heartbeat(&heartbeat);

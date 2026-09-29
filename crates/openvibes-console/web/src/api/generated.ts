@@ -1345,6 +1345,10 @@ export interface components {
             assigned_to?: string | null;
             /** @description Whether the finding arrived over authenticated agent transport. */
             authenticated: boolean;
+            /** @description The end time is approximate (known only to be before a resync). */
+            end_approximate: boolean;
+            /** @description RFC 3339 time the match ended (protocol P13), or `null` while open. */
+            ended_at?: string | null;
             /** @description RFC 3339 time when this endpoint first reported the finding. */
             first_observed_at: string;
             /** @description Hostname label, when reported. */

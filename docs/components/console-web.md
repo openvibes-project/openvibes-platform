@@ -47,7 +47,8 @@ Show everything, without page changes for details:
   shows its saved triage first (fields stay disabled until it arrives).
   A stale selection (412) reloads the list. The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
-  (marked expired once past).
+  (marked expired once past), and a `fixed <date>` badge (`about` when
+  approximate) for a host whose agent reported the match ended (P13).
 
 ## Dashboards
 

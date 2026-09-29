@@ -822,6 +822,8 @@ async fn finding_group_endpoints(
             triage_version: 0,
             assigned_to: None,
             accepted_until: None,
+            ended_at: None,
+            end_approximate: false,
             outside_window: false,
             origin: item.origin,
             authenticated: item.authenticated,

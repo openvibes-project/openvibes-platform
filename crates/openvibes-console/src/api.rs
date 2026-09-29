@@ -1208,6 +1208,10 @@ pub struct FindingGroupEndpointView {
     pub assigned_to: Option<String>,
     /// RFC 3339 accepted-risk expiry, or `null`.
     pub accepted_until: Option<String>,
+    /// RFC 3339 time the match ended (protocol P13), or `null` while open.
+    pub ended_at: Option<String>,
+    /// The end time is approximate (known only to be before a resync).
+    pub end_approximate: bool,
     /// Whether this endpoint is older than the requested window.
     pub outside_window: bool,
     /// Online or imported observation provenance.
