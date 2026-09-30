@@ -150,7 +150,7 @@ async fn connections_beyond_max_connections_wait_for_a_free_slot() {
 
 #[tokio::test]
 async fn shutdown_waits_for_requests_in_flight() {
-    let world = World::start().await;
+    let mut world = World::start().await;
     let mut stream = tls(&world).await;
     // The handler is waiting for the rest of the body when shutdown starts.
     stream
@@ -158,7 +158,12 @@ async fn shutdown_waits_for_requests_in_flight() {
         .await
         .unwrap();
     tokio::time::sleep(StdDuration::from_millis(200)).await;
-    let stopping = tokio::spawn(world.stop());
+    // Only the server's drain is timed below: dropping the test database
+    // afterwards could take seconds on a busy machine (#80).
+    let stopping = tokio::spawn(async move {
+        world.stop_server().await;
+        world
+    });
     tokio::time::sleep(StdDuration::from_millis(500)).await;
     assert!(
         !stopping.is_finished(),
@@ -173,8 +178,9 @@ async fn shutdown_waits_for_requests_in_flight() {
         .nth(1)
         .map(str::to_owned);
     assert_eq!(status.as_deref(), Some("400"), "the request is answered");
-    tokio::time::timeout(StdDuration::from_secs(5), stopping)
+    let world = tokio::time::timeout(StdDuration::from_secs(5), stopping)
         .await
         .expect("shutdown finishes once the connection is done")
         .unwrap();
+    world.stop().await;
 }

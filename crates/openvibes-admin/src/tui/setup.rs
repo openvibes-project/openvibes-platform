@@ -74,6 +74,10 @@ pub struct Setup {
     pub then_remove: Option<Vec<String>>,
     /// The components before Change components.
     pub previous: Option<BTreeSet<Component>>,
+    /// The agent ports before Change ports, and whether moving them was
+    /// confirmed: agents elsewhere keep calling the old ones (#69).
+    pub previous_agent_ports: Option<String>,
+    pub move_confirmed: bool,
     pub home: Option<String>,
     /// Update and Uninstall screens: backup file, typed hostname, the
     /// choice, the packages, and the row under the cursor.
@@ -110,6 +114,8 @@ impl Setup {
             job_args: Vec::new(),
             then_remove: None,
             previous: None,
+            previous_agent_ports: None,
+            move_confirmed: false,
             home,
             backup: String::new(),
             confirm: String::new(),
@@ -257,6 +263,7 @@ impl<H: Host> App<H> {
                 self.ask_password(After::Job(Job::Repair));
             }
             Key::Char('m') => self.change_components(),
+            Key::Char('p') => self.change_ports(),
             Key::Char('u') => self.open_update(),
             Key::Char('x') => self.open_uninstall(),
             Key::Tab => self.leave_setup(),
@@ -288,8 +295,42 @@ impl<H: Host> App<H> {
         self.setup.sans = plan.sans.join(", ");
         self.setup.ca = plan.ca;
         self.setup.root_key_out.clear(); // the CA exists; no new root key
+        self.setup.console_port = plan.console_port.to_string();
+        self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
+        self.setup.console_note = None;
+        self.setup.agent_ports_note = None;
+        self.setup.previous_agent_ports = Some(self.setup.agent_ports.clone());
+        self.setup.move_confirmed = false;
         self.setup.row = 0;
         self.setup.phase = Phase::Form;
+    }
+
+    /// Change ports (#69): the same form, on the port rows.
+    fn change_ports(&mut self) {
+        self.change_components();
+        if self.setup.phase == Phase::Form {
+            self.setup.row = PORT_ROW;
+        }
+    }
+
+    /// Start, but a first Enter that would move the agent ports only says
+    /// what that means.
+    fn start_plan(&mut self) {
+        let moves_agents = self
+            .setup
+            .previous_agent_ports
+            .as_ref()
+            .is_some_and(|before| *before != self.setup.agent_ports);
+        if moves_agents && !self.setup.move_confirmed {
+            self.setup.move_confirmed = true;
+            self.message = Some(
+                "The agent ports change: agents on other hosts keep calling the old ones \
+                 until their install line is re-run. Enter on Start again to move them."
+                    .into(),
+            );
+            return;
+        }
+        self.ask_password(After::Plan);
     }
 
     fn start_job(&mut self, job: Job, secret: Secret) {
@@ -339,7 +380,7 @@ impl<H: Host> App<H> {
                     CaMode::Careful => CaMode::Quick,
                 };
             }
-            Key::Enter if self.setup.row == START_ROW => self.ask_password(After::Plan),
+            Key::Enter if self.setup.row == START_ROW => self.start_plan(),
             Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
             Key::Tab => self.leave_setup(),
             Key::BackTab => self.open(super::app::Tab::Health),

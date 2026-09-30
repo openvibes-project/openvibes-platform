@@ -3,6 +3,8 @@
 //! start, so a taken port stops Setup with the holder's name instead of
 //! leaving a unit that crash-loops on "Address already in use".
 
+use std::path::Path;
+
 use platform_host::{
     Service,
     runner::{
@@ -264,29 +266,122 @@ pub fn moved_agent_ports(old: &Plan, new: &Plan) -> Vec<(&'static str, u16, u16)
     .collect()
 }
 
+/// The firewalld ports Setup itself opened, one `PORT/tcp` per line: the
+/// only ones a move may close (lead on #106: a port that was open before
+/// Setup ran, e.g. 443 for another web server, is not ours to close).
+/// Installs from before this record have none, so nothing is closed there.
+pub const OPENED: &str = "/etc/openvibes/setup-opened-ports";
+
+fn opened<R: Runner>(ctx: &Ctx<R>) -> Vec<String> {
+    ctx.read(OPENED)
+        .map(|text| text.lines().map(str::to_owned).collect())
+        .unwrap_or_default()
+}
+
+fn write_opened<R: Runner>(ctx: &Ctx<R>, ports: &[String]) -> Result<(), String> {
+    let text: String = ports.iter().map(|port| format!("{port}\n")).collect();
+    ctx.put(OPENED, text.as_bytes(), None, 0o644)
+}
+
+/// Records that the Firewall step opened `port`.
+pub fn record_opened<R: Runner>(ctx: &Ctx<R>, port: &str) -> Result<(), String> {
+    let mut ports = opened(ctx);
+    if !ports.iter().any(|known| known == port) {
+        ports.push(port.to_owned());
+        write_opened(ctx, &ports)?;
+    }
+    Ok(())
+}
+
+/// Where `helper setup-plan` keeps the ports a TUI plan moves away from,
+/// `CONSOLE INGEST DISTRIBUTION`, until the run ends well (#69: the CLI's
+/// Repair closes them itself; the TUI saves the plan first, then runs).
+pub const MOVED_FROM: &str = "/etc/openvibes/setup-moved-from";
+
+/// Remembers `old`'s ports when `new` moves any of them; keeps an earlier
+/// record (a run that did not finish), so the first ports are the ones
+/// closed.
+pub fn remember_moved(root: &Path, old: &Plan, new: &Plan) -> Result<(), String> {
+    let from = [old.console_port, old.ingest_port, old.distribution_port];
+    let file = root.join(MOVED_FROM.trim_start_matches('/'));
+    if from == [new.console_port, new.ingest_port, new.distribution_port] || file.exists() {
+        return Ok(());
+    }
+    let text = format!("{} {} {}\n", from[0], from[1], from[2]);
+    std::fs::write(&file, text).map_err(|error| format!("{}: {error}", file.display()))
+}
+
+/// After a run whose services are all ready: closes the ports recorded by
+/// [`remember_moved`] as the CLI's Repair does, then forgets them. What
+/// it closed and kept, as [`close_old`].
+pub fn close_moved<R: Runner>(ctx: &Ctx<R>) -> Result<(Vec<String>, Vec<String>), String> {
+    let Ok(text) = ctx.read(MOVED_FROM) else {
+        return Ok((Vec::new(), Vec::new()));
+    };
+    let ports: Vec<u16> = text
+        .split_whitespace()
+        .filter_map(|port| port.parse().ok())
+        .collect();
+    let outcome = match ports[..] {
+        [console_port, ingest_port, distribution_port] => {
+            let old = Plan {
+                console_port,
+                ingest_port,
+                distribution_port,
+                ..ctx.plan.clone()
+            };
+            close_old(ctx, &old)?
+        }
+        _ => (Vec::new(), Vec::new()),
+    };
+    let file = ctx.path(MOVED_FROM);
+    std::fs::remove_file(&file).map_err(|error| format!("{}: {error}", file.display()))?;
+    Ok(outcome)
+}
+
 /// Closes in firewalld the ports a Repair moved away from (`old`'s, no
 /// longer the plan's) that are open; the Firewall step opens the new ones.
-/// Returns what it closed; without firewalld, nothing.
-pub fn close_old<R: Runner>(ctx: &Ctx<R>, old: &Plan) -> Result<Vec<String>, String> {
+/// Only ports Setup opened ([`OPENED`]) are candidates.
+/// A port another program still listens on stays open (reviewer on #106:
+/// on the user's host nginx serves the 443 Setup once opened), and so does
+/// one `ss` cannot check. Returns what it closed and why others stayed;
+/// without firewalld, nothing.
+pub fn close_old<R: Runner>(
+    ctx: &Ctx<R>,
+    old: &Plan,
+) -> Result<(Vec<String>, Vec<String>), String> {
     if !ctx.succeeds(FirewallCmd, &["--state"]) {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
+    let mut kept = Vec::new();
+    let mut ours = opened(ctx);
     let new = ctx.plan;
     let still = [new.console_port, new.ingest_port, new.distribution_port];
     let mut closed = Vec::new();
     for from in [old.console_port, old.ingest_port, old.distribution_port] {
         // A port another service moved onto stays open.
         let port = format!("{from}/tcp");
-        if !still.contains(&from)
-            && ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", &port])
+        if still.contains(&from)
+            || !ours.contains(&port)
+            || !ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", &port])
         {
-            ctx.ok(FirewallCmd, &["--permanent", "--remove-port", &port])?;
-            closed.push(port);
+            continue;
+        }
+        // Our services left it after Readiness: whoever listens is not us.
+        match holder(ctx.runner, from) {
+            Ok(None) => {
+                ctx.ok(FirewallCmd, &["--permanent", "--remove-port", &port])?;
+                ours.retain(|known| *known != port);
+                write_opened(ctx, &ours)?;
+                closed.push(port);
+            }
+            Ok(Some((who, _))) => kept.push(format!("{port} stays open: {who} uses it")),
+            Err(error) => kept.push(format!("{port} stays open: {error}")),
         }
     }
     if !closed.is_empty() {
         // The running firewall too, not only after a reboot.
         ctx.ok(FirewallCmd, &["--reload"])?;
     }
-    Ok(closed)
+    Ok((closed, kept))
 }

@@ -79,7 +79,10 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   VERB…` with the password on stdin only (never in argv or the journal),
   journals `VERB ok|failed` (without `setup-plan`'s arguments), and returns
   the helper's stdout. sudo's refusals map to `WrongPassword` ("incorrect
-  password") and `NotSudoer` (not in sudoers).
+  password") and `NotSudoer` (not in sudoers, or "is not allowed to
+  execute", which a session started before joining wheel also gets). sudo's
+  first-use lecture is removed from stderr first, so it never stands in for
+  the error (#75).
 - `UpdateStep` (`backup`, `stop`, `upgrade`, `migrate`, `start`, `ready`) and
   `RemoveStep` (`backup`, `stop`, `firewall`, `packages`, `purge`), with
   the verbs `Privileged::Update` (`update-step STEP [ARGS]`),

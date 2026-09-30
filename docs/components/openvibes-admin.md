@@ -61,7 +61,16 @@ host, the Setup tab offers `c` check every step (`helper setup-status`),
 `r` repair (every step with `--repair`: never a new CA), `u` update (the
 installed OpenVIBES packages with any newer version, a backup file, then
 the update job), `m` change components (the form filled from `setup.toml`;
-added components are installed, unticked ones removed keeping data) and
+added components are installed, unticked ones removed keeping data, ports
+included), `p` change ports (the same form, on the port rows, #69; moving
+the agent ports takes a second Enter on Start, since agents on other hosts
+keep calling the old ones until their install line is re-run; the ports a
+plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
+`helper setup-plan` and closed in firewalld once Readiness is done, as the
+CLI's Repair does; only ports the Firewall step itself opened are closed, as
+recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
+never Setup's; installs from before the record close nothing), and one another
+program listens on, per `ss`, stays open with who uses it) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
 Only rows on screen take the focus: with keep data, one `j` goes from the
@@ -91,6 +100,10 @@ OpenVIBES units).
 and is edited by hand). Only the fields listed for the service in
 `src/fields.rs` can be set; clearing a value (Enter on an empty value)
 removes the key, so the service default applies (shown as `(default)`).
+Fields Setup owns (ingest's and distribution's `listen`, the console's
+`development_listen` with direct TLS, and `public_origin`) are shown `(set by Setup)` and do
+not open (#78): Setup checks those ports, opens the firewall and keeps the
+origin in step, so they change with `p` (Change ports) on the Setup tab.
 Every change is checked at once by the service's own configuration type,
 the same check the service runs at start, and the result is shown as
 `valid` or `invalid: REASON`; the help line under the form gives each
