@@ -302,6 +302,46 @@ async fn certificate_names_are_served_and_others_told_where_to_go() {
     assert!(body.contains("This OpenVIBES console is at"), "{body}");
 }
 
+/// Reviewer on #99: a request without `Host` passes the host check, so its
+/// Origin must still be the canonical one, never anything else.
+#[tokio::test]
+async fn without_a_host_only_the_canonical_origin_may_log_in() {
+    for (origin, allowed) in [
+        ("https://metabox-lnx:8443", true),
+        ("https://192.168.1.10:8443", false),
+        ("https://attacker.example", false),
+    ] {
+        let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+            .await
+            .unwrap();
+        let response = authenticated_router_for_hosts(
+            pool,
+            "https://metabox-lnx:8443",
+            ["192.168.1.10:8443".to_owned()],
+        )
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/auth/v1/login")
+                .header(header::ORIGIN, origin)
+                .header(header::CONTENT_TYPE, "application/json")
+                .extension(axum::extract::ConnectInfo(TrustedPeer::new(
+                    "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
+                )))
+                .body(Body::from("{"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+        let expected = if allowed {
+            StatusCode::BAD_REQUEST
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(response.status(), expected, "{origin}");
+    }
+}
+
 #[tokio::test]
 async fn a_login_origin_must_match_the_host_it_came_to() {
     let login = |host: &str, origin: &str| {

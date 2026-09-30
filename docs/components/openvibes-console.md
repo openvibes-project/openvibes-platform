@@ -210,8 +210,8 @@ the server certificate covers (its DNS and IP subjectAltNames at the listen
 port; the bare name too on 443), so the console opens by IP over a VPN or as
 `localhost` through a tunnel. Any other `Host` gets a 421 page linking to
 `public_origin`. Plain http on the TLS port gets a `301` to `https://` on the
-same `Host` (a plain `400` note if that `Host` has other characters) instead
-of TLS bytes. The e2e fixture uses
+same `Host` when that is a served name, else to `public_origin` (never to a
+name the console does not serve), instead of TLS bytes. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
 
 Reverse-proxy mode requires authenticated database configuration and a

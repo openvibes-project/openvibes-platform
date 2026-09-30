@@ -95,6 +95,15 @@ struct CappedListener {
     capacity: std::sync::Arc<Semaphore>,
     tls: Option<TlsAcceptor>,
     handshakes: JoinSet<(io::Result<TlsStream<CappedStream>>, TrustedPeer)>,
+    plain_http: std::sync::Arc<PlainHttp>,
+}
+
+/// Where plain http on the TLS port is sent (board #71): the served hosts
+/// (`name:port`, lowercase) and the canonical origin for any other `Host`.
+#[derive(Default)]
+struct PlainHttp {
+    hosts: Vec<String>,
+    origin: String,
 }
 
 /// Socket peer identity supplied by a capped console listener.
@@ -145,6 +154,7 @@ impl CappedListener {
             capacity: std::sync::Arc::new(Semaphore::new(limit)),
             tls,
             handshakes: JoinSet::new(),
+            plain_http: std::sync::Arc::default(),
         }
     }
 }
@@ -296,8 +306,9 @@ impl Listener for CappedListener {
                             };
                             let capped = CappedStream { stream, _permit: permit };
                             let tls = self.tls.as_ref().expect("TLS mode has an acceptor").clone();
+                            let plain_http = self.plain_http.clone();
                             self.handshakes.spawn(async move {
-                                let result = match timeout(TLS_HANDSHAKE_TIMEOUT, handshake(tls, capped)).await {
+                                let result = match timeout(TLS_HANDSHAKE_TIMEOUT, handshake(tls, capped, &plain_http)).await {
                                     Ok(result) => result,
                                     Err(_) => Err(io::Error::new(io::ErrorKind::TimedOut, "TLS handshake timed out")),
                                 };
@@ -487,6 +498,7 @@ impl Connected<IncomingStream<'_, PublicListener>> for TrustedPeer {
 async fn handshake(
     tls: TlsAcceptor,
     mut stream: CappedStream,
+    plain_http: &PlainHttp,
 ) -> io::Result<TlsStream<CappedStream>> {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     let mut first = [0_u8; 1];
@@ -503,7 +515,9 @@ async fn handshake(
             }
             request.extend_from_slice(&buffer[..read]);
         }
-        stream.write_all(&plain_http_answer(&request)).await?;
+        stream
+            .write_all(&plain_http_answer(&request, plain_http))
+            .await?;
         stream.shutdown().await?;
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
@@ -513,28 +527,24 @@ async fn handshake(
     tls.accept(stream).await
 }
 
-/// `301` to `https://` + the request's `Host`, with a plain-text note. A
-/// `Host` with anything but name, address and port characters gets no
-/// `Location`, only the note.
-fn plain_http_answer(request: &[u8]) -> Vec<u8> {
-    let host = String::from_utf8_lossy(request)
+/// `301` to `https://` + the request's `Host` when this console serves it,
+/// else to the canonical origin, never to a name it does not serve; a
+/// plain `400` note when there is neither.
+fn plain_http_answer(request: &[u8], to: &PlainHttp) -> Vec<u8> {
+    let served = String::from_utf8_lossy(request)
         .lines()
         .find_map(|line| {
             let (name, value) = line.split_once(':')?;
             name.eq_ignore_ascii_case("host")
-                .then(|| value.trim().to_owned())
+                .then(|| value.trim().to_ascii_lowercase())
         })
-        .filter(|host| {
-            !host.is_empty()
-                && host
-                    .bytes()
-                    .all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b))
-        });
-    match host {
-        Some(host) => format!(
-            "HTTP/1.1 301 Moved Permanently\r\nLocation: https://{host}/\r\n\
+        .filter(|host| to.hosts.contains(host))
+        .map(|host| format!("https://{host}"));
+    match served.or_else(|| (!to.origin.is_empty()).then(|| to.origin.clone())) {
+        Some(origin) => format!(
+            "HTTP/1.1 301 Moved Permanently\r\nLocation: {origin}/\r\n\
              Content-Type: text/plain; charset=utf-8\r\nConnection: close\r\n\r\n\
-             This OpenVIBES console speaks https only: open https://{host}/\n"
+             This OpenVIBES console speaks https only: open {origin}/\n"
         ),
         None => "HTTP/1.1 400 Bad Request\r\nContent-Type: text/plain; charset=utf-8\r\n\
                  Connection: close\r\n\r\nThis OpenVIBES console speaks https only.\n"
@@ -580,12 +590,36 @@ pub(crate) fn certificate_hosts(pem: &[u8], port: u16) -> Vec<String> {
     hosts
 }
 
+/// The served hosts, as the router has them: `public_origin`'s authority
+/// and the certificate's names.
+fn plain_http(config: &ConsoleConfig, mut hosts: Vec<String>) -> PlainHttp {
+    let origin = config.public_origin.clone().unwrap_or_default();
+    if let Some(authority) = origin
+        .parse::<axum::http::Uri>()
+        .ok()
+        .and_then(|uri| uri.authority().map(|a| a.as_str().to_owned()))
+    {
+        hosts.push(authority);
+    }
+    for host in &mut hosts {
+        host.make_ascii_lowercase();
+    }
+    PlainHttp { hosts, origin }
+}
+
 /// Binds the configured public and health listeners and serves until shutdown.
 pub async fn serve(
     config: ConsoleConfig,
     shutdown: impl Future<Output = ()>,
 ) -> Result<(), ConsoleError> {
     config.validate()?;
+    // With direct TLS, every name the certificate covers is served.
+    let hosts = match (&config.transport_mode, &config.server_certificate_file) {
+        (ConsoleTransportMode::DirectTls, Some(path)) => {
+            certificate_hosts(&read_tls_pem(path)?, config.development_listen.port())
+        }
+        _ => Vec::new(),
+    };
     let (public_router, readiness_pool) = match (&config.database_url, &config.public_origin) {
         (Some(database_url), Some(public_origin)) => {
             let pool = platform_store::connect(database_url).await?;
@@ -613,18 +647,11 @@ pub async fn serve(
                 })
                 .transpose()?
                 .flatten();
-            // With direct TLS, every name the certificate covers is served.
-            let hosts = match (&config.transport_mode, &config.server_certificate_file) {
-                (ConsoleTransportMode::DirectTls, Some(path)) => {
-                    certificate_hosts(&read_tls_pem(path)?, config.development_listen.port())
-                }
-                _ => Vec::new(),
-            };
             (
                 crate::router::authenticated_router_with_assistant(
                     pool.clone(),
                     public_origin.as_str(),
-                    hosts,
+                    hosts.clone(),
                     assistant_runtime,
                 ),
                 Some(pool),
@@ -655,17 +682,20 @@ pub async fn serve(
         (PublicListener::Unix(listener), Some(guard))
     } else {
         let listener = TcpListener::bind(config.development_listen).await?;
-        (
-            PublicListener::Tcp(CappedListener::new(listener, MAX_PUBLIC_CONNECTIONS, tls)),
-            None,
-        )
+        let mut listener = CappedListener::new(listener, MAX_PUBLIC_CONNECTIONS, tls);
+        listener.plain_http = plain_http(&config, hosts).into();
+        (PublicListener::Tcp(listener), None)
     };
     #[cfg(not(unix))]
-    let public_listener = PublicListener::Tcp(CappedListener::new(
-        TcpListener::bind(config.development_listen).await?,
-        MAX_PUBLIC_CONNECTIONS,
-        tls,
-    ));
+    let public_listener = PublicListener::Tcp({
+        let mut listener = CappedListener::new(
+            TcpListener::bind(config.development_listen).await?,
+            MAX_PUBLIC_CONNECTIONS,
+            tls,
+        );
+        listener.plain_http = plain_http(&config, hosts).into();
+        listener
+    });
 
     let result = run_with_router(
         public_listener,
@@ -987,10 +1017,23 @@ mod certificate_hosts_tests {
         assert_eq!(hosts, ["metabox-lnx:443", "metabox-lnx"]);
     }
 
+    fn served() -> super::PlainHttp {
+        super::PlainHttp {
+            hosts: vec!["metabox-lnx:8443".into(), "127.0.0.1:8443".into()],
+            origin: "https://metabox-lnx:8443".into(),
+        }
+    }
+
+    fn answer(request: &[u8], to: &super::PlainHttp) -> String {
+        String::from_utf8(super::plain_http_answer(request, to)).unwrap()
+    }
+
     #[test]
-    fn plain_http_is_sent_to_https_on_the_same_host() {
-        let answer = super::plain_http_answer(b"GET /x HTTP/1.1\r\nhost: 127.0.0.1:8443\r\n\r\n");
-        let answer = String::from_utf8(answer).unwrap();
+    fn plain_http_is_sent_to_https_on_the_same_served_host() {
+        let answer = answer(
+            b"GET /x HTTP/1.1\r\nhost: 127.0.0.1:8443\r\n\r\n",
+            &served(),
+        );
         assert!(answer.starts_with("HTTP/1.1 301 "), "{answer}");
         assert!(
             answer.contains("\r\nLocation: https://127.0.0.1:8443/\r\n"),
@@ -1003,15 +1046,25 @@ mod certificate_hosts_tests {
     }
 
     #[test]
-    fn a_strange_host_gets_no_redirect() {
+    fn any_other_host_is_sent_to_the_canonical_origin() {
+        // Reviewer on #99: never redirect to a name this console does not serve.
         for request in [
-            &b"GET / HTTP/1.1\r\nHost: evil.example/\"><x\r\n\r\n"[..],
+            &b"GET / HTTP/1.1\r\nHost: evil.example\r\n\r\n"[..],
+            b"GET / HTTP/1.1\r\nHost: evil.example/\"><x\r\n\r\n",
             b"GET / HTTP/1.1\r\n\r\n",
         ] {
-            let answer = String::from_utf8(super::plain_http_answer(request)).unwrap();
-            assert!(answer.starts_with("HTTP/1.1 400 "), "{answer}");
-            assert!(!answer.contains("Location"), "{answer}");
+            let answer = answer(request, &served());
+            assert!(
+                answer.contains("\r\nLocation: https://metabox-lnx:8443/\r\n"),
+                "{answer}"
+            );
+            assert!(!answer.contains("evil"), "{answer}");
         }
+        let answer = answer(b"GET / HTTP/1.1\r\n\r\n", &super::PlainHttp::default());
+        assert!(
+            answer.starts_with("HTTP/1.1 400 ") && !answer.contains("Location"),
+            "{answer}"
+        );
     }
 
     #[tokio::test]
@@ -1022,7 +1075,7 @@ mod certificate_hosts_tests {
         let client = tokio::spawn(async move {
             let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
             client
-                .write_all(b"GET / HTTP/1.1\r\nHost: localhost:8443\r\n\r\n")
+                .write_all(b"GET / HTTP/1.1\r\nHost: 127.0.0.1:8443\r\n\r\n")
                 .await
                 .unwrap();
             let mut answer = String::new();
@@ -1054,6 +1107,7 @@ mod certificate_hosts_tests {
                 stream,
                 _permit: permit,
             },
+            &served(),
         )
         .await;
         assert!(result.is_err());
@@ -1061,7 +1115,7 @@ mod certificate_hosts_tests {
             client
                 .await
                 .unwrap()
-                .contains("Location: https://localhost:8443/")
+                .contains("Location: https://127.0.0.1:8443/")
         );
     }
 
