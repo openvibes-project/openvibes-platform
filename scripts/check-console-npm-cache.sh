@@ -127,7 +127,7 @@ else
 fi
 
 cd -- "${web_root}"
-"${isolate[@]}" npm ci --offline --no-audit --no-fund --cache "${cache_dir}"
+"${isolate[@]}" npm ci --ignore-scripts --offline --no-audit --no-fund --cache "${cache_dir}"
 # Build into a scratch directory: the real dist/ (and its build stamp, which
 # embedded-ui builds need) is left untouched.
 "${isolate[@]}" npm run build -- --outDir "${work_dir}/dist" --emptyOutDir

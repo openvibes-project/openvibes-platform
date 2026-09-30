@@ -44,7 +44,7 @@ cache_dir="${work_dir}/npm-cache"
 mkdir -p -- "${cache_dir}"
 
 cd -- "${web_root}"
-npm ci --no-audit --no-fund --cache "${cache_dir}" >&2
+npm ci --ignore-scripts --no-audit --no-fund --cache "${cache_dir}" >&2
 npm cache verify --cache "${cache_dir}" >&2
 
 printf '%s\n' "${lock_digest}" >"${cache_dir}/.lockfile-sha256"

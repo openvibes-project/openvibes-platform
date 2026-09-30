@@ -77,6 +77,6 @@ cargo test -p platform-store --test console_dashboards       # ownership, sharin
 cargo test -p openvibes-console --lib dashboards              # layout and name validation
 cargo test -p openvibes-console --all-features --test dashboards_http   # routes, auth, audit
 cd crates/openvibes-console/web
-npx vitest run src/dashboards src/demo                                  # grid, config, editor, demo API
-npx playwright test --config playwright.demo.config.ts dashboards        # create, edit, keyboard, share, home, axe
+npm test -- src/dashboards src/demo                                      # grid, config, editor, demo API
+npm run test:e2e:demo -- dashboards                                     # create, edit, keyboard, share, home, axe
 ```

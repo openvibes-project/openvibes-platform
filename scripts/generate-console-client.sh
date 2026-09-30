@@ -16,7 +16,8 @@ fi
 generate() {
     local destination="$1"
     cd -- "${web_root}"
-    npm exec -- openapi-typescript "${snapshot}" --output "${destination}"
+    # The locked local binary; npm exec could fetch one on demand.
+    node_modules/.bin/openapi-typescript "${snapshot}" --output "${destination}"
 }
 
 case "${1:-}" in

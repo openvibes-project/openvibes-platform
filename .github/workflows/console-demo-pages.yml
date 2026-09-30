@@ -47,28 +47,28 @@ jobs:
           cache-dependency-path: crates/openvibes-console/web/package-lock.json
 
       - name: Install dependencies
-        run: npm ci --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Lint, typecheck and unit tests
         run: |
-          npx eslint . --max-warnings 0
-          npx tsc --noEmit
-          npx vitest run
+          npm run lint
+          npm run typecheck
+          npm test
 
       - name: Install pinned browsers
-        run: npx playwright install --with-deps chromium firefox
+        run: node_modules/.bin/playwright install --with-deps chromium firefox
 
       - name: End to end and accessibility (Chromium, Firefox)
         env:
           CI: "true"
-        run: npx playwright test --config playwright.demo.config.ts
+        run: npm run test:e2e:demo
 
       - name: Build with demo data
         env:
           CONSOLE_BASE: /${{ github.event.repository.name }}/
           VITE_DEMO: "true"
         run: |
-          npx vite build --outDir dist-demo
+          npm run build:demo
           # Deep links: Pages serves 404.html for unknown paths.
           cp dist-demo/index.html dist-demo/404.html
 
