@@ -381,9 +381,14 @@ The same command maintains a set-up host (one action per call; each takes
 the run lock `/run/openvibes-admin/setup.lock`, so a second Setup run is
 refused while one works):
 
-- `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]`:
-  given ports go into `setup.toml` first (checked like a new plan's), then
-  every step is checked, and only failed ones fixed. It
+- `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]
+  [--move-agent-ports]`: given ports go into `setup.toml` first (checked
+  like a new plan's; a taken one changes nothing). Moving the ingest or
+  distribution port is refused without `--move-agent-ports`: agents
+  enrolled from other hosts keep calling the old port until the line from
+  `agent command` is run on them again, which the output says. Ports moved
+  away from are closed in firewalld. Then every step is checked, and only
+  failed ones fixed. It
   never makes a new CA: with the CA files gone it stops and says how to
   recover. Certificates issued for other names are issued again; one
   expiring within 14 days is reported, not replaced.

@@ -6,12 +6,15 @@
 use platform_host::{
     Service,
     runner::{
-        Program::{Ss, Systemctl},
+        Program::{FirewallCmd, Ss, Systemctl},
         Runner,
     },
 };
 
-use super::{Ctx, plan::Component};
+use super::{
+    Ctx,
+    plan::{Component, Plan},
+};
 use crate::config_file;
 
 /// The console's port unless the operator chooses another.
@@ -208,4 +211,39 @@ pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 pub fn listen_port<R: Runner>(ctx: &Ctx<R>, unit: &str) -> Option<u16> {
     let name = unit.trim_end_matches(".service");
     needed(ctx).into_iter().find(|n| n.1 == name).map(|n| n.0)
+}
+
+/// The agent ports a Repair moves from `old` to `new`, as (what, old, new):
+/// agents enrolled from other hosts keep calling the old ones.
+pub fn moved_agent_ports(old: &Plan, new: &Plan) -> Vec<(&'static str, u16, u16)> {
+    [
+        ("ingest", old.ingest_port, new.ingest_port),
+        ("distribution", old.distribution_port, new.distribution_port),
+    ]
+    .into_iter()
+    .filter(|(_, from, to)| from != to)
+    .collect()
+}
+
+/// Closes in firewalld the ports a Repair moved away from (`old`'s, no
+/// longer the plan's) that are open; the Firewall step opens the new ones.
+/// Returns what it closed; without firewalld, nothing.
+pub fn close_old<R: Runner>(ctx: &Ctx<R>, old: &Plan) -> Result<Vec<String>, String> {
+    if !ctx.succeeds(FirewallCmd, &["--state"]) {
+        return Ok(Vec::new());
+    }
+    let new = ctx.plan;
+    let mut closed = Vec::new();
+    for (from, to) in [
+        (old.console_port, new.console_port),
+        (old.ingest_port, new.ingest_port),
+        (old.distribution_port, new.distribution_port),
+    ] {
+        let port = format!("{from}/tcp");
+        if from != to && ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", &port]) {
+            ctx.ok(FirewallCmd, &["--permanent", "--remove-port", &port])?;
+            closed.push(port);
+        }
+    }
+    Ok(closed)
 }

@@ -322,3 +322,54 @@ fn behind_a_proxy_the_console_port_is_the_proxy_s() {
         None
     );
 }
+
+#[test]
+fn a_repair_names_the_agent_ports_it_moves() {
+    let old = plan(&[Ingest, Distribution, Console]);
+    let moved = old.with_ports(Some(8444), Some(18600), None).unwrap();
+    // The console is not an agent port: only ingest counts here.
+    assert_eq!(moved_agent_ports(&old, &moved), [("ingest", 18423, 18600)]);
+    assert!(moved_agent_ports(&old, &old).is_empty());
+}
+
+#[test]
+fn a_repair_closes_the_ports_it_moved_away_from() {
+    let fake = Fake::new("ports-close");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "18423/tcp",
+        ],
+        0,
+        "yes\n",
+    );
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
+        1,
+        "no\n",
+    );
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--remove-port"],
+        0,
+        "success\n",
+    );
+    let old = plan(&[Ingest, Distribution, Console]);
+    let new = old.with_ports(Some(8444), Some(18600), None).unwrap();
+    // 18423 was open and is closed; 443 was not open, so nothing to remove.
+    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap(), ["18423/tcp"]);
+    assert_eq!(
+        fake.call(&["/usr/bin/firewall-cmd", "--permanent", "--remove-port"]),
+        [
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--remove-port",
+            "18423/tcp"
+        ]
+    );
+    // Without firewalld there is nothing to close.
+    let fake = Fake::new("ports-close-off");
+    assert!(close_old(&fake.ctx(&new), &old).unwrap().is_empty());
+}

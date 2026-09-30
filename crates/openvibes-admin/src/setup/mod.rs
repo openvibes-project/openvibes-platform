@@ -297,9 +297,14 @@ fn report(results: impl Iterator<Item = (&'static str, StepState)>) -> ExitCode 
 }
 
 /// `setup --repair`.
-/// `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]`:
-/// given ports go into the plan first (#61), then every step is checked.
-pub fn repair_all(ports: (Option<u16>, Option<u16>, Option<u16>)) -> ExitCode {
+/// `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]
+/// [--move-agent-ports]`: given ports go into the plan first (#61), then
+/// every step is checked. Moving an agent port needs `move_agent_ports`:
+/// agents enrolled from other hosts keep calling the old one.
+pub fn repair_all(
+    ports: (Option<u16>, Option<u16>, Option<u16>),
+    move_agent_ports: bool,
+) -> ExitCode {
     if let Err(code) = root_or_exit() {
         return code;
     }
@@ -307,6 +312,7 @@ pub fn repair_all(ports: (Option<u16>, Option<u16>, Option<u16>)) -> ExitCode {
         Ok(v) => v,
         Err(code) => return code,
     };
+    let old = plan.clone();
     let plan = if ports == (None, None, None) {
         plan
     } else {
@@ -317,12 +323,34 @@ pub fn repair_all(ports: (Option<u16>, Option<u16>, Option<u16>)) -> ExitCode {
                 return ExitCode::from(2);
             }
         };
+        let moved = ports::moved_agent_ports(&old, &plan);
+        if !moved.is_empty() && !move_agent_ports {
+            for (what, from, to) in &moved {
+                eprintln!(
+                    "openvibes-admin: moving {what} from {from} to {to} leaves agents on other \
+                     hosts calling {from}; add --move-agent-ports, then re-run the line from \
+                     `openvibes-admin agent command` on each of them (nothing changed)"
+                );
+            }
+            return ExitCode::from(2);
+        }
         // Checked before the plan is saved: a taken port changes nothing.
         if let Err(error) =
             ports::check(&host_ctx(&plan, true)).and_then(|_| plan.save(Path::new("/")))
         {
             eprintln!("openvibes-admin: {error} (nothing changed)");
             return ExitCode::FAILURE;
+        }
+        match ports::close_old(&host_ctx(&plan, true), &old) {
+            Ok(closed) if !closed.is_empty() => println!("Firewall: closed {}", closed.join(" ")),
+            Ok(_) => {}
+            Err(error) => eprintln!("openvibes-admin: {error}"),
+        }
+        for (what, from, to) in moved {
+            println!(
+                "Agents: {what} moved from {from} to {to}; agents on other hosts still call \
+                 {from}: re-run the line from `openvibes-admin agent command` on each of them"
+            );
         }
         plan
     };

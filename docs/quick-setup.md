@@ -36,7 +36,9 @@ it; then the form proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
 the same way, and the agent command Setup prints carries them. To move a
 port later: `sudo openvibes-admin setup --repair --console-port N` (or
-`--ingest-port`, `--distribution-port`). Setup asks for
+`--ingest-port`, `--distribution-port`, which also need
+`--move-agent-ports`: agents on other hosts then need their install line
+run again). Setup asks for
 your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
 (the console and agent ports), agent and readiness. A port another
