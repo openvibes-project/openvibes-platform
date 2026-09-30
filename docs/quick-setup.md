@@ -29,14 +29,19 @@ fingerprint), installs `openvibes-admin` and opens its **Setup** screen.
 
 The Setup form has the components ticked (ingest, console, distribution,
 vulnerabilities, rules and an agent on this host), a hostname and a CA
-mode, and the console port. The defaults are right for a first install:
+mode, and the ports. The defaults are right for a first install:
 enter the hostname the other hosts will use to reach this one and press
 `Start`. The console port is 443 unless another web server already holds
 it; then the form proposes the first free port from 8443 and says so, and
-the console is at `https://HOST:PORT`. Setup asks for
+the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
+the same way, and the agent command Setup prints carries them. To move a
+port later: `sudo openvibes-admin setup --repair --console-port N` (or
+`--ingest-port`, `--distribution-port`, which also need
+`--move-agent-ports`: agents on other hosts then need their install line
+run again). Setup asks for
 your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
-(the console port, 18423, 18424), agent and readiness. A port another
+(the console and agent ports), agent and readiness. A port another
 process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
 and press `r` to continue from it.
 

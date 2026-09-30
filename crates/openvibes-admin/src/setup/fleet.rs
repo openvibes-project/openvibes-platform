@@ -92,19 +92,33 @@ pub fn rules_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("rule set {set} published")))
 }
 
-fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
-    let mut text = String::from(
+/// `https://localhost`, with `:PORT` unless it is the agent's default.
+fn local_url(port: u16, default: u16) -> String {
+    if port == default {
+        "https://localhost".into()
+    } else {
+        format!("https://localhost:{port}")
+    }
+}
+
+pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
+    let platform = local_url(ctx.plan.ingest_port, super::ports::INGEST_DEFAULT);
+    let mut text = format!(
         "# Written by openvibes-admin setup: the agent on the platform host.\n\
          state_dir = \"/var/lib/openvibes-agent\"\n\
-         platform_url = \"https://localhost\"\n\
+         platform_url = \"{platform}\"\n\
          platform_ca_file = \"/etc/openvibes-agent/platform-ca.crt\"\n\
          enrollment_token_file = \"/etc/openvibes-agent/token\"\n",
     );
     if ctx.plan.has(Component::Rules)
         && let Ok([set, issuer, key]) = baseline_key(ctx)
     {
+        let distribution = local_url(
+            ctx.plan.distribution_port,
+            super::ports::DISTRIBUTION_DEFAULT,
+        );
         text.push_str(&format!(
-            "distribution_url = \"https://localhost\"\n\n[[rule_sets]]\nid = \"{set}\"\n\
+            "distribution_url = \"{distribution}\"\n\n[[rule_sets]]\nid = \"{set}\"\n\
              trusted_keys = [{{ issuer_key_id = \"{issuer}\", public_key = \"{key}\" }}]\n"
         ));
     }
@@ -117,7 +131,7 @@ pub fn agent_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     }
     let configured = ctx
         .read(&format!("{AGENT}/agent.toml"))
-        .is_ok_and(|text| text.contains("platform_url = \"https://localhost\""));
+        .is_ok_and(|text| text == agent_toml(ctx));
     Ok(
         if configured && ctx.succeeds(Systemctl, &["is-active", "--quiet", "openvibes-agent"]) {
             StepState::Done("the agent on this host is running".into())
@@ -374,6 +388,37 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn the_local_agent_uses_the_chosen_ports() {
+        let fake = Fake::new("agent-ports");
+        fake.file(
+            "/usr/share/openvibes/rules/baseline.key",
+            &format!("{KEY}\n"),
+        );
+        let mut plan = plan(&[Ingest, Distribution, Rules, Agent]);
+        plan.ingest_port = 18500;
+        plan.distribution_port = 18501;
+        let config = super::agent_toml(&fake.ctx(&plan));
+        assert!(
+            config.contains("platform_url = \"https://localhost:18500\""),
+            "{config}"
+        );
+        assert!(
+            config.contains("distribution_url = \"https://localhost:18501\""),
+            "{config}"
+        );
+        // The defaults stay port-less, as before.
+        let config = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(
+            config.contains("platform_url = \"https://localhost\"\n"),
+            "{config}"
+        );
+    }
+
+    fn plan_defaults() -> crate::setup::plan::Plan {
+        plan(&[Ingest, Distribution, Rules, Agent])
     }
 
     #[test]

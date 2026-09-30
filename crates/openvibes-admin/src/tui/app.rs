@@ -66,7 +66,7 @@ impl<H: Host> App<H> {
             .unwrap_or_default();
         let mut setup = Setup::new(set_up, hostname, std::env::var("HOME").ok());
         if !set_up {
-            setup.propose_port(&host);
+            setup.propose_ports(&host);
         }
         let mut app = App {
             color: std::env::var_os("NO_COLOR").is_none_or(|v| v.is_empty()),

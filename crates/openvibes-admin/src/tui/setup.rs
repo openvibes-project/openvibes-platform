@@ -21,7 +21,8 @@ pub const SANS_ROW: usize = 8;
 pub const CA_ROW: usize = 9;
 pub const KEY_ROW: usize = 10;
 pub const PORT_ROW: usize = 11;
-pub const START_ROW: usize = 12;
+pub const AGENT_PORTS_ROW: usize = 12;
+pub const START_ROW: usize = 13;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum After {
@@ -55,8 +56,12 @@ pub struct Setup {
     pub ca: CaMode,
     pub root_key_out: String,
     pub console_port: String,
-    /// Why the console port is not 443 ("443 is taken by …"), if it is not.
-    pub port_note: Option<String>,
+    /// "INGEST, DISTRIBUTION": one row, so the form fits 80×24.
+    pub agent_ports: String,
+    /// Why the console's or the agent ports are not their defaults
+    /// ("443 is taken by another process"), shown on their rows.
+    pub console_note: Option<String>,
+    pub agent_ports_note: Option<String>,
     pub editing: bool,
     pub prompt: PasswordPrompt,
     pub password: Option<Secret>,
@@ -93,7 +98,9 @@ impl Setup {
                 .map(|home| format!("{home}/openvibes-root-ca.key"))
                 .unwrap_or_default(),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
-            port_note: None,
+            agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
+            console_note: None,
+            agent_ports_note: None,
             editing: false,
             prompt: PasswordPrompt::default(),
             password: None,
@@ -140,28 +147,60 @@ impl Setup {
             args.extend(["--root-key-out".into(), self.root_key_out.trim().into()]);
         }
         args.extend(["--console-port".into(), self.console_port.trim().into()]);
+        // Two numbers; anything else goes through as typed, so Setup's own
+        // check names what is wrong.
+        let mut agent = self.agent_ports.split([',', ' ']).filter(|p| !p.is_empty());
+        let ingest = agent.next().unwrap_or("").to_owned();
+        let distribution = agent.collect::<Vec<_>>().join(" ");
+        args.extend([
+            "--ingest-port".into(),
+            ingest,
+            "--distribution-port".into(),
+            distribution,
+        ]);
         args
     }
 
-    /// When another process holds 443, proposes the first free port from
-    /// 8443 and says why. Unprivileged, so the holder is rarely named here;
-    /// Setup's own check (as root) names it if it is still there.
-    pub fn propose_port<H: Host>(&mut self, host: &H) {
+    /// For each port another process holds, proposes the first free one
+    /// (from 8443 for the console, 18425 for ingest and distribution) and
+    /// notes it on the row. Unprivileged, so the holder is rarely known
+    /// here; Setup's own check (as root) names it if it is still there.
+    pub fn propose_ports<H: Host>(&mut self, host: &H) {
         let taken = |port: u16| {
             host.listeners(port)
-                .map(|lines| ports::parse(&lines))
+                .map(|lines| ports::parse(&lines).is_some())
                 .map_err(|error| error.to_string())
         };
-        let Ok(Some(holder)) = taken(ports::CONSOLE_DEFAULT) else {
-            return; // free, or unknown: Setup checks again before starting
-        };
-        if let Ok(port) = ports::suggest(|port| Ok(taken(port)?.is_some())) {
-            self.console_port = port.to_string();
-            self.port_note = Some(format!(
-                "{} is taken by {holder}; {port} is free",
-                ports::CONSOLE_DEFAULT
-            ));
+        let defaults = [
+            ports::CONSOLE_DEFAULT,
+            ports::INGEST_DEFAULT,
+            ports::DISTRIBUTION_DEFAULT,
+        ];
+        let mut chosen: Vec<u16> = defaults.to_vec();
+        for (index, from) in [8443, 18425, 18425].into_iter().enumerate() {
+            let default = defaults[index];
+            // Free, or unknown: Setup checks again before starting.
+            let Ok(true) = taken(default) else {
+                continue;
+            };
+            let Ok(port) = ports::suggest(from, |port| Ok(chosen.contains(&port) || taken(port)?))
+            else {
+                continue;
+            };
+            chosen[index] = port;
+            let note = format!("{default} is in use");
+            if index == 0 {
+                self.console_note = Some(note);
+            } else {
+                let joined = self
+                    .agent_ports_note
+                    .take()
+                    .map_or(note.clone(), |n| format!("{n}; {note}"));
+                self.agent_ports_note = Some(joined);
+            }
         }
+        self.console_port = chosen[0].to_string();
+        self.agent_ports = format!("{}, {}", chosen[1], chosen[2]);
     }
 
     fn toggle(&mut self, component: Component) {
@@ -185,6 +224,7 @@ impl Setup {
             SANS_ROW => Some(&mut self.sans),
             KEY_ROW => Some(&mut self.root_key_out),
             PORT_ROW => Some(&mut self.console_port),
+            AGENT_PORTS_ROW => Some(&mut self.agent_ports),
             _ => None,
         }
     }

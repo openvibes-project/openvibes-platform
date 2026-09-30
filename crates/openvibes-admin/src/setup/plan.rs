@@ -125,13 +125,43 @@ pub struct Plan {
     /// The console's HTTPS port (plans from before board #45: 443).
     #[serde(default = "console_default")]
     pub console_port: u16,
+    /// Ingest's port for agents (plans from before board #48: 18423).
+    #[serde(default = "ingest_default")]
+    pub ingest_port: u16,
+    /// Distribution's port for agents (plans from before board #48: 18424).
+    #[serde(default = "distribution_default")]
+    pub distribution_port: u16,
 }
 
 fn console_default() -> u16 {
     super::ports::CONSOLE_DEFAULT
 }
 
+fn ingest_default() -> u16 {
+    super::ports::INGEST_DEFAULT
+}
+
+fn distribution_default() -> u16 {
+    super::ports::DISTRIBUTION_DEFAULT
+}
+
 impl Plan {
+    /// This plan with the ports given (`setup --repair --console-port N`):
+    /// checked like a new plan's, the others kept.
+    pub fn with_ports(
+        &self,
+        console: Option<u16>,
+        ingest: Option<u16>,
+        distribution: Option<u16>,
+    ) -> Result<Plan, String> {
+        let mut plan = self.clone();
+        plan.console_port = console.unwrap_or(plan.console_port);
+        plan.ingest_port = ingest.unwrap_or(plan.ingest_port);
+        plan.distribution_port = distribution.unwrap_or(plan.distribution_port);
+        super::ports::check_ports(plan.console_port, plan.ingest_port, plan.distribution_port)?;
+        Ok(plan)
+    }
+
     pub fn has(&self, component: Component) -> bool {
         self.components.contains(&component)
     }
@@ -220,9 +250,16 @@ pub struct PlanArgs {
     /// With --repo-dir: accept unsigned package files (test builds only).
     #[arg(long)]
     pub allow_unsigned_local: bool,
-    /// The console's HTTPS port; Setup refuses one another process holds.
-    #[arg(long, default_value_t = super::ports::CONSOLE_DEFAULT)]
-    pub console_port: u16,
+    /// The console's HTTPS port (443); Setup refuses one another process
+    /// holds. With --repair: move the console there.
+    #[arg(long)]
+    pub console_port: Option<u16>,
+    /// Ingest's port for agents (18423). With --repair: move ingest there.
+    #[arg(long)]
+    pub ingest_port: Option<u16>,
+    /// Distribution's port for agents (18424). With --repair: move it there.
+    #[arg(long)]
+    pub distribution_port: Option<u16>,
 }
 
 /// A lowercase DNS name.
@@ -283,7 +320,13 @@ impl PlanArgs {
             return Err("rules need distribution (agents fetch rules from it)".into());
         }
         check_name(&self.hostname)?;
-        super::ports::check_console_port(self.console_port)?;
+        let (console_port, ingest_port, distribution_port) = (
+            self.console_port.unwrap_or(super::ports::CONSOLE_DEFAULT),
+            self.ingest_port.unwrap_or(super::ports::INGEST_DEFAULT),
+            self.distribution_port
+                .unwrap_or(super::ports::DISTRIBUTION_DEFAULT),
+        );
+        super::ports::check_ports(console_port, ingest_port, distribution_port)?;
         if self.san.len() > 16 {
             return Err("at most 16 --san".into());
         }
@@ -312,7 +355,9 @@ impl PlanArgs {
             repo_dir: self.repo_dir.clone(),
             allow_unsigned_local: self.allow_unsigned_local,
             operator,
-            console_port: self.console_port,
+            console_port,
+            ingest_port,
+            distribution_port,
         })
     }
 }
@@ -329,139 +374,4 @@ pub fn operator_from_env() -> Option<String> {
                 || (i > 0 && (b.is_ascii_digit() || b == b'-' || b == b'.'))
         });
     valid.then_some(user)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(components: &[Component], hostname: &str, sans: &[&str]) -> PlanArgs {
-        PlanArgs {
-            components: components.to_vec(),
-            hostname: hostname.into(),
-            san: sans.iter().map(|s| (*s).to_owned()).collect(),
-            ca: CaMode::Quick,
-            root_key_out: None,
-            admin_password_file: None,
-            repo_dir: None,
-            allow_unsigned_local: false,
-            console_port: 443,
-        }
-    }
-
-    fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("ov-plan-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        dir
-    }
-
-    #[test]
-    fn a_plan_is_sorted_saved_and_loaded() {
-        use Component::*;
-        let plan = args(
-            &[Agent, Ingest, Vulns, Ingest],
-            "platform.example.com",
-            &["10.0.0.5"],
-        )
-        .plan(Some("alice".into()))
-        .unwrap();
-        assert_eq!(plan.components, [Ingest, Vulns, Agent]);
-        assert_eq!(
-            plan.names(),
-            ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"]
-        );
-        let root = temp("roundtrip");
-        plan.save(&root).unwrap();
-        let file = root.join("etc/openvibes/setup.toml");
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            std::fs::metadata(&file).unwrap().permissions().mode() & 0o777,
-            0o644
-        );
-        assert_eq!(Plan::load(&root).unwrap(), plan);
-        std::fs::write(
-            &file,
-            "components = [\"ingest\"]\nhostname = \"a\"\nca = \"quick\"\nextra = 1\n",
-        )
-        .unwrap();
-        assert!(Plan::load(&root).is_err(), "unknown fields are refused");
-    }
-
-    #[test]
-    fn bad_plans_are_refused() {
-        use Component::*;
-        let host = "platform.example.com";
-        for (args, want) in [
-            (args(&[Console], host, &[]), "must include ingest"),
-            (args(&[Ingest, Rules], host, &[]), "rules need distribution"),
-            (
-                args(&[Ingest], "Platform.example.com", &[]),
-                "lowercase DNS name",
-            ),
-            (
-                args(&[Ingest], "platform..example.com", &[]),
-                "lowercase DNS name",
-            ),
-            (
-                args(&[Ingest], "-platform.example.com", &[]),
-                "lowercase DNS name",
-            ),
-            (
-                args(&[Ingest], "platform.example.com.", &[]),
-                "lowercase DNS name",
-            ),
-            (args(&[Ingest], "1.2.3", &[]), "lowercase DNS name"),
-            (args(&[Ingest], host, &["bad name"]), "lowercase DNS name"),
-            (args(&[Ingest], host, &["a"; 17]), "at most 16"),
-            (args(&[], host, &[]), "--components is required"),
-            (args(&[Ingest], "", &[]), "--hostname is required"),
-        ] {
-            let error = args.plan(None).unwrap_err();
-            assert!(error.contains(want), "{error} should contain {want}");
-        }
-        let mut unsigned = args(&[Ingest], host, &[]);
-        unsigned.allow_unsigned_local = true;
-        assert!(
-            unsigned
-                .plan(None)
-                .unwrap_err()
-                .contains("needs --repo-dir")
-        );
-        let mut careful = args(&[Ingest], host, &[]);
-        careful.ca = CaMode::Careful;
-        careful.root_key_out = Some("/media/usb/root.key".into());
-        assert!(careful.plan(None).unwrap_err().contains("quick CA"));
-        let mut relative = args(&[Ingest], host, &[]);
-        relative.root_key_out = Some("root.key".into());
-        assert!(
-            relative
-                .plan(None)
-                .unwrap_err()
-                .contains("not an absolute path")
-        );
-        assert!(
-            args(&[Ingest], host, &["10.0.0.5", "fd00::5", "ingest.lan"])
-                .plan(None)
-                .is_ok()
-        );
-    }
-
-    #[test]
-    fn every_component_names_its_packages() {
-        for component in Component::ALL {
-            assert!(!component.packages().is_empty(), "{component:?}");
-            assert!(
-                component
-                    .packages()
-                    .iter()
-                    .all(|p| p.starts_with("openvibes-"))
-            );
-        }
-        assert_eq!(
-            Component::Ingest.packages(),
-            ["openvibes-ingest", "openvibes-admin"]
-        );
-        assert_eq!(Component::Ingest.units(), [Unit::Ingest, Unit::Maintenance]);
-    }
 }

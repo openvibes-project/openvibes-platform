@@ -132,6 +132,11 @@ enum Command {
         /// With --update: upgrade from this folder of package files.
         #[arg(long)]
         update_repo_dir: Option<PathBuf>,
+        /// With --repair and --ingest-port or --distribution-port: move them
+        /// although agents on other hosts keep calling the old port until
+        /// their install line is run again.
+        #[arg(long)]
+        move_agent_ports: bool,
         #[command(flatten)]
         plan: setup::plan::PlanArgs,
     },
@@ -222,12 +227,16 @@ async fn main() -> ExitCode {
         confirm,
         backup,
         update_repo_dir,
+        move_agent_ports,
         plan,
     } = command
     {
         return match (*quick, *repair, *update, *uninstall) {
             (true, ..) => setup::quick(plan),
-            (_, true, ..) => setup::repair_all(),
+            (_, true, ..) => setup::repair_all(
+                (plan.console_port, plan.ingest_port, plan.distribution_port),
+                *move_agent_ports,
+            ),
             (_, _, true, _) => setup::update_all(&setup::update::UpdateArgs {
                 backup: backup.clone(),
                 repo_dir: update_repo_dir.clone(),

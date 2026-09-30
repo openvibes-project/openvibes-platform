@@ -323,7 +323,7 @@ the installed file name.
 `openvibes-admin setup --quick --components LIST --hostname NAME [--san
 ADDR]... [--ca quick|careful] [--root-key-out PATH]
 [--admin-password-file PATH] [--repo-dir DIR] [--allow-unsigned-local]
-[--console-port PORT]`
+[--console-port PORT] [--ingest-port PORT] [--distribution-port PORT]`
 runs as root, writes `/etc/openvibes/setup.toml` (0644) from the checked
 arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
@@ -333,19 +333,30 @@ failure, 2 on bad arguments (checked before the root check).
 Hostname and `--san` are lowercase DNS names or IP addresses; paths must be
 absolute. Without `--quick` the command refuses and points to the TUI.
 
-Ports (board #45, `src/setup/ports.rs`): the console listens on
-`--console-port` (default 443; never 18423, 18424 or 18480-18483, the
-platform's own). Before anything changes, and again in `services` just
-before the units start, Setup asks `ss -ltnpH` who listens on each port the
-plan needs: the console's, 18423 (ingest), 18424 (distribution). Any
-listener counts, on any address, IPv4 or IPv6, except our own unit while it
-runs (Repair, Update). A taken port stops Setup with the holder
-(`nginx (pid N)` as root, "another process" when `ss` cannot name it) and,
-for the console, the first free port from 8443 to choose instead; nothing
-is started, and the firewall step never opens a port another process
-holds. The TUI's form has a "Console port" row: 443 when free, otherwise
-the first free port from 8443 with a line saying 443 is taken; it is
-editable. Ingest and distribution ports are not choosable yet.
+Ports (boards #45, #48, #61, `src/setup/ports.rs`): the console listens on
+`--console-port` (default 443), ingest on `--ingest-port` (18423) and
+distribution on `--distribution-port` (18424). The three must differ and
+may not be 18430 or 18480-18483 (the assistant's and the health
+listeners). Before anything changes, and again in `services` just before
+the units start, Setup asks `ss -ltnpH` who listens on each chosen port.
+Any listener counts, on any address, IPv4 or IPv6, except the unit that
+owns the port (its `MainPID`, so a Repair or an Update finds our own
+services). A taken port stops Setup with the holder (`nginx (pid N)` as
+root, "another process" when `ss` cannot name it) and the first free
+port to choose instead (from 8443 for the console, from 18425 for the
+others); nothing is started, and the firewall step never opens a port
+another process holds. `services` writes the ingest and distribution
+ports into `ingest.toml`/`distribution.toml` `listen` (the console step
+writes the console's), and restarts a running unit that is not on its
+planned port yet. `ready` also connects to each service's planned port,
+so a unit that answers its health check but not its port is not ready.
+The local agent's `platform_url`/`distribution_url`, the firewall and the
+agent command follow the plan: the command names a port only when it is
+not the default (`--platform HOST:PORT`, `--rules … --distribution-port
+N`), so a default platform prints the line every installer accepts.
+The TUI's form has a "Console port" row and one "Agent ports (ingest,
+distribution)" row: the defaults when free, otherwise the first free port
+with "(443 is in use)" on the row; both editable.
 
 Steps (`src/setup/`, each checks before it acts, so re-running is safe and
 resumes): `packages` (dnf from the repository, or the one file per package
@@ -370,7 +381,14 @@ The same command maintains a set-up host (one action per call; each takes
 the run lock `/run/openvibes-admin/setup.lock`, so a second Setup run is
 refused while one works):
 
-- `setup --repair`: every step checked, and only failed ones fixed. It
+- `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]
+  [--move-agent-ports]`: given ports go into `setup.toml` first (checked
+  like a new plan's; a taken one changes nothing). Moving the ingest or
+  distribution port is refused without `--move-agent-ports`: agents
+  enrolled from other hosts keep calling the old port until the line from
+  `agent command` is run on them again, which the output says. Ports moved
+  away from are closed in firewalld. Then every step is checked, and only
+  failed ones fixed. It
   never makes a new CA: with the CA files gone it stops and says how to
   recover. Certificates issued for other names are issued again; one
   expiring within 14 days is reported, not replaced.
