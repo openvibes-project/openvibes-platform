@@ -153,7 +153,7 @@ The admin role owns the schema and needs `CREATEROLE` (migration 1 creates
 
 | Command | Does | Prints |
 |---|---|---|
-| `migrate` | applies pending migrations; refuses a newer schema | `schema version N` |
+| `migrate [--additive]` | applies pending migrations; refuses a newer schema. `--additive` (the `openvibes-migrate` unit after a package upgrade, #77) applies nothing when a pending migration changes stored data and says to run Update, which backs up first | `schema version N` |
 | `status` | summary (requires the current schema) | `schema version`, `agents active/offline/revoked`, `imported hosts`, `tokens usable`, `partitions OLDEST..NEWEST` or `none`, `partition count N`, `database size N MiB` |
 | `maintenance [--retention-days 90]` | creates any missing partition from the finding retention cutoff to today + 7 days, drops older finding partitions (never today's), and deletes at most 10,000 expired audit events using the configured audit policy. `--retention-days` must be 1 to 36500 (else exit 2, before any change) | `created N partitions, dropped M, deleted K expired audit events` |
 | `user create --username NAME --display-name LABEL [--role viewer|analyst|operator|admin] [--password-stdin]` | creates a local console account with a global built-in role; role defaults to admin | prompts twice for the password without terminal echo; with `--password-stdin`, reads one line from standard input instead (scripts and Setup), same password rules |
@@ -170,7 +170,14 @@ the audit log. The built-in common-passphrase list is a small seed list, not a
 full compromised-password corpus.
 
 Commands other than `migrate` refuse to run on an outdated schema ("run
-openvibes-admin migrate") or a newer one ("upgrade openvibes-admin"). Errors
+openvibes-admin migrate", or "this upgrade changes stored data … run Update"
+when a pending migration needs a backup) or a newer one ("upgrade
+openvibes-admin"). A migration that deletes or rewrites rows, or drops or
+retypes columns or tables, starts with a `-- openvibes: needs-backup` line;
+a unit test holds every migration to that (13, 14, 16, 20 and 24, from
+before the marker, are listed in `platform-store`). Setup's `schema` step
+reports such a change as failed in Check and Repair (Repair migrates only
+with `--additive`); a first install migrates fully. Errors
 never print SQL or connection strings. If the audit entry cannot be
 written, the command exits non-zero with a warning.
 

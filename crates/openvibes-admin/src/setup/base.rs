@@ -173,16 +173,25 @@ pub fn database_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn schema_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    // `status` refuses unless the schema is current.
-    Ok(if ctx.as_admin(&["status"]).is_ok() {
-        StepState::Done("schema current".into())
-    } else {
-        StepState::Todo
+    // `status` refuses unless the schema is current, and says when the
+    // pending change needs Update's backup (board #77): Check and Repair
+    // report that instead of migrating.
+    Ok(match ctx.as_admin(&["status"]) {
+        Ok(_) => StepState::Done("schema current".into()),
+        Err(error) if error.contains("changes stored data") => StepState::Failed(error),
+        Err(_) => StepState::Todo,
     })
 }
 
 pub fn schema_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let migrated = ctx.as_admin(&["migrate"])?;
+    // A first install has no data to lose; Repair never migrates past a
+    // change to stored data without Update's backup.
+    let args: &[&str] = if ctx.repair {
+        &["migrate", "--additive"]
+    } else {
+        &["migrate"]
+    };
+    let migrated = ctx.as_admin(args)?;
     let maintained = ctx.as_admin(&["maintenance"])?;
     Ok(StepState::Done(format!(
         "{}; {}",
@@ -440,6 +449,62 @@ mod tests {
         assert_eq!(
             state,
             StepState::Done("schema version 24; created 97 partitions".into())
+        );
+    }
+
+    const ADMIN: [&str; 5] = [
+        "/usr/sbin/runuser",
+        "-u",
+        "openvibes-admin",
+        "--",
+        "/usr/bin/openvibes-admin",
+    ];
+
+    fn admin(rest: &[&'static str]) -> Vec<&'static str> {
+        ADMIN.iter().chain(rest).copied().collect()
+    }
+
+    /// Board #77: Check and Repair report a pending change to stored data
+    /// and leave it to Update, which backs up first.
+    #[test]
+    fn a_schema_change_to_stored_data_waits_for_update() {
+        let fake = Fake::new("schema-needs-backup");
+        fake.fail(
+            &admin(&["status"]),
+            "openvibes-admin: this upgrade changes stored data (migration 29): run \
+             `openvibes-admin` → Update",
+        );
+        let plan = plan(&[Ingest]);
+        let mut ctx = fake.ctx(&plan);
+        ctx.repair = true;
+        let state = run_step(&ctx, Step::Schema);
+        assert!(
+            matches!(&state, StepState::Failed(text) if text.contains("Update")),
+            "{state:?}"
+        );
+        assert!(!fake.called(&admin(&["migrate"])));
+    }
+
+    #[test]
+    fn repair_migrates_only_additively() {
+        let fake = Fake::new("schema-repair");
+        fake.answer(&admin(&["status"]), 1, "schema is not current");
+        fake.answer(&admin(&["migrate"]), 0, "schema version 28\n");
+        fake.answer(&admin(&["maintenance"]), 0, "ok\n");
+        let plan = plan(&[Ingest]);
+        let mut ctx = fake.ctx(&plan);
+        ctx.repair = true;
+        run_step(&ctx, Step::Schema);
+        assert_eq!(fake.call(&admin(&["migrate"]))[6..], ["--additive"]);
+        let fake = Fake::new("schema-install");
+        fake.answer(&admin(&["status"]), 1, "no schema");
+        fake.answer(&admin(&["migrate"]), 0, "schema version 28\n");
+        fake.answer(&admin(&["maintenance"]), 0, "ok\n");
+        run_step(&fake.ctx(&plan), Step::Schema);
+        assert_eq!(
+            fake.call(&admin(&["migrate"])).len(),
+            6,
+            "a first install migrates fully"
         );
     }
 }

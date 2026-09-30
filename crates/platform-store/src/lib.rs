@@ -48,7 +48,9 @@ use tokio_postgres::NoTls;
 /// Pooled connection and pool types, so callers need no pool dependency.
 pub use deadpool_postgres::{Client, Pool};
 pub use maintenance::{drop_partitions_before, ensure_partitions, partition_days};
-pub use migrate::{SCHEMA_VERSION, migrate, schema_version};
+pub use migrate::{
+    NEEDS_BACKUP, SCHEMA_VERSION, migrate, migrate_additive, needs_backup_after, schema_version,
+};
 pub use status::{OFFLINE_AFTER_MINUTES, Status, status};
 
 /// Fixed failure categories; no SQL, parameters, or connection strings are
@@ -63,6 +65,9 @@ pub enum StoreError {
     Query,
     /// The configured database URL does not parse.
     InvalidUrl,
+    /// A pending migration changes stored data: it runs only through
+    /// Update, which backs up first (board #77).
+    NeedsBackup(i32),
 }
 
 impl fmt::Display for StoreError {
@@ -74,6 +79,11 @@ impl fmt::Display for StoreError {
             }
             Self::Query => f.write_str("database query failed"),
             Self::InvalidUrl => f.write_str("invalid database_url"),
+            Self::NeedsBackup(version) => write!(
+                f,
+                "this upgrade changes stored data (migration {version}): run `openvibes-admin` \
+                 → Update (or `sudo openvibes-admin setup --update`), which backs up first"
+            ),
         }
     }
 }

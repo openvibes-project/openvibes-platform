@@ -1,8 +1,8 @@
 [Unit]
 Description=OpenVIBES vulnerability feeds and matching
 Documentation=https://github.com/openvibes-project/openvibes-platform
-After=network-online.target postgresql.service
-Wants=network-online.target
+After=network-online.target postgresql.service openvibes-migrate.service
+Wants=network-online.target openvibes-migrate.service
 
 [Service]
 Type=exec
