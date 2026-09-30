@@ -52,6 +52,9 @@ pub(crate) struct AuthHttpState {
     pub(crate) pool: Pool,
     public_origin: Arc<str>,
     public_origin_valid: bool,
+    /// Lowercase `Host` values served: `public_origin`'s authority and every
+    /// name the certificate covers at the console's port (board #71).
+    allowed_hosts: Arc<[String]>,
     dummy_password_phc: Option<String>,
     password_slots: Arc<Semaphore>,
     assistant: Option<crate::assistant::AssistantRuntime>,
@@ -247,18 +250,39 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, None)
+    authenticated_router_with_assistant(pool, public_origin, [], None)
+}
+
+/// As [`authenticated_router`], also serving `hosts` (`name:port`, e.g. the
+/// certificate's IP addresses) besides `public_origin`'s own (board #71).
+pub fn authenticated_router_for_hosts(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    hosts: impl IntoIterator<Item = String>,
+) -> Router {
+    authenticated_router_with_assistant(pool, public_origin, hosts, None)
 }
 
 pub(crate) fn authenticated_router_with_assistant(
     pool: Pool,
     public_origin: impl Into<Arc<str>>,
+    hosts: impl IntoIterator<Item = String>,
     assistant: Option<crate::assistant::AssistantRuntime>,
 ) -> Router {
     let public_origin = public_origin.into();
+    let mut allowed_hosts: Vec<String> = public_origin
+        .parse::<axum::http::Uri>()
+        .ok()
+        .and_then(|origin| origin.authority().map(|a| a.as_str().to_ascii_lowercase()))
+        .into_iter()
+        .chain(hosts.into_iter().map(|host| host.to_ascii_lowercase()))
+        .collect();
+    allowed_hosts.sort();
+    allowed_hosts.dedup();
     let state = AuthHttpState {
         pool,
         public_origin_valid: valid_public_origin(&public_origin),
+        allowed_hosts: allowed_hosts.into(),
         public_origin,
         dummy_password_phc: dummy_password_phc(),
         password_slots: Arc::new(Semaphore::new(4)),
@@ -554,26 +578,55 @@ async fn authenticated_host_only(
     next: middleware::Next,
 ) -> Response {
     let allowed = request.headers().get(header::HOST).is_none_or(|host| {
-        let expected = state
-            .public_origin
-            .parse::<axum::http::Uri>()
-            .ok()
-            .and_then(|origin| origin.authority().cloned());
-        host.to_str().is_ok_and(|host| {
-            expected
-                .as_ref()
-                .is_some_and(|expected| host.eq_ignore_ascii_case(expected.as_str()))
-        })
+        host.to_str()
+            .is_ok_and(|host| state.allowed_hosts.contains(&host.to_ascii_lowercase()))
     });
     if allowed {
         next.run(request).await
     } else {
-        let mut response = StatusCode::MISDIRECTED_REQUEST.into_response();
-        response
-            .headers_mut()
-            .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-        response
+        misdirected(&state.public_origin)
     }
+}
+
+/// 421 for a name this console does not serve: a short page with the right
+/// address, never a blank one (board #71). Still refused, so a hostile name
+/// resolving here (DNS rebinding) reads nothing.
+fn misdirected(public_origin: &str) -> Response {
+    let origin = html_escape(public_origin);
+    let body = format!(
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
+         <title>OpenVIBES console</title></head><body>\
+         <p>This OpenVIBES console is at <a href=\"{origin}/\">{origin}</a>.</p>\
+         <p>Open that address: it is a name the console's certificate covers.</p>\
+         </body></html>"
+    );
+    let mut response = (StatusCode::MISDIRECTED_REQUEST, body).into_response();
+    let headers = response.headers_mut();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    response
+}
+
+fn html_escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// The origin a browser request must carry: `https://` + the `Host` it was
+/// sent to (already one this console serves), or `public_origin` without one.
+fn request_origin(state: &AuthHttpState, headers: &axum::http::HeaderMap) -> String {
+    headers
+        .get(header::HOST)
+        .and_then(|host| host.to_str().ok())
+        .map_or_else(
+            || state.public_origin.to_string(),
+            |host| format!("https://{host}"),
+        )
 }
 
 /// `localhost`, `127.0.0.1`, or `[::1]`, with or without a port.
@@ -5485,7 +5538,7 @@ async fn session_capabilities(
     }
     if csrf_required
         && (!state.public_origin_valid
-            || !crate::browser_origin_allowed(headers, &state.public_origin)
+            || !crate::browser_origin_allowed(headers, &request_origin(state, headers))
             || !crate::csrf_token_matches(headers, &csrf))
     {
         return Err(problem_response(ProblemDetails::new(
@@ -5648,7 +5701,7 @@ async fn login(
     };
 
     if !state.public_origin_valid
-        || !browser_origin_allowed(&headers, &state.public_origin)
+        || !browser_origin_allowed(&headers, &request_origin(&state, &headers))
         || headers.contains_key(header::AUTHORIZATION)
     {
         return problem_response(ProblemDetails::new(
@@ -5926,7 +5979,7 @@ async fn logout(State(state): State<AuthHttpState>, request: axum::extract::Requ
 
     let headers = request.headers();
     if !state.public_origin_valid
-        || !browser_origin_allowed(headers, &state.public_origin)
+        || !browser_origin_allowed(headers, &request_origin(&state, headers))
         || headers.contains_key(header::AUTHORIZATION)
     {
         return problem_response(ProblemDetails::new(

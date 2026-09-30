@@ -205,7 +205,13 @@ bound elsewhere. TLS PEM files are capped at 1 MiB, must contain a valid
 certificate chain and key, and are checked before serving; handshakes are TLS
 1.3 only with a 10-second deadline. Startup checks that the database is already at schema 23; it
 never runs migrations. The database URL is redacted from `Debug`. Authenticated
-requests must use the configured Host authority. The e2e fixture uses
+requests must use the configured Host authority or, with direct TLS, any name
+the server certificate covers (its DNS and IP subjectAltNames at the listen
+port; the bare name too on 443), so the console opens by IP over a VPN or as
+`localhost` through a tunnel. Any other `Host` gets a 421 page linking to
+`public_origin`. Plain http on the TLS port gets a `301` to `https://` on the
+same `Host` when that is a served name, else to `public_origin` (never to a
+name the console does not serve), instead of TLS bytes. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
 
 Reverse-proxy mode requires authenticated database configuration and a
@@ -246,7 +252,10 @@ key/certificate paths are refused. Its deployment constraints are:
 - reverse-proxy mode is explicit and requires a canonical external HTTPS
   origin plus an allow-list of trusted proxy peers (loopback TCP addresses or
   Unix effective UIDs);
-- Host/Origin checks use the configured external origin; for login throttling,
+- Host checks accept the configured external origin and, with direct TLS, the
+  certificate's names; a browser `Origin` must be `https://` plus the `Host`
+  the request came to, so one served name is still cross-origin to another
+  (session cookies are `__Host-`, one per name); for login throttling,
   the final `X-Forwarded-For` address is trusted only from an allow-listed
   proxy, including when the proxy appends its observed client address;
 - plaintext proxy upstreams may bind only to loopback or a Unix socket;
@@ -281,7 +290,9 @@ of local configuration, TLS files, the local account, and its active session.
   DNS-rebinding page cannot read it. Requests without `Host` pass.
 - Authenticated runtime startup refuses absent/unreachable databases and any
   schema version other than 24; it does not migrate. The configured Host
-  authority is enforced for authenticated requests. Login uses trusted socket
+  authority (and, with direct TLS, the certificate's names) is enforced for
+  authenticated requests; a wrong one gets a no-store 421 page with the
+  console's address, still without any data, so DNS rebinding reads nothing. Login uses trusted socket
   peer information from the capped listener. In reverse-proxy mode, the final
   `X-Forwarded-For` address from an allow-listed proxy is used for source-address
   throttling; other forwarded headers are ignored.

@@ -9,6 +9,9 @@ permission-checked read models, enrollment-token management, and audit routes.
 - `authenticated_router(pool, public_origin)` builds a router with database-
   backed authentication. `public_origin` is the canonical configured browser
   origin; `public_router()` remains the C0 fail-closed router.
+  `authenticated_router_for_hosts(pool, public_origin, hosts)` also serves
+  `hosts` (`name:port`); the executable passes the server certificate's
+  names in direct-TLS mode (board #71).
 - `GET /api/v1/session` accepts exactly one valid `__Host-openvibes-session`
   cookie, rejects bearer or conflicting credentials, checks session and CSRF
   digests in constant time, touches the bounded idle expiry, and resolves active
