@@ -267,6 +267,7 @@ impl<H: Host> App<H> {
             Key::Char('u') => self.open_update(),
             Key::Char('x') => self.open_uninstall(),
             Key::Tab => self.leave_setup(),
+            Key::BackTab => self.open(super::app::Tab::Health),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
@@ -361,6 +362,7 @@ impl<H: Host> App<H> {
                 Key::Backspace => {
                     field.pop();
                 }
+                Key::ClearLine => field.clear(),
                 Key::Enter | Key::Esc => self.setup.editing = false,
                 _ => {}
             }
@@ -381,6 +383,7 @@ impl<H: Host> App<H> {
             Key::Enter if self.setup.row == START_ROW => self.start_plan(),
             Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
             Key::Tab => self.leave_setup(),
+            Key::BackTab => self.open(super::app::Tab::Health),
             Key::Char('q') => self.quit = true,
             _ => {}
         }

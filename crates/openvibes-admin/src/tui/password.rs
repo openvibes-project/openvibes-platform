@@ -32,6 +32,10 @@ impl PasswordPrompt {
                 self.typed.pop();
                 Typed::Pending
             }
+            Key::ClearLine => {
+                self.typed.clear();
+                Typed::Pending
+            }
             Key::Esc => {
                 self.typed.clear();
                 Typed::Cancelled
