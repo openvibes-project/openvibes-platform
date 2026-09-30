@@ -10,7 +10,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: { baseURL: origin, screenshot: "only-on-failure", trace: "retain-on-failure" },
   webServer: {
-    command: "VITE_DEMO=true npx vite build --outDir dist-e2e && npx vite preview --outDir dist-e2e --port 5175 --strictPort",
+    command: "VITE_DEMO=true node_modules/.bin/vite build --outDir dist-e2e && node_modules/.bin/vite preview --outDir dist-e2e --port 5175 --strictPort",
     url: origin,
     reuseExistingServer: false,
     timeout: 120_000,
