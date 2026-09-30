@@ -270,11 +270,19 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             ctx.pause();
         }
     }
+    // Every service answers on its new port: the old ones can close (#69).
+    let closed = super::ports::close_moved(ctx)?;
+    let closed = if closed.is_empty() {
+        String::new()
+    } else {
+        format!("; firewall closed {}", closed.join(" "))
+    };
     // A Repair mints no token: each one used to leave another 10-use
     // token behind (#64); the install line is one command away.
     if ctx.repair {
         return Ok(StepState::Done(format!(
-            "ready: {}; for an agent install line, run openvibes-admin agent command",
+            "ready: {}{closed}; for an agent install line (new after moving an agent \
+             port), run openvibes-admin agent command",
             names(&units).join(" ")
         )));
     }

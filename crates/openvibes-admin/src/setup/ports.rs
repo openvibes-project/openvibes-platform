@@ -3,6 +3,8 @@
 //! start, so a taken port stops Setup with the holder's name instead of
 //! leaving a unit that crash-loops on "Address already in use".
 
+use std::path::Path;
+
 use platform_host::{
     Service,
     runner::{
@@ -262,6 +264,52 @@ pub fn moved_agent_ports(old: &Plan, new: &Plan) -> Vec<(&'static str, u16, u16)
     .into_iter()
     .filter(|(_, from, to)| from != to)
     .collect()
+}
+
+/// Where `helper setup-plan` keeps the ports a TUI plan moves away from,
+/// `CONSOLE INGEST DISTRIBUTION`, until the run ends well (#69: the CLI's
+/// Repair closes them itself; the TUI saves the plan first, then runs).
+pub const MOVED_FROM: &str = "/etc/openvibes/setup-moved-from";
+
+/// Remembers `old`'s ports when `new` moves any of them; keeps an earlier
+/// record (a run that did not finish), so the first ports are the ones
+/// closed.
+pub fn remember_moved(root: &Path, old: &Plan, new: &Plan) -> Result<(), String> {
+    let from = [old.console_port, old.ingest_port, old.distribution_port];
+    let file = root.join(MOVED_FROM.trim_start_matches('/'));
+    if from == [new.console_port, new.ingest_port, new.distribution_port] || file.exists() {
+        return Ok(());
+    }
+    let text = format!("{} {} {}\n", from[0], from[1], from[2]);
+    std::fs::write(&file, text).map_err(|error| format!("{}: {error}", file.display()))
+}
+
+/// After a run whose services are all ready: closes the ports recorded by
+/// [`remember_moved`] as the CLI's Repair does, then forgets them. What
+/// it closed, if anything.
+pub fn close_moved<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<String>, String> {
+    let Ok(text) = ctx.read(MOVED_FROM) else {
+        return Ok(Vec::new());
+    };
+    let ports: Vec<u16> = text
+        .split_whitespace()
+        .filter_map(|port| port.parse().ok())
+        .collect();
+    let closed = match ports[..] {
+        [console_port, ingest_port, distribution_port] => {
+            let old = Plan {
+                console_port,
+                ingest_port,
+                distribution_port,
+                ..ctx.plan.clone()
+            };
+            close_old(ctx, &old)?
+        }
+        _ => Vec::new(),
+    };
+    let file = ctx.path(MOVED_FROM);
+    std::fs::remove_file(&file).map_err(|error| format!("{}: {error}", file.display()))?;
+    Ok(closed)
 }
 
 /// Closes in firewalld the ports a Repair moved away from (`old`'s, no

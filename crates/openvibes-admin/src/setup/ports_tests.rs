@@ -458,4 +458,55 @@ fn repair_restarts_a_unit_whose_listen_address_changed() {
         fake.call(&["/usr/bin/systemctl", "try-restart"]),
         ["/usr/bin/systemctl", "try-restart", "openvibes-ingest"]
     );
+
+/// Reviewer on #106: the TUI saves a moved plan, then runs; the old ports
+/// close only once every service is ready, as the CLI's Repair does.
+#[test]
+fn a_tui_move_closes_the_old_port_after_the_run() {
+    let fake = Fake::new("ports-moved-from");
+    let mut old = plan(&[Ingest, Console]);
+    old.console_port = 443;
+    let mut new = old.clone();
+    remember_moved(&fake.root, &old, &new).unwrap();
+    assert!(
+        !fake.root.join("etc/openvibes/setup-moved-from").exists(),
+        "nothing moved"
+    );
+    new.console_port = 8443;
+    std::fs::create_dir_all(fake.root.join("etc/openvibes")).unwrap();
+    remember_moved(&fake.root, &old, &new).unwrap();
+    // A second move before a run finished keeps the first ports.
+    let mut newer = new.clone();
+    newer.console_port = 9443;
+    remember_moved(&fake.root, &new, &newer).unwrap();
+    assert_eq!(fake.text(MOVED_FROM), "443 18423 18424\n");
+
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "443/tcp",
+        ],
+        0,
+        "yes",
+    );
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--remove-port",
+            "443/tcp",
+        ],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "");
+    assert_eq!(close_moved(&fake.ctx(&newer)).unwrap(), ["443/tcp"]);
+    assert!(
+        !fake.root.join("etc/openvibes/setup-moved-from").exists(),
+        "forgotten"
+    );
+    assert!(close_moved(&fake.ctx(&newer)).unwrap().is_empty());
 }

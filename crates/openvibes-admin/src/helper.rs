@@ -158,6 +158,10 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     let dir = Path::new(CONFIG_DIR);
     match verb {
         Verb::SetupPlan(plan) => match crate::setup::lock(Path::new("/")).and_then(|lock| {
+            // Ports the new plan leaves are closed once the run is ready (#69).
+            if let Ok(old) = crate::setup::plan::Plan::load(Path::new("/")) {
+                crate::setup::ports::remember_moved(Path::new("/"), &old, &plan)?;
+            }
             plan.save(Path::new("/"))?;
             drop(lock);
             Ok(())
