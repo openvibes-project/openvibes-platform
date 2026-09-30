@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
+import { activeCount, olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -15,6 +15,12 @@ describe("list selection matches the views", () => {
     expect(selectFindings(all, new URLSearchParams("state=all")).map((g) => g.rule_id)).toEqual(["A", "B"]);
     expect(selectFindings(all, new URLSearchParams("state=all&severity=low")).map((g) => g.rule_id)).toEqual(["B"]);
     expect(selectFindings(all, new URLSearchParams("state=all&q=msg%20b")).map((g) => g.rule_id)).toEqual(["B"]);
+  });
+
+  it("findings: investigating is active work, not resolved (board #83)", () => {
+    const investigating = { ...group("C", "low", 0), triage_counts: { open: 0, investigating: 1, mitigated: 0, accepted_risk: 0, false_positive: 0 } };
+    expect(selectFindings([investigating], new URLSearchParams()).map((g) => g.rule_id)).toEqual(["C"]);
+    expect(activeCount(investigating)).toBe(1);
   });
 
   it("agents: status and text", () => {

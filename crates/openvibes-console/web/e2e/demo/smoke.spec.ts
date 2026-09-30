@@ -118,3 +118,17 @@ test("an asset group is created from the access view", async ({ page }) => {
   await expect(page.locator(".panel-header__title")).toContainText("Web servers");
   await expect(page.locator(".group-card", { hasText: "Web servers" })).toBeVisible();
 });
+
+test("a finding set to Investigating stays in the default Findings list (board #83)", async ({ page }) => {
+  await page.goto("/findings?open=finding%3Abaseline-linux%2FLNX-010");
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ }).click();
+  await inspector.getByRole("checkbox", { name: "Select all hosts" }).check();
+  await inspector.getByRole("combobox", { name: "New triage state" }).selectOption("investigating");
+  await inspector.getByRole("button", { name: "Apply" }).click();
+  await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);
+  // Not page.goto: the demo keeps its data in memory and a reload resets it.
+  await page.keyboard.press("Escape");
+  await page.getByRole("link", { name: "Findings" }).click();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "World-writable file in /etc" })).toBeVisible();
+});

@@ -111,7 +111,9 @@ test("an Audit filter with no matches explains the empty list", async ({ page })
 test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
   await signIn(page, "alex");
   await page.goto("/findings");
-  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  const row = page.locator(".view tbody tr").first();
+  const message = await row.locator(".truncate").first().innerText();
+  await row.locator("td").nth(1).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Finding");
   // Hosts that can all move to investigating: the open ones, else those already there.
   await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
@@ -120,6 +122,9 @@ test("imported findings are triaged in bulk from the panel", async ({ page }, in
   await page.getByLabel("Triage note").fill(`e2e ${info.project.name}`);
   await page.locator(".bulk-bar button[type=submit]").click();
   await expect(page.locator(".toast")).toContainText("set to investigating");
+  // Investigating is active work: the default list still shows it (#83).
+  await page.goto("/findings");
+  await expect(page.locator(".view tbody tr").filter({ hasText: message })).toBeVisible();
 });
 
 test("one host's risk is accepted until a date with an assignee, and the form shows it again", async ({ page }) => {
