@@ -348,7 +348,9 @@ others); nothing is started, and the firewall step never opens a port
 another process holds. `services` writes the ingest and distribution
 ports into `ingest.toml`/`distribution.toml` `listen` (the console step
 writes the console's), and restarts a running unit that is not on its
-planned port yet. `ready` also connects to each service's planned port,
+planned port yet. The address is `[::]` (IPv4 and IPv6 on one socket) when
+`/proc/sys/net/ipv6/bindv6only` is 0, so a hostname that resolves to IPv6
+only reaches the services (#72); `0.0.0.0` when IPv6 is off or that is 1. `ready` also connects to each service's planned port,
 so a unit that answers its health check but not its port is not ready.
 The local agent's `platform_url`/`distribution_url`, the firewall and the
 agent command follow the plan: the command names a port only when it is

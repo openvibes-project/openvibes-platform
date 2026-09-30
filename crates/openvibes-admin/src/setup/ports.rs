@@ -197,13 +197,24 @@ pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
             .read(&path)?
             .parse()
             .map_err(|error| format!("{path}: {error}"))?;
-        let listen = format!("0.0.0.0:{port}");
+        let listen = any_address(ctx, port);
         if doc.get("listen").and_then(|v| v.as_str()) != Some(listen.as_str()) {
             doc["listen"] = toml_edit::value(listen);
             config_file::replace(&ctx.path("/etc/openvibes"), service, &doc.to_string())?;
         }
     }
     Ok(())
+}
+
+/// Every address at `port`: `[::]` where it takes IPv4 too (IPv6 on and
+/// `bindv6only` 0, Fedora's default), so a name resolving to IPv6 only
+/// reaches the services (board #72); `0.0.0.0` otherwise, since binding
+/// `[::]` without IPv6 fails and with `bindv6only` 1 would drop IPv4.
+pub(crate) fn any_address<R: Runner>(ctx: &Ctx<R>, port: u16) -> String {
+    match ctx.read("/proc/sys/net/ipv6/bindv6only") {
+        Ok(value) if value.trim() == "0" => format!("[::]:{port}"),
+        _ => format!("0.0.0.0:{port}"),
+    }
 }
 
 /// The port `unit` (e.g. `openvibes-console.service`) listens on for

@@ -397,3 +397,34 @@ fn a_port_another_service_moved_onto_stays_open() {
     let new = old.with_ports(Some(8443), Some(443), None).unwrap();
     assert_eq!(close_old(&fake.ctx(&new), &old).unwrap(), ["18423/tcp"]);
 }
+
+/// Board #72: a name that resolves to IPv6 only (the user's hostname) or an
+/// IPv6 client reaches the services when the kernel binds `[::]` for both.
+#[test]
+fn services_listen_on_both_ip_versions_where_the_kernel_allows_it() {
+    let fake = Fake::new("ports-dual-stack");
+    let ingest = include_str!("../../../../packaging/rpm/ingest.toml");
+    fake.file("/etc/openvibes/ingest.toml", ingest);
+    fake.file("/proc/sys/net/ipv6/bindv6only", "0\n");
+    configure(&fake.ctx(&plan(&[Ingest]))).unwrap();
+    let ingest = fake.text("/etc/openvibes/ingest.toml");
+    assert!(ingest.contains("listen = \"[::]:18423\""), "{ingest}");
+}
+
+#[test]
+fn without_dual_stack_ipv6_services_stay_on_ipv4() {
+    // IPv6 off (no such file), or a `[::]` socket that would be IPv6 only.
+    for bindv6only in [None, Some("1\n")] {
+        let fake = Fake::new("ports-v4-only");
+        let ingest = include_str!("../../../../packaging/rpm/ingest.toml");
+        fake.file("/etc/openvibes/ingest.toml", ingest);
+        if let Some(value) = bindv6only {
+            fake.file("/proc/sys/net/ipv6/bindv6only", value);
+        }
+        let mut plan = plan(&[Ingest]);
+        plan.ingest_port = 18500;
+        configure(&fake.ctx(&plan)).unwrap();
+        let ingest = fake.text("/etc/openvibes/ingest.toml");
+        assert!(ingest.contains("listen = \"0.0.0.0:18500\""), "{ingest}");
+    }
+}

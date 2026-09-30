@@ -20,7 +20,7 @@ fn origin<R: Runner>(ctx: &Ctx<R>) -> String {
 }
 
 fn listen<R: Runner>(ctx: &Ctx<R>) -> String {
-    format!("0.0.0.0:{}", ctx.plan.console_port)
+    super::ports::any_address(ctx, ctx.plan.console_port)
 }
 
 /// The origin, and with direct TLS the listener, are the plan's. Behind a
@@ -216,6 +216,14 @@ mod tests {
         let toml = fake.text("/etc/openvibes/console.toml");
         assert!(
             toml.contains("development_listen = \"0.0.0.0:8443\""),
+            "{toml}"
+        );
+        // Board #72: both IP versions where the kernel binds them together.
+        fake.file("/proc/sys/net/ipv6/bindv6only", "0\n");
+        run_step(&fake.ctx(&plan), Step::Console);
+        let toml = fake.text("/etc/openvibes/console.toml");
+        assert!(
+            toml.contains("development_listen = \"[::]:8443\""),
             "{toml}"
         );
         assert!(
