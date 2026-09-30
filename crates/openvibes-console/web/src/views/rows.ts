@@ -59,9 +59,10 @@ function versionParts(version: string): [string, string] {
   return dash < 0 ? [plain, ""] : [plain.slice(0, dash), plain.slice(dash + 1)];
 }
 
-/** The newest agent version in the fleet. */
-export function newestVersion(versions: readonly string[]): string | undefined {
-  return versions.filter(Boolean).sort(versionOrder)[0];
+/** Whether an agent's `version` is older than this platform's (board #54):
+ * one agent claiming a far newer version flags nothing. */
+export function olderThan(version: string, platform: string): boolean {
+  return versionOrder(version, platform) > 0;
 }
 
 export function selectAgents(all: readonly Agent[], params: URLSearchParams): Agent[] {

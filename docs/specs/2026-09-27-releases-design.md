@@ -22,6 +22,11 @@ awaiting review. Sub-project 1 of the easy setup (workspace `decisions.md`,
 - **Releases:** independent per repository (`openvibes-platform`,
   `openvibes-agent`), tag `vX.Y.Z` by an admin. The package repository keeps
   every released version of both. No testing channel for now.
+  **Agent and platform share the version:** bump and tag both on every
+  release, even if one didn't change. The console marks agents older than
+  the platform's version as outdated (board #54), so a platform-only
+  release would mark the whole fleet outdated for an agent that doesn't
+  exist.
 - **Hosts:** Fedora 44 on x86_64 only; the script refuses anything else.
 
 ## 2. Release workflow (`openvibes-platform`, `openvibes-agent`)

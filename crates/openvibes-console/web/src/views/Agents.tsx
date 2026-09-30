@@ -6,7 +6,7 @@ import { nav, useLocation } from "../app/nav";
 import { Ago, Empty, ErrorBox, Loading, StatusBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
-import { newestVersion, selectAgents } from "./rows";
+import { olderThan, selectAgents } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 
 export function Agents() {
@@ -16,7 +16,8 @@ export function Agents() {
   const all = useMemo(() => agents.data ?? [], [agents.data]);
   const rows = useMemo(() => selectAgents(all, params), [all, params]);
   const top = panels[panels.length - 1];
-  const newest = newestVersion(all.map((a) => a.scanner_version ?? ""));
+  // Judged against this platform, not the fleet's highest claim (board #54).
+  const platform = summary.data?.platform_version;
 
   return (
     <div className="view">
@@ -41,7 +42,9 @@ export function Agents() {
             { key: "status", header: "Status", width: "110px", sort: (a) => a.status, render: (a) => <StatusBadge status={a.status} /> },
             { key: "seen", header: "Last contact", width: "140px", hideBelow: 480, sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} /></span> },
             { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => a.scanner_version
-              ? <span className={a.scanner_version === newest ? "mono" : "mono warn-text"} title={a.scanner_version === newest ? "Newest version in the fleet" : `Older than ${newest ?? ""}`}>{a.scanner_version}</span>
+              ? platform && olderThan(a.scanner_version, platform)
+                ? <span className="mono warn-text" title={`Older than this platform (${platform})`}>{a.scanner_version}</span>
+                : <span className="mono" title={platform ? `Not older than this platform (${platform})` : undefined}>{a.scanner_version}</span>
               : <span className="subtle">—</span> },
             { key: "enrolled", header: "Enrolled", width: "130px", hideBelow: 900, sort: (a) => a.enrolled_at, render: (a) => <span className="subtle">{date(a.enrolled_at)}</span> },
           ]} />

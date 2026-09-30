@@ -907,6 +907,9 @@ pub struct AgentSummary {
     pub revoked: u64,
     /// Number of visible imported hosts.
     pub imported: u64,
+    /// This platform's version: agents older than it are shown as outdated.
+    /// Readable by every signed-in role (it is in the packages anyway).
+    pub platform_version: String,
 }
 
 /// Latest observation state for one agent, rule set, and rule.

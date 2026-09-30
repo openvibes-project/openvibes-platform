@@ -364,6 +364,7 @@ impl ConsoleRepository for SeededRepository {
                     stale: 0,
                     revoked: 0,
                     imported: 0,
+                    platform_version: env!("CARGO_PKG_VERSION").to_owned(),
                 },
                 |mut summary, agent| {
                     summary.total += 1;

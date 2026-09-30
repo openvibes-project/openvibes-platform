@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { newestVersion, selectAgents, selectAudit, selectFindings } from "./rows";
+import { olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -31,14 +31,17 @@ describe("list selection matches the views", () => {
 });
 
 describe("agent versions", () => {
-  it("the newest is compared by number, not as text", () => {
-    expect(newestVersion(["0.9.0", "0.10.0", "0.2.1", ""])).toBe("0.10.0");
-    expect(newestVersion([])).toBeUndefined();
+  it("an agent is older than the platform by number, not as text", () => {
+    expect(olderThan("0.9.0", "0.10.0")).toBe(true);
+    expect(olderThan("0.10.0", "0.9.0")).toBe(false);
+    expect(olderThan("0.1.2", "0.1.2")).toBe(false);
   });
-  it("a release outranks its pre-release; build metadata is ignored", () => {
-    expect(newestVersion(["0.10.0-rc.1", "0.10.0"])).toBe("0.10.0");
-    expect(newestVersion(["0.10.0", "0.10.0-rc.1"])).toBe("0.10.0");
-    expect(newestVersion(["0.9.0", "0.10.0-rc.1"])).toBe("0.10.0-rc.1");
-    expect(newestVersion(["0.1.1+build", "0.1.2"])).toBe("0.1.2");
+  it("a pre-release is older than its release; build metadata is ignored", () => {
+    expect(olderThan("0.10.0-rc.1", "0.10.0")).toBe(true);
+    expect(olderThan("0.10.0", "0.10.0-rc.1")).toBe(false);
+    expect(olderThan("0.1.2+build", "0.1.2")).toBe(false);
+  });
+  it("an agent claiming a far newer version flags nothing (board #54)", () => {
+    expect(olderThan("999.0.0", "0.1.2")).toBe(false);
   });
 });
