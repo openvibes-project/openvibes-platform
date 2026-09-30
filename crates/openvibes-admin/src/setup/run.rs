@@ -169,6 +169,8 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     for port in &ports {
         if !ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", port]) {
             ctx.ok(FirewallCmd, &["--permanent", "--add-port", port])?;
+            // Ours to close again after a move; one open before is not.
+            super::ports::record_opened(ctx, port)?;
         }
     }
     ctx.ok(FirewallCmd, &["--reload"])?;
@@ -270,11 +272,23 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             ctx.pause();
         }
     }
+    // Every service answers on its new port: the old ones can close (#69).
+    let (closed, kept) = super::ports::close_moved(ctx)?;
+    let mut firewall = String::new();
+    if !closed.is_empty() {
+        firewall = format!("; firewall closed {}", closed.join(" "));
+    }
+    for line in kept {
+        firewall.push_str("; ");
+        firewall.push_str(&line);
+    }
+    let closed = firewall;
     // A Repair mints no token: each one used to leave another 10-use
     // token behind (#64); the install line is one command away.
     if ctx.repair {
         return Ok(StepState::Done(format!(
-            "ready: {}; for an agent install line, run openvibes-admin agent command",
+            "ready: {}{closed}; for an agent install line (new after moving an agent \
+             port), run openvibes-admin agent command",
             names(&units).join(" ")
         )));
     }
