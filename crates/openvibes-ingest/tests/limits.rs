@@ -153,11 +153,18 @@ async fn shutdown_waits_for_requests_in_flight() {
     let mut world = World::start().await;
     let mut stream = tls(&world).await;
     // The handler is waiting for the rest of the body when shutdown starts.
+    // hyper answers `100 Continue` when the handler first reads the body,
+    // so that line, not a sleep, says the request is in flight (#80).
     stream
-        .write_all(b"POST /v1/enroll HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\n\r\n{")
+        .write_all(
+            b"POST /v1/enroll HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nExpect: 100-continue\r\n\r\n",
+        )
         .await
         .unwrap();
-    tokio::time::sleep(StdDuration::from_millis(200)).await;
+    let mut interim = [0; 25];
+    stream.read_exact(&mut interim).await.unwrap();
+    assert_eq!(&interim, b"HTTP/1.1 100 Continue\r\n\r\n");
+    stream.write_all(b"{").await.unwrap();
     // Only the server's drain is timed below: dropping the test database
     // afterwards could take seconds on a busy machine (#80).
     let stopping = tokio::spawn(async move {
