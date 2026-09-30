@@ -14,7 +14,7 @@ use crate::{StoreError, ingest::StoredFinding, inventory::PackageRow};
 /// (`future_observation`); the protocol states the window.
 pub const MAX_FUTURE_MINUTES: i64 = 60;
 
-fn severity(severity: Severity) -> &'static str {
+pub(crate) fn severity(severity: Severity) -> &'static str {
     match severity {
         Severity::Info => "info",
         Severity::Low => "low",

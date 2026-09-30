@@ -6,6 +6,8 @@
 
 /// Agent listing, inspection, and revocation.
 pub mod agents;
+/// Threat alarms (P14): insert with suppression.
+pub mod alarms;
 /// Read-only, scoped lookups for the console's assistant.
 pub mod assistant;
 /// The append-only audit log.
