@@ -24,7 +24,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   and Health screens `database(Status | Migrate | Maintenance |
   FeedsStatus)`, `certificates()` and `disk()`. These three have defaults
   (not supported, none, none) for hosts without a local database or files
-  (spec §10).
+  (spec §10). `listeners(port)` (Setup's console port row): the
+  `ss -ltnpH` lines for that TCP port, by default none.
 - `native::Native<R: Runner>`: the systemd implementation.
   - services: one `systemctl show --property=… UNITS…`; readiness by
     `curl --silent --fail --max-time 1` on the default loopback endpoints
@@ -53,6 +54,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
     missing files are left out;
   - disk: `df --output=file,pcent,avail -h` on `/var/lib/pgsql` and each
     existing `/var/lib/openvibes-*`.
+  - listeners: `ss -ltnpH sport = :PORT`, as the user (so processes of
+    other users are rarely named).
 - `runner::Runner` / `SystemRunner`: every command is one of a closed set of
   `Program`s (`/usr/bin/systemctl`, `sudo`, `logger`, `curl`) with an
   argument vector, never a shell; `run_with_input` also writes stdin (the
@@ -90,7 +93,8 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   debuginfo left out) with any newer version (`dnf -q list --upgrades`, as
   the user; offline, none are shown).
 - `Program` also covers `dnf`, `rpm`, `runuser`, `postgresql-setup`,
-  `usermod`, `firewall-cmd`, `userdel`, `groupdel`, `df` and `openvibes-admin`,
+  `usermod`, `firewall-cmd`, `userdel`, `groupdel`, `df`, `ss`, `journalctl`
+  and `openvibes-admin`,
   which Setup's root side runs. `SystemRunner` runs every command with
   `LC_ALL=C`, because sudo's, dnf's and systemctl's messages are parsed.
 

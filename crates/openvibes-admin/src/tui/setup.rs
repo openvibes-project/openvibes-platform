@@ -11,13 +11,17 @@ use super::{
     jobs::Job,
     password::{PasswordPrompt, Typed},
 };
-use crate::setup::plan::{CaMode, Component};
+use crate::setup::{
+    plan::{CaMode, Component},
+    ports,
+};
 
 pub const HOSTNAME_ROW: usize = 7;
 pub const SANS_ROW: usize = 8;
 pub const CA_ROW: usize = 9;
 pub const KEY_ROW: usize = 10;
-pub const START_ROW: usize = 11;
+pub const PORT_ROW: usize = 11;
+pub const START_ROW: usize = 12;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum After {
@@ -50,6 +54,9 @@ pub struct Setup {
     pub sans: String,
     pub ca: CaMode,
     pub root_key_out: String,
+    pub console_port: String,
+    /// Why the console port is not 443 ("443 is taken by …"), if it is not.
+    pub port_note: Option<String>,
     pub editing: bool,
     pub prompt: PasswordPrompt,
     pub password: Option<Secret>,
@@ -85,6 +92,8 @@ impl Setup {
                 .as_ref()
                 .map(|home| format!("{home}/openvibes-root-ca.key"))
                 .unwrap_or_default(),
+            console_port: ports::CONSOLE_DEFAULT.to_string(),
+            port_note: None,
             editing: false,
             prompt: PasswordPrompt::default(),
             password: None,
@@ -130,7 +139,29 @@ impl Setup {
         if self.ca == CaMode::Quick && !self.root_key_out.trim().is_empty() {
             args.extend(["--root-key-out".into(), self.root_key_out.trim().into()]);
         }
+        args.extend(["--console-port".into(), self.console_port.trim().into()]);
         args
+    }
+
+    /// When another process holds 443, proposes the first free port from
+    /// 8443 and says why. Unprivileged, so the holder is rarely named here;
+    /// Setup's own check (as root) names it if it is still there.
+    pub fn propose_port<H: Host>(&mut self, host: &H) {
+        let taken = |port: u16| {
+            host.listeners(port)
+                .map(|lines| ports::parse(&lines))
+                .map_err(|error| error.to_string())
+        };
+        let Ok(Some(holder)) = taken(ports::CONSOLE_DEFAULT) else {
+            return; // free, or unknown: Setup checks again before starting
+        };
+        if let Ok(port) = ports::suggest(|port| Ok(taken(port)?.is_some())) {
+            self.console_port = port.to_string();
+            self.port_note = Some(format!(
+                "{} is taken by {holder}; {port} is free",
+                ports::CONSOLE_DEFAULT
+            ));
+        }
     }
 
     fn toggle(&mut self, component: Component) {
@@ -153,6 +184,7 @@ impl Setup {
             HOSTNAME_ROW => Some(&mut self.hostname),
             SANS_ROW => Some(&mut self.sans),
             KEY_ROW => Some(&mut self.root_key_out),
+            PORT_ROW => Some(&mut self.console_port),
             _ => None,
         }
     }

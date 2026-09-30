@@ -76,8 +76,9 @@ inventories OpenVIBES agents report.
 
 %package -n openvibes-admin
 Requires(pre):  shadow-utils procps-ng systemd
-# The administration TUI: operators act through sudo, polkit and curl.
-Requires:       sudo polkit curl
+# The administration TUI: operators act through sudo, polkit and curl;
+# Setup checks ports with ss (iproute).
+Requires:       sudo polkit curl iproute
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
 

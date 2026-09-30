@@ -174,5 +174,6 @@ pub fn plan(components: &[Component]) -> Plan {
         repo_dir: None,
         allow_unsigned_local: false,
         operator: Some("alice".into()),
+        console_port: 443,
     }
 }

@@ -23,6 +23,8 @@ struct SetupHost {
     /// `setup.toml`'s text; empty: not set up.
     plan: String,
     packages: Vec<PackageUpdate>,
+    /// Ports another process listens on.
+    taken: Vec<u16>,
 }
 
 impl Host for SetupHost {
@@ -47,6 +49,13 @@ impl Host for SetupHost {
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
     }
+    fn listeners(&self, port: u16) -> Result<String, HostError> {
+        Ok(if self.taken.contains(&port) {
+            format!("LISTEN 0 511 *:{port} *:*\n")
+        } else {
+            String::new()
+        })
+    }
     fn setup_plan(&self) -> Result<String, HostError> {
         if self.plan.is_empty() {
             Err(HostError::Failed("not set up".into()))
@@ -66,12 +75,21 @@ impl Host for SetupHost {
 }
 
 fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    app_taken(set_up, answers, vec![])
+}
+
+fn app_taken(
+    set_up: bool,
+    answers: Vec<Result<String, HostError>>,
+    taken: Vec<u16>,
+) -> App<SetupHost> {
     let mut app = App::new(SetupHost {
         set_up,
         answers: RefCell::new(answers.into()),
         calls: RefCell::new(Vec::new()),
         plan: String::new(),
         packages: Vec::new(),
+        taken,
     });
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
@@ -145,7 +163,7 @@ fn start_writes_the_plan_with_the_password_then_runs_one_step_per_tick() {
         let calls = app.host.calls.borrow();
         assert_eq!(
             calls[0].0,
-            "setup-plan --components ingest,console,distribution,vulns,rules,agent --hostname platform.example.com --ca quick --root-key-out /home/alice/openvibes-root-ca.key"
+            "setup-plan --components ingest,console,distribution,vulns,rules,agent --hostname platform.example.com --ca quick --root-key-out /home/alice/openvibes-root-ca.key --console-port 443"
         );
         assert_eq!(calls[0].1, "pw pw pw");
     }
@@ -416,4 +434,37 @@ fn keep_data_uninstall_sends_no_confirmation() {
         app.host.calls.borrow()[0].0,
         "remove-step backup --components ingest,console,distribution,vulns,rules,agent"
     );
+}
+
+#[test]
+fn a_taken_console_port_is_replaced_by_a_free_one_and_said_so() {
+    let mut app = app_taken(false, vec![], vec![443, 8443]);
+    let text = screen(&app);
+    assert!(text.contains("Console port:  8444"), "{text}");
+    assert!(
+        text.contains("443 is taken by another process; 8444 is free"),
+        "{text}"
+    );
+    // The operator may type another port.
+    while app.setup.row != super::setup::PORT_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    app.key(Key::Backspace);
+    app.key(Key::Backspace);
+    type_text(&mut app, "50");
+    app.key(Key::Enter);
+    assert!(
+        app.setup
+            .plan_args()
+            .ends_with(&["--console-port".into(), "8450".into()])
+    );
+}
+
+#[test]
+fn a_free_443_is_the_console_port() {
+    let app = app(false, vec![]);
+    let text = screen(&app);
+    assert!(text.contains("Console port:  443"), "{text}");
+    assert!(!text.contains("is taken"), "{text}");
 }
