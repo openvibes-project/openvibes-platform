@@ -246,3 +246,27 @@ fn tokens_are_read_from_token_create() {
     assert!(super::token_from("token short\n").is_err());
     assert!(super::token_from("nothing\n").is_err());
 }
+
+#[test]
+fn a_repair_mints_no_enrollment_token() {
+    // Board #64: every Repair used to leave another 10-use token behind.
+    let fake = Fake::new("ready-repair");
+    fake.answer(&["/usr/bin/curl"], 0, "");
+    let plan = plan(&[Ingest]);
+    let mut ctx = fake.ctx(&plan);
+    ctx.repair = true;
+    let state = run_step(&ctx, Step::Ready);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(
+        state.detail().contains("openvibes-admin agent command"),
+        "{state:?}"
+    );
+    assert!(!fake.called(&[
+        "/usr/sbin/runuser",
+        "-u",
+        "openvibes-admin",
+        "--",
+        "/usr/bin/openvibes-admin",
+        "token"
+    ]));
+}
