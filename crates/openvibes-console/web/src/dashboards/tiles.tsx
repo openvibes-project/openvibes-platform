@@ -42,9 +42,12 @@ export function NumberTile({ widget }: WidgetProps) {
     : metric.startsWith("findings.open.") ? findings.data?.[metric.slice(14) as "critical" | "high" | "medium" | "low"]
       : metric === "vulns.exploited" ? vulns.data?.exploited : metric === "vulns.reboot_hosts" ? vulns.data?.reboot_hosts : vulns.data?.no_fix;
   const tone = value && (metric === "findings.open.critical" || metric === "vulns.exploited") ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
+  // No vulnerability feed yet: a 0 would claim nothing was found.
+  const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
   return (
     <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-      <span className={`stat__value num${tone ? ` stat__value--${tone}` : ""}`}>{value === undefined ? "…" : count(value)}</span>
+      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? "—" : value === undefined ? "…" : count(value)}</span>
+      {unset && <span className="subtle">Not set up</span>}
     </button>
   );
 }
@@ -58,6 +61,7 @@ export function BreakdownTile({ widget }: WidgetProps) {
   const vulns = useResource<VulnerabilitySummary>(allowed && source === "vulnerabilities" ? "/api/v1/vulnerabilities/summary" : null);
   const agents = useResource<AgentSummary>(allowed && source === "agents" ? "/api/v1/agents/summary" : null);
   if (!allowed) return <Unavailable />;
+  if (vulns.data && !vulns.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const parts: { key: string; label: string; value: number; tone: string; go: () => void }[] =
     source === "findings" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/findings", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))

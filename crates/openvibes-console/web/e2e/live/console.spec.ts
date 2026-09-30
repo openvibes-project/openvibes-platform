@@ -74,6 +74,20 @@ test("Most exposed hosts says scanning is not set up before any feed imported", 
   await expect(tile.getByText("No host has an open vulnerability")).toHaveCount(0);
 });
 
+test("vulnerability number tiles show no zero before any feed imported", async ({ page }) => {
+  // A 0 would claim nothing was found; nothing was looked for (board #47).
+  await signIn(page, "alex");
+  for (const title of ["Exploited", "Hosts needing a reboot"]) {
+    const tile = page.locator(".tile", { hasText: title });
+    await expect(tile.locator(".stat__value")).toHaveText("—");
+    const note = tile.getByText("Not set up");
+    await expect(note).toBeVisible();
+    // Inside the tile, not cut off by its fixed height.
+    const bottom = async (l: typeof tile) => { const b = await l.boundingBox(); if (!b) throw new Error("not rendered"); return b.y + b.height; };
+    expect(await bottom(note)).toBeLessThanOrEqual(await bottom(tile));
+  }
+});
+
 test("an Access filter with no matches explains the empty list", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "light" });

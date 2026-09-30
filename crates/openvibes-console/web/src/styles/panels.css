@@ -167,6 +167,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile-empty { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 13px; padding: 8px 0; }
 .tile-number { all: unset; cursor: pointer; display: block; }
 .tile-number:focus-visible { outline: 2px solid var(--focus); border-radius: var(--r-1); }
+.tile-number .subtle { margin-left: 8px; font-size: 13px; }
 .tile-list { display: grid; gap: 6px; }
 .tile-more { justify-self: start; font-size: 13px; }
 .tile-note p { margin: 0 0 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
