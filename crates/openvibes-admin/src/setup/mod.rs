@@ -16,6 +16,8 @@ pub mod plan;
 pub(crate) mod ports;
 pub mod remove;
 mod run;
+#[cfg(test)]
+mod run_tests;
 mod system;
 pub mod update;
 
