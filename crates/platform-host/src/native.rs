@@ -36,6 +36,26 @@ fn printable(text: &str) -> String {
         .collect()
 }
 
+/// `stderr` without sudo's first-use lecture, which comes before whatever
+/// went wrong and so stood in for it (board #75): from its first line
+/// through "#3)", and the "password … will not be visible" note after it.
+fn without_lecture(stderr: &str) -> String {
+    let Some(start) = stderr.find("We trust you have received the usual lecture") else {
+        return stderr.to_owned();
+    };
+    let rest = &stderr[start..];
+    let end = rest
+        .find("#3)")
+        .and_then(|at| rest[at..].find('\n').map(|nl| at + nl + 1))
+        .unwrap_or(rest.len());
+    let mut after = &rest[end..];
+    let note = "For security reasons, the password you type will not be visible.";
+    if let Some(stripped) = after.trim_start().strip_prefix(note) {
+        after = stripped;
+    }
+    format!("{}{}", &stderr[..start], after).trim().to_owned()
+}
+
 /// The invoking user for the journal: `$USER` as a hint, the real uid as
 /// the fact (from `/proc/self/status`).
 fn who() -> String {
@@ -233,19 +253,19 @@ impl<R: Runner> Host for Native<R> {
                 }
             }
         }
+        let stderr = without_lecture(&out.stderr);
         if out.status == 0 {
             Ok(out.stdout)
-        } else if out.stderr.contains("incorrect password")
-            || out.stderr.contains("Sorry, try again")
-        {
+        } else if stderr.contains("incorrect password") || stderr.contains("Sorry, try again") {
             Err(HostError::WrongPassword)
-        } else if out.stderr.contains("not in the sudoers file")
-            || out.stderr.contains("may not run sudo")
-            || out.stderr.contains("is not allowed to run sudo")
+        } else if stderr.contains("not in the sudoers file")
+            || stderr.contains("may not run sudo")
+            || stderr.contains("is not allowed to run sudo")
+            || stderr.contains("is not allowed to execute")
         {
             Err(HostError::NotSudoer)
         } else {
-            Err(HostError::Failed(printable(&out.stderr)))
+            Err(HostError::Failed(printable(&stderr)))
         }
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
