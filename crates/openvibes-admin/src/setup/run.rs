@@ -66,12 +66,15 @@ pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         ctx.succeeds(Systemctl, &["is-enabled", "--quiet", unit.name()])
             && ctx.succeeds(Systemctl, &["is-active", "--quiet", unit.name()])
     });
-    // Running but not on a planned port (a Repair after a move): not done.
-    Ok(if running && super::ports::check(ctx)?.is_empty() {
-        StepState::Done(done_text(ctx, &units))
-    } else {
-        StepState::Todo
-    })
+    // Running but not on a planned port (a Repair after a move), or a
+    // listen address to rewrite (#72): not done.
+    Ok(
+        if running && super::ports::check(ctx)?.is_empty() && !super::ports::listen_stale(ctx)? {
+            StepState::Done(done_text(ctx, &units))
+        } else {
+            StepState::Todo
+        },
+    )
 }
 
 fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
@@ -86,14 +89,19 @@ fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
 
 pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // Again here, not only at the start: the port may have been taken since.
-    let moved = super::ports::check(ctx)?;
-    super::ports::configure(ctx)?;
+    let mut restart = super::ports::check(ctx)?;
+    for unit in super::ports::configure(ctx)? {
+        if !restart.contains(&unit) {
+            restart.push(unit);
+        }
+    }
     let units = units(ctx);
     let mut args = vec!["enable", "--now"];
     args.extend(names(&units));
     ctx.ok(Systemctl, &args)?;
-    // Running on an old port: its configuration now says the new one.
-    for unit in moved {
+    // Running on an old port or address: its configuration now says the
+    // new one (try-restart leaves a stopped unit alone).
+    for unit in restart {
         ctx.ok(Systemctl, &["try-restart", unit])?;
     }
     Ok(StepState::Done(done_text(ctx, &units)))

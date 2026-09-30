@@ -178,14 +178,22 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<&'static str>, String> {
     Ok(restart)
 }
 
-/// Writes the plan's ingest and distribution ports into their services'
-/// `listen` (the console's is the Console step's).
-pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
-    for (component, service, port) in [
-        (Component::Ingest, Service::Ingest, ctx.plan.ingest_port),
+/// The ingest and distribution configs whose `listen` is not the plan's
+/// (a moved port, or `0.0.0.0` before dual stack, #72): `(unit, path,
+/// service, listen)`.
+fn stale<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<(&'static str, String, Service, String)>, String> {
+    let mut stale = Vec::new();
+    for (component, service, unit, port) in [
+        (
+            Component::Ingest,
+            Service::Ingest,
+            "openvibes-ingest",
+            ctx.plan.ingest_port,
+        ),
         (
             Component::Distribution,
             Service::Distribution,
+            "openvibes-distribution",
             ctx.plan.distribution_port,
         ),
     ] {
@@ -193,17 +201,48 @@ pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
         if !ctx.plan.has(component) || !ctx.exists(&path) {
             continue;
         }
+        let doc: toml::Table =
+            toml::from_str(&ctx.read(&path)?).map_err(|error| format!("{path}: {error}"))?;
+        let listen = any_address(ctx, port);
+        if doc.get("listen").and_then(toml::Value::as_str) != Some(listen.as_str()) {
+            stale.push((unit, path, service, listen));
+        }
+    }
+    Ok(stale)
+}
+
+/// Whether a `listen` differs from the plan's, so the services step is not
+/// done even with every unit running on its port (#72 on an existing host).
+pub fn listen_stale<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
+    Ok(!stale(ctx)?.is_empty())
+}
+
+/// Writes the plan's ingest and distribution ports into their services'
+/// `listen` (the console's is the Console step's); the units whose file
+/// changed, which a running unit only reads on a restart.
+pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<&'static str>, String> {
+    let mut changed = Vec::new();
+    for (unit, path, service, listen) in stale(ctx)? {
         let mut doc: toml_edit::DocumentMut = ctx
             .read(&path)?
             .parse()
             .map_err(|error| format!("{path}: {error}"))?;
-        let listen = format!("0.0.0.0:{port}");
-        if doc.get("listen").and_then(|v| v.as_str()) != Some(listen.as_str()) {
-            doc["listen"] = toml_edit::value(listen);
-            config_file::replace(&ctx.path("/etc/openvibes"), service, &doc.to_string())?;
-        }
+        doc["listen"] = toml_edit::value(listen);
+        config_file::replace(&ctx.path("/etc/openvibes"), service, &doc.to_string())?;
+        changed.push(unit);
     }
-    Ok(())
+    Ok(changed)
+}
+
+/// Every address at `port`: `[::]` where it takes IPv4 too (IPv6 on and
+/// `bindv6only` 0, Fedora's default), so a name resolving to IPv6 only
+/// reaches the services (board #72); `0.0.0.0` otherwise, since binding
+/// `[::]` without IPv6 fails and with `bindv6only` 1 would drop IPv4.
+pub(crate) fn any_address<R: Runner>(ctx: &Ctx<R>, port: u16) -> String {
+    match ctx.read("/proc/sys/net/ipv6/bindv6only") {
+        Ok(value) if value.trim() == "0" => format!("[::]:{port}"),
+        _ => format!("0.0.0.0:{port}"),
+    }
 }
 
 /// The port `unit` (e.g. `openvibes-console.service`) listens on for

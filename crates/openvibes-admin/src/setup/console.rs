@@ -2,7 +2,10 @@
 //! (packaging.md "Console RPM setup"). The TLS files come from step 7.
 
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use platform_host::{Service, StepState, runner::Runner};
+use platform_host::{
+    Service, StepState,
+    runner::{Program::Systemctl, Runner},
+};
 use ring::rand::{SecureRandom, SystemRandom};
 use zeroize::Zeroizing;
 
@@ -20,7 +23,7 @@ fn origin<R: Runner>(ctx: &Ctx<R>) -> String {
 }
 
 fn listen<R: Runner>(ctx: &Ctx<R>) -> String {
-    format!("0.0.0.0:{}", ctx.plan.console_port)
+    super::ports::any_address(ctx, ctx.plan.console_port)
 }
 
 /// The origin, and with direct TLS the listener, are the plan's. Behind a
@@ -80,6 +83,9 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             Service::Console,
             &doc.to_string(),
         )?;
+        // A running console reads it only on a restart (#72: `[::]` on an
+        // existing host); try-restart leaves a stopped one alone.
+        ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
     }
     let mut shown = "console admin: admin".to_owned();
     if !admin_exists(ctx)? {
@@ -144,6 +150,7 @@ mod tests {
                 include_str!("../../../../packaging/rpm/console.toml")
             ),
         );
+        fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
         fake.answer(
             &[&ADMIN[..], &["user", "list"]].concat(),
             0,
@@ -217,6 +224,18 @@ mod tests {
         assert!(
             toml.contains("development_listen = \"0.0.0.0:8443\""),
             "{toml}"
+        );
+        // Board #72: both IP versions where the kernel binds them together.
+        fake.file("/proc/sys/net/ipv6/bindv6only", "0\n");
+        run_step(&fake.ctx(&plan), Step::Console);
+        let toml = fake.text("/etc/openvibes/console.toml");
+        assert!(
+            toml.contains("development_listen = \"[::]:8443\""),
+            "{toml}"
+        );
+        assert!(
+            fake.called(&["/usr/bin/systemctl", "try-restart", "openvibes-console"]),
+            "a running console reads it only on a restart"
         );
         assert!(
             toml.contains("public_origin = \"https://platform.example.com:8443\""),
