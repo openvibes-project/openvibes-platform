@@ -41,6 +41,29 @@ export function selectFindings(all: readonly FindingGroup[], params: URLSearchPa
     && (!ruleSet || g.rule_set_id === ruleSet) && matches([g.latest_message, g.rule_id, g.rule_set_id], q));
 }
 
+/** Newest first: by number ("0.10.0" before "0.9.0"), a release before
+ * its pre-release ("0.10.0" before "0.10.0-rc.1"), build metadata ignored. */
+function versionOrder(a: string, b: string): number {
+  const [aCore, aPre] = versionParts(a);
+  const [bCore, bPre] = versionParts(b);
+  return bCore.localeCompare(aCore, "en", { numeric: true })
+    || (aPre === "" ? -1 : 0) - (bPre === "" ? -1 : 0)
+    || bPre.localeCompare(aPre, "en", { numeric: true });
+}
+
+/** "1.2.3-rc.1+build" → ["1.2.3", "rc.1"]. */
+function versionParts(version: string): [string, string] {
+  const plus = version.indexOf("+");
+  const plain = plus < 0 ? version : version.slice(0, plus);
+  const dash = plain.indexOf("-");
+  return dash < 0 ? [plain, ""] : [plain.slice(0, dash), plain.slice(dash + 1)];
+}
+
+/** The newest agent version in the fleet. */
+export function newestVersion(versions: readonly string[]): string | undefined {
+  return versions.filter(Boolean).sort(versionOrder)[0];
+}
+
 export function selectAgents(all: readonly Agent[], params: URLSearchParams): Agent[] {
   const status = params.get("status");
   const q = params.get("q") ?? "";

@@ -87,7 +87,8 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
     setPersona(next);
   };
   const logout = () => {
-    request("POST", "/auth/v1/logout").finally(() => window.location.reload());
+    // Reload either way: a failed logout leaves a session the reload shows.
+    request("POST", "/auth/v1/logout").catch(() => undefined).finally(() => window.location.reload());
   };
 
   if (auth === "signin") return <SignIn onDemo={demoAllowed ? () => choosePersona("admin") : undefined} />;
