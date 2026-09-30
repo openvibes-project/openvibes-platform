@@ -372,7 +372,7 @@ pub async fn update_many_with_request_id(
     Ok(BulkTriageUpdate::Updated(records))
 }
 
-fn transition_allowed(from: &str, to: &str) -> bool {
+pub(crate) fn transition_allowed(from: &str, to: &str) -> bool {
     from == to
         || matches!(
             (from, to),

@@ -14,6 +14,8 @@ pub mod assistant;
 pub mod audit;
 /// CA certificates the platform issues under.
 pub mod ca;
+/// Console reads and triage of threat alarms (P14).
+pub mod console_alarms;
 /// Local console credentials, throttles, pre-authentication, and sessions.
 pub mod console_auth;
 /// Bounded global read models for the human console.
