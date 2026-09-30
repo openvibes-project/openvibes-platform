@@ -222,6 +222,10 @@ impl<R: Runner> Host for Native<R> {
         std::path::Path::new(SETUP_FILE).exists()
     }
 
+    fn needs_password(&self) -> bool {
+        !effective_root()
+    }
+
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
         let args = verb.args();
         // -S: password from stdin; -k: never a cached credential; -p '': no
@@ -413,4 +417,20 @@ fn operator(out: crate::runner::Output) -> Result<crate::runner::Output, HostErr
     } else {
         Err(HostError::Failed(printable(&out.stderr)))
     }
+}
+
+/// Whether this process runs as root: the effective uid, the second field
+/// of `Uid:` in `/proc/self/status` (no `unsafe` libc call). Unreadable
+/// means not root, so the prompt is shown.
+fn effective_root() -> bool {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|status| {
+            status
+                .lines()
+                .find_map(|line| line.strip_prefix("Uid:"))
+                .and_then(|ids| ids.split_whitespace().nth(1))
+                .map(|euid| euid == "0")
+        })
+        .unwrap_or(false)
 }

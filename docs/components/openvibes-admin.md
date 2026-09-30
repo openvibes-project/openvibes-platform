@@ -83,7 +83,8 @@ program listens on, per `ss`, stays open with who uses it) and
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
 Only rows on screen take the focus: with keep data, one `j` goes from the
 choice to `[ Uninstall ]` (#74).
-Each runs one step per refresh like the install, asking for the password
+As root no password is asked (sudo needs none; #82). Each runs one step
+per refresh like the install, asking for the password
 once. The steps are those of
 `setup --quick` (below).
 
@@ -417,7 +418,9 @@ with "(443 is in use)" on the row; both editable.
 
 Steps (`src/setup/`, each checks before it acts, so re-running is safe and
 resumes): `packages` (dnf from the repository, or the one file per package
-in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
+in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`;
+an installed package whose packaged configuration file is missing, per
+`rpm -V`, is reinstalled, which restores it and keeps edited ones, #82),
 `postgres`, `operators` (the sudo user joins `openvibes-operators`),
 `database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
 written once to `--root-key-out`, never over an existing file, otherwise
@@ -468,7 +471,7 @@ refused while one works):
   `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
   `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays;
   `openvibes-admin` itself is removed last with `sudo dnf remove
-  openvibes-admin`.
+  openvibes-admin`, so its packaged `admin.toml` is left for rpm (#82).
 - Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
   --no-role-passwords` to `PATH.roles.sql`, both new files (never over an
   existing one), 0600, owned by the sudo user, checked with `pg_restore

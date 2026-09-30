@@ -25,6 +25,8 @@ pub(super) struct SetupHost {
     packages: Vec<PackageUpdate>,
     /// Ports another process listens on.
     taken: Vec<u16>,
+    /// Running as root: sudo needs no password.
+    root: bool,
 }
 
 impl Host for SetupHost {
@@ -45,6 +47,9 @@ impl Host for SetupHost {
     }
     fn is_set_up(&self) -> bool {
         self.set_up
+    }
+    fn needs_password(&self) -> bool {
+        !self.root
     }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
@@ -90,6 +95,7 @@ fn app_taken(
         plan: String::new(),
         packages: Vec::new(),
         taken,
+        root: false,
     });
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
@@ -182,6 +188,20 @@ fn start_writes_the_plan_with_the_password_then_runs_one_step_per_tick() {
         app.host.calls.borrow()[2].0,
         format!("setup-step {}", Step::Postgres.name())
     );
+}
+
+/// #82: as root, Start runs at once; no password prompt is shown.
+#[test]
+fn root_is_not_asked_for_a_password() {
+    let mut app = app(false, vec![Ok("written\n".into())]);
+    app.host.root = true;
+    while app.setup.row != super::setup::START_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert_eq!(app.setup.phase, Phase::Running(0));
+    assert!(!screen(&app).contains("password"));
+    assert_eq!(app.host.calls.borrow()[0].1, "", "sudo gets an empty line");
 }
 
 #[test]

@@ -176,10 +176,38 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     }) {
         ctx.as_postgres(&["/usr/bin/dropuser", "--if-exists", role])?;
     }
+    // #82: the admin package is removed last, by hand (this tool is part
+    // of it), so its configuration file stays for rpm: deleting it here
+    // made `dnf remove` warn, and a reinstall in between left it missing.
+    let kept = if installed(ctx, "openvibes-admin") {
+        ctx.stdout(Rpm, &["-qc", "openvibes-admin"])?
+    } else {
+        String::new()
+    };
+    let kept: Vec<&str> = kept.lines().map(str::trim).collect();
     for dir in DATA {
         let path = ctx.path(dir);
-        if path.exists() {
-            fs::remove_dir_all(&path).map_err(|error| format!("{dir}: {error}"))?;
+        if !path.exists() {
+            continue;
+        }
+        let fail = |error: std::io::Error| format!("{dir}: {error}");
+        // One level only: kept files sit directly in the directory (today
+        // just /etc/openvibes/admin.toml); a subdirectory goes whole.
+        if kept.iter().any(|file| file.starts_with(&format!("{dir}/"))) {
+            for entry in fs::read_dir(&path).map_err(fail)? {
+                let entry = entry.map_err(fail)?;
+                let name = format!("{dir}/{}", entry.file_name().to_string_lossy());
+                if kept.contains(&name.as_str()) {
+                    continue;
+                }
+                if entry.file_type().map_err(fail)?.is_dir() {
+                    fs::remove_dir_all(entry.path()).map_err(fail)?;
+                } else {
+                    fs::remove_file(entry.path()).map_err(fail)?;
+                }
+            }
+        } else {
+            fs::remove_dir_all(&path).map_err(fail)?;
         }
     }
     let passwd = ctx.read("/etc/passwd")?;
@@ -407,6 +435,36 @@ mod tests {
             state.detail().contains("PostgreSQL itself stays"),
             "{state:?}"
         );
+    }
+
+    /// #82: while openvibes-admin is still installed, its packaged
+    /// admin.toml stays for `dnf remove`; everything else goes.
+    #[test]
+    fn purge_leaves_the_admin_package_config_for_rpm() {
+        let fake = Fake::new("purge-keep");
+        fake.file("/etc/openvibes/admin.toml", "x");
+        fake.file("/etc/openvibes/setup.toml", "x");
+        fake.file("/etc/openvibes/tls/server.pem", "x");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
+        fake.answer(
+            &["/usr/bin/rpm", "-qc", "openvibes-admin"],
+            0,
+            "/etc/openvibes/admin.toml\n",
+        );
+        fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
+        fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
+        fake.answer(&["/usr/sbin/userdel"], 0, "");
+        fake.answer(&["/usr/sbin/groupdel"], 0, "");
+        let plan = plan(&[Ingest]);
+        let state = run(
+            &fake.ctx(&plan),
+            RemoveStep::Purge,
+            &args(&[Ingest], Some("platform.example.com")),
+        );
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(fake.root.join("etc/openvibes/admin.toml").exists());
+        assert!(!fake.root.join("etc/openvibes/setup.toml").exists());
+        assert!(!fake.root.join("etc/openvibes/tls").exists());
     }
 
     #[test]

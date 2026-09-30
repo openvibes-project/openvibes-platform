@@ -52,7 +52,11 @@ pub(super) fn local_rpm<R: Runner>(
 
 /// `dnf install` from the repository, or the files in `repo_dir`.
 pub fn install<R: Runner>(ctx: &Ctx<R>, names: &[&str]) -> Result<(), String> {
-    let mut args = vec!["install".to_owned(), "-y".to_owned()];
+    dnf(ctx, "install", names)
+}
+
+fn dnf<R: Runner>(ctx: &Ctx<R>, verb: &str, names: &[&str]) -> Result<(), String> {
+    let mut args = vec![verb.to_owned(), "-y".to_owned()];
     match &ctx.plan.repo_dir {
         None => args.extend(names.iter().map(|name| (*name).to_owned())),
         Some(dir) => {
@@ -75,17 +79,49 @@ pub fn packages_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let names = platform_packages(ctx.plan);
     let mut args = vec!["-q", "--quiet"];
     args.extend(&names);
-    Ok(if ctx.succeeds(Rpm, &args) {
-        StepState::Done(format!("installed: {}", names.join(" ")))
-    } else {
-        StepState::Todo
-    })
+    Ok(
+        if ctx.succeeds(Rpm, &args) && missing_config(ctx, &names).is_empty() {
+            StepState::Done(format!("installed: {}", names.join(" ")))
+        } else {
+            StepState::Todo
+        },
+    )
 }
 
 pub fn packages_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let names = platform_packages(ctx.plan);
     install(ctx, &names)?;
+    // #82: a configuration file deleted while its package stayed installed
+    // (an interrupted Remove everything) is not put back by `install`;
+    // `reinstall` restores it and leaves edited ones alone.
+    // `reinstall` needs the installed version in a repository; when it is
+    // gone (a newer release, a local file), `upgrade` also restores it.
+    let missing = missing_config(ctx, &names);
+    if !missing.is_empty() && dnf(ctx, "reinstall", &missing).is_err() {
+        dnf(ctx, "upgrade", &missing)?;
+    }
     Ok(StepState::Done(format!("installed: {}", names.join(" "))))
+}
+
+/// The installed `names` whose packaged configuration file is missing
+/// (`rpm -V` marks it `missing  c /path`).
+fn missing_config<'n, R: Runner>(ctx: &Ctx<R>, names: &[&'n str]) -> Vec<&'n str> {
+    names
+        .iter()
+        .copied()
+        .filter(|name| {
+            ctx.stdout(
+                Rpm,
+                &["-V", "--nodeps", "--nodigest", "--nosignature", name],
+            )
+            .is_ok_and(|out| {
+                out.lines().any(|line| {
+                    let mut words = line.split_whitespace();
+                    words.next() == Some("missing") && words.next() == Some("c")
+                })
+            })
+        })
+        .collect()
 }
 
 const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
@@ -230,6 +266,73 @@ mod tests {
                 "openvibes-distribution",
                 "openvibes-vulns"
             ]
+        );
+    }
+
+    /// #82: Setup after an interrupted Remove everything finds admin.toml
+    /// gone while the package is installed, and reinstalls that package.
+    #[test]
+    fn a_missing_config_file_is_restored_by_a_reinstall() {
+        let fake = Fake::new("packages-config");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
+        fake.answer(
+            &[
+                "/usr/bin/rpm",
+                "-V",
+                "--nodeps",
+                "--nodigest",
+                "--nosignature",
+                "openvibes-admin",
+            ],
+            1,
+            "missing   c /etc/openvibes/admin.toml\n",
+        );
+        fake.answer(
+            &["/usr/bin/rpm", "-V"],
+            1,
+            "S.5....T.  c /etc/openvibes/ingest.toml\n",
+        );
+        fake.answer(&["/usr/bin/dnf"], 0, "");
+        let plan = plan(&[Ingest]);
+        let ctx = fake.ctx(&plan);
+        assert_eq!(
+            super::super::check(&ctx, Step::Packages),
+            StepState::Todo,
+            "an edited config is fine, a missing one is not"
+        );
+        let state = run_step(&ctx, Step::Packages);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert_eq!(
+            fake.call(&["/usr/bin/dnf", "reinstall"]),
+            ["/usr/bin/dnf", "reinstall", "-y", "openvibes-admin"]
+        );
+    }
+
+    #[test]
+    fn a_missing_config_is_restored_by_an_upgrade_when_reinstall_cannot() {
+        let fake = Fake::new("packages-config-upgrade");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
+        fake.answer(
+            &[
+                "/usr/bin/rpm",
+                "-V",
+                "--nodeps",
+                "--nodigest",
+                "--nosignature",
+                "openvibes-admin",
+            ],
+            1,
+            "missing   c /etc/openvibes/admin.toml\n",
+        );
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        fake.answer(&["/usr/bin/dnf", "upgrade"], 0, "");
+        let plan = plan(&[Ingest]);
+        let state = run_step(&fake.ctx(&plan), Step::Packages);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(fake.called(&["/usr/bin/dnf", "reinstall"]));
+        assert_eq!(
+            fake.call(&["/usr/bin/dnf", "upgrade"]),
+            ["/usr/bin/dnf", "upgrade", "-y", "openvibes-admin"]
         );
     }
 

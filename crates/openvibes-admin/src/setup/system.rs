@@ -132,6 +132,12 @@ impl<R: Runner> Ctx<'_, R> {
         self.checked(program, args, Some(input))
     }
 
+    /// The command's stdout whatever its exit status (for tools such as
+    /// `rpm -V` that report findings through a non-zero exit).
+    pub fn stdout(&self, program: Program, args: &[&str]) -> Result<String, String> {
+        self.run(program, args, None).map(|out| out.stdout)
+    }
+
     /// Whether the command ran and exited 0 (a missing program is `false`).
     pub fn succeeds(&self, program: Program, args: &[&str]) -> bool {
         self.run(program, args, None)
