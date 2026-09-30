@@ -108,7 +108,9 @@ also journalled. `R` reloads.
 `ok`, with the problem count in the title: each installed unit (a problem
 unless active and, where it has an endpoint, ready); the ingest and
 distribution server certificates and the intermediate (a problem under 14
-days to expiry, when Setup's repair renews them); feed errors from `feeds
+days to expiry, when Setup's repair renews them; also a problem when one
+misses an address this host now has, e.g. after DHCP, which Repair fixes);
+feed errors from `feeds
 status` (an unreachable database is a problem here); disk use of
 `/var/lib/pgsql` and each `/var/lib/openvibes-*` (a problem from 90 %);
 each published rule set's current bundle from `rules list` (a problem under
@@ -369,7 +371,11 @@ in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
 `database`, `schema`, `ca` (quick: root in `/run/openvibes-ca`, its key
 written once to `--root-key-out`, never over an existing file, otherwise
 deleted; careful: waits for the signed intermediate), `certificates`
-(hostname, `--san`, `localhost`, `127.0.0.1`), `console` (`public_origin`
+(hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
+addresses from `ip -o -4 addr show scope global`, container and VM bridges
+(docker, podman, lxd, incus, calico, flannel, vxlan…) left out, VPN
+interfaces kept, so the console opens by IP; a changed address makes the step Todo
+and Repair reissues), `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
 port with direct TLS, and the `admin` account; a generated password is
 shown once), `services` (after the port check),

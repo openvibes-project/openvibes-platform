@@ -37,6 +37,35 @@ fn check(problem: bool, text: String) -> Check {
 }
 
 /// Health's lines from what the host reported, problems first.
+/// A problem per certificate that misses one of this host's addresses,
+/// e.g. after DHCP gave it a new one (board #71): the console no longer
+/// opens by that IP without a warning until Repair reissues it.
+pub fn uncovered(
+    certificates: &[(&str, Result<String, HostError>)],
+    addresses: &[String],
+) -> Vec<Check> {
+    certificates
+        .iter()
+        .filter_map(|(path, pem)| {
+            let names = platform_pki::subject_alt_names(pem.as_ref().ok()?).ok()?;
+            let missing: Vec<&str> = addresses
+                .iter()
+                .map(String::as_str)
+                .filter(|address| !names.iter().any(|name| name == address))
+                .collect();
+            (!missing.is_empty()).then(|| {
+                check(
+                    true,
+                    format!(
+                        "{path}: does not cover {} (this host): press r on Setup to repair",
+                        missing.join(", ")
+                    ),
+                )
+            })
+        })
+        .collect()
+}
+
 pub fn checks(
     services: &[ServiceStatus],
     certificates: &[(&str, Result<String, HostError>)],
@@ -196,14 +225,18 @@ impl<H: Host> App<H> {
 
     fn load_health(&mut self) {
         self.refresh();
+        let certificates = self.host.certificates();
         self.database.health = checks(
             &self.services,
-            &self.host.certificates(),
+            &certificates,
             self.host.database(Database::FeedsStatus),
             self.host.disk(),
             self.host.database(Database::RulesList),
             Utc::now(),
         );
+        self.database
+            .health
+            .extend(uncovered(&certificates, &self.host.addresses()));
     }
 
     /// R reloads, Tab opens Setup, q quits.
