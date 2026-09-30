@@ -74,7 +74,7 @@ CREATE INDEX alarms_rule_idx ON alarms (rule_set_id, rule_id);
 CREATE TABLE alarm_triage_history (
     event_id bigint GENERATED ALWAYS AS IDENTITY,
     first_seen_day date NOT NULL,
-    alarm_id bigint NOT NULL,
+    alarm_row_id bigint NOT NULL,
     from_state text CHECK (from_state IS NULL OR from_state IN ('open', 'investigating', 'mitigated', 'accepted_risk', 'false_positive')),
     to_state text NOT NULL CHECK (to_state IN ('open', 'investigating', 'mitigated', 'accepted_risk', 'false_positive')),
     assigned_to uuid REFERENCES console_users,
@@ -85,7 +85,7 @@ CREATE TABLE alarm_triage_history (
     PRIMARY KEY (event_id, first_seen_day)
 ) PARTITION BY RANGE (first_seen_day);
 CREATE INDEX alarm_triage_history_alarm_idx
-    ON alarm_triage_history (alarm_id, event_id DESC);
+    ON alarm_triage_history (alarm_row_id, event_id DESC);
 
 -- The largest `dropped_total` the agent has reported (contract: keep the
 -- largest). Ingest already holds UPDATE on agents (0001).
