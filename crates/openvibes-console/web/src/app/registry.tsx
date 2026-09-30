@@ -24,6 +24,8 @@ export type ViewDef = {
   /** Paths below this prefix belong to the view too (e.g. /dashboards/{id}). */
   prefix?: string;
   label: string;
+  /** A shorter label for the phone bar, when `label` is too long for it. */
+  short?: string;
   icon: IconName;
   group: "Investigate" | "Operate" | "Administer";
   /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
@@ -33,9 +35,9 @@ export type ViewDef = {
 };
 
 export const views: readonly ViewDef[] = [
-  { path: "/", prefix: "/dashboards/", label: "Dashboards", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
+  { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/findings", label: "Findings", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
-  { path: "/vulnerabilities", label: "Vulnerabilities", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
+  { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Agents", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
