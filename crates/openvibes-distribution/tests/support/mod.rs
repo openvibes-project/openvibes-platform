@@ -331,10 +331,13 @@ impl World {
             let _ = server.await;
         }
         let admin = platform_store::connect(&self.admin_url).await.unwrap();
-        let _ = admin
-            .get()
+        let drop_client = admin.get().await.unwrap();
+        // DROP grows with partitions; no statement timeout for it.
+        drop_client
+            .batch_execute("SET statement_timeout = 0")
             .await
-            .unwrap()
+            .unwrap();
+        let _ = drop_client
             .batch_execute(&format!(
                 "DROP DATABASE IF EXISTS {} WITH (FORCE)",
                 self.name
@@ -345,10 +348,13 @@ impl World {
 
     pub async fn drop_database(&self) {
         let admin = platform_store::connect(&self.admin_url).await.unwrap();
-        admin
-            .get()
+        let drop_client = admin.get().await.unwrap();
+        // DROP grows with partitions; no statement timeout for it.
+        drop_client
+            .batch_execute("SET statement_timeout = 0")
             .await
-            .unwrap()
+            .unwrap();
+        drop_client
             .batch_execute(&format!("DROP DATABASE {} WITH (FORCE)", self.name))
             .await
             .unwrap();

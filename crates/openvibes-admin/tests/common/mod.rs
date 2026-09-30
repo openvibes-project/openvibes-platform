@@ -109,7 +109,13 @@ impl Fixture {
     pub async fn drop(self) {
         let pool = platform_store::connect(&self.admin_url).await.unwrap();
         let client = pool.get().await.unwrap();
-        client
+        let drop_client = client;
+        // DROP grows with partitions; no statement timeout for it.
+        drop_client
+            .batch_execute("SET statement_timeout = 0")
+            .await
+            .unwrap();
+        drop_client
             .batch_execute(&format!("DROP DATABASE {} WITH (FORCE)", self.name))
             .await
             .unwrap();
