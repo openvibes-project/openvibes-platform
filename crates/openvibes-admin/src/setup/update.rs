@@ -164,12 +164,8 @@ fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         let mut attempts = 0;
         while !ready(ctx, *unit) {
             attempts += 1;
-            if attempts == 30 {
-                return Err(format!(
-                    "{} is not ready after 30 seconds; see journalctl -u {}",
-                    unit.name(),
-                    unit.name()
-                ));
+            if attempts == super::run::READY_ATTEMPTS {
+                return Err(super::run::not_ready(ctx, *unit));
             }
             ctx.pause();
         }
