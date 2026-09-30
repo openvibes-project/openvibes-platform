@@ -190,10 +190,11 @@ function ExistingServiceAccount({ id }: { id: string }) {
                   <td><Ago value={token.expires_at} /></td>
                   <td><span className={`badge badge--${token.revoked ? "bad" : isPast(token.expires_at) ? "plain" : "ok"}`}>{token.revoked ? "Revoked" : isPast(token.expires_at) ? "Expired" : "Active"}</span></td>
                   {can("service_accounts.manage", true) && <td>{!token.revoked && !isPast(token.expires_at) && (
-                    <button type="button" className="button button--small button--danger" onClick={() => {
-                      request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(token.token_id)}/revoke`)
-                        .then(() => { invalidate("/api/v1/service-accounts"); toast(`${token.label} revoked`); }, (e: unknown) => toast(e instanceof ApiError ? e.message : "Revoke failed", true));
-                    }}>Revoke</button>
+                    <Confirm danger label={`Revoke ${token.label}? Whatever uses it stops working at once.`} onConfirm={async () => {
+                      await request("POST", `/api/v1/service-accounts/${encodeURIComponent(id)}/tokens/${encodeURIComponent(token.token_id)}/revoke`);
+                      invalidate("/api/v1/service-accounts");
+                      toast(`${token.label} revoked`);
+                    }}>Revoke</Confirm>
                   )}</td>}
                 </tr>
               ))}
