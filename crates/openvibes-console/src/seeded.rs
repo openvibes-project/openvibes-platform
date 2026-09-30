@@ -1073,6 +1073,9 @@ async fn vulnerability_summary(
             .iter()
             .filter(|item| item.exploited && !item.reboot_needed)
             .count() as u64,
+        // A fresh (empty) platform has no feed yet.
+        feed_last_imported_at: (!matches!(mode, SeedMode::Empty))
+            .then(|| "2026-09-28T06:00:00Z".to_owned()),
     })
     .into_response()
 }

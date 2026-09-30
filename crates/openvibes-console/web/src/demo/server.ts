@@ -294,6 +294,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       no_fix: items.filter((i) => Array.isArray(i.packages) && (i.packages as { fixed: unknown }[]).every((p) => p.fixed == null)).length,
       reboot_hosts: new Set(items.filter((i) => i.reboot_needed).map((i) => i.agent_id)).size,
       top_hosts: [...hosts.values()].sort((a, b) => b.serious - a.serious || b.open - a.open).slice(0, 8),
+      feed_last_imported_at: iso(Date.now() - 6 * 3600_000),
     });
   });
   route("GET", "/api/v1/vulnerabilities/advisories/{id}", "vulnerabilities.read", ({ id = "" }) => {

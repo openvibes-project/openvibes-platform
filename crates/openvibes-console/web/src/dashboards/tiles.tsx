@@ -132,6 +132,8 @@ export function TopHostsTile({ widget }: WidgetProps) {
   if (!can("vulnerabilities.read")) return <Unavailable />;
   if (summary.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {summary.error.message}</div>;
   if (!summary.data) return <div className="skeleton" />;
+  // No feed ever imported: zero hosts would claim a scan that never ran.
+  if (!summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   if (summary.data.top_hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> No host has an open vulnerability</div>;
   return (
     <ul className="list list--plain">

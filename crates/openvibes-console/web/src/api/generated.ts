@@ -1943,6 +1943,11 @@ export interface components {
              */
             exploited: number;
             /**
+             * @description When an advisory feed last imported new content (RFC 3339); null
+             *     until one has, so zero counts mean "nothing found" only when set.
+             */
+            feed_last_imported_at?: string | null;
+            /**
              * Format: int64
              * @description Hosts with at least one open advisory.
              */

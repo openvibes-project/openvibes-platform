@@ -67,6 +67,7 @@ None.
 | database unavailable | 503 |
 | home dashboard deleted or no longer visible | `GET /me/home` answers `null` |
 | a tile with nothing to show (no findings, no vulnerable host) | the tile says so ("All clear", "No host has an open vulnerability"), never a blank box; a failed read shows its error |
+| no vulnerability feed ever imported (vulns not installed, or its first download failed) | Most exposed hosts says "Vulnerability scanning is not set up", never "no vulnerable host" (summary's `feed_last_imported_at` is null) |
 
 ## How to test
 

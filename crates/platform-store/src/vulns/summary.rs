@@ -18,6 +18,10 @@ pub struct Summary {
     pub no_fix: i64,
     /// Open ones (reboot-needed excluded) with a CVE on KEV or EUVD's list.
     pub exploited: i64,
+    /// When an advisory feed last imported new content; `None` until one
+    /// has, so zero counts can be told from "no feed yet". Enrichment
+    /// feeds (`os_id = 'cve'`) don't count: they alone match nothing.
+    pub feed_last_imported_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// Counts open vulnerabilities from each host's stored counts (refreshed
@@ -93,6 +97,13 @@ async fn summary_for_agents(
         )
         .await?
         .get(0);
+    let feed_last_imported_at = client
+        .query_one(
+            "SELECT max(last_changed_at) FROM feed_sources WHERE os_id <> 'cve'",
+            &[],
+        )
+        .await?
+        .get(0);
     Ok(Summary {
         by_severity,
         hosts: totals.get(5),
@@ -100,6 +111,7 @@ async fn summary_for_agents(
         reboot_hosts: totals.get(6),
         exploited,
         no_fix: totals.get(7),
+        feed_last_imported_at,
     })
 }
 

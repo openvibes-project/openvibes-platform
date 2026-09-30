@@ -1048,6 +1048,9 @@ pub struct VulnerabilitySummary {
     pub no_fix: u64,
     /// Open, non-reboot findings with KEV/EUVD exploitation evidence.
     pub exploited: u64,
+    /// When an advisory feed last imported new content (RFC 3339); null
+    /// until one has, so zero counts mean "nothing found" only when set.
+    pub feed_last_imported_at: Option<String>,
 }
 
 /// One host-advisory match with package and exploitation details.

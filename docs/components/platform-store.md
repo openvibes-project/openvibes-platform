@@ -288,6 +288,11 @@ IDs and applied in SQL before priority selection, aggregation, or returning
 advisory enrichment. An empty scope returns no host rows or summary counts;
 advisory details are returned only when a visible host has a matching
 vulnerability.
+The summary's `feed_last_imported_at` is the newest `feed_sources.last_changed_at`
+of an advisory feed (`os_id <> 'cve'`: enrichment feeds alone match
+nothing), `None` until one has imported, so an empty summary can say "not
+set up" rather than "nothing found". Schema 28 grants the console
+`SELECT (os_id, last_changed_at)` on `feed_sources`, and no other column.
 `ListFilter.exploited` and `ListFilter.reboot_needed` are applied inside the
 ranked/counting SQL before the 10,000-row fleet bound, so filtered fleet reads
 do not lose lower-priority matching rows. `hosts_named_in_scope` resolves an
