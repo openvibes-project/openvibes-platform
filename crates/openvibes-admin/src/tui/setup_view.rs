@@ -42,7 +42,7 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             "Enter confirm  Esc cancel",
         ),
         Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
-            checklist(app),
+            checklist(app, usize::from(body.width.saturating_sub(2))),
             if matches!(setup.phase, Phase::Stopped(_)) {
                 RUN_KEYS
             } else {
@@ -151,8 +151,12 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
     lines
 }
 
-fn checklist<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
-    app.setup
+/// One line per step, cut to `width` so the list never runs off the screen
+/// (#78: wrapped details pushed the last steps out of view); the step a run
+/// stopped at gets its whole detail under the list.
+fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
+    let mut lines: Vec<Line<'static>> = app
+        .setup
         .job
         .titles()
         .into_iter()
@@ -166,9 +170,26 @@ fn checklist<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
                 (Some(state), _) => (state.label().to_owned(), state.detail().to_owned()),
                 (None, _) => (String::new(), String::new()),
             };
-            Line::raw(format!("{title:<26}{label:<9}{detail}"))
+            Line::raw(cut(&format!("{title:<26}{label:<9}{detail}"), width))
         })
-        .collect()
+        .collect();
+    if let Phase::Stopped(at) = app.setup.phase
+        && let Some(Some(state)) = app.setup.states.get(at)
+    {
+        lines.push(Line::raw(""));
+        lines.push(Line::raw(state.detail().to_owned()));
+    }
+    lines
+}
+
+/// `text` in at most `width` characters, ending in "…" when cut.
+fn cut(text: &str, width: usize) -> String {
+    if text.chars().count() <= width {
+        return text.to_owned();
+    }
+    let mut cut: String = text.chars().take(width.saturating_sub(1)).collect();
+    cut.push('…');
+    cut
 }
 
 fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
