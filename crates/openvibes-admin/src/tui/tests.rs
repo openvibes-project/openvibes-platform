@@ -520,3 +520,42 @@ fn enable_at_boot_asks_for_the_password() {
     );
     assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }
+
+/// Board #78: Ctrl+U typed a literal "u", so "(empty: the service default)"
+/// was unreachable without many Backspaces.
+#[test]
+fn ctrl_u_clears_the_field_being_edited() {
+    let mut app = configuration(false);
+    while app.config.form.as_ref().unwrap().fields()[app.config.selected].key
+        != "max_inventory_in_flight"
+    {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    type_text(&mut app, "128");
+    assert_eq!(app.config.editing.as_deref(), Some("128"));
+    app.key(Key::ClearLine);
+    assert_eq!(app.config.editing.as_deref(), Some(""));
+}
+
+/// Board #78: Shift+Tab went forward like Tab.
+#[test]
+fn shift_tab_walks_the_screens_backwards() {
+    let mut app = app(false);
+    assert_eq!(app.tab, Tab::Services);
+    let mut seen = Vec::new();
+    for _ in 0..5 {
+        app.key(Key::BackTab);
+        seen.push(app.tab);
+    }
+    assert_eq!(
+        seen,
+        [
+            Tab::Setup,
+            Tab::Health,
+            Tab::Database,
+            Tab::Configuration,
+            Tab::Services
+        ]
+    );
+}

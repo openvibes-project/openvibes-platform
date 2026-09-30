@@ -60,6 +60,7 @@ impl<H: Host> App<H> {
             Key::Backspace => {
                 field.pop();
             }
+            Key::ClearLine => field.clear(),
             Key::Enter | Key::Esc => self.setup.editing = false,
             _ => {}
         }
