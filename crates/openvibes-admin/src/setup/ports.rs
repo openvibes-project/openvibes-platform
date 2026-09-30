@@ -11,10 +11,7 @@ use platform_host::{
     },
 };
 
-use super::{
-    Ctx,
-    plan::{Component, Plan},
-};
+use super::{Ctx, plan::Component};
 use crate::config_file;
 
 /// The console's port unless the operator chooses another.
@@ -110,8 +107,11 @@ fn suggest_from(unit: &str) -> u16 {
     }
 }
 
-/// Each port `plan` listens on: (port, the unit that owns it, what it is).
-pub fn needed(plan: &Plan) -> Vec<(u16, &'static str, &'static str)> {
+/// Each port the plan listens on: (port, the unit that owns it, what it
+/// is). A console behind a reverse proxy is left out: its public port is
+/// the proxy's (a missing `console.toml`, before the packages, is direct).
+pub fn needed<R: Runner>(ctx: &Ctx<R>) -> Vec<(u16, &'static str, &'static str)> {
+    let plan = ctx.plan;
     let mut ports = Vec::new();
     if plan.has(Component::Ingest) {
         ports.push((plan.ingest_port, "openvibes-ingest", "ingest"));
@@ -123,10 +123,20 @@ pub fn needed(plan: &Plan) -> Vec<(u16, &'static str, &'static str)> {
             "distribution",
         ));
     }
-    if plan.has(Component::Console) {
+    if plan.has(Component::Console) && direct_tls(ctx) {
         ports.push((plan.console_port, "openvibes-console", "the console"));
     }
     ports
+}
+
+/// Whether the console serves TLS itself, rather than behind a proxy.
+fn direct_tls<R: Runner>(ctx: &Ctx<R>) -> bool {
+    let Ok(text) = ctx.read("/etc/openvibes/console.toml") else {
+        return true;
+    };
+    toml::from_str::<toml::Table>(&text).map_or(true, |table| {
+        table.get("transport_mode").and_then(toml::Value::as_str) == Some("direct_tls")
+    })
 }
 
 /// The main process of `unit` while it runs.
@@ -145,7 +155,8 @@ fn main_pid<R: Runner>(ctx: &Ctx<R>, unit: &str) -> Option<u32> {
 /// their planned port yet: restart them once their configuration says it.
 pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<&'static str>, String> {
     let mut restart = Vec::new();
-    for (port, unit, what) in needed(ctx.plan) {
+    let needed = needed(ctx);
+    for &(port, unit, what) in &needed {
         let own = main_pid(ctx, unit);
         match holder(ctx.runner, port)? {
             None if own.is_some() => restart.push(unit),
@@ -153,8 +164,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<Vec<&'static str>, String> {
             Some((_, pid)) if pid.is_some() && pid == own => {}
             Some((by, _)) => {
                 let free = suggest(suggest_from(unit), |port| {
-                    Ok(holder(ctx.runner, port)?.is_some()
-                        || needed(ctx.plan).iter().any(|n| n.0 == port))
+                    Ok(holder(ctx.runner, port)?.is_some() || needed.iter().any(|n| n.0 == port))
                 })?;
                 return Err(format!(
                     "port {port} is taken by {by}; {what} needs it: stop that process or choose another port, e.g. {free} (free)"
@@ -195,7 +205,7 @@ pub fn configure<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
 
 /// The port `unit` (e.g. `openvibes-console.service`) listens on for
 /// agents or browsers, for readiness.
-pub fn listen_port(plan: &Plan, unit: &str) -> Option<u16> {
+pub fn listen_port<R: Runner>(ctx: &Ctx<R>, unit: &str) -> Option<u16> {
     let name = unit.trim_end_matches(".service");
-    needed(plan).into_iter().find(|n| n.1 == name).map(|n| n.0)
+    needed(ctx).into_iter().find(|n| n.1 == name).map(|n| n.0)
 }

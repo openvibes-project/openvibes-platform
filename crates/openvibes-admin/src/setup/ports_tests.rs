@@ -298,3 +298,27 @@ fn readiness_needs_the_listen_port_not_only_health() {
         "{state:?}"
     );
 }
+
+#[test]
+fn behind_a_proxy_the_console_port_is_the_proxy_s() {
+    let fake = Fake::new("ports-proxy");
+    // Switched to reverse_proxy in the config editor: nginx holding 443 is
+    // the point, not a clash (reviewer on #92).
+    fake.file(
+        "/etc/openvibes/console.toml",
+        "development_listen = \"127.0.0.1:8080\"\ntransport_mode = \"reverse_proxy\"\n",
+    );
+    listens(
+        &fake,
+        443,
+        "LISTEN 0 511 *:443 *:* users:((\"nginx\",pid=7,fd=6))\n",
+    );
+    free(&fake);
+    let plan = plan(&[Ingest, Console]);
+    assert_eq!(check(&fake.ctx(&plan)).unwrap(), Vec::<&str>::new());
+    assert!(!fake.called(&[SS, "-ltnpH", "sport", "=", ":443"]));
+    assert_eq!(
+        listen_port(&fake.ctx(&plan), "openvibes-console.service"),
+        None
+    );
+}

@@ -190,7 +190,7 @@ pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
 /// answer counts, even a refused client certificate; only "connection
 /// refused" (7) and a timeout (28) do not.
 fn listening<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
-    let Some(port) = super::ports::listen_port(ctx.plan, unit.name()) else {
+    let Some(port) = super::ports::listen_port(ctx, unit.name()) else {
         return true;
     };
     let url = format!("https://127.0.0.1:{port}/");
