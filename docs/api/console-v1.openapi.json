@@ -708,6 +708,124 @@
         }
       }
     },
+    "/api/v1/alarm-suppressions": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "list_suppressions",
+        "responses": {
+          "200": {
+            "description": "Active suppressions the caller may see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionList"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "create_suppression",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAlarmSuppressionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created; applies to alarms stored from now on",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid scope or note",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied, or program/command without global scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alarm absent or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm-suppressions/{suppression_id}": {
+      "delete": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "remove_suppression",
+        "parameters": [
+          {
+            "name": "suppression_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Removed (kept as history)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmSuppressionView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent, already removed, or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/alarms": {
       "get": {
         "tags": [
@@ -4418,6 +4536,86 @@
           }
         }
       },
+      "AlarmSuppressionList": {
+        "type": "object",
+        "description": "Active suppressions the caller may see.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlarmSuppressionView"
+            },
+            "description": "Newest first."
+          }
+        }
+      },
+      "AlarmSuppressionView": {
+        "type": "object",
+        "description": "One active suppression.",
+        "required": [
+          "id",
+          "rule_set_id",
+          "rule_id",
+          "scope",
+          "note",
+          "created_by",
+          "created_at"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The agent, for `host`."
+          },
+          "args_sha256": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SHA-256 of the masked args' JSON array, for `command`."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "created_by": {
+            "type": "string",
+            "description": "Who created it."
+          },
+          "exe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The program, for `program` and `command`."
+          },
+          "id": {
+            "type": "string",
+            "description": "Its id; closed alarms say \"suppressed by #id\"."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule it quiets."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set of the rule."
+          },
+          "scope": {
+            "type": "string",
+            "description": "`host`, `program` or `command`."
+          }
+        }
+      },
       "AlarmTriageView": {
         "type": "object",
         "description": "An alarm's triage.",
@@ -5035,6 +5233,30 @@
             "description": "Stable local-user UUID.",
             "maxLength": 36,
             "minLength": 36
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateAlarmSuppressionRequest": {
+        "type": "object",
+        "description": "\"Don't alarm on this again\", derived from one alarm.",
+        "required": [
+          "alarm_id",
+          "scope",
+          "note"
+        ],
+        "properties": {
+          "alarm_id": {
+            "type": "string",
+            "description": "The platform's id of the alarm to derive it from."
+          },
+          "note": {
+            "type": "string",
+            "description": "Why, 1 to 4,000 characters."
+          },
+          "scope": {
+            "type": "string",
+            "description": "`host` (this alarm's host), `program` (this program on any host) or\n`command` (this exact command line on any host)."
           }
         },
         "additionalProperties": false

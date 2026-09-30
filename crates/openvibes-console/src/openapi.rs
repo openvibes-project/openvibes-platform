@@ -89,7 +89,10 @@ use crate::{
         crate::dashboards::set_home,
         crate::alarms::list_alarms,
         crate::alarms::get_alarm,
-        crate::alarms::update_alarm_triage
+        crate::alarms::update_alarm_triage,
+        crate::alarm_suppressions::list_suppressions,
+        crate::alarm_suppressions::create_suppression,
+        crate::alarm_suppressions::remove_suppression
     ),
     components(schemas(
         crate::alarms::AlarmSummaryView,
@@ -97,6 +100,9 @@ use crate::{
         crate::alarms::AlarmTriageView,
         crate::alarms::AlarmDetailView,
         crate::alarms::UpdateAlarmTriageRequest,
+        crate::alarm_suppressions::AlarmSuppressionView,
+        crate::alarm_suppressions::AlarmSuppressionList,
+        crate::alarm_suppressions::CreateAlarmSuppressionRequest,
         crate::api::DashboardView,
         crate::api::DashboardPage,
         crate::api::SaveDashboardRequest,
