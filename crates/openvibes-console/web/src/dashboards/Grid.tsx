@@ -80,7 +80,7 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
           width: widget.w * column - GAP, height: widget.h * ROW_HEIGHT - GAP,
         };
         return (
-          <section key={widget.id} className="tile" style={style} aria-label={title} data-selected={canEdit && selected === widget.id || undefined}
+          <section key={widget.id} className="tile" data-type={widget.type} style={style} aria-label={title} data-selected={canEdit && selected === widget.id || undefined}
             tabIndex={canEdit ? 0 : undefined} aria-describedby={canEdit ? "grid-keys" : undefined} onKeyDown={(event) => onKey(event, widget)} onFocus={() => canEdit && editor.select(widget.id)}>
             <header className="tile__head" onPointerDown={(event) => drag(event, widget, "move")}>
               <h2 className="tile__title truncate">{title}</h2>
