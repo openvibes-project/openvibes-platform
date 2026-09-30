@@ -74,6 +74,8 @@
 .menu__who { display: grid; padding: 8px 10px 10px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
 .menu__section { display: grid; padding: 4px 0 6px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
 .menu__section .section-title { padding: 4px 10px; }
+.menu__note { margin: 0; padding: 7px 10px; color: var(--text-3); font-size: 13px; }
+.dashboard-phone-only { display: none; }
 .menu__item { all: unset; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-1); cursor: pointer; text-transform: capitalize; }
 .menu__item:hover, .menu__item:focus-visible { background: var(--surface-2); }
 .menu__section:last-child { border: 0; margin: 0; }
@@ -180,6 +182,7 @@
   .dashboard-header .view-header__title { flex: 1 1 100%; }
   /* Tiles can't be arranged on a phone (Grid.tsx), so no way into editing. */
   .dashboard-edit { display: none; }
+  .dashboard-phone-only { display: block; }
   .view .table-wrap { margin: 0 8px 16px; }
   .view--overview { padding: 16px; }
 }

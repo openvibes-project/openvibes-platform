@@ -163,6 +163,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
               <button type="button" className="icon-button" aria-haspopup="menu" aria-expanded={menu} aria-label="Dashboard menu" onClick={() => setMenu((m) => !m)}><Icon name="chevronDown" size={16} /></button>
               {menu && (
                 <div className="menu__pop" role="menu" onClick={() => setMenu(false)}>
+                  <p className="menu__note dashboard-phone-only">Editing needs a wider screen</p>
                   <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="filter" size={14} /> Rename</button>}
                   {mine && can("dashboards.share", true) && (

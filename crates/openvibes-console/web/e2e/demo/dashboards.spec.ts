@@ -158,3 +158,9 @@ test("Most exposed hosts labels each host's open count", async ({ page }) => {
   const row = tile.locator(".list__row").first();
   await expect(row).toContainText(/\d+ open$/);
 });
+
+test("the editing note is for phones only", async ({ page }) => {
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
+  await expect(page.getByText("Editing needs a wider screen")).toBeHidden();
+});

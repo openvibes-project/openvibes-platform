@@ -66,4 +66,7 @@ test("a phone offers no way into editing, which it cannot do", async ({ page }) 
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Dashboards" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeHidden();
+  // Someone looking for it is told why.
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await expect(page.getByText("Editing needs a wider screen")).toBeVisible();
 });
