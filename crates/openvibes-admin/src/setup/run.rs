@@ -210,11 +210,11 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == READY_ATTEMPTS {
+                // The service's own last message; `-u` would also match
+                // systemd's "Failed with result 'exit-code'".
+                let own = format!("_SYSTEMD_UNIT={}", unit.name());
                 let why = ctx
-                    .ok(
-                        Journalctl,
-                        &["-u", unit.name(), "-n", "1", "-o", "cat", "--no-pager"],
-                    )
+                    .ok(Journalctl, &[&own, "-n", "1", "-o", "cat", "--no-pager"])
                     .ok()
                     .map(|line| line.trim().to_owned())
                     .filter(|line| !line.is_empty())

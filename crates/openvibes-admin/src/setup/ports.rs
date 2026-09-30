@@ -92,11 +92,20 @@ fn needed(plan: &Plan) -> Vec<(u16, &'static str, &'static str)> {
     ports
 }
 
+/// The port the console is configured to listen on now, if any.
+fn configured_console_port<R: Runner>(ctx: &Ctx<R>) -> Option<u16> {
+    let table: toml::Table = toml::from_str(&ctx.read("/etc/openvibes/console.toml").ok()?).ok()?;
+    let listen = table.get("development_listen")?.as_str()?;
+    Some(listen.parse::<std::net::SocketAddr>().ok()?.port())
+}
+
 /// Refuses when a port the plan needs is held by anything but our own
-/// running unit (a Repair or an Update finds its own services listening).
+/// running unit on its unchanged port (a Repair or an Update finds its own
+/// services listening). A console moving to another port is checked there.
 pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
     for (port, unit, what) in needed(ctx.plan) {
-        if ctx.succeeds(Systemctl, &["is-active", "--quiet", unit]) {
+        let unchanged = unit != "openvibes-console" || configured_console_port(ctx) == Some(port);
+        if unchanged && ctx.succeeds(Systemctl, &["is-active", "--quiet", unit]) {
             continue;
         }
         let Some(by) = holder(ctx.runner, port)? else {
@@ -237,10 +246,24 @@ mod tests {
     fn readiness_quotes_why_a_service_is_down() {
         let fake = Fake::new("ports-ready");
         fake.answer(&["/usr/bin/curl"], 7, "");
+        // The service's own messages, not systemd's "Failed with result".
+        fake.answer(
+            &[
+                "/usr/bin/journalctl",
+                "_SYSTEMD_UNIT=openvibes-ingest.service",
+                "-n",
+                "1",
+                "-o",
+                "cat",
+                "--no-pager",
+            ],
+            0,
+            "console listener failed: Address already in use (os error 98)\n",
+        );
         fake.answer(
             &["/usr/bin/journalctl"],
             0,
-            "console listener failed: Address already in use (os error 98)\n",
+            "openvibes-ingest.service: Failed with result 'exit-code'.\n",
         );
         let state = crate::setup::run_step(
             &fake.ctx(&plan(&[Ingest, Console])),
@@ -254,6 +277,29 @@ mod tests {
                     .into()
             )
         );
+    }
+
+    #[test]
+    fn a_running_console_moving_to_a_taken_port_is_refused() {
+        let fake = Fake::new("ports-move");
+        // Repair: the console runs on 443; the plan now wants 8443.
+        fake.file(
+            "/etc/openvibes/console.toml",
+            "development_listen = \"0.0.0.0:443\"\ntransport_mode = \"direct_tls\"\n",
+        );
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
+        listens(&fake, 8443, "LISTEN 0 511 *:8443 *:*\n");
+        free(&fake);
+        let mut plan = plan(&[Ingest, Console]);
+        plan.console_port = 8443;
+        assert!(
+            check(&fake.ctx(&plan))
+                .unwrap_err()
+                .starts_with("port 8443 is taken by another process"),
+        );
+        // Unchanged, the running console's own port passes.
+        plan.console_port = 443;
+        check(&fake.ctx(&plan)).unwrap();
     }
 
     #[test]
