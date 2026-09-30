@@ -38,7 +38,9 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. `Tab` switches between the screens (Setup, Services,
 Configuration, Database, Health), `Shift+Tab` back. In any field being edited,
-`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters). Every screen starts with the OpenVIBES wordmark (six rows,
+`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters).
+Every screen starts with the OpenVIBES wordmark (one line, `OpenVIBES`, the
+tabs and the version, on a terminal under 30 rows, #78; otherwise six rows,
 figlet's standard font: "Open" in white, "VIBES" in the brand teal
 `#36b9e0`), the tabs on its last row (the current one highlighted), and the
 version on the right; with `NO_COLOR` set it is plain text.
