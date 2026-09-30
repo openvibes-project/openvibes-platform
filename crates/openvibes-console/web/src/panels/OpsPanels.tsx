@@ -246,7 +246,7 @@ export function UserPanel({ id }: { id: string }) {
   if (!data || !user) return inventory.loading ? <Loading /> : <div className="panel-body"><Empty title="User not found" /></div>;
   const bindings = data.bindings.filter((binding) => binding.user_id === id);
   const manage = can("rbac.manage", true);
-  const effective = [...new Set(bindings.flatMap((binding) => data.roles.find((r) => r.role_id === binding.role_id)?.permissions ?? []))].sort();
+  const effective = [...new Set(bindings.flatMap((binding) => data.roles.find((r) => r.role_id === binding.role_id)?.permissions ?? []))].sort((a, b) => a.localeCompare(b));
   return (
     <>
       <PanelHeader icon="user" kind="User" title={user.display_name} subtitle={<span className="mono subtle">{user.username}</span>} />

@@ -17,7 +17,7 @@ export function Findings() {
   const all = useMemo(() => groups.data ?? [], [groups.data]);
   const rows = useMemo(() => selectFindings(all, params), [all, params]);
   const top = panels[panels.length - 1];
-  const sets = [...new Set(all.map((group) => group.rule_set_id))].sort();
+  const sets = [...new Set(all.map((group) => group.rule_set_id))].sort((a, b) => a.localeCompare(b));
   const bySeverity = (s: string) => all.filter((g) => g.severity === s && (!onlyOpen || g.triage_counts.open > 0)).length;
 
   return (

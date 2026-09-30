@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { selectAgents, selectAudit, selectFindings } from "./rows";
+import { newestVersion, selectAgents, selectAudit, selectFindings } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -27,5 +27,12 @@ describe("list selection matches the views", () => {
   it("audit: failures filter", () => {
     const event = (id: string, result: string) => ({ id, action: "user.login", actor: "a", at: "2026-09-01T00:00:00Z", result });
     expect(selectAudit([event("1", "success"), event("2", "failure")], new URLSearchParams("result=failure")).map((e) => e.id)).toEqual(["2"]);
+  });
+});
+
+describe("agent versions", () => {
+  it("the newest is compared by number, not as text", () => {
+    expect(newestVersion(["0.9.0", "0.10.0", "0.2.1", ""])).toBe("0.10.0");
+    expect(newestVersion([])).toBeUndefined();
   });
 });

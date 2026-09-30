@@ -6,7 +6,7 @@ import { nav, useLocation } from "../app/nav";
 import { Ago, Empty, ErrorBox, Loading, StatusBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
-import { selectAgents } from "./rows";
+import { newestVersion, selectAgents } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 
 export function Agents() {
@@ -16,8 +16,7 @@ export function Agents() {
   const all = useMemo(() => agents.data ?? [], [agents.data]);
   const rows = useMemo(() => selectAgents(all, params), [all, params]);
   const top = panels[panels.length - 1];
-  const versions = [...new Set(all.map((a) => a.scanner_version).filter(Boolean))].sort().reverse();
-  const newest = versions[0];
+  const newest = newestVersion(all.map((a) => a.scanner_version ?? ""));
 
   return (
     <div className="view">

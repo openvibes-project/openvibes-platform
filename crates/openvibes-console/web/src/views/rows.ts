@@ -41,6 +41,11 @@ export function selectFindings(all: readonly FindingGroup[], params: URLSearchPa
     && (!ruleSet || g.rule_set_id === ruleSet) && matches([g.latest_message, g.rule_id, g.rule_set_id], q));
 }
 
+/** The newest agent version in the fleet, compared by number ("0.10.0" after "0.9.0"). */
+export function newestVersion(versions: readonly string[]): string | undefined {
+  return versions.filter(Boolean).sort((a, b) => b.localeCompare(a, "en", { numeric: true }))[0];
+}
+
 export function selectAgents(all: readonly Agent[], params: URLSearchParams): Agent[] {
   const status = params.get("status");
   const q = params.get("q") ?? "";
