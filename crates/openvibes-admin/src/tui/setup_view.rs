@@ -20,8 +20,7 @@ use crate::setup::plan::{CaMode, Component};
 
 const FORM_KEYS: &str = "Tab screens  j/k move  space toggle  Enter edit/start  q quit";
 /// After a failed step: retry it, or any other action (#73). Fits 80 columns.
-const RUN_KEYS: &str =
-    "r retry failed step  c check  u update  x uninstall  m components  p ports  Esc  q";
+const RUN_KEYS: &str = "r retry  c check  u update  x uninstall  m components  p ports  Esc  q";
 /// Fits 80 columns.
 const DONE_KEYS: &str = "c check  r repair  u update  m components  p ports  x uninstall  Tab  q";
 
