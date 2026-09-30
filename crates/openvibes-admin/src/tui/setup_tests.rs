@@ -14,7 +14,7 @@ use super::{
     setup::Phase,
 };
 
-struct SetupHost {
+pub(super) struct SetupHost {
     set_up: bool,
     /// What each privileged call returns, in order.
     answers: RefCell<VecDeque<Result<String, HostError>>>,
@@ -96,7 +96,7 @@ fn app_taken(
     app
 }
 
-fn screen(app: &App<SetupHost>) -> String {
+pub(super) fn screen(app: &App<SetupHost>) -> String {
     let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
     terminal.draw(|frame| render(frame, app)).unwrap();
     let buffer = terminal.backend().buffer();
@@ -110,7 +110,7 @@ fn screen(app: &App<SetupHost>) -> String {
         .collect()
 }
 
-fn type_text(app: &mut App<SetupHost>, text: &str) {
+pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
     for c in text.chars() {
         app.key(Key::Char(c));
     }
@@ -275,7 +275,7 @@ fn rules_bring_distribution_and_the_finished_screen_shows_the_login() {
 
 const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
 
-fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+pub(super) fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
     let mut app = app(true, answers);
     app.host.plan = PLAN.into();
     app

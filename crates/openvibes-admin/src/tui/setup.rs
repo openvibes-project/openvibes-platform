@@ -238,25 +238,30 @@ impl<H: Host> App<H> {
             Phase::Running(_) => {}
             Phase::Update => self.update_key(key),
             Phase::Uninstall => self.uninstall_key(key),
+            // A stopped run keeps every other action (#73): the user's
+            // "Uninstall doesn't work" was x ignored after a failed Repair.
             Phase::Stopped(at) => match key {
                 Key::Char('r') => self.ask_password(After::Run(at)),
-                Key::Tab => self.leave_setup(),
-                Key::Char('q') => self.quit = true,
-                _ => {}
+                Key::Esc => self.setup.phase = Phase::Status,
+                _ => self.status_key(key),
             },
-            Phase::Finished | Phase::Status => match key {
-                Key::Char('c') => self.ask_password(After::Status),
-                Key::Char('r') => {
-                    self.setup.job_args.clear();
-                    self.ask_password(After::Job(Job::Repair));
-                }
-                Key::Char('m') => self.change_components(),
-                Key::Char('u') => self.open_update(),
-                Key::Char('x') => self.open_uninstall(),
-                Key::Tab => self.leave_setup(),
-                Key::Char('q') => self.quit = true,
-                _ => {}
-            },
+            Phase::Finished | Phase::Status => self.status_key(key),
+        }
+    }
+
+    fn status_key(&mut self, key: Key) {
+        match key {
+            Key::Char('c') => self.ask_password(After::Status),
+            Key::Char('r') => {
+                self.setup.job_args.clear();
+                self.ask_password(After::Job(Job::Repair));
+            }
+            Key::Char('m') => self.change_components(),
+            Key::Char('u') => self.open_update(),
+            Key::Char('x') => self.open_uninstall(),
+            Key::Tab => self.leave_setup(),
+            Key::Char('q') => self.quit = true,
+            _ => {}
         }
     }
 

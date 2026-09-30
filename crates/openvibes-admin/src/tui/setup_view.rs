@@ -19,7 +19,9 @@ use super::{
 use crate::setup::plan::{CaMode, Component};
 
 const FORM_KEYS: &str = "Tab screens  j/k move  space toggle  Enter edit/start  q quit";
-const RUN_KEYS: &str = "r retry from the failed step  Tab screens  q quit";
+/// After a failed step: retry it, or any other action (#73). Fits 80 columns.
+const RUN_KEYS: &str =
+    "r retry failed step  c check  u update  x uninstall  m components  Esc  Tab  q";
 const DONE_KEYS: &str = "c check  r repair  u update  m change components  x uninstall  Tab  q";
 
 pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
