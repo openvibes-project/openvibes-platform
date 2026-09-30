@@ -371,12 +371,22 @@ async fn each_suppression_scope_closes_matching_alarms_only() {
 }
 
 #[tokio::test]
-async fn recurrence_reopens_a_mitigated_alarm_only() {
+async fn recurrence_reopens_mitigated_and_expired_risk_only() {
     let (db, agent) = setup().await;
     let mut client = as_ingest(&db).await;
     let now = Utc::now();
     let t0 = at(now.timestamp_millis() - 60_000);
-    for (n, state) in ["mitigated", "false_positive"].into_iter().enumerate() {
+    let cases = [
+        ("mitigated", None, "open"),
+        ("false_positive", None, "false_positive"),
+        ("accepted_risk", Some(now - Duration::hours(1)), "open"),
+        (
+            "accepted_risk",
+            Some(now + Duration::days(30)),
+            "accepted_risk",
+        ),
+    ];
+    for (n, (state, until, _)) in cases.iter().enumerate() {
         let id = format!("alarm.{:032}", 300 + n);
         let first = row(&client, &alarm(&id, 1, t0, t0)).await;
         alarms::insert_batch(&mut client, &agent, 0, &[first], now)
@@ -387,8 +397,9 @@ async fn recurrence_reopens_a_mitigated_alarm_only() {
             .await
             .unwrap()
             .execute(
-                "UPDATE alarms SET state = $2, note = 'handled' WHERE alarm_id = $1",
-                &[&id, &state],
+                "UPDATE alarms SET state = $2, note = 'handled', accepted_until = $3
+                 WHERE alarm_id = $1",
+                &[&id, state, until],
             )
             .await
             .unwrap();
@@ -398,11 +409,9 @@ async fn recurrence_reopens_a_mitigated_alarm_only() {
             .unwrap();
     }
     let rows = stored(&client, &agent).await;
-    assert_eq!(
-        rows[0].2, "open",
-        "a mitigated alarm that recurs is open again"
-    );
-    assert_eq!(rows[1].2, "false_positive");
+    for (row, (state, until, expected)) in rows.iter().zip(cases) {
+        assert_eq!(row.2, expected, "{state} until {until:?}");
+    }
     drop(client);
     db.drop().await;
 }

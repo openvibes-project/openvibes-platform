@@ -194,15 +194,17 @@ pub async fn insert_batch(
         // delivers its queue serially.
         let known = transaction
             .query_opt(
-                "SELECT id, first_seen_day, count, last_seen, state FROM alarms
+                "SELECT id, first_seen_day, count, last_seen, state,
+                    state = 'accepted_risk' AND accepted_until <= $3 FROM alarms
                  WHERE agent_id = $1 AND alarm_id = $2 LIMIT 1",
-                &[&agent_id, &alarm.alarm_id],
+                &[&agent_id, &alarm.alarm_id, &now],
             )
             .await?;
         if let Some(known) = known {
             let (id, day): (i64, NaiveDate) = (known.get(0), known.get(1));
             let (count, last_seen, state): (i64, DateTime<Utc>, String) =
                 (known.get(2), known.get(3), known.get(4));
+            let risk_expired: bool = known.get(5);
             if alarm.count <= count && alarm.last_seen <= last_seen {
                 continue;
             }
@@ -214,12 +216,13 @@ pub async fn insert_batch(
                     &[&id, &day, &alarm.count, &alarm.last_seen],
                 )
                 .await?;
-            // Recurrence reopens a mitigated alarm, as findings do; a false
-            // positive or accepted risk stays closed.
-            if alarm.count > count && state == "mitigated" {
+            // Recurrence reopens a mitigated alarm, or one whose accepted
+            // risk has expired, as findings do; a false positive or an
+            // unexpired accepted risk stays closed.
+            if alarm.count > count && (state == "mitigated" || risk_expired) {
                 transaction
                     .execute(
-                        "UPDATE alarms SET state = 'open',
+                        "UPDATE alarms SET state = 'open', accepted_until = NULL,
                             triage_version = triage_version + 1,
                             triage_updated_at = $3, triage_updated_by = $4
                          WHERE id = $1 AND first_seen_day = $2",
@@ -230,7 +233,7 @@ pub async fn insert_batch(
                     &transaction,
                     id,
                     day,
-                    Some("mitigated"),
+                    Some(state.as_str()),
                     "open",
                     "recurred",
                     now,

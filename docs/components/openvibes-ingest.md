@@ -132,7 +132,8 @@ The usual request limits apply. Test: `tests/ca.rs`.
   stored, then 204: a batch queued through a long outage never stalls the
   agent. Storing is `platform_store::alarms::insert_batch`: a resend raises
   `count` and `last_seen` only, active suppressions close a new alarm as a
-  false positive, a recurrence reopens a mitigated one, and the agent's
+  false positive, a recurrence reopens a mitigated one (or one whose
+  accepted risk has expired), and the agent's
   largest `dropped_total` is kept.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
