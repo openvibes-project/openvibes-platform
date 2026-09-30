@@ -22,8 +22,10 @@ env:
 
 jobs:
   test:
+    # The name is a required check in the main ruleset; it keeps saying
+    # ubuntu-latest until an admin renames the check (board #29).
     name: Lint, audit, and tests (ubuntu-latest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:
@@ -129,7 +131,7 @@ jobs:
 
   fedora:
     name: RPMs (fedora:44)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     container: registry.fedoraproject.org/fedora:44
     steps:
@@ -240,7 +242,7 @@ jobs:
   integration:
     name: Agent integration (fedora:44)
     needs: fedora
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     container: registry.fedoraproject.org/fedora:44
     steps:
@@ -308,7 +310,7 @@ jobs:
     # covers the console RPM).
     name: End to end under systemd (platform and agent RPMs)
     needs: fedora
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout repository
@@ -334,7 +336,7 @@ jobs:
   setup-lifecycle:
     name: Setup life cycle under systemd (install, repair, update, uninstall)
     needs: fedora
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
       - name: Checkout repository
