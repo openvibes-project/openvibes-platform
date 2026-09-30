@@ -66,6 +66,7 @@ None.
 | invalid name or layout, 100 dashboards already, unknown role | 422 (validation lists `field_errors`, e.g. `layout.widgets[0].type`) |
 | database unavailable | 503 |
 | home dashboard deleted or no longer visible | `GET /me/home` answers `null` |
+| a tile with more than fits (e.g. Needs attention's 14 items) | the body scrolls, and a shade at the top or bottom edge shows that more lies past it |
 | a tile with nothing to show (no findings, no vulnerable host) | the tile says so ("All clear", "No host has an open vulnerability"), never a blank box; a failed read shows its error |
 
 ## How to test
