@@ -128,9 +128,15 @@ pub(super) fn readable(line: &str) -> String {
         .next()
         .and_then(|stamp| stamp.split_once('T'))
         .map_or("", |(_, rest)| rest.get(..8).unwrap_or(rest));
-    let text = |value: &serde_json::Value| match value {
-        serde_json::Value::String(text) => text.clone(),
-        other => other.to_string(),
+    // Decoding turns a JSON escape like `\u001b` back into a real control
+    // character, which ratatui would write to the terminal (reviewer on
+    // #112): escape every decoded piece again.
+    let text = |value: &serde_json::Value| {
+        let raw = match value {
+            serde_json::Value::String(text) => text.clone(),
+            other => other.to_string(),
+        };
+        safe(&raw)
     };
     let mut out = format!(
         "{time} {}",
@@ -142,15 +148,41 @@ pub(super) fn readable(line: &str) -> String {
             out.push_str(&text(message));
         }
         for (key, value) in fields.iter().filter(|(key, _)| *key != "message") {
-            out.push_str(&format!(" {key}={}", text(value)));
+            out.push_str(&format!(" {}={}", safe(key), text(value)));
         }
     }
     out
 }
 
+/// `text` with control characters escaped (`\u{1b}`), as the journal
+/// reader does for the raw line.
+fn safe(text: &str) -> String {
+    text.chars()
+        .map(|c| {
+            if c.is_control() {
+                c.escape_default().to_string()
+            } else {
+                c.to_string()
+            }
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::readable;
+
+    /// Reviewer on #112: a log field can carry outside text; decoded, a
+    /// JSON `\u001b` must not become a real escape sequence on screen.
+    #[test]
+    fn decoded_control_characters_stay_escaped() {
+        let line = "2026-09-30T17:02:10+02:00 h openvibes-ingest[1]: \
+                    {\"level\":\"WARN\",\"fields\":{\"message\":\"a\\u001b[31mb\",\
+                    \"k\\u0007\":\"x\\u009b2J\"}}";
+        let out = readable(line);
+        assert!(!out.chars().any(char::is_control), "{out:?}");
+        assert!(out.contains(r"a\u{1b}[31mb"), "{out:?}");
+    }
 
     #[test]
     fn tracing_json_reads_as_one_short_line() {
