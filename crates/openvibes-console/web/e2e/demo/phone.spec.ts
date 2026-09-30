@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { type Locator, expect, test } from "@playwright/test";
 
 // Board #55: the console on a 390px phone.
@@ -68,5 +69,10 @@ test("a phone offers no way into editing, which it cannot do", async ({ page }) 
   await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeHidden();
   // Someone looking for it is told why.
   await page.getByRole("button", { name: "Dashboard menu" }).click();
-  await expect(page.getByText("Editing needs a wider screen")).toBeVisible();
+  // A menu item, so screen readers moving through the menu announce it.
+  const note = page.getByRole("menuitem", { name: "Editing needs a wider screen" });
+  await expect(note).toBeVisible();
+  await expect(note).toHaveAttribute("aria-disabled", "true");
+  const axe = await new AxeBuilder({ page }).include(".menu__pop").analyze();
+  expect(axe.violations).toEqual([]);
 });
