@@ -109,6 +109,10 @@ impl<H: Host> App<H> {
             Key::Enter => {
                 if let Some(form) = &self.config.form {
                     let field = form.fields()[self.config.selected];
+                    if setup_owned(form.service, field.key) {
+                        self.message = Some(SETUP_OWNED.into());
+                        return;
+                    }
                     self.config.editing = Some(form.get(field.key).unwrap_or_default());
                     self.message = None;
                 }
@@ -235,4 +239,20 @@ impl<H: Host> App<H> {
             Err(error) => self.message = Some(error.to_string()),
         }
     }
+}
+
+/// Why a field Setup owns does not open for editing (board #78).
+const SETUP_OWNED: &str = "set by Setup: change ports with p (Change ports) on the Setup tab, \
+                           which checks them and opens the firewall";
+
+/// Listen addresses and the console's origin: Setup writes them from its
+/// plan, checks the ports, opens the firewall and keeps `public_origin` in
+/// step. Edited here, a Repair would undo them, and a changed console port
+/// would answer 421 until then (board #78).
+pub(super) fn setup_owned(service: Service, key: &str) -> bool {
+    matches!(
+        (service, key),
+        (Service::Ingest | Service::Distribution, "listen")
+            | (Service::Console, "development_listen" | "public_origin")
+    )
 }

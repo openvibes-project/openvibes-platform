@@ -520,3 +520,25 @@ fn enable_at_boot_asks_for_the_password() {
     );
     assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }
+
+/// Board #78: editing `listen` here moved a service past Setup's port
+/// check and firewall, and left `public_origin` stale (421). Setup owns
+/// these; the screen says where to change them.
+#[test]
+fn fields_setup_owns_are_read_only_here() {
+    let mut app = configuration(false);
+    assert_eq!(app.config.form.as_ref().unwrap().fields()[0].key, "listen");
+    app.key(Key::Enter);
+    assert!(app.config.editing.is_none(), "no edit starts");
+    assert!(
+        message(&app).contains("p (Change ports) on the Setup tab"),
+        "{}",
+        message(&app)
+    );
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("set by Setup"), "{text}");
+    // Other fields still edit.
+    set(&mut app, "max_inventory_in_flight", "200");
+    assert!(text.contains("listen"));
+    assert!(app.config.form.as_ref().unwrap().changes().len() == 1);
+}

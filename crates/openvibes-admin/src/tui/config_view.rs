@@ -105,6 +105,9 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
                 let skip = buffer.chars().count().saturating_sub(room);
                 format!("{}_", buffer.chars().skip(skip).collect::<String>())
             }
+            _ if super::configuration::setup_owned(form.service, field.key) => {
+                format!("{}  (set by Setup)", shown(form.get(field.key).as_ref()))
+            }
             _ => shown(form.get(field.key).as_ref()).to_owned(),
         };
         Row::new([marker.to_owned(), field.key.to_owned(), value])

@@ -81,6 +81,10 @@ OpenVIBES units).
 and is edited by hand). Only the fields listed for the service in
 `src/fields.rs` can be set; clearing a value (Enter on an empty value)
 removes the key, so the service default applies (shown as `(default)`).
+Fields Setup owns (ingest's and distribution's `listen`, the console's
+`development_listen` and `public_origin`) are shown `(set by Setup)` and do
+not open (#78): Setup checks those ports, opens the firewall and keeps the
+origin in step, so they change with `p` (Change ports) on the Setup tab.
 Every change is checked at once by the service's own configuration type,
 the same check the service runs at start, and the result is shown as
 `valid` or `invalid: REASON`; the help line under the form gives each
