@@ -346,8 +346,8 @@ fn a_second_run_is_refused() {
     assert!(crate::setup::system::lock(&fake.root).is_ok());
 }
 
-/// `ip -o -4 addr show scope global` on a host with Wi-Fi, Ethernet and
-/// container bridges.
+/// `ip -o addr show scope global` on a host with Wi-Fi, Ethernet, IPv6
+/// (a stable and a rotating privacy address) and container bridges.
 const IP_ADDR: &str = "\
 2: enp5s0    inet 192.168.1.10/24 brd 192.168.1.255 scope global dynamic noprefixroute enp5s0\\       valid_lft 54853sec preferred_lft 54853sec
 3: wlp4s0    inet 192.168.1.181/24 brd 192.168.1.255 scope global dynamic noprefixroute wlp4s0\\       valid_lft 51670sec preferred_lft 51670sec
@@ -357,6 +357,10 @@ const IP_ADDR: &str = "\
 8: lxdbr0    inet 10.10.10.1/24 brd 10.10.10.255 scope global lxdbr0\\       valid_lft forever preferred_lft forever
 9: wg0    inet 10.66.0.1/24 scope global wg0\\       valid_lft forever preferred_lft forever
 7: enp6s0    inet 10.0.0.5/24 brd 10.0.0.255 scope global enp6s0\\       valid_lft forever preferred_lft forever
+2: enp5s0    inet6 2001:db8:0:1::10/64 scope global dynamic mngtmpaddr noprefixroute \\       valid_lft 86000sec preferred_lft 14000sec
+2: enp5s0    inet6 2001:db8:0:1:a1b2:c3d4:e5f6:1234/64 scope global temporary dynamic \\       valid_lft 86000sec preferred_lft 14000sec
+2: enp5s0    inet6 2001:db8:0:1::99/64 scope global deprecated dynamic \\       valid_lft 600sec preferred_lft 0sec
+4: docker0    inet6 fd00:dead::1/64 scope global \\       valid_lft forever preferred_lft forever
 ";
 
 /// Board #71: the console opens by the host's IP over a VPN, so the
@@ -365,15 +369,7 @@ const IP_ADDR: &str = "\
 fn certificates_also_name_the_hosts_own_addresses() {
     let fake = Fake::new("cert-host-ips");
     fake.answer(
-        &[
-            "/usr/sbin/ip",
-            "-o",
-            "-4",
-            "addr",
-            "show",
-            "scope",
-            "global",
-        ],
+        &["/usr/sbin/ip", "-o", "addr", "show", "scope", "global"],
         0,
         IP_ADDR,
     );
@@ -402,6 +398,7 @@ fn certificates_also_name_the_hosts_own_addresses() {
             "192.168.1.10",
             "192.168.1.181",
             "10.66.0.1",
+            "2001:db8:0:1::10",
         ]
     );
 }

@@ -390,7 +390,8 @@ in `--repo-dir` with `localpkg_gpgcheck=1` unless `--allow-unsigned-local`),
 written once to `--root-key-out`, never over an existing file, otherwise
 deleted; careful: waits for the signed intermediate), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
-addresses from `ip -o -4 addr show scope global`, container and VM bridges
+and IPv6 addresses from `ip -o addr show scope global` (not rotating IPv6
+privacy or deprecated ones), container and VM bridges
 (docker, podman, lxd, incus, calico, flannel, vxlan…) left out, VPN
 interfaces kept, so the console opens by IP; a changed address makes the step Todo
 and Repair reissues), `console` (`public_origin`
