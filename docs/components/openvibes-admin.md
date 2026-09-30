@@ -43,7 +43,8 @@ setup-plan`, then runs one step per screen refresh through `helper
 setup-step`, showing each step's state. The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
 from that step, and every other action (`c`, `u`, `m`, `x`, below) still
-works from there; `Esc` returns to them without retrying (#73). Three wrong passwords close the prompt. The finished screen
+works from there; `Esc` returns to them without retrying (#73). Three
+wrong passwords close the prompt. The finished screen
 shows the root certificate's fingerprint, the console address and admin
 password (shown only then), and an endpoint enrollment token. On a set-up
 host, the Setup tab offers `c` check every step (`helper setup-status`),
