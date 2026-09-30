@@ -369,7 +369,8 @@ written once to `--root-key-out`, never over an existing file, otherwise
 deleted; careful: waits for the signed intermediate), `certificates`
 (hostname, `--san`, `localhost`, `127.0.0.1`, then the host's global IPv4
 addresses from `ip -o -4 addr show scope global`, container and VM bridges
-left out, so the console opens by IP; a changed address makes the step Todo
+(docker, podman, lxd, incus, calico, flannel, vxlan…) left out, VPN
+interfaces kept, so the console opens by IP; a changed address makes the step Todo
 and Repair reissues), `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
 port with direct TLS, and the `admin` account; a generated password is

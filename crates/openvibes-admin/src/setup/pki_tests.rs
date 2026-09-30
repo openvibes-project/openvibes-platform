@@ -354,6 +354,8 @@ const IP_ADDR: &str = "\
 4: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\\       valid_lft forever preferred_lft forever
 5: podman0    inet 10.88.0.1/16 brd 10.88.255.255 scope global podman0\\       valid_lft forever preferred_lft forever
 6: virbr0    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0\\       valid_lft forever preferred_lft forever
+8: lxdbr0    inet 10.10.10.1/24 brd 10.10.10.255 scope global lxdbr0\\       valid_lft forever preferred_lft forever
+9: wg0    inet 10.66.0.1/24 scope global wg0\\       valid_lft forever preferred_lft forever
 7: enp6s0    inet 10.0.0.5/24 brd 10.0.0.255 scope global enp6s0\\       valid_lft forever preferred_lft forever
 ";
 
@@ -399,6 +401,7 @@ fn certificates_also_name_the_hosts_own_addresses() {
             "127.0.0.1",
             "192.168.1.10",
             "192.168.1.181",
+            "10.66.0.1",
         ]
     );
 }

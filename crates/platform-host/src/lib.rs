@@ -196,7 +196,12 @@ pub const IP_ADDRESSES: [&str; 6] = ["-o", "-4", "addr", "show", "scope", "globa
 
 /// Interfaces whose addresses never name this host to a browser: container
 /// and VM bridges.
-const BRIDGES: [&str; 6] = ["docker", "podman", "br-", "veth", "virbr", "cni"];
+/// VPN interfaces (wg, tun, tailscale) stay: reaching the console over a
+/// VPN is why the addresses are named at all.
+const BRIDGES: [&str; 12] = [
+    "docker", "podman", "br-", "veth", "virbr", "cni", "lxcbr", "lxdbr", "incusbr", "cali",
+    "flannel", "vxlan",
+];
 
 /// The addresses in `ip -o -4 addr show scope global` output, bridges left
 /// out (board #71: the console opens by IP, so its certificate names them).
