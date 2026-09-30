@@ -39,7 +39,7 @@ export function Agents() {
           columns={[
             { key: "host", header: "Host", sort: (a) => a.hostname ?? a.id, render: (a) => <div className="cell-two"><span className="truncate">{a.hostname ?? "—"}</span><span className="mono subtle">{a.id}</span></div> },
             { key: "status", header: "Status", width: "110px", sort: (a) => a.status, render: (a) => <StatusBadge status={a.status} /> },
-            { key: "seen", header: "Last contact", width: "140px", sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} /></span> },
+            { key: "seen", header: "Last contact", width: "140px", hideBelow: 480, sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} /></span> },
             { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => a.scanner_version
               ? <span className={a.scanner_version === newest ? "mono" : "mono warn-text"} title={a.scanner_version === newest ? "Newest version in the fleet" : `Older than ${newest ?? ""}`}>{a.scanner_version}</span>
               : <span className="subtle">—</span> },

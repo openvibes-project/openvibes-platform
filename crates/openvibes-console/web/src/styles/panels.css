@@ -171,8 +171,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile-more { justify-self: start; font-size: 13px; }
 .tile-note p { margin: 0 0 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .grid { position: relative; margin: 0 24px 24px; }
-.grid--stacked { display: grid; gap: 12px; }
-.grid--stacked .tile { position: static; min-height: 140px; }
+.grid--stacked { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.grid--stacked .tile { position: static; min-height: 140px; grid-column: 1 / -1; }
+/* Phones: numbers two to a row, as tall as their content. */
+.grid--stacked .tile[data-type="number"] { grid-column: auto; min-height: 0; }
 .grid__empty { padding: 32px; justify-content: center; border: 2px dashed var(--line-strong); border-radius: var(--r-3); }
 .tile {
   position: absolute; display: flex; flex-direction: column; overflow: hidden; background: var(--surface);

@@ -34,7 +34,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className="rail__group">
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className="rail__item" href={nav.href(item.path)} aria-current={view === item.path ? "page" : undefined}
+                <a key={item.path} className="rail__item" href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
                   <span className="rail__label">{item.label}</span>
