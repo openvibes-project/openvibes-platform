@@ -28,7 +28,7 @@ concurrency:
 jobs:
   build:
     name: Console demo browser tests and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
       run:
@@ -82,7 +82,7 @@ jobs:
     name: Deploy to GitHub Pages
     if: github.event_name != 'pull_request'
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       pages: write
