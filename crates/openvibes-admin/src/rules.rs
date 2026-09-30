@@ -84,12 +84,17 @@ pub enum RulesCommand {
 #[derive(Subcommand)]
 pub enum TrustCommand {
     /// Trust an Ed25519 public key for a rule set (creating the set).
+    // Ids and keys may start with `-` (`-x` is a valid identifier; 1 key
+    // in 64): never read as flags (#63).
     Add {
         /// Rule set id.
+        #[arg(allow_hyphen_values = true)]
         rule_set: String,
         /// Issuer key id named in envelopes.
+        #[arg(allow_hyphen_values = true)]
         issuer_key_id: String,
         /// Public key, 32 bytes, base64url without padding.
+        #[arg(allow_hyphen_values = true)]
         public_key: String,
     },
     /// List trusted keys, removed ones included.
@@ -100,8 +105,10 @@ pub enum TrustCommand {
     /// Stop trusting a key; its id is never re-used.
     Remove {
         /// Rule set id.
+        #[arg(allow_hyphen_values = true)]
         rule_set: String,
         /// Issuer key id.
+        #[arg(allow_hyphen_values = true)]
         issuer_key_id: String,
     },
 }
