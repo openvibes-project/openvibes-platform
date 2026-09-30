@@ -292,17 +292,24 @@ async fn agent_command(
     client: &platform_store::Client,
     actor: &str,
 ) -> (Result<String, String>, Option<String>) {
-    let platform = match platform {
-        Some(name) => name.to_owned(),
-        None => match crate::setup::plan::Plan::load(std::path::Path::new("/")) {
-            Ok(plan) => plan.hostname,
-            Err(_) => {
-                return (
-                    Err("--platform is required (no Setup plan on this host)".into()),
-                    None,
-                );
-            }
-        },
+    // The plan's ports (defaults without a plan) travel with the line.
+    let plan = crate::setup::plan::Plan::load(std::path::Path::new("/")).ok();
+    let ports = plan.as_ref().map_or(
+        (
+            crate::setup::ports::INGEST_DEFAULT,
+            crate::setup::ports::DISTRIBUTION_DEFAULT,
+        ),
+        |plan| (plan.ingest_port, plan.distribution_port),
+    );
+    let platform = match (platform, plan) {
+        (Some(name), _) => name.to_owned(),
+        (None, Some(plan)) => plan.hostname,
+        (None, None) => {
+            return (
+                Err("--platform is required (no Setup plan on this host)".into()),
+                None,
+            );
+        }
     };
     if platform.parse::<std::net::IpAddr>().is_err()
         && let Err(error) = crate::setup::plan::check_name(&platform)
@@ -334,7 +341,7 @@ async fn agent_command(
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
             "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",
-            crate::setup::agent_install_command(&platform, &token, &fingerprint, rules.as_deref())
+            crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref())
         )
     });
     (output, target)

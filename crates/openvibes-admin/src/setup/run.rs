@@ -66,7 +66,8 @@ pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         ctx.succeeds(Systemctl, &["is-enabled", "--quiet", unit.name()])
             && ctx.succeeds(Systemctl, &["is-active", "--quiet", unit.name()])
     });
-    Ok(if running {
+    // Running but not on a planned port (a Repair after a move): not done.
+    Ok(if running && super::ports::check(ctx)?.is_empty() {
         StepState::Done(done_text(ctx, &units))
     } else {
         StepState::Todo
@@ -85,11 +86,16 @@ fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
 
 pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // Again here, not only at the start: the port may have been taken since.
-    super::ports::check(ctx)?;
+    let moved = super::ports::check(ctx)?;
+    super::ports::configure(ctx)?;
     let units = units(ctx);
     let mut args = vec!["enable", "--now"];
     args.extend(names(&units));
     ctx.ok(Systemctl, &args)?;
+    // Running on an old port: its configuration now says the new one.
+    for unit in moved {
+        ctx.ok(Systemctl, &["try-restart", unit])?;
+    }
     Ok(StepState::Done(done_text(ctx, &units)))
 }
 
@@ -117,10 +123,10 @@ pub(super) fn ports_for<R: Runner>(
 ) -> Result<Vec<String>, String> {
     let mut ports = Vec::new();
     if components.contains(&Component::Ingest) {
-        ports.push("18423/tcp".to_owned());
+        ports.push(format!("{}/tcp", ctx.plan.ingest_port));
     }
     if components.contains(&Component::Distribution) {
-        ports.push("18424/tcp".into());
+        ports.push(format!("{}/tcp", ctx.plan.distribution_port));
     }
     if components.contains(&Component::Console) {
         ports.extend(console_port(ctx)?);
@@ -162,7 +168,7 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
-    unit.ready_url().is_none_or(|url| {
+    let healthy = unit.ready_url().is_none_or(|url| {
         ctx.succeeds(
             Curl,
             &[
@@ -175,7 +181,31 @@ pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
                 url,
             ],
         )
-    })
+    });
+    healthy && listening(ctx, unit)
+}
+
+/// Whether `unit` accepts connections on its planned port too: health
+/// alone answered while a moved console listened nowhere (#61). Any TLS
+/// answer counts, even a refused client certificate; only "connection
+/// refused" (7) and a timeout (28) do not.
+fn listening<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
+    let Some(port) = super::ports::listen_port(ctx.plan, unit.name()) else {
+        return true;
+    };
+    let url = format!("https://127.0.0.1:{port}/");
+    let args = [
+        "--silent",
+        "--insecure",
+        "--max-time",
+        "2",
+        "--output",
+        "/dev/null",
+        url.as_str(),
+    ];
+    ctx.runner
+        .run(Curl, &args)
+        .is_ok_and(|out| !matches!(out.status, 7 | 28))
 }
 
 pub fn ready_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -237,6 +267,7 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     });
     let command = super::agent_install_command(
         &ctx.plan.hostname,
+        (ctx.plan.ingest_port, ctx.plan.distribution_port),
         &token,
         &super::pki::fingerprint(&root)?,
         rules.as_deref(),

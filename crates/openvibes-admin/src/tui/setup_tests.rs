@@ -163,7 +163,7 @@ fn start_writes_the_plan_with_the_password_then_runs_one_step_per_tick() {
         let calls = app.host.calls.borrow();
         assert_eq!(
             calls[0].0,
-            "setup-plan --components ingest,console,distribution,vulns,rules,agent --hostname platform.example.com --ca quick --root-key-out /home/alice/openvibes-root-ca.key --console-port 443"
+            "setup-plan --components ingest,console,distribution,vulns,rules,agent --hostname platform.example.com --ca quick --root-key-out /home/alice/openvibes-root-ca.key --console-port 443 --ingest-port 18423 --distribution-port 18424"
         );
         assert_eq!(calls[0].1, "pw pw pw");
     }
@@ -440,11 +440,11 @@ fn keep_data_uninstall_sends_no_confirmation() {
 fn a_taken_console_port_is_replaced_by_a_free_one_and_said_so() {
     let mut app = app_taken(false, vec![], vec![443, 8443]);
     let text = screen(&app);
-    assert!(text.contains("Console port:  8444"), "{text}");
     assert!(
-        text.contains("443 is taken by another process; 8444 is free"),
+        text.contains("Console port:  8444  (443 is in use)"),
         "{text}"
     );
+    assert!(text.contains("Start"), "the form fits 80×24:\n{text}");
     // The operator may type another port.
     while app.setup.row != super::setup::PORT_ROW {
         app.key(Key::Down);
@@ -454,10 +454,22 @@ fn a_taken_console_port_is_replaced_by_a_free_one_and_said_so() {
     app.key(Key::Backspace);
     type_text(&mut app, "50");
     app.key(Key::Enter);
+    let args = app.setup.plan_args().join(" ");
+    assert!(args.contains("--console-port 8450"), "{args}");
+}
+
+#[test]
+fn a_taken_ingest_port_moves_to_a_free_one_and_distribution_keeps_its_own() {
+    let app = app_taken(false, vec![], vec![18423]);
+    let text = screen(&app);
     assert!(
-        app.setup
-            .plan_args()
-            .ends_with(&["--console-port".into(), "8450".into()])
+        text.contains("Agent ports (ingest, distribution):  18425, 18424  (18423 is in use)"),
+        "{text}"
+    );
+    let args = app.setup.plan_args().join(" ");
+    assert!(
+        args.ends_with("--console-port 443 --ingest-port 18425 --distribution-port 18424"),
+        "{args}"
     );
 }
 
@@ -466,5 +478,9 @@ fn a_free_443_is_the_console_port() {
     let app = app(false, vec![]);
     let text = screen(&app);
     assert!(text.contains("Console port:  443"), "{text}");
+    assert!(
+        text.contains("Agent ports (ingest, distribution):  18423, 18424"),
+        "{text}"
+    );
     assert!(!text.contains("is taken"), "{text}");
 }

@@ -227,7 +227,9 @@ async fn main() -> ExitCode {
     {
         return match (*quick, *repair, *update, *uninstall) {
             (true, ..) => setup::quick(plan),
-            (_, true, ..) => setup::repair_all(),
+            (_, true, ..) => {
+                setup::repair_all((plan.console_port, plan.ingest_port, plan.distribution_port))
+            }
             (_, _, true, _) => setup::update_all(&setup::update::UpdateArgs {
                 backup: backup.clone(),
                 repo_dir: update_repo_dir.clone(),

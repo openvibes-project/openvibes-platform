@@ -5,6 +5,8 @@
 
 mod backup;
 mod base;
+#[cfg(test)]
+mod command_tests;
 mod console;
 #[cfg(test)]
 mod fake;
@@ -13,7 +15,11 @@ pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;
 pub mod plan;
+#[cfg(test)]
+mod plan_tests;
 pub(crate) mod ports;
+#[cfg(test)]
+mod ports_tests;
 pub mod remove;
 mod run;
 #[cfg(test)]
@@ -39,14 +45,28 @@ pub const BASELINE_KEY: &str = "/usr/share/openvibes/rules/baseline.key";
 
 /// The one line that installs and enrolls an agent (releases spec §5), with
 /// `--rules SET,ISSUER,KEY` when the platform has the baseline rules, so the
-/// agent trusts the same key the platform published with.
+/// agent trusts the same key the platform published with. `ports` are
+/// (ingest, distribution); each is named only when it is not the default,
+/// so a default platform prints the line every installer accepts.
 pub fn agent_install_command(
     platform: &str,
+    (ingest, distribution): (u16, u16),
     token: &str,
     fingerprint: &str,
     rules: Option<&str>,
 ) -> String {
-    let rules = rules.map_or_else(String::new, |rules| format!(" --rules {rules}"));
+    let platform = if ingest == ports::INGEST_DEFAULT {
+        platform.to_owned()
+    } else {
+        format!("{platform}:{ingest}")
+    };
+    let rules = rules.map_or_else(String::new, |rules| {
+        if distribution == ports::DISTRIBUTION_DEFAULT {
+            format!(" --rules {rules}")
+        } else {
+            format!(" --rules {rules} --distribution-port {distribution}")
+        }
+    });
     format!(
         "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
          --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}{rules}"
@@ -277,13 +297,34 @@ fn report(results: impl Iterator<Item = (&'static str, StepState)>) -> ExitCode 
 }
 
 /// `setup --repair`.
-pub fn repair_all() -> ExitCode {
+/// `setup --repair [--console-port N] [--ingest-port N] [--distribution-port N]`:
+/// given ports go into the plan first (#61), then every step is checked.
+pub fn repair_all(ports: (Option<u16>, Option<u16>, Option<u16>)) -> ExitCode {
     if let Err(code) = root_or_exit() {
         return code;
     }
     let (_lock, plan) = match begin() {
         Ok(v) => v,
         Err(code) => return code,
+    };
+    let plan = if ports == (None, None, None) {
+        plan
+    } else {
+        let plan = match plan.with_ports(ports.0, ports.1, ports.2) {
+            Ok(plan) => plan,
+            Err(error) => {
+                eprintln!("openvibes-admin: {error} (nothing changed)");
+                return ExitCode::from(2);
+            }
+        };
+        // Checked before the plan is saved: a taken port changes nothing.
+        if let Err(error) =
+            ports::check(&host_ctx(&plan, true)).and_then(|_| plan.save(Path::new("/")))
+        {
+            eprintln!("openvibes-admin: {error} (nothing changed)");
+            return ExitCode::FAILURE;
+        }
+        plan
     };
     if let Err(code) = setup_guard() {
         return code;
@@ -389,72 +430,5 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
         (true, _) => ExitCode::SUCCESS,
         (false, true) => ExitCode::from(3),
         (false, false) => ExitCode::FAILURE,
-    }
-}
-
-#[cfg(test)]
-mod command_tests {
-    #[test]
-    fn the_agent_install_command_is_one_line() {
-        assert_eq!(
-            super::agent_install_command("h.example", "T", "AB:CD", None),
-            "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
-             --agent --platform h.example --token T --ca-sha256 AB:CD"
-        );
-    }
-
-    #[test]
-    fn rules_ride_along_only_when_the_served_bundle_uses_that_key() {
-        const K: &str = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
-        const OTHER: &str = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
-        let line = format!("baseline openvibes-1 {K}\n");
-        let served = |set: &str, issuer: &str, key: &str| super::Served {
-            set: set.into(),
-            issuer: issuer.into(),
-            key: key.into(),
-        };
-        assert_eq!(
-            super::published_rules_arg(&line, &[served("baseline", "openvibes-1", K)]).as_deref(),
-            Some(format!("baseline,openvibes-1,{K}").as_str())
-        );
-        // Not published, another set, another signer, or another key for
-        // the same issuer: the agent could not verify what is served.
-        for others in [
-            vec![],
-            vec![served("other", "openvibes-1", K)],
-            vec![served("baseline", "org.rules", K)],
-            vec![served("baseline", "openvibes-1", OTHER)],
-        ] {
-            assert_eq!(
-                super::published_rules_arg(&line, &others),
-                None,
-                "{others:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn the_baseline_trust_line_rides_along() {
-        let key = "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n";
-        let rules = super::rules_arg(key);
-        assert_eq!(
-            rules.as_deref(),
-            Some("baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
-        );
-        assert!(
-            super::agent_install_command("h.example", "T", "AB:CD", rules.as_deref()).ends_with(
-                " --rules baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-            )
-        );
-        // Anything that could break the shell line or the installer's check
-        // is left out rather than quoted.
-        for bad in [
-            "baseline openvibes-1",
-            "baseline openvibes-1 A B",
-            "base line x y",
-            "b;rm x A",
-        ] {
-            assert_eq!(super::rules_arg(bad), None, "{bad}");
-        }
     }
 }
