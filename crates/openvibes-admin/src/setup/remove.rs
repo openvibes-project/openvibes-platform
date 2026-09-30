@@ -191,6 +191,8 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
             continue;
         }
         let fail = |error: std::io::Error| format!("{dir}: {error}");
+        // One level only: kept files sit directly in the directory (today
+        // just /etc/openvibes/admin.toml); a subdirectory goes whole.
         if kept.iter().any(|file| file.starts_with(&format!("{dir}/"))) {
             for entry in fs::read_dir(&path).map_err(fail)? {
                 let entry = entry.map_err(fail)?;

@@ -94,9 +94,11 @@ pub fn packages_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // #82: a configuration file deleted while its package stayed installed
     // (an interrupted Remove everything) is not put back by `install`;
     // `reinstall` restores it and leaves edited ones alone.
+    // `reinstall` needs the installed version in a repository; when it is
+    // gone (a newer release, a local file), `upgrade` also restores it.
     let missing = missing_config(ctx, &names);
-    if !missing.is_empty() {
-        dnf(ctx, "reinstall", &missing)?;
+    if !missing.is_empty() && dnf(ctx, "reinstall", &missing).is_err() {
+        dnf(ctx, "upgrade", &missing)?;
     }
     Ok(StepState::Done(format!("installed: {}", names.join(" "))))
 }
@@ -303,6 +305,34 @@ mod tests {
         assert_eq!(
             fake.call(&["/usr/bin/dnf", "reinstall"]),
             ["/usr/bin/dnf", "reinstall", "-y", "openvibes-admin"]
+        );
+    }
+
+    #[test]
+    fn a_missing_config_is_restored_by_an_upgrade_when_reinstall_cannot() {
+        let fake = Fake::new("packages-config-upgrade");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
+        fake.answer(
+            &[
+                "/usr/bin/rpm",
+                "-V",
+                "--nodeps",
+                "--nodigest",
+                "--nosignature",
+                "openvibes-admin",
+            ],
+            1,
+            "missing   c /etc/openvibes/admin.toml\n",
+        );
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        fake.answer(&["/usr/bin/dnf", "upgrade"], 0, "");
+        let plan = plan(&[Ingest]);
+        let state = run_step(&fake.ctx(&plan), Step::Packages);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(fake.called(&["/usr/bin/dnf", "reinstall"]));
+        assert_eq!(
+            fake.call(&["/usr/bin/dnf", "upgrade"]),
+            ["/usr/bin/dnf", "upgrade", "-y", "openvibes-admin"]
         );
     }
 
