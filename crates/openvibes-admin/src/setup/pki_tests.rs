@@ -345,3 +345,70 @@ fn a_second_run_is_refused() {
     drop(first);
     assert!(crate::setup::system::lock(&fake.root).is_ok());
 }
+
+/// `ip -o -4 addr show scope global` on a host with Wi-Fi, Ethernet and
+/// container bridges.
+const IP_ADDR: &str = "\
+2: enp5s0    inet 192.168.1.10/24 brd 192.168.1.255 scope global dynamic noprefixroute enp5s0\\       valid_lft 54853sec preferred_lft 54853sec
+3: wlp4s0    inet 192.168.1.181/24 brd 192.168.1.255 scope global dynamic noprefixroute wlp4s0\\       valid_lft 51670sec preferred_lft 51670sec
+4: docker0    inet 172.17.0.1/16 brd 172.17.255.255 scope global docker0\\       valid_lft forever preferred_lft forever
+5: podman0    inet 10.88.0.1/16 brd 10.88.255.255 scope global podman0\\       valid_lft forever preferred_lft forever
+6: virbr0    inet 192.168.122.1/24 brd 192.168.122.255 scope global virbr0\\       valid_lft forever preferred_lft forever
+7: enp6s0    inet 10.0.0.5/24 brd 10.0.0.255 scope global enp6s0\\       valid_lft forever preferred_lft forever
+";
+
+/// Board #71: the console opens by the host's IP over a VPN, so the
+/// certificate names its LAN addresses too, not container bridges'.
+#[test]
+fn certificates_also_name_the_hosts_own_addresses() {
+    let fake = Fake::new("cert-host-ips");
+    fake.answer(
+        &[
+            "/usr/sbin/ip",
+            "-o",
+            "-4",
+            "addr",
+            "show",
+            "scope",
+            "global",
+        ],
+        0,
+        IP_ADDR,
+    );
+    installed_certificates(
+        &fake,
+        &["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"],
+        60,
+    );
+    let state = super::check(
+        &fake.ctx(&plan(&[Ingest, Distribution])),
+        Step::Certificates,
+    );
+    assert_eq!(
+        state,
+        StepState::Todo,
+        "a new address needs a new certificate"
+    );
+    let names = super::pki::certificate_names(&fake.ctx(&plan(&[Ingest])));
+    assert_eq!(
+        names,
+        [
+            "platform.example.com",
+            "10.0.0.5",
+            "localhost",
+            "127.0.0.1",
+            "192.168.1.10",
+            "192.168.1.181",
+        ]
+    );
+}
+
+#[test]
+fn without_ip_the_certificate_keeps_the_planned_names() {
+    let fake = Fake::new("cert-no-ip");
+    let names = super::pki::certificate_names(&fake.ctx(&plan(&[Ingest])));
+    assert_eq!(
+        names,
+        ["platform.example.com", "10.0.0.5", "localhost", "127.0.0.1"]
+    );
+}

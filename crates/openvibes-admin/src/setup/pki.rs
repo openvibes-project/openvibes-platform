@@ -6,7 +6,10 @@ use std::fs;
 
 use platform_host::{
     StepState,
-    runner::{Program::Admin, Runner},
+    runner::{
+        Program::{Admin, Ip},
+        Runner,
+    },
 };
 
 use super::{
@@ -241,8 +244,23 @@ const TLS_NAMES: &str = "/etc/openvibes/tls/setup-names";
 /// Certificates this close to expiry are renewed (and Health reports them).
 pub(crate) const RENEW_DAYS: i64 = 14;
 
+/// The plan's names, then the host's own addresses (board #71: the console
+/// opens by IP over a VPN). An address that changes (DHCP) makes the check
+/// Todo, so Check shows it and Repair reissues; Health says so too. Without
+/// `ip`, just the plan's names.
+pub(crate) fn certificate_names<R: Runner>(ctx: &Ctx<R>) -> Vec<String> {
+    let mut names = ctx.plan.names();
+    let listing = ctx.ok(Ip, &platform_host::IP_ADDRESSES).unwrap_or_default();
+    for address in platform_host::host_addresses(&listing) {
+        if !names.contains(&address) {
+            names.push(address);
+        }
+    }
+    names
+}
+
 pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let names = ctx.plan.names();
+    let names = certificate_names(ctx);
     let wanted = format!("{}\n", names.join("\n"));
     let present = chosen(ctx).all(|tls| ctx.exists(tls.cert) && ctx.exists(tls.key));
     if !present || ctx.read(TLS_NAMES).ok().as_deref() != Some(wanted.as_str()) {
@@ -267,7 +285,7 @@ pub fn certificates_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> 
 }
 
 pub fn certificates_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let names = ctx.plan.names();
+    let names = certificate_names(ctx);
     fresh_stage(ctx)?;
     ctx.copy(
         INTERMEDIATE,

@@ -38,6 +38,8 @@ pub enum Program {
     Ss,
     /// A unit's last log line (Setup's readiness failure).
     Journalctl,
+    /// The host's addresses (Setup's server certificate names).
+    Ip,
 }
 
 impl Program {
@@ -61,6 +63,7 @@ impl Program {
             Program::Df => "/usr/bin/df",
             Program::Ss => "/usr/sbin/ss",
             Program::Journalctl => "/usr/bin/journalctl",
+            Program::Ip => "/usr/sbin/ip",
         }
     }
 }

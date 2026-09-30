@@ -8,7 +8,7 @@ use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
     runner::{
-        Program::{Curl, Df, Dnf, Logger, Rpm, Ss, Sudo, Systemctl},
+        Program::{Curl, Df, Dnf, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
         Runner,
     },
 };
@@ -318,6 +318,14 @@ impl<R: Runner> Host for Native<R> {
                 Err(error) => Some((path, Err(HostError::Failed(format!("{path}: {error}"))))),
             })
             .collect()
+    }
+
+    fn addresses(&self) -> Vec<String> {
+        self.run(Ip, &crate::IP_ADDRESSES)
+            .ok()
+            .filter(|out| out.status == 0)
+            .map(|out| crate::host_addresses(&out.stdout))
+            .unwrap_or_default()
     }
 
     fn listeners(&self, port: u16) -> Result<String, HostError> {

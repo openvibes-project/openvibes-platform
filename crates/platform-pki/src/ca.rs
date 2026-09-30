@@ -250,6 +250,32 @@ pub fn sha256_fingerprint(cert_pem: &str) -> Result<[u8; 32], PkiError> {
     digest.as_ref().try_into().map_err(|_| PkiError::Generation)
 }
 
+/// The DNS names and IP addresses the first certificate covers.
+pub fn subject_alt_names(cert_pem: &str) -> Result<Vec<String>, PkiError> {
+    use x509_parser::extensions::GeneralName;
+    let der = der_of(cert_pem)?;
+    let cert = parse(&der)?;
+    let Ok(Some(names)) = cert.subject_alternative_name() else {
+        return Ok(Vec::new());
+    };
+    Ok(names
+        .value
+        .general_names
+        .iter()
+        .filter_map(|name| match name {
+            GeneralName::DNSName(dns) => Some((*dns).to_owned()),
+            GeneralName::IPAddress(bytes) => match bytes.len() {
+                4 => Some(std::net::Ipv4Addr::from(<[u8; 4]>::try_from(*bytes).ok()?).to_string()),
+                16 => {
+                    Some(std::net::Ipv6Addr::from(<[u8; 16]>::try_from(*bytes).ok()?).to_string())
+                }
+                _ => None,
+            },
+            _ => None,
+        })
+        .collect())
+}
+
 /// End of validity of the first certificate.
 pub fn not_after(cert_pem: &str) -> Result<DateTime<Utc>, PkiError> {
     let der = der_of(cert_pem)?;

@@ -177,3 +177,24 @@ fn unreadable_rule_sets_are_a_problem() {
         "{got:?}"
     );
 }
+
+#[test]
+fn a_certificate_missing_one_of_the_hosts_addresses_is_a_problem() {
+    let now = Utc::now();
+    let root = platform_pki::generate_root(now).unwrap();
+    let issuer = platform_pki::Issuer::load(&root.cert_pem, &root.key_pem).unwrap();
+    let names = ["metabox-lnx".to_owned(), "192.168.1.10".to_owned()];
+    let pem = issuer.issue_server(&names, now).unwrap().cert_pem;
+    let certificate = [("/c.crt", Ok(pem))];
+    assert!(crate::tui::database::uncovered(&certificate, &["192.168.1.10".into()]).is_empty());
+    let moved = crate::tui::database::uncovered(
+        &certificate,
+        &["192.168.1.10".into(), "192.168.1.23".into()],
+    );
+    assert_eq!(moved.len(), 1);
+    assert!(moved[0].problem);
+    assert_eq!(
+        moved[0].text,
+        "/c.crt: does not cover 192.168.1.23 (this host): press r on Setup to repair"
+    );
+}

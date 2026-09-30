@@ -175,6 +175,10 @@ pub trait Host {
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
         Vec::new()
     }
+    /// This host's own global IPv4 addresses ([`host_addresses`]).
+    fn addresses(&self) -> Vec<String> {
+        Vec::new()
+    }
     /// Disk use of `/var/lib/pgsql` and each `/var/lib/openvibes-*`.
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         Ok(Vec::new())
@@ -185,4 +189,35 @@ pub trait Host {
         let _ = port;
         Ok(String::new())
     }
+}
+
+/// `ip` arguments listing the host's global IPv4 addresses.
+pub const IP_ADDRESSES: [&str; 6] = ["-o", "-4", "addr", "show", "scope", "global"];
+
+/// Interfaces whose addresses never name this host to a browser: container
+/// and VM bridges.
+const BRIDGES: [&str; 6] = ["docker", "podman", "br-", "veth", "virbr", "cni"];
+
+/// The addresses in `ip -o -4 addr show scope global` output, bridges left
+/// out (board #71: the console opens by IP, so its certificate names them).
+#[must_use]
+pub fn host_addresses(listing: &str) -> Vec<String> {
+    let mut addresses = Vec::new();
+    for line in listing.lines() {
+        // `2: enp5s0    inet 192.168.1.10/24 brd ...`
+        let mut fields = line.split_whitespace().skip(1);
+        let (Some(interface), Some("inet"), Some(address)) =
+            (fields.next(), fields.next(), fields.next())
+        else {
+            continue;
+        };
+        let address = address.split('/').next().unwrap_or_default();
+        if !BRIDGES.iter().any(|bridge| interface.starts_with(bridge))
+            && address.parse::<std::net::Ipv4Addr>().is_ok()
+            && !addresses.iter().any(|known| known == address)
+        {
+            addresses.push(address.to_owned());
+        }
+    }
+    addresses
 }
