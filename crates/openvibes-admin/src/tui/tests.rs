@@ -542,3 +542,23 @@ fn fields_setup_owns_are_read_only_here() {
     assert!(text.contains("listen"));
     assert!(app.config.form.as_ref().unwrap().changes().len() == 1);
 }
+
+/// Reviewer on #109: behind a reverse proxy the console's listener is the
+/// operator's, not Setup's; the origin stays Setup's either way.
+#[test]
+fn a_proxied_consoles_listener_stays_editable() {
+    use super::{configuration::setup_owned, form::Form};
+    let form = |mode: &str| {
+        Form::parse(
+            Service::Console,
+            &format!(
+                "transport_mode = \"{mode}\"\ndevelopment_listen = \"127.0.0.1:8080\"\n\
+                 public_origin = \"https://console.example\"\n"
+            ),
+        )
+        .unwrap()
+    };
+    assert!(setup_owned(&form("direct_tls"), "development_listen"));
+    assert!(!setup_owned(&form("reverse_proxy"), "development_listen"));
+    assert!(setup_owned(&form("reverse_proxy"), "public_origin"));
+}

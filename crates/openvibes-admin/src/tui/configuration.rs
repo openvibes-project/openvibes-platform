@@ -109,7 +109,7 @@ impl<H: Host> App<H> {
             Key::Enter => {
                 if let Some(form) = &self.config.form {
                     let field = form.fields()[self.config.selected];
-                    if setup_owned(form.service, field.key) {
+                    if setup_owned(form, field.key) {
                         self.message = Some(SETUP_OWNED.into());
                         return;
                     }
@@ -248,11 +248,16 @@ const SETUP_OWNED: &str = "set by Setup: change ports with p (Change ports) on t
 /// Listen addresses and the console's origin: Setup writes them from its
 /// plan, checks the ports, opens the firewall and keeps `public_origin` in
 /// step. Edited here, a Repair would undo them, and a changed console port
-/// would answer 421 until then (board #78).
-pub(super) fn setup_owned(service: Service, key: &str) -> bool {
-    matches!(
-        (service, key),
+/// would answer 421 until then (board #78). Behind a reverse proxy the
+/// console's listener is the operator's (Setup writes it only with direct
+/// TLS), so it stays editable there.
+pub(super) fn setup_owned(form: &Form, key: &str) -> bool {
+    match (form.service, key) {
         (Service::Ingest | Service::Distribution, "listen")
-            | (Service::Console, "development_listen" | "public_origin")
-    )
+        | (Service::Console, "public_origin") => true,
+        (Service::Console, "development_listen") => form
+            .get("transport_mode")
+            .is_none_or(|mode| mode.trim_matches('"') == "direct_tls"),
+        _ => false,
+    }
 }
