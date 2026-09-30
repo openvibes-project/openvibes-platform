@@ -299,7 +299,19 @@ async fn certificate_names_are_served_and_others_told_where_to_go() {
         body.contains(r#"href="https://metabox-lnx:8443/""#),
         "{body}"
     );
-    assert!(body.contains("This OpenVIBES console is at"), "{body}");
+    assert!(body.contains(">Open the console</a>"), "{body}");
+    assert!(
+        body.contains(r#"<p class="address">https://metabox-lnx:8443</p>"#),
+        "{body}"
+    );
+    // Board #81: the sign-in look, under the console's CSP (no inline style).
+    assert!(
+        body.contains(r#"<link rel="stylesheet" href="/misdirected/page.css">"#),
+        "{body}"
+    );
+    assert!(body.contains("/misdirected/wordmark-light.svg"), "{body}");
+    assert!(!body.contains("style="), "{body}");
+    assert!(!body.contains("certificate"), "plain words: {body}");
 }
 
 /// Reviewer on #99: a request without `Host` passes the host check, so its
@@ -340,6 +352,53 @@ async fn without_a_host_only_the_canonical_origin_may_log_in() {
         };
         assert_eq!(response.status(), expected, "{origin}");
     }
+}
+
+/// Board #81: the 421 page's own stylesheet and wordmarks load under any
+/// Host (they hold no data); nothing else does.
+#[tokio::test]
+async fn the_misdirected_page_assets_load_under_any_host() {
+    for (path, kind) in [
+        ("/misdirected/page.css", "text/css"),
+        ("/misdirected/wordmark-light.svg", "image/svg+xml"),
+        ("/misdirected/wordmark-dark.svg", "image/svg+xml"),
+    ] {
+        let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+            .await
+            .unwrap();
+        let response = authenticated_router(pool, "https://metabox-lnx:8443")
+            .oneshot(
+                Request::builder()
+                    .uri(path)
+                    .header(header::HOST, "192.0.2.7:8443")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert!(
+            response.headers()[header::CONTENT_TYPE]
+                .to_str()
+                .unwrap()
+                .starts_with(kind),
+            "{path}"
+        );
+    }
+    let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+        .await
+        .unwrap();
+    let response = authenticated_router(pool, "https://metabox-lnx:8443")
+        .oneshot(
+            Request::builder()
+                .uri("/misdirected/../api/v1/session")
+                .header(header::HOST, "192.0.2.7:8443")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
 }
 
 #[tokio::test]
