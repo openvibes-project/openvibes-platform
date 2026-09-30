@@ -724,6 +724,10 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(bearer_read.status(), StatusCode::OK);
+    // Board #54: agents are judged against this platform's own version.
+    let summary: Value =
+        serde_json::from_slice(&to_bytes(bearer_read.into_body(), 8192).await.unwrap()).unwrap();
+    assert_eq!(summary["platform_version"], env!("CARGO_PKG_VERSION"));
     let mixed_credentials = router
         .clone()
         .oneshot(

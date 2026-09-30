@@ -2822,6 +2822,9 @@ pub(crate) async fn authenticated_agent_summary(
                 stale: summary.stale.try_into().unwrap_or_default(),
                 revoked: summary.revoked.try_into().unwrap_or_default(),
                 imported: summary.imported.try_into().unwrap_or_default(),
+                // Agent and platform release in lockstep; if that ever
+                // changes, compare against the newest published agent RPM.
+                platform_version: env!("CARGO_PKG_VERSION").to_owned(),
             }),
         )
             .into_response(),

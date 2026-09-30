@@ -3718,7 +3718,8 @@
           "active",
           "stale",
           "revoked",
-          "imported"
+          "imported",
+          "platform_version"
         ],
         "properties": {
           "active": {
@@ -3732,6 +3733,10 @@
             "format": "int64",
             "description": "Number of visible imported hosts.",
             "minimum": 0
+          },
+          "platform_version": {
+            "type": "string",
+            "description": "This platform's version: agents older than it are shown as outdated.\nReadable by every signed-in role (it is in the packages anyway)."
           },
           "revoked": {
             "type": "integer",

@@ -29,7 +29,11 @@ the executable connects to PostgreSQL, requires schema version 26, and serves
 the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
-certificate routes, plus finding summary, latest, history, and grouped rule
+certificate routes (the agent summary also carries `platform_version`, the
+console's own version: the Agents view marks agents older than it, since
+agent and platform release together. It is readable by every signed-in
+role, being in the packages anyway, so nothing admin-only belongs next to
+it), plus finding summary, latest, history, and grouped rule
 reads. Vulnerability summary, prioritized list, and advisory/CVE detail are
 available under the caller's `vulnerabilities.read` scope. Access
 control has a global read inventory for roles, bindings, and asset groups,

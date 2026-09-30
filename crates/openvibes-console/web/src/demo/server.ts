@@ -183,7 +183,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   route("GET", "/api/v1/agents/summary", "agents.read", () => {
     const items = data.agents.filter((agent) => visible(agent.id));
     const count = (status: Agent["status"]) => items.filter((agent) => agent.status === status).length;
-    return json({ total: items.length, active: count("active"), stale: count("stale"), revoked: count("revoked"), imported: count("imported") });
+    // The demo fleet's newest agents run the demo platform's version.
+    return json({ total: items.length, active: count("active"), stale: count("stale"), revoked: count("revoked"), imported: count("imported"), platform_version: "0.4.2" });
   });
   route("GET", "/api/v1/agents/{id}", "agents.read", ({ id = "" }) => {
     const agent = agentById(id);

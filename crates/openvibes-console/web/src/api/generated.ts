@@ -889,6 +889,11 @@ export interface components {
              */
             imported: number;
             /**
+             * @description This platform's version: agents older than it are shown as outdated.
+             *     Readable by every signed-in role (it is in the packages anyway).
+             */
+            platform_version: string;
+            /**
              * Format: int64
              * @description Number of visible revoked agents.
              */
