@@ -578,8 +578,10 @@ async fn authenticated_host_only(
     next: middleware::Next,
 ) -> Response {
     // The 421 page's own look loads under any name: fixed files, no data.
+    // This layer is outside the others, so both answers get the console's
+    // security headers here (CSP, nosniff, framing; reviewer on #116).
     if let Some(response) = misdirected_asset(request.uri().path()) {
-        return response;
+        return public_security_headers(response).await;
     }
     let allowed = request.headers().get(header::HOST).is_none_or(|host| {
         host.to_str()
@@ -588,7 +590,7 @@ async fn authenticated_host_only(
     if allowed {
         next.run(request).await
     } else {
-        misdirected(&state.public_origin)
+        public_security_headers(misdirected(&state.public_origin)).await
     }
 }
 

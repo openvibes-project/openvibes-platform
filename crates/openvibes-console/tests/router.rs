@@ -286,6 +286,13 @@ async fn certificate_names_are_served_and_others_told_where_to_go() {
         .await
         .unwrap();
     assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+    // The console's own headers here too (reviewer on #116).
+    assert_eq!(response.headers()["x-content-type-options"], "nosniff");
+    assert!(
+        response
+            .headers()
+            .contains_key(header::CONTENT_SECURITY_POLICY)
+    );
     assert!(
         response.headers()[header::CONTENT_TYPE]
             .to_str()
@@ -377,6 +384,18 @@ async fn the_misdirected_page_assets_load_under_any_host() {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::OK, "{path}");
+        assert_eq!(
+            response.headers()["x-content-type-options"],
+            "nosniff",
+            "{path}"
+        );
+        assert!(
+            response.headers()[header::CONTENT_SECURITY_POLICY]
+                .to_str()
+                .unwrap()
+                .contains("style-src 'self'"),
+            "{path}"
+        );
         assert!(
             response.headers()[header::CONTENT_TYPE]
                 .to_str()
