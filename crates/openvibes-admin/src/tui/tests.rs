@@ -520,3 +520,84 @@ fn enable_at_boot_asks_for_the_password() {
     );
     assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }
+
+/// Board #78: editing `listen` here moved a service past Setup's port
+/// check and firewall, and left `public_origin` stale (421). Setup owns
+/// these; the screen says where to change them.
+#[test]
+fn fields_setup_owns_are_read_only_here() {
+    let mut app = configuration(false);
+    assert_eq!(app.config.form.as_ref().unwrap().fields()[0].key, "listen");
+    app.key(Key::Enter);
+    assert!(app.config.editing.is_none(), "no edit starts");
+    assert!(
+        message(&app).contains("p (Change ports) on the Setup tab"),
+        "{}",
+        message(&app)
+    );
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("set by Setup"), "{text}");
+    // Other fields still edit.
+    set(&mut app, "max_inventory_in_flight", "200");
+    assert!(text.contains("listen"));
+    assert!(app.config.form.as_ref().unwrap().changes().len() == 1);
+}
+
+/// Reviewer on #109: behind a reverse proxy the console's listener is the
+/// operator's, not Setup's; the origin stays Setup's either way.
+#[test]
+fn a_proxied_consoles_listener_stays_editable() {
+    use super::{configuration::setup_owned, form::Form};
+    let form = |mode: &str| {
+        Form::parse(
+            Service::Console,
+            &format!(
+                "transport_mode = \"{mode}\"\ndevelopment_listen = \"127.0.0.1:8080\"\n\
+                 public_origin = \"https://console.example\"\n"
+            ),
+        )
+        .unwrap()
+    };
+    assert!(setup_owned(&form("direct_tls"), "development_listen"));
+    assert!(!setup_owned(&form("reverse_proxy"), "development_listen"));
+    assert!(setup_owned(&form("reverse_proxy"), "public_origin"));
+}
+
+/// Board #78: Ctrl+U typed a literal "u", so "(empty: the service default)"
+/// was unreachable without many Backspaces.
+#[test]
+fn ctrl_u_clears_the_field_being_edited() {
+    let mut app = configuration(false);
+    while app.config.form.as_ref().unwrap().fields()[app.config.selected].key
+        != "max_inventory_in_flight"
+    {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    type_text(&mut app, "128");
+    assert_eq!(app.config.editing.as_deref(), Some("128"));
+    app.key(Key::ClearLine);
+    assert_eq!(app.config.editing.as_deref(), Some(""));
+}
+
+/// Board #78: Shift+Tab went forward like Tab.
+#[test]
+fn shift_tab_walks_the_screens_backwards() {
+    let mut app = app(false);
+    assert_eq!(app.tab, Tab::Services);
+    let mut seen = Vec::new();
+    for _ in 0..5 {
+        app.key(Key::BackTab);
+        seen.push(app.tab);
+    }
+    assert_eq!(
+        seen,
+        [
+            Tab::Setup,
+            Tab::Health,
+            Tab::Database,
+            Tab::Configuration,
+            Tab::Services
+        ]
+    );
+}

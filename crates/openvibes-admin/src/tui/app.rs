@@ -24,6 +24,10 @@ pub enum Key {
     Esc,
     Backspace,
     Tab,
+    /// Shift+Tab: the previous screen.
+    BackTab,
+    /// Ctrl+U: empty the field being edited.
+    ClearLine,
 }
 
 /// The screen shown.
@@ -114,6 +118,24 @@ impl<H: Host> App<H> {
     }
 
     /// One key, handled by the screen shown.
+    /// Opens `tab`, loading what it shows, as reaching it with Tab does.
+    pub(super) fn open(&mut self, tab: Tab) {
+        self.message = None;
+        match tab {
+            Tab::Setup => self.tab = Tab::Setup,
+            Tab::Services => {
+                self.tab = Tab::Services;
+                self.refresh();
+            }
+            Tab::Configuration => {
+                self.tab = Tab::Configuration;
+                self.load_config();
+            }
+            Tab::Database => self.open_database(),
+            Tab::Health => self.open_health(),
+        }
+    }
+
     pub fn key(&mut self, key: Key) {
         match self.tab {
             Tab::Setup => self.setup_key(key),
@@ -177,11 +199,8 @@ impl<H: Host> App<H> {
                 self.refresh();
                 self.load_logs();
             }
-            Key::Tab => {
-                self.tab = Tab::Configuration;
-                self.message = None;
-                self.load_config();
-            }
+            Key::Tab => self.open(Tab::Configuration),
+            Key::BackTab => self.open(Tab::Setup),
             Key::Char('q') => self.quit = true,
             _ => {}
         }

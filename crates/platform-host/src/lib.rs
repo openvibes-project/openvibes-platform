@@ -136,7 +136,8 @@ impl std::fmt::Display for HostError {
             ),
             HostError::WrongPassword => f.write_str("wrong password"),
             HostError::NotSudoer => f.write_str(
-                "this needs sudo rights (on Fedora: membership of wheel); ask an administrator",
+                "this needs sudo rights (on Fedora: membership of wheel; just added? log out and in \
+                 again); ask an administrator",
             ),
             HostError::Failed(text) => write!(f, "failed: {text}"),
             HostError::Io(text) => write!(f, "could not run: {text}"),

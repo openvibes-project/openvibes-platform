@@ -736,3 +736,79 @@ fn a_status_check_is_journalled_but_not_noted_in_the_audit_log() {
     assert_eq!(calls.len(), 2, "no audit note: {calls:?}");
     assert!(calls[1][3].ends_with(" setup-status ok"), "{:?}", calls[1]);
 }
+
+/// sudo's first-use lecture (board #75), as sudo 1.9 prints it to stderr.
+const LECTURE: &str = "\nWe trust you have received the usual lecture from the local System\n\
+Administrator. It usually boils down to these three things:\n\n    #1) Respect the privacy of others.\n    \
+#2) Think before you type.\n    #3) With great power comes great responsibility.\n\n\
+For security reasons, the password you type will not be visible.\n\n";
+
+fn helper(verb: &'static str) -> Vec<&'static str> {
+    vec![
+        "/usr/bin/sudo",
+        "-S",
+        "-k",
+        "-p",
+        "",
+        "/usr/bin/openvibes-admin",
+        "helper",
+        verb,
+    ]
+}
+
+/// Board #75: a new operator's first privileged action showed "failed: We
+/// trust you have received the usual lecture…" instead of the real cause.
+#[test]
+fn sudos_lecture_never_stands_in_for_the_error() {
+    let host = fake(vec![
+        (
+            helper("setup-status"),
+            out(
+                1,
+                "",
+                &format!("{LECTURE}sudo: 1 incorrect password attempt\n"),
+            ),
+        ),
+        (
+            helper("unit-enable"),
+            out(
+                1,
+                "",
+                &format!(
+                    "{LECTURE}Sorry, user alice is not allowed to execute \
+                     '/usr/bin/openvibes-admin helper unit-enable ingest' as root on metabox.\n"
+                ),
+            ),
+        ),
+        (
+            helper("unit-disable"),
+            out(
+                1,
+                "",
+                &format!("{LECTURE}openvibes-admin helper: database unavailable\n"),
+            ),
+        ),
+        (helper("setup-step"), out(0, "done\tok\n", LECTURE)),
+        (vec!["/usr/bin/logger"], out(0, "", "")),
+    ]);
+    let password = Secret::new("pw".into());
+    assert_eq!(
+        host.privileged(Privileged::SetupStatus, &password),
+        Err(HostError::WrongPassword)
+    );
+    assert_eq!(
+        host.privileged(Privileged::UnitEnable(Unit::Ingest), &password),
+        Err(HostError::NotSudoer)
+    );
+    assert_eq!(
+        host.privileged(Privileged::UnitDisable(Unit::Ingest), &password),
+        Err(HostError::Failed(
+            "openvibes-admin helper: database unavailable".into()
+        ))
+    );
+    assert_eq!(
+        host.privileged(Privileged::SetupStep(Step::Ca), &password)
+            .unwrap(),
+        "done\tok\n"
+    );
+}

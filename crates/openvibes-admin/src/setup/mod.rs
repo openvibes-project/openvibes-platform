@@ -374,8 +374,14 @@ pub fn repair_all(
         .all(|(_, state)| matches!(state, StepState::Done(_) | StepState::Skipped(_)))
     {
         match ports::close_old(&ctx, &old) {
-            Ok(closed) if !closed.is_empty() => println!("Firewall: closed {}", closed.join(" ")),
-            Ok(_) => {}
+            Ok((closed, kept)) => {
+                if !closed.is_empty() {
+                    println!("Firewall: closed {}", closed.join(" "));
+                }
+                for line in kept {
+                    println!("Firewall: {line}");
+                }
+            }
             Err(error) => eprintln!("openvibes-admin: {error}"),
         }
     }

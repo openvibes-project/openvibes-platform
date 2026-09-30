@@ -37,9 +37,10 @@ person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. `Tab` switches between the screens (Setup, Services,
-Configuration, Database, Health). Every screen starts with the OpenVIBES
-wordmark (one line, `OpenVIBES`, the tabs and the version, on a terminal
-under 30 rows, #78; otherwise six rows,
+Configuration, Database, Health), `Shift+Tab` back. In any field being edited,
+`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters).
+Every screen starts with the OpenVIBES wordmark (one line, `OpenVIBES`, the
+tabs and the version, on a terminal under 30 rows, #78; otherwise six rows,
 figlet's standard font: "Open" in white, "VIBES" in the brand teal
 `#36b9e0`), the tabs on its last row (the current one highlighted), and the
 version on the right; with `NO_COLOR` set it is plain text.
@@ -51,7 +52,9 @@ names or addresses, CA mode (quick or careful) and the root key file.
 `Start` asks for the user's password once (masked; the user needs sudo
 rights, not operator membership), writes the plan through `helper
 setup-plan`, then runs one step per screen refresh through `helper
-setup-step`, showing each step's state. The first step that fails or waits
+setup-step`, showing each step's state on one line (cut with "…" at the
+screen's width; the step a run stopped at has its whole detail under the
+list). The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
 from that step, and every other action (`c`, `u`, `m`, `x`, below) still
 works from there; `Esc` returns to them without retrying (#73). Three
@@ -62,7 +65,16 @@ host, the Setup tab offers `c` check every step (`helper setup-status`),
 `r` repair (every step with `--repair`: never a new CA), `u` update (the
 installed OpenVIBES packages with any newer version, a backup file, then
 the update job), `m` change components (the form filled from `setup.toml`;
-added components are installed, unticked ones removed keeping data) and
+added components are installed, unticked ones removed keeping data, ports
+included), `p` change ports (the same form, on the port rows, #69; moving
+the agent ports takes a second Enter on Start, since agents on other hosts
+keep calling the old ones until their install line is re-run; the ports a
+plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
+`helper setup-plan` and closed in firewalld once Readiness is done, as the
+CLI's Repair does; only ports the Firewall step itself opened are closed, as
+recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
+never Setup's; installs from before the record close nothing), and one another
+program listens on, per `ss`, stays open with who uses it) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
 Only rows on screen take the focus: with keep data, one `j` goes from the
@@ -74,7 +86,9 @@ once. The steps are those of
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
 `llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
 installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
-`-`), and since when; below, the selected unit's last 50 journal lines.
+`-`), and since when; below, the selected unit's last 50 journal lines,
+tracing JSON shown as `HH:MM:SS LEVEL message key=value…` (fields in key
+order; other lines as they are).
 Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
 `y/n`; the job is queued and the state follows on the next refresh), `R`
 refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
@@ -92,6 +106,10 @@ OpenVIBES units).
 and is edited by hand). Only the fields listed for the service in
 `src/fields.rs` can be set; clearing a value (Enter on an empty value)
 removes the key, so the service default applies (shown as `(default)`).
+Fields Setup owns (ingest's and distribution's `listen`, the console's
+`development_listen` with direct TLS, and `public_origin`) are shown `(set by Setup)` and do
+not open (#78): Setup checks those ports, opens the firewall and keeps the
+origin in step, so they change with `p` (Change ports) on the Setup tab.
 Every change is checked at once by the service's own configuration type,
 the same check the service runs at start, and the result is shown as
 `valid` or `invalid: REASON`; the help line under the form gives each

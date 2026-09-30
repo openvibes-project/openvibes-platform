@@ -292,7 +292,8 @@ fn a_set_up_host_offers_the_maintenance_actions() {
         "c check",
         "r repair",
         "u update",
-        "m change components",
+        "m components",
+        "p ports",
         "x uninstall",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
@@ -483,4 +484,117 @@ fn a_free_443_is_the_console_port() {
         "{text}"
     );
     assert!(!text.contains("is taken"), "{text}");
+}
+
+/// A set-up host whose console already moved to 8443 (board #69).
+fn set_up_on_8443() -> App<SetupHost> {
+    let mut app = set_up(vec![]);
+    app.host.plan =
+        format!("{PLAN}console_port = 8443\ningest_port = 18423\ndistribution_port = 18424\n");
+    app.tab = Tab::Setup;
+    app
+}
+
+#[test]
+fn a_set_up_host_changes_its_ports_from_the_tui() {
+    // Board #69: the port rows existed only before the first install.
+    let mut app = set_up_on_8443();
+    app.key(Key::Char('p'));
+    assert_eq!(app.setup.phase, Phase::Form);
+    assert_eq!(
+        app.setup.row,
+        super::setup::PORT_ROW,
+        "the cursor is on the ports"
+    );
+    let text = screen(&app);
+    assert!(
+        text.contains("Console port:  8443"),
+        "the saved port, not 443:\n{text}"
+    );
+    app.key(Key::Enter);
+    app.key(Key::Backspace);
+    type_text(&mut app, "4");
+    app.key(Key::Enter);
+    start(&mut app, "pw");
+    let calls = app.host.calls.borrow();
+    assert!(
+        calls[0]
+            .0
+            .ends_with("--console-port 8444 --ingest-port 18423 --distribution-port 18424"),
+        "{}",
+        calls[0].0
+    );
+}
+
+#[test]
+fn changing_components_keeps_the_saved_ports() {
+    let mut app = set_up_on_8443();
+    app.key(Key::Char('m'));
+    assert_eq!(app.setup.console_port, "8443");
+    assert_eq!(app.setup.agent_ports, "18423, 18424");
+}
+
+#[test]
+fn moving_an_agent_port_asks_for_a_second_enter() {
+    let mut app = set_up_on_8443();
+    app.key(Key::Char('p'));
+    app.key(Key::Down); // agent ports
+    app.key(Key::Enter);
+    for _ in 0..5 {
+        app.key(Key::Backspace);
+    }
+    type_text(&mut app, "18500");
+    app.key(Key::Enter);
+    while app.setup.row != super::setup::START_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert_eq!(
+        app.setup.phase,
+        Phase::Form,
+        "not yet: the operator is warned first"
+    );
+    let message = app.message.clone().unwrap_or_default();
+    assert!(message.contains("agents on other hosts"), "{message}");
+    app.key(Key::Enter);
+    assert!(
+        matches!(app.setup.phase, Phase::Password(_)),
+        "{:?}",
+        app.setup.phase
+    );
+}
+
+/// Board #78: long step details wrapped, and the list ran off the bottom
+/// (reviewer at 120x36): each step is one line, and the failed step's full
+/// reason is under the list.
+#[test]
+fn every_step_fits_and_the_failure_is_in_full() {
+    use platform_host::StepState;
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.setup.job = super::jobs::Job::Repair;
+    let steps = app.setup.job.titles().len();
+    let long = "a detail long enough to wrap twice on a wide terminal, ".repeat(4);
+    app.setup.states = (0..steps)
+        .map(|index| Some(StepState::Done(format!("{index} {long}"))))
+        .collect();
+    let failed = steps - 2;
+    app.setup.states[failed] = Some(StepState::Failed(format!("the whole reason: {long}END")));
+    app.setup.states[steps - 1] = None;
+    app.setup.phase = Phase::Stopped(failed);
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
+    terminal.draw(|frame| render(frame, &app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let text: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                + "\n"
+        })
+        .collect();
+    for title in app.setup.job.titles() {
+        assert!(text.contains(title), "missing step {title:?} in\n{text}");
+    }
+    assert!(text.contains("END"), "the failure in full:\n{text}");
 }

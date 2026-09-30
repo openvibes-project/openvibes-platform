@@ -64,9 +64,13 @@ jobs:
           cargo fetch --locked
 
       - name: Install console brand renderer
+        # A stalled Ubuntu mirror once held this step until the job's 30
+        # minutes ran out (#105, #106): fail fast and retry instead.
+        timeout-minutes: 5
         run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends imagemagick librsvg2-bin
+          apt=(sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          "${apt[@]}" update
+          "${apt[@]}" install --no-install-recommends imagemagick librsvg2-bin
 
       - name: Build and validate console frontend
         run: bash scripts/build-console.sh
