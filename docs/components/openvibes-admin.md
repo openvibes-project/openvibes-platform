@@ -37,7 +37,8 @@ person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. `Tab` switches between the screens (Setup, Services,
-Configuration, Database, Health). Every screen starts with the OpenVIBES wordmark (six rows,
+Configuration, Database, Health), `Shift+Tab` back. In any field being edited,
+`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters). Every screen starts with the OpenVIBES wordmark (six rows,
 figlet's standard font: "Open" in white, "VIBES" in the brand teal
 `#36b9e0`), the tabs on its last row (the current one highlighted), and the
 version on the right; with `NO_COLOR` set it is plain text.
@@ -49,7 +50,9 @@ names or addresses, CA mode (quick or careful) and the root key file.
 `Start` asks for the user's password once (masked; the user needs sudo
 rights, not operator membership), writes the plan through `helper
 setup-plan`, then runs one step per screen refresh through `helper
-setup-step`, showing each step's state. The first step that fails or waits
+setup-step`, showing each step's state on one line (cut with "…" at the
+screen's width; the step a run stopped at has its whole detail under the
+list). The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
 from that step, and every other action (`c`, `u`, `m`, `x`, below) still
 works from there; `Esc` returns to them without retrying (#73). Three
@@ -85,7 +88,9 @@ once. The steps are those of
 **Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
 `llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
 installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
-`-`), and since when; below, the selected unit's last 50 journal lines.
+`-`), and since when; below, the selected unit's last 50 journal lines,
+tracing JSON shown as `HH:MM:SS LEVEL message key=value…` (fields in key
+order; other lines as they are).
 Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
 `y/n`; the job is queued and the state follows on the next refresh), `R`
 refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read

@@ -617,3 +617,38 @@ fn a_default_port_held_while_our_unit_is_down_is_named() {
         );
     }
 }
+
+/// Board #78: long step details wrapped, and the list ran off the bottom
+/// (reviewer at 120x36): each step is one line, and the failed step's full
+/// reason is under the list.
+#[test]
+fn every_step_fits_and_the_failure_is_in_full() {
+    use platform_host::StepState;
+    let mut app = set_up(vec![]);
+    app.tab = Tab::Setup;
+    app.setup.job = super::jobs::Job::Repair;
+    let steps = app.setup.job.titles().len();
+    let long = "a detail long enough to wrap twice on a wide terminal, ".repeat(4);
+    app.setup.states = (0..steps)
+        .map(|index| Some(StepState::Done(format!("{index} {long}"))))
+        .collect();
+    let failed = steps - 2;
+    app.setup.states[failed] = Some(StepState::Failed(format!("the whole reason: {long}END")));
+    app.setup.states[steps - 1] = None;
+    app.setup.phase = Phase::Stopped(failed);
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).unwrap();
+    terminal.draw(|frame| render(frame, &app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    let text: String = (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                + "\n"
+        })
+        .collect();
+    for title in app.setup.job.titles() {
+        assert!(text.contains(title), "missing step {title:?} in\n{text}");
+    }
+    assert!(text.contains("END"), "the failure in full:\n{text}");
+}
