@@ -226,13 +226,20 @@ impl World {
         .await
     }
 
-    pub async fn stop(mut self) {
+    /// Shuts the server down and waits for it; nothing else, so a test can
+    /// time the drain alone (#80). A second call does nothing.
+    pub async fn stop_server(&mut self) {
         if let Some(shutdown) = self.shutdown.take() {
             let _ = shutdown.send(());
         }
         if let Some(server) = self.server.take() {
             let _ = server.await;
         }
+    }
+
+    /// Stops the server, then drops the test database and files.
+    pub async fn stop(mut self) {
+        self.stop_server().await;
         let admin = platform_store::connect(&self.admin_url).await.unwrap();
         let _ = admin
             .get()
