@@ -101,6 +101,21 @@ test("a service account is created and issues a token shown once", async ({ page
   await expect(page.locator(".secret")).toContainText("ovst_demo_");
 });
 
+test("revoking a service token asks first (board #85)", async ({ page }) => {
+  await page.goto("/service-accounts");
+  await page.getByRole("button", { name: "New account" }).click();
+  await page.getByLabel("Name").fill("Report job");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByLabel("Token label").fill("weekly");
+  await page.getByRole("button", { name: "Issue" }).click();
+  const row = page.locator(".inspector tbody tr").filter({ hasText: "weekly" });
+  await row.getByRole("button", { name: "Revoke" }).click();
+  await expect(row).toContainText("Revoke weekly? Whatever uses it stops working at once.");
+  await expect(row).toContainText("Active");
+  await row.getByRole("button", { name: "Confirm" }).click();
+  await expect(row).toContainText("Revoked");
+});
+
 test("audit retention changes from its panel", async ({ page }) => {
   await page.goto("/audit");
   await page.getByRole("button", { name: /Kept 365 days/ }).click();
