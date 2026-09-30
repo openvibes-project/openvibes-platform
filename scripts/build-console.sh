@@ -80,9 +80,9 @@ if [[ -n "${offline_cache_dir}" ]]; then
         printf 'warning: network namespace unavailable; relying on npm --offline and the validated cache\n' >&2
     fi
     "${npm_network_namespace[@]}" npm cache verify --cache "${offline_cache_dir}"
-    "${npm_network_namespace[@]}" npm ci --offline --no-audit --no-fund --cache "${offline_cache_dir}"
+    "${npm_network_namespace[@]}" npm ci --ignore-scripts --offline --no-audit --no-fund --cache "${offline_cache_dir}"
 else
-    npm ci --no-audit --no-fund
+    npm ci --ignore-scripts --no-audit --no-fund
 fi
 "${npm_network_namespace[@]}" npm run check:api
 "${npm_network_namespace[@]}" npm run lint

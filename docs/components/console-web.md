@@ -151,7 +151,7 @@ correctness:
 
 ```sh
 cd crates/openvibes-console/web
-npm ci
+npm ci --ignore-scripts      # no dependency install scripts; esbuild's binary is an optional dependency
 npm run lint && npm run typecheck
 npm test                     # location, client, table, source, contract, demo server
 npm run test:e2e:demo        # demo build: smoke, dashboards + axe (both themes), Chromium and Firefox

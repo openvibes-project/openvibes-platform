@@ -81,8 +81,8 @@ jobs:
 
       - name: Install pinned console browsers
         run: >-
-          npm --prefix crates/openvibes-console/web exec --
-          playwright install --with-deps chromium firefox webkit
+          crates/openvibes-console/web/node_modules/.bin/playwright
+          install --with-deps chromium firefox webkit
 
       - name: Test console in real browsers
         run: bash scripts/test-console-e2e.sh

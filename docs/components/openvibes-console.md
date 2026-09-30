@@ -353,7 +353,7 @@ checksum sidecar. It contains npm's content-addressed cache, the lock digest,
 and the target platform, but no `node_modules`. The networked cache-preparation
 stage is separate from packaging. `scripts/check-console-npm-cache.sh ARCHIVE`
 checks the sidecar, allow-lists archive paths, refuses links and special files,
-confirms the current lock digest and platform, then runs `npm ci --offline`
+confirms the current lock digest and platform, then runs `npm ci --ignore-scripts --offline`
 and a Vite build in a scratch directory. Packaging extraction also requires an
 independently pinned digest from trusted RPM source metadata:
 `scripts/check-console-npm-cache.sh ARCHIVE CACHE_DIR EXPECTED_SHA256`.
