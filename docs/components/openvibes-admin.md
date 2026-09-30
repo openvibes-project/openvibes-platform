@@ -51,7 +51,10 @@ host, the Setup tab offers `c` check every step (`helper setup-status`),
 `r` repair (every step with `--repair`: never a new CA), `u` update (the
 installed OpenVIBES packages with any newer version, a backup file, then
 the update job), `m` change components (the form filled from `setup.toml`;
-added components are installed, unticked ones removed keeping data) and
+added components are installed, unticked ones removed keeping data, ports
+included), `p` change ports (the same form, on the port rows, #69; moving
+the agent ports takes a second Enter on Start, since agents on other hosts
+keep calling the old ones until their install line is re-run) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
 Only rows on screen take the focus: with keep data, one `j` goes from the
