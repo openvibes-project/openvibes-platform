@@ -222,7 +222,16 @@ mod tests {
         // Statement starts that change rows, and clauses that drop or
         // retype stored columns or tables.
         const STARTS: [&str; 3] = ["update ", "delete from", "truncate"];
-        const CLAUSES: [&str; 4] = ["drop column", "drop table", " type ", "rename column"];
+        const CLAUSES: [&str; 7] = [
+            "drop column",
+            "drop table",
+            " type ",
+            "rename column",
+            // An upsert rewrites rows; a dropped schema or view loses them.
+            "do update",
+            "drop schema",
+            "drop materialized view",
+        ];
         for (version, sql) in MIGRATIONS {
             let changes = sql
                 .lines()
