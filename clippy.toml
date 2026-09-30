@@ -1,8 +1,9 @@
 # Security invariants from security.md, enforced by `cargo clippy -D warnings`.
 # Exceptions, each allowed at its call site with a reason: the admin TUI's
-# host backend (platform-host SystemRunner) and its root helper
-# (openvibes-admin helper), which run fixed commands, never a shell
-# (admin TUI spec §4).
+# host backend (platform-host SystemRunner), its root helper
+# (openvibes-admin helper), and the CLI starting itself again as its
+# service account (openvibes-admin run_as, #79), which run fixed commands,
+# never a shell (admin TUI spec §4).
 disallowed-types = [
     { path = "std::process::Command", reason = "security.md 2.3: no shells or external processes" },
 ]

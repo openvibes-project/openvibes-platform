@@ -20,6 +20,9 @@ const MAX_BYTES: u64 = 64 * 1024;
 pub enum ConfigError {
     /// The file does not exist.
     Missing,
+    /// The file exists but this user may not read it (board #79: the admin
+    /// CLI run as the operator rather than its service account).
+    PermissionDenied,
     /// The file exceeds 64 KiB.
     TooLarge,
     /// The file is unreadable, not UTF-8, not TOML, or has unknown or
@@ -33,6 +36,7 @@ impl fmt::Display for ConfigError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Missing => "configuration file not found",
+            Self::PermissionDenied => "configuration file not readable (permission denied)",
             Self::TooLarge => "configuration file exceeds 64 KiB",
             Self::Invalid => "invalid configuration file",
             Self::RelativePath => "configured paths must be absolute",
@@ -48,6 +52,9 @@ pub fn load<T: DeserializeOwned>(path: &Path) -> Result<T, ConfigError> {
     let file = match open_nonblocking(path) {
         Ok(file) => file,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Err(ConfigError::Missing),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => {
+            return Err(ConfigError::PermissionDenied);
+        }
         Err(_) => return Err(ConfigError::Invalid),
     };
     // Only a regular file (a symlink to one is followed): a FIFO, device, or
@@ -99,6 +106,26 @@ mod tests {
     #[serde(deny_unknown_fields)]
     struct Sample {
         name: String,
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_file_says_so() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("ov-config-denied-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("admin.toml");
+        std::fs::write(&file, "name = \"admin\"\n").unwrap();
+        std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
+        let result = load::<Sample>(&file);
+        std::fs::remove_dir_all(&dir).unwrap();
+        // root reads it anyway; everyone else gets the reason.
+        if std::fs::metadata("/proc/self").is_ok_and(|m| {
+            use std::os::unix::fs::MetadataExt;
+            m.uid() != 0
+        }) {
+            assert_eq!(result, Err(ConfigError::PermissionDenied));
+        }
     }
 
     #[test]

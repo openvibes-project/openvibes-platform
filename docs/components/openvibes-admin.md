@@ -13,6 +13,15 @@ or `uid 1000` when `USER` is unset (timers, containers). Run through sudo
 (`sudo -u openvibes-admin …`), the person is appended from `SUDO_USER`:
 `openvibes-admin (uid 994) via sudo by alice`.
 
+Database commands need the `openvibes-admin` account: only it reads
+`admin.toml` (0640) and has the database's peer login. With the packaged
+`/etc/openvibes/admin.toml` (#79, `src/run_as.rs`), an operator who cannot
+read it is started again through `sudo -n -u openvibes-admin` when the
+operators' sudoers rule allows that without a password, and root through
+`runuser -u openvibes-admin`; otherwise the error names the file, "permission
+denied", and the `sudo -u openvibes-admin` form. A `--config` given on the
+command line is used as is.
+
 ## Administration TUI
 
 `openvibes-admin` with no subcommand opens the administration TUI: the

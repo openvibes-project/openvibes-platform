@@ -16,6 +16,8 @@ mod import;
 mod model;
 mod rules;
 mod rules_sign;
+#[cfg(unix)]
+mod run_as;
 mod setup;
 mod token;
 mod tui;
@@ -292,10 +294,23 @@ async fn main() -> ExitCode {
             }
         };
     }
-    let config: configs::AdminConfig = match platform_config::load(&cli.config) {
+    let loaded = platform_config::load::<configs::AdminConfig>(&cli.config);
+    // Board #79: as the operator or root, start again as the service account.
+    #[cfg(unix)]
+    {
+        let how = run_as::choose(
+            run_as::uid().unwrap_or(u32::MAX),
+            cli.config == std::path::Path::new(run_as::DEFAULT_CONFIG),
+            loaded.as_ref().map(|_| ()),
+        );
+        if how != run_as::RunAs::Here {
+            return run_as::rerun(&how);
+        }
+    }
+    let config = match loaded {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("openvibes-admin: {error}");
+            eprintln!("openvibes-admin: {}: {error}", cli.config.display());
             return ExitCode::FAILURE;
         }
     };
