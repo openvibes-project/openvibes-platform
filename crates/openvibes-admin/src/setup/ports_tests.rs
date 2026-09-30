@@ -360,7 +360,8 @@ fn a_repair_closes_the_ports_it_moved_away_from() {
     let old = plan(&[Ingest, Distribution, Console]);
     let new = old.with_ports(Some(8444), Some(18600), None).unwrap();
     // 18423 was open and is closed; 443 was not open, so nothing to remove.
-    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap(), ["18423/tcp"]);
+    free(&fake);
+    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap().0, ["18423/tcp"]);
     assert_eq!(
         fake.call(&["/usr/bin/firewall-cmd", "--permanent", "--remove-port"]),
         [
@@ -374,7 +375,7 @@ fn a_repair_closes_the_ports_it_moved_away_from() {
     assert!(fake.called(&["/usr/bin/firewall-cmd", "--reload"]));
     // Without firewalld there is nothing to close.
     let fake = Fake::new("ports-close-off");
-    assert!(close_old(&fake.ctx(&new), &old).unwrap().is_empty());
+    assert!(close_old(&fake.ctx(&new), &old).unwrap().0.is_empty());
 }
 
 #[test]
@@ -395,7 +396,8 @@ fn a_port_another_service_moved_onto_stays_open() {
     let old = plan(&[Ingest, Distribution, Console]);
     // The console leaves 443 and ingest takes it: 443 must stay open.
     let new = old.with_ports(Some(8443), Some(443), None).unwrap();
-    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap(), ["18423/tcp"]);
+    free(&fake);
+    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap().0, ["18423/tcp"]);
 }
 
 /// Board #72: a name that resolves to IPv6 only (the user's hostname) or an
@@ -503,10 +505,36 @@ fn a_tui_move_closes_the_old_port_after_the_run() {
         "",
     );
     fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "");
-    assert_eq!(close_moved(&fake.ctx(&newer)).unwrap(), ["443/tcp"]);
+    free(&fake);
+    assert_eq!(close_moved(&fake.ctx(&newer)).unwrap().0, ["443/tcp"]);
     assert!(
         !fake.root.join("etc/openvibes/setup-moved-from").exists(),
         "forgotten"
     );
-    assert!(close_moved(&fake.ctx(&newer)).unwrap().is_empty());
+    assert!(close_moved(&fake.ctx(&newer)).unwrap().0.is_empty());
+}
+
+/// Reviewer on #106, the user's host: Setup once opened 443, the console
+/// moves to 8443, and nginx serves 443. It must stay open.
+#[test]
+fn a_port_another_program_serves_stays_open() {
+    let fake = Fake::new("ports-foreign-holder");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
+        0,
+        "yes\n",
+    );
+    listens(
+        &fake,
+        443,
+        "LISTEN 0 511 *:443 *:* users:((\"nginx\",pid=4242,fd=6))\n",
+    );
+    let old = plan(&[Ingest, Console]);
+    let new = old.with_ports(Some(8443), None, None).unwrap();
+    let (closed, kept) = close_old(&fake.ctx(&new), &old).unwrap();
+    assert!(closed.is_empty());
+    assert_eq!(kept, ["443/tcp stays open: nginx (pid 4242) uses it"]);
+    assert!(!fake.called(&["/usr/bin/firewall-cmd", "--permanent", "--remove-port"]));
+    assert!(!fake.called(&["/usr/bin/firewall-cmd", "--reload"]));
 }

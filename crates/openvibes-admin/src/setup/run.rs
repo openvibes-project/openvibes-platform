@@ -271,12 +271,16 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         }
     }
     // Every service answers on its new port: the old ones can close (#69).
-    let closed = super::ports::close_moved(ctx)?;
-    let closed = if closed.is_empty() {
-        String::new()
-    } else {
-        format!("; firewall closed {}", closed.join(" "))
-    };
+    let (closed, kept) = super::ports::close_moved(ctx)?;
+    let mut firewall = String::new();
+    if !closed.is_empty() {
+        firewall = format!("; firewall closed {}", closed.join(" "));
+    }
+    for line in kept {
+        firewall.push_str("; ");
+        firewall.push_str(&line);
+    }
+    let closed = firewall;
     // A Repair mints no token: each one used to leave another 10-use
     // token behind (#64); the install line is one command away.
     if ctx.repair {
