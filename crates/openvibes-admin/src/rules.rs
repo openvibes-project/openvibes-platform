@@ -89,7 +89,9 @@ pub enum TrustCommand {
         rule_set: String,
         /// Issuer key id named in envelopes.
         issuer_key_id: String,
-        /// Public key, 32 bytes, base64url without padding.
+        /// Public key, 32 bytes, base64url without padding. It may start
+        /// with `-` (1 key in 64), so it is never read as a flag (#63).
+        #[arg(allow_hyphen_values = true)]
         public_key: String,
     },
     /// List trusted keys, removed ones included.

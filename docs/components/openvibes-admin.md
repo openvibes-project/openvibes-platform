@@ -206,7 +206,7 @@ offline; the platform never holds a rule-signing key.
 
 | Command | Does |
 |---|---|
-| `rules trust add RULE_SET ISSUER_KEY_ID PUBLIC_KEY_B64URL` | trusts a 32-byte Ed25519 key (base64url, no padding; weak keys refused) for the set, creating the set. Prints `trusted` or `already trusted`. An id already used for a different or removed key is refused: ids are never re-used. |
+| `rules trust add RULE_SET ISSUER_KEY_ID PUBLIC_KEY_B64URL` | trusts a 32-byte Ed25519 key (base64url, no padding; weak keys refused) for the set, creating the set. A key starting with `-` (1 in 64) is taken as the key, not a flag; no `--` is needed. Prints `trusted` or `already trusted`. An id already used for a different or removed key is refused: ids are never re-used. |
 | `rules trust list [RULE_SET]` | `SET ISSUER KEY added TIME [removed TIME]` per key |
 | `rules trust remove RULE_SET ISSUER_KEY_ID` | stops trusting the key for future publishing; served bundles are unchanged (agents trust keys themselves) |
 | `rules publish FILE` | verifies the envelope with the agent's own `openvibes-rules` loader against the set's currently trusted keys, then stores its exact bytes. Prints `published SET vN`, or `unchanged: …` for the same version with the same bytes. |

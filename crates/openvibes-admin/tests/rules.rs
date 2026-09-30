@@ -242,6 +242,22 @@ async fn publish_refuses_an_oversized_file() {
     fixture.drop().await;
 }
 
+/// 1 key in 64 starts with `-`, which an argument parser can take for a
+/// flag (#63): the operator's `rules trust add SET ISSUER KEY` must take it
+/// as the key, without `--`. The seed is fixed, so this runs the same way
+/// every time.
+#[tokio::test]
+async fn trust_add_takes_a_key_that_starts_with_a_hyphen() {
+    let (fixture, _dir) = ready("hyphen-key").await;
+    let key = (0u8..=255)
+        .map(public)
+        .find(|key| key.starts_with('-'))
+        .expect("some seed gives a '-' key");
+    let out = stdout(&fixture.run(&["rules", "trust", "add", "baseline", "org.rules", &key]));
+    assert_eq!(out, "trusted\n");
+    fixture.drop().await;
+}
+
 #[tokio::test]
 async fn trust_add_rejects_bad_keys() {
     let (fixture, _dir) = ready("badkeys").await;
