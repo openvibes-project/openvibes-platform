@@ -708,6 +708,299 @@
         }
       }
     },
+    "/api/v1/alarms": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "list_alarms",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "description": "Exact agent.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "description": "Exact rule.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "severity",
+            "in": "path",
+            "description": "Exact severity.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "state",
+            "in": "path",
+            "description": "Exact triage state.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "suppressed",
+            "in": "path",
+            "description": "Include alarms closed by a suppression (default false).",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped alarms, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarms/{alarm_id}": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "get_alarm",
+        "parameters": [
+          {
+            "name": "alarm_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The alarm, its process tree and triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmDetailView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarms/{alarm_id}/triage": {
+      "put": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "update_alarm_triage",
+        "parameters": [
+          {
+            "name": "alarm_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Quoted triage version",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlarmTriageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated triage",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New triage version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AlarmTriageView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid state, note, expiry or assignee",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The workflow does not allow this step",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale triage version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/messages": {
       "post": {
         "tags": [
@@ -3960,6 +4253,225 @@
           }
         }
       },
+      "AlarmDetailView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/AlarmSummaryView",
+            "description": "The list fields."
+          },
+          {
+            "type": "object",
+            "required": [
+              "rule_set_version",
+              "rule_version",
+              "confidence",
+              "process",
+              "ancestors",
+              "received_at",
+              "triage"
+            ],
+            "properties": {
+              "ancestors": {
+                "type": "array",
+                "items": {
+                  "type": "object"
+                },
+                "description": "Its ancestors, nearest first, as sent."
+              },
+              "confidence": {
+                "type": "integer",
+                "format": "int32",
+                "description": "0 to 100."
+              },
+              "process": {
+                "type": "object",
+                "description": "The process (masked args) as the agent sent it."
+              },
+              "received_at": {
+                "type": "string",
+                "description": "When ingest stored it (RFC 3339)."
+              },
+              "rule_set_version": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Rule set version."
+              },
+              "rule_version": {
+                "type": "integer",
+                "format": "int64",
+                "description": "Rule version."
+              },
+              "triage": {
+                "$ref": "#/components/schemas/AlarmTriageView",
+                "description": "Current triage."
+              }
+            }
+          }
+        ],
+        "description": "One alarm with its process tree and triage."
+      },
+      "AlarmPage": {
+        "type": "object",
+        "description": "A page of alarms, newest first.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AlarmSummaryView"
+            },
+            "description": "The alarms."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; absent on the last page."
+          }
+        }
+      },
+      "AlarmSummaryView": {
+        "type": "object",
+        "description": "One alarm in the list.",
+        "required": [
+          "id",
+          "agent_id",
+          "rule_set_id",
+          "rule_id",
+          "severity",
+          "message",
+          "exe",
+          "count",
+          "first_seen",
+          "last_seen",
+          "state"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent that raised it."
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "How many starts matched."
+          },
+          "exe": {
+            "type": "string",
+            "description": "The process's program."
+          },
+          "first_seen": {
+            "type": "string",
+            "description": "First match (RFC 3339)."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The agent's hostname, when known."
+          },
+          "id": {
+            "type": "string",
+            "description": "The platform's alarm id."
+          },
+          "last_seen": {
+            "type": "string",
+            "description": "Latest match (RFC 3339)."
+          },
+          "message": {
+            "type": "string",
+            "description": "The rule's message."
+          },
+          "parent_exe": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its parent's program, when known."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule that raised it."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set of the rule."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium`, `low` or `info`."
+          },
+          "state": {
+            "type": "string",
+            "description": "Triage state."
+          },
+          "suppressed_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The suppression that closed it, if any."
+          }
+        }
+      },
+      "AlarmTriageView": {
+        "type": "object",
+        "description": "An alarm's triage.",
+        "required": [
+          "state",
+          "version"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Accepted-risk expiry (RFC 3339)."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assignee's username."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator note."
+          },
+          "state": {
+            "type": "string",
+            "description": "Workflow state."
+          },
+          "updated_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last change (RFC 3339)."
+          },
+          "updated_by": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Who changed it; `ingest` for a suppression or a recurrence."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for If-Match (also the ETag)."
+          }
+        }
+      },
       "ApplyAgentTagsRequest": {
         "type": "object",
         "description": "Confirmed tag update request, bound to an impact preview.",
@@ -6231,6 +6743,41 @@
         },
         "additionalProperties": false
       },
+      "UpdateAlarmTriageRequest": {
+        "type": "object",
+        "description": "A triage change; the same rules as findings triage.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Accepted-risk expiry (RFC 3339), required for `accepted_risk`."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assignee's username."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Note, required for completed states."
+          },
+          "state": {
+            "type": "string",
+            "description": "New state."
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateAuditRetentionRequest": {
         "type": "object",
         "description": "Request body for changing audit retention.",
@@ -6588,6 +7135,10 @@
     {
       "name": "agents",
       "description": "Scope-filtered agent reads"
+    },
+    {
+      "name": "alarms",
+      "description": "Scope-filtered threat alarms and their triage"
     },
     {
       "name": "findings",

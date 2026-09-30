@@ -202,6 +202,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_alarms"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alarms/{alarm_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_alarm"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alarms/{alarm_id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_alarm_triage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant/messages": {
         parameters: {
             query?: never;
@@ -974,6 +1022,93 @@ export interface components {
             scanner_version?: string | null;
             /** @description Current lifecycle state. */
             status: components["schemas"]["AgentStatus"];
+        };
+        /** @description One alarm with its process tree and triage. */
+        AlarmDetailView: components["schemas"]["AlarmSummaryView"] & {
+            /** @description Its ancestors, nearest first, as sent. */
+            ancestors: Record<string, never>[];
+            /**
+             * Format: int32
+             * @description 0 to 100.
+             */
+            confidence: number;
+            /** @description The process (masked args) as the agent sent it. */
+            process: Record<string, never>;
+            /** @description When ingest stored it (RFC 3339). */
+            received_at: string;
+            /**
+             * Format: int64
+             * @description Rule set version.
+             */
+            rule_set_version: number;
+            /**
+             * Format: int64
+             * @description Rule version.
+             */
+            rule_version: number;
+            /** @description Current triage. */
+            triage: components["schemas"]["AlarmTriageView"];
+        };
+        /** @description A page of alarms, newest first. */
+        AlarmPage: {
+            /** @description The alarms. */
+            items: components["schemas"]["AlarmSummaryView"][];
+            /** @description Pass as `cursor` for the next page; absent on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description One alarm in the list. */
+        AlarmSummaryView: {
+            /** @description Agent that raised it. */
+            agent_id: string;
+            /**
+             * Format: int64
+             * @description How many starts matched.
+             */
+            count: number;
+            /** @description The process's program. */
+            exe: string;
+            /** @description First match (RFC 3339). */
+            first_seen: string;
+            /** @description The agent's hostname, when known. */
+            hostname?: string | null;
+            /** @description The platform's alarm id. */
+            id: string;
+            /** @description Latest match (RFC 3339). */
+            last_seen: string;
+            /** @description The rule's message. */
+            message: string;
+            /** @description Its parent's program, when known. */
+            parent_exe?: string | null;
+            /** @description Rule that raised it. */
+            rule_id: string;
+            /** @description Rule set of the rule. */
+            rule_set_id: string;
+            /** @description `critical`, `high`, `medium`, `low` or `info`. */
+            severity: string;
+            /** @description Triage state. */
+            state: string;
+            /** @description The suppression that closed it, if any. */
+            suppressed_by?: string | null;
+        };
+        /** @description An alarm's triage. */
+        AlarmTriageView: {
+            /** @description Accepted-risk expiry (RFC 3339). */
+            accepted_until?: string | null;
+            /** @description Assignee's username. */
+            assigned_to?: string | null;
+            /** @description Operator note. */
+            note?: string | null;
+            /** @description Workflow state. */
+            state: string;
+            /** @description Last change (RFC 3339). */
+            updated_at?: string | null;
+            /** @description Who changed it; `ingest` for a suppression or a recurrence. */
+            updated_by?: string | null;
+            /**
+             * Format: int64
+             * @description Version for If-Match (also the ETag).
+             */
+            version: number;
         };
         /** @description Confirmed tag update request, bound to an impact preview. */
         ApplyAgentTagsRequest: {
@@ -1888,6 +2023,17 @@ export interface components {
             /** @description Base64url Ed25519 signature. */
             signature_base64url: string;
         };
+        /** @description A triage change; the same rules as findings triage. */
+        UpdateAlarmTriageRequest: {
+            /** @description Accepted-risk expiry (RFC 3339), required for `accepted_risk`. */
+            accepted_until?: string | null;
+            /** @description Assignee's username. */
+            assigned_to?: string | null;
+            /** @description Note, required for completed states. */
+            note?: string | null;
+            /** @description New state. */
+            state: string;
+        };
         /** @description Request body for changing audit retention. */
         UpdateAuditRetentionRequest: {
             /**
@@ -2590,6 +2736,177 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_alarms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Exact agent. */
+                agent_id: string | null;
+                /** @description Exact rule. */
+                rule_id: string | null;
+                /** @description Exact severity. */
+                severity: string | null;
+                /** @description Exact triage state. */
+                state: string | null;
+                /** @description Include alarms closed by a suppression (default false). */
+                suppressed: boolean | null;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Scoped alarms, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmPage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_alarm: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alarm_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The alarm, its process tree and triage */
+            200: {
+                headers: {
+                    /** @description Triage version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmDetailView"];
+                };
+            };
+            /** @description Absent or outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_alarm_triage: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Quoted triage version */
+                "If-Match": string;
+            };
+            path: {
+                alarm_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAlarmTriageRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated triage */
+            200: {
+                headers: {
+                    /** @description New triage version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmTriageView"];
+                };
+            };
+            /** @description Invalid state, note, expiry or assignee */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The workflow does not allow this step */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Stale triage version */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
