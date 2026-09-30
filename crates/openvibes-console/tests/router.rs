@@ -3,7 +3,8 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use openvibes_console::{
-    Readiness, TrustedPeer, authenticated_router, development_router, health_router, public_router,
+    Readiness, TrustedPeer, authenticated_router, authenticated_router_for_hosts,
+    development_router, health_router, public_router,
 };
 use serde_json::Value;
 use tower::ServiceExt;
@@ -252,6 +253,96 @@ async fn authenticated_router_rejects_unconfigured_hosts() {
         response.headers().get(header::CACHE_CONTROL).unwrap(),
         "no-store"
     );
+}
+
+/// Board #71: the console answers every name its certificate covers (an IP
+/// over a VPN, localhost through a tunnel), and says where it is otherwise.
+#[tokio::test]
+async fn certificate_names_are_served_and_others_told_where_to_go() {
+    let router = || async {
+        let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+            .await
+            .unwrap();
+        authenticated_router_for_hosts(
+            pool,
+            "https://metabox-lnx:8443",
+            ["192.168.1.10:8443".to_owned(), "localhost:8443".to_owned()],
+        )
+    };
+    let get = |host: &str| {
+        Request::builder()
+            .uri("/api/v1/session")
+            .header(header::HOST, host)
+            .body(Body::empty())
+            .unwrap()
+    };
+    for host in ["metabox-lnx:8443", "192.168.1.10:8443", "LOCALHOST:8443"] {
+        let response = router().await.oneshot(get(host)).await.unwrap();
+        assert_ne!(response.status(), StatusCode::MISDIRECTED_REQUEST, "{host}");
+    }
+    let response = router()
+        .await
+        .oneshot(get("attacker.example"))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::MISDIRECTED_REQUEST);
+    assert!(
+        response.headers()[header::CONTENT_TYPE]
+            .to_str()
+            .unwrap()
+            .starts_with("text/html"),
+        "a page, not a blank"
+    );
+    let body =
+        String::from_utf8(to_bytes(response.into_body(), 8192).await.unwrap().to_vec()).unwrap();
+    assert!(
+        body.contains(r#"href="https://metabox-lnx:8443/""#),
+        "{body}"
+    );
+    assert!(body.contains("This OpenVIBES console is at"), "{body}");
+}
+
+#[tokio::test]
+async fn a_login_origin_must_match_the_host_it_came_to() {
+    let login = |host: &str, origin: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/auth/v1/login")
+            .header(header::HOST, host)
+            .header(header::ORIGIN, origin)
+            .header(header::CONTENT_TYPE, "application/json")
+            .extension(axum::extract::ConnectInfo(TrustedPeer::new(
+                "127.0.0.1:4242".parse::<std::net::SocketAddr>().unwrap(),
+            )))
+            .body(Body::from("{"))
+            .unwrap()
+    };
+    for (host, origin, allowed) in [
+        ("192.168.1.10:8443", "https://192.168.1.10:8443", true),
+        ("metabox-lnx:8443", "https://metabox-lnx:8443", true),
+        // Another allowed name is still cross-origin for this request.
+        ("192.168.1.10:8443", "https://metabox-lnx:8443", false),
+        ("192.168.1.10:8443", "https://attacker.example", false),
+    ] {
+        let pool = platform_store::connect_sized("host=/socket-that-does-not-exist user=none", 1)
+            .await
+            .unwrap();
+        let response = authenticated_router_for_hosts(
+            pool,
+            "https://metabox-lnx:8443",
+            ["192.168.1.10:8443".to_owned()],
+        )
+        .oneshot(login(host, origin))
+        .await
+        .unwrap();
+        // The origin check comes first: past it, a malformed body is a 400.
+        let expected = if allowed {
+            StatusCode::BAD_REQUEST
+        } else {
+            StatusCode::FORBIDDEN
+        };
+        assert_eq!(response.status(), expected, "{host} {origin}");
+    }
 }
 
 #[tokio::test]

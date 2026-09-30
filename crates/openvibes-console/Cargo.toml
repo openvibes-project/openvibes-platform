@@ -33,6 +33,7 @@ tokio-rustls.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 unicode-normalization = "=0.1.25"
+x509-parser.workspace = true
 utoipa = { version = "=5.5.0", default-features = false, features = ["macros"] }
 zeroize = "=1.9.0"
 
@@ -41,6 +42,7 @@ serde_json.workspace = true
 sha2.workspace = true
 
 [dev-dependencies]
+rcgen.workspace = true
 ed25519-dalek.workspace = true
 tower.workspace = true
 
