@@ -390,10 +390,16 @@ impl<H: Host> App<H> {
         self.refresh();
     }
 
-    fn ask_password(&mut self, after: After) {
+    /// Asks for the sudo password before `after`, or goes straight on as
+    /// root, which sudo lets through without one (#82).
+    pub(super) fn ask_password(&mut self, after: After) {
         self.setup.prompt = PasswordPrompt::default();
-        self.setup.phase = Phase::Password(after);
         self.message = None;
+        if self.host.needs_password() {
+            self.setup.phase = Phase::Password(after);
+        } else {
+            self.with_password(after, Secret::new(String::new()));
+        }
     }
 
     fn form_key(&mut self, key: Key) {
@@ -460,6 +466,10 @@ impl<H: Host> App<H> {
             }
             Typed::Entered(secret) => secret,
         };
+        self.with_password(after, secret);
+    }
+
+    fn with_password(&mut self, after: After, secret: Secret) {
         match after {
             After::Job(job) => self.start_job(job, secret),
             After::Run(at) => {

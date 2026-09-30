@@ -160,6 +160,11 @@ pub trait Host {
     fn write_config(&self, service: Service, toml: &str) -> Result<(), HostError>;
     /// Whether Setup has run on this host (`/etc/openvibes/setup.toml`).
     fn is_set_up(&self) -> bool;
+    /// Whether [`Host::privileged`] needs the user's password. Root runs
+    /// sudo without one, so the screens skip the prompt.
+    fn needs_password(&self) -> bool {
+        true
+    }
     /// Runs a password-gated helper verb through sudo; its standard output.
     fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError>;
     /// Installed OpenVIBES packages with any newer version (no password).

@@ -87,8 +87,7 @@ impl<H: Host> App<H> {
             Key::Char('k') | Key::Up => self.setup.row2 = self.setup.row2.saturating_sub(1),
             Key::Enter if self.setup.row2 == UPDATE_START_ROW => {
                 self.setup.job_args = self.backup_args();
-                self.setup.prompt = Default::default();
-                self.setup.phase = Phase::Password(After::Job(Job::Update));
+                self.ask_password(After::Job(Job::Update));
             }
             Key::Enter => self.setup.editing = self.maintain_field().is_some(),
             Key::Esc => self.setup.phase = Phase::Status,
@@ -165,7 +164,6 @@ impl<H: Host> App<H> {
         }
         self.message = None;
         self.setup.job_args = args;
-        self.setup.prompt = Default::default();
-        self.setup.phase = Phase::Password(After::Job(Job::Remove));
+        self.ask_password(After::Job(Job::Remove));
     }
 }

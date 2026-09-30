@@ -91,7 +91,9 @@ ok "update upgraded the packages, migrated, and the agent keeps reporting"
 # 5. Remove everything, then the admin tool itself: nothing is left.
 in_c 'openvibes-admin setup --uninstall --everything --confirm localhost' > "$W/purge.out" 2>&1 ||
     { cat "$W/purge.out"; fail "uninstall --everything"; }
-in_c 'dnf -q -y remove openvibes-admin' >/dev/null 2>&1 || fail "remove openvibes-admin"
+in_c 'test -e /etc/openvibes/admin.toml' || fail "uninstall removed admin.toml, which rpm still owns (#82)"
+in_c 'dnf -q -y remove openvibes-admin' > "$W/remove-admin.out" 2>&1 || { cat "$W/remove-admin.out"; fail "remove openvibes-admin"; }
+! grep -q 'remove failed' "$W/remove-admin.out" || { cat "$W/remove-admin.out"; fail "dnf remove warned (#82)"; }
 [[ -z "$(in_c "rpm -qa 'openvibes-*'")" ]] || fail "packages left"
 in_c '! ls -d /etc/openvibes /etc/openvibes-agent /var/lib/openvibes-* 2>/dev/null' || fail "files left"
 in_c '! getent passwd openvibes-ingest openvibes-admin openvibes_agent && ! getent group openvibes-operators' || fail "accounts left"
