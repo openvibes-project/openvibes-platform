@@ -428,3 +428,34 @@ fn without_dual_stack_ipv6_services_stay_on_ipv4() {
         assert!(ingest.contains("listen = \"0.0.0.0:18500\""), "{ingest}");
     }
 }
+
+/// Reviewer on #102: Repair on a running host rewrites `0.0.0.0` to `[::]`
+/// and must restart the unit, though its own process holds its port.
+#[test]
+fn repair_restarts_a_unit_whose_listen_address_changed() {
+    let fake = Fake::new("ports-dual-stack-restart");
+    let ingest = include_str!("../../../../packaging/rpm/ingest.toml");
+    fake.file("/etc/openvibes/ingest.toml", ingest);
+    fake.file("/proc/sys/net/ipv6/bindv6only", "0\n");
+    fake.answer(&["/usr/bin/systemctl", "is-enabled"], 0, "");
+    fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
+    running(&fake, "openvibes-ingest", 11);
+    listens(
+        &fake,
+        18423,
+        "LISTEN 0 5 0.0.0.0:18423 0.0.0.0:* users:((\"openvibes-inges\",pid=11,fd=9))\n",
+    );
+    free(&fake);
+    fake.answer(&["/usr/bin/systemctl", "enable", "--now"], 0, "");
+    fake.answer(&["/usr/bin/systemctl", "try-restart"], 0, "");
+    let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Services);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(
+        fake.text("/etc/openvibes/ingest.toml")
+            .contains("listen = \"[::]:18423\"")
+    );
+    assert_eq!(
+        fake.call(&["/usr/bin/systemctl", "try-restart"]),
+        ["/usr/bin/systemctl", "try-restart", "openvibes-ingest"]
+    );
+}

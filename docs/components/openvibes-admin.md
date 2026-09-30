@@ -350,7 +350,11 @@ ports into `ingest.toml`/`distribution.toml` `listen` (the console step
 writes the console's), and restarts a running unit that is not on its
 planned port yet. The address is `[::]` (IPv4 and IPv6 on one socket) when
 `/proc/sys/net/ipv6/bindv6only` is 0, so a hostname that resolves to IPv6
-only reaches the services (#72); `0.0.0.0` when IPv6 is off or that is 1. `ready` also connects to each service's planned port,
+only reaches the services (#72); `0.0.0.0` when IPv6 is off or that is 1.
+A `listen` that differs from the plan's keeps `services` Todo even with
+every unit running, and each unit whose file Setup rewrites is
+try-restarted (the console by its own step), so Repair moves a running
+host to `[::]` without a reboot. `ready` also connects to each service's planned port,
 so a unit that answers its health check but not its port is not ready.
 The local agent's `platform_url`/`distribution_url`, the firewall and the
 agent command follow the plan: the command names a port only when it is
