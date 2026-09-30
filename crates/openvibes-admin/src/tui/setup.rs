@@ -55,6 +55,8 @@ pub struct Setup {
     pub sans: String,
     pub ca: CaMode,
     pub root_key_out: String,
+    /// The first free root key file name in the home directory (#87).
+    pub root_key_default: String,
     pub console_port: String,
     /// "INGEST, DISTRIBUTION": one row, so the form fits 80×24.
     pub agent_ports: String,
@@ -91,16 +93,18 @@ pub struct Setup {
 impl Setup {
     pub fn new(set_up: bool, hostname: String, home: Option<String>) -> Setup {
         use Component::*;
+        let root_key_default = home
+            .as_deref()
+            .map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
+            .unwrap_or_default();
         Setup {
             components: [Ingest, Console, Distribution, Vulns, Rules, Agent].into(),
             row: 0,
             hostname,
             sans: String::new(),
             ca: CaMode::Quick,
-            root_key_out: home
-                .as_ref()
-                .map(|home| format!("{home}/openvibes-root-ca.key"))
-                .unwrap_or_default(),
+            root_key_out: root_key_default.clone(),
+            root_key_default,
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
             console_note: None,
@@ -333,11 +337,24 @@ impl<H: Host> App<H> {
             }
         };
         self.setup.components = plan.components.iter().copied().collect();
-        self.setup.previous = Some(self.setup.components.clone());
         self.setup.hostname = plan.hostname.clone();
         self.setup.sans = plan.sans.join(", ");
-        self.setup.ca = plan.ca;
-        self.setup.root_key_out.clear(); // the CA exists; no new root key
+        // #87: a plan from a first install that stopped before the CA is
+        // not a set-up host: run the install again (new CA, free key name)
+        // instead of a Repair that refuses to make a CA.
+        let ca_exists = self
+            .host
+            .certificates()
+            .iter()
+            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt");
+        if ca_exists {
+            self.setup.previous = Some(self.setup.components.clone());
+            self.setup.ca = plan.ca;
+            self.setup.root_key_out.clear(); // the CA exists; no new root key
+        } else {
+            self.setup.previous = None;
+            self.setup.root_key_out = self.setup.root_key_default.clone();
+        }
         self.setup.console_port = plan.console_port.to_string();
         self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
         self.setup.console_note = None;
@@ -592,5 +609,32 @@ impl<H: Host> App<H> {
         } else {
             Phase::Running(next + 1)
         };
+    }
+}
+
+/// `HOME/openvibes-root-ca.key`, or `-2`, `-3`… when taken: Remove
+/// everything keeps the old root key (it is the user's), so a new install
+/// must not stop on it (#87).
+fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
+    let base = format!("{home}/openvibes-root-ca");
+    std::iter::once(format!("{base}.key"))
+        .chain((2..).map(|n| format!("{base}-{n}.key")))
+        .find(|path| !exists(path))
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod root_key_tests {
+    #[test]
+    fn the_default_root_key_name_skips_taken_files() {
+        let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];
+        assert_eq!(
+            super::free_root_key("/h", |p| taken.contains(&p)),
+            "/h/openvibes-root-ca-3.key"
+        );
+        assert_eq!(
+            super::free_root_key("/h", |_| false),
+            "/h/openvibes-root-ca.key"
+        );
     }
 }

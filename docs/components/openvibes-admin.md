@@ -81,6 +81,10 @@ never Setup's; installs from before the record close nothing), and one another
 program listens on, per `ss`, stays open with who uses it) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+The root key file defaults to the first free name in the home directory
+(`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
+the old key; and `m` after a first install that stopped before the CA step
+offers the install again, not a Repair (#87).
 Only rows on screen take the focus: with keep data, one `j` goes from the
 choice to `[ Uninstall ]` (#74).
 As root no password is asked (sudo needs none; #82). Each runs one step
