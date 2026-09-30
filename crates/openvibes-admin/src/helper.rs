@@ -159,7 +159,8 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     match verb {
         Verb::SetupPlan(plan) => match crate::setup::lock(Path::new("/")).and_then(|lock| {
             // Ports the new plan leaves are closed once the run is ready (#69).
-            if let Ok(old) = crate::setup::plan::Plan::load(Path::new("/")) {
+            // A 0.1.1 plan has no port fields: the ports in use, not defaults.
+            if let Ok((old, _)) = crate::setup::plan::Plan::load_filled(Path::new("/")) {
                 crate::setup::ports::remember_moved(Path::new("/"), &old, &plan)?;
             }
             plan.save(Path::new("/"))?;

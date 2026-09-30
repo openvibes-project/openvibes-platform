@@ -462,6 +462,7 @@ fn repair_restarts_a_unit_whose_listen_address_changed() {
         fake.call(&["/usr/bin/systemctl", "try-restart"]),
         ["/usr/bin/systemctl", "try-restart", "openvibes-ingest"]
     );
+}
 
 /// Reviewer on #106: the TUI saves a moved plan, then runs; the old ports
 /// close only once every service is ready, as the CLI's Repair does.
