@@ -255,6 +255,12 @@ async fn trust_add_takes_a_key_that_starts_with_a_hyphen() {
         .expect("some seed gives a '-' key");
     let out = stdout(&fixture.run(&["rules", "trust", "add", "baseline", "org.rules", &key]));
     assert_eq!(out, "trusted\n");
+    // Rule set and issuer ids may start with `-` too (`-x` is a valid
+    // identifier).
+    let out = stdout(&fixture.run(&["rules", "trust", "add", "-set", "-issuer", &public(9)]));
+    assert_eq!(out, "trusted\n");
+    let out = stdout(&fixture.run(&["rules", "trust", "remove", "-set", "-issuer"]));
+    assert!(!out.is_empty(), "{out}");
     fixture.drop().await;
 }
 
