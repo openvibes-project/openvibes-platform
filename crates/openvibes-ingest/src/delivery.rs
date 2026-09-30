@@ -7,10 +7,11 @@ use axum::{
 
 use chrono::{Duration, Utc};
 use openvibes_core::{
-    DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges, Heartbeat, Identifier,
-    InventoryChanges, InventoryReport, RejectedFinding, ResourceLimits, SchemaVersion, Validate,
+    ALARM_BATCH_BYTES, AlarmBatch, DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges,
+    Heartbeat, Identifier, InventoryChanges, InventoryReport, RejectedFinding, ResourceLimits,
+    SchemaVersion, Validate,
 };
-use platform_store::{finding_changes, ingest, inventory, wire};
+use platform_store::{alarms, finding_changes, ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
@@ -257,4 +258,55 @@ pub(crate) async fn finding_changes(
         finding_changes::Outcome::Stored => Ok(StatusCode::NO_CONTENT),
         finding_changes::Outcome::Resync => Err(ApiError::FindingsResync),
     }
+}
+
+/// `POST /v1/alarms` (protocol P14): stores the authenticated agent's
+/// alarms. The answer carries nothing per alarm, so an alarm the store
+/// cannot hold (outside retention, in the future, a day without a
+/// partition) is skipped, logged and counted, and the rest stored: a
+/// batch queued through a long outage must never stall the agent's queue.
+/// 400 for an invalid document or another agent's id, 413 over 256 KiB.
+pub(crate) async fn alarms(
+    State(state): State<AppState>,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let body = platform_agent_server::decoded_body(
+        &headers,
+        &body,
+        platform_agent_server::MAX_BODY_BYTES,
+    )?;
+    if body.len() > ALARM_BATCH_BYTES {
+        return Err(ApiError::TooLarge);
+    }
+    let batch: AlarmBatch = parse(&body)?;
+    if batch.agent_id.as_str() != agent_id {
+        return Err(ApiError::BadRequest);
+    }
+    let now = Utc::now();
+    let oldest = now - Duration::days(i64::from(state.finding_retention_days));
+    let latest = now + Duration::minutes(wire::MAX_FUTURE_MINUTES);
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    let partitions = platform_store::partition_days_of(&client, "alarms").await?;
+    let mut rows = Vec::with_capacity(batch.alarms.len());
+    let mut skipped: std::collections::BTreeMap<&str, u32> = Default::default();
+    for alarm in &batch.alarms {
+        match alarms::row(alarm, oldest, latest, &partitions) {
+            Ok(row) => rows.push(row),
+            Err(reason) => *skipped.entry(reason).or_default() += 1,
+        }
+    }
+    if !skipped.is_empty() {
+        tracing::warn!(?skipped, "alarms skipped: the store cannot hold them");
+    }
+    let done =
+        alarms::insert_batch(&mut client, &agent_id, batch.dropped_total, &rows, now).await?;
+    tracing::debug!(
+        stored = done.stored,
+        raised = done.raised,
+        suppressed = done.suppressed,
+        "alarms stored"
+    );
+    Ok(StatusCode::NO_CONTENT)
 }

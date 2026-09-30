@@ -137,7 +137,7 @@ async fn a_resend_raises_count_and_last_seen_and_never_lowers_them() {
     let one = row(&client, &first).await;
     let now = Utc::now();
     assert_eq!(
-        alarms::insert_batch(&mut client, &agent, 0, &[one.clone()], now)
+        alarms::insert_batch(&mut client, &agent, 0, std::slice::from_ref(&one), now)
             .await
             .unwrap(),
         Stored {
@@ -262,6 +262,15 @@ async fn suppress(
         .get(0)
 }
 
+type Case<'a> = (
+    &'a str,
+    Option<&'a str>,
+    Option<&'a str>,
+    Option<String>,
+    &'a str,
+    bool,
+);
+
 #[tokio::test]
 async fn each_suppression_scope_closes_matching_alarms_only() {
     let (db, agent) = setup().await;
@@ -269,7 +278,8 @@ async fn each_suppression_scope_closes_matching_alarms_only() {
     let now = Utc::now();
     let t0 = at(now.timestamp_millis() - 60_000);
     let hash = alarms::args_sha256(&["sh".into(), "-c".into(), "id".into()]);
-    let cases: [(&str, Option<&str>, Option<&str>, Option<String>, &str, bool); 5] = [
+    // (scope, agent, exe, args hash, the alarm's exe, closes it)
+    let cases: [Case; 5] = [
         (
             "host",
             Some(agent.as_str()),

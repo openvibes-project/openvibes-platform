@@ -39,6 +39,9 @@ impl std::error::Error for ServerError {}
 pub enum ApiError {
     /// Malformed, invalid, or oversized request (400).
     BadRequest,
+    /// A document over its own limit where the contract names 413 (an
+    /// `AlarmBatch` over 256 KiB uncompressed, P14).
+    TooLarge,
     /// No, unknown, or expired client certificate (401).
     Unauthorized,
     /// The agent is revoked (403 `identity_revoked`).
@@ -71,6 +74,7 @@ impl IntoResponse for ApiError {
             )
                 .into_response(),
             Self::BadRequest => (StatusCode::BAD_REQUEST, "bad request").into_response(),
+            Self::TooLarge => (StatusCode::PAYLOAD_TOO_LARGE, "too large").into_response(),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized").into_response(),
             Self::NotFound => (StatusCode::NOT_FOUND, "not found").into_response(),
             Self::Unavailable => {
