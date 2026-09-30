@@ -577,6 +577,12 @@ async fn authenticated_host_only(
     request: axum::extract::Request,
     next: middleware::Next,
 ) -> Response {
+    // The 421 page's own look loads under any name: fixed files, no data.
+    // This layer is outside the others, so both answers get the console's
+    // security headers here (CSP, nosniff, framing; reviewer on #116).
+    if let Some(response) = misdirected_asset(request.uri().path()) {
+        return public_security_headers(response).await;
+    }
     let allowed = request.headers().get(header::HOST).is_none_or(|host| {
         host.to_str()
             .is_ok_and(|host| state.allowed_hosts.contains(&host.to_ascii_lowercase()))
@@ -584,7 +590,7 @@ async fn authenticated_host_only(
     if allowed {
         next.run(request).await
     } else {
-        misdirected(&state.public_origin)
+        public_security_headers(misdirected(&state.public_origin)).await
     }
 }
 
@@ -593,12 +599,22 @@ async fn authenticated_host_only(
 /// resolving here (DNS rebinding) reads nothing.
 fn misdirected(public_origin: &str) -> Response {
     let origin = html_escape(public_origin);
+    // Board #81: the sign-in page's look (its own stylesheet and wordmarks,
+    // as the console's CSP allows no inline style) and plain words.
     let body = format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">\
-         <title>OpenVIBES console</title></head><body>\
-         <p>This OpenVIBES console is at <a href=\"{origin}/\">{origin}</a>.</p>\
-         <p>Open that address: it is a name the console's certificate covers.</p>\
-         </body></html>"
+         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+         <title>OpenVIBES: wrong address</title>\
+         <link rel=\"stylesheet\" href=\"/misdirected/page.css\"></head><body>\
+         <main class=\"signin\"><div class=\"signin__card\"><picture>\
+         <source srcset=\"/misdirected/wordmark-dark.svg\" media=\"(prefers-color-scheme: dark)\">\
+         <img class=\"signin__logo\" src=\"/misdirected/wordmark-light.svg\" alt=\"OpenVIBES\">\
+         </picture><h1>Wrong address</h1>\
+         <p>This OpenVIBES console does not answer to the address you opened.</p>\
+         <a class=\"button\" href=\"{origin}/\">Open the console</a>\
+         <p class=\"address\">{origin}</p>\
+         <p class=\"hint\">If that link does not open from where you are, ask whoever set up \
+         OpenVIBES which address to use.</p></div></main></body></html>"
     );
     let mut response = (StatusCode::MISDIRECTED_REQUEST, body).into_response();
     let headers = response.headers_mut();
@@ -608,6 +624,30 @@ fn misdirected(public_origin: &str) -> Response {
         HeaderValue::from_static("text/html; charset=utf-8"),
     );
     response
+}
+
+/// The 421 page's stylesheet and wordmarks, by exact path.
+fn misdirected_asset(path: &str) -> Option<Response> {
+    let (body, kind): (&'static str, &'static str) = match path {
+        "/misdirected/page.css" => (include_str!("misdirected.css"), "text/css; charset=utf-8"),
+        "/misdirected/wordmark-light.svg" => (
+            include_str!("../web/public/brand/openvibes-wordmark-light.svg"),
+            "image/svg+xml",
+        ),
+        "/misdirected/wordmark-dark.svg" => (
+            include_str!("../web/public/brand/openvibes-wordmark-dark.svg"),
+            "image/svg+xml",
+        ),
+        _ => return None,
+    };
+    let mut response = body.into_response();
+    let headers = response.headers_mut();
+    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static(kind));
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static("public, max-age=3600"),
+    );
+    Some(response)
 }
 
 fn html_escape(text: &str) -> String {

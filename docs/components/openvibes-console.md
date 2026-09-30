@@ -209,7 +209,10 @@ requests must use the configured Host authority or, with direct TLS, any name
 the server certificate covers (its DNS and IP subjectAltNames at the listen
 port; the bare name too on 443), so the console opens by IP over a VPN or as
 `localhost` through a tunnel. Any other `Host` gets a 421 page linking to
-`public_origin`. Plain http on the TLS port gets a `301` to `https://` on the
+`public_origin`, in the sign-in page's look and plain words (#81); its
+stylesheet and wordmarks (`/misdirected/page.css`, `wordmark-light.svg`,
+`wordmark-dark.svg`: fixed files, no data) load under any `Host`, since the
+console's CSP allows no inline style and every other path is refused there. Plain http on the TLS port gets a `301` to `https://` on the
 same `Host` when that is a served name, else to `public_origin` (never to a
 name the console does not serve), instead of TLS bytes. The e2e fixture uses
 18490/18491, clear of ingest's 18480 and distribution's 18481.
