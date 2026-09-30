@@ -373,8 +373,8 @@ shown once), `services` (after the port check),
 `openvibes-rules-baseline` exists; done while the published version is at
 least the installed package's, so Repair publishes a newer package),
 `agent` (the agent on this host, waits
-up to 60 s for it to report), `ready` (and an endpoint token, 24 hours, 10
-uses; a unit not ready after 30 s fails with its last journal line, e.g.
+up to 60 s for it to report), `ready` (and, on a first install, an endpoint token, 24 hours, 10
+uses; a Repair mints none and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).
 
 The same command maintains a set-up host (one action per call; each takes

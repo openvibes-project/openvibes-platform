@@ -257,6 +257,14 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             ctx.pause();
         }
     }
+    // A Repair mints no token: each one used to leave another 10-use
+    // token behind (#64); the install line is one command away.
+    if ctx.repair {
+        return Ok(StepState::Done(format!(
+            "ready: {}; for an agent install line, run openvibes-admin agent command",
+            names(&units).join(" ")
+        )));
+    }
     let token =
         token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
     let root = ctx.read(super::pki::ROOT_CERT)?;
