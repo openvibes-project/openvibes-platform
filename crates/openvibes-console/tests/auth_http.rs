@@ -103,10 +103,13 @@ impl TestDb {
     async fn drop(self) {
         self.pool.close();
         let admin = platform_store::connect(&self.admin_url).await.unwrap();
-        admin
-            .get()
+        let drop_client = admin.get().await.unwrap();
+        // DROP grows with partitions; no statement timeout for it.
+        drop_client
+            .batch_execute("SET statement_timeout = 0")
             .await
-            .unwrap()
+            .unwrap();
+        drop_client
             .batch_execute(&format!("DROP DATABASE {} WITH (FORCE)", self.name))
             .await
             .unwrap();
