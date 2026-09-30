@@ -31,6 +31,8 @@ pub enum Then {
     Service(usize),
     /// The Database screen (the next tab).
     Database,
+    /// The Services screen (the previous tab).
+    Services,
     Quit,
 }
 
@@ -105,6 +107,7 @@ impl<H: Host> App<H> {
             }
             Key::Char('R') => self.leave(Then::Service(self.config.service)),
             Key::Tab => self.leave(Then::Database),
+            Key::BackTab => self.leave(Then::Services),
             Key::Char('q') => self.leave(Then::Quit),
             Key::Enter => {
                 if let Some(form) = &self.config.form {
@@ -137,6 +140,7 @@ impl<H: Host> App<H> {
             Key::Backspace => {
                 buffer.pop();
             }
+            Key::ClearLine => buffer.clear(),
             Key::Esc => {
                 self.config.editing = None;
                 self.message = None;
@@ -175,6 +179,7 @@ impl<H: Host> App<H> {
                 self.load_config();
             }
             Then::Database => self.open_database(),
+            Then::Services => self.open(super::app::Tab::Services),
             Then::Quit => self.quit = true,
         }
     }

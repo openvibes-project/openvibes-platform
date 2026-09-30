@@ -113,6 +113,12 @@ pub fn run() -> ExitCode {
                         app.quit = true;
                         continue;
                     }
+                    // Ctrl+U empties a field; other control chords typed
+                    // their letter into it (#78).
+                    KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        Key::ClearLine
+                    }
+                    KeyCode::Char(_) if key.modifiers.contains(KeyModifiers::CONTROL) => continue,
                     KeyCode::Char(c) => Key::Char(c),
                     KeyCode::Up => Key::Up,
                     KeyCode::Down => Key::Down,
@@ -121,7 +127,8 @@ pub fn run() -> ExitCode {
                     KeyCode::Enter => Key::Enter,
                     KeyCode::Esc => Key::Esc,
                     KeyCode::Backspace => Key::Backspace,
-                    KeyCode::Tab | KeyCode::BackTab => Key::Tab,
+                    KeyCode::Tab => Key::Tab,
+                    KeyCode::BackTab => Key::BackTab,
                     _ => continue,
                 };
                 app.key(key);

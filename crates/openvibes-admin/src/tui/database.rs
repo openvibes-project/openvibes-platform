@@ -212,12 +212,13 @@ impl<H: Host> App<H> {
                 self.load_database();
             }
             Key::Tab => self.open_health(),
+            Key::BackTab => self.open(Tab::Configuration),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
     }
 
-    fn open_health(&mut self) {
+    pub(super) fn open_health(&mut self) {
         self.tab = Tab::Health;
         self.message = None;
         self.load_health();
@@ -246,10 +247,8 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_health();
             }
-            Key::Tab => {
-                self.tab = Tab::Setup;
-                self.message = None;
-            }
+            Key::Tab => self.open(Tab::Setup),
+            Key::BackTab => self.open(Tab::Database),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
