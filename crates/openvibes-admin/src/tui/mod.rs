@@ -56,8 +56,11 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
         frame.render_widget(Paragraph::new(text), area);
         return;
     }
-    let [title, body] =
-        Layout::vertical([Constraint::Length(banner::HEIGHT), Constraint::Min(0)]).areas(area);
+    let [title, body] = Layout::vertical([
+        Constraint::Length(banner::height(area.height)),
+        Constraint::Min(0),
+    ])
+    .areas(area);
     banner::draw(frame, title, app);
     match app.tab {
         Tab::Setup => setup_view::draw(frame, body, app),

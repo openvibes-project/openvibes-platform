@@ -48,14 +48,23 @@ fn app() -> App<BannerHost> {
     app
 }
 
+/// A terminal tall enough for the full wordmark (30 rows or more).
 fn draw(app: &App<BannerHost>) -> Terminal<TestBackend> {
-    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    draw_at(app, 36)
+}
+
+fn draw_at(app: &App<BannerHost>, height: u16) -> Terminal<TestBackend> {
+    let mut terminal = Terminal::new(TestBackend::new(80, height)).unwrap();
     terminal.draw(|frame| render(frame, app)).unwrap();
     terminal
 }
 
 fn rows(app: &App<BannerHost>) -> Vec<String> {
-    let terminal = draw(app);
+    rows_at(app, 36)
+}
+
+fn rows_at(app: &App<BannerHost>, height: u16) -> Vec<String> {
+    let terminal = draw_at(app, height);
     let buffer = terminal.backend().buffer();
     (0..buffer.area.height)
         .map(|y| {
@@ -139,4 +148,38 @@ fn the_selected_field_stays_visible_in_a_long_form() {
         rows.iter().any(|r| r.contains(last)),
         "{last} not shown:\n{rows:#?}"
     );
+}
+
+/// Board #78: at 80x24 the six-row wordmark took a quarter of the screen;
+/// below 30 rows it is one line with the same tabs and version.
+#[test]
+fn a_short_terminal_gets_a_one_line_banner() {
+    let mut app = app();
+    app.tab = Tab::Services;
+    let rows = rows_at(&app, 24);
+    assert!(rows[0].contains("OpenVIBES"), "{rows:#?}");
+    assert!(rows[0].contains("[Services]"), "{rows:#?}");
+    assert!(
+        rows[0].contains(concat!("v", env!("CARGO_PKG_VERSION"))),
+        "{rows:#?}"
+    );
+    assert!(
+        !rows.iter().any(|r| r.contains("___")),
+        "no wordmark: {rows:#?}"
+    );
+    // The screen below starts on the second row.
+    assert!(!rows[1].trim().is_empty(), "{rows:#?}");
+}
+
+#[test]
+fn the_short_banner_keeps_the_colours() {
+    let app = app();
+    let terminal = draw_at(&app, 24);
+    let buffer = terminal.backend().buffer();
+    let at = |text: &str| {
+        let row: String = (0..80).map(|x| buffer[(x, 0)].symbol()).collect();
+        u16::try_from(row.find(text).unwrap()).unwrap()
+    };
+    assert_eq!(buffer[(at("Open"), 0)].fg, Color::White);
+    assert_eq!(buffer[(at("VIBES"), 0)].fg, super::banner::TEAL);
 }
