@@ -1,14 +1,18 @@
 [Unit]
-Description=OpenVIBES finding partition maintenance
+Description=OpenVIBES additive schema migrations before the services start
 Documentation=https://github.com/openvibes-project/openvibes-platform
-After=postgresql.service openvibes-migrate.service
-Wants=openvibes-migrate.service
+After=postgresql.service
+# Before Setup there is no database to migrate.
+ConditionPathExists=/etc/openvibes/setup.toml
 
 [Service]
 Type=oneshot
 User=openvibes-admin
 Group=openvibes-admin
-ExecStart=/usr/bin/openvibes-admin maintenance
+# After a plain `dnf upgrade` (board #77): additive migrations only; one
+# that changes stored data fails this unit with "run Update", and the
+# services then refuse the old schema as before.
+ExecStart=/usr/bin/openvibes-admin migrate --additive
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict

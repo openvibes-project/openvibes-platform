@@ -47,6 +47,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/vulns.toml` | 0640 root:openvibes-vulns, `%config(noreplace)` | vulns |
 | `/usr/bin/openvibes-admin` | 0755 root | admin |
 | `/usr/lib/systemd/system/openvibes-maintenance.{service,timer}` | 0644 root | admin |
+| `/usr/lib/systemd/system/openvibes-migrate.service` | 0644 root | admin |
 | `/usr/lib/sysusers.d/openvibes-admin.conf` | user `openvibes-admin` | admin |
 | `/etc/openvibes/admin.toml` | 0640 root:openvibes-admin, `%config(noreplace)` | admin |
 | `/usr/bin/openvibes-console` | 0755 root | console |
@@ -87,6 +88,13 @@ directory itself, so no tmpfiles.d entry is needed.
   (0700, `StateDirectory`), where OSV downloads (Ubuntu's is ~760 MB) stay
   only until imported. On SIGINT it stops; an interrupted feed
   check is redone at the next start.
+- `openvibes-migrate.service` (admin package, #77): a oneshot, as
+  `openvibes-admin` with the same hardening, running `openvibes-admin
+  migrate --additive` once Setup has run (`setup.toml` exists). Ingest,
+  distribution, vulns, the console and maintenance want it and start after
+  it, so the restart after a plain `dnf upgrade` migrates first. A migration
+  that changes stored data fails it with "run Update", and the services
+  then refuse the old schema as before; Update backs up and migrates.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes-admin`, with the same hardening.

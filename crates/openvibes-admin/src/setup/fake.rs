@@ -79,6 +79,19 @@ impl Fake {
         ));
     }
 
+    /// Calls starting with `prefix` exit 1 with `stderr`.
+    pub fn fail(&self, prefix: &[&str], stderr: &str) {
+        self.answers.borrow_mut().push((
+            prefix.iter().map(|s| (*s).to_owned()).collect(),
+            Output {
+                status: 1,
+                stdout: String::new(),
+                stderr: stderr.into(),
+            },
+            None,
+        ));
+    }
+
     /// Calls starting with `prefix` succeed and run `effect` on the root.
     pub fn effect(&self, prefix: &[&str], effect: impl Fn(&Path) + 'static) {
         self.answers.borrow_mut().push((

@@ -130,6 +130,7 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-vulns/LICENSE
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unitdir}/openvibes-ingest.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
+install -D -m 0644 $S/packaging/rpm/openvibes-migrate.service %{buildroot}%{_unitdir}/openvibes-migrate.service
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.sysusers %{buildroot}%{_sysusersdir}/openvibes-ingest.conf
 install -D -m 0644 $S/packaging/rpm/openvibes-admin.sysusers %{buildroot}%{_sysusersdir}/openvibes-admin.conf
 install -D -m 0640 $S/packaging/rpm/ingest.toml %{buildroot}%{_sysconfdir}/openvibes/ingest.toml
@@ -265,6 +266,7 @@ fi
 %{_bindir}/openvibes-admin
 %{_unitdir}/openvibes-maintenance.service
 %{_unitdir}/openvibes-maintenance.timer
+%{_unitdir}/openvibes-migrate.service
 %{_sysusersdir}/openvibes-admin.conf
 %dir %{_libexecdir}/openvibes
 %{_libexecdir}/openvibes/rename-account-admin

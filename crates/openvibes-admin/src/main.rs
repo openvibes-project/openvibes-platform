@@ -45,7 +45,13 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Apply pending schema migrations.
-    Migrate,
+    Migrate {
+        /// Only additive ones: stop, applying nothing, before a migration
+        /// that changes stored data (the unit that runs after a package
+        /// upgrade, board #77; Update backs up first and applies all).
+        #[arg(long)]
+        additive: bool,
+    },
     /// Summarise agents, tokens, and finding partitions.
     Status,
     /// Create upcoming finding partitions and drop expired ones.
@@ -187,7 +193,7 @@ fn short_text(value: &str) -> Result<String, String> {
 impl Command {
     fn name(&self) -> &'static str {
         match self {
-            Self::Migrate => "migrate",
+            Self::Migrate { .. } => "migrate",
             Self::Status => "status",
             Self::Maintenance { .. } => "maintenance",
             Self::Ca { command } => command.name(),
@@ -444,7 +450,12 @@ async fn require_current_schema(client: &platform_store::Client) -> Result<(), S
         Some(version) if version > SCHEMA_VERSION => {
             Err(store_error(StoreError::NewerSchema(version)))
         }
-        _ => Err("schema is not current; run openvibes-admin migrate".into()),
+        // Board #77: say when the pending schema change needs Update's backup.
+        Some(version) => match platform_store::needs_backup_after(version) {
+            Some(needs) => Err(StoreError::NeedsBackup(needs).to_string()),
+            None => Err("schema is not current; run openvibes-admin migrate".into()),
+        },
+        None => Err("schema is not current; run openvibes-admin migrate".into()),
     }
 }
 
@@ -463,13 +474,18 @@ const STATUS_READS: &[&str] = &[
 
 async fn run(command: &Command, client: &mut platform_store::Client) -> Result<String, String> {
     let fail = store_error;
-    if let Command::Migrate = command {
-        let version = platform_store::migrate(client).await.map_err(fail)?;
+    if let Command::Migrate { additive } = command {
+        let version = if *additive {
+            platform_store::migrate_additive(client).await
+        } else {
+            platform_store::migrate(client).await
+        }
+        .map_err(fail)?;
         return Ok(format!("schema version {version}\n"));
     }
     require_current_schema(client).await?;
     match command {
-        Command::Migrate
+        Command::Migrate { .. }
         | Command::Ca { .. }
         | Command::Token { .. }
         | Command::Agent { .. }

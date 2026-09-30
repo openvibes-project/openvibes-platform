@@ -22,7 +22,16 @@ systemd-analyze verify /usr/lib/systemd/system/openvibes-ingest.service \
     /usr/lib/systemd/system/openvibes-distribution.service \
     /usr/lib/systemd/system/openvibes-vulns.service \
     /usr/lib/systemd/system/openvibes-maintenance.service \
-    /usr/lib/systemd/system/openvibes-maintenance.timer || fail "unit verification"
+    /usr/lib/systemd/system/openvibes-maintenance.timer \
+    /usr/lib/systemd/system/openvibes-migrate.service || fail "unit verification"
+# A plain `dnf upgrade` migrates before the services start (board #77).
+for unit in ingest distribution vulns maintenance; do
+    grep -q '^After=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-$unit.service \
+        && grep -q '^Wants=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-$unit.service \
+        || fail "openvibes-$unit.service does not start after openvibes-migrate.service"
+done
+grep -qx 'ExecStart=/usr/bin/openvibes-admin migrate --additive' /usr/lib/systemd/system/openvibes-migrate.service \
+    || fail "openvibes-migrate.service does not run additive migrations only"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service || fail "unit lacks KillSignal=SIGINT (the drain signal)"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-distribution.service || fail "distribution unit lacks KillSignal=SIGINT"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-vulns.service || fail "vulns unit lacks KillSignal=SIGINT"

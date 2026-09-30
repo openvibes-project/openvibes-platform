@@ -133,11 +133,47 @@ pub async fn schema_version(client: &Client) -> Result<Option<i32>, StoreError> 
     Ok(row.map(|row| row.get(0)))
 }
 
+/// The header line of a migration that drops or rewrites stored data. The
+/// automatic migration after a package upgrade stops before it (board #77).
+pub const NEEDS_BACKUP: &str = "-- openvibes: needs-backup";
+
+/// Migrations from before the marker that change stored data, reviewed
+/// once: 13 (OSV columns folded and dropped), 14 (duplicate vulnerabilities
+/// deleted), 16 (findings backfilled and pruned), 20 (triage backfill), 24
+/// (role permissions deleted). Migrations are immutable, so they carry no
+/// header; later ones must.
+const CHANGES_DATA: [i32; 5] = [13, 14, 16, 20, 24];
+
+fn needs_backup(version: i32, sql: &str) -> bool {
+    CHANGES_DATA.contains(&version) || sql.lines().any(|line| line.trim() == NEEDS_BACKUP)
+}
+
+/// The first migration after `applied` that changes stored data, if any:
+/// the automatic migration stops there and Update, which backs up, runs it.
+#[must_use]
+pub fn needs_backup_after(applied: i32) -> Option<i32> {
+    MIGRATIONS
+        .iter()
+        .find(|(version, sql)| *version > applied && needs_backup(*version, sql))
+        .map(|(version, _)| *version)
+}
+
 /// Applies every pending migration in one transaction and returns the
 /// version now in place. The version table is locked for the duration, so
 /// two concurrent runs cannot both apply a migration. A newer schema is
 /// refused, never rolled back.
 pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
+    migrate_with(client, true).await
+}
+
+/// [`migrate`], refusing ([`StoreError::NeedsBackup`], nothing applied)
+/// when a pending migration changes stored data: the unit that runs after
+/// a package upgrade, where no backup was taken.
+pub async fn migrate_additive(client: &mut Client) -> Result<i32, StoreError> {
+    migrate_with(client, false).await
+}
+
+async fn migrate_with(client: &mut Client, backed_up: bool) -> Result<i32, StoreError> {
     let transaction = client.transaction().await?;
     // Serializes concurrent runs before anything else, including creating
     // the version table (a racing CREATE ... IF NOT EXISTS fails).
@@ -156,6 +192,9 @@ pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
     if applied > SCHEMA_VERSION {
         return Err(StoreError::NewerSchema(applied));
     }
+    if !backed_up && let Some(version) = needs_backup_after(applied) {
+        return Err(StoreError::NeedsBackup(version));
+    }
     for (_, sql) in MIGRATIONS.iter().filter(|(version, _)| *version > applied) {
         transaction.batch_execute(sql).await?;
     }
@@ -173,7 +212,35 @@ pub async fn migrate(client: &mut Client) -> Result<i32, StoreError> {
 
 #[cfg(test)]
 mod tests {
-    use super::MIGRATIONS;
+    use super::{CHANGES_DATA, MIGRATIONS, NEEDS_BACKUP};
+
+    /// A migration that looks like it changes stored data carries the
+    /// needs-backup header (board #77), so a plain package upgrade never
+    /// applies it without a backup.
+    #[test]
+    fn data_changing_migrations_are_marked() {
+        // Statement starts that change rows, and clauses that drop or
+        // retype stored columns or tables.
+        const STARTS: [&str; 3] = ["update ", "delete from", "truncate"];
+        const CLAUSES: [&str; 4] = ["drop column", "drop table", " type ", "rename column"];
+        for (version, sql) in MIGRATIONS {
+            let changes = sql
+                .lines()
+                .map(|line| line.trim().to_lowercase())
+                .filter(|line| !line.starts_with("--"))
+                .find(|line| {
+                    STARTS.iter().any(|start| line.starts_with(start))
+                        || CLAUSES.iter().any(|clause| line.contains(clause))
+                });
+            if let Some(line) = changes {
+                assert!(
+                    CHANGES_DATA.contains(version) || sql.contains(NEEDS_BACKUP),
+                    "migration {version} changes stored data ({line:?}): add a \
+                     `{NEEDS_BACKUP}` line"
+                );
+            }
+        }
+    }
 
     // Two branches once both added a 0023 migration and the merge kept only
     // one: every file in migrations/ must be embedded, each number once.
