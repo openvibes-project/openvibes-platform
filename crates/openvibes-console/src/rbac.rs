@@ -111,7 +111,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
     match role {
         BuiltInRole::Viewer => matches!(
             permission,
-            P::AgentsRead | P::FindingsRead | P::VulnerabilitiesRead
+            P::AgentsRead | P::FindingsRead | P::VulnerabilitiesRead | P::AlarmsRead
         ),
         BuiltInRole::Analyst => {
             matches!(
@@ -121,6 +121,9 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
                     | P::FindingsTriage
                     | P::VulnerabilitiesRead
                     | P::AssistantUse
+                    | P::AlarmsRead
+                    | P::AlarmsTriage
+                    | P::AlarmsSuppress
             )
         }
         BuiltInRole::Operator => matches!(
@@ -133,6 +136,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
                 | P::TokensCreate
                 | P::TokensRevoke
                 | P::RulesUpload
+                | P::AlarmsRead
         ),
         BuiltInRole::Admin => true,
     }
@@ -146,6 +150,9 @@ fn is_agent_bound(permission: Permission) -> bool {
             | Permission::FindingsRead
             | Permission::VulnerabilitiesRead
             | Permission::FindingsTriage
+            | Permission::AlarmsRead
+            | Permission::AlarmsTriage
+            | Permission::AlarmsSuppress
     )
 }
 
@@ -155,6 +162,9 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::FindingsRead,
     Permission::VulnerabilitiesRead,
     Permission::FindingsTriage,
+    Permission::AlarmsRead,
+    Permission::AlarmsTriage,
+    Permission::AlarmsSuppress,
     Permission::TokensRead,
     Permission::TokensCreate,
     Permission::TokensRevoke,
@@ -197,6 +207,7 @@ mod tests {
                 (Permission::AgentsRevoke, vec!["group-a", "group-b"]),
                 (Permission::FindingsRead, vec!["group-a", "group-b"]),
                 (Permission::VulnerabilitiesRead, vec!["group-a", "group-b"]),
+                (Permission::AlarmsRead, vec!["group-a", "group-b"]),
             ]
             .map(|(permission, asset_group_ids)| crate::EffectiveCapability {
                 permission,

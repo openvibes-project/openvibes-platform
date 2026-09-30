@@ -238,7 +238,7 @@ async fn concurrent_migrate_and_maintenance_both_succeed() {
             platform_store::ensure_partitions(&a, today, 7),
             platform_store::ensure_partitions(&b, today, 7)
         );
-        assert_eq!(x.unwrap() + y.unwrap(), 8, "each partition created once");
+        assert_eq!(x.unwrap() + y.unwrap(), 24, "each partition created once");
         drop((a, b));
         db.drop().await;
     }

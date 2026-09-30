@@ -358,15 +358,42 @@ The `detail` column is never given secrets.
 
 ## Partitions and retention
 
-- `ensure_partitions(&client, today, days_ahead)`: creates `findings_YYYYMMDD`
-  partitions for today and the next `days_ahead` days that are missing;
+- Three tables are partitioned by day and share one retention: `findings`,
+  `alarms` and `alarm_triage_history` (schema 29).
+- `ensure_partitions(&client, today, days_ahead)`: creates `<table>_YYYYMMDD`
+  partitions of each for today and the next `days_ahead` days that are missing;
   returns how many it created. Safe to run repeatedly, and concurrently:
   both this and `drop_partitions_before` hold a session advisory lock
   (always released, errors included), so a second run waits and then finds
   nothing to do.
-- `drop_partitions_before(&client, cutoff)`: drops partitions for days before
-  `cutoff`, **never today's**, even if `cutoff` is later.
-- Partition names come only from dates, never from input.
+- `drop_partitions_before(&client, cutoff)`: drops partitions of each for
+  days before `cutoff`, **never today's**, even if `cutoff` is later.
+- `partition_days(&client)` lists the `findings` days (ingest's "no
+  partition" check); `partition_days_of(&client, table)` any of the three.
+- Partition names come only from table constants and dates, never from input.
+
+## Threat alarms (schema 29)
+
+`0029_alarms.sql` (additive; protocol P14, plan
+`docs/superpowers/plans/2026-09-30-threat-alarms-3-platform.md`):
+
+- `alarms`: one row per alarm, partitioned by `first_seen_day` (UTC day of
+  `first_seen`, checked). `id` is the platform's key for the console;
+  `alarm_id` is the agent's and unique only per agent (`(agent_id,
+  alarm_id)` is indexed for the lookup before insert). Triage (`state`,
+  assignee, note, `accepted_until`, `triage_version`) lives on the row, so
+  it leaves with its partition; the CHECKs match findings triage.
+- `alarm_triage_history`: partitioned by the alarm's day, same reason.
+- `alarm_suppressions`: `host` (agent), `program` (exe) or `command` (exe
+  and SHA-256 of the masked args); a CHECK ties the columns to the scope;
+  removal sets `removed_at`/`removed_by` and keeps the row.
+- `agents.alarms_dropped_total`: the largest `dropped_total` reported.
+- Permissions `alarms.read`, `alarms.triage`, `alarms.suppress` (agent
+  scoped) for the roles in `console-rbac.md`.
+- Grants: ingest SELECT/INSERT/UPDATE on `alarms`, INSERT on the history,
+  SELECT on suppressions; the console SELECT on `alarms` with UPDATE only
+  on the triage columns, SELECT/INSERT on the history, and
+  SELECT/INSERT/UPDATE on suppressions.
 
 ## Status
 

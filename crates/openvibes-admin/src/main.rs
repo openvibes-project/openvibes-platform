@@ -496,6 +496,11 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             platform_store::migrate(client).await
         }
         .map_err(fail)?;
+        // A table added by this migration (alarms, schema 29) must accept
+        // rows before the daily maintenance timer next runs.
+        platform_store::ensure_partitions(client, Utc::now().date_naive(), PARTITIONS_AHEAD)
+            .await
+            .map_err(fail)?;
         return Ok(format!("schema version {version}\n"));
     }
     require_current_schema(client).await?;

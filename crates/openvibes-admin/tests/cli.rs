@@ -23,8 +23,8 @@ async fn migrate_status_and_maintenance_are_audited() {
         "agents offline 0",
         "agents revoked 0",
         "tokens usable 0",
-        "partitions none",
-        "partition count 0",
+        // migrate gives every day-partitioned table today and the week ahead.
+        "partition count 8",
     ] {
         assert!(
             status.lines().any(|l| l == line),
@@ -32,8 +32,9 @@ async fn migrate_status_and_maintenance_are_audited() {
         );
     }
     // The whole retention window gets partitions, so any finding an agent may
-    // still deliver has a home: 90 days back to 7 days ahead.
-    assert!(stdout(&fixture.run(&["maintenance"])).contains("created 98 partitions, dropped 0"));
+    // still deliver has a home: 90 days back to 7 days ahead (the last 8 days
+    // of each of the three tables already exist from migrate).
+    assert!(stdout(&fixture.run(&["maintenance"])).contains("created 270 partitions, dropped 0"));
     let today = chrono::Utc::now().date_naive();
     let window = format!(
         "partitions {}..{}",
@@ -105,7 +106,8 @@ async fn an_out_of_range_retention_is_refused_before_any_change() {
     assert!(
         stdout(&fixture.run(&["status"]))
             .lines()
-            .any(|l| l == "partitions none")
+            .any(|l| l == "partition count 8"),
+        "only migrate's partitions: the refused runs changed nothing"
     );
     fixture.drop().await;
 }
