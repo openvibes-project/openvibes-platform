@@ -97,10 +97,7 @@ impl Setup {
             hostname,
             sans: String::new(),
             ca: CaMode::Quick,
-            root_key_out: home
-                .as_ref()
-                .map(|home| format!("{home}/openvibes-root-ca.key"))
-                .unwrap_or_default(),
+            root_key_out: default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
             console_note: None,
@@ -333,11 +330,26 @@ impl<H: Host> App<H> {
             }
         };
         self.setup.components = plan.components.iter().copied().collect();
-        self.setup.previous = Some(self.setup.components.clone());
         self.setup.hostname = plan.hostname.clone();
         self.setup.sans = plan.sans.join(", ");
-        self.setup.ca = plan.ca;
-        self.setup.root_key_out.clear(); // the CA exists; no new root key
+        // #87: a plan from a first install that stopped before the CA is
+        // not a set-up host: run the install again (new CA, free key name)
+        // instead of a Repair that refuses to make a CA.
+        let ca_exists = self
+            .host
+            .certificates()
+            .iter()
+            .any(|(path, _)| *path == "/etc/openvibes/pki/intermediate.crt");
+        if ca_exists {
+            self.setup.previous = Some(self.setup.components.clone());
+            self.setup.ca = plan.ca;
+            self.setup.root_key_out.clear(); // the CA exists; no new root key
+        } else {
+            self.setup.previous = None;
+            // Looked up now: a key written since the TUI started (by a CA
+            // step that then failed, or kept by Remove everything) is taken.
+            self.setup.root_key_out = default_root_key(self.setup.home.as_deref());
+        }
         self.setup.console_port = plan.console_port.to_string();
         self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
         self.setup.console_note = None;
@@ -592,5 +604,38 @@ impl<H: Host> App<H> {
         } else {
             Phase::Running(next + 1)
         };
+    }
+}
+
+/// The free default root key file in `home`, or empty without a home.
+fn default_root_key(home: Option<&str>) -> String {
+    home.map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
+        .unwrap_or_default()
+}
+
+/// `HOME/openvibes-root-ca.key`, or `-2`, `-3`… when taken: Remove
+/// everything keeps the old root key (it is the user's), so a new install
+/// must not stop on it (#87).
+fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
+    let base = format!("{home}/openvibes-root-ca");
+    std::iter::once(format!("{base}.key"))
+        .chain((2..).map(|n| format!("{base}-{n}.key")))
+        .find(|path| !exists(path))
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod root_key_tests {
+    #[test]
+    fn the_default_root_key_name_skips_taken_files() {
+        let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];
+        assert_eq!(
+            super::free_root_key("/h", |p| taken.contains(&p)),
+            "/h/openvibes-root-ca-3.key"
+        );
+        assert_eq!(
+            super::free_root_key("/h", |_| false),
+            "/h/openvibes-root-ca.key"
+        );
     }
 }

@@ -51,6 +51,15 @@ impl Host for SetupHost {
     fn needs_password(&self) -> bool {
         !self.root
     }
+    fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        // A set-up host has its CA; a plan left by a first install that
+        // stopped before the CA step does not (#87).
+        if self.plan.is_empty() || self.plan.contains("# no ca") {
+            Vec::new()
+        } else {
+            vec![("/etc/openvibes/pki/intermediate.crt", Ok(String::new()))]
+        }
+    }
     fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
         Ok(self.packages.clone())
     }
@@ -329,6 +338,29 @@ fn repair_runs_every_step_in_repair_mode() {
     app.key(Key::Enter);
     app.setup_tick();
     assert_eq!(app.host.calls.borrow()[0].0, "setup-step packages --repair");
+}
+
+/// #87: a plan from a first install that stopped before the CA step is
+/// not a set-up host: `m` offers a fresh install with a root key file.
+#[test]
+fn components_after_a_stopped_first_install_install_again() {
+    let mut app = set_up(vec![]);
+    app.host.plan = format!("{PLAN}# no ca\n");
+    // The failed run's CA step wrote the default key after the TUI started.
+    let home = std::env::temp_dir().join(format!("ov-87-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("openvibes-root-ca.key"), "x").unwrap();
+    app.setup.home = Some(home.display().to_string());
+    app.tab = Tab::Setup;
+    app.key(Key::Char('m'));
+    assert_eq!(app.setup.phase, Phase::Form);
+    assert!(app.setup.previous.is_none(), "install, not repair");
+    assert_eq!(
+        app.setup.root_key_out,
+        home.join("openvibes-root-ca-2.key").display().to_string(),
+        "the name taken since startup is skipped"
+    );
+    std::fs::remove_dir_all(&home).unwrap();
 }
 
 #[test]
