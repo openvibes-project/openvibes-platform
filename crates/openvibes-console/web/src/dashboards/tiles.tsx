@@ -46,7 +46,7 @@ export function NumberTile({ widget }: WidgetProps) {
   const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
   return (
     <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? "—" : value === undefined ? "…" : count(value)}</span>
+      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : value === undefined ? "…" : count(value)}</span>
       {unset && <span className="subtle">Not set up</span>}
     </button>
   );

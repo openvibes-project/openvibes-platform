@@ -80,6 +80,8 @@ test("vulnerability number tiles show no zero before any feed imported", async (
   for (const title of ["Exploited", "Hosts needing a reboot"]) {
     const tile = page.locator(".tile", { hasText: title });
     await expect(tile.locator(".stat__value")).toHaveText("—");
+    // Read aloud as "Not set up", not "dash, Not set up".
+    await expect(tile.getByRole("button")).toHaveAccessibleName("Not set up");
     const note = tile.getByText("Not set up");
     await expect(note).toBeVisible();
     // Inside the tile, not cut off by its fixed height.
