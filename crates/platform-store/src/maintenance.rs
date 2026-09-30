@@ -5,31 +5,45 @@ use deadpool_postgres::Client;
 
 use crate::StoreError;
 
-/// Partition names are built only from dates, never from input.
-fn partition_name(day: NaiveDate) -> String {
-    format!("findings_{}", day.format("%Y%m%d"))
+/// The tables partitioned by day, kept with the same retention.
+const PARTITIONED: [&str; 3] = ["findings", "alarms", "alarm_triage_history"];
+
+/// Partition names are built only from constants and dates, never from input.
+fn partition_name(table: &str, day: NaiveDate) -> String {
+    format!("{table}_{}", day.format("%Y%m%d"))
 }
 
 /// The days that have a `findings` partition.
 pub async fn partition_days(client: &Client) -> Result<BTreeSet<NaiveDate>, StoreError> {
+    partition_days_of(client, "findings").await
+}
+
+/// The days that have a partition of `table`, one of `findings`, `alarms` or `alarm_triage_history`.
+pub async fn partition_days_of(
+    client: &Client,
+    table: &str,
+) -> Result<BTreeSet<NaiveDate>, StoreError> {
     let rows = client
         .query(
             "SELECT c.relname FROM pg_inherits i JOIN pg_class c ON c.oid = i.inhrelid
-             WHERE i.inhparent = 'findings'::regclass",
-            &[],
+             WHERE i.inhparent = $1::text::regclass",
+            &[&table],
         )
         .await?;
+    let prefix = format!("{table}_");
     Ok(rows
         .iter()
         .filter_map(|row| {
             let name: String = row.get(0);
-            NaiveDate::parse_from_str(name.strip_prefix("findings_")?, "%Y%m%d").ok()
+            NaiveDate::parse_from_str(name.strip_prefix(&prefix)?, "%Y%m%d").ok()
         })
         .collect())
 }
 
-/// Creates daily partitions for `today` and the `days_ahead` days after it
-/// that do not exist yet; returns how many were created.
+/// Creates daily partitions of every day-partitioned table (findings, alarms,
+/// alarm triage history) for `today` and
+/// the `days_ahead` days after it that do not exist yet; returns how many
+/// were created.
 pub async fn ensure_partitions(
     client: &Client,
     today: NaiveDate,
@@ -66,30 +80,34 @@ async fn create_partitions(
     today: NaiveDate,
     days_ahead: u32,
 ) -> Result<u32, StoreError> {
-    let existing = partition_days(client).await?;
     let mut created = 0;
-    for offset in 0..=i64::from(days_ahead) {
-        let day = today + Duration::days(offset);
-        if existing.contains(&day) {
-            continue;
+    for table in PARTITIONED {
+        let existing = partition_days_of(client, table).await?;
+        for offset in 0..=i64::from(days_ahead) {
+            let day = today + Duration::days(offset);
+            if existing.contains(&day) {
+                continue;
+            }
+            let next = day + Duration::days(1);
+            client
+                .batch_execute(&format!(
+                    "CREATE TABLE IF NOT EXISTS {} PARTITION OF {table}
+                     FOR VALUES FROM ('{}') TO ('{}')",
+                    partition_name(table, day),
+                    day.format("%Y-%m-%d"),
+                    next.format("%Y-%m-%d"),
+                ))
+                .await?;
+            created += 1;
         }
-        let next = day + Duration::days(1);
-        client
-            .batch_execute(&format!(
-                "CREATE TABLE IF NOT EXISTS {} PARTITION OF findings
-                 FOR VALUES FROM ('{}') TO ('{}')",
-                partition_name(day),
-                day.format("%Y-%m-%d"),
-                next.format("%Y-%m-%d"),
-            ))
-            .await?;
-        created += 1;
     }
     Ok(created)
 }
 
-/// Drops partitions for days strictly before `cutoff`, but never the
-/// partition for the current day; returns how many were dropped.
+/// Drops partitions of every day-partitioned table (findings, alarms,
+/// alarm triage history) for days strictly before
+/// `cutoff`, but never the partition for the current day; returns how many
+/// were dropped.
 pub async fn drop_partitions_before(client: &Client, cutoff: NaiveDate) -> Result<u32, StoreError> {
     locked(client, drop_partitions(client, cutoff)).await
 }
@@ -97,11 +115,16 @@ pub async fn drop_partitions_before(client: &Client, cutoff: NaiveDate) -> Resul
 async fn drop_partitions(client: &Client, cutoff: NaiveDate) -> Result<u32, StoreError> {
     let cutoff = cutoff.min(chrono::Utc::now().date_naive());
     let mut dropped = 0;
-    for day in partition_days(client).await?.range(..cutoff) {
-        client
-            .batch_execute(&format!("DROP TABLE IF EXISTS {}", partition_name(*day)))
-            .await?;
-        dropped += 1;
+    for table in PARTITIONED {
+        for day in partition_days_of(client, table).await?.range(..cutoff) {
+            client
+                .batch_execute(&format!(
+                    "DROP TABLE IF EXISTS {}",
+                    partition_name(table, *day)
+                ))
+                .await?;
+            dropped += 1;
+        }
     }
     Ok(dropped)
 }

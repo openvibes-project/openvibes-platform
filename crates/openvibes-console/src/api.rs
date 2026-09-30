@@ -121,6 +121,15 @@ pub enum Permission {
     /// Change human triage state for findings.
     #[serde(rename = "findings.triage")]
     FindingsTriage,
+    /// Read threat alarms.
+    #[serde(rename = "alarms.read")]
+    AlarmsRead,
+    /// Change human triage state for alarms.
+    #[serde(rename = "alarms.triage")]
+    AlarmsTriage,
+    /// Create and remove alarm suppressions.
+    #[serde(rename = "alarms.suppress")]
+    AlarmsSuppress,
     /// Read enrollment tokens.
     #[serde(rename = "tokens.read")]
     TokensRead,

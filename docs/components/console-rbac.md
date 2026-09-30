@@ -8,6 +8,9 @@ control-plane permissions; a global grant for a permission dominates any
 scoped grants. Group IDs are deduplicated and sorted for stable output.
 `dashboards.share` (global, Admin only) lets an owner share their own
 dashboards with a role (schema 26).
+`alarms.read` (all four roles), `alarms.triage` and `alarms.suppress`
+(Analyst, Admin) are agent-scoped like their findings counterparts
+(schema 29); the routes that use them come with threat alarms (P14).
 
 The resolver is pure and has no configuration or database access. Persisted
 bindings are loaded from PostgreSQL for each authenticated request. The

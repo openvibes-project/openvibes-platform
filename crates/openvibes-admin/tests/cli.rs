@@ -33,7 +33,7 @@ async fn migrate_status_and_maintenance_are_audited() {
     }
     // The whole retention window gets partitions, so any finding an agent may
     // still deliver has a home: 90 days back to 7 days ahead.
-    assert!(stdout(&fixture.run(&["maintenance"])).contains("created 98 partitions, dropped 0"));
+    assert!(stdout(&fixture.run(&["maintenance"])).contains("created 294 partitions, dropped 0"));
     let today = chrono::Utc::now().date_naive();
     let window = format!(
         "partitions {}..{}",

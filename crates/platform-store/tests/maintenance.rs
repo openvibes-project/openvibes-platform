@@ -20,7 +20,8 @@ async fn partitions_are_created_once_and_today_is_never_dropped() {
         platform_store::ensure_partitions(&client, today, 7)
             .await
             .unwrap(),
-        8
+        24,
+        "8 days each for findings, alarms and alarm triage history"
     );
     assert_eq!(
         platform_store::ensure_partitions(&client, today, 7)
@@ -58,7 +59,14 @@ async fn retention_drops_only_older_partitions() {
         platform_store::drop_partitions_before(&client, cutoff)
             .await
             .unwrap(),
-        10
+        30,
+        "alarms keep the same retention as findings"
+    );
+    assert_eq!(
+        platform_store::partition_days_of(&client, "alarms")
+            .await
+            .unwrap(),
+        platform_store::partition_days(&client).await.unwrap()
     );
     let status = platform_store::status(&client, Utc::now()).await.unwrap();
     assert_eq!(status.oldest_partition, Some(cutoff));
