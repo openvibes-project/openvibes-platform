@@ -87,7 +87,9 @@ vulnerability and grouped-finding data so both pages can be reviewed locally.
 `/vulnerabilities/advisories/{advisory_id}` require `vulnerabilities.read`.
 Every query applies the caller's asset scope in SQL before returning records.
 The summary reports severity, affected hosts, exploited advisories, no-fix
-matches, and reboot-needed hosts. The bounded prioritized list uses the same
+matches, and reboot-needed hosts, plus `feed_last_imported_at` (RFC 3339,
+null until an advisory feed has imported: then zero counts mean "not set
+up", not "nothing found"). The bounded prioritized list uses the same
 ranking as `vulns list`; host, advisory, severity, CVE, and fixed-state filters
 are available, with exploited and reboot-needed filters applied before the
 store's fleet row cap. Host names that match multiple visible hosts are refused

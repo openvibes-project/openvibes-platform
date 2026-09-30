@@ -65,10 +65,29 @@ test("an empty service accounts view explains the next step", async ({ page }) =
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
 });
 
-test("Most exposed hosts says so when no host has a vulnerability", async ({ page }) => {
+test("Most exposed hosts says scanning is not set up before any feed imported", async ({ page }) => {
+  // This platform never imported a vulnerability feed: "no vulnerable host"
+  // would claim a scan that never ran (board #47).
   await signIn(page, "alex");
   const tile = page.locator(".tile", { hasText: "Most exposed hosts" });
-  await expect(tile.getByText("No host has an open vulnerability")).toBeVisible();
+  await expect(tile.getByText("Vulnerability scanning is not set up")).toBeVisible();
+  await expect(tile.getByText("No host has an open vulnerability")).toHaveCount(0);
+});
+
+test("vulnerability number tiles show no zero before any feed imported", async ({ page }) => {
+  // A 0 would claim nothing was found; nothing was looked for (board #47).
+  await signIn(page, "alex");
+  for (const title of ["Exploited", "Hosts needing a reboot"]) {
+    const tile = page.locator(".tile", { hasText: title });
+    await expect(tile.locator(".stat__value")).toHaveText("—");
+    // Read aloud as "Not set up", not "dash, Not set up".
+    await expect(tile.getByRole("button")).toHaveAccessibleName("Not set up");
+    const note = tile.getByText("Not set up");
+    await expect(note).toBeVisible();
+    // Inside the tile, not cut off by its fixed height.
+    const bottom = async (l: typeof tile) => { const b = await l.boundingBox(); if (!b) throw new Error("not rendered"); return b.y + b.height; };
+    expect(await bottom(note)).toBeLessThanOrEqual(await bottom(tile));
+  }
 });
 
 test("an Access filter with no matches explains the empty list", async ({ page }) => {

@@ -268,3 +268,47 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
     drop(client);
     db.drop().await;
 }
+
+/// The console tells "no vulnerable host" from "no vulnerability feed yet"
+/// (board #47): the summary carries when an advisory feed last imported,
+/// null until one has; enrichment feeds (KEV, EPSS, NVD: `os_id = 'cve'`)
+/// don't count, since they alone match nothing.
+#[tokio::test]
+async fn the_vulnerability_summary_says_whether_a_feed_ever_imported() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let console = db.pool.get().await.unwrap();
+    console
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    let imported = || async {
+        platform_store::vulns::summary_in_scope(&console, &AgentScope::Global)
+            .await
+            .unwrap()
+            .feed_last_imported_at
+    };
+    assert_eq!(imported().await, None, "no feed yet");
+
+    let at = Utc::now() - Duration::hours(2);
+    let key = ("kev", "cve", "", "");
+    platform_store::vulns::record_feed(&admin, key, Ok(([1; 32], 10)), at)
+        .await
+        .unwrap();
+    assert_eq!(imported().await, None, "an enrichment feed alone");
+
+    let fedora = ("fedora-44-x86_64", "fedora", "44", "x86_64");
+    platform_store::vulns::record_feed(&admin, fedora, Err("offline"), at)
+        .await
+        .unwrap();
+    assert_eq!(imported().await, None, "a failed first download");
+
+    platform_store::vulns::record_feed(&admin, fedora, Ok(([2; 32], 3)), at)
+        .await
+        .unwrap();
+    let got = imported().await.expect("imported once");
+    assert!((got - at).num_milliseconds().abs() < 1, "{got} vs {at}");
+    drop(admin);
+    db.drop().await;
+}

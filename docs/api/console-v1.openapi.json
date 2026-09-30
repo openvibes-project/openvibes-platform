@@ -6378,6 +6378,13 @@
             "description": "Open, non-reboot findings with KEV/EUVD exploitation evidence.",
             "minimum": 0
           },
+          "feed_last_imported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When an advisory feed last imported new content (RFC 3339); null\nuntil one has, so zero counts mean \"nothing found\" only when set."
+          },
           "hosts": {
             "type": "integer",
             "format": "int64",

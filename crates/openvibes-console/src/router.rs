@@ -4675,6 +4675,9 @@ pub(crate) async fn authenticated_vulnerability_summary(
         reboot_hosts: summary.reboot_hosts.max(0) as u64,
         no_fix: summary.no_fix.max(0) as u64,
         exploited: summary.exploited.max(0) as u64,
+        feed_last_imported_at: summary
+            .feed_last_imported_at
+            .map(|at| at.to_rfc3339_opts(SecondsFormat::Secs, true)),
     })
     .into_response()
 }
