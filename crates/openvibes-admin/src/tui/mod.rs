@@ -15,6 +15,8 @@ mod database_view;
 pub mod form;
 mod jobs;
 mod maintain;
+#[cfg(test)]
+mod maintain_tests;
 mod maintain_view;
 mod password;
 mod services;

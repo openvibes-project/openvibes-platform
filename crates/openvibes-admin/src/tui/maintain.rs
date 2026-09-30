@@ -100,10 +100,23 @@ impl<H: Host> App<H> {
             return;
         }
         match key {
-            Key::Char('j') | Key::Down if self.setup.row2 < UNINSTALL_START_ROW => {
-                self.setup.row2 += 1
+            // Only rows on screen take the focus (#74): the backup and the
+            // typed name exist for Remove everything alone.
+            Key::Char('j') | Key::Down => {
+                let rows = self.uninstall_rows();
+                if let Some(&next) = rows.iter().find(|&&r| r > self.setup.row2) {
+                    self.setup.row2 = next;
+                }
             }
-            Key::Char('k') | Key::Up => self.setup.row2 = self.setup.row2.saturating_sub(1),
+            Key::Char('k') | Key::Up => {
+                let rows = self.uninstall_rows();
+                self.setup.row2 = rows
+                    .iter()
+                    .rev()
+                    .copied()
+                    .find(|&r| r < self.setup.row2)
+                    .unwrap_or(0);
+            }
             Key::Char(' ') if self.setup.row2 == 0 => {
                 self.setup.everything = !self.setup.everything
             }
@@ -111,6 +124,15 @@ impl<H: Host> App<H> {
             Key::Enter => self.setup.editing = self.maintain_field().is_some(),
             Key::Esc => self.setup.phase = Phase::Status,
             _ => {}
+        }
+    }
+
+    /// The Uninstall screen's rows that are shown, top to bottom.
+    fn uninstall_rows(&self) -> &'static [usize] {
+        if self.setup.everything {
+            &[0, 1, 2, UNINSTALL_START_ROW]
+        } else {
+            &[0, UNINSTALL_START_ROW]
         }
     }
 

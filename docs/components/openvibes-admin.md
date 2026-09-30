@@ -42,7 +42,8 @@ rights, not operator membership), writes the plan through `helper
 setup-plan`, then runs one step per screen refresh through `helper
 setup-step`, showing each step's state. The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
-from that step. Three wrong passwords close the prompt. The finished screen
+from that step, and every other action (`c`, `u`, `m`, `x`, below) still
+works from there; `Esc` returns to them without retrying (#73). Three wrong passwords close the prompt. The finished screen
 shows the root certificate's fingerprint, the console address and admin
 password (shown only then), and an endpoint enrollment token. On a set-up
 host, the Setup tab offers `c` check every step (`helper setup-status`),
@@ -52,6 +53,8 @@ the update job), `m` change components (the form filled from `setup.toml`;
 added components are installed, unticked ones removed keeping data) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+Only rows on screen take the focus: with keep data, one `j` goes from the
+choice to `[ Uninstall ]` (#74).
 Each runs one step per refresh like the install, asking for the password
 once. The steps are those of
 `setup --quick` (below).
