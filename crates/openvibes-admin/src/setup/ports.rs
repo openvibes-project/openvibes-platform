@@ -233,17 +233,21 @@ pub fn close_old<R: Runner>(ctx: &Ctx<R>, old: &Plan) -> Result<Vec<String>, Str
         return Ok(Vec::new());
     }
     let new = ctx.plan;
+    let still = [new.console_port, new.ingest_port, new.distribution_port];
     let mut closed = Vec::new();
-    for (from, to) in [
-        (old.console_port, new.console_port),
-        (old.ingest_port, new.ingest_port),
-        (old.distribution_port, new.distribution_port),
-    ] {
+    for from in [old.console_port, old.ingest_port, old.distribution_port] {
+        // A port another service moved onto stays open.
         let port = format!("{from}/tcp");
-        if from != to && ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", &port]) {
+        if !still.contains(&from)
+            && ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", &port])
+        {
             ctx.ok(FirewallCmd, &["--permanent", "--remove-port", &port])?;
             closed.push(port);
         }
+    }
+    if !closed.is_empty() {
+        // The running firewall too, not only after a reboot.
+        ctx.ok(FirewallCmd, &["--reload"])?;
     }
     Ok(closed)
 }

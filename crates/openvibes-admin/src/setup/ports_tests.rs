@@ -356,6 +356,7 @@ fn a_repair_closes_the_ports_it_moved_away_from() {
         0,
         "success\n",
     );
+    fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "success\n");
     let old = plan(&[Ingest, Distribution, Console]);
     let new = old.with_ports(Some(8444), Some(18600), None).unwrap();
     // 18423 was open and is closed; 443 was not open, so nothing to remove.
@@ -369,7 +370,30 @@ fn a_repair_closes_the_ports_it_moved_away_from() {
             "18423/tcp"
         ]
     );
+    // The running firewall too, not only after a reboot.
+    assert!(fake.called(&["/usr/bin/firewall-cmd", "--reload"]));
     // Without firewalld there is nothing to close.
     let fake = Fake::new("ports-close-off");
     assert!(close_old(&fake.ctx(&new), &old).unwrap().is_empty());
+}
+
+#[test]
+fn a_port_another_service_moved_onto_stays_open() {
+    let fake = Fake::new("ports-swap");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
+        0,
+        "yes\n",
+    );
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--remove-port"],
+        0,
+        "success\n",
+    );
+    fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "success\n");
+    let old = plan(&[Ingest, Distribution, Console]);
+    // The console leaves 443 and ingest takes it: 443 must stay open.
+    let new = old.with_ports(Some(8443), Some(443), None).unwrap();
+    assert_eq!(close_old(&fake.ctx(&new), &old).unwrap(), ["18423/tcp"]);
 }

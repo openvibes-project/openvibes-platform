@@ -341,11 +341,6 @@ pub fn repair_all(
             eprintln!("openvibes-admin: {error} (nothing changed)");
             return ExitCode::FAILURE;
         }
-        match ports::close_old(&host_ctx(&plan, true), &old) {
-            Ok(closed) if !closed.is_empty() => println!("Firewall: closed {}", closed.join(" ")),
-            Ok(_) => {}
-            Err(error) => eprintln!("openvibes-admin: {error}"),
-        }
         for (what, from, to) in moved {
             println!(
                 "Agents: {what} moved from {from} to {to}; agents on other hosts still call \
@@ -358,11 +353,23 @@ pub fn repair_all(
         return code;
     }
     let ctx = host_ctx(&plan, true);
-    report(
-        Step::ALL
-            .into_iter()
-            .map(|step| (step.title(), run_step(&ctx, step))),
-    )
+    let states: Vec<_> = Step::ALL
+        .into_iter()
+        .map(|step| (step.title(), run_step(&ctx, step)))
+        .collect();
+    // Old ports close only once every step worked: until then the services
+    // may still listen there.
+    if states
+        .iter()
+        .all(|(_, state)| matches!(state, StepState::Done(_) | StepState::Skipped(_)))
+    {
+        match ports::close_old(&ctx, &old) {
+            Ok(closed) if !closed.is_empty() => println!("Firewall: closed {}", closed.join(" ")),
+            Ok(_) => {}
+            Err(error) => eprintln!("openvibes-admin: {error}"),
+        }
+    }
+    report(states.into_iter())
 }
 
 /// `setup --update [--backup PATH] [--repo-dir DIR]`.
