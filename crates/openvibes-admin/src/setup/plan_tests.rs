@@ -159,3 +159,63 @@ fn repair_moves_only_the_ports_it_is_given() {
     );
     assert!(plan.with_ports(Some(18430), None, None).is_err());
 }
+
+/// A plan from before the port choices (0.1.1): no port fields.
+const OLD_PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\"]\n\
+                        hostname = \"metabox-lnx\"\nca = \"quick\"\n";
+
+fn old_host(name: &str) -> PathBuf {
+    let root = temp(name);
+    let etc = root.join("etc/openvibes");
+    std::fs::create_dir_all(&etc).unwrap();
+    std::fs::write(etc.join("setup.toml"), OLD_PLAN).unwrap();
+    root
+}
+
+/// Board #76: Repair on such a host moved a working 8443 console back to
+/// 443, then stopped on "443 is taken". The ports the services really use
+/// fill the missing fields instead.
+#[test]
+fn a_plan_without_ports_takes_the_ones_the_services_use() {
+    let root = old_host("old-ports");
+    let etc = root.join("etc/openvibes");
+    std::fs::write(
+        etc.join("console.toml"),
+        "transport_mode = \"direct_tls\"\ndevelopment_listen = \"0.0.0.0:8443\"\n",
+    )
+    .unwrap();
+    std::fs::write(etc.join("ingest.toml"), "listen = \"[::]:18500\"\n").unwrap();
+    let (plan, filled) = Plan::load_filled(&root).unwrap();
+    assert!(filled);
+    assert_eq!(
+        (plan.console_port, plan.ingest_port, plan.distribution_port),
+        (8443, 18500, 18424),
+        "no distribution.toml: its default"
+    );
+    assert_eq!(Plan::load(&root).unwrap(), plan);
+}
+
+#[test]
+fn saved_ports_win_and_a_proxied_console_keeps_its_default() {
+    let root = old_host("saved-ports");
+    let etc = root.join("etc/openvibes");
+    std::fs::write(
+        etc.join("console.toml"),
+        "transport_mode = \"reverse_proxy\"\ndevelopment_listen = \"127.0.0.1:8080\"\n",
+    )
+    .unwrap();
+    let (plan, _) = Plan::load_filled(&root).unwrap();
+    assert_eq!(
+        plan.console_port, 443,
+        "behind a proxy the listener is not the port"
+    );
+    std::fs::write(
+        etc.join("setup.toml"),
+        format!("{OLD_PLAN}console_port = 9443\ningest_port = 18423\ndistribution_port = 18424\n"),
+    )
+    .unwrap();
+    std::fs::write(etc.join("ingest.toml"), "listen = \"0.0.0.0:18500\"\n").unwrap();
+    let (plan, filled) = Plan::load_filled(&root).unwrap();
+    assert!(!filled);
+    assert_eq!((plan.console_port, plan.ingest_port), (9443, 18423));
+}

@@ -336,6 +336,11 @@ arguments, then runs every Setup step in order and prints one line per step
 step waits (careful CA: sign the request offline, then run it again), 1 on a
 failure, 2 on bad arguments (checked before the root check).
 `--components` must include `ingest`; `rules` needs `distribution`.
+A `setup.toml` from before the port choices (0.1.1) has no port fields;
+each missing one is taken from the service using it (`console.toml`
+`development_listen` with direct TLS, `ingest.toml`/`distribution.toml`
+`listen`), else its default, and the plan is saved with them on the next
+helper run, so Repair never moves a working service back (#76).
 Hostname and `--san` are lowercase DNS names or IP addresses; paths must be
 absolute. Without `--quick` the command refuses and points to the TUI.
 

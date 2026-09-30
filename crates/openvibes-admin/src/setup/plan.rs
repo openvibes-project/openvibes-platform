@@ -188,6 +188,13 @@ impl Plan {
     }
 
     pub fn load(root: &Path) -> Result<Plan, String> {
+        Plan::load_filled(root).map(|(plan, _)| plan)
+    }
+
+    /// The plan, and whether a port missing from it (a plan from before
+    /// the port choices) was taken from the service using it: its default
+    /// would move a working service (board #76).
+    pub fn load_filled(root: &Path) -> Result<(Plan, bool), String> {
         let path = Plan::file(root);
         let text = fs::read_to_string(&path).map_err(|error| match error.kind() {
             std::io::ErrorKind::NotFound => {
@@ -195,7 +202,54 @@ impl Plan {
             }
             _ => format!("{}: {error}", path.display()),
         })?;
-        toml::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))
+        let fail = |error: toml::de::Error| format!("{}: {error}", path.display());
+        let mut plan: Plan = toml::from_str(&text).map_err(fail)?;
+        let table: toml::Table = toml::from_str(&text).map_err(fail)?;
+        let mut filled = false;
+        let mut fill = |key: &str, port: &mut u16, config: &str, listen: &str| {
+            if table.contains_key(key) {
+                return;
+            }
+            let Ok(text) = fs::read_to_string(root.join("etc/openvibes").join(config)) else {
+                return;
+            };
+            let Ok(config) = toml::from_str::<toml::Table>(&text) else {
+                return;
+            };
+            // Behind a proxy the console's listener is not its public port.
+            if config.contains_key("transport_mode")
+                && config.get("transport_mode").and_then(toml::Value::as_str) != Some("direct_tls")
+            {
+                return;
+            }
+            if let Some(used) = config
+                .get(listen)
+                .and_then(toml::Value::as_str)
+                .and_then(|listen| listen.parse::<std::net::SocketAddr>().ok())
+            {
+                *port = used.port();
+                filled = true;
+            }
+        };
+        fill(
+            "console_port",
+            &mut plan.console_port,
+            "console.toml",
+            "development_listen",
+        );
+        fill(
+            "ingest_port",
+            &mut plan.ingest_port,
+            "ingest.toml",
+            "listen",
+        );
+        fill(
+            "distribution_port",
+            &mut plan.distribution_port,
+            "distribution.toml",
+            "listen",
+        );
+        Ok((plan, filled))
     }
 
     pub fn save(&self, root: &Path) -> Result<(), String> {
