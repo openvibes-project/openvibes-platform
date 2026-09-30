@@ -154,9 +154,9 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                 {state.saving ? "Saving…" : "Save"}</button>
             </>
           ) : mine && dashboard ? (
-            <button type="button" className="button" onClick={() => editor.begin(dashboard)}><Icon name="filter" size={15} /> Edit</button>
+            <button type="button" className="button dashboard-edit" onClick={() => editor.begin(dashboard)}><Icon name="filter" size={15} /> Edit</button>
           ) : (
-            <button type="button" className="button" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Duplicate to edit</button>
+            <button type="button" className="button dashboard-edit" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Duplicate to edit</button>
           )}
           {!editing && (
             <div className="menu">

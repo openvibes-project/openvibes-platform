@@ -176,6 +176,8 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .grid--stacked .tile { position: static; min-height: 140px; grid-column: 1 / -1; }
 /* Phones: numbers two to a row, as tall as their content. */
 .grid--stacked .tile[data-type="number"] { grid-column: auto; min-height: 0; }
+/* Half-width tiles: a title wraps rather than losing its end. */
+.grid--stacked .tile__title.truncate { white-space: normal; overflow-wrap: anywhere; }
 .grid__empty { padding: 32px; justify-content: center; border: 2px dashed var(--line-strong); border-radius: var(--r-3); }
 .tile {
   position: absolute; display: flex; flex-direction: column; overflow: hidden; background: var(--surface);

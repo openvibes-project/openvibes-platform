@@ -175,6 +175,11 @@
   .topbar__title, .topbar__search .kbd, .demo-badge { display: none; }
   .assistant-toggle { padding: 0 8px; }
   .view-header { padding: 16px; }
+  /* The greeting gets the full width; its buttons wrap below it. */
+  .dashboard-header .view-header__top { flex-wrap: wrap; }
+  .dashboard-header .view-header__title { flex: 1 1 100%; }
+  /* Tiles can't be arranged on a phone (Grid.tsx), so no way into editing. */
+  .dashboard-edit { display: none; }
   .view .table-wrap { margin: 0 8px 16px; }
   .view--overview { padding: 16px; }
 }
