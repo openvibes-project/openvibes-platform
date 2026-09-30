@@ -346,15 +346,21 @@ fn repair_runs_every_step_in_repair_mode() {
 fn components_after_a_stopped_first_install_install_again() {
     let mut app = set_up(vec![]);
     app.host.plan = format!("{PLAN}# no ca\n");
-    app.setup.root_key_default = "/home/alice/openvibes-root-ca-2.key".into();
+    // The failed run's CA step wrote the default key after the TUI started.
+    let home = std::env::temp_dir().join(format!("ov-87-{}", std::process::id()));
+    std::fs::create_dir_all(&home).unwrap();
+    std::fs::write(home.join("openvibes-root-ca.key"), "x").unwrap();
+    app.setup.home = Some(home.display().to_string());
     app.tab = Tab::Setup;
     app.key(Key::Char('m'));
     assert_eq!(app.setup.phase, Phase::Form);
     assert!(app.setup.previous.is_none(), "install, not repair");
     assert_eq!(
         app.setup.root_key_out,
-        "/home/alice/openvibes-root-ca-2.key"
+        home.join("openvibes-root-ca-2.key").display().to_string(),
+        "the name taken since startup is skipped"
     );
+    std::fs::remove_dir_all(&home).unwrap();
 }
 
 #[test]

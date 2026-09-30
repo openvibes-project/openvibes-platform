@@ -55,8 +55,6 @@ pub struct Setup {
     pub sans: String,
     pub ca: CaMode,
     pub root_key_out: String,
-    /// The first free root key file name in the home directory (#87).
-    pub root_key_default: String,
     pub console_port: String,
     /// "INGEST, DISTRIBUTION": one row, so the form fits 80×24.
     pub agent_ports: String,
@@ -93,18 +91,13 @@ pub struct Setup {
 impl Setup {
     pub fn new(set_up: bool, hostname: String, home: Option<String>) -> Setup {
         use Component::*;
-        let root_key_default = home
-            .as_deref()
-            .map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
-            .unwrap_or_default();
         Setup {
             components: [Ingest, Console, Distribution, Vulns, Rules, Agent].into(),
             row: 0,
             hostname,
             sans: String::new(),
             ca: CaMode::Quick,
-            root_key_out: root_key_default.clone(),
-            root_key_default,
+            root_key_out: default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
             console_note: None,
@@ -353,7 +346,9 @@ impl<H: Host> App<H> {
             self.setup.root_key_out.clear(); // the CA exists; no new root key
         } else {
             self.setup.previous = None;
-            self.setup.root_key_out = self.setup.root_key_default.clone();
+            // Looked up now: a key written since the TUI started (by a CA
+            // step that then failed, or kept by Remove everything) is taken.
+            self.setup.root_key_out = default_root_key(self.setup.home.as_deref());
         }
         self.setup.console_port = plan.console_port.to_string();
         self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
@@ -610,6 +605,12 @@ impl<H: Host> App<H> {
             Phase::Running(next + 1)
         };
     }
+}
+
+/// The free default root key file in `home`, or empty without a home.
+fn default_root_key(home: Option<&str>) -> String {
+    home.map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
+        .unwrap_or_default()
 }
 
 /// `HOME/openvibes-root-ca.key`, or `-2`, `-3`… when taken: Remove
