@@ -196,6 +196,27 @@ mod tests {
         run_step,
     };
 
+    /// #84: the console's "Enroll a host" steps use the paths and owner
+    /// this step (and the agent package) uses, so a hand enrollment works.
+    #[test]
+    fn the_console_enrollment_steps_match_the_packaged_agent() {
+        let panel = include_str!("../../../openvibes-console/web/src/panels/OpsPanels.tsx");
+        for want in [
+            format!("{}/agent.toml", super::AGENT),
+            format!("{}/platform-ca.crt", super::AGENT),
+            format!(
+                "-o openvibes_agent -g openvibes_agent -m 0600 /dev/stdin {}/token",
+                super::AGENT
+            ),
+            super::ROOT_CERT.to_owned(),
+            "systemctl restart openvibes-agent".to_owned(),
+        ] {
+            assert!(panel.contains(&want), "the console snippet lacks {want}");
+        }
+        assert!(!panel.contains("/etc/openvibes/agent.toml"));
+        assert!(!panel.contains("/etc/openvibes/enrollment-token"));
+    }
+
     const ADMIN: [&str; 5] = [
         "/usr/sbin/runuser",
         "-u",

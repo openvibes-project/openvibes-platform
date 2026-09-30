@@ -121,8 +121,8 @@ function NewEnrollmentToken() {
               <button type="button" className="icon-button" aria-label="Copy token" onClick={() => { void navigator.clipboard?.writeText(created.token ?? ""); toast("Copied"); }}><Icon name="copy" size={16} /></button>
             </div>
             <Section title="Enroll a host">
-              <p className="subtle">On the host, with <code>platform_url</code> and <code>platform_ca_file</code> set in <code>/etc/openvibes/agent.toml</code>:</p>
-              <pre className="code">{`echo '${created.token ?? ""}' | sudo install -m 600 /dev/stdin /etc/openvibes/enrollment-token\nsudo systemctl restart openvibes-agent`}</pre>
+              <p className="subtle">On the host, with the <code>openvibes-agent</code> package installed, <code>platform_url</code> set in <code>/etc/openvibes-agent/agent.toml</code>, and this platform's <code>/etc/openvibes/pki/root.crt</code> copied to <code>/etc/openvibes-agent/platform-ca.crt</code>:</p>
+              <pre className="code">{`echo '${created.token ?? ""}' | sudo install -o openvibes_agent -g openvibes_agent -m 0600 /dev/stdin /etc/openvibes-agent/token\nsudo systemctl enable openvibes-agent\nsudo systemctl restart openvibes-agent`}</pre>
             </Section>
             <button type="button" className="button" onClick={() => nav.open({ kind: "enrollment-token", id: created.token_id }, true)}>Done</button>
           </>
