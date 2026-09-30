@@ -169,6 +169,8 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     for port in &ports {
         if !ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", port]) {
             ctx.ok(FirewallCmd, &["--permanent", "--add-port", port])?;
+            // Ours to close again after a move; one open before is not.
+            super::ports::record_opened(ctx, port)?;
         }
     }
     ctx.ok(FirewallCmd, &["--reload"])?;

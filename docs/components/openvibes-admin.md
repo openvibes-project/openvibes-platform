@@ -57,8 +57,10 @@ the agent ports takes a second Enter on Start, since agents on other hosts
 keep calling the old ones until their install line is re-run; the ports a
 plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
 `helper setup-plan` and closed in firewalld once Readiness is done, as the
-CLI's Repair does; a port another program listens on, per `ss`, stays open
-and the step says who uses it) and
+CLI's Repair does; only ports the Firewall step itself opened are closed, as
+recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
+never Setup's; installs from before the record close nothing), and one another
+program listens on, per `ss`, stays open with who uses it) and
 `x` uninstall (keep data, or remove everything with a backup and the
 typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
 Only rows on screen take the focus: with keep data, one `j` goes from the

@@ -335,6 +335,7 @@ fn a_repair_names_the_agent_ports_it_moves() {
 #[test]
 fn a_repair_closes_the_ports_it_moved_away_from() {
     let fake = Fake::new("ports-close");
+    fake.file(OPENED, "443/tcp\n18423/tcp\n18424/tcp\n");
     fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
     fake.answer(
         &[
@@ -381,6 +382,7 @@ fn a_repair_closes_the_ports_it_moved_away_from() {
 #[test]
 fn a_port_another_service_moved_onto_stays_open() {
     let fake = Fake::new("ports-swap");
+    fake.file(OPENED, "443/tcp\n18423/tcp\n18424/tcp\n");
     fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
     fake.answer(
         &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
@@ -466,6 +468,7 @@ fn repair_restarts_a_unit_whose_listen_address_changed() {
 #[test]
 fn a_tui_move_closes_the_old_port_after_the_run() {
     let fake = Fake::new("ports-moved-from");
+    fake.file(OPENED, "443/tcp\n18423/tcp\n18424/tcp\n");
     let mut old = plan(&[Ingest, Console]);
     old.console_port = 443;
     let mut new = old.clone();
@@ -519,6 +522,7 @@ fn a_tui_move_closes_the_old_port_after_the_run() {
 #[test]
 fn a_port_another_program_serves_stays_open() {
     let fake = Fake::new("ports-foreign-holder");
+    fake.file(OPENED, "443/tcp\n18423/tcp\n18424/tcp\n");
     fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
     fake.answer(
         &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
@@ -537,4 +541,56 @@ fn a_port_another_program_serves_stays_open() {
     assert_eq!(kept, ["443/tcp stays open: nginx (pid 4242) uses it"]);
     assert!(!fake.called(&["/usr/bin/firewall-cmd", "--permanent", "--remove-port"]));
     assert!(!fake.called(&["/usr/bin/firewall-cmd", "--reload"]));
+}
+
+/// Lead on #106: a port open before Setup ran (the user's 443 for nginx)
+/// is not ours to close, even with nothing listening right now.
+#[test]
+fn only_ports_setup_opened_are_closed() {
+    let fake = Fake::new("ports-not-ours");
+    fake.file(OPENED, "18423/tcp\n");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--query-port"],
+        0,
+        "yes\n",
+    );
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--remove-port"],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "");
+    free(&fake);
+    let old = plan(&[Ingest, Console]);
+    let new = old.with_ports(Some(8443), Some(18500), None).unwrap();
+    let (closed, _) = close_old(&fake.ctx(&new), &old).unwrap();
+    assert_eq!(closed, ["18423/tcp"], "443 was never Setup's");
+    assert_eq!(fake.text(OPENED), "", "a closed port is forgotten");
+}
+
+#[test]
+fn the_firewall_step_records_what_it_opened() {
+    let fake = Fake::new("ports-record");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    // 18423 was open already (not ours); 18424 Setup opens.
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "18423/tcp",
+        ],
+        0,
+        "yes\n",
+    );
+    fake.answer(
+        &["/usr/bin/firewall-cmd", "--permanent", "--add-port"],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/firewall-cmd", "--reload"], 0, "");
+    let state = run_step(&fake.ctx(&plan(&[Ingest, Distribution])), Step::Firewall);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert_eq!(fake.text(OPENED), "18424/tcp\n");
 }
