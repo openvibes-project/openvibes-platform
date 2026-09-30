@@ -29,6 +29,7 @@
   --info-soft: #e1eef8;
   --muted-soft: #eceff3;
   --shadow-1: 0 1px 2px rgb(16 24 32 / 6%), 0 1px 1px rgb(16 24 32 / 4%);
+  --scroll-shade: rgb(16 24 32 / 16%);
   --shadow-2: 0 8px 24px rgb(16 24 32 / 10%), 0 2px 6px rgb(16 24 32 / 6%);
   --shadow-3: 0 24px 64px rgb(16 24 32 / 18%), 0 4px 16px rgb(16 24 32 / 8%);
   --backdrop: rgb(20 27 34 / 28%);
@@ -77,6 +78,7 @@
     --info-soft: #16323f;
     --muted-soft: #1f2a33;
     --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+    --scroll-shade: rgb(0 0 0 / 55%);
     --shadow-2: 0 10px 30px rgb(0 0 0 / 35%), 0 2px 6px rgb(0 0 0 / 25%);
     --shadow-3: 0 30px 80px rgb(0 0 0 / 55%), 0 6px 20px rgb(0 0 0 / 30%);
     --backdrop: rgb(4 8 12 / 55%);
@@ -112,6 +114,7 @@
   --info-soft: #16323f;
   --muted-soft: #1f2a33;
   --shadow-1: 0 1px 2px rgb(0 0 0 / 30%);
+  --scroll-shade: rgb(0 0 0 / 55%);
   --shadow-2: 0 10px 30px rgb(0 0 0 / 35%), 0 2px 6px rgb(0 0 0 / 25%);
   --shadow-3: 0 30px 80px rgb(0 0 0 / 55%), 0 6px 20px rgb(0 0 0 / 30%);
   --backdrop: rgb(4 8 12 / 55%);

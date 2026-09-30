@@ -138,7 +138,7 @@ export function TopHostsTile({ widget }: WidgetProps) {
       {summary.data.top_hosts.slice(0, int(widget.config, "limit", 6, 1, 10)).map((host) => (
         <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
           <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
-          {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num">{host.open}</span>
+          {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.open} open</span>
         </ObjectLink></li>
       ))}
     </ul>

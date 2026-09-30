@@ -152,3 +152,9 @@ test("unsaved edits survive a reload and can be restored", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
 });
+
+test("Most exposed hosts labels each host's open count", async ({ page }) => {
+  const tile = page.locator(".tile", { hasText: "Most exposed hosts" });
+  const row = tile.locator(".list__row").first();
+  await expect(row).toContainText(/\d+ open$/);
+});
