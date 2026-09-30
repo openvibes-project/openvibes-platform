@@ -270,3 +270,48 @@ fn a_repair_mints_no_enrollment_token() {
         "token"
     ]));
 }
+
+#[test]
+fn an_update_quotes_why_a_service_is_not_ready() {
+    // Board #67: Update's readiness said only "see journalctl".
+    let fake = Fake::new("update-ready-why");
+    fake.answer(
+        &[
+            "/usr/bin/systemctl",
+            "is-active",
+            "--quiet",
+            "openvibes-ingest.service",
+        ],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+    fake.answer(&["/usr/bin/curl"], 7, "");
+    fake.answer(
+        &[
+            "/usr/bin/journalctl",
+            "_SYSTEMD_UNIT=openvibes-ingest.service",
+            "-n",
+            "1",
+            "-o",
+            "cat",
+            "--no-pager",
+        ],
+        0,
+        "ingest listener failed: Address already in use (os error 98)\n",
+    );
+    let plan = plan(&[Ingest]);
+    let state = crate::setup::update::run(
+        &fake.ctx(&plan),
+        platform_host::UpdateStep::Ready,
+        &crate::setup::update::UpdateArgs::default(),
+    );
+    assert_eq!(
+        state,
+        StepState::Failed(
+            "openvibes-ingest.service is not ready after 30 seconds: \
+             ingest listener failed: Address already in use (os error 98)"
+                .into()
+        )
+    );
+}

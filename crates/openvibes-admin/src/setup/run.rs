@@ -11,7 +11,7 @@ use platform_host::{
 
 use super::{Ctx, plan::Component};
 
-const READY_ATTEMPTS: u32 = 30;
+pub(super) const READY_ATTEMPTS: u32 = 30;
 
 fn units<R: Runner>(ctx: &Ctx<R>) -> Vec<Unit> {
     ctx.plan
@@ -233,6 +233,23 @@ pub fn token_from(output: &str) -> Result<String, String> {
         .ok_or_else(|| "token create printed no token".into())
 }
 
+/// Why `unit` is not ready after [`READY_ATTEMPTS`] seconds: the service's
+/// own last message (`-u` would also match systemd's "Failed with result
+/// 'exit-code'"), shared by Setup's and Update's readiness.
+pub(super) fn not_ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> String {
+    let own = format!("_SYSTEMD_UNIT={}", unit.name());
+    let why = ctx
+        .ok(Journalctl, &[&own, "-n", "1", "-o", "cat", "--no-pager"])
+        .ok()
+        .map(|line| line.trim().to_owned())
+        .filter(|line| !line.is_empty())
+        .unwrap_or_else(|| format!("see journalctl -u {}", unit.name()));
+    format!(
+        "{} is not ready after {READY_ATTEMPTS} seconds: {why}",
+        unit.name()
+    )
+}
+
 pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
     for unit in &units {
@@ -240,19 +257,7 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == READY_ATTEMPTS {
-                // The service's own last message; `-u` would also match
-                // systemd's "Failed with result 'exit-code'".
-                let own = format!("_SYSTEMD_UNIT={}", unit.name());
-                let why = ctx
-                    .ok(Journalctl, &[&own, "-n", "1", "-o", "cat", "--no-pager"])
-                    .ok()
-                    .map(|line| line.trim().to_owned())
-                    .filter(|line| !line.is_empty())
-                    .unwrap_or_else(|| format!("see journalctl -u {}", unit.name()));
-                return Err(format!(
-                    "{} is not ready after {READY_ATTEMPTS} seconds: {why}",
-                    unit.name()
-                ));
+                return Err(not_ready(ctx, *unit));
             }
             ctx.pause();
         }

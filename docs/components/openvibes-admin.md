@@ -398,7 +398,8 @@ refused while one works):
   installed `openvibes-*` packages (the agent too), `migrate` and
   `maintenance` (and, with the rules component, publishing the upgraded
   baseline rule set when it is newer than the published one), start the
-  remembered units, readiness.
+  remembered units, readiness (a unit not ready after 30 s fails with its
+  own last journal line, as in Setup).
 - `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
