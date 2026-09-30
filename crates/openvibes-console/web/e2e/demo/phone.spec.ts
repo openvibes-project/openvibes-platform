@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { type Locator, expect, test } from "@playwright/test";
 
 // Board #55: the console on a 390px phone.
@@ -40,4 +41,38 @@ test("an agent's host name wraps instead of being cut", async ({ page }) => {
   expect(await host.evaluate((e) => e.scrollWidth <= e.clientWidth)).toBe(true);
   // A name of ordinary length stays on one line.
   expect((await box(host)).height).toBeLessThan(24);
+});
+
+test("the greeting sits above its buttons, not squeezed beside them", async ({ page }) => {
+  await page.goto("/");
+  const heading = page.getByRole("heading", { level: 1 });
+  const buttons = page.getByRole("button", { name: "Dashboards" });
+  const [h, b] = [await box(heading), await box(buttons)];
+  expect(b.y).toBeGreaterThanOrEqual(h.y + h.height - 1);
+  // One or two lines, not three.
+  expect(h.height).toBeLessThan(70);
+});
+
+test("tile titles are not cut off", async ({ page }) => {
+  await page.goto("/");
+  const titles = page.locator(".tile__title");
+  await expect(titles.first()).toBeVisible();
+  for (const title of await titles.all()) {
+    const cut = await title.evaluate((e) => e.scrollWidth > e.clientWidth);
+    expect(cut, await title.textContent() ?? "").toBe(false);
+  }
+});
+
+test("a phone offers no way into editing, which it cannot do", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Dashboards" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeHidden();
+  // Someone looking for it is told why.
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  // A menu item, so screen readers moving through the menu announce it.
+  const note = page.getByRole("menuitem", { name: "Editing needs a wider screen" });
+  await expect(note).toBeVisible();
+  await expect(note).toHaveAttribute("aria-disabled", "true");
+  const axe = await new AxeBuilder({ page }).include(".menu__pop").analyze();
+  expect(axe.violations).toEqual([]);
 });

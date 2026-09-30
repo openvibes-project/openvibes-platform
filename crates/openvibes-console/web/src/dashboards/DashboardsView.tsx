@@ -154,15 +154,16 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                 {state.saving ? "Saving…" : "Save"}</button>
             </>
           ) : mine && dashboard ? (
-            <button type="button" className="button" onClick={() => editor.begin(dashboard)}><Icon name="filter" size={15} /> Edit</button>
+            <button type="button" className="button dashboard-edit" onClick={() => editor.begin(dashboard)}><Icon name="filter" size={15} /> Edit</button>
           ) : (
-            <button type="button" className="button" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Duplicate to edit</button>
+            <button type="button" className="button dashboard-edit" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Duplicate to edit</button>
           )}
           {!editing && (
             <div className="menu">
               <button type="button" className="icon-button" aria-haspopup="menu" aria-expanded={menu} aria-label="Dashboard menu" onClick={() => setMenu((m) => !m)}><Icon name="chevronDown" size={16} /></button>
               {menu && (
                 <div className="menu__pop" role="menu" onClick={() => setMenu(false)}>
+                  <div role="menuitem" aria-disabled="true" className="menu__note dashboard-phone-only">Editing needs a wider screen</div>
                   <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="filter" size={14} /> Rename</button>}
                   {mine && can("dashboards.share", true) && (

@@ -83,8 +83,10 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   - Each tile loads data with the viewer's own permissions.
   - A tile the viewer's role can't read says so.
   - A tile that fails to render doesn't take the dashboard down.
-- **Phones:** tiles stack in reading order, number tiles two to a row, and
-  editing is hidden. Below 720px the rail is a bottom bar in which every
+- **Phones:** tiles stack in reading order, number tiles two to a row
+  (titles wrap rather than truncate), the greeting sits above its buttons,
+  and editing is hidden, "Edit" and "Duplicate to edit" included (the
+  dashboard menu says "Editing needs a wider screen"). Below 720px the rail is a bottom bar in which every
   destination fits (icons only, each link keeps its name for screen
   readers); tables wrap long names, and Agents drops Last contact below
   480px so host names fit.
