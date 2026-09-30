@@ -35,4 +35,10 @@ describe("agent versions", () => {
     expect(newestVersion(["0.9.0", "0.10.0", "0.2.1", ""])).toBe("0.10.0");
     expect(newestVersion([])).toBeUndefined();
   });
+  it("a release outranks its pre-release; build metadata is ignored", () => {
+    expect(newestVersion(["0.10.0-rc.1", "0.10.0"])).toBe("0.10.0");
+    expect(newestVersion(["0.10.0", "0.10.0-rc.1"])).toBe("0.10.0");
+    expect(newestVersion(["0.9.0", "0.10.0-rc.1"])).toBe("0.10.0-rc.1");
+    expect(newestVersion(["0.1.1+build", "0.1.2"])).toBe("0.1.2");
+  });
 });
