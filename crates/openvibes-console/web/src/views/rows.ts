@@ -32,12 +32,18 @@ export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] 
   return [...rows.values()];
 }
 
+/** Hosts where the finding still needs work: open or investigating.
+ * Only mitigated, accepted risk and false positive count as resolved (#83). */
+export function activeCount(group: Pick<FindingGroup, "triage_counts">): number {
+  return group.triage_counts.open + group.triage_counts.investigating;
+}
+
 export function selectFindings(all: readonly FindingGroup[], params: URLSearchParams): FindingGroup[] {
   const severity = params.get("severity");
   const onlyOpen = params.get("state") !== "all";
   const ruleSet = params.get("set");
   const q = params.get("q") ?? "";
-  return all.filter((g) => (!severity || g.severity === severity) && (!onlyOpen || g.triage_counts.open > 0)
+  return all.filter((g) => (!severity || g.severity === severity) && (!onlyOpen || activeCount(g) > 0)
     && (!ruleSet || g.rule_set_id === ruleSet) && matches([g.latest_message, g.rule_id, g.rule_set_id], q));
 }
 
@@ -102,9 +108,9 @@ export function useListRows(view: ListView | null, params: URLSearchParams): { r
     const status = view === "/findings" ? groups : view === "/agents" ? agents : view === "/audit" ? audit : vulns;
     let rows: ListRow[];
     if (view === "/findings") {
-      rows = selectFindings(groups.data ?? [], params).sort((a, b) => sev(a.severity) - sev(b.severity) || b.triage_counts.open - a.triage_counts.open)
+      rows = selectFindings(groups.data ?? [], params).sort((a, b) => sev(a.severity) - sev(b.severity) || activeCount(b) - activeCount(a))
         .map((g) => ({ key: `${g.rule_set_id}/${g.rule_id}`, open: { kind: "finding", id: `${g.rule_set_id}/${g.rule_id}` }, title: g.latest_message,
-          meta: `${g.rule_id} · ${g.triage_counts.open} open`, badge: { label: g.severity, tone: g.severity } }));
+          meta: `${g.rule_id} · ${activeCount(g)} active`, badge: { label: g.severity, tone: g.severity } }));
     } else if (view === "/agents") {
       rows = selectAgents(agents.data ?? [], params).map((a) => ({ key: a.id, open: { kind: "agent", id: a.id }, title: a.hostname ?? a.id,
         meta: a.id, badge: { label: a.status, tone: a.status === "active" ? "ok" : a.status === "stale" ? "warn" : a.status === "revoked" ? "bad" : "info" } }));
