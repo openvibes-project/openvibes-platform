@@ -16,7 +16,7 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use openvibes_core::{
-    Confidence, Identifier, PayloadEncoding, Rule, RuleSet, SchemaVersion, Severity,
+    Confidence, Identifier, PayloadEncoding, Rule, RuleKind, RuleSet, SchemaVersion, Severity,
     SignedRuleEnvelope,
 };
 use platform_store::{
@@ -253,6 +253,8 @@ impl Fleet {
                     confidence: Confidence::new(90).map_err(|_| "confidence")?,
                     expression: r.expression.clone(),
                     finding_message: r.message.clone(),
+                    kind: RuleKind::Snapshot,
+                    programs: None,
                 })
             })
             .collect::<Result<Vec<_>, &str>>()?;

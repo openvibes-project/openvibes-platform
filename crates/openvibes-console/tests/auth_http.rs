@@ -41,6 +41,8 @@ fn signed_rule_envelope(version: u64) -> (Vec<u8>, [u8; 32]) {
             confidence: Confidence::new(100).unwrap(),
             expression: "facts['process.count'] >= 1".into(),
             finding_message: format!("version {version}"),
+            kind: openvibes_core::RuleKind::Snapshot,
+            programs: None,
         }],
     })
     .unwrap();
