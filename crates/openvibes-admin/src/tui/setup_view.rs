@@ -116,14 +116,20 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
             edit(SANS_ROW)
         ),
     ));
-    let ca = match setup.ca {
-        CaMode::Quick => "quick (root created here, key written once)",
-        CaMode::Careful => "careful (root stays offline)",
+    // Changing a set-up host keeps its CA: no first-install choices.
+    let ca = match (setup.previous.is_some(), setup.ca) {
+        (true, _) => "kept (this host is set up)",
+        (false, CaMode::Quick) => "quick (root created here, key written once)",
+        (false, CaMode::Careful) => "careful (root stays offline)",
     };
     lines.push(mark(setup.row == CA_ROW, format!("CA:  {ca}")));
     lines.push(mark(
         setup.row == KEY_ROW,
-        format!("Root key file:  {}{}", setup.root_key_out, edit(KEY_ROW)),
+        if setup.previous.is_some() {
+            String::new()
+        } else {
+            format!("Root key file:  {}{}", setup.root_key_out, edit(KEY_ROW))
+        },
     ));
     let note = |note: &Option<String>| {
         note.as_ref()

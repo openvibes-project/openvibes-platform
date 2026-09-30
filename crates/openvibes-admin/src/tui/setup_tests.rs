@@ -564,6 +564,60 @@ fn moving_an_agent_port_asks_for_a_second_enter() {
     );
 }
 
+/// Reviewer's #106 drive: the `p` form said nothing about why the console
+/// is not on 443, and showed first-install CA and root-key text.
+#[test]
+fn the_ports_form_says_what_holds_the_default_and_keeps_the_ca() {
+    let mut app = set_up_on_8443();
+    app.host.taken = vec![443];
+    app.key(Key::Char('p'));
+    let text = screen(&app);
+    assert!(
+        text.contains("Console port:  8443  (443 is in use)"),
+        "{text}"
+    );
+    assert!(text.contains("CA:  kept (this host is set up)"), "{text}");
+    assert!(!text.contains("root created here"), "{text}");
+    assert!(!text.contains("Root key file"), "{text}");
+    // One k from the ports skips the hidden root key row to the CA row,
+    // which does not toggle on a set-up host.
+    assert_eq!(app.setup.row, super::setup::PORT_ROW);
+    app.key(Key::Up);
+    assert_eq!(app.setup.row, super::setup::CA_ROW, "no invisible focus");
+    let before = app.setup.ca;
+    app.key(Key::Char(' '));
+    assert_eq!(app.setup.ca, before);
+}
+
+/// Reviewer on #115, the user's own moment: the console still set to 443,
+/// nginx holding 443, our console not running.
+#[test]
+fn a_default_port_held_while_our_unit_is_down_is_named() {
+    let status = |active: &str| platform_host::ServiceStatus {
+        unit: Unit::Console,
+        installed: true,
+        enabled: true,
+        active: active.into(),
+        ready: None,
+        since: None,
+    };
+    for (active, noted) in [("activating", true), ("failed", true), ("active", false)] {
+        let mut app = set_up(vec![]);
+        app.host.plan =
+            format!("{PLAN}console_port = 443\ningest_port = 18423\ndistribution_port = 18424\n");
+        app.host.taken = vec![443];
+        app.services = vec![status(active)];
+        app.tab = Tab::Setup;
+        app.key(Key::Char('p'));
+        let text = screen(&app);
+        assert_eq!(
+            text.contains("Console port:  443  (443 is in use by another program)"),
+            noted,
+            "{active}:\n{text}"
+        );
+    }
+}
+
 /// Board #78: long step details wrapped, and the list ran off the bottom
 /// (reviewer at 120x36): each step is one line, and the failed step's full
 /// reason is under the list.

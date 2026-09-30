@@ -66,7 +66,11 @@ host, the Setup tab offers `c` check every step (`helper setup-status`),
 installed OpenVIBES packages with any newer version, a backup file, then
 the update job), `m` change components (the form filled from `setup.toml`;
 added components are installed, unticked ones removed keeping data, ports
-included), `p` change ports (the same form, on the port rows, #69; moving
+included), `p` change ports (the same form, on the port rows, #69; it says when a
+default port is held by another program ("443 is in use"; "443 is in use by
+another program" when the plan still has 443 and our unit is not running),
+and shows the CA
+as kept, with no root key row; moving
 the agent ports takes a second Enter on Start, since agents on other hosts
 keep calling the old ones until their install line is re-run; the ports a
 plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by

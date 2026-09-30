@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use platform_host::{Host, HostError, Privileged, Secret, Step, StepState};
+use platform_host::{Host, HostError, Privileged, Secret, ServiceStatus, Step, StepState, Unit};
 
 use super::{
     app::{App, Key},
@@ -209,6 +209,49 @@ impl Setup {
         self.agent_ports = format!("{}, {}", chosen[1], chosen[2]);
     }
 
+    /// On a set-up host: a default port another program holds, "443 is in
+    /// use" (why the port differs), or, when the plan still has the default
+    /// and our unit is not running, "443 is in use by another program": the
+    /// user's case, a console crash-looping on a port nginx holds
+    /// (reviewer's #106 drive). While our unit runs, the holder is ours.
+    fn note_taken_defaults<H: Host>(&mut self, host: &H, services: &[ServiceStatus]) {
+        let taken = |port: u16| {
+            host.listeners(port)
+                .is_ok_and(|lines| ports::parse(&lines).is_some())
+        };
+        let running = |unit: Unit| {
+            services
+                .iter()
+                .any(|status| status.unit == unit && status.active == "active")
+        };
+        let note = |default: u16, chosen: &str, unit: Unit| {
+            let chosen = chosen.trim().parse::<u16>().ok();
+            match (chosen == Some(default), taken(default)) {
+                (false, true) => Some(format!("{default} is in use")),
+                (true, true) if !running(unit) => {
+                    Some(format!("{default} is in use by another program"))
+                }
+                _ => None,
+            }
+        };
+        self.console_note = note(ports::CONSOLE_DEFAULT, &self.console_port, Unit::Console);
+        let mut agent: Vec<String> = self
+            .agent_ports
+            .split([',', ' '])
+            .filter(|p| !p.is_empty())
+            .map(str::to_owned)
+            .collect();
+        agent.resize(2, String::new());
+        let notes: Vec<String> = [
+            note(ports::INGEST_DEFAULT, &agent[0], Unit::Ingest),
+            note(ports::DISTRIBUTION_DEFAULT, &agent[1], Unit::Distribution),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        self.agent_ports_note = (!notes.is_empty()).then(|| notes.join("; "));
+    }
+
     fn toggle(&mut self, component: Component) {
         use Component::*;
         if matches!(component, Ingest | Console) {
@@ -299,6 +342,7 @@ impl<H: Host> App<H> {
         self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
         self.setup.console_note = None;
         self.setup.agent_ports_note = None;
+        self.setup.note_taken_defaults(&self.host, &self.services);
         self.setup.previous_agent_ports = Some(self.setup.agent_ports.clone());
         self.setup.move_confirmed = false;
         self.setup.row = 0;
@@ -369,11 +413,25 @@ impl<H: Host> App<H> {
             return;
         }
         match key {
-            Key::Char('j') | Key::Down if self.setup.row < START_ROW => self.setup.row += 1,
-            Key::Char('k') | Key::Up => self.setup.row = self.setup.row.saturating_sub(1),
+            Key::Char('j') | Key::Down if self.setup.row < START_ROW => {
+                self.setup.row += 1;
+                // A set-up host shows no root key row (#78): step over it.
+                if self.setup.previous.is_some() && self.setup.row == KEY_ROW {
+                    self.setup.row += 1;
+                }
+            }
+            Key::Char('k') | Key::Up => {
+                self.setup.row = self.setup.row.saturating_sub(1);
+                if self.setup.previous.is_some() && self.setup.row == KEY_ROW {
+                    self.setup.row -= 1;
+                }
+            }
             Key::Char(' ') if self.setup.row < Component::ALL.len() => {
                 self.setup.toggle(Component::ALL[self.setup.row])
             }
+            // A set-up host keeps its CA (and has no new root key to write).
+            Key::Char(' ') | Key::Enter
+                if self.setup.previous.is_some() && matches!(self.setup.row, CA_ROW | KEY_ROW) => {}
             Key::Char(' ') | Key::Enter if self.setup.row == CA_ROW => {
                 self.setup.ca = match self.setup.ca {
                     CaMode::Quick => CaMode::Careful,
