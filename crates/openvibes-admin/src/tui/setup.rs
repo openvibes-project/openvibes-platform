@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use platform_host::{Host, HostError, Privileged, Secret, Step, StepState};
+use platform_host::{Host, HostError, Privileged, Secret, ServiceStatus, Step, StepState, Unit};
 
 use super::{
     app::{App, Key},
@@ -209,35 +209,47 @@ impl Setup {
         self.agent_ports = format!("{}, {}", chosen[1], chosen[2]);
     }
 
-    /// On a set-up host: why a port is not its default, when another
-    /// program holds the default ("443 is in use"), as the first install's
-    /// form says (reviewer's #106 drive).
-    fn note_taken_defaults<H: Host>(&mut self, host: &H) {
+    /// On a set-up host: a default port another program holds, "443 is in
+    /// use" (why the port differs), or, when the plan still has the default
+    /// and our unit is not running, "443 is in use by another program": the
+    /// user's case, a console crash-looping on a port nginx holds
+    /// (reviewer's #106 drive). While our unit runs, the holder is ours.
+    fn note_taken_defaults<H: Host>(&mut self, host: &H, services: &[ServiceStatus]) {
         let taken = |port: u16| {
             host.listeners(port)
                 .is_ok_and(|lines| ports::parse(&lines).is_some())
         };
-        let chosen = |text: &str| text.trim().parse::<u16>().ok();
-        if chosen(&self.console_port) != Some(ports::CONSOLE_DEFAULT)
-            && taken(ports::CONSOLE_DEFAULT)
-        {
-            self.console_note = Some(format!("{} is in use", ports::CONSOLE_DEFAULT));
-        }
-        let mut agent: Vec<&str> = self
+        let running = |unit: Unit| {
+            services
+                .iter()
+                .any(|status| status.unit == unit && status.active == "active")
+        };
+        let note = |default: u16, chosen: &str, unit: Unit| {
+            let chosen = chosen.trim().parse::<u16>().ok();
+            match (chosen == Some(default), taken(default)) {
+                (false, true) => Some(format!("{default} is in use")),
+                (true, true) if !running(unit) => {
+                    Some(format!("{default} is in use by another program"))
+                }
+                _ => None,
+            }
+        };
+        self.console_note = note(ports::CONSOLE_DEFAULT, &self.console_port, Unit::Console);
+        let mut agent: Vec<String> = self
             .agent_ports
             .split([',', ' '])
             .filter(|p| !p.is_empty())
+            .map(str::to_owned)
             .collect();
-        agent.resize(2, "");
-        let notes: Vec<String> = [ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT]
-            .into_iter()
-            .zip(agent)
-            .filter(|(default, port)| chosen(port) != Some(*default) && taken(*default))
-            .map(|(default, _)| format!("{default} is in use"))
-            .collect();
-        if !notes.is_empty() {
-            self.agent_ports_note = Some(notes.join("; "));
-        }
+        agent.resize(2, String::new());
+        let notes: Vec<String> = [
+            note(ports::INGEST_DEFAULT, &agent[0], Unit::Ingest),
+            note(ports::DISTRIBUTION_DEFAULT, &agent[1], Unit::Distribution),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        self.agent_ports_note = (!notes.is_empty()).then(|| notes.join("; "));
     }
 
     fn toggle(&mut self, component: Component) {
@@ -329,7 +341,7 @@ impl<H: Host> App<H> {
         self.setup.agent_ports = format!("{}, {}", plan.ingest_port, plan.distribution_port);
         self.setup.console_note = None;
         self.setup.agent_ports_note = None;
-        self.setup.note_taken_defaults(&self.host);
+        self.setup.note_taken_defaults(&self.host, &self.services);
         self.setup.previous_agent_ports = Some(self.setup.agent_ports.clone());
         self.setup.move_confirmed = false;
         self.setup.row = 0;

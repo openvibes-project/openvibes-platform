@@ -588,3 +588,32 @@ fn the_ports_form_says_what_holds_the_default_and_keeps_the_ca() {
     app.key(Key::Char(' '));
     assert_eq!(app.setup.ca, before);
 }
+
+/// Reviewer on #115, the user's own moment: the console still set to 443,
+/// nginx holding 443, our console not running.
+#[test]
+fn a_default_port_held_while_our_unit_is_down_is_named() {
+    let status = |active: &str| platform_host::ServiceStatus {
+        unit: Unit::Console,
+        installed: true,
+        enabled: true,
+        active: active.into(),
+        ready: None,
+        since: None,
+    };
+    for (active, noted) in [("activating", true), ("failed", true), ("active", false)] {
+        let mut app = set_up(vec![]);
+        app.host.plan =
+            format!("{PLAN}console_port = 443\ningest_port = 18423\ndistribution_port = 18424\n");
+        app.host.taken = vec![443];
+        app.services = vec![status(active)];
+        app.tab = Tab::Setup;
+        app.key(Key::Char('p'));
+        let text = screen(&app);
+        assert_eq!(
+            text.contains("Console port:  443  (443 is in use by another program)"),
+            noted,
+            "{active}:\n{text}"
+        );
+    }
+}
