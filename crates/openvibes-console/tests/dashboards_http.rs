@@ -576,7 +576,9 @@ async fn bearer_tokens_are_refused_and_changes_are_audited() {
         )
         .await
         .unwrap();
-    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    // An unknown token is refused before any route runs (#97): 401. A
+    // valid service token still gets the dashboards' own 403.
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     let (cookie, csrf) = login(&router, "alice").await;
     call(
         &router,

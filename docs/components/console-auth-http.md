@@ -64,6 +64,18 @@ permission-checked read models, enrollment-token management, and audit routes.
   from the high-entropy session secret with a domain separator; only its digest
   is persisted by the store.
 
+### Authentication first (#97)
+
+Every authenticated `/api` route except `GET /api/v1/session` and `POST
+/api/v1/session/password` passes `auth_first::authenticate_first` before
+its handler, and so before axum parses the body: no session or token is
+401, and a user who must still set their own password is 403
+`password_change_required`. Nothing about a request (a malformed body, a
+field rule, whether the assistant is on) reaches an unauthenticated
+caller. Handlers still check their own permission, scope and CSRF.
+`tests/auth_first_http.rs` sends a malformed body to every `/api` route
+in the OpenAPI document, with no session and with a forced-change one.
+
 ### Users and passwords (#85)
 
 - `POST /api/v1/access-control/users` (`rbac.manage`, global binding, CSRF):
