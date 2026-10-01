@@ -1695,32 +1695,71 @@ pub async fn rehash_password(
     Ok(true)
 }
 
+/// What [`change_own_password`] did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PasswordChange {
+    /// Changed; the user's other sessions are signed out.
+    Changed,
+    /// The password changed since the caller verified it (another session
+    /// won a race): nothing was changed.
+    ChangedElsewhere,
+    /// The account is disabled or the session is no longer valid.
+    SessionGone,
+}
+
 /// Sets a user's own password (self-service, or the forced change after a
-/// one-time password): replaces the credential, clears
+/// one-time password) as a compare-and-swap: the credential row is locked
+/// first and replaced only while it still holds `verified_phc`, the hash
+/// the caller checked the current password against. Then it clears
 /// `password_must_change`, revokes the user's other sessions (the one
-/// making the change stays), and audits it, in one transaction. `false`
-/// when the account was disabled or its sessions invalidated meanwhile.
+/// making the change stays) and audits it, in one transaction. Locking
+/// the credential before any session row means two concurrent changes by
+/// one user queue on it instead of deadlocking on each other's sessions.
 pub async fn change_own_password(
     client: &mut Client,
     user_id: &str,
     current_session_sha256: &[u8],
+    verified_phc: &str,
     password_phc: &str,
     now: DateTime<Utc>,
     audit: &AuditContext<'_>,
-) -> Result<bool, StoreError> {
+) -> Result<PasswordChange, StoreError> {
     let tx = client.transaction().await?;
-    let updated = tx
-        .execute(
-            "UPDATE console_credentials c SET password_phc = $2, changed_at = $3
-             FROM console_users u
-             WHERE c.user_id = u.user_id AND u.user_id = $1::text::uuid AND u.enabled",
-            &[&user_id, &password_phc, &now],
+    let stored: Option<String> = tx
+        .query_opt(
+            "SELECT c.password_phc FROM console_credentials c JOIN console_users u USING (user_id)
+             WHERE c.user_id = $1::text::uuid AND u.enabled FOR UPDATE OF c",
+            &[&user_id],
         )
-        .await?;
-    if updated == 0 {
+        .await?
+        .map(|row| row.get(0));
+    let Some(stored) = stored else {
         tx.rollback().await?;
-        return Ok(false);
+        return Ok(PasswordChange::SessionGone);
+    };
+    if stored != verified_phc {
+        tx.rollback().await?;
+        return Ok(PasswordChange::ChangedElsewhere);
     }
+    let session_valid = tx
+        .query_opt(
+            "SELECT 1 FROM console_sessions
+             WHERE session_sha256 = $1 AND user_id = $2::text::uuid AND revoked_at IS NULL
+               AND idle_expires_at > $3 AND absolute_expires_at > $3",
+            &[&current_session_sha256, &user_id, &now],
+        )
+        .await?
+        .is_some();
+    if !session_valid {
+        tx.rollback().await?;
+        return Ok(PasswordChange::SessionGone);
+    }
+    tx.execute(
+        "UPDATE console_credentials SET password_phc = $2, changed_at = $3
+         WHERE user_id = $1::text::uuid",
+        &[&user_id, &password_phc, &now],
+    )
+    .await?;
     tx.execute(
         "UPDATE console_users SET password_must_change = false WHERE user_id = $1::text::uuid",
         &[&user_id],
@@ -1751,7 +1790,7 @@ pub async fn change_own_password(
     )
     .await?;
     tx.commit().await?;
-    Ok(true)
+    Ok(PasswordChange::Changed)
 }
 
 /// Whether a console user with this canonical username exists.

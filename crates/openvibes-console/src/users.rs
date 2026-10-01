@@ -239,6 +239,7 @@ fn busy() -> Response {
         (status = 204, description = "Password set; the user's other sessions are signed out"),
         (status = 400, description = "Wrong current password, or a new password that is too short or unchanged", body = ProblemDetails),
         (status = 401, description = "Not signed in", body = ProblemDetails),
+        (status = 409, description = "The password was just changed in another session; nothing changed", body = ProblemDetails),
         (status = 429, description = "Too many wrong passwords for this account (shared with sign-in)", body = ProblemDetails),
     ))]
 pub(crate) async fn change_password(
@@ -354,18 +355,30 @@ pub(crate) async fn change_password(
     {
         return unavailable_auth();
     }
+    // Compare-and-swap on the hash just verified (tripwire #1606): of two
+    // concurrent changes with the same current password, one wins.
     match console_auth::change_own_password(
         &mut client,
         &active.user_id,
         &digest,
+        &credential.password_phc,
         &phc,
         now,
         &audit,
     )
     .await
     {
-        Ok(true) => no_store(StatusCode::NO_CONTENT.into_response()),
-        Ok(false) => authentication_required(),
+        Ok(console_auth::PasswordChange::Changed) => {
+            no_store(StatusCode::NO_CONTENT.into_response())
+        }
+        Ok(console_auth::PasswordChange::ChangedElsewhere) => {
+            problem_response(ProblemDetails::new(
+                StatusCode::CONFLICT,
+                "password_changed_elsewhere",
+                "Your password was just changed in another session; sign in again",
+            ))
+        }
+        Ok(console_auth::PasswordChange::SessionGone) => authentication_required(),
         Err(_) => unavailable_auth(),
     }
 }

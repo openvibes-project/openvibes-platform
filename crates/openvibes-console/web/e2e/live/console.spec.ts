@@ -231,10 +231,20 @@ test("a new user signs in with a one-time password and must set their own first 
   await other.getByRole("button", { name: "Sign in" }).click();
   await expect(other.getByRole("heading", { name: "Set your password" })).toBeVisible();
   await expect(other.locator(".rail")).toHaveCount(0);
+  // A second tab of the same session (tripwire #1604).
+  const secondTab = await context.newPage();
+  await secondTab.goto("/");
+  await expect(secondTab.getByRole("heading", { name: "Set your password" })).toBeVisible();
   await other.getByLabel("One-time password").fill(oneTime);
   await other.getByLabel("New password (at least 15 characters)").fill("e2e-a-long-new-password-2026");
   await other.getByLabel("New password again").fill("e2e-a-long-new-password-2026");
   await other.getByRole("button", { name: "Set password" }).click();
   await expect(other.locator(".view")).toBeVisible();
+  // The stale tab, used with the spent one-time password, goes to the console.
+  await secondTab.getByLabel("One-time password").fill(oneTime);
+  await secondTab.getByLabel("New password (at least 15 characters)").fill("e2e-another-long-password-2026");
+  await secondTab.getByLabel("New password again").fill("e2e-another-long-password-2026");
+  await secondTab.getByRole("button", { name: "Set password" }).click();
+  await expect(secondTab.locator(".view")).toBeVisible();
   await context.close();
 });

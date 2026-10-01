@@ -84,6 +84,12 @@ permission-checked read models, enrollment-token management, and audit routes.
   A wrong current password counts against sign-in's per-account limit (5
   in 15 minutes, shared with sign-in), then 429 `too_many_attempts`, so a
   stolen session cannot guess it faster than sign-in could.
+  The change is a compare-and-swap: the credential row is locked and
+  replaced only while it still holds the hash the current password was
+  checked against, so of two concurrent changes one wins and the other gets
+  409 `password_changed_elsewhere` with nothing changed. The Set your
+  password screen re-reads the session on focus and after an error, so a
+  second tab whose password was already set goes to the console.
   On success (204) the flag is cleared, the user's other sessions are
   signed out, and `auth.password.changed` is audited. The same route is the
   account menu's Change password.

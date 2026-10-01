@@ -423,8 +423,8 @@ Code over these tables:
 
 `0030_console_password_change.sql` (additive): `console_users.password_must_change`
 (default false). The console's New user sets it with a one-time password;
-`console_auth::session` returns it, and `change_own_password` clears it
-while replacing the credential, revoking the user's other sessions and
+`console_auth::session` returns it, and `change_own_password` (a compare-and-swap on the
+verified hash, credential row locked first) clears it while replacing the credential, revoking the user's other sessions and
 auditing `auth.password.changed`, in one transaction. `create_local_user`
 takes the flag and the audit `actor_kind` (`local_admin` from the CLI,
 `user` from the console). No new grants: the console already writes

@@ -408,3 +408,49 @@ async fn guessing_the_current_password_is_throttled_like_sign_in() {
     assert_eq!(locked.status(), StatusCode::TOO_MANY_REQUESTS);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn two_sessions_changing_the_password_at_once_cannot_both_win() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        eprintln!("skipping: OPENVIBES_TEST_DATABASE_URL is unset");
+        return;
+    }
+    let db = TestDb::create().await;
+    platform_store::migrate(&mut db.pool.get().await.unwrap())
+        .await
+        .unwrap();
+    let router = authenticated_router(db.pool.clone(), ORIGIN);
+    let path = "/api/v1/session/password";
+    // tripwire #1606 hit it 5 of 5 times; five rounds, one user each.
+    for round in 0..5_u8 {
+        let user = format!("racer{round}");
+        local_user(&db, &user, "viewer", 10 + round).await;
+        let first = sign_in(&router, &user, ADMIN_PASSWORD).await;
+        let second = sign_in(&router, &user, ADMIN_PASSWORD).await;
+        let change = |new: &str| serde_json::json!({"current_password": ADMIN_PASSWORD, "new_password": new});
+        let (a, b) = tokio::join!(
+            post(&router, path, &first, change("first-new-password-of-many")),
+            post(
+                &router,
+                path,
+                &second,
+                change("second-new-password-of-many")
+            ),
+        );
+        let mut statuses = [a.status(), b.status()];
+        statuses.sort();
+        assert_eq!(
+            statuses,
+            [StatusCode::NO_CONTENT, StatusCode::CONFLICT],
+            "round {round}"
+        );
+        let winner = if a.status() == StatusCode::NO_CONTENT {
+            "first-new-password-of-many"
+        } else {
+            "second-new-password-of-many"
+        };
+        // Only the winner's password signs in.
+        sign_in(&router, &user, winner).await;
+    }
+    db.drop().await;
+}

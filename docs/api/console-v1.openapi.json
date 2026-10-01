@@ -3740,6 +3740,16 @@
               }
             }
           },
+          "409": {
+            "description": "The password was just changed in another session; nothing changed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "429": {
             "description": "Too many wrong passwords for this account (shared with sign-in)",
             "content": {
