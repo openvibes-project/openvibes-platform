@@ -42,6 +42,8 @@ pub(crate) use run::token_from;
 
 /// Where the baseline rules package puts its trust line.
 pub const BASELINE_KEY: &str = "/usr/share/openvibes/rules/baseline.key";
+/// The threat-alarm rule set's trust line (rules v2 and later).
+pub const ALARMS_KEY: &str = "/usr/share/openvibes/rules/alarms.key";
 
 /// The one line that installs and enrolls an agent (releases spec §5), with
 /// `--rules SET,ISSUER,KEY` when the platform has the baseline rules, so the
@@ -54,6 +56,7 @@ pub fn agent_install_command(
     token: &str,
     fingerprint: &str,
     rules: Option<&str>,
+    alarm_rules: Option<&str>,
 ) -> String {
     let platform = if ingest == ports::INGEST_DEFAULT {
         platform.to_owned()
@@ -67,9 +70,15 @@ pub fn agent_install_command(
             format!(" --rules {rules} --distribution-port {distribution}")
         }
     });
+    // The installer adds the alarm rules (and process_events) only for a
+    // P14 agent, and only with --rules (they share the distribution URL).
+    let alarms = match (rules.is_empty(), alarm_rules) {
+        (false, Some(alarms)) => format!(" --alarm-rules {alarms}"),
+        _ => String::new(),
+    };
     format!(
         "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
-         --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}{rules}"
+         --agent --platform {platform} --token {token} --ca-sha256 {fingerprint}{rules}{alarms}"
     )
 }
 

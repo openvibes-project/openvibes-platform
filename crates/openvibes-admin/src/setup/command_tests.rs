@@ -5,21 +5,21 @@ const DEFAULTS: (u16, u16) = (18423, 18424);
 #[test]
 fn chosen_agent_ports_travel_only_when_not_the_defaults() {
     let rules = Some("baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    let line = super::agent_install_command("h.example", (18500, 18424), "T", "AB:CD", rules);
+    let line = super::agent_install_command("h.example", (18500, 18424), "T", "AB:CD", rules, None);
     assert!(line.contains(" --platform h.example:18500 "), "{line}");
     assert!(!line.contains("--distribution-port"), "{line}");
-    let line = super::agent_install_command("h.example", (18423, 18501), "T", "AB:CD", rules);
+    let line = super::agent_install_command("h.example", (18423, 18501), "T", "AB:CD", rules, None);
     assert!(line.contains(" --platform h.example "), "{line}");
     assert!(line.ends_with(" --distribution-port 18501"), "{line}");
     // Without rules the agent never asks distribution.
-    let line = super::agent_install_command("h.example", (18423, 18501), "T", "AB:CD", None);
+    let line = super::agent_install_command("h.example", (18423, 18501), "T", "AB:CD", None, None);
     assert!(!line.contains("--distribution-port"), "{line}");
 }
 
 #[test]
 fn the_agent_install_command_is_one_line() {
     assert_eq!(
-        super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", None),
+        super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", None, None),
         "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
          --agent --platform h.example --token T --ca-sha256 AB:CD"
     );
@@ -64,7 +64,7 @@ fn the_baseline_trust_line_rides_along() {
         Some("baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
     );
     assert!(
-        super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", rules.as_deref())
+        super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", rules.as_deref(), None)
             .ends_with(" --rules baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
     );
     // Anything that could break the shell line or the installer's check
@@ -77,4 +77,22 @@ fn the_baseline_trust_line_rides_along() {
     ] {
         assert_eq!(super::rules_arg(bad), None, "{bad}");
     }
+}
+
+/// Rules v2: the install line also names the alarm rules, but only with
+/// --rules (they share the distribution URL); the installer gates them on
+/// a P14 agent.
+#[test]
+fn the_alarm_rules_ride_along_with_the_rules() {
+    let rules = Some("baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    let alarms = Some("baseline-alarms,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    let line = super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", rules, alarms);
+    assert!(
+        line.ends_with(
+            " --alarm-rules baseline-alarms,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        ),
+        "{line}"
+    );
+    let line = super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", None, alarms);
+    assert!(!line.contains("--alarm-rules"), "{line}");
 }
