@@ -19,7 +19,13 @@ v1 (`2026-10-01-assets-design.md`).
   readable) and each process's unit (`/proc/<pid>/cgroup`), name and
   command line (`/proc/<pid>/comm`, `cmdline`), user (`status`).
 
-## 2. Decision for the user: who owns a port?
+## 2. Who owns a port? (decided: C, the user, 2026-10-01, #1688)
+
+**Decision: C.** No new privilege by default; an admin can opt in to the
+capability with a documented systemd drop-in. The agent reports owners
+whenever it can see them, so the same code serves both.
+
+Options considered:
 
 - **A. No new privilege (recommended).** Ports are listed with protocol,
   address, exposed/local; the owning service is filled in only where the
