@@ -3,10 +3,11 @@
 //! the caller's agents: a scoped caller's counts include only hosts in the
 //! scope, and a host outside it reads as absent.
 //!
-//! "Vulnerable" for a host's package version: the host has an open
-//! fixable vulnerability naming the package (the matcher always uses the
-//! host's newest version of that name), or the version has a vulnerability
-//! without a fix.
+//! "Vulnerable" for a host's package: the host has an open vulnerability
+//! with a fix naming the package (the matcher always uses the host's
+//! newest version of that name). Vulnerabilities without a fix are left
+//! out: a Debian host has thousands, so they would flag most packages; the
+//! Vulnerabilities view reports them.
 
 use chrono::{DateTime, Utc};
 
@@ -100,11 +101,10 @@ fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
     }
 }
 
-/// SQL for "this host's (`hp.agent_id`) version `pv` is vulnerable".
-const VULNERABLE: &str = "(EXISTS (SELECT 1 FROM vulnerabilities v
+/// SQL for "this host's (`hp.agent_id`) package `pv` is vulnerable".
+const VULNERABLE: &str = "EXISTS (SELECT 1 FROM vulnerabilities v
         WHERE v.agent_id = hp.agent_id AND v.fixed_at IS NULL
-          AND v.packages @> jsonb_build_array(jsonb_build_object('name', pv.name)))
-    OR EXISTS (SELECT 1 FROM version_vulnerabilities vv WHERE vv.package_version_id = pv.id))";
+          AND v.packages @> jsonb_build_array(jsonb_build_object('name', pv.name)))";
 
 /// Whether the caller may see `agent_id`.
 async fn visible(client: &Client, scope: &AgentScope, agent_id: &str) -> Result<bool, StoreError> {
@@ -172,22 +172,79 @@ pub async fn software(
     limit: i64,
 ) -> Result<Vec<Software>, StoreError> {
     let (global, groups) = scope_params(scope);
-    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    // A global caller sees every host: no per-row visibility join (it
+    // sorts every host-package row; most callers are global).
+    // A scoped caller's hosts are worked out once (visible_agents).
+    let visible = |agent: &str| {
+        if global {
+            // Always true; it names $1 and $2 so their types are known.
+            "($1::boolean OR $2::text[] IS NULL)".to_owned()
+        } else {
+            format!("{agent} IN (SELECT agent_id FROM visible_agents)")
+        }
+    };
+    let (visible_host, visible_vulnerability) = (visible("hp.agent_id"), visible("v.agent_id"));
+    let visibility = agent_visibility("a.agent_id", "$1", "$2");
     let (after_name, after_manager) =
         after.map_or((None, ""), |(name, manager)| (Some(name), manager));
+    // The page's names first (in name order, so the scan can stop after
+    // `limit`), then the counts for those names only.
     let query = format!(
-        "SELECT pv.manager, pv.name, count(DISTINCT hp.agent_id),
-            count(DISTINCT (pv.epoch, pv.version, pv.release)),
-            count(DISTINCT hp.agent_id) FILTER (WHERE {VULNERABLE})
-         FROM package_versions pv
-         JOIN host_packages hp ON hp.package_version_id = pv.id
-         JOIN agents a ON a.agent_id = hp.agent_id
-         WHERE {visible}
-           AND ($3::text IS NULL OR strpos(lower(pv.name), lower($3)) > 0)
-           AND ($4::text IS NULL OR (pv.name, pv.manager) > ($4, $5))
-         GROUP BY pv.name, pv.manager
-         HAVING NOT $6 OR count(DISTINCT hp.agent_id) FILTER (WHERE {VULNERABLE}) > 0
-         ORDER BY pv.name, pv.manager LIMIT $7"
+        "WITH visible_agents AS MATERIALIZED (
+            SELECT a.agent_id FROM agents a WHERE NOT $1 AND {visibility}
+         ),
+         vulnerable_names AS (
+            -- Only for \"vulnerable only\": names with an open fixable
+            -- vulnerability on a visible host (the matcher only reports
+            -- installed packages).
+            SELECT DISTINCT p->>'name' AS name
+            FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
+            WHERE $6 AND v.fixed_at IS NULL
+              AND {visible_vulnerability}
+         ),
+         page AS (
+            SELECT pv.name, pv.manager FROM package_versions pv
+            WHERE ($3::text IS NULL OR strpos(lower(pv.name), lower($3)) > 0)
+              AND ($4::text IS NULL OR (pv.name, pv.manager) > ($4, $5))
+              AND (NOT $6 OR pv.name IN (SELECT name FROM vulnerable_names))
+              AND EXISTS (SELECT 1 FROM host_packages hp
+                          WHERE hp.package_version_id = pv.id AND {visible_host})
+            GROUP BY pv.name, pv.manager
+            ORDER BY pv.name, pv.manager LIMIT $7
+         ),
+         pairs AS (
+            SELECT DISTINCT v.agent_id COLLATE \"C\" AS agent_id, p->>'name' AS name
+            FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
+            WHERE v.fixed_at IS NULL AND p->>'name' IN (SELECT name FROM page)
+         ),
+         -- Visible hosts × versions of the page's names, then hosts and
+         -- versions each counted by grouping (hash), not count(DISTINCT):
+         -- a DISTINCT count sorts every row under the text collation.
+         per_version AS (
+            SELECT pv.name, pv.manager, hp.agent_id COLLATE \"C\" AS agent_id, pv.epoch, pv.version, pv.release,
+                bool_or(pr.agent_id IS NOT NULL) AS vulnerable
+            FROM page
+            JOIN package_versions pv ON pv.name = page.name AND pv.manager = page.manager
+            JOIN host_packages hp ON hp.package_version_id = pv.id
+            LEFT JOIN pairs pr ON pr.agent_id = hp.agent_id COLLATE \"C\" AND pr.name = pv.name
+            WHERE {visible_host}
+            GROUP BY pv.name, pv.manager, hp.agent_id COLLATE \"C\", pv.epoch, pv.version, pv.release
+         ),
+         hosts AS (
+            SELECT name, manager, count(*) AS hosts, count(*) FILTER (WHERE vulnerable) AS vulnerable
+            FROM (SELECT name, manager, agent_id, bool_or(vulnerable) AS vulnerable
+                  FROM per_version GROUP BY name, manager, agent_id) h
+            GROUP BY name, manager
+         ),
+         versions AS (
+            SELECT name, manager, count(*) AS versions
+            FROM (SELECT name, manager FROM per_version
+                  GROUP BY name, manager, epoch, version, release) v
+            GROUP BY name, manager
+         )
+         SELECT h.manager, h.name, h.hosts, v.versions, h.vulnerable
+         FROM hosts h JOIN versions v ON v.name = h.name AND v.manager = h.manager
+         ORDER BY h.name, h.manager"
     );
     let rows = client
         .query(

@@ -17,7 +17,8 @@ const IMPORTED: &str = "import.00000000000000000000000000000003";
 const PROD: &str = "00000000-0000-4000-8000-0000000000a1";
 
 /// web-01 (tag env=prod): openssl 3.0.13 (an open fixable vulnerability),
-/// bash 5.2 (a no-fix vulnerability), glibc for two architectures.
+/// bash 5.2 (only a no-fix vulnerability: not flagged), glibc for two
+/// architectures.
 /// db-01 (env=dev): openssl 3.0.14 (its vulnerability is fixed), bash 5.2.
 /// An imported host: openssl 3.0.13.
 async fn setup() -> TestDb {
@@ -89,7 +90,7 @@ async fn a_hosts_packages_are_sorted_paged_filtered_and_flagged() {
     assert_eq!(
         names,
         [
-            ("bash", "x86_64", true),
+            ("bash", "x86_64", false),
             ("glibc", "x86_64", false),
             ("glibc", "i686", false),
             ("openssl", "x86_64", true)
@@ -189,7 +190,7 @@ async fn fleet_software_counts_only_visible_hosts() {
     // openssl: web-01, db-01, the imported host; two versions; only web-01
     // has it open (the imported host has no vulnerability rows).
     assert_eq!(row(&global, "openssl"), Some((3, 2, 1)));
-    assert_eq!(row(&global, "bash"), Some((2, 1, 2)));
+    assert_eq!(row(&global, "bash"), Some((2, 1, 0)));
     assert_eq!(row(&global, "glibc"), Some((1, 1, 0)));
     let names: Vec<&str> = global.iter().map(|s| s.name.as_str()).collect();
     assert_eq!(names, ["bash", "glibc", "openssl"]);
@@ -199,7 +200,7 @@ async fn fleet_software_counts_only_visible_hosts() {
         .await
         .unwrap();
     assert_eq!(row(&scoped, "openssl"), Some((1, 1, 1)));
-    assert_eq!(row(&scoped, "bash"), Some((1, 1, 1)));
+    assert_eq!(row(&scoped, "bash"), Some((1, 1, 0)));
 
     // Vulnerable only, a name filter, and the keyset cursor.
     let vulnerable = SoftwareFilters {
@@ -211,7 +212,7 @@ async fn fleet_software_counts_only_visible_hosts() {
         .unwrap();
     assert_eq!(
         flagged.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
-        ["bash", "openssl"]
+        ["openssl"]
     );
     let after =
         console_inventory::software(&client, &AgentScope::Global, &all, Some(("bash", "rpm")), 1)
@@ -304,5 +305,124 @@ async fn one_packages_versions_and_hosts() {
             .unwrap()
             .is_empty()
     );
+    db.drop().await;
+}
+
+/// Design §4: the fleet aggregate on 1,000 hosts × 2,000 packages (2 M
+/// host_packages rows, three versions per name), 50 open fixable
+/// vulnerabilities per host (50 k rows over 100 advisories), and an asset
+/// group of 100 hosts. Prints timings.
+/// `cargo test --release -p platform-store --test console_inventory -- --ignored --nocapture`
+#[tokio::test]
+#[ignore = "measurement: builds a 2 M-row fixture"]
+async fn measure_the_fleet_aggregate_on_1000_hosts() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    admin
+        .batch_execute(
+            "SET statement_timeout = 0;
+             INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at)
+             SELECT 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), 'active', now(),
+                    'host-' || lpad(h::text, 4, '0'), now()
+             FROM generate_series(1, 1000) h;
+             INSERT INTO package_versions (manager, name, version, release, arch)
+             SELECT 'rpm', 'pkg-' || lpad(p::text, 4, '0'), '1.' || v, '1.fc44', 'x86_64'
+             FROM generate_series(1, 2000) p, generate_series(0, 2) v;
+             INSERT INTO host_packages
+             SELECT 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), pv.id
+             FROM generate_series(1, 1000) h
+             JOIN package_versions pv ON pv.version = '1.' || (h % 3);
+             INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+             SELECT 'FEDORA-' || k, 'fedora', 'fedora', '44', 'important', 't', 'https://x'
+             FROM generate_series(1, 100) k;
+             INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
+                last_evaluated_at)
+             SELECT 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), 'FEDORA-' || k,
+                    jsonb_build_array(jsonb_build_object('name', 'pkg-' || lpad((k * 20)::text, 4, '0'))),
+                    now(), now()
+             FROM generate_series(1, 1000) h, generate_series(1, 100) k WHERE (h + k) % 2 = 0;
+             INSERT INTO console_agent_tags
+             SELECT 'agent.00000000-0000-4000-8000-' || lpad(h::text, 12, '0'), 'env', 'prod', now(), 't'
+             FROM generate_series(1, 100) h;
+             INSERT INTO console_asset_groups VALUES ('00000000-0000-4000-8000-0000000000a1', 'prod', now(), 't');
+             INSERT INTO console_asset_group_selectors
+             VALUES ('00000000-0000-4000-8000-0000000000a1', 'env', 'prod', now());
+             ANALYZE;",
+        )
+        .await
+        .unwrap();
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    let all = SoftwareFilters::default();
+    let vulnerable = SoftwareFilters {
+        vulnerable: true,
+        ..SoftwareFilters::default()
+    };
+    let time = |label: &'static str| {
+        let start = std::time::Instant::now();
+        move || eprintln!("{label}: {:?}", start.elapsed())
+    };
+    let done = time("software, first page (50)");
+    let page = console_inventory::software(&client, &AgentScope::Global, &all, None, 50)
+        .await
+        .unwrap();
+    done();
+    assert_eq!(page.len(), 50);
+    assert_eq!((page[0].hosts, page[0].versions), (1000, 3));
+    let done = time("software, a page in the middle (after pkg-1500)");
+    console_inventory::software(
+        &client,
+        &AgentScope::Global,
+        &all,
+        Some(("pkg-1500", "rpm")),
+        50,
+    )
+    .await
+    .unwrap();
+    done();
+    let done = time("software, vulnerable only");
+    let flagged = console_inventory::software(&client, &AgentScope::Global, &vulnerable, None, 50)
+        .await
+        .unwrap();
+    done();
+    assert_eq!(flagged.len(), 50);
+    assert_eq!(flagged[0].vulnerable_hosts, 500);
+    let done = time("software, scoped to a 100-host group, first page");
+    let scoped = console_inventory::software(&client, &prod(), &all, None, 50)
+        .await
+        .unwrap();
+    done();
+    assert_eq!(scoped[0].hosts, 100);
+    let done = time("software, scoped to an empty group");
+    console_inventory::software(
+        &client,
+        &AgentScope::AssetGroups(vec!["00000000-0000-4000-8000-0000000000ff".into()]),
+        &all,
+        None,
+        50,
+    )
+    .await
+    .unwrap();
+    done();
+    let agent = "agent.00000000-0000-4000-8000-000000000001";
+    let done = time("one host's packages, first page (50)");
+    console_inventory::host_packages(&client, &AgentScope::Global, agent, None, None, 50)
+        .await
+        .unwrap();
+    done();
+    let done = time("one package's versions");
+    console_inventory::software_versions(&client, &AgentScope::Global, "rpm", "pkg-1000")
+        .await
+        .unwrap();
+    done();
+    let done = time("one package's hosts, first page (50)");
+    console_inventory::software_hosts(&client, &AgentScope::Global, "rpm", "pkg-1000", None, 50)
+        .await
+        .unwrap();
+    done();
     db.drop().await;
 }
