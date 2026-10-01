@@ -309,6 +309,36 @@ jobs:
             BUNDLE_BIN="$PWD/tools/integration_bundle" \
             bash scripts/load/run.sh 50 1000 10
 
+  # P14 end to end (board #89): the real agent on a real kernel (VM runner:
+  # kernel audit is not reachable from a container) sends alarms to the
+  # platform built here; they read back through the console API, and a
+  # program suppression closes the next one.
+  alarms-e2e:
+    name: Alarms end to end (real kernel)
+    needs: fedora
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms
+          path: dist
+
+      - name: Install auditd, podman and tools
+        timeout-minutes: 10
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q auditd rpm2cpio cpio jq podman
+
+      - name: Alarms end to end
+        run: bash scripts/alarms-e2e.sh dist
+
   # The documented install, scripted, under a real systemd (podman fedora:44,
   # systemd as PID 1): PostgreSQL and the platform/agent/console RPMs; the
   # agent enrolls/fetches rules/delivers findings; the console serves TLS and
