@@ -29,8 +29,10 @@
 .panel-header__badges { margin-top: 2px; }
 .panel-header__actions { margin-top: 8px; }
 .panel-body { padding: 4px 20px 20px; }
-.panel-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 1px; margin: 0 20px 12px; border-radius: var(--r-3); overflow: hidden; background: var(--line); border: 1px solid var(--line); }
-.panel-glance > div { display: grid; gap: 2px; padding: 10px 12px; background: var(--surface-2); font-size: 12px; }
+/* Separators are drawn by each tile, not by the grid's background, so a
+   row the tiles don't fill stays blank instead of a grey block. */
+.panel-glance { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); margin: 0 20px 12px; border-radius: var(--r-3); overflow: hidden; background: var(--surface-2); border: 1px solid var(--line); }
+.panel-glance > div { display: grid; gap: 2px; padding: 10px 12px; background: var(--surface-2); font-size: 12px; box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line); }
 .panel-glance strong { font-size: 15px; font-weight: 600; }
 .panel-section { display: grid; gap: 10px; }
 .panel-section + .panel-section { margin-top: 8px; }

@@ -35,11 +35,11 @@ export function PortPanel({ id }: { id: string }) {
               {data.hosts.map((h) => (
                 <li key={`${h.agent_id}/${h.address}`}>
                   <ObjectLink to={{ kind: "agent", id: h.agent_id }} className="list__row">
-                    <span className="grow truncate">{h.hostname ?? h.agent_id}</span>
-                    <span className="mono subtle nowrap">{h.address}</span>
+                    <span className="cell-two grow">
+                      <span>{h.hostname ?? h.agent_id}</span>
+                      <span className="subtle"><span className="mono">{h.address}</span> · <span className="mono">{h.service ?? h.program ?? "owner not visible"}</span> · <Ago value={h.last_seen_at} /></span>
+                    </span>
                     {h.exposed && <span className="badge badge--warn badge--plain">exposed</span>}
-                    <span className="mono subtle truncate">{h.service ?? h.program ?? "owner not visible"}</span>
-                    <span className="subtle nowrap"><Ago value={h.last_seen_at} /></span>
                   </ObjectLink>
                 </li>
               ))}
@@ -69,11 +69,11 @@ export function UnitPanel({ id }: { id: string }) {
               {data.hosts.map((h) => (
                 <li key={h.agent_id}>
                   <ObjectLink to={{ kind: "agent", id: h.agent_id }} className="list__row">
-                    <span className="grow truncate">{h.hostname ?? h.agent_id}</span>
-                    <span className="mono subtle truncate">{h.programs.join(", ") || "—"}</span>
-                    <span className="num nowrap">{h.processes} proc</span>
-                    <span className="mono subtle nowrap">{h.run_as ?? "—"}</span>
-                    <span className="subtle nowrap"><Ago value={h.last_seen_at} /></span>
+                    <span className="cell-two grow">
+                      <span>{h.hostname ?? h.agent_id}</span>
+                      <span className="subtle"><span className="mono">{h.programs.join(", ") || "—"}</span> as <span className="mono">{h.run_as ?? "?"}</span> · <Ago value={h.last_seen_at} /></span>
+                    </span>
+                    <span className="num nowrap subtle">{h.processes} {h.processes === 1 ? "process" : "processes"}</span>
                   </ObjectLink>
                 </li>
               ))}

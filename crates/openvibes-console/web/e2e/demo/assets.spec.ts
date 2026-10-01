@@ -77,6 +77,31 @@ test("fleet Ports and Services rows open the hosts that have them, linking to th
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
 
+test("the fleet Ports and Services views work from the keyboard: j moves, Enter opens, Escape closes", async ({ page }) => {
+  for (const [path, kind] of [["/ports", "Port"], ["/services", "Service"]] as const) {
+    await page.goto(path);
+    await page.locator(".view table").focus();
+    await page.keyboard.press("j");
+    await page.keyboard.press("Enter");
+    const inspector = page.locator(".inspector");
+    await expect(inspector.locator(".panel-header__kind")).toContainText(kind);
+    await page.keyboard.press("Escape");
+    await expect(inspector).toHaveCount(0);
+  }
+});
+
+test("on a phone the Host page's tab strip scrolls itself, never the page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/agents");
+  await page.getByPlaceholder("Filter by host name, ID or version…").fill("web-");
+  await page.locator(".view tbody tr, .view .list li").filter({ hasText: "web-" }).first().click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("tab", { name: "Services" }).click();
+  // Selecting a far tab must not scroll the panel sideways.
+  const shifted = await inspector.evaluate((panel) => [...panel.querySelectorAll("*")].some((el) => el.scrollLeft > 0 && !el.classList.contains("tabs") && !el.classList.contains("table-wrap")));
+  expect(shifted).toBe(false);
+});
+
 test("a host whose lists were cut says some ports are not listed", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").filter({ hasText: "build-" }).first().locator("td").nth(1).click();

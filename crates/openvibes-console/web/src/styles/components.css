@@ -79,6 +79,8 @@
 
 /* Tables */
 .table-wrap { overflow: auto; min-height: 0; }
+/* A column of a plain table that phones leave out (DataTable has hideBelow). */
+@media (max-width: 480px) { .hide-narrow { display: none; } }
 .table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .table th {
   position: sticky; top: 0; z-index: 1; background: var(--surface); text-align: left;
@@ -117,9 +119,12 @@
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 
 /* Tabs */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 16px; }
+/* The strip scrolls itself when its tabs don't fit (the Host page has
+   seven), so it never widens and scrolls the panel around it. */
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
 .tabs button {
-  all: unset; cursor: pointer; padding: 10px 10px; font-size: 13px; font-weight: 500; color: var(--text-2);
+  all: unset; flex: none; white-space: nowrap; cursor: pointer; padding: 10px 10px; font-size: 13px; font-weight: 500; color: var(--text-2);
   border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center;
 }
 .tabs button:hover { color: var(--text); }

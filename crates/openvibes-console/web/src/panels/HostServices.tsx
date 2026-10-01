@@ -33,14 +33,14 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       {show === "ports" ? (
         data.listeners.length === 0 ? <Empty title="No open ports" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Open ports">
-            <thead><tr><th>Port</th><th>Address</th><th>Service</th><th>Program</th></tr></thead>
+            <thead><tr><th>Port</th><th className="hide-narrow">Address</th><th>Service</th><th className="hide-narrow">Program</th></tr></thead>
             <tbody>
               {data.listeners.map((l) => (
                 <tr key={`${l.protocol}/${l.address}/${l.port}`}>
                   <td className="mono nowrap">{l.port}/{l.protocol}{l.exposed && <> <span className="badge badge--warn badge--plain">exposed</span></>}</td>
-                  <td className="mono">{l.address}</td>
+                  <td className="mono hide-narrow">{l.address}</td>
                   <td className="mono">{l.service ?? "—"}</td>
-                  <td className="mono">{l.program ?? "—"}</td>
+                  <td className="mono hide-narrow">{l.program ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
@@ -49,12 +49,12 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
       ) : (
         data.services.length === 0 ? <Empty title="No services reported" /> : (
           <div className="table-wrap"><table className="table table--compact" aria-label="Running services">
-            <thead><tr><th>Service</th><th>Programs</th><th>Processes</th><th>Runs as</th></tr></thead>
+            <thead><tr><th>Service</th><th className="hide-narrow">Programs</th><th>Processes</th><th>Runs as</th></tr></thead>
             <tbody>
               {data.services.map((s) => (
                 <tr key={s.unit}>
                   <td className="mono">{s.unit}</td>
-                  <td className="mono">{s.programs.join(", ") || "—"}</td>
+                  <td className="mono hide-narrow">{s.programs.join(", ") || "—"}</td>
                   <td className="num">{s.processes}</td>
                   <td className="mono">{s.run_as ?? "—"}</td>
                 </tr>
