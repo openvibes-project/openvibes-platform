@@ -8,6 +8,8 @@
     "/vulnerabilities",
     "/agents",
     "/software",
+    "/ports",
+    "/services",
     "/enrollment",
     "/rule-sets",
     "/access",

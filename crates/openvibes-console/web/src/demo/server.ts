@@ -389,6 +389,47 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     }
     return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
   };
+  // Assets v2: open ports and running services, from the host's role.
+  const PORTS: Record<string, [number, string, string][]> = {
+    web: [[443, "nginx.service", "nginx"], [80, "nginx.service", "nginx"]], proxy: [[443, "haproxy.service", "haproxy"]], api: [[8080, "api.service", "node"]],
+    db: [[5432, "postgresql.service", "postgres"]], cache: [[6379, "redis.service", "redis-server"]], mail: [[25, "postfix.service", "master"]],
+  };
+  const hostServices = (agentId: string) => {
+    const role = (data.agents.find((a) => a.id === agentId)?.hostname ?? "").split("-")[0] ?? "";
+    const own = PORTS[role] ?? [];
+    const listeners = [
+      ...own.map(([port, service, program]) => ({ protocol: "tcp", address: "0.0.0.0", port, exposed: true, service, program })),
+      { protocol: "tcp", address: "0.0.0.0", port: 22, exposed: true, service: "sshd.service", program: "sshd" },
+      { protocol: "udp", address: "127.0.0.53", port: 53, exposed: false, service: "systemd-resolved.service", program: "systemd-resolve" },
+    ].sort((a, b) => Number(b.exposed) - Number(a.exposed) || a.port - b.port);
+    const units = new Map(listeners.map((l) => [l.service, l.program]));
+    units.set("chronyd.service", "chronyd");
+    const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
+    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", listeners, services };
+  };
+  route("GET", "/api/v1/agents/{id}/services", "agents.read", ({ id = "" }) => {
+    if (!agentById(id)) return problem(404, "agent_not_found", "Agent not found");
+    return json(hostServices(id));
+  });
+  route("GET", "/api/v1/ports", "agents.read", (_, query) => {
+    const rows = new Map<string, { protocol: string; port: number; hosts: number; exposed_hosts: number; services: Set<string> }>();
+    for (const agent of hosts()) {
+      for (const l of hostServices(agent.id).listeners) {
+        const row = rows.get(`${l.protocol}/${l.port}`) ?? { protocol: l.protocol, port: l.port, hosts: 0, exposed_hosts: 0, services: new Set() };
+        row.hosts += 1;
+        if (l.exposed) row.exposed_hosts += 1;
+        row.services.add(l.service);
+        rows.set(`${l.protocol}/${l.port}`, row);
+      }
+    }
+    const exposed = query.get("exposed") === "true";
+    return json([...rows.values()].filter((r) => !exposed || r.exposed_hosts > 0).sort((a, b) => a.port - b.port || a.protocol.localeCompare(b.protocol)).map((r) => ({ ...r, services: [...r.services].sort().slice(0, 8) })));
+  });
+  route("GET", "/api/v1/services", "agents.read", () => {
+    const counts = new Map<string, number>();
+    for (const agent of hosts()) for (const s of hostServices(agent.id).services) counts.set(s.unit, (counts.get(s.unit) ?? 0) + 1);
+    return json([...counts].sort(([a], [b]) => a.localeCompare(b)).map(([unit, hosts]) => ({ unit, hosts })));
+  });
   route("GET", "/api/v1/software", "agents.read", (_, query) => {
     const q = (query.get("q") ?? "").toLowerCase();
     const fixable = query.get("fixable") === "true";
