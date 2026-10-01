@@ -22,7 +22,7 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Finding");
   await page.locator(".inspector tbody a").first().click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".panel-header__kind")).toContainText("Host");
   await expect(page.locator(".crumbs__item")).toHaveCount(2);
   await page.keyboard.press("Escape");
   await expect(page.locator(".panel-header__kind")).toContainText("Finding");
@@ -44,7 +44,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
   await page.keyboard.press("Control+k");
   await page.getByRole("combobox", { name: "Search" }).fill("web-01");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".panel-header__kind")).toContainText("Host");
   await expect(page.locator(".panel-header__title")).toContainText("web-01");
 });
 
@@ -65,7 +65,7 @@ test("the assistant answers with citations that open objects", async ({ page }) 
   const cite = page.locator(".cite").first();
   await expect(cite).toBeVisible();
   await cite.click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Agent");
+  await expect(page.locator(".panel-header__kind")).toContainText("Host");
   await expect(page.locator(".assistant")).toBeVisible();
 });
 

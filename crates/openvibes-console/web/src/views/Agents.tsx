@@ -21,7 +21,7 @@ export function Agents() {
 
   return (
     <div className="view">
-      <ViewHeader title="Agents" count={rows.length} total={all.length} refresh="/api/v1/agents" placeholder="Filter by host name, ID or version…"
+      <ViewHeader title="Hosts" count={rows.length} total={all.length} refresh="/api/v1/agents" placeholder="Filter by host name, ID or version…"
         chips={[
           { label: "Online", param: "status", value: "active", count: summary.data?.active },
           { label: "Stale", param: "status", value: "stale", count: summary.data?.stale },
@@ -29,11 +29,11 @@ export function Agents() {
           { label: "Revoked", param: "status", value: "revoked", count: summary.data?.revoked },
         ]} />
       {agents.error ? <div className="view-pad"><ErrorBox error={agents.error} /></div> : agents.loading && !agents.data ? <Loading /> : rows.length === 0 ? (
-        <Empty icon="agents" title={all.length === 0 ? "No agents yet" : "Nothing matches these filters"}>
+        <Empty icon="agents" title={all.length === 0 ? "No hosts yet" : "Nothing matches these filters"}>
           {all.length === 0 ? "Create an enrollment token under Enrollment, then install the agent on a host." : "Clear a filter to see more."}
         </Empty>
       ) : (
-        <DataTable label="Agents" rows={rows} rowKey={(a) => a.id}
+        <DataTable label="Hosts" rows={rows} rowKey={(a) => a.id}
           onOpen={(a) => nav.open({ kind: "agent", id: a.id }, true)}
           isOpen={(a) => top?.kind === "agent" && top.id === a.id}
           defaultSort={{ key: "host", direction: "asc" }}

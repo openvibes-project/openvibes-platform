@@ -20,7 +20,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
   const groups = ["Investigate", "Operate", "Administer"] as const;
   // On a phone the bar holds the Investigate views with short labels; the
   // rest are under More, so no destination is an unlabeled icon (#85).
-  const secondary = views.filter((item) => item.group !== "Investigate" && canView(item.path));
+  const secondary = views.filter((item) => (item.group !== "Investigate" || item.phoneMore) && canView(item.path));
   const [more, setMore] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -45,7 +45,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className="rail__item" href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
+                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
                   <span className="rail__label">{item.label}</span>

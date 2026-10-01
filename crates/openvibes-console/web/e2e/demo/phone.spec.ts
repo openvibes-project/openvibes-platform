@@ -14,7 +14,7 @@ test("the bottom bar is labeled; the rest sit under More (board #85)", async ({ 
   await page.goto("/");
   const bar = page.locator(".rail");
   // The Investigate views and More, each with a visible label, all on screen.
-  for (const [name, label] of [["Dashboards", "Home"], ["Findings", "Findings"], ["Alarms", "Alarms"], ["Vulnerabilities", "Vulns"], ["Agents", "Agents"], ["More", "More"]] as const) {
+  for (const [name, label] of [["Dashboards", "Home"], ["Findings", "Findings"], ["Alarms", "Alarms"], ["Vulnerabilities", "Vulns"], ["Hosts", "Hosts"], ["More", "More"]] as const) {
     const item = bar.getByRole(name === "More" ? "button" : "link", { name, exact: true });
     await expect(item).toBeInViewport({ ratio: 1 });
     await expect(item).toContainText(label);
@@ -22,7 +22,7 @@ test("the bottom bar is labeled; the rest sit under More (board #85)", async ({ 
   await expect(bar.getByRole("link", { name: "Audit log" })).toBeHidden();
   await bar.getByRole("button", { name: "More" }).click();
   const menu = bar.getByRole("menu");
-  for (const name of ["Enrollment", "Rule sets", "Access", "Service accounts", "Audit log"]) {
+  for (const name of ["Software", "Enrollment", "Rule sets", "Access", "Service accounts", "Audit log"]) {
     await expect(menu.getByRole("menuitem", { name })).toBeInViewport({ ratio: 1 });
   }
   await menu.getByRole("menuitem", { name: "Audit log" }).click();
