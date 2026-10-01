@@ -18,6 +18,17 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
   const { view } = useLocation();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(pinKey) === "true"; } catch { return false; } });
   const groups = ["Investigate", "Operate", "Administer"] as const;
+  // On a phone the bar holds the Investigate views with short labels; the
+  // rest are under More, so no destination is an unlabeled icon (#85).
+  const secondary = views.filter((item) => item.group !== "Investigate" && canView(item.path));
+  const [more, setMore] = useState(false);
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!more) return;
+    const close = (event: MouseEvent) => { if (!moreRef.current?.contains(event.target as Node)) setMore(false); };
+    window.addEventListener("mousedown", close);
+    return () => window.removeEventListener("mousedown", close);
+  }, [more]);
   const base = import.meta.env.BASE_URL;
   return (
     <nav className={pinned ? "rail rail--pinned" : "rail"} aria-label="Main">
@@ -31,19 +42,39 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
           const items = views.filter((item) => item.group === group && canView(item.path));
           if (items.length === 0) return null;
           return (
-            <div key={group} className="rail__group">
+            <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
                 <a key={item.path} className="rail__item" href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
                   <span className="rail__label">{item.label}</span>
+                  <span className="rail__short" aria-hidden="true">{item.short ?? item.label}</span>
                   <span className="rail__tip" aria-hidden="true">{item.label}</span>
                 </a>
               ))}
             </div>
           );
         })}
+        {secondary.length > 0 && (
+          <div className="rail__more menu" ref={moreRef}>
+            <button type="button" className="rail__item" aria-haspopup="menu" aria-expanded={more} aria-label="More"
+              aria-current={secondary.some((item) => item.path === view) ? "page" : undefined} onClick={() => setMore((m) => !m)}>
+              <Icon name="more" size={19} />
+              <span className="rail__short" aria-hidden="true">More</span>
+            </button>
+            {more && (
+              <div className="menu__pop rail__more-pop" role="menu">
+                {secondary.map((item) => (
+                  <a key={item.path} role="menuitem" className="menu__item" href={nav.href(item.path)} aria-current={view === item.path ? "page" : undefined}
+                    onClick={(event) => { setMore(false); if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
+                    <Icon name={item.icon} size={15} /> {item.label}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <button type="button" className="rail__item rail__pin" aria-pressed={pinned} onClick={() => setPinned((p) => { try { localStorage.setItem(pinKey, String(!p)); } catch { /* per viewer */ } return !p; })}>
         <Icon name="pin" size={17} /><span className="rail__label">{pinned ? "Unpin menu" : "Keep menu open"}</span>

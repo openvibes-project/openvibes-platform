@@ -10,18 +10,33 @@ async function box(locator: Locator) {
   return found;
 }
 
-test("every destination fits in the bottom bar, none hidden", async ({ page }) => {
+test("the bottom bar is labeled; the rest sit under More (board #85)", async ({ page }) => {
   await page.goto("/");
-  const items = page.locator(".rail a.rail__item"); // destinations; the pin is desktop-only
-  await expect(items).toHaveCount(9);
-  // The two that sat past the bar's edge before, found by their names.
-  for (const name of ["Service accounts", "Audit log"]) {
-    await expect(page.locator(".rail").getByRole("link", { name })).toBeInViewport({ ratio: 1 });
+  const bar = page.locator(".rail");
+  // The Investigate views and More, each with a visible label, all on screen.
+  for (const [name, label] of [["Dashboards", "Home"], ["Findings", "Findings"], ["Vulnerabilities", "Vulns"], ["Agents", "Agents"], ["More", "More"]] as const) {
+    const item = bar.getByRole(name === "More" ? "button" : "link", { name, exact: true });
+    await expect(item).toBeInViewport({ ratio: 1 });
+    await expect(item).toContainText(label);
   }
-  for (const item of await items.all()) {
-    const { x, width } = await box(item);
-    expect(x).toBeGreaterThanOrEqual(0);
-    expect(x + width).toBeLessThanOrEqual(390);
+  await expect(bar.getByRole("link", { name: "Audit log" })).toBeHidden();
+  await bar.getByRole("button", { name: "More" }).click();
+  const menu = bar.getByRole("menu");
+  for (const name of ["Enrollment", "Rule sets", "Access", "Service accounts", "Audit log"]) {
+    await expect(menu.getByRole("menuitem", { name })).toBeInViewport({ ratio: 1 });
+  }
+  await menu.getByRole("menuitem", { name: "Audit log" }).click();
+  await expect(page).toHaveURL(/\/audit/);
+  await expect(menu).toBeHidden();
+  await expect(bar.getByRole("button", { name: "More" })).toHaveAttribute("aria-current", "page");
+});
+
+test("at 320px every bar label fits its slot", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/");
+  for (const label of await page.locator(".rail .rail__short").all()) {
+    if (!(await label.isVisible())) continue;
+    expect(await label.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   }
 });
 

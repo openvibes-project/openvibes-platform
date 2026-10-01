@@ -43,6 +43,7 @@
 .rail__label { opacity: 0; transition: opacity var(--fast); }
 .rail:hover .rail__label, .rail:has(:focus-visible) .rail__label, .rail--pinned .rail__label { opacity: 1; }
 .rail__tip { display: none; }
+.rail__short, .rail__more { display: none; }
 .rail__pin { margin-top: auto; color: var(--text-3); }
 .rail__pin[aria-pressed="true"] { color: var(--accent); }
 
@@ -160,12 +161,22 @@
 
 @media (max-width: 720px) {
   .app { flex-direction: column-reverse; }
-  .rail, .rail--pinned, .rail:hover { width: 100%; height: 58px; flex-direction: row; padding: 4px 6px; border-right: 0; border-top: 1px solid var(--line); box-shadow: none; margin: 0; }
+  /* :not(.rail--pinned):hover too, or the desktop hover rule (more specific)
+     widens and shifts the bar under a mouse in a narrow window. */
+  .rail, .rail--pinned, .rail:hover, .rail:not(.rail--pinned):hover, .rail:not(.rail--pinned):has(:focus-visible) { width: 100%; height: 58px; flex-direction: row; padding: 4px 6px; border-right: 0; border-top: 1px solid var(--line); box-shadow: none; margin: 0; }
   .rail__brand, .rail__heading, .rail__pin, .rail__label { display: none; }
-  .rail__groups { flex: 1; flex-direction: row; gap: 0; overflow-x: auto; overflow-y: hidden; }
+  .rail__groups { flex: 1; flex-direction: row; gap: 0; overflow: visible; }
   /* Every destination shares the bar, so none hides past its edge. */
   .rail__group { display: contents; }
-  .rail__item { flex: 1; min-width: 0; height: 48px; padding: 0; justify-content: center; }
+  .rail__item { flex: 1; min-width: 0; height: 48px; padding: 0; justify-content: center; flex-direction: column; gap: 2px; }
+  /* Investigate views and More, each labeled (#85); the rest sit in More. */
+  .rail__group--secondary { display: none; }
+  .rail__short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; line-height: 1.1; }
+  .rail__more { display: flex; flex: 1; min-width: 0; }
+  .rail__more > .rail__item { width: 100%; }
+  .rail__more-pop { top: auto; bottom: 56px; right: 4px; }
+  .rail__more-pop .menu__item { text-transform: none; }
+  .rail__more-pop .menu__item[aria-current="page"] { color: var(--accent); background: var(--accent-soft); }
   .cell-two .truncate { white-space: normal; overflow-wrap: anywhere; }
   .rail__item[aria-current="page"]::before { left: 12px; right: 12px; top: auto; bottom: -4px; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
   .topbar { padding: 0 10px; gap: 8px; }
