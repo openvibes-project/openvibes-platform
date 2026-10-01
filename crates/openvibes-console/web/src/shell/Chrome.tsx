@@ -83,10 +83,11 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
   );
 }
 
-export function TopBar({ title, onPalette, onLogout, persona, onPersona, onHelp }: {
+export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, onPersona, onHelp }: {
   title: string;
   onPalette: () => void;
   onLogout: () => void;
+  onChangePassword: () => void;
   persona: Persona | undefined;
   onPersona: (persona: Persona) => void;
   onHelp: () => void;
@@ -146,6 +147,7 @@ export function TopBar({ title, onPalette, onLogout, persona, onPersona, onHelp 
               <button type="button" role="menuitemcheckbox" aria-checked={density === "compact"} className="menu__item" onClick={() => setDensity(density === "compact" ? "comfortable" : "compact")}>
                 {density === "compact" ? <Icon name="check" size={14} /> : <span style={{ width: 14 }} />} Compact rows
               </button>
+              {!persona && <button type="button" role="menuitem" className="menu__item" onClick={() => { setMenu(false); onChangePassword(); }}><Icon name="access" size={14} /> Change password</button>}
               {!persona && <button type="button" role="menuitem" className="menu__item" onClick={onLogout}><Icon name="logout" size={14} /> Sign out</button>}
             </div>
           )}

@@ -62,6 +62,7 @@ fn session_and_page_dtos_have_stable_wire_names() {
         csrf_token: "x".repeat(32),
         idle_expires_at: "2026-09-23T12:30:00Z".to_owned(),
         absolute_expires_at: "2026-09-23T20:00:00Z".to_owned(),
+        password_must_change: false,
     };
     let session = serde_json::to_value(session).unwrap();
     assert_eq!(session["authentication_method"], "local_password");

@@ -173,6 +173,8 @@ async fn new_user(client: &mut platform_store::Client, now: chrono::DateTime<Utc
             password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
             role_id: "admin",
             actor_id: "bootstrap-cli",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now,
         },
     )
@@ -288,6 +290,8 @@ async fn credentials_sessions_and_password_reset_revocation_round_trip() {
         password_phc: "$argon2id$test-only-invalid-role",
         role_id: "missing_role",
         actor_id: "bootstrap-cli",
+        actor_kind: "local_admin",
+        password_must_change: false,
         now,
     };
     assert!(matches!(

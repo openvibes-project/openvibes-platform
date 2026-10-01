@@ -174,7 +174,16 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     principal: { id: `u-${actor}`, display_name: data.access.users.find((u) => u.username === actor)?.display_name ?? actor, username: actor },
     capabilities, csrf_token: "demo-csrf", authentication_level: "single_factor", authentication_method: "local_password",
     idle_expires_at: iso(Date.now() + 30 * 60_000), absolute_expires_at: iso(Date.now() + 12 * 3_600_000),
+    password_must_change: false,
   }));
+  // The demo has no real passwords: any change of at least 15 new characters succeeds.
+  route("POST", "/api/v1/session/password", null, (_, __, body) => {
+    const next = String(body.new_password ?? "");
+    if (next.length < 15) return problem(400, "weak_password", "Use at least 15 characters for the new password");
+    if (next === String(body.current_password ?? "")) return problem(400, "password_unchanged", "Choose a password different from the current one");
+    audit("auth.password.changed", `u-${actor}`, "user");
+    return new Response(null, { status: 204 });
+  });
   route("GET", "/api/v1/agents", "agents.read", (_, query) => {
     const state = query.get("state");
     const items = data.agents.filter((agent) => visible(agent.id) && (state === null || agent.status === state));
@@ -458,6 +467,17 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return json(data.retention);
   });
   route("GET", "/api/v1/access-control", "rbac.read", () => json(data.access));
+  route("POST", "/api/v1/access-control/users", "rbac.manage", (_, __, body) => {
+    const username = String(body.username ?? "").toLowerCase();
+    const displayName = String(body.display_name ?? "").trim();
+    if (!/^[a-z0-9._@+-]{1,64}$/.test(username) || displayName === "") return problem(400, "invalid_user", "Use 1 to 64 letters, digits or ._@+- for the username, and a name");
+    if (data.access.users.some((u) => u.username === username)) return problem(409, "user_conflict", "A user with this username already exists");
+    const user = { user_id: `u-${Date.now().toString(36)}`, username, display_name: displayName };
+    data.access.users.push(user);
+    data.access.bindings.push({ binding_id: `b-${Date.now().toString(36)}`, user_id: user.user_id, username, display_name: displayName, role_id: String(body.role_id ?? "viewer"), asset_group_id: null, asset_group_name: null, created_at: iso(), created_by: actor });
+    audit("user.created", user.user_id, "user");
+    return json({ ...user, role_id: String(body.role_id ?? "viewer"), one_time_password: "demo1-pass2-word3-onlyx" }, 201);
+  });
   route("POST", "/api/v1/access-control/bindings", "rbac.manage", (_, __, body) => {
     const user = data.access.users.find((u) => u.user_id === body.user_id);
     if (!user) return problem(422, "invalid_user", "Choose a user");

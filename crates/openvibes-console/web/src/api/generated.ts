@@ -87,6 +87,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/access-control/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creates a local user with one global built-in role and a one-time
+         *     password, returned only here; the user must replace it at first sign-in.
+         */
+        post: operations["create_user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -792,6 +812,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sets the signed-in user's own password: the current one is required,
+         *     the new one must be at least 15 characters and differ from it. Clears
+         *     `password_must_change`, signs out the user's other sessions, and is
+         *     audited. Works while the flag is set; browser sessions only.
+         */
+        post: operations["change_password"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/software": {
         parameters: {
             query?: never;
@@ -1402,6 +1444,19 @@ export interface components {
             /** @description Certificate serial rendered as hexadecimal. */
             serial: string;
         };
+        /** @description Sets the signed-in user's own password (`POST /api/v1/session/password`). */
+        ChangePasswordRequest: {
+            /**
+             * Format: password
+             * @description The current password (the one-time password after New user).
+             */
+            current_password: string;
+            /**
+             * Format: password
+             * @description The new password, at least 15 characters and different from the current.
+             */
+            new_password: string;
+        };
         ClientTurn: {
             answer: string;
             question: string;
@@ -1459,6 +1514,18 @@ export interface components {
             /** @description Operator label, 1 to 128 characters. */
             label: string;
         };
+        /**
+         * @description Creates a local console user with one global built-in role and a
+         *     one-time password (`POST /api/v1/access-control/users`).
+         */
+        CreateUserRequest: {
+            /** @description Operator-facing name, 1 to 160 printable characters. */
+            display_name: string;
+            /** @description Initial built-in global role. */
+            role_id: string;
+            /** @description 1 to 64 ASCII letters, digits or `._@+-`; stored lowercase. */
+            username: string;
+        };
         /** @description Enrollment token secret, returned only at creation time. */
         CreatedEnrollmentToken: {
             /** @description RFC3339 expiry instant. */
@@ -1484,6 +1551,22 @@ export interface components {
             token?: string | null;
             /** @description Stable token UUID. */
             token_id: string;
+        };
+        /** @description A created user and their one-time password, shown only in this response. */
+        CreatedUser: {
+            /** @description Display name as stored. */
+            display_name: string;
+            /**
+             * Format: password
+             * @description One-time password; the user must replace it at first sign-in.
+             */
+            readonly one_time_password: string;
+            /** @description The role granted. */
+            role_id: string;
+            /** @description New user id. */
+            user_id: string;
+            /** @description Canonical (lowercase) username. */
+            username: string;
         };
         /** @description Validated cursor and limit accepted by cursor-paginated collection routes. */
         CursorPagination: {
@@ -2130,6 +2213,12 @@ export interface components {
              * @description RFC 3339 instant when idle expiry occurs if the session is not used.
              */
             idle_expires_at: string;
+            /**
+             * @description The user signed in with a one-time password and must set their own
+             *     before anything else: every other route answers 403
+             *     `password_change_required`, and `capabilities` is empty.
+             */
+            password_must_change: boolean;
             /** @description Current human principal. Service-account tokens cannot call this route. */
             principal: components["schemas"]["SessionPrincipal"];
         };
@@ -2606,6 +2695,57 @@ export interface operations {
             };
             /** @description Binding not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description User created; the one-time password is shown only here */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatedUser"];
+                };
+            };
+            /** @description Invalid username, display name or role */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Needs rbac.manage with a global binding */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The username is taken */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5091,6 +5231,64 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    change_password: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description Password set; the user's other sessions are signed out */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Wrong current password, or a new password that is too short or unchanged */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The password was just changed in another session; nothing changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too many wrong passwords for this account (shared with sign-in) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

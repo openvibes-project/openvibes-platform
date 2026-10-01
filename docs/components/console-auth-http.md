@@ -64,6 +64,36 @@ permission-checked read models, enrollment-token management, and audit routes.
   from the high-entropy session secret with a domain separator; only its digest
   is persisted by the store.
 
+### Users and passwords (#85)
+
+- `POST /api/v1/access-control/users` (`rbac.manage`, global binding, CSRF):
+  username (the CLI's rule, stored lowercase), display name and a built-in
+  role (a create that loses a race on the same name is 409, not 503). The
+  answer (201, `no-store`) carries a generated one-time password
+  (20 symbols from an unambiguous alphabet, about 99 bits), shown only
+  there. 409 when the username is taken. Audited as `user.created` with
+  `actor_kind = user`.
+- The user then signs in with it. Until they set their own password,
+  `GET /api/v1/session` says `password_must_change: true` with no
+  capabilities, and every other session route answers 403
+  `password_change_required`. The gate sits in `session_capabilities`, the
+  one path every session route but `GET /session` and set-password takes.
+- `POST /api/v1/session/password` (browser sessions, CSRF): the current
+  password and a new one of at least 15 characters that differs from it.
+  400 `invalid_current_password`, `weak_password` or `password_unchanged`.
+  A wrong current password counts against sign-in's per-account limit (5
+  in 15 minutes, shared with sign-in), then 429 `too_many_attempts`, so a
+  stolen session cannot guess it faster than sign-in could.
+  The change is a compare-and-swap: the credential row is locked and
+  replaced only while it still holds the hash the current password was
+  checked against, so of two concurrent changes one wins and the other gets
+  409 `password_changed_elsewhere` with nothing changed. The Set your
+  password screen re-reads the session on focus and after an error, so a
+  second tab whose password was already set goes to the console.
+  On success (204) the flag is cleared, the user's other sessions are
+  signed out, and `auth.password.changed` is audited. The same route is the
+  account menu's Change password.
+
 ## Configuration
 
 The router constructor accepts a `platform_store::Pool` and canonical public
@@ -108,7 +138,8 @@ agent or finding records.
 
 Run `cargo test --offline -p openvibes-console` for API contract and router
 checks. The PostgreSQL-backed HTTP journey covers login, account-enumeration
-failure shape, session rotation, and logout:
+failure shape, session rotation, and logout (`--test users_http`: New
+user, the forced change, self-service change):
 `OPENVIBES_TEST_DATABASE_URL=… cargo test --offline -p openvibes-console
 --test auth_http`. Store transaction coverage uses the same isolated test
 cluster with `cargo test --offline -p platform-store --test console_auth`.

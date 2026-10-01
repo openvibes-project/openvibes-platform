@@ -231,6 +231,10 @@ pub struct SessionResponse {
     /// RFC 3339 absolute session expiry instant.
     #[schema(format = DateTime)]
     pub absolute_expires_at: String,
+    /// The user signed in with a one-time password and must set their own
+    /// before anything else: every other route answers 403
+    /// `password_change_required`, and `capabilities` is empty.
+    pub password_must_change: bool,
 }
 
 /// Current administrator-controlled audit retention policy.
@@ -717,6 +721,64 @@ impl Drop for LoginRequest {
         use zeroize::Zeroize;
         self.password.zeroize();
         self.username.zeroize();
+    }
+}
+
+/// Sets the signed-in user's own password (`POST /api/v1/session/password`).
+#[derive(Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct ChangePasswordRequest {
+    /// The current password (the one-time password after New user).
+    #[schema(format = Password, write_only = true, max_length = 4096)]
+    pub current_password: String,
+    /// The new password, at least 15 characters and different from the current.
+    #[schema(format = Password, write_only = true, max_length = 4096)]
+    pub new_password: String,
+}
+
+impl Drop for ChangePasswordRequest {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.current_password.zeroize();
+        self.new_password.zeroize();
+    }
+}
+
+/// Creates a local console user with one global built-in role and a
+/// one-time password (`POST /api/v1/access-control/users`).
+#[derive(Clone, Debug, Deserialize, ToSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CreateUserRequest {
+    /// 1 to 64 ASCII letters, digits or `._@+-`; stored lowercase.
+    #[schema(max_length = 64)]
+    pub username: String,
+    /// Operator-facing name, 1 to 160 printable characters.
+    #[schema(max_length = 160)]
+    pub display_name: String,
+    /// Initial built-in global role.
+    pub role_id: String,
+}
+
+/// A created user and their one-time password, shown only in this response.
+#[derive(Serialize, ToSchema)]
+pub struct CreatedUser {
+    /// New user id.
+    pub user_id: String,
+    /// Canonical (lowercase) username.
+    pub username: String,
+    /// Display name as stored.
+    pub display_name: String,
+    /// The role granted.
+    pub role_id: String,
+    /// One-time password; the user must replace it at first sign-in.
+    #[schema(format = Password, read_only = true)]
+    pub one_time_password: String,
+}
+
+impl Drop for CreatedUser {
+    fn drop(&mut self) {
+        use zeroize::Zeroize;
+        self.one_time_password.zeroize();
     }
 }
 

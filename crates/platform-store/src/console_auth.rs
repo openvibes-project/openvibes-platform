@@ -40,6 +40,11 @@ pub struct NewLocalUser<'a> {
     pub role_id: &'a str,
     /// Actor identifier for audit.
     pub actor_id: &'a str,
+    /// Audit actor kind: `local_admin` (the CLI) or `user` (the console).
+    pub actor_kind: &'a str,
+    /// The user must set their own password at the next sign-in (a
+    /// one-time password from the console's New user).
+    pub password_must_change: bool,
     /// Provisioning time.
     pub now: DateTime<Utc>,
 }
@@ -110,6 +115,9 @@ pub struct Session {
     pub idle_expires_at: DateTime<Utc>,
     /// Fixed absolute expiry.
     pub absolute_expires_at: DateTime<Utc>,
+    /// Every route but the session read, setting a password and sign-out
+    /// is refused until the user sets their own password.
+    pub password_must_change: bool,
 }
 
 /// Active role binding for a local console user.
@@ -1285,13 +1293,15 @@ pub async fn create_local_user(
 ) -> Result<(), StoreError> {
     let tx = client.transaction().await?;
     tx.execute(
-        "INSERT INTO console_users (user_id, username, display_name, created_at)
-         VALUES ($1::text::uuid, $2, $3, $4)",
+        "INSERT INTO console_users (user_id, username, display_name, created_at,
+             password_must_change)
+         VALUES ($1::text::uuid, $2, $3, $4, $5)",
         &[
             &new_user.user_id,
             &new_user.username,
             &new_user.display_name,
             &new_user.now,
+            &new_user.password_must_change,
         ],
     )
     .await?;
@@ -1318,12 +1328,13 @@ pub async fn create_local_user(
         "INSERT INTO audit_log
             (actor, action, target, result, detail, actor_kind, actor_id,
              actor_display, target_kind, target_id)
-         VALUES ($1, 'user.created', $2, 'success', jsonb_build_object('role_id', $3::text), 'local_admin', $1, $1,
+         VALUES ($1, 'user.created', $2, 'success', jsonb_build_object('role_id', $3::text), $4, $1, $1,
                  'user', $2)",
         &[
             &new_user.actor_id,
             &new_user.username,
             &new_user.role_id,
+            &new_user.actor_kind,
         ],
     )
     .await?;
@@ -1453,7 +1464,8 @@ pub async fn session(
     let row = client
         .query_opt(
             "SELECT u.user_id::text, u.username, u.display_name, s.csrf_sha256,
-                    s.last_seen_at, s.idle_expires_at, s.absolute_expires_at
+                    s.last_seen_at, s.idle_expires_at, s.absolute_expires_at,
+                    u.password_must_change
              FROM console_sessions s JOIN console_users u USING (user_id)
              WHERE s.session_sha256 = $1 AND s.revoked_at IS NULL
                AND s.idle_expires_at > $2 AND s.absolute_expires_at > $2
@@ -1683,6 +1695,115 @@ pub async fn rehash_password(
     Ok(true)
 }
 
+/// What [`change_own_password`] did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PasswordChange {
+    /// Changed; the user's other sessions are signed out.
+    Changed,
+    /// The password changed since the caller verified it (another session
+    /// won a race): nothing was changed.
+    ChangedElsewhere,
+    /// The account is disabled or the session is no longer valid.
+    SessionGone,
+}
+
+/// Sets a user's own password (self-service, or the forced change after a
+/// one-time password) as a compare-and-swap: the credential row is locked
+/// first and replaced only while it still holds `verified_phc`, the hash
+/// the caller checked the current password against. Then it clears
+/// `password_must_change`, revokes the user's other sessions (the one
+/// making the change stays) and audits it, in one transaction. Locking
+/// the credential before any session row means two concurrent changes by
+/// one user queue on it instead of deadlocking on each other's sessions.
+pub async fn change_own_password(
+    client: &mut Client,
+    user_id: &str,
+    current_session_sha256: &[u8],
+    verified_phc: &str,
+    password_phc: &str,
+    now: DateTime<Utc>,
+    audit: &AuditContext<'_>,
+) -> Result<PasswordChange, StoreError> {
+    let tx = client.transaction().await?;
+    let stored: Option<String> = tx
+        .query_opt(
+            "SELECT c.password_phc FROM console_credentials c JOIN console_users u USING (user_id)
+             WHERE c.user_id = $1::text::uuid AND u.enabled FOR UPDATE OF c",
+            &[&user_id],
+        )
+        .await?
+        .map(|row| row.get(0));
+    let Some(stored) = stored else {
+        tx.rollback().await?;
+        return Ok(PasswordChange::SessionGone);
+    };
+    if stored != verified_phc {
+        tx.rollback().await?;
+        return Ok(PasswordChange::ChangedElsewhere);
+    }
+    let session_valid = tx
+        .query_opt(
+            "SELECT 1 FROM console_sessions
+             WHERE session_sha256 = $1 AND user_id = $2::text::uuid AND revoked_at IS NULL
+               AND idle_expires_at > $3 AND absolute_expires_at > $3",
+            &[&current_session_sha256, &user_id, &now],
+        )
+        .await?
+        .is_some();
+    if !session_valid {
+        tx.rollback().await?;
+        return Ok(PasswordChange::SessionGone);
+    }
+    tx.execute(
+        "UPDATE console_credentials SET password_phc = $2, changed_at = $3
+         WHERE user_id = $1::text::uuid",
+        &[&user_id, &password_phc, &now],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE console_users SET password_must_change = false WHERE user_id = $1::text::uuid",
+        &[&user_id],
+    )
+    .await?;
+    tx.execute(
+        "UPDATE console_sessions SET revoked_at = $3
+         WHERE user_id = $1::text::uuid AND session_sha256 <> $2 AND revoked_at IS NULL",
+        &[&user_id, &current_session_sha256, &now],
+    )
+    .await?;
+    append_auth_event(
+        &tx,
+        audit,
+        AuthAuditEvent {
+            actor: user_id,
+            action: "auth.password.changed",
+            target: Some(user_id),
+            result: "success",
+            actor_kind: Some("user"),
+            actor_id: Some(user_id),
+            actor_display: None,
+            authentication_method: Some("local_password"),
+            target_kind: Some("user"),
+            target_id: Some(user_id),
+            reason_code: None,
+        },
+    )
+    .await?;
+    tx.commit().await?;
+    Ok(PasswordChange::Changed)
+}
+
+/// Whether a console user with this canonical username exists.
+pub async fn username_taken(client: &Client, username: &str) -> Result<bool, StoreError> {
+    Ok(client
+        .query_opt(
+            "SELECT 1 FROM console_users WHERE username = $1",
+            &[&username],
+        )
+        .await?
+        .is_some())
+}
+
 /// Disables an enabled user and revokes all sessions in one audited transaction.
 pub async fn disable_local_user(
     client: &mut Client,
@@ -1892,6 +2013,7 @@ fn session_from_row(row: &Row) -> Session {
         last_seen_at: row.get(4),
         idle_expires_at: row.get(5),
         absolute_expires_at: row.get(6),
+        password_must_change: row.get(7),
     }
 }
 

@@ -221,6 +221,8 @@ async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
             password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
             role_id: "admin",
             actor_id: "test-bootstrap",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now: Utc::now(),
         },
     )
@@ -301,5 +303,22 @@ async fn user_create_reads_one_password_line_from_stdin() {
     let short = fixture.run_input(&create("bob"), "short\n");
     assert!(!short.status.success());
     assert!(String::from_utf8_lossy(&short.stderr).contains("15 to 128"));
+    // #85: --must-change makes the password one-time, as the console's
+    // New user does; without it the user is not asked to change it.
+    let mut one_time = create("carol").to_vec();
+    one_time.push("--must-change");
+    let out = fixture.run_input(&one_time, "violet quartz lantern 2027\n");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let must_change = |name: &str| {
+        format!(
+            "SELECT count(*) FROM console_users WHERE username = '{name}' AND password_must_change"
+        )
+    };
+    assert_eq!(fixture.count(&must_change("carol")).await, 1);
+    assert_eq!(fixture.count(&must_change("admin")).await, 0);
     fixture.drop().await;
 }
