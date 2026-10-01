@@ -7,7 +7,12 @@
 //! with a fix naming the package (the matcher always uses the host's
 //! newest version of that name). Vulnerabilities without a fix are left
 //! out: a Debian host has thousands, so they would flag most packages; the
-//! Vulnerabilities view reports them.
+//! Vulnerabilities view reports them. A vulnerability names its package
+//! by name only (its JSON has no manager); agents report one OS package
+//! manager per host (rpm or dpkg), so the name is unambiguous there.
+//!
+//! Revoked agents are not hosts any more: they are left out of every read
+//! (imported hosts stay).
 
 use chrono::{DateTime, Utc};
 
@@ -111,7 +116,9 @@ const VULNERABLE: &str = "EXISTS (SELECT 1 FROM vulnerabilities v
 async fn visible(client: &Client, scope: &AgentScope, agent_id: &str) -> Result<bool, StoreError> {
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
-    let query = format!("SELECT 1 FROM agents a WHERE a.agent_id = $3 AND {visible}");
+    let query = format!(
+        "SELECT 1 FROM agents a WHERE a.agent_id = $3 AND a.status <> 'revoked' AND {visible}"
+    );
     Ok(client
         .query_opt(&query, &[&global, &groups, &agent_id])
         .await?
@@ -178,8 +185,12 @@ pub async fn software(
     // A scoped caller's hosts are worked out once (visible_agents).
     let visible = |agent: &str| {
         if global {
-            // Always true; it names $1 and $2 so their types are known.
-            "($1::boolean OR $2::text[] IS NULL)".to_owned()
+            // $1 and $2 are named so their types are known; revoked hosts
+            // are few, so this stays a cheap anti-join.
+            format!(
+                "($1::boolean OR $2::text[] IS NULL)
+                 AND NOT EXISTS (SELECT 1 FROM revoked_agents r WHERE r.agent_id = {agent})"
+            )
         } else {
             format!("{agent} IN (SELECT agent_id FROM visible_agents)")
         }
@@ -192,7 +203,11 @@ pub async fn software(
     // `limit`), then the counts for those names only.
     let query = format!(
         "WITH visible_agents AS MATERIALIZED (
-            SELECT a.agent_id FROM agents a WHERE NOT $1 AND {visibility}
+            SELECT a.agent_id FROM agents a
+            WHERE NOT $1 AND a.status <> 'revoked' AND {visibility}
+         ),
+         revoked_agents AS MATERIALIZED (
+            SELECT agent_id FROM agents WHERE status = 'revoked'
          ),
          vulnerable_names AS (
             -- Only for \"vulnerable only\": names with an open fixable
@@ -290,7 +305,7 @@ pub async fn software_versions(
          FROM package_versions pv
          JOIN host_packages hp ON hp.package_version_id = pv.id
          JOIN agents a ON a.agent_id = hp.agent_id
-         WHERE pv.manager = $3 AND pv.name = $4 AND {visible}
+         WHERE pv.manager = $3 AND pv.name = $4 AND a.status <> 'revoked' AND {visible}
          GROUP BY pv.id
          ORDER BY count(DISTINCT hp.agent_id) DESC, pv.version, pv.release, pv.arch, pv.id"
     );
@@ -334,7 +349,7 @@ pub async fn software_hosts(
          FROM package_versions pv
          JOIN host_packages hp ON hp.package_version_id = pv.id
          JOIN agents a ON a.agent_id = hp.agent_id
-         WHERE pv.manager = $3 AND pv.name = $4 AND {visible}
+         WHERE pv.manager = $3 AND pv.name = $4 AND a.status <> 'revoked' AND {visible}
            AND ($5::text IS NULL OR (coalesce(a.hostname, ''), a.agent_id, pv.id) > ($5, $6, $7))
          ORDER BY coalesce(a.hostname, ''), a.agent_id, pv.id LIMIT $8"
     );

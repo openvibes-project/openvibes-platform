@@ -121,7 +121,8 @@ synthetic API models for these routes.
 
 All three need `agents.read` and are scoped like the agents. A scoped
 caller's counts include only hosts in the scope, and a host or package no
-visible host has is a 404. "Fixable vulnerable" means an open
+visible host has is a 404. Revoked agents are not hosts and never count;
+imported hosts do. "Fixable vulnerable" means an open
 vulnerability **with a fix** naming the package on that host;
 vulnerabilities without a fix (thousands on a Debian host) are left out
 and stay in the Vulnerabilities view.
@@ -139,7 +140,7 @@ and stay in the Vulnerabilities view.
 Cursors are opaque (base64url JSON of the keyset), and `limit` is 1–100
 (default 50). Measured on 1,000 hosts × 2,000 packages with 50 k open
 vulnerabilities: a software page takes ~235 ms, the `fixable` filter
-~460 ms, a 100-host scope 78 ms, and one host's packages 6 ms
+~365 ms, a 100-host scope 78 ms, and one host's packages 6 ms
 (`platform-store` test `measure_the_fleet_aggregate_on_1000_hosts`).
 
 ### Threat alarms (P14, `src/alarms.rs`)

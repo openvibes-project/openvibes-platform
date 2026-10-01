@@ -14,13 +14,15 @@ use platform_store::{
 const WEB: &str = "agent.00000000-0000-4000-8000-000000000001";
 const DB: &str = "agent.00000000-0000-4000-8000-000000000002";
 const IMPORTED: &str = "import.00000000000000000000000000000003";
+const REVOKED: &str = "agent.00000000-0000-4000-8000-000000000004";
 const PROD: &str = "00000000-0000-4000-8000-0000000000a1";
 
 /// web-01 (tag env=prod): openssl 3.0.13 (an open fixable vulnerability),
 /// bash 5.2 (only a no-fix vulnerability: not flagged), glibc for two
 /// architectures.
 /// db-01 (env=dev): openssl 3.0.14 (its vulnerability is fixed), bash 5.2.
-/// An imported host: openssl 3.0.13.
+/// An imported host: openssl 3.0.13. A revoked agent: openssl and bash
+/// (it is not a host any more and never counts).
 async fn setup() -> TestDb {
     let db = TestDb::create().await;
     let mut admin = db.pool.get().await.unwrap();
@@ -30,7 +32,8 @@ async fn setup() -> TestDb {
             "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
                 ('{WEB}', 'active', now(), 'web-01', now()),
                 ('{DB}', 'active', now(), 'db-01', now()),
-                ('{IMPORTED}', 'imported', now(), 'old-01', NULL);
+                ('{IMPORTED}', 'imported', now(), 'old-01', NULL),
+                ('{REVOKED}', 'revoked', now(), 'gone-01', now());
              INSERT INTO console_agent_tags VALUES
                 ('{WEB}', 'env', 'prod', now(), 't'), ('{DB}', 'env', 'dev', now(), 't');
              INSERT INTO console_asset_groups VALUES ('{PROD}', 'prod', now(), 't');
@@ -43,7 +46,7 @@ async fn setup() -> TestDb {
                 (5, 'rpm', 'glibc', 0, '2.41', '1.fc44', 'i686');
              INSERT INTO host_packages VALUES
                 ('{WEB}', 1), ('{WEB}', 3), ('{WEB}', 4), ('{WEB}', 5),
-                ('{DB}', 2), ('{DB}', 3), ('{IMPORTED}', 1);
+                ('{DB}', 2), ('{DB}', 3), ('{IMPORTED}', 1), ('{REVOKED}', 1), ('{REVOKED}', 3);
              INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
              VALUES ('FEDORA-1', 'fedora', 'fedora', '44', 'important', 'openssl', 'https://x'),
                     ('FEDORA-2', 'fedora', 'fedora', '44', 'low', 'bash', 'https://x');
@@ -164,6 +167,13 @@ async fn a_host_outside_the_scope_reads_as_absent() {
             .await
             .unwrap()
             .is_some()
+    );
+    // A revoked agent is not a host: absent even to a global caller.
+    assert!(
+        console_inventory::host_packages(&client, &AgentScope::Global, REVOKED, None, None, 10)
+            .await
+            .unwrap()
+            .is_none()
     );
     assert!(
         console_inventory::host_packages(&client, &prod(), WEB, None, None, 10)
