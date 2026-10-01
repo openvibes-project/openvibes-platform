@@ -204,6 +204,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_host_services"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/tags": {
         parameters: {
             query?: never;
@@ -658,6 +674,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_ports"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-bundles/preview": {
         parameters: {
             query?: never;
@@ -790,6 +822,22 @@ export interface paths {
         put?: never;
         /** Revokes one service bearer token. */
         post: operations["revoke_authenticated_service_token"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_services"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1980,6 +2028,38 @@ export interface components {
             /** @description Version. */
             version: string;
         };
+        /** @description One host's open ports and running services. */
+        HostServicesView: {
+            /** @description Listeners, exposed first, then by port. */
+            listeners: components["schemas"]["ListenerView"][];
+            /**
+             * @description `complete` (every owner is named) or `partial` (some owners are
+             *     not visible to the agent).
+             */
+            owners?: string | null;
+            /** @description RFC 3339 time of the last report; absent if the host never sent one. */
+            reported_at?: string | null;
+            /** @description Services, by unit. */
+            services: components["schemas"]["ServiceView"][];
+        };
+        /** @description One listening socket on a host. */
+        ListenerView: {
+            /** @description The bound address (`0.0.0.0` or `::` for any). */
+            address: string;
+            /** @description Bound to a non-loopback address: reachable from the network. */
+            exposed: boolean;
+            /**
+             * Format: int32
+             * @description The port.
+             */
+            port: number;
+            /** @description The owning program, when the agent could see it. */
+            program?: string | null;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+            /** @description The owning systemd unit, when the agent could see it. */
+            service?: string | null;
+        };
         /** @description One-use local login request. The password is never echoed by the API. */
         LoginRequest: {
             /**
@@ -2009,6 +2089,28 @@ export interface components {
             asset_group_ids: string[];
             /** @enum {string} */
             kind: "asset_groups";
+        };
+        /** @description One port across the caller's hosts. */
+        PortView: {
+            /**
+             * Format: int64
+             * @description Of those, hosts where it is exposed.
+             */
+            exposed_hosts: number;
+            /**
+             * Format: int64
+             * @description Hosts listening on it.
+             */
+            hosts: number;
+            /**
+             * Format: int32
+             * @description The port.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+            /** @description Owning services seen for it, sorted, at most 8. */
+            services: string[];
         };
         /** @description CSRF challenge returned before local password login. */
         PreauthResponse: {
@@ -2184,6 +2286,20 @@ export interface components {
             /** @description Stable token UUID. */
             token_id: string;
         };
+        /** @description One running service on a host. */
+        ServiceView: {
+            /**
+             * Format: int32
+             * @description How many processes it runs.
+             */
+            processes: number;
+            /** @description Its programs, sorted. */
+            programs: string[];
+            /** @description The user it runs as (a name, or the uid when unknown). */
+            run_as?: string | null;
+            /** @description The systemd unit. */
+            unit: string;
+        };
         /** @description Human principal represented by an authenticated browser session. */
         SessionPrincipal: {
             /** @description Operator-facing display label. */
@@ -2347,6 +2463,16 @@ export interface components {
              * @description Distinct versions in use.
              */
             versions: number;
+        };
+        /** @description One service unit across the caller's hosts. */
+        UnitView: {
+            /**
+             * Format: int64
+             * @description Hosts running it.
+             */
+            hosts: number;
+            /** @description The systemd unit. */
+            unit: string;
         };
         /** @description A triage change; the same rules as findings triage. */
         UpdateAlarmTriageRequest: {
@@ -3090,6 +3216,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_host_services: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The host's open ports and running services */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostServicesView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -4882,6 +5057,56 @@ export interface operations {
             };
         };
     };
+    list_ports: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Only ports exposed on at least one host. */
+                exposed: boolean | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Ports across the caller's hosts, by port */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortView"][];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     preview_authenticated_rule_bundle: {
         parameters: {
             query?: never;
@@ -5202,6 +5427,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_services: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Running services across the caller's hosts, by unit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitView"][];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

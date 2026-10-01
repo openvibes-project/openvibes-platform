@@ -360,3 +360,59 @@ async fn bad_queries_are_refused_and_a_session_is_required() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn ports_and_services_per_host_and_across_hosts() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "UPDATE agents SET services_at = now(), services_owners = 'partial'
+                WHERE agent_id = '{AGENT}';
+             INSERT INTO host_listeners VALUES
+                ('{AGENT}', 'tcp', '0.0.0.0', 443, true, 'nginx.service', 'nginx'),
+                ('{AGENT}', 'tcp', '127.0.0.1', 5432, false, NULL, NULL);
+             INSERT INTO host_services VALUES
+                ('{AGENT}', 'nginx.service', '{{nginx}}', 3, 'root');"
+        ))
+        .await
+        .unwrap();
+    let (cookie, _) = login(&router, "vera").await;
+    let (status, host) = get(
+        &router,
+        &cookie,
+        &format!("/api/v1/agents/{AGENT}/services"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(host["owners"], "partial");
+    assert_eq!(host["listeners"][0]["port"], 443, "exposed first");
+    assert_eq!(host["listeners"][0]["address"], "0.0.0.0");
+    assert_eq!(host["services"][0]["programs"][0], "nginx");
+    let (_, exposed) = get(&router, &cookie, "/api/v1/ports?exposed=true").await;
+    assert_eq!(exposed.as_array().unwrap().len(), 1);
+    assert_eq!(exposed[0]["services"][0], "nginx.service");
+    let (_, all) = get(&router, &cookie, "/api/v1/ports").await;
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    let (_, units) = get(&router, &cookie, "/api/v1/services").await;
+    assert_eq!(units[0]["hosts"], 1);
+    let missing = "/api/v1/agents/agent.00000000-0000-4000-8000-0000000004ff/services";
+    assert_eq!(
+        get(&router, &cookie, missing).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get(&router, &cookie, "/api/v1/ports?exposed=maybe").await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get(&router, "", "/api/v1/ports").await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    db.drop().await;
+}

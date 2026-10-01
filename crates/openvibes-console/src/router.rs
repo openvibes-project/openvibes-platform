@@ -558,6 +558,12 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/software/{manager}/{name}",
             get(crate::software::get_software),
         )
+        .route(
+            "/v1/agents/{agent_id}/services",
+            get(crate::ports::get_host_services),
+        )
+        .route("/v1/ports", get(crate::ports::list_ports))
+        .route("/v1/services", get(crate::ports::list_services))
         .route("/v1/alarms", get(crate::alarms::list_alarms))
         .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
         .route(

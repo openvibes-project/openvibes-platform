@@ -762,6 +762,66 @@
         }
       }
     },
+    "/api/v1/agents/{agent_id}/services": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "operationId": "get_host_services",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The host's open ports and running services",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostServicesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents/{agent_id}/tags": {
       "put": {
         "tags": [
@@ -3263,6 +3323,73 @@
         }
       }
     },
+    "/api/v1/ports": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "operationId": "list_ports",
+        "parameters": [
+          {
+            "name": "exposed",
+            "in": "path",
+            "description": "Only ports exposed on at least one host.",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Ports across the caller's hosts, by port",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PortView"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-bundles/preview": {
       "post": {
         "tags": [
@@ -3660,6 +3787,49 @@
             "description": "Token not found",
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "operationId": "list_services",
+        "responses": {
+          "200": {
+            "description": "Running services across the caller's hosts, by unit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UnitView"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -6912,6 +7082,87 @@
           }
         }
       },
+      "HostServicesView": {
+        "type": "object",
+        "description": "One host's open ports and running services.",
+        "required": [
+          "listeners",
+          "services"
+        ],
+        "properties": {
+          "listeners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListenerView"
+            },
+            "description": "Listeners, exposed first, then by port."
+          },
+          "owners": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`complete` (every owner is named) or `partial` (some owners are\nnot visible to the agent)."
+          },
+          "reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time of the last report; absent if the host never sent one."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ServiceView"
+            },
+            "description": "Services, by unit."
+          }
+        }
+      },
+      "ListenerView": {
+        "type": "object",
+        "description": "One listening socket on a host.",
+        "required": [
+          "protocol",
+          "address",
+          "port",
+          "exposed"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The bound address (`0.0.0.0` or `::` for any)."
+          },
+          "exposed": {
+            "type": "boolean",
+            "description": "Bound to a non-loopback address: reachable from the network."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The port."
+          },
+          "program": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning program, when the agent could see it."
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning systemd unit, when the agent could see it."
+          }
+        }
+      },
       "LoginRequest": {
         "type": "object",
         "description": "One-use local login request. The password is never echoed by the API.",
@@ -7019,6 +7270,45 @@
           }
         ],
         "description": "Effective object scope attached to one permission."
+      },
+      "PortView": {
+        "type": "object",
+        "description": "One port across the caller's hosts.",
+        "required": [
+          "protocol",
+          "port",
+          "hosts",
+          "exposed_hosts",
+          "services"
+        ],
+        "properties": {
+          "exposed_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, hosts where it is exposed."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts listening on it."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The port."
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Owning services seen for it, sorted, at most 8."
+          }
+        }
       },
       "PreauthResponse": {
         "type": "object",
@@ -7421,6 +7711,40 @@
           }
         }
       },
+      "ServiceView": {
+        "type": "object",
+        "description": "One running service on a host.",
+        "required": [
+          "unit",
+          "programs",
+          "processes"
+        ],
+        "properties": {
+          "processes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many processes it runs."
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Its programs, sorted."
+          },
+          "run_as": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user it runs as (a name, or the uid when unknown)."
+          },
+          "unit": {
+            "type": "string",
+            "description": "The systemd unit."
+          }
+        }
+      },
       "SessionPrincipal": {
         "type": "object",
         "description": "Human principal represented by an authenticated browser session.",
@@ -7770,6 +8094,25 @@
             "type": "integer",
             "format": "int64",
             "description": "Distinct versions in use."
+          }
+        }
+      },
+      "UnitView": {
+        "type": "object",
+        "description": "One service unit across the caller's hosts.",
+        "required": [
+          "unit",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Hosts running it."
+          },
+          "unit": {
+            "type": "string",
+            "description": "The systemd unit."
           }
         }
       },
@@ -8173,6 +8516,10 @@
     {
       "name": "software",
       "description": "Installed software per host and across the caller's hosts"
+    },
+    {
+      "name": "assets",
+      "description": "Open ports and running services per host and across the caller's hosts"
     },
     {
       "name": "findings",
