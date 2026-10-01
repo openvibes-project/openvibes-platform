@@ -216,6 +216,7 @@ jobs:
 
       - name: Build the agent RPM and the test tools
         env:
+          OV_RELEASE: 1.1.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"
         run: |
           bash /opt/agent-src/scripts/build-rpm.sh
