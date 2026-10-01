@@ -40,6 +40,8 @@ pub enum Program {
     Journalctl,
     /// The host's addresses (Setup's server certificate names).
     Ip,
+    /// User accounts, directory users (SSSD, FreeIPA, LDAP) included.
+    Getent,
 }
 
 impl Program {
@@ -64,6 +66,7 @@ impl Program {
             Program::Ss => "/usr/sbin/ss",
             Program::Journalctl => "/usr/bin/journalctl",
             Program::Ip => "/usr/sbin/ip",
+            Program::Getent => "/usr/bin/getent",
         }
     }
 }

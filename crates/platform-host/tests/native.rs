@@ -812,3 +812,43 @@ fn sudos_lecture_never_stands_in_for_the_error() {
         "done\tok\n"
     );
 }
+
+#[test]
+fn a_users_home_comes_from_getent_with_etc_passwd_as_fallback() {
+    // A directory user (SSSD, FreeIPA, LDAP) is not in /etc/passwd; getent
+    // finds it through NSS.
+    let host = fake(vec![(
+        vec!["/usr/bin/getent", "passwd", "--", "ipa.alice"],
+        out(
+            0,
+            "ipa.alice:*:1234:1234:Alice:/home/ipa.alice:/bin/bash\n",
+            "",
+        ),
+    )]);
+    assert_eq!(
+        host.user_home("ipa.alice").as_deref(),
+        Some("/home/ipa.alice")
+    );
+    assert_eq!(
+        host.runner.calls.borrow()[0],
+        ["/usr/bin/getent", "passwd", "--", "ipa.alice"]
+    );
+    // getent fails or is missing: /etc/passwd still knows root.
+    let host = fake(Vec::new());
+    assert_eq!(host.user_home("root").as_deref(), Some("/root"));
+    assert_eq!(host.user_home("no-such-user-ov"), None);
+}
+
+#[test]
+fn passwd_home_takes_only_the_named_users_absolute_home() {
+    let passwd = "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n\
+                  bob:x:1001:1001:Bob:relative:/bin/sh\n";
+    assert_eq!(
+        platform_host::passwd_home(passwd, "alice").as_deref(),
+        Some("/home/alice")
+    );
+    assert_eq!(platform_host::passwd_home(passwd, "bob"), None);
+    assert_eq!(platform_host::passwd_home(passwd, "carol"), None);
+    // A prefix of a name is not the name.
+    assert_eq!(platform_host::passwd_home(passwd, "ali"), None);
+}

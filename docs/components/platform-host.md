@@ -95,7 +95,11 @@ themselves and other deployments (pods, Kubernetes) can plug in later
 - `Host::packages`: installed `openvibes-*` packages (`rpm -qa`,
   debuginfo left out) with any newer version (`dnf -q list --upgrades`, as
   the user; offline, none are shown).
-- `Program` also covers `dnf`, `rpm`, `runuser`, `postgresql-setup`,
+- `Host::user_home`: a person's home directory for the TUI under sudo
+  (where the root key is saved). It runs `getent passwd -- USER`, so
+  directory users (SSSD, FreeIPA, LDAP) are found too, and falls back to
+  `/etc/passwd`.
+- `Program` also covers `getent`, `dnf`, `rpm`, `runuser`, `postgresql-setup`,
   `usermod`, `firewall-cmd`, `userdel`, `groupdel`, `df`, `ss`, `journalctl`
   and `openvibes-admin`,
   which Setup's root side runs. `SystemRunner` runs every command with
