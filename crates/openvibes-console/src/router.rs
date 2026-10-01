@@ -533,6 +533,12 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/me/home",
             get(crate::dashboards::get_home).put(crate::dashboards::set_home),
         )
+        .route("/v1/alarms", get(crate::alarms::list_alarms))
+        .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
+        .route(
+            "/v1/alarms/{alarm_id}/triage",
+            axum::routing::put(crate::alarms::update_alarm_triage),
+        )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
@@ -5437,7 +5443,7 @@ async fn authenticated_agent_scope(
         .map(|(scope, _user_id)| scope)
 }
 
-async fn authenticated_permission(
+pub(crate) async fn authenticated_permission(
     state: &AuthHttpState,
     headers: &HeaderMap,
     permission: crate::Permission,

@@ -117,6 +117,24 @@ link host/advisory views, preserve opaque cursors, disable triage for readers,
 and send mutations with the session CSRF token. The demo server supplies
 synthetic API models for these routes.
 
+### Threat alarms (P14, `src/alarms.rs`)
+
+- `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped
+  to the caller's agents; filters `agent_id`, `rule_id`, `severity`,
+  `state`, `suppressed` (closed-by-suppression alarms are hidden unless
+  true); keyset cursor on `(last_seen, id)`, `limit` 1–100. A resend moves
+  `last_seen`, so the list is a live view.
+- `GET /api/v1/alarms/{id}` (`alarms.read`): the alarm with its process and
+  ancestors (masked args, as the agent sent them) and triage; ETag is the
+  triage version. `{id}` is the platform's id, never the agent's
+  `alarm_id`. Outside the scope is 404.
+- `PUT /api/v1/alarms/{id}/triage` (`alarms.triage`, CSRF, `If-Match`):
+  the findings workflow (open → investigating → mitigated / accepted risk
+  / false positive; completed states need a note; accepted risk a future
+  expiry); 412 stale, 409 transition, 428 without `If-Match`. Audited as
+  `alarm.triage.changed` with a history row.
+- Alarms are not offered to the assistant in P14.
+
 ## Interfaces
 
 The production service has two HTTP surfaces:

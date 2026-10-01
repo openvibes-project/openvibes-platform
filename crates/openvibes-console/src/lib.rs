@@ -9,6 +9,7 @@
 //! remain unavailable until their implementation milestones. Production frontend assets are included only
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
+mod alarms;
 mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;

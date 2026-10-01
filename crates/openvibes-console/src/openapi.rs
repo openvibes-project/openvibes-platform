@@ -86,9 +86,17 @@ use crate::{
         crate::dashboards::delete_dashboard,
         crate::dashboards::share_dashboard,
         crate::dashboards::get_home,
-        crate::dashboards::set_home
+        crate::dashboards::set_home,
+        crate::alarms::list_alarms,
+        crate::alarms::get_alarm,
+        crate::alarms::update_alarm_triage
     ),
     components(schemas(
+        crate::alarms::AlarmSummaryView,
+        crate::alarms::AlarmPage,
+        crate::alarms::AlarmTriageView,
+        crate::alarms::AlarmDetailView,
+        crate::alarms::UpdateAlarmTriageRequest,
         crate::api::DashboardView,
         crate::api::DashboardPage,
         crate::api::SaveDashboardRequest,
@@ -174,6 +182,7 @@ use crate::{
         (name = "session", description = "Current browser session"),
         (name = "authentication", description = "Local browser authentication"),
         (name = "agents", description = "Scope-filtered agent reads"),
+        (name = "alarms", description = "Scope-filtered threat alarms and their triage"),
         (name = "findings", description = "Scope-filtered observation reads"),
         (name = "vulnerabilities", description = "Scope-filtered vulnerability review"),
         (name = "assistant", description = "Read-only local assistant"),
