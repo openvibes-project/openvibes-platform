@@ -18,6 +18,7 @@ const REVOKED: &str = "agent.00000000-0000-4000-8000-000000000004";
 const PROD: &str = "00000000-0000-4000-8000-0000000000a1";
 
 /// web-01 (tag env=prod): openssl 3.0.13 (an open fixable vulnerability),
+/// glibc whose fix is installed but needs a reboot (not flagged),
 /// bash 5.2 (only a no-fix vulnerability: not flagged), glibc for two
 /// architectures.
 /// db-01 (env=dev): openssl 3.0.14 (its vulnerability is fixed), bash 5.2.
@@ -58,7 +59,13 @@ async fn setup() -> TestDb {
                 ('{DB}', 'FEDORA-1',
                  '[{{\"name\": \"openssl\", \"installed\": \"1:3.0.13-1.fc44\", \"fixed\": \"1:3.0.14-1.fc44\"}}]',
                  now(), now(), now());
-             INSERT INTO version_vulnerabilities VALUES (3, 'FEDORA-2', 'bash', now());"
+             INSERT INTO version_vulnerabilities VALUES (3, 'FEDORA-2', 'bash', now());
+             -- glibc on web-01: its fix is installed, only a reboot is missing.
+             INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+             VALUES ('FEDORA-3', 'fedora', 'fedora', '44', 'important', 'glibc', 'https://x');
+             INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at,
+                fixed_at, last_evaluated_at, reboot_needed) VALUES
+                ('{WEB}', 'FEDORA-3', '[{{\"name\": \"glibc\"}}]', now(), NULL, now(), true);"
         ))
         .await
         .unwrap();

@@ -5,7 +5,12 @@
 //!
 //! "Vulnerable" for a host's package: the host has an open vulnerability
 //! with a fix naming the package (the matcher always uses the host's
-//! newest version of that name). Vulnerabilities without a fix are left
+//! newest version of that name), and the fix is not already installed
+//! with only a reboot missing (`reboot_needed`: updating would not help).
+//! This relies on `vulnerabilities` holding only matches that have a fix;
+//! those without one live in `version_vulnerabilities`. If the matcher
+//! ever stores no-fix matches there, these reads must filter on the
+//! package's `fixed` field. Vulnerabilities without a fix are left
 //! out: a Debian host has thousands, so they would flag most packages; the
 //! Vulnerabilities view reports them. A vulnerability names its package
 //! by name only (its JSON has no manager); agents report one OS package
@@ -109,7 +114,7 @@ fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
 
 /// SQL for "this host's (`hp.agent_id`) package `pv` is vulnerable".
 const VULNERABLE: &str = "EXISTS (SELECT 1 FROM vulnerabilities v
-        WHERE v.agent_id = hp.agent_id AND v.fixed_at IS NULL
+        WHERE v.agent_id = hp.agent_id AND v.fixed_at IS NULL AND NOT v.reboot_needed
           AND v.packages @> jsonb_build_array(jsonb_build_object('name', pv.name)))";
 
 /// Whether the caller may see `agent_id`.
@@ -215,7 +220,7 @@ pub async fn software(
             -- installed packages).
             SELECT DISTINCT p->>'name' AS name
             FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
-            WHERE $6 AND v.fixed_at IS NULL
+            WHERE $6 AND v.fixed_at IS NULL AND NOT v.reboot_needed
               AND {visible_vulnerability}
          ),
          page AS (
@@ -231,7 +236,7 @@ pub async fn software(
          pairs AS (
             SELECT DISTINCT v.agent_id COLLATE \"C\" AS agent_id, p->>'name' AS name
             FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
-            WHERE v.fixed_at IS NULL AND p->>'name' IN (SELECT name FROM page)
+            WHERE v.fixed_at IS NULL AND NOT v.reboot_needed AND p->>'name' IN (SELECT name FROM page)
          ),
          -- Visible hosts × versions of the page's names, then hosts and
          -- versions each counted by grouping (hash), not count(DISTINCT):
