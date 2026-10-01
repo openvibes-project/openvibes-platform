@@ -2925,7 +2925,7 @@ export interface operations {
                 rule_id: string | null;
                 /** @description Exact severity. */
                 severity: string | null;
-                /** @description Exact triage state. */
+                /** @description Exact triage state, or `active` (open or investigating). */
                 state: string | null;
                 /** @description Include alarms closed by a suppression (default false). */
                 suppressed: boolean | null;

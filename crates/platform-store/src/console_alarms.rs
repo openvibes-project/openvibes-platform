@@ -92,7 +92,7 @@ pub struct AlarmFilters {
     pub rule_id: Option<String>,
     /// Exact severity.
     pub severity: Option<String>,
-    /// Exact triage state.
+    /// Exact triage state, or `active` (open or investigating).
     pub state: Option<String>,
     /// Include alarms closed by a suppression (hidden by default).
     pub suppressed: bool,
@@ -148,7 +148,8 @@ pub async fn list(
            AND ($3::text IS NULL OR al.agent_id = $3)
            AND ($4::text IS NULL OR al.rule_id = $4)
            AND ($5::text IS NULL OR al.severity = $5)
-           AND ($6::text IS NULL OR al.state = $6)
+           AND ($6::text IS NULL OR al.state = $6
+                OR ($6 = 'active' AND al.state IN ('open', 'investigating')))
            AND ($7 OR al.suppressed_by IS NULL)
            AND ($8::timestamptz IS NULL OR (al.last_seen, al.id) < ($8, $9))
          ORDER BY al.last_seen DESC, al.id DESC LIMIT $10"

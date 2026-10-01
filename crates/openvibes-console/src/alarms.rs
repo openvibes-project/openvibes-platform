@@ -133,7 +133,7 @@ pub(crate) struct AlarmListParams {
     rule_id: Option<String>,
     /// Exact severity.
     severity: Option<String>,
-    /// Exact triage state.
+    /// Exact triage state, or `active` (open or investigating).
     state: Option<String>,
     /// Include alarms closed by a suppression (default false).
     suppressed: Option<bool>,

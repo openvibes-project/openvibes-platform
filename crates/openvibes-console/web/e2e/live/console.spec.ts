@@ -65,6 +65,13 @@ test("an empty service accounts view explains the next step", async ({ page }) =
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
 });
 
+test("with no alarm at all, the Alarms view says how to turn alarms on", async ({ page }) => {
+  await signIn(page, "alex");
+  await page.goto("/alarms");
+  await expect(page.getByText("No alarms")).toBeVisible();
+  await expect(page.getByText(/auditd runs and "process_events"/)).toBeVisible();
+});
+
 test("Most exposed hosts says scanning is not set up before any feed imported", async ({ page }) => {
   // This platform never imported a vulnerability feed: "no vulnerable host"
   // would claim a scan that never ran (board #47).

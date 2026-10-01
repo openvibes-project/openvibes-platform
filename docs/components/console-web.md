@@ -102,9 +102,14 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
 - **Alarms** (`/alarms`, `g m`, `alarms.read`): newest first; severity,
   message with `parent → program`, host, count, triage, last seen. Resolved
   and suppressed alarms are hidden unless their chips are on; the empty
-  state explains the auditd / `process_events` requirement. Each row has a
-  **Quiet…** menu (with `alarms.suppress`): this host, or (global scope
-  only) this program or this exact command on any host.
+  state explains the auditd / `process_events` requirement. The list loads
+  the newest 100 with the filters sent to the API (`state=active` by
+  default) and **Load 100 more**; the text filter applies to what is
+  loaded. Each row has a **Quiet…** choice (with `alarms.suppress`): this
+  host, or (global scope only) this program or this exact command on any
+  host. Choosing does nothing until the inline confirmation, which names
+  what it quiets and asks why; confirming closes that alarm as a false
+  positive (through investigating) and creates the suppression.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
   process: program, masked command line, uid and euid when they differ,
   working directory, pid), rule and versions, first/last seen, count, and

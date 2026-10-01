@@ -1,9 +1,9 @@
 // Threat alarms (P14): process starts that matched a rule, newest first,
 // and the suppressions that quiet them.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
-import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { AlarmSummary, AlarmSuppression } from "../api/types";
+import { invalidate, request, useAllPages, useResource } from "../api/client";
+import type { AlarmDetail, AlarmPage, AlarmSummary, AlarmSuppression } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
@@ -14,7 +14,8 @@ import { matches } from "../ui/table";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
 
-const active = new Set(["open", "investigating"]);
+/** Alarms fetched per "Load more" (the API's page size). */
+const PAGE = 100;
 
 /** `parent → program`, by base name, the way an analyst reads it. */
 export function lineage(alarm: Pick<AlarmSummary, "exe" | "parent_exe">): string {
@@ -22,15 +23,20 @@ export function lineage(alarm: Pick<AlarmSummary, "exe" | "parent_exe">): string
   return alarm.parent_exe ? `${base(alarm.parent_exe)} → ${base(alarm.exe)}` : base(alarm.exe);
 }
 
-/** What the list shows: active and unsuppressed unless asked, then the filters. */
-export function selectAlarms(all: readonly AlarmSummary[], params: URLSearchParams): AlarmSummary[] {
-  const resolved = params.get("state") === "all";
-  const suppressed = params.get("suppressed") === "true";
+/** The API query for the list's filters; the text filter stays local. */
+export function alarmQuery(params: URLSearchParams): string {
+  const query = new URLSearchParams();
+  if (params.get("state") !== "all") query.set("state", "active");
   const severity = params.get("severity");
+  if (severity) query.set("severity", severity);
+  if (params.get("suppressed") === "true") query.set("suppressed", "true");
+  return `/api/v1/alarms?${query.toString()}`;
+}
+
+/** The loaded alarms that match the text filter. */
+export function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams): AlarmSummary[] {
   const q = params.get("q") ?? "";
-  return all.filter((a) => (resolved || active.has(a.state)) && (suppressed || !a.suppressed_by)
-    && (!severity || a.severity === severity)
-    && matches([a.message, a.rule_id, a.hostname ?? a.agent_id, a.exe, a.parent_exe ?? ""], q));
+  return loaded.filter((a) => matches([a.message, a.rule_id, a.hostname ?? a.agent_id, a.exe, a.parent_exe ?? ""], q));
 }
 
 export const quietScopes = [
@@ -46,45 +52,78 @@ export async function quiet(alarmId: string, scope: string, note: string): Promi
   toast("Quieted: new matches are closed as false positives");
 }
 
+/** From the list: closes this alarm as a false positive (through the
+ * workflow's steps) and then quiets new ones, both with the user's note. */
+async function closeAndQuiet(alarmId: string, scope: string, note: string): Promise<void> {
+  const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
+  let alarm = await request<AlarmDetail>("GET", path);
+  const step = async (state: string, withNote: boolean) => {
+    await request("PUT", `${path}/triage`, { state, note: withNote ? note : null, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
+      { "if-match": `"${alarm.triage.version}"` });
+    alarm = await request<AlarmDetail>("GET", path);
+  };
+  if (alarm.triage.state === "open") await step("investigating", false);
+  if (alarm.triage.state === "investigating") await step("false_positive", true);
+  await quiet(alarmId, scope, note);
+}
+
 function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
   const { can } = useSession();
+  const [scope, setScope] = useState("");
   const scopes = quietScopes.filter((s) => can("alarms.suppress", s.global));
   if (scopes.length === 0 || alarm.suppressed_by) return null;
+  const chosen = quietScopes.find((s) => s.scope === scope);
+  const what = {
+    host: `on ${alarm.hostname ?? alarm.agent_id}`,
+    program: `${alarm.exe} on every host`,
+    command: `this exact ${alarm.exe} command on every host`,
+  }[scope] ?? "";
+  // Choosing a scope does nothing by itself (arrow keys change a closed
+  // select); only the confirmation acts, and it names what it quiets.
   return (
-    <select className="select select--small" aria-label={`Quiet ${alarm.message}`} value=""
-      onClick={(event) => event.stopPropagation()}
-      onChange={(event) => {
-        const scope = event.target.value;
-        if (scope) void quiet(alarm.id, scope, "Quieted from the alarm list").catch((e: unknown) => toast(e instanceof ApiError ? e.message : "Quiet failed", true));
-      }}>
-      <option value="">Quiet…</option>
-      {scopes.map((s) => <option key={s.scope} value={s.scope}>{s.label}</option>)}
-    </select>
+    <div className="row">
+      <select className="select select--small" aria-label={`Quiet ${alarm.message}`} value={scope} onChange={(event) => setScope(event.target.value)}>
+        <option value="">Quiet…</option>
+        {scopes.map((s) => <option key={s.scope} value={s.scope}>{s.label}</option>)}
+      </select>
+      {chosen && (
+        <Confirm danger label={`Close this alarm as a false positive and quiet ${what}?`} reason="Why (saved as the note)"
+          onConfirm={async (note) => { await closeAndQuiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>
+      )}
+    </div>
   );
 }
 
 export function Alarms() {
   const { params, panels } = useLocation();
-  const alarms = useAllPages<AlarmSummary>("/api/v1/alarms?suppressed=true");
-  const all = useMemo(() => alarms.data ?? [], [alarms.data]);
-  const rows = useMemo(() => selectAlarms(all, params), [all, params]);
+  // Alarms are per occurrence and can run to thousands: the newest pages
+  // only, filtered on the server, more on request.
+  // ponytail: Load more refetches from the first page (useAllPages); keep
+  // the cursor and append if people page deep.
+  const [max, setMax] = useState(PAGE);
+  const path = alarmQuery(params);
+  const alarms = useAllPages<AlarmSummary>(path, max);
+  const loaded = useMemo(() => alarms.data ?? [], [alarms.data]);
+  const rows = useMemo(() => selectAlarms(loaded, params), [loaded, params]);
   const top = panels[panels.length - 1];
-  const hidden = all.filter((a) => !active.has(a.state) || a.suppressed_by).length;
-  const bySeverity = (s: string) => all.filter((a) => a.severity === s && active.has(a.state) && !a.suppressed_by).length;
+  // An empty filtered page: does any alarm exist at all? If not, the
+  // empty state explains how to turn alarms on, not the chips.
+  const any = useResource<AlarmPage>(alarms.data && loaded.length === 0 ? "/api/v1/alarms?suppressed=true&limit=1" : null);
+  const none = loaded.length === 0 && any.data?.items.length === 0;
 
   return (
     <div className="view">
-      <ViewHeader title="Alarms" count={rows.length} total={all.length} refresh="/api/v1/alarms" placeholder="Filter by message, rule, host or program…"
+      <ViewHeader title="Alarms" count={rows.length} total={loaded.length} refresh="/api/v1/alarms" placeholder="Filter by message, rule, host or program…"
         chips={[
           { label: "Include resolved", param: "state", value: "all" },
           { label: "Include suppressed", param: "suppressed", value: "true" },
-          ...(["critical", "high", "medium", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s, count: bySeverity(s) })),
+          ...(["critical", "high", "medium", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s })),
         ]} />
       {alarms.error ? <div className="view-pad"><ErrorBox error={alarms.error} /></div> : alarms.loading && !alarms.data ? <Loading /> : rows.length === 0 ? (
-        <Empty icon="alarm" title={all.length === 0 ? "No alarms" : "Nothing matches these filters"}>
-          {all.length === 0
+        <Empty icon="alarm" title={none ? "No alarms" : "Nothing matches these filters"}>
+          {none
             ? "Alarms appear here within seconds of a matching program start. Agents report process starts only when auditd runs and \"process_events\" is in their collectors (agent.toml)."
-            : hidden > 0 ? "Resolved and suppressed alarms are hidden; use the chips to include them." : "Clear a filter to see more."}
+            : "Resolved and suppressed alarms are hidden unless their chips are on; clear a filter to see more."}
         </Empty>
       ) : (
         <DataTable label="Alarms" rows={rows} rowKey={(a) => a.id}
@@ -98,8 +137,11 @@ export function Alarms() {
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (a) => a.last_seen, render: (a) => <span className="subtle"><Ago value={a.last_seen} /></span> },
-            { key: "quiet", header: "Quiet", width: "120px", hideBelow: 900, render: (a) => <QuietMenu alarm={a} /> },
+            { key: "quiet", header: "Quiet", width: "200px", hideBelow: 900, render: (a) => <QuietMenu alarm={a} /> },
           ]} />
+      )}
+      {loaded.length >= max && (
+        <div className="view-pad"><button type="button" className="button" onClick={() => setMax((m) => m + PAGE)}>Load {PAGE} more</button></div>
       )}
     </div>
   );

@@ -156,6 +156,20 @@ async fn the_list_is_newest_first_scoped_filtered_and_paged() {
             .len(),
         1
     );
+    // `active` is open or investigating: the suppressed (false positive)
+    // alarm is not active even with suppressed shown.
+    let active = AlarmFilters {
+        state: Some("active".into()),
+        suppressed: true,
+        ..AlarmFilters::default()
+    };
+    assert_eq!(
+        console_alarms::list(&client, &AgentScope::Global, &active, None, 10)
+            .await
+            .unwrap()
+            .len(),
+        2
+    );
     let nobody = AgentScope::AssetGroups(vec!["00000000-0000-4000-8000-00000000000f".into()]);
     assert!(
         console_alarms::list(&client, &nobody, &all, None, 10)

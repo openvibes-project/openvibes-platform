@@ -872,7 +872,7 @@
           {
             "name": "state",
             "in": "path",
-            "description": "Exact triage state.",
+            "description": "Exact triage state, or `active` (open or investigating).",
             "required": true,
             "schema": {
               "type": [
