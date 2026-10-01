@@ -5,7 +5,7 @@ import { useMemo } from "react";
 
 import { useResource } from "../api/client";
 import type { PortRow, UnitRow } from "../api/types";
-import { useLocation } from "../app/nav";
+import { nav, useLocation } from "../app/nav";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { ViewHeader } from "../ui/ViewHeader";
@@ -26,7 +26,7 @@ export function Ports() {
       {ports.error ? <div className="view-pad"><ErrorBox error={ports.error} /></div> : ports.loading && !ports.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="activity" title={q || exposed ? "Nothing matches these filters" : "No ports reported yet"}>{q || exposed ? "Clear a filter to see more." : NOT_YET}</Empty>
       ) : (
-        <DataTable label="Ports" rows={rows} onOpen={() => undefined} rowKey={(r) => `${r.protocol}/${r.port}`} defaultSort={{ key: "port", direction: "asc" }}
+        <DataTable label="Ports" rows={rows} onOpen={(r) => nav.open({ kind: "port", id: `${r.protocol}/${r.port}` }, true)} rowKey={(r) => `${r.protocol}/${r.port}`} defaultSort={{ key: "port", direction: "asc" }}
           columns={[
             { key: "port", header: "Port", sort: (r) => r.port, render: (r) => <span className="mono">{r.port}/{r.protocol}</span> },
             { key: "hosts", header: "Hosts", numeric: true, width: "90px", sort: (r) => r.hosts, render: (r) => <strong className="num">{r.hosts}</strong> },
@@ -50,7 +50,7 @@ export function Services() {
       {units.error ? <div className="view-pad"><ErrorBox error={units.error} /></div> : units.loading && !units.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="layers" title={q ? "Nothing matches this filter" : "No services reported yet"}>{q ? "Clear the filter to see more." : NOT_YET}</Empty>
       ) : (
-        <DataTable label="Services" rows={rows} onOpen={() => undefined} rowKey={(r) => r.unit} defaultSort={{ key: "unit", direction: "asc" }}
+        <DataTable label="Services" rows={rows} onOpen={(r) => nav.open({ kind: "unit", id: r.unit }, true)} rowKey={(r) => r.unit} defaultSort={{ key: "unit", direction: "asc" }}
           columns={[
             { key: "unit", header: "Service", sort: (r) => r.unit, render: (r) => <span className="mono truncate">{r.unit}</span> },
             { key: "hosts", header: "Hosts", numeric: true, width: "90px", sort: (r) => r.hosts, render: (r) => <strong className="num">{r.hosts}</strong> },

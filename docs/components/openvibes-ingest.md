@@ -149,7 +149,8 @@ The usual request limits apply. Test: `tests/ca.rs`.
   - A good report replaces the host's listeners and services
     (`host_services::replace`; with an unchanged digest it only touches
     `services_at`), clears the refusal, and answers 204.
-  - `truncated` is not stored yet and is logged at debug.
+  - `truncated` (the agent cut a list to the limits) is stored, so the
+    console can say the lists are incomplete.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

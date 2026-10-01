@@ -3390,6 +3390,113 @@
         }
       }
     },
+    "/api/v1/ports/{protocol}/{port}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "operationId": "get_port",
+        "parameters": [
+          {
+            "name": "protocol",
+            "in": "path",
+            "description": "`tcp` or `udp`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "port",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the caller's hosts listening on the port",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid protocol, port, query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No visible host listens on it",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-bundles/preview": {
       "post": {
         "tags": [
@@ -3828,6 +3935,102 @@
           },
           "403": {
             "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/services/{unit}": {
+      "get": {
+        "tags": [
+          "assets"
+        ],
+        "operationId": "get_unit",
+        "parameters": [
+          {
+            "name": "unit",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A page of the caller's hosts running the unit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnitDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No visible host runs it",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -7086,6 +7289,7 @@
         "type": "object",
         "description": "One host's open ports and running services.",
         "required": [
+          "truncated",
           "listeners",
           "services"
         ],
@@ -7131,6 +7335,10 @@
               "$ref": "#/components/schemas/ServiceView"
             },
             "description": "Services, by unit."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "The agent cut a list to the protocol limits: the lists are\nincomplete."
           }
         }
       },
@@ -7284,6 +7492,91 @@
           }
         ],
         "description": "Effective object scope attached to one permission."
+      },
+      "PortDetail": {
+        "type": "object",
+        "description": "One port across the caller's hosts: a page of the hosts listening on it.",
+        "required": [
+          "protocol",
+          "port",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PortHostView"
+            },
+            "description": "Hosts on this page, by hostname."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page of hosts."
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "description": "The port."
+          },
+          "protocol": {
+            "type": "string",
+            "description": "`tcp` or `udp`."
+          }
+        }
+      },
+      "PortHostView": {
+        "type": "object",
+        "description": "One host listening on a port (once per bound address).",
+        "required": [
+          "agent_id",
+          "address",
+          "exposed"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "The bound address."
+          },
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "exposed": {
+            "type": "boolean",
+            "description": "Bound to a non-loopback address."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname, when known."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last contact (RFC 3339)."
+          },
+          "program": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning program, when the agent saw it."
+          },
+          "service": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The owning unit, when the agent saw it."
+          }
+        }
       },
       "PortView": {
         "type": "object",
@@ -8108,6 +8401,82 @@
             "type": "integer",
             "format": "int64",
             "description": "Distinct versions in use."
+          }
+        }
+      },
+      "UnitDetail": {
+        "type": "object",
+        "description": "One service unit across the caller's hosts: a page of the hosts\nrunning it.",
+        "required": [
+          "unit",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UnitHostView"
+            },
+            "description": "Hosts on this page, by hostname."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page of hosts."
+          },
+          "unit": {
+            "type": "string",
+            "description": "The systemd unit."
+          }
+        }
+      },
+      "UnitHostView": {
+        "type": "object",
+        "description": "One host running a unit.",
+        "required": [
+          "agent_id",
+          "programs",
+          "processes"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname, when known."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last contact (RFC 3339)."
+          },
+          "processes": {
+            "type": "integer",
+            "format": "int32",
+            "description": "How many processes it runs there."
+          },
+          "programs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The unit's programs there, sorted."
+          },
+          "run_as": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The user it runs as there."
           }
         }
       },

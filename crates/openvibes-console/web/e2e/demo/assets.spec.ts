@@ -2,6 +2,12 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 // Assets v1 on the demo: the fleet Software view and a host's software.
+
+// The inspector fades in; axe must measure colours after that, or text
+// mid-fade fails contrast (Firefox measured 4.37:1 for a 4.6:1 badge).
+async function settled(page: import("@playwright/test").Page) {
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
+}
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
@@ -49,6 +55,34 @@ test("a host page shows its open ports and services; the fleet lists them (Asset
   await expect(page.locator(".view tbody tr").filter({ hasText: "22/tcp" })).toBeVisible();
   await expect(page.locator(".view tbody tr").filter({ hasText: "53/udp" })).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("fleet Ports and Services rows open the hosts that have them, linking to the Host page (#102)", async ({ page }) => {
+  await page.goto("/ports");
+  await page.locator(".view tbody tr").filter({ hasText: "443/tcp" }).first().locator("td").first().click();
+  const inspector = page.locator(".inspector");
+  await expect(inspector.locator(".panel-header__kind")).toContainText("Port");
+  const listening = inspector.getByRole("list", { name: "Hosts listening on this port" });
+  await expect(listening.locator("li").first()).toContainText("exposed");
+  await settled(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await listening.locator("li a").first().click();
+  await expect(inspector.locator(".panel-header__kind")).toContainText("Host");
+  await page.keyboard.press("Escape");
+  await page.goto("/services");
+  await page.locator(".view tbody tr").filter({ hasText: "chronyd.service" }).first().locator("td").first().click();
+  await expect(inspector.locator(".panel-header__kind")).toContainText("Service");
+  await expect(inspector.getByRole("list", { name: "Hosts running this service" }).locator("li").first()).toContainText("chronyd");
+  await settled(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("a host whose lists were cut says some ports are not listed", async ({ page }) => {
+  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.locator(".view tbody tr").filter({ hasText: "build-" }).first().locator("td").nth(1).click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("tab", { name: "Ports" }).click();
+  await expect(inspector.getByText("some ports not listed")).toBeVisible();
 });
 
 test("a host whose last services report was refused says so above its old lists", async ({ page }) => {

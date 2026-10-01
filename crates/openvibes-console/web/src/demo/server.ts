@@ -407,7 +407,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
     // The mail hosts' last report was refused (over 512 KiB): the tab says so.
     const refused = role === "mail" ? { refused: "too_large", refused_at: new Date(Date.now() - 5 * 60_000).toISOString() } : { refused: null, refused_at: null };
-    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", ...refused, listeners, services };
+    // The build hosts run more than a report carries: their lists were cut.
+    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", truncated: role === "build", ...refused, listeners, services };
   };
   route("GET", "/api/v1/agents/{id}/services", "agents.read", ({ id = "" }) => {
     if (!agentById(id)) return problem(404, "agent_not_found", "Agent not found");
@@ -431,6 +432,21 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const counts = new Map<string, number>();
     for (const agent of hosts()) for (const s of hostServices(agent.id).services) counts.set(s.unit, (counts.get(s.unit) ?? 0) + 1);
     return json([...counts].sort(([a], [b]) => a.localeCompare(b)).map(([unit, hosts]) => ({ unit, hosts })));
+  });
+  route("GET", "/api/v1/ports/{protocol}/{port}", "agents.read", ({ protocol = "", port = "" }) => {
+    const found = hosts().flatMap((agent) => hostServices(agent.id).listeners
+      .filter((l) => l.protocol === protocol && String(l.port) === port)
+      .map((l) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, address: l.address, exposed: l.exposed, service: l.service, program: l.program, last_seen_at: agent.last_seen_at ?? null })));
+    if (found.length === 0) return problem(404, "port_not_found", "No host listens on this port");
+    return json({ protocol, port: Number(port), hosts: found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), next_cursor: null });
+  });
+  route("GET", "/api/v1/services/{unit}", "agents.read", ({ unit = "" }) => {
+    const name = decodeURIComponent(unit);
+    const found = hosts().flatMap((agent) => hostServices(agent.id).services
+      .filter((s) => s.unit === name)
+      .map((s) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, programs: s.programs, processes: s.processes, run_as: s.run_as, last_seen_at: agent.last_seen_at ?? null })));
+    if (found.length === 0) return problem(404, "service_not_found", "No host runs this service");
+    return json({ unit: name, hosts: found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), next_cursor: null });
   });
   route("GET", "/api/v1/software", "agents.read", (_, query) => {
     const q = (query.get("q") ?? "").toLowerCase();

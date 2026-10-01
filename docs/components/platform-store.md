@@ -434,6 +434,9 @@ Functions:
   `Invalid`, `WrongAgent`) and keeps the stored lists.
 - `for_host`, `fleet_ports` and `fleet_services` (console): scoped like
   agents, and the fleet reads leave revoked hosts out.
+- `port_hosts` and `unit_hosts` (console): the visible, non-revoked hosts
+  with a port or unit, keyset-paged on `(hostname, agent_id[, address])`.
+- `agents.services_truncated` holds the report's `truncated`.
 
 Grants: ingest inserts and deletes the two tables, and already updates
 `agents`; the console reads.
