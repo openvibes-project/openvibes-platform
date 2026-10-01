@@ -56,7 +56,7 @@ pub(crate) struct AuthHttpState {
     /// name the certificate covers at the console's port (board #71).
     allowed_hosts: Arc<[String]>,
     dummy_password_phc: Option<String>,
-    password_slots: Arc<Semaphore>,
+    pub(crate) password_slots: Arc<Semaphore>,
     assistant: Option<crate::assistant::AssistantRuntime>,
 }
 
@@ -394,6 +394,10 @@ fn api_router() -> Router {
 fn authenticated_api_router() -> Router<AuthHttpState> {
     Router::new()
         .route("/v1/session", get(authenticated_session))
+        .route(
+            "/v1/session/password",
+            axum::routing::post(crate::users::change_password),
+        )
         .route("/v1/assistant/status", get(authenticated_assistant_status))
         .route(
             "/v1/assistant/messages",
@@ -510,6 +514,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/access-control/bindings",
             axum::routing::post(create_authenticated_access_binding),
+        )
+        .route(
+            "/v1/access-control/users",
+            axum::routing::post(crate::users::create_user),
         )
         .route(
             "/v1/access-control/bindings/{binding_id}",
@@ -2573,7 +2581,11 @@ async fn authenticated_session(
         }
     }
     let idle_expiry = (now + Duration::minutes(30)).min(active.absolute_expires_at);
-    let mut capabilities = crate::resolve_capabilities(&resolved);
+    let mut capabilities = if active.password_must_change {
+        Vec::new() // nothing but setting the password until then (#85)
+    } else {
+        crate::resolve_capabilities(&resolved)
+    };
     if state.assistant.is_none() {
         capabilities.retain(|capability| capability.permission != crate::Permission::AssistantUse);
     }
@@ -2591,6 +2603,7 @@ async fn authenticated_session(
         absolute_expires_at: active
             .absolute_expires_at
             .to_rfc3339_opts(SecondsFormat::Secs, true),
+        password_must_change: active.password_must_change,
     };
     let mut response = (StatusCode::OK, axum::Json(response)).into_response();
     response
@@ -5578,14 +5591,15 @@ pub(crate) async fn session_user(
     }
 }
 
-/// The session path shared by `authenticated_permission` and `session_user`:
-/// verifies the session and CSRF, touches it, and resolves capabilities.
-async fn session_capabilities(
+/// Verifies the session cookie and CSRF and touches the session, without
+/// the `password_must_change` gate: the set-password route needs a session
+/// while the flag is set. Returns the session and its digest.
+pub(crate) async fn checked_session(
     state: &AuthHttpState,
     headers: &HeaderMap,
     secret: &str,
     csrf_required: bool,
-) -> Result<SessionUser, Response> {
+) -> Result<(console_auth::Session, [u8; 32]), Response> {
     use crate::auth::{session_csrf, session_digest};
     let now = Utc::now();
     let digest = session_digest(secret);
@@ -5623,6 +5637,35 @@ async fn session_capabilities(
     {
         return Err(authentication_required());
     }
+    Ok((active, digest))
+}
+
+/// 403 for a user who must set their own password first.
+pub(crate) fn password_change_required() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::FORBIDDEN,
+        "password_change_required",
+        "Set your own password first",
+    ))
+}
+
+/// The session path shared by `authenticated_permission` and `session_user`:
+/// verifies the session and CSRF, touches it, refuses a user who must still
+/// set their own password, and resolves capabilities.
+async fn session_capabilities(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    secret: &str,
+    csrf_required: bool,
+) -> Result<SessionUser, Response> {
+    let (active, _digest) = checked_session(state, headers, secret, csrf_required).await?;
+    // One gate for every session route (#85): until the user replaces a
+    // one-time password, only the session read, setting the password and
+    // sign-out work, and those do not come through here.
+    if active.password_must_change {
+        return Err(password_change_required());
+    }
+    let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
     let bindings = console_auth::user_role_bindings(&client, &active.user_id)
         .await
         .map_err(|_| unavailable_auth())?;
@@ -6141,7 +6184,7 @@ fn login_throttle_buckets(
     (account, source)
 }
 
-fn bounded_user_agent(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn bounded_user_agent(headers: &HeaderMap) -> Option<String> {
     headers
         .get(header::USER_AGENT)
         .and_then(|value| value.to_str().ok())

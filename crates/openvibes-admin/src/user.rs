@@ -144,6 +144,8 @@ pub async fn run(
                     password_phc: credential.as_str(),
                     role_id: role.as_str(),
                     actor_id: actor,
+                    actor_kind: "local_admin",
+                    password_must_change: false,
                     now,
                 },
             )

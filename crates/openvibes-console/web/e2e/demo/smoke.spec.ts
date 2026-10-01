@@ -147,3 +147,15 @@ test("a finding set to Investigating stays in the default Findings list (board #
   await page.getByRole("link", { name: "Findings" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "World-writable file in /etc" })).toBeVisible();
 });
+
+test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
+  await page.goto("/access");
+  await page.getByRole("button", { name: "New user" }).click();
+  await page.getByLabel("Username").fill("jdoe");
+  await page.getByLabel("Display name").fill("Jane Doe");
+  await page.getByRole("button", { name: "Create user" }).click();
+  await expect(page.locator(".secret")).toContainText("demo1-pass2-word3-onlyx");
+  await expect(page.getByText("It is shown only once")).toBeVisible();
+  await page.getByRole("button", { name: "Done" }).click();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "jdoe" })).toBeVisible();
+});

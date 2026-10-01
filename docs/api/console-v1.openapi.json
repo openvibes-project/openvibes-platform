@@ -236,6 +236,67 @@
         }
       }
     },
+    "/api/v1/access-control/users": {
+      "post": {
+        "tags": [
+          "access control"
+        ],
+        "summary": "Creates a local user with one global built-in role and a one-time\npassword, returned only here; the user must replace it at first sign-in.",
+        "operationId": "create_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "User created; the one-time password is shown only here",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedUser"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid username, display name or role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs rbac.manage with a global binding",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The username is taken",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents": {
       "get": {
         "tags": [
@@ -3638,6 +3699,50 @@
         }
       }
     },
+    "/api/v1/session/password": {
+      "post": {
+        "tags": [
+          "session"
+        ],
+        "summary": "Sets the signed-in user's own password: the current one is required,\nthe new one must be at least 15 characters and differ from it. Clears\n`password_must_change`, signs out the user's other sessions, and is\naudited. Works while the flag is set; browser sessions only.",
+        "operationId": "change_password",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Password set; the user's other sessions are signed out"
+          },
+          "400": {
+            "description": "Wrong current password, or a new password that is too short or unchanged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Not signed in",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/software": {
       "get": {
         "tags": [
@@ -5531,6 +5636,31 @@
           }
         }
       },
+      "ChangePasswordRequest": {
+        "type": "object",
+        "description": "Sets the signed-in user's own password (`POST /api/v1/session/password`).",
+        "required": [
+          "current_password",
+          "new_password"
+        ],
+        "properties": {
+          "current_password": {
+            "type": "string",
+            "format": "password",
+            "description": "The current password (the one-time password after New user).",
+            "writeOnly": true,
+            "maxLength": 4096
+          },
+          "new_password": {
+            "type": "string",
+            "format": "password",
+            "description": "The new password, at least 15 characters and different from the current.",
+            "writeOnly": true,
+            "maxLength": 4096
+          }
+        },
+        "additionalProperties": false
+      },
       "ClientTurn": {
         "type": "object",
         "required": [
@@ -5673,6 +5803,32 @@
         },
         "additionalProperties": false
       },
+      "CreateUserRequest": {
+        "type": "object",
+        "description": "Creates a local console user with one global built-in role and a\none-time password (`POST /api/v1/access-control/users`).",
+        "required": [
+          "username",
+          "display_name",
+          "role_id"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Operator-facing name, 1 to 160 printable characters.",
+            "maxLength": 160
+          },
+          "role_id": {
+            "type": "string",
+            "description": "Initial built-in global role."
+          },
+          "username": {
+            "type": "string",
+            "description": "1 to 64 ASCII letters, digits or `._@+-`; stored lowercase.",
+            "maxLength": 64
+          }
+        },
+        "additionalProperties": false
+      },
       "CreatedEnrollmentToken": {
         "type": "object",
         "description": "Enrollment token secret, returned only at creation time.",
@@ -5740,6 +5896,41 @@
           "token_id": {
             "type": "string",
             "description": "Stable token UUID."
+          }
+        }
+      },
+      "CreatedUser": {
+        "type": "object",
+        "description": "A created user and their one-time password, shown only in this response.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name",
+          "role_id",
+          "one_time_password"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Display name as stored."
+          },
+          "one_time_password": {
+            "type": "string",
+            "format": "password",
+            "description": "One-time password; the user must replace it at first sign-in.",
+            "readOnly": true
+          },
+          "role_id": {
+            "type": "string",
+            "description": "The role granted."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "New user id."
+          },
+          "username": {
+            "type": "string",
+            "description": "Canonical (lowercase) username."
           }
         }
       },
@@ -7245,7 +7436,8 @@
           "capabilities",
           "csrf_token",
           "idle_expires_at",
-          "absolute_expires_at"
+          "absolute_expires_at",
+          "password_must_change"
         ],
         "properties": {
           "absolute_expires_at": {
@@ -7278,6 +7470,10 @@
             "type": "string",
             "format": "date-time",
             "description": "RFC 3339 instant when idle expiry occurs if the session is not used."
+          },
+          "password_must_change": {
+            "type": "boolean",
+            "description": "The user signed in with a one-time password and must set their own\nbefore anything else: every other route answers 403\n`password_change_required`, and `capabilities` is empty."
           },
           "principal": {
             "$ref": "#/components/schemas/SessionPrincipal",

@@ -29,6 +29,7 @@ mod router;
 mod seeded;
 mod server;
 mod software;
+mod users;
 
 pub use api::{
     AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
@@ -36,21 +37,22 @@ pub use api::{
     AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest,
     AssetGroupSelectorInput, AuditEventPage, AuditEventView, AuditRetentionPolicy,
     AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
-    BulkFindingTriageResponse, CertificatePage, CertificateView, CreateAccessBindingRequest,
-    CreateEnrollmentTokenRequest, CreateServiceAccountRequest, CreateServiceTokenRequest,
-    CreatedEnrollmentToken, CreatedServiceToken, CursorPage, CursorPagination, CveDetailView,
-    DEFAULT_PAGE_SIZE, DashboardPage, DashboardView, EffectiveCapability, EnrollmentTokenPage,
-    EnrollmentTokenView, FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage,
-    FindingGroupView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage,
-    FindingSummary, FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard,
-    LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission,
-    PermissionScope, PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview,
-    RuleBundleView, RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest,
-    ServiceAccountPage, ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal,
-    SessionResponse, Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest,
-    UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
-    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
-    VulnerabilityTopHost, VulnerabilityView,
+    BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
+    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
+    CreateServiceTokenRequest, CreateUserRequest, CreatedEnrollmentToken, CreatedServiceToken,
+    CreatedUser, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE, DashboardPage,
+    DashboardView, EffectiveCapability, EnrollmentTokenPage, EnrollmentTokenView,
+    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
+    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+    FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard, LoginRequest,
+    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
+    PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
+    RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
+    ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
+    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest,
+    UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail, VulnerabilityPage,
+    VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost,
+    VulnerabilityView,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,

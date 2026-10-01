@@ -210,3 +210,31 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+test("a new user signs in with a one-time password and must set their own first (board #85)", async ({ page, browser }, info) => {
+  await signIn(page, "alex");
+  await page.goto("/access");
+  await page.getByRole("button", { name: "New user" }).click();
+  const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
+  await page.getByLabel("Username").fill(username);
+  await page.getByLabel("Display name").fill("E2E Person");
+  await page.getByLabel("Role").selectOption("viewer");
+  await page.getByRole("button", { name: "Create user" }).click();
+  const oneTime = (await page.locator(".secret .grow").innerText()).trim();
+  expect(oneTime.length).toBeGreaterThanOrEqual(15);
+
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  const other = await context.newPage();
+  await other.goto("/");
+  await other.getByLabel("Username").fill(username);
+  await other.getByLabel("Password").fill(oneTime);
+  await other.getByRole("button", { name: "Sign in" }).click();
+  await expect(other.getByRole("heading", { name: "Set your password" })).toBeVisible();
+  await expect(other.locator(".rail")).toHaveCount(0);
+  await other.getByLabel("One-time password").fill(oneTime);
+  await other.getByLabel("New password (at least 15 characters)").fill("e2e-a-long-new-password-2026");
+  await other.getByLabel("New password again").fill("e2e-a-long-new-password-2026");
+  await other.getByRole("button", { name: "Set password" }).click();
+  await expect(other.locator(".view")).toBeVisible();
+  await context.close();
+});

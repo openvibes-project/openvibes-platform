@@ -221,6 +221,8 @@ async fn local_user_list_and_disable_use_the_real_cli_and_audit() {
             password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
             role_id: "admin",
             actor_id: "test-bootstrap",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now: Utc::now(),
         },
     )

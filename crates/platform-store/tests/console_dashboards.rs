@@ -28,6 +28,8 @@ async fn user(client: &mut Client, id: &str, binding: &str, name: &str, role: &s
             password_phc: "$argon2id$v=19$m=19456,t=2,p=1$opaque-salt$opaque-hash",
             role_id: role,
             actor_id: "test",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now: Utc::now(),
         },
     )

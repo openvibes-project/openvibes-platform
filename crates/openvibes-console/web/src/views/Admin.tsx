@@ -107,12 +107,13 @@ export function Access() {
   })).filter((user) => matches([user.username, user.display_name, ...user.bindings.map((b) => b.role_id)], params.get("q") ?? "")), [data, params]);
   return (
     <div className="view">
-      <ViewHeader title="Access" count={rows.length} refresh="/api/v1/access-control" placeholder="Filter people or roles…" />
+      <ViewHeader title="Access" count={rows.length} refresh="/api/v1/access-control" placeholder="Filter people or roles…"
+        actions={can("rbac.manage", true) && <button type="button" className="button button--primary button--small" onClick={() => nav.open({ kind: "user", id: "new" }, true)}><Icon name="plus" size={14} /> New user</button>} />
       {inventory.error ? <div className="view-pad"><ErrorBox error={inventory.error} /></div> : !data ? <Loading /> : (
         <>
           {rows.length === 0 ? (
             <Empty icon="access" title={data.users.length === 0 ? "No people" : "Nothing matches these filters"}>
-              {data.users.length === 0 ? "Create a local user with openvibes-admin to grant access." : "Clear a filter to see more."}
+              {data.users.length === 0 ? "Add a person with New user." : "Clear a filter to see more."}
             </Empty>
           ) : <DataTable label="People" rows={rows} rowKey={(u) => u.user_id}
             onOpen={(u) => nav.open({ kind: "user", id: u.user_id }, true)}

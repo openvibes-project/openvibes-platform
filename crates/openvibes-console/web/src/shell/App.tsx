@@ -9,11 +9,12 @@ import { SessionContext, allows } from "../app/session";
 import type { Persona } from "../demo/personas";
 import { Empty } from "../ui/bits";
 import { Icon } from "../ui/Icon";
-import { Toasts } from "../ui/toast";
+import { Toasts, toast } from "../ui/toast";
 import { AssistantDock } from "./AssistantDock";
 import { Rail, ShortcutHelp, TopBar } from "./Chrome";
 import { CommandPalette, rememberRecent } from "./CommandPalette";
 import { Inspector, WindowLayer } from "./Frames";
+import { SetPassword } from "./SetPassword";
 import { SignIn } from "./SignIn";
 
 const personaKey = "openvibes.v2.persona";
@@ -32,6 +33,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   const [auth, setAuth] = useState<"loading" | "ok" | "signin" | "down">("loading");
   const [palette, setPalette] = useState(false);
   const [help, setHelp] = useState(false);
+  const [changingPassword, setChangingPassword] = useState(false);
   const { view, panels } = useLocation();
 
   useEffect(() => {
@@ -103,6 +105,9 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
     );
   }
   if (auth === "loading" || !session) return <div className="boot" aria-busy="true"><img src={`${import.meta.env.BASE_URL}brand/openvibes-mark.svg`} alt="" /></div>;
+  // A one-time password: nothing else works until the user sets their own (#85).
+  if (session.password_must_change) return <SetPassword required onDone={() => window.location.reload()} onSignOut={logout} />;
+  if (changingPassword) return <SetPassword required={false} onDone={() => { setChangingPassword(false); toast("Password changed. Your other sessions were signed out."); }} onCancel={() => setChangingPassword(false)} />;
 
   const allowed = current !== undefined && canView(current.path);
   const firstAllowed = views.find((v) => canView(v.path));
@@ -112,7 +117,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
       <div className="app">
         <Rail canView={canView} />
         <div className="app__main">
-          <TopBar title={current?.label ?? "Not found"} onPalette={() => setPalette(true)} onLogout={logout} persona={persona} onPersona={choosePersona} onHelp={() => setHelp(true)} />
+          <TopBar title={current?.label ?? "Not found"} onPalette={() => setPalette(true)} onLogout={logout} onChangePassword={() => setChangingPassword(true)} persona={persona} onPersona={choosePersona} onHelp={() => setHelp(true)} />
           <div className="workspace">
             <main id="main" className="view-area" tabIndex={-1}>
               {allowed ? current.render() : (

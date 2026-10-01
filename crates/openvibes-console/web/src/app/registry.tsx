@@ -8,7 +8,7 @@ import type { Permission } from "../api/types";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
 import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
-import { AssetGroupPanel, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
+import { AssetGroupPanel, NewUser, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { AlarmPanel } from "../panels/AlarmPanel";
@@ -78,7 +78,7 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
   "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
-  user: { label: "User", icon: "user", title: (id) => id, render: (id) => <UserPanel id={id} /> },
+  user: { label: "User", icon: "user", title: (id) => id === "new" ? "New user" : id, render: (id) => id === "new" ? <NewUser /> : <UserPanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
   "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },
   widget: { label: "Widget", icon: "filter", title: (id) => id, render: (id) => <WidgetSettingsPanel id={id} /> },

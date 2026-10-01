@@ -346,6 +346,8 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             password_phc: phc.as_str(),
             role_id: "admin",
             actor_id: "test-bootstrap",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now: Utc::now(),
         },
     )
