@@ -401,3 +401,72 @@ async fn alarms_are_listed_shown_and_triaged_with_permissions_and_audit() {
     assert_eq!(audited, 1);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn suppressions_are_created_from_an_alarm_listed_and_removed() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router, id) = setup().await;
+    let (cookie, csrf) = login(&router, "vera").await;
+    let body =
+        json!({"alarm_id": id.to_string(), "scope": "program", "note": "nginx health check"});
+    let (status, _, _) = call(
+        &router,
+        "POST",
+        "/api/v1/alarm-suppressions",
+        &cookie,
+        &csrf,
+        Some(body.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "a viewer may not suppress");
+
+    let (cookie, csrf) = login(&router, "alice").await;
+    let (status, created, _) = call(
+        &router,
+        "POST",
+        "/api/v1/alarm-suppressions",
+        &cookie,
+        &csrf,
+        Some(body),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{created}");
+    assert_eq!(created["exe"], "/usr/bin/sh");
+    assert_eq!(created["agent_id"], Value::Null);
+    let (status, _, _) = call(
+        &router,
+        "POST",
+        "/api/v1/alarm-suppressions",
+        &cookie,
+        &csrf,
+        Some(json!({"alarm_id": id.to_string(), "scope": "anywhere", "note": "x"})),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, list, _) = call(
+        &router,
+        "GET",
+        "/api/v1/alarm-suppressions",
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(list["items"].as_array().unwrap().len(), 1);
+    let one = format!(
+        "/api/v1/alarm-suppressions/{}",
+        created["id"].as_str().unwrap()
+    );
+    let (status, _, _) = call(&router, "DELETE", &one, &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _, _) = call(&router, "DELETE", &one, &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    db.drop().await;
+}

@@ -74,6 +74,37 @@ heartbeats_ok() {
 }
 more_heartbeats_than() { (($(heartbeats_ok) > $1)); }
 wait_for "heartbeat accepted" 20 more_heartbeats_than 0
+# Protocol P14: an AlarmBatch posted with the agent's own certificate is
+# stored once; a resend raises the count; a suppression closes the next one.
+sqlite3 "$W/agent/state/identity.sqlite" "SELECT key_pem FROM identity" > "$W/alarm.key"
+sqlite3 "$W/agent/state/identity.sqlite" "SELECT chain_json FROM identity" | jq -r '.[]' > "$W/alarm.crt"
+chmod 600 "$W/alarm.key"
+ALARM_AT=$(date +%s%3N)
+post_alarm() { # alarm number, count
+    jq -nc --arg agent "$FIRST_AGENT" --arg id "$(printf 'alarm.%032x' "$1")" \
+        --argjson count "$2" --argjson at "$ALARM_AT" '{schema_version: 1,
+        agent_id: $agent, dropped_total: 0, alarms: [{alarm_id: $id,
+        rule_set_id: "integration", rule_set_version: 1, rule_id: "web-shell",
+        rule_version: 1, severity: "high", confidence: 80,
+        message: "A web server started a shell", first_seen_unix_ms: $at,
+        last_seen_unix_ms: $at, count: $count, ancestors: [],
+        process: {pid: 1, exe: "/usr/bin/sh", args: ["sh", "-c", "id"],
+                  uid: 48, euid: 48, truncated: false}}]}' |
+        curl -sS -o /dev/null -w '%{http_code}' --cacert "$W/ca/root/root.crt" \
+            --cert "$W/alarm.crt" --key "$W/alarm.key" -H 'content-type: application/json' \
+            --data-binary @- "https://127.0.0.1:$INGEST_PORT/v1/alarms"
+}
+for count in 1 1 3; do
+    [[ "$(post_alarm 1 "$count")" == 204 ]] || { echo "FAIL: POST /v1/alarms"; exit 1; }
+done
+[[ "$(sql "SELECT count(*) || ' ' || max(count) FROM alarms")" == "1 3" ]] ||
+    { echo "FAIL: expected one alarm raised to count 3"; exit 1; }
+sql "INSERT INTO alarm_suppressions (rule_set_id, rule_id, scope, exe, note, created_by, created_at)
+     VALUES ('integration', 'web-shell', 'program', '/usr/bin/sh', 'test', 'test', now())" >/dev/null
+[[ "$(post_alarm 2 1)" == 204 ]] || { echo "FAIL: POST /v1/alarms (suppressed)"; exit 1; }
+[[ "$(sql "SELECT state FROM alarms WHERE alarm_id = '$(printf 'alarm.%032x' 2)'")" == false_positive ]] ||
+    { echo "FAIL: a suppressed alarm is not closed"; exit 1; }
+echo "ok: alarms are stored once, raised on resend, and closed by a suppression (P14)"
 
 # Protocol P13: the agent reports a match when it starts, changes or ends,
 # not on every scan. A match is a current_findings row with source

@@ -133,6 +133,16 @@ synthetic API models for these routes.
   / false positive; completed states need a note; accepted risk a future
   expiry); 412 stale, 409 transition, 428 without `If-Match`. Audited as
   `alarm.triage.changed` with a history row.
+- `GET /api/v1/alarm-suppressions` (`alarms.read`): active suppressions
+  the caller may see: `host` ones on agents in scope; `program` and
+  `command` ones (they apply on every host) only with global scope.
+- `POST /api/v1/alarm-suppressions` (`alarms.suppress`, CSRF): `{alarm_id,
+  scope, note}`; the rule, agent, program and args hash are derived from
+  that alarm, never typed in. `program`/`command` need global scope (403
+  `global_scope_required`). It applies to alarms stored from now on.
+- `DELETE /api/v1/alarm-suppressions/{id}` (`alarms.suppress`, CSRF): sets
+  `removed_at`; the row stays as history. Both changes are audited
+  (`alarm.suppression.created` / `.removed`).
 - Alarms are not offered to the assistant in P14.
 
 ## Interfaces

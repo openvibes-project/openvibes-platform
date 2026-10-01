@@ -202,6 +202,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarm-suppressions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_suppressions"];
+        put?: never;
+        post: operations["create_suppression"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/alarm-suppressions/{suppression_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove_suppression"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alarms": {
         parameters: {
             query?: never;
@@ -1090,6 +1122,34 @@ export interface components {
             /** @description The suppression that closed it, if any. */
             suppressed_by?: string | null;
         };
+        /** @description Active suppressions the caller may see. */
+        AlarmSuppressionList: {
+            /** @description Newest first. */
+            items: components["schemas"]["AlarmSuppressionView"][];
+        };
+        /** @description One active suppression. */
+        AlarmSuppressionView: {
+            /** @description The agent, for `host`. */
+            agent_id?: string | null;
+            /** @description SHA-256 of the masked args' JSON array, for `command`. */
+            args_sha256?: string | null;
+            /** @description When (RFC 3339). */
+            created_at: string;
+            /** @description Who created it. */
+            created_by: string;
+            /** @description The program, for `program` and `command`. */
+            exe?: string | null;
+            /** @description Its id; closed alarms say "suppressed by #id". */
+            id: string;
+            /** @description Why. */
+            note: string;
+            /** @description Rule it quiets. */
+            rule_id: string;
+            /** @description Rule set of the rule. */
+            rule_set_id: string;
+            /** @description `host`, `program` or `command`. */
+            scope: string;
+        };
         /** @description An alarm's triage. */
         AlarmTriageView: {
             /** @description Accepted-risk expiry (RFC 3339). */
@@ -1298,6 +1358,18 @@ export interface components {
             role_id: string;
             /** @description Stable local-user UUID. */
             user_id: string;
+        };
+        /** @description "Don't alarm on this again", derived from one alarm. */
+        CreateAlarmSuppressionRequest: {
+            /** @description The platform's id of the alarm to derive it from. */
+            alarm_id: string;
+            /** @description Why, 1 to 4,000 characters. */
+            note: string;
+            /**
+             * @description `host` (this alarm's host), `program` (this program on any host) or
+             *     `command` (this exact command line on any host).
+             */
+            scope: string;
         };
         /** @description Bounded one-time enrollment-token creation request. */
         CreateEnrollmentTokenRequest: {
@@ -2736,6 +2808,108 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_suppressions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Active suppressions the caller may see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmSuppressionList"];
+                };
+            };
+        };
+    };
+    create_suppression: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateAlarmSuppressionRequest"];
+            };
+        };
+        responses: {
+            /** @description Created; applies to alarms stored from now on */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmSuppressionView"];
+                };
+            };
+            /** @description Invalid scope or note */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied, or program/command without global scope */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Alarm absent or outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_suppression: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                suppression_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed (kept as history) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AlarmSuppressionView"];
+                };
+            };
+            /** @description Absent, already removed, or outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -395,6 +395,21 @@ The `detail` column is never given secrets.
   on the triage columns, SELECT/INSERT on the history, and
   SELECT/INSERT/UPDATE on suppressions.
 
+Code over these tables:
+
+- `alarms` (ingest): `row` checks one alarm (time, skew, retention,
+  partition); `insert_batch` upserts with `GREATEST` on count and last
+  seen, applies active suppressions, reopens a mitigated alarm or an
+  expired accepted risk on recurrence, and keeps `alarms_dropped_total`.
+  `args_sha256` is the `command` suppression hash (SHA-256 of the args'
+  JSON array).
+- `console_alarms` (console): scoped `list` (filters, keyset `(last_seen,
+  id)`), `detail`, and `update_triage` with the findings workflow, history
+  and audit.
+- `alarm_suppressions` (console): `list`, `create` (derived from a visible
+  alarm; `program`/`command` need global scope) and `remove` (kept as
+  history), audited.
+
 ## Status
 
 `status(&client, now) -> Status`: schema version; active, offline (no

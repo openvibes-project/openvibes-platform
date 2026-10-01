@@ -539,6 +539,15 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/alarms/{alarm_id}/triage",
             axum::routing::put(crate::alarms::update_alarm_triage),
         )
+        .route(
+            "/v1/alarm-suppressions",
+            get(crate::alarm_suppressions::list_suppressions)
+                .post(crate::alarm_suppressions::create_suppression),
+        )
+        .route(
+            "/v1/alarm-suppressions/{suppression_id}",
+            axum::routing::delete(crate::alarm_suppressions::remove_suppression),
+        )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
