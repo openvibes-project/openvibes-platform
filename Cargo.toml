@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/platform-assistant", "crates/openvibes-llm", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin", "crates/openvibes-console", "crates/platform-pki", "crates/platform-host", "scripts/load"]
 
 [workspace.package]
-version = "0.1.3"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.95"
 license = "MIT"
