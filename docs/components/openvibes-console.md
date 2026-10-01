@@ -127,6 +127,10 @@ vulnerability **with a fix** naming the package on that host;
 vulnerabilities without a fix (thousands on a Debian host) are left out
 and stay in the Vulnerabilities view.
 
+- The agent list and detail (`AgentView`) also carry `os_id`, `os_version`
+  and `running_kernel` from the last inventory, and `inventory_at` (the
+  time the software list is "as of"). Each is null until an inventory
+  arrives.
 - `GET /api/v1/agents/{agent_id}/packages`: the host's packages by name
   (manager, name, epoch, version, release, arch, `fixable_vulnerable`).
   `q` is a case-insensitive substring of the name (at most 128 bytes).

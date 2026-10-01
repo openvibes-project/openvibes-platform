@@ -867,6 +867,14 @@ pub struct AgentView {
     pub scanner_version: Option<String>,
     /// Reported agent capabilities.
     pub capabilities: Vec<String>,
+    /// OS id from the last inventory (os-release `ID`, e.g. `fedora`).
+    pub os_id: Option<String>,
+    /// OS version from the last inventory (os-release `VERSION_ID`).
+    pub os_version: Option<String>,
+    /// Running kernel from the last inventory (`uname -r`).
+    pub running_kernel: Option<String>,
+    /// RFC 3339 time the last inventory was received: software "as of".
+    pub inventory_at: Option<String>,
 }
 
 /// Certificate metadata exposed in an agent detail response.

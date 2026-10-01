@@ -135,6 +135,14 @@ pub struct Agent {
     pub scanner_version: Option<String>,
     /// Reported agent capabilities.
     pub capabilities: Vec<String>,
+    /// OS id from the last inventory (os-release `ID`).
+    pub os_id: Option<String>,
+    /// OS version from the last inventory (os-release `VERSION_ID`).
+    pub os_version: Option<String>,
+    /// Running kernel from the last inventory.
+    pub running_kernel: Option<String>,
+    /// When the last inventory (installed software) was received.
+    pub inventory_at: Option<DateTime<Utc>>,
 }
 
 /// Cursor for agent order: last seen descending/nulls last, then id ascending.
@@ -577,7 +585,8 @@ pub async fn agents_in_scope(
                          WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN a.last_seen_at IS NULL OR a.last_seen_at < $1 THEN 'stale'
                          ELSE 'active' END AS state,
-                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
+                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
              FROM agents a
              WHERE ($2::text IS NULL OR
                     ($2 = 'active' AND a.status = 'active'
@@ -659,7 +668,8 @@ pub async fn agent_in_scope(
                          WHEN a.status = 'revoked' THEN 'revoked'
                          WHEN a.last_seen_at IS NULL OR a.last_seen_at < $2 THEN 'stale'
                          ELSE 'active' END AS state,
-                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
+                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
              FROM agents a WHERE a.agent_id = $1
                AND ($3::boolean OR EXISTS (
                     SELECT 1 FROM console_asset_group_selectors s
@@ -700,7 +710,8 @@ pub async fn agent_matches_in_scope(
                      WHEN a.status = 'revoked' THEN 'revoked'
                      WHEN a.last_seen_at IS NULL OR a.last_seen_at < $4 THEN 'stale'
                      ELSE 'active' END AS state,
-                a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities
+                a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
          FROM agents a
          WHERE (a.agent_id::text = $1 OR lower(a.hostname) = lower($1))
            AND {visible}
@@ -1237,6 +1248,10 @@ fn agent_from_row(row: &Row) -> Agent {
         last_seen_at: row.get(5),
         scanner_version: row.get(6),
         capabilities: row.get(7),
+        os_id: row.get(8),
+        os_version: row.get(9),
+        running_kernel: row.get(10),
+        inventory_at: row.get(11),
     }
 }
 

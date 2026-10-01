@@ -1094,10 +1094,18 @@ export interface components {
             hostname?: string | null;
             /** @description Stable platform agent identifier. */
             id: string;
+            /** @description RFC 3339 time the last inventory was received: software "as of". */
+            inventory_at?: string | null;
             /** @description RFC 3339 time of the latest heartbeat, if present. */
             last_seen_at?: string | null;
+            /** @description OS id from the last inventory (os-release `ID`, e.g. `fedora`). */
+            os_id?: string | null;
+            /** @description OS version from the last inventory (os-release `VERSION_ID`). */
+            os_version?: string | null;
             /** @description RFC 3339 revocation time, if revoked. */
             revoked_at?: string | null;
+            /** @description Running kernel from the last inventory (`uname -r`). */
+            running_kernel?: string | null;
             /** @description Reported scanner version, if present. */
             scanner_version?: string | null;
             /** @description Current lifecycle state. */

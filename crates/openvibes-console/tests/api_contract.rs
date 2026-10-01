@@ -96,6 +96,10 @@ fn read_model_dtos_have_stable_wire_names() {
         last_seen_at: Some("2026-09-23T12:00:00Z".to_owned()),
         scanner_version: Some("0.4.0".to_owned()),
         capabilities: vec!["findings".to_owned()],
+        os_id: Some("fedora".to_owned()),
+        os_version: Some("44".to_owned()),
+        running_kernel: Some("6.17.4-300.fc44.x86_64".to_owned()),
+        inventory_at: Some("2026-09-23T11:59:00Z".to_owned()),
     };
     let agent_page = AgentPage {
         items: vec![agent],
@@ -105,6 +109,16 @@ fn read_model_dtos_have_stable_wire_names() {
     let agent_page = serde_json::to_value(agent_page).unwrap();
     assert_eq!(agent_page["items"][0]["status"], "stale");
     assert_eq!(agent_page["items"][0]["hostname"], "host.example.test");
+    assert_eq!(agent_page["items"][0]["os_id"], "fedora");
+    assert_eq!(agent_page["items"][0]["os_version"], "44");
+    assert_eq!(
+        agent_page["items"][0]["running_kernel"],
+        "6.17.4-300.fc44.x86_64"
+    );
+    assert_eq!(
+        agent_page["items"][0]["inventory_at"],
+        "2026-09-23T11:59:00Z"
+    );
     assert!(agent_page["next_cursor"].is_null());
 
     let finding_page = FindingPage {

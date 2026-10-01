@@ -4658,6 +4658,13 @@
             "type": "string",
             "description": "Stable platform agent identifier."
           },
+          "inventory_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time the last inventory was received: software \"as of\"."
+          },
           "last_seen_at": {
             "type": [
               "string",
@@ -4665,12 +4672,33 @@
             ],
             "description": "RFC 3339 time of the latest heartbeat, if present."
           },
+          "os_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS id from the last inventory (os-release `ID`, e.g. `fedora`)."
+          },
+          "os_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "OS version from the last inventory (os-release `VERSION_ID`)."
+          },
           "revoked_at": {
             "type": [
               "string",
               "null"
             ],
             "description": "RFC 3339 revocation time, if revoked."
+          },
+          "running_kernel": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Running kernel from the last inventory (`uname -r`)."
           },
           "scanner_version": {
             "type": [

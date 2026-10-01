@@ -3257,6 +3257,12 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
             .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
         scanner_version: agent.scanner_version,
         capabilities: agent.capabilities,
+        os_id: agent.os_id,
+        os_version: agent.os_version,
+        running_kernel: agent.running_kernel,
+        inventory_at: agent
+            .inventory_at
+            .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
     }
 }
 
