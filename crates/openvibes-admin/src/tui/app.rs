@@ -68,13 +68,10 @@ impl<H: Host> App<H> {
         let hostname = std::fs::read_to_string("/etc/hostname")
             .map(|h| h.trim().to_lowercase())
             .unwrap_or_default();
+        // Under sudo, HOME is root's, but the root key belongs in the
+        // person's own home (#92); directory users too (#94).
         let home = crate::setup::plan::operator_from_env()
-            .and_then(|user| {
-                person_home(
-                    &std::fs::read_to_string("/etc/passwd").unwrap_or_default(),
-                    &user,
-                )
-            })
+            .and_then(|user| host.user_home(&user))
             .or_else(|| std::env::var("HOME").ok());
         let mut setup = Setup::new(set_up, hostname, home);
         if !set_up {
@@ -236,29 +233,5 @@ impl<H: Host> App<H> {
         } else {
             self.message = Some(format!("{} is not installed", status.unit.name()));
         }
-    }
-}
-
-/// The home directory of `user` from `/etc/passwd` text. Under sudo, HOME
-/// is root's, but the root key belongs in the person's own home (#92).
-fn person_home(passwd: &str, user: &str) -> Option<String> {
-    passwd.lines().find_map(|line| {
-        let fields: Vec<&str> = line.split(':').collect();
-        (fields.len() >= 7 && fields[0] == user && fields[5].starts_with('/'))
-            .then(|| fields[5].to_owned())
-    })
-}
-
-#[cfg(test)]
-mod home_tests {
-    #[test]
-    fn under_sudo_the_root_key_goes_to_the_persons_home() {
-        let passwd =
-            "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n";
-        assert_eq!(
-            super::person_home(passwd, "alice").as_deref(),
-            Some("/home/alice")
-        );
-        assert_eq!(super::person_home(passwd, "bob"), None);
     }
 }

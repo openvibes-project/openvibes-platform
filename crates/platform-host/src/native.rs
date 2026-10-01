@@ -8,7 +8,7 @@ use crate::{
     CERTIFICATES, Database, DiskUse, Host, HostError, PackageUpdate, Privileged, SETUP_FILE,
     Secret, Service, ServiceAction, ServiceStatus, Unit,
     runner::{
-        Program::{Admin, Curl, Df, Dnf, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
+        Program::{Admin, Curl, Df, Dnf, Getent, Ip, Logger, Rpm, Ss, Sudo, Systemctl},
         Runner,
     },
 };
@@ -360,6 +360,16 @@ impl<R: Runner> Host for Native<R> {
             .filter(|out| out.status == 0)
             .map(|out| crate::host_addresses(&out.stdout))
             .unwrap_or_default()
+    }
+
+    fn user_home(&self, user: &str) -> Option<String> {
+        // getent asks NSS, so SSSD, FreeIPA and LDAP users are found too;
+        // /etc/passwd is the fallback when getent is missing or fails.
+        self.run(Getent, &["passwd", "--", user])
+            .ok()
+            .filter(|out| out.status == 0)
+            .and_then(|out| crate::passwd_home(&out.stdout, user))
+            .or_else(|| crate::passwd_home(&std::fs::read_to_string("/etc/passwd").ok()?, user))
     }
 
     fn listeners(&self, port: u16) -> Result<String, HostError> {

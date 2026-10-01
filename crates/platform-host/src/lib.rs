@@ -185,6 +185,12 @@ pub trait Host {
     fn addresses(&self) -> Vec<String> {
         Vec::new()
     }
+    /// The home directory of `user`, directory users included; `None` when
+    /// unknown (the TUI then keeps `HOME`).
+    fn user_home(&self, user: &str) -> Option<String> {
+        let _ = user;
+        None
+    }
     /// Disk use of `/var/lib/pgsql` and each `/var/lib/openvibes-*`.
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         Ok(Vec::new())
@@ -195,6 +201,17 @@ pub trait Host {
         let _ = port;
         Ok(String::new())
     }
+}
+
+/// The home directory of `user` in `passwd` lines (`/etc/passwd`, or
+/// `getent passwd` output); only an absolute path counts.
+#[must_use]
+pub fn passwd_home(passwd: &str, user: &str) -> Option<String> {
+    passwd.lines().find_map(|line| {
+        let fields: Vec<&str> = line.split(':').collect();
+        (fields.len() >= 7 && fields[0] == user && fields[5].starts_with('/'))
+            .then(|| fields[5].to_owned())
+    })
 }
 
 /// `ip` arguments listing the host's global addresses, IPv4 and IPv6.
