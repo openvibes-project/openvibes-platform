@@ -12,12 +12,10 @@ import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section, Tabs } from "../ui/panel";
 import { toast } from "../ui/toast";
 
-// ponytail: the OS fields arrive with the Assets API (#139); optional until
-// every platform sends them.
 /** Active alarms the Host page lists; more opens the Alarms view. */
 const ALARMS_SHOWN = 100;
 
-type Detail = Agent & { certificates: Certificate[]; os_id?: string | null; os_version?: string | null; running_kernel?: string | null; inventory_at?: string | null };
+type Detail = Agent & { certificates: Certificate[] };
 
 /** The host's installed software (Assets v1), filtered on the server. */
 function SoftwareTab({ id }: { id: string }) {
