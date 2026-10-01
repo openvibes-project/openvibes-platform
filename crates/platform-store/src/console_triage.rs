@@ -105,13 +105,7 @@ pub async fn update(
     actor_id: &str,
     now: DateTime<Utc>,
 ) -> Result<TriageUpdate, StoreError> {
-    if !matches!(
-        state,
-        "open" | "investigating" | "mitigated" | "accepted_risk" | "false_positive"
-    ) || note.is_some_and(|value| value.trim().is_empty() || value.chars().count() > 4000)
-        || ((state == "accepted_risk") != accepted_until.is_some())
-        || accepted_until.is_some_and(|value| value <= now)
-    {
+    if !fields_valid(state, note, accepted_until, now) {
         return Ok(TriageUpdate::InvalidFields);
     }
 
@@ -148,11 +142,9 @@ pub async fn update(
         tx.rollback().await?;
         return Ok(TriageUpdate::InvalidFields);
     }
-    let assignee = if let Some(username) = assigned_to_username {
-        tx.query_opt("SELECT u.user_id::text,u.username FROM console_users u WHERE u.username=$1 AND u.enabled AND EXISTS(SELECT 1 FROM console_role_bindings b WHERE b.user_id=u.user_id AND b.role_id IN ('analyst','admin') AND b.revoked_at IS NULL)",&[&username]).await?
-            .map(|row|(row.get::<_,String>(0),row.get::<_,String>(1)))
-    } else {
-        None
+    let assignee = match assigned_to_username {
+        Some(username) => assignee(&tx, username).await?,
+        None => None,
     };
     if assigned_to_username.is_some() && assignee.is_none() {
         tx.rollback().await?;
@@ -314,11 +306,9 @@ pub async fn update_many_with_request_id(
         tx.rollback().await?;
         return Ok(BulkTriageUpdate::Stale(stale));
     }
-    let assignee = if let Some(username) = assigned_to_username {
-        tx.query_opt("SELECT u.user_id::text,u.username FROM console_users u WHERE u.username=$1 AND u.enabled AND EXISTS(SELECT 1 FROM console_role_bindings b WHERE b.user_id=u.user_id AND b.role_id IN ('analyst','admin') AND b.revoked_at IS NULL)",&[&username]).await?
-            .map(|row|(row.get::<_,String>(0),row.get::<_,String>(1)))
-    } else {
-        None
+    let assignee = match assigned_to_username {
+        Some(username) => assignee(&tx, username).await?,
+        None => None,
     };
     if assigned_to_username.is_some() && assignee.is_none() {
         tx.rollback().await?;
@@ -370,6 +360,40 @@ pub async fn update_many_with_request_id(
     }
     tx.commit().await?;
     Ok(BulkTriageUpdate::Updated(records))
+}
+
+/// The state, note and expiry rules every triage write shares (findings
+/// and alarms): a known state, a bounded non-blank note, and a future
+/// expiry exactly for accepted risk.
+pub(crate) fn fields_valid(
+    state: &str,
+    note: Option<&str>,
+    accepted_until: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> bool {
+    matches!(
+        state,
+        "open" | "investigating" | "mitigated" | "accepted_risk" | "false_positive"
+    ) && note.is_none_or(|value| !value.trim().is_empty() && value.chars().count() <= 4000)
+        && ((state == "accepted_risk") == accepted_until.is_some())
+        && accepted_until.is_none_or(|value| value > now)
+}
+
+/// An enabled analyst or admin by username: (user id, username).
+pub(crate) async fn assignee(
+    tx: &Transaction<'_>,
+    username: &str,
+) -> Result<Option<(String, String)>, StoreError> {
+    Ok(tx
+        .query_opt(
+            "SELECT u.user_id::text, u.username FROM console_users u
+             WHERE u.username = $1 AND u.enabled AND EXISTS (
+                SELECT 1 FROM console_role_bindings b WHERE b.user_id = u.user_id
+                AND b.role_id IN ('analyst', 'admin') AND b.revoked_at IS NULL)",
+            &[&username],
+        )
+        .await?
+        .map(|row| (row.get(0), row.get(1))))
 }
 
 pub(crate) fn transition_allowed(from: &str, to: &str) -> bool {

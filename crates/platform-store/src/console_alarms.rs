@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use crate::{
     Client, StoreError,
     console_read::{AgentScope, agent_visibility},
-    console_triage::transition_allowed,
+    console_triage::{assignee, fields_valid, transition_allowed},
 };
 
 /// One alarm in the list.
@@ -263,12 +263,7 @@ pub async fn update_triage(
         note,
         accepted_until,
     } = *change;
-    if !matches!(
-        state,
-        "open" | "investigating" | "mitigated" | "accepted_risk" | "false_positive"
-    ) || note.is_some_and(|value| value.trim().is_empty() || value.chars().count() > 4000)
-        || ((state == "accepted_risk") != accepted_until.is_some())
-        || accepted_until.is_some_and(|value| value <= now)
+    if !fields_valid(state, note, accepted_until, now)
         || (matches!(state, "mitigated" | "accepted_risk" | "false_positive") && note.is_none())
     {
         return Ok(TriageOutcome::InvalidFields);
@@ -299,22 +294,11 @@ pub async fn update_triage(
     if !transition_allowed(&previous, state) {
         return Ok(TriageOutcome::InvalidTransition);
     }
-    let assignee: Option<(String, String)> = match assigned_to_username {
-        Some(username) => {
-            let found = tx
-                .query_opt(
-                    "SELECT u.user_id::text, u.username FROM console_users u
-                     WHERE u.username = $1 AND u.enabled AND EXISTS (
-                        SELECT 1 FROM console_role_bindings b WHERE b.user_id = u.user_id
-                        AND b.role_id IN ('analyst', 'admin') AND b.revoked_at IS NULL)",
-                    &[&username],
-                )
-                .await?;
-            let Some(found) = found else {
-                return Ok(TriageOutcome::AssigneeUnavailable);
-            };
-            Some((found.get(0), found.get(1)))
-        }
+    let assignee = match assigned_to_username {
+        Some(username) => match assignee(&tx, username).await? {
+            Some(found) => Some(found),
+            None => return Ok(TriageOutcome::AssigneeUnavailable),
+        },
         None => None,
     };
     let assigned_id = assignee.as_ref().map(|(id, _)| id.clone());
