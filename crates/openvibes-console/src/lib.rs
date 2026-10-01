@@ -28,6 +28,7 @@ mod router;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
+mod software;
 
 pub use api::{
     AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,

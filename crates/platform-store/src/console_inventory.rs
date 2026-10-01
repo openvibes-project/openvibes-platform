@@ -31,8 +31,8 @@ pub struct HostPackage {
     pub release: String,
     /// Architecture.
     pub arch: String,
-    /// The host has an open vulnerability on it.
-    pub vulnerable: bool,
+    /// The host has an open vulnerability with a fix on it.
+    pub fixable_vulnerable: bool,
 }
 
 /// One package across the visible hosts.
@@ -46,8 +46,8 @@ pub struct Software {
     pub hosts: i64,
     /// Distinct versions in use (epoch, version, release).
     pub versions: i64,
-    /// Visible hosts where it is vulnerable.
-    pub vulnerable_hosts: i64,
+    /// Visible hosts where it has an open vulnerability with a fix.
+    pub fixable_vulnerable_hosts: i64,
 }
 
 /// One version of a package in use.
@@ -63,8 +63,8 @@ pub struct SoftwareVersion {
     pub arch: String,
     /// Visible hosts with it.
     pub hosts: i64,
-    /// Of those, hosts where it is vulnerable.
-    pub vulnerable_hosts: i64,
+    /// Of those, hosts where it has an open vulnerability with a fix.
+    pub fixable_vulnerable_hosts: i64,
 }
 
 /// One host that has a package.
@@ -81,8 +81,8 @@ pub struct SoftwareHost {
     pub arch: String,
     /// The host's last contact.
     pub last_seen_at: Option<DateTime<Utc>>,
-    /// It is vulnerable there.
-    pub vulnerable: bool,
+    /// It has an open vulnerability with a fix there.
+    pub fixable_vulnerable: bool,
 }
 
 /// List filters for the fleet's software.
@@ -90,8 +90,9 @@ pub struct SoftwareHost {
 pub struct SoftwareFilters {
     /// Case-insensitive substring of the name.
     pub q: Option<String>,
-    /// Only packages vulnerable on at least one visible host.
-    pub vulnerable: bool,
+    /// Only packages with an open vulnerability with a fix on at least
+    /// one visible host.
+    pub fixable: bool,
 }
 
 fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
@@ -154,7 +155,7 @@ pub async fn host_packages(
                         version: row.get(4),
                         release: row.get(5),
                         arch: row.get(6),
-                        vulnerable: row.get(7),
+                        fixable_vulnerable: row.get(7),
                     },
                 )
             })
@@ -255,7 +256,7 @@ pub async fn software(
                 &filters.q,
                 &after_name,
                 &after_manager,
-                &filters.vulnerable,
+                &filters.fixable,
                 &limit,
             ],
         )
@@ -267,7 +268,7 @@ pub async fn software(
             name: row.get(1),
             hosts: row.get(2),
             versions: row.get(3),
-            vulnerable_hosts: row.get(4),
+            fixable_vulnerable_hosts: row.get(4),
         })
         .collect())
 }
@@ -304,7 +305,7 @@ pub async fn software_versions(
             release: row.get(2),
             arch: row.get(3),
             hosts: row.get(4),
-            vulnerable_hosts: row.get(5),
+            fixable_vulnerable_hosts: row.get(5),
         })
         .collect())
 }
@@ -363,7 +364,7 @@ pub async fn software_hosts(
                     version: row.get(2),
                     arch: row.get(3),
                     last_seen_at: row.get(4),
-                    vulnerable: row.get(5),
+                    fixable_vulnerable: row.get(5),
                 },
             )
         })

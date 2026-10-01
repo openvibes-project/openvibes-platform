@@ -533,6 +533,15 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/me/home",
             get(crate::dashboards::get_home).put(crate::dashboards::set_home),
         )
+        .route(
+            "/v1/agents/{agent_id}/packages",
+            get(crate::software::list_host_packages),
+        )
+        .route("/v1/software", get(crate::software::list_software))
+        .route(
+            "/v1/software/{manager}/{name}",
+            get(crate::software::get_software),
+        )
         .route("/v1/alarms", get(crate::alarms::list_alarms))
         .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
         .route(

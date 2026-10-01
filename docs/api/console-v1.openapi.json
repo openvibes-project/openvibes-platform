@@ -539,6 +539,114 @@
         }
       }
     },
+    "/api/v1/agents/{agent_id}/packages": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "operationId": "list_host_packages",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Case-insensitive substring of the name (at most 128 bytes).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The host's installed packages, by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HostPackagePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents/{agent_id}/revoke": {
       "post": {
         "tags": [
@@ -3530,6 +3638,212 @@
         }
       }
     },
+    "/api/v1/software": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "operationId": "list_software",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Case-insensitive substring of the name (at most 128 bytes).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "fixable",
+            "in": "path",
+            "description": "Only packages with an open vulnerability with a fix on at least\none visible host.",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Packages across the caller's visible hosts, by name",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwarePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/software/{manager}/{name}": {
+      "get": {
+        "tags": [
+          "software"
+        ],
+        "operationId": "get_software",
+        "parameters": [
+          {
+            "name": "manager",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The package's versions in use and a page of its hosts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SoftwareDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No visible host has it",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vulnerabilities": {
       "get": {
         "tags": [
@@ -6292,6 +6606,73 @@
         },
         "additionalProperties": false
       },
+      "HostPackagePage": {
+        "type": "object",
+        "description": "A page of a host's packages, by name.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HostPackageView"
+            },
+            "description": "Packages on this page."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page."
+          }
+        }
+      },
+      "HostPackageView": {
+        "type": "object",
+        "description": "One installed package version on a host.",
+        "required": [
+          "manager",
+          "name",
+          "epoch",
+          "version",
+          "release",
+          "arch",
+          "fixable_vulnerable"
+        ],
+        "properties": {
+          "arch": {
+            "type": "string",
+            "description": "Architecture."
+          },
+          "epoch": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Epoch (0 when none)."
+          },
+          "fixable_vulnerable": {
+            "type": "boolean",
+            "description": "The host has an open vulnerability with a fix on this package."
+          },
+          "manager": {
+            "type": "string",
+            "description": "Package manager (`rpm`, `dpkg`)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Package name."
+          },
+          "release": {
+            "type": "string",
+            "description": "Release (empty for dpkg)."
+          },
+          "version": {
+            "type": "string",
+            "description": "Version."
+          }
+        }
+      },
       "LoginRequest": {
         "type": "object",
         "description": "One-use local login request. The password is never echoed by the API.",
@@ -6965,6 +7346,189 @@
         },
         "additionalProperties": false
       },
+      "SoftwareDetail": {
+        "type": "object",
+        "description": "One package: its versions in use and, paged, its hosts.",
+        "required": [
+          "manager",
+          "name",
+          "versions",
+          "hosts"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareHostView"
+            },
+            "description": "Hosts on this page, by hostname."
+          },
+          "manager": {
+            "type": "string",
+            "description": "Package manager."
+          },
+          "name": {
+            "type": "string",
+            "description": "Package name."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page of hosts."
+          },
+          "versions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareVersionView"
+            },
+            "description": "Versions in use on visible hosts, most hosts first."
+          }
+        }
+      },
+      "SoftwareHostView": {
+        "type": "object",
+        "description": "One host that has the package.",
+        "required": [
+          "agent_id",
+          "version",
+          "arch",
+          "fixable_vulnerable"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "arch": {
+            "type": "string",
+            "description": "Architecture."
+          },
+          "fixable_vulnerable": {
+            "type": "boolean",
+            "description": "It has an open vulnerability with a fix there."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname, when known."
+          },
+          "last_seen_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last contact (RFC 3339)."
+          },
+          "version": {
+            "type": "string",
+            "description": "The version it has (`epoch:version-release`)."
+          }
+        }
+      },
+      "SoftwarePage": {
+        "type": "object",
+        "description": "A page of the fleet's software, by name.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareView"
+            },
+            "description": "Packages on this page."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Opaque cursor for the next page."
+          }
+        }
+      },
+      "SoftwareVersionView": {
+        "type": "object",
+        "description": "One version of a package in use.",
+        "required": [
+          "epoch",
+          "version",
+          "release",
+          "arch",
+          "hosts",
+          "fixable_vulnerable_hosts"
+        ],
+        "properties": {
+          "arch": {
+            "type": "string",
+            "description": "Architecture."
+          },
+          "epoch": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Epoch."
+          },
+          "fixable_vulnerable_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, hosts where it has an open vulnerability with a fix."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible hosts with it."
+          },
+          "release": {
+            "type": "string",
+            "description": "Release."
+          },
+          "version": {
+            "type": "string",
+            "description": "Version."
+          }
+        }
+      },
+      "SoftwareView": {
+        "type": "object",
+        "description": "One package across the caller's visible hosts.",
+        "required": [
+          "manager",
+          "name",
+          "hosts",
+          "versions",
+          "fixable_vulnerable_hosts"
+        ],
+        "properties": {
+          "fixable_vulnerable_hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible hosts where it has an open vulnerability with a fix."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible hosts with any version of it."
+          },
+          "manager": {
+            "type": "string",
+            "description": "Package manager."
+          },
+          "name": {
+            "type": "string",
+            "description": "Package name."
+          },
+          "versions": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct versions in use."
+          }
+        }
+      },
       "UpdateAlarmTriageRequest": {
         "type": "object",
         "description": "A triage change; the same rules as findings triage.",
@@ -7361,6 +7925,10 @@
     {
       "name": "alarms",
       "description": "Scope-filtered threat alarms and their triage"
+    },
+    {
+      "name": "software",
+      "description": "Installed software per host and across the caller's hosts"
     },
     {
       "name": "findings",

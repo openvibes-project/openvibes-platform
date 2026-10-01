@@ -151,6 +151,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/packages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_host_packages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/revoke": {
         parameters: {
             query?: never;
@@ -768,6 +784,38 @@ export interface paths {
             cookie?: never;
         };
         get: operations["session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/software": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_software"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/software/{manager}/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_software"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1814,6 +1862,33 @@ export interface components {
             /** @description Visible dashboard id, or `null`. */
             dashboard_id?: string | null;
         };
+        /** @description A page of a host's packages, by name. */
+        HostPackagePage: {
+            /** @description Packages on this page. */
+            items: components["schemas"]["HostPackageView"][];
+            /** @description Opaque cursor for the next page. */
+            next_cursor?: string | null;
+        };
+        /** @description One installed package version on a host. */
+        HostPackageView: {
+            /** @description Architecture. */
+            arch: string;
+            /**
+             * Format: int32
+             * @description Epoch (0 when none).
+             */
+            epoch: number;
+            /** @description The host has an open vulnerability with a fix on this package. */
+            fixable_vulnerable: boolean;
+            /** @description Package manager (`rpm`, `dpkg`). */
+            manager: string;
+            /** @description Package name. */
+            name: string;
+            /** @description Release (empty for dpkg). */
+            release: string;
+            /** @description Version. */
+            version: string;
+        };
         /** @description One-use local login request. The password is never echoed by the API. */
         LoginRequest: {
             /**
@@ -2094,6 +2169,87 @@ export interface components {
             schema_version: number;
             /** @description Base64url Ed25519 signature. */
             signature_base64url: string;
+        };
+        /** @description One package: its versions in use and, paged, its hosts. */
+        SoftwareDetail: {
+            /** @description Hosts on this page, by hostname. */
+            hosts: components["schemas"]["SoftwareHostView"][];
+            /** @description Package manager. */
+            manager: string;
+            /** @description Package name. */
+            name: string;
+            /** @description Opaque cursor for the next page of hosts. */
+            next_cursor?: string | null;
+            /** @description Versions in use on visible hosts, most hosts first. */
+            versions: components["schemas"]["SoftwareVersionView"][];
+        };
+        /** @description One host that has the package. */
+        SoftwareHostView: {
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Architecture. */
+            arch: string;
+            /** @description It has an open vulnerability with a fix there. */
+            fixable_vulnerable: boolean;
+            /** @description Hostname, when known. */
+            hostname?: string | null;
+            /** @description Last contact (RFC 3339). */
+            last_seen_at?: string | null;
+            /** @description The version it has (`epoch:version-release`). */
+            version: string;
+        };
+        /** @description A page of the fleet's software, by name. */
+        SoftwarePage: {
+            /** @description Packages on this page. */
+            items: components["schemas"]["SoftwareView"][];
+            /** @description Opaque cursor for the next page. */
+            next_cursor?: string | null;
+        };
+        /** @description One version of a package in use. */
+        SoftwareVersionView: {
+            /** @description Architecture. */
+            arch: string;
+            /**
+             * Format: int32
+             * @description Epoch.
+             */
+            epoch: number;
+            /**
+             * Format: int64
+             * @description Of those, hosts where it has an open vulnerability with a fix.
+             */
+            fixable_vulnerable_hosts: number;
+            /**
+             * Format: int64
+             * @description Visible hosts with it.
+             */
+            hosts: number;
+            /** @description Release. */
+            release: string;
+            /** @description Version. */
+            version: string;
+        };
+        /** @description One package across the caller's visible hosts. */
+        SoftwareView: {
+            /**
+             * Format: int64
+             * @description Visible hosts where it has an open vulnerability with a fix.
+             */
+            fixable_vulnerable_hosts: number;
+            /**
+             * Format: int64
+             * @description Visible hosts with any version of it.
+             */
+            hosts: number;
+            /** @description Package manager. */
+            manager: string;
+            /** @description Package name. */
+            name: string;
+            /**
+             * Format: int64
+             * @description Distinct versions in use.
+             */
+            versions: number;
         };
         /** @description A triage change; the same rules as findings triage. */
         UpdateAlarmTriageRequest: {
@@ -2675,6 +2831,70 @@ export interface operations {
             };
             /** @description Read unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_host_packages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                /** @description Case-insensitive substring of the name (at most 128 bytes). */
+                q: string | null;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The host's installed packages, by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostPackagePage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or outside the caller's scope */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4858,6 +5078,128 @@ export interface operations {
             };
             /** @description Authentication store is unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_software: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Case-insensitive substring of the name (at most 128 bytes). */
+                q: string | null;
+                /**
+                 * @description Only packages with an open vulnerability with a fix on at least
+                 *     one visible host.
+                 */
+                fixable: boolean | null;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Packages across the caller's visible hosts, by name */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwarePage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_software: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                manager: string;
+                name: string;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The package's versions in use and a page of its hosts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SoftwareDetail"];
+                };
+            };
+            /** @description Invalid cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No visible host has it */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

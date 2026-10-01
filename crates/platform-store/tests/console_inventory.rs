@@ -85,7 +85,7 @@ async fn a_hosts_packages_are_sorted_paged_filtered_and_flagged() {
         .unwrap();
     let names: Vec<(&str, &str, bool)> = all
         .iter()
-        .map(|(_, p)| (p.name.as_str(), p.arch.as_str(), p.vulnerable))
+        .map(|(_, p)| (p.name.as_str(), p.arch.as_str(), p.fixable_vulnerable))
         .collect();
     assert_eq!(
         names,
@@ -137,7 +137,7 @@ async fn a_hosts_packages_are_sorted_paged_filtered_and_flagged() {
     assert!(
         db_packages
             .iter()
-            .any(|(_, p)| p.name == "openssl" && !p.vulnerable)
+            .any(|(_, p)| p.name == "openssl" && !p.fixable_vulnerable)
     );
     db.drop().await;
 }
@@ -185,7 +185,7 @@ async fn fleet_software_counts_only_visible_hosts() {
     let row = |rows: &[console_inventory::Software], name: &str| {
         rows.iter()
             .find(|s| s.name == name)
-            .map(|s| (s.hosts, s.versions, s.vulnerable_hosts))
+            .map(|s| (s.hosts, s.versions, s.fixable_vulnerable_hosts))
     };
     // openssl: web-01, db-01, the imported host; two versions; only web-01
     // has it open (the imported host has no vulnerability rows).
@@ -204,7 +204,7 @@ async fn fleet_software_counts_only_visible_hosts() {
 
     // Vulnerable only, a name filter, and the keyset cursor.
     let vulnerable = SoftwareFilters {
-        vulnerable: true,
+        fixable: true,
         ..SoftwareFilters::default()
     };
     let flagged = console_inventory::software(&client, &AgentScope::Global, &vulnerable, None, 10)
@@ -243,7 +243,7 @@ async fn one_packages_versions_and_hosts() {
             .unwrap();
     let summary: Vec<(&str, i64, i64)> = versions
         .iter()
-        .map(|v| (v.version.as_str(), v.hosts, v.vulnerable_hosts))
+        .map(|v| (v.version.as_str(), v.hosts, v.fixable_vulnerable_hosts))
         .collect();
     assert_eq!(summary, [("3.0.13", 2, 1), ("3.0.14", 1, 0)]);
     let hosts =
@@ -256,7 +256,7 @@ async fn one_packages_versions_and_hosts() {
             (
                 h.hostname.as_deref().unwrap(),
                 h.version.as_str(),
-                h.vulnerable,
+                h.fixable_vulnerable,
             )
         })
         .collect();
@@ -359,7 +359,7 @@ async fn measure_the_fleet_aggregate_on_1000_hosts() {
         .unwrap();
     let all = SoftwareFilters::default();
     let vulnerable = SoftwareFilters {
-        vulnerable: true,
+        fixable: true,
         ..SoftwareFilters::default()
     };
     let time = |label: &'static str| {
@@ -390,7 +390,7 @@ async fn measure_the_fleet_aggregate_on_1000_hosts() {
         .unwrap();
     done();
     assert_eq!(flagged.len(), 50);
-    assert_eq!(flagged[0].vulnerable_hosts, 500);
+    assert_eq!(flagged[0].fixable_vulnerable_hosts, 500);
     let done = time("software, scoped to a 100-host group, first page");
     let scoped = console_inventory::software(&client, &prod(), &all, None, 50)
         .await
