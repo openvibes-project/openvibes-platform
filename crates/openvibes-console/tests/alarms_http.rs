@@ -132,6 +132,8 @@ async fn user(
             password_phc: phc.as_str(),
             role_id: role,
             actor_id: "test",
+            actor_kind: "local_admin",
+            password_must_change: false,
             now: Utc::now(),
         },
     )
