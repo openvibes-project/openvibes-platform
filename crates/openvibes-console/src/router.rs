@@ -289,7 +289,15 @@ pub(crate) fn authenticated_router_with_assistant(
         assistant,
     };
     let router = Router::new()
-        .nest("/api", authenticated_api_router().with_state(state.clone()))
+        .nest(
+            "/api",
+            authenticated_api_router()
+                .layer(middleware::from_fn_with_state(
+                    state.clone(),
+                    crate::auth_first::authenticate_first,
+                ))
+                .with_state(state.clone()),
+        )
         .nest(
             "/auth",
             authenticated_auth_router().with_state(state.clone()),

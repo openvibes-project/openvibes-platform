@@ -16,6 +16,7 @@ mod api;
 mod assets;
 mod assistant;
 mod auth;
+mod auth_first;
 mod config;
 mod dashboards;
 mod error;
