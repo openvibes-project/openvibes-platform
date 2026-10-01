@@ -291,6 +291,28 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
             "{uri}"
         );
     }
+    // Nothing about a request body is answered before authentication
+    // (tripwire #1601): a bad body is still 403 for Bob, 401 for nobody.
+    for bad in [
+        serde_json::json!({"username": "b b"}),
+        serde_json::json!("not an object"),
+    ] {
+        let forced = post(&router, "/api/v1/access-control/users", &bob, bad.clone()).await;
+        assert_eq!(forced.status(), StatusCode::FORBIDDEN, "{bad}");
+        assert_eq!(
+            body(forced).await["code"],
+            "password_change_required",
+            "{bad}"
+        );
+        let nobody = post(
+            &router,
+            "/api/v1/access-control/users",
+            &(String::new(), String::new()),
+            bad.clone(),
+        )
+        .await;
+        assert_eq!(nobody.status(), StatusCode::UNAUTHORIZED, "{bad}");
+    }
 
     // The current password is required, the new one must be long and new.
     let change = |current: &str, new: &str| serde_json::json!({"current_password": current, "new_password": new});

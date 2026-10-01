@@ -101,6 +101,23 @@ pub(crate) async fn create_user(
     headers: HeaderMap,
     payload: Result<Json<crate::CreateUserRequest>, JsonRejection>,
 ) -> Response {
+    // Authentication, CSRF and permission first: nothing about the body is
+    // answered to a caller who may not make the request (no validation
+    // oracle; a forced-change session gets 403, not 400).
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::RbacManage, true).await
+        {
+            Ok(value) => value,
+            Err(response) => return response,
+        };
+    // Users get global roles; only a global administrator makes them.
+    if !matches!(scope, AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
     let Ok(Json(request)) = payload else {
         return bad_request("invalid_user", "Provide a username, display name and role");
     };
@@ -120,20 +137,6 @@ pub(crate) async fn create_user(
             "Use 1 to 64 letters, digits or ._@+- for the username, 1 to 160 characters for the name, and a built-in role",
         );
     };
-    let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::RbacManage, true).await
-        {
-            Ok(value) => value,
-            Err(response) => return response,
-        };
-    // Users get global roles; only a global administrator makes them.
-    if !matches!(scope, AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Access is not available",
-        ));
-    }
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
