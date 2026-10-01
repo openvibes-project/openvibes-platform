@@ -403,6 +403,15 @@ Code over these tables:
   expired accepted risk on recurrence, and keeps `alarms_dropped_total`.
   `args_sha256` is the `command` suppression hash (SHA-256 of the args'
   JSON array).
+- `console_inventory` (console): a host's packages, the fleet's software
+  and one package's versions and hosts, scoped to the caller's agents
+  (counts over visible hosts only). The fleet query picks the page's names
+  first, in name order, so the scan stops early. It then counts hosts and
+  versions by grouping, not `count(DISTINCT)`, which sorted every row
+  under the text collation. A global caller skips the visibility join, and
+  a scoped caller's hosts are resolved once. `fixable_vulnerable` is an
+  open vulnerability with a fix naming the package. An ignored test
+  measures it at 1,000 hosts × 2,000 packages.
 - `console_alarms` (console): scoped `list` (filters, keyset `(last_seen,
   id)`), `detail`, and `update_triage` with the findings workflow, history
   and audit.

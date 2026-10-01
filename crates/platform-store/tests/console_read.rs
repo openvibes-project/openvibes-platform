@@ -120,11 +120,34 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
         ),
         (2, 1, 1)
     );
+    // The Host page's Overview: OS, running kernel, software "as of".
+    let inventory_at = now - Duration::minutes(2);
+    client
+        .execute(
+            "UPDATE agents SET os_id = 'fedora', os_version = '44',
+                running_kernel = '6.17.4-300.fc44.x86_64', inventory_at = $2
+             WHERE agent_id = $1",
+            &[&RECENT, &inventory_at],
+        )
+        .await
+        .unwrap();
     let agent = platform_store::console_read::agent(&client, RECENT, now)
         .await
         .unwrap()
         .unwrap();
     assert_eq!(agent.hostname.as_deref(), Some("host-a"));
+    assert_eq!(
+        (agent.os_id.as_deref(), agent.os_version.as_deref()),
+        (Some("fedora"), Some("44"))
+    );
+    assert_eq!(
+        agent.running_kernel.as_deref(),
+        Some("6.17.4-300.fc44.x86_64")
+    );
+    assert_eq!(
+        agent.inventory_at.map(|at| at.timestamp()),
+        Some(inventory_at.timestamp())
+    );
     let certificates = platform_store::console_read::certificates(
         &client,
         RECENT,

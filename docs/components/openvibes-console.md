@@ -117,6 +117,36 @@ link host/advisory views, preserve opaque cursors, disable triage for readers,
 and send mutations with the session CSRF token. The demo server supplies
 synthetic API models for these routes.
 
+### Installed software (assets v1, `src/software.rs`)
+
+All three need `agents.read` and are scoped like the agents. A scoped
+caller's counts include only hosts in the scope, and a host or package no
+visible host has is a 404. Revoked agents are not hosts and never count;
+imported hosts do. "Fixable vulnerable" means an open
+vulnerability **with a fix** naming the package on that host;
+vulnerabilities without a fix (thousands on a Debian host) are left out
+and stay in the Vulnerabilities view.
+
+- The agent list and detail (`AgentView`) also carry `os_id`, `os_version`
+  and `running_kernel` from the last inventory, and `inventory_at` (the
+  time the software list is "as of"). Each is null until an inventory
+  arrives.
+- `GET /api/v1/agents/{agent_id}/packages`: the host's packages by name
+  (manager, name, epoch, version, release, arch, `fixable_vulnerable`).
+  `q` is a case-insensitive substring of the name (at most 128 bytes).
+- `GET /api/v1/software`: one row per (manager, name) over visible hosts,
+  by name, with `hosts`, `versions` (distinct epoch/version/release) and
+  `fixable_vulnerable_hosts`. Filters are `q` and `fixable=true`.
+- `GET /api/v1/software/{manager}/{name}`: the versions in use (most hosts
+  first) and a page of the hosts that have it (hostname, version, arch,
+  last contact, `fixable_vulnerable`).
+
+Cursors are opaque (base64url JSON of the keyset), and `limit` is 1–100
+(default 50). Measured on 1,000 hosts × 2,000 packages with 50 k open
+vulnerabilities: a software page takes ~235 ms, the `fixable` filter
+~365 ms, a 100-host scope 78 ms, and one host's packages 6 ms
+(`platform-store` test `measure_the_fleet_aggregate_on_1000_hosts`).
+
 ### Threat alarms (P14, `src/alarms.rs`)
 
 - `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped
