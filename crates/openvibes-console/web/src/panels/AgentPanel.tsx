@@ -14,6 +14,9 @@ import { toast } from "../ui/toast";
 
 // ponytail: the OS fields arrive with the Assets API (#139); optional until
 // every platform sends them.
+/** Active alarms the Host page lists; more opens the Alarms view. */
+const ALARMS_SHOWN = 100;
+
 type Detail = Agent & { certificates: Certificate[]; os_id?: string | null; os_version?: string | null; running_kernel?: string | null; inventory_at?: string | null };
 
 /** The host's installed software (Assets v1), filtered on the server. */
@@ -57,7 +60,10 @@ export function AgentPanel({ id }: { id: string }) {
   const agent = useResource<Detail>(`/api/v1/agents/${encodeURIComponent(id)}`);
   const findings = useAllPages<Finding>(can("findings.read") ? "/api/v1/findings/latest" : null);
   const vulns = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? `/api/v1/vulnerabilities?host=${encodeURIComponent(id)}` : null);
-  const alarms = useAllPages<AlarmSummary>(can("alarms.read") ? `/api/v1/alarms?agent_id=${encodeURIComponent(id)}&state=active` : null, 100);
+  const alarms = useAllPages<AlarmSummary>(can("alarms.read") ? `/api/v1/alarms?agent_id=${encodeURIComponent(id)}&state=active` : null, ALARMS_SHOWN);
+  const alarmItems = alarms.data ?? [];
+  // A full page may hide more: say so rather than a round number.
+  const alarmCount = alarmItems.length >= ALARMS_SHOWN ? `${ALARMS_SHOWN}+` : String(alarmItems.length);
   useProvideTitle({ kind: "agent", id }, agent.data?.hostname ?? undefined);
   const mine = useMemo(() => (findings.data ?? []).filter((finding) => finding.agent_id === id)
     .sort((a, b) => (severityOrder[a.severity] ?? 9) - (severityOrder[b.severity] ?? 9)), [findings.data, id]);
@@ -90,16 +96,16 @@ export function AgentPanel({ id }: { id: string }) {
         <div><span className="subtle">Last contact</span><strong><Ago value={data.last_seen_at} /></strong></div>
         <div><span className="subtle">Findings</span><strong className="num">{findings.loading ? "…" : mine.length}</strong></div>
         <div><span className="subtle">Vulnerabilities</span><strong className="num">{vulns.loading ? "…" : vulnItems.length}</strong></div>
-        {can("alarms.read") && <div><span className="subtle">Active alarms</span><strong className="num">{alarms.loading ? "…" : (alarms.data ?? []).length}</strong></div>}
+        {can("alarms.read") && <div><span className="subtle">Active alarms</span><strong className="num">{alarms.loading ? "…" : alarmCount}</strong></div>}
         <div><span className="subtle">Enrolled</span><strong>{date(data.enrolled_at)}</strong></div>
       </div>
       <Tabs tabs={[
         { id: "findings", label: "Findings", count: mine.length },
         { id: "vulns", label: "Vulnerabilities", count: vulnItems.length },
-        { id: "alarms", label: "Alarms", count: (alarms.data ?? []).length },
+        ...(can("alarms.read") ? [{ id: "alarms", label: "Alarms", count: alarmItems.length }] as const : []),
         { id: "software", label: "Software" },
         { id: "details", label: "Details" },
-      ] as const}>
+      ]}>
         {(tab) => tab === "findings" ? (
           mine.length === 0 ? <Empty title={findings.loading ? "Loading…" : "No findings"}>{findings.loading ? null : "This host matches no rule right now."}</Empty> : (
             <ul className="list">
@@ -130,9 +136,9 @@ export function AgentPanel({ id }: { id: string }) {
             </ul>
           )
         ) : tab === "alarms" ? (
-          (alarms.data ?? []).length === 0 ? <Empty title={alarms.loading ? "Loading…" : "No active alarms"} /> : (
+          alarmItems.length === 0 ? <Empty title={alarms.loading ? "Loading…" : "No active alarms"} /> : (
             <ul className="list">
-              {(alarms.data ?? []).map((alarm) => (
+              {alarmItems.map((alarm) => (
                 <li key={alarm.id}>
                   <ObjectLink to={{ kind: "alarm", id: alarm.id }} className="list__row">
                     <SeverityBadge severity={alarm.severity} />
