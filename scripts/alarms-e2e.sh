@@ -131,7 +131,7 @@ ID=$(api GET /api/v1/alarms | jq -r '.items[] | select(.rule_id == "web-shell") 
 DETAIL=$(api GET "/api/v1/alarms/$ID")
 jq -e '.parent_exe == "/tmp/fake-nginx" and .process.args == ["sh", "-c", "id"]
        and .ancestors[0].exe == "/tmp/fake-nginx" and (.ancestors | length) >= 2
-       and .state == "new"' <<<"$DETAIL" >/dev/null ||
+       and .state == "open"' <<<"$DETAIL" >/dev/null ||
     { echo "$DETAIL" | jq . >&2; fail "the alarm's process tree"; }
 echo "ok: the alarm reads back from GET /api/v1/alarms/{id} with its process tree"
 
@@ -145,7 +145,7 @@ jq -e '.scope == "program"' <<<"$SUPPRESSION" >/dev/null ||
 suppressed() {
     # The list hides suppressed alarms unless asked.
     api GET '/api/v1/alarms?suppressed=true' | jq -e '.items[] | select(.rule_id == "web-shell" and .id != "'"$ID"'"
-        and .suppressed_by != null and .state != "new")' >/dev/null
+        and .suppressed_by != null and .state != "open")' >/dev/null
 }
 wait_for "the next alarm is closed by the program suppression" 60 suppressed
 echo "ok: alarms end to end (real agent, real kernel, platform, console API)"
