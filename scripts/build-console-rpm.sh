@@ -67,7 +67,8 @@ for version in "${versions[@]}"; do
         --define "console_repo_root ${repository_root}" \
         --define "console_npm_cache_name ${cache_name}" \
         --define "console_npm_cache_sha256 ${expected_sha256}" \
-        --define "ov_version ${version}"
+        --define "ov_version ${version}" \
+        --define "ov_release ${OV_RELEASE:-1}"
 done
 
 ls "${repository_root}"/target/rpm-console/RPMS/*/openvibes-console-*.rpm
