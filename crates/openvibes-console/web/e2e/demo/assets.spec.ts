@@ -111,6 +111,31 @@ test("on a phone the Host page's tab strip scrolls itself, never the page", asyn
   expect(shifted).toBe(false);
 });
 
+test("panels load the hosts after the first page with Show more (#104)", async ({ page }) => {
+  await page.goto("/ports");
+  await page.locator(".view tbody tr").filter({ hasText: "22/tcp" }).first().locator("td").first().click();
+  const inspector = page.locator(".inspector");
+  const rows = inspector.getByRole("list", { name: "Hosts listening on this port" }).locator("li");
+  await expect(rows).toHaveCount(50);
+  const more = inspector.getByRole("button", { name: "Show more hosts" });
+  await more.click();
+  await expect(rows).toHaveCount(100);
+  await more.click();
+  await more.click();
+  await expect(rows).toHaveCount(183);
+  await expect(more).toHaveCount(0);
+  await settled(page);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  // The same in a package's panel; Enter on the focused button works too.
+  await page.goto("/software");
+  await page.locator(".view tbody tr").filter({ hasText: /^bash/ }).first().locator("td").first().click();
+  const pkg = inspector.getByRole("list", { name: "Hosts that have it" }).locator("li");
+  await expect(pkg).toHaveCount(50);
+  await inspector.getByRole("button", { name: "Show more hosts" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(pkg).toHaveCount(100);
+});
+
 test("a host whose lists were cut says some ports are not listed", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
   await page.locator(".view tbody tr").filter({ hasText: "build-" }).first().locator("td").nth(1).click();

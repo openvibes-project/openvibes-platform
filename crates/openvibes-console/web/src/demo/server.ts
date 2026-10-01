@@ -433,20 +433,22 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     for (const agent of hosts()) for (const s of hostServices(agent.id).services) counts.set(s.unit, (counts.get(s.unit) ?? 0) + 1);
     return json([...counts].sort(([a], [b]) => a.localeCompare(b)).map(([unit, hosts]) => ({ unit, hosts })));
   });
-  route("GET", "/api/v1/ports/{protocol}/{port}", "agents.read", ({ protocol = "", port = "" }) => {
+  route("GET", "/api/v1/ports/{protocol}/{port}", "agents.read", ({ protocol = "", port = "" }, query) => {
     const found = hosts().flatMap((agent) => hostServices(agent.id).listeners
       .filter((l) => l.protocol === protocol && String(l.port) === port)
       .map((l) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, address: l.address, exposed: l.exposed, service: l.service, program: l.program, last_seen_at: agent.last_seen_at ?? null })));
     if (found.length === 0) return problem(404, "port_not_found", "No host listens on this port");
-    return json({ protocol, port: Number(port), hosts: found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), next_cursor: null });
+    const { items, next_cursor } = page(found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), query);
+    return json({ protocol, port: Number(port), hosts: items, next_cursor });
   });
-  route("GET", "/api/v1/services/{unit}", "agents.read", ({ unit = "" }) => {
+  route("GET", "/api/v1/services/{unit}", "agents.read", ({ unit = "" }, query) => {
     const name = decodeURIComponent(unit);
     const found = hosts().flatMap((agent) => hostServices(agent.id).services
       .filter((s) => s.unit === name)
       .map((s) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, programs: s.programs, processes: s.processes, run_as: s.run_as, last_seen_at: agent.last_seen_at ?? null })));
     if (found.length === 0) return problem(404, "service_not_found", "No host runs this service");
-    return json({ unit: name, hosts: found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), next_cursor: null });
+    const { items, next_cursor } = page(found.sort((a, b) => (a.hostname ?? "").localeCompare(b.hostname ?? "")), query);
+    return json({ unit: name, hosts: items, next_cursor });
   });
   route("GET", "/api/v1/software", "agents.read", (_, query) => {
     const q = (query.get("q") ?? "").toLowerCase();
@@ -455,7 +457,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       .map((row) => ({ manager: row.manager, name: row.name, hosts: row.hosts.size, versions: row.versions.size, fixable_vulnerable_hosts: row.fixable.size }));
     return json(page(items, query));
   });
-  route("GET", "/api/v1/software/{manager}/{name}", "agents.read", ({ manager = "", name = "" }) => {
+  route("GET", "/api/v1/software/{manager}/{name}", "agents.read", ({ manager = "", name = "" }, query) => {
     const found = hosts().flatMap((agent) => hostPackages(agent.id).filter((p) => p.manager === manager && p.name === decodeURIComponent(name)).map((p) => ({ agent, p })));
     if (found.length === 0) return problem(404, "not_found", "No visible host has it");
     const versions = new Map<string, { epoch: number; version: string; release: string; arch: string; hosts: number; fixable_vulnerable_hosts: number }>();
@@ -466,11 +468,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       if (p.fixable_vulnerable) v.fixable_vulnerable_hosts += 1;
       versions.set(key, v);
     }
-    return json({
-      manager, name: decodeURIComponent(name), versions: [...versions.values()],
-      hosts: found.map(({ agent, p }) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, version: `${p.version}-${p.release}`, arch: p.arch, last_seen_at: agent.last_seen_at ?? null, fixable_vulnerable: p.fixable_vulnerable })),
-      next_cursor: null,
-    });
+    const { items, next_cursor } = page(found.map(({ agent, p }) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, version: `${p.version}-${p.release}`, arch: p.arch, last_seen_at: agent.last_seen_at ?? null, fixable_vulnerable: p.fixable_vulnerable })), query);
+    return json({ manager, name: decodeURIComponent(name), versions: [...versions.values()], hosts: items, next_cursor });
   });
 
   route("GET", "/api/v1/vulnerabilities", "vulnerabilities.read", (_, query) => {
