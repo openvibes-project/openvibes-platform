@@ -97,6 +97,26 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
 - **The demo** (preview and dev only) keeps dashboards and home choices in the browser's
   `localStorage` (`openvibes.v2.demo.dashboards`).
 
+## Threat alarms (P14)
+
+- **Alarms** (`/alarms`, `g m`, `alarms.read`): newest first; severity,
+  message with `parent → program`, host, count, triage, last seen. Resolved
+  and suppressed alarms are hidden unless their chips are on; the empty
+  state explains the auditd / `process_events` requirement. Each row has a
+  **Quiet…** menu (with `alarms.suppress`): this host, or (global scope
+  only) this program or this exact command on any host.
+- **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
+  process: program, masked command line, uid and euid when they differ,
+  working directory, pid), rule and versions, first/last seen, count, and
+  the triage bar (findings workflow). Choosing false positive offers
+  "Don't alarm on this again" with the same scopes.
+- **Alarm suppressions** (`/alarm-suppressions`, `g q`): who, when and
+  why, Remove (kept as history on the server); a row opens the matching
+  alarms.
+- Alarms are not offered to the assistant (no "Ask about" on the panel).
+- The demo serves alarms and suppressions with the server's rules
+  (scoped persona, workflow, global-only program/command).
+
 ## Interfaces
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.

@@ -11,7 +11,7 @@ describe("demo server", () => {
     const server = createDemoServer({ persona: "viewer" });
     const session = await json(await server.handle("GET", "/api/v1/session"));
     const permissions = (session.capabilities as { permission: string }[]).map((c) => c.permission);
-    expect(permissions).toEqual(["agents.read", "findings.read", "vulnerabilities.read"]);
+    expect(permissions).toEqual(["agents.read", "findings.read", "vulnerabilities.read", "alarms.read"]);
   });
 
   it("refuses what the persona may not do, with problem details", async () => {
@@ -280,4 +280,23 @@ describe("demo server", () => {
     expect((await server.handle("POST", "/api/v1/dashboards", { name: "One more", layout })).status).toBe(422);
   });
 
+});
+
+describe("demo alarms (P14)", () => {
+  it("follows the server's rules for triage and suppressions", async () => {
+    const analyst = createDemoServer({ persona: "analyst" });
+    const list = await json(await analyst.handle("GET", "/api/v1/alarms"));
+    const first = (list.items as { id: string; state: string }[]).find((a) => a.state === "open");
+    expect(first).toBeDefined();
+    const id = first?.id ?? "";
+    const skip = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
+    expect(skip.status).toBe(409);
+    const step = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "investigating" }, { "if-match": "\"1\"" });
+    expect(step.status).toBe(200);
+    const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
+    expect(created.status).toBe(201);
+    const scoped = createDemoServer({ persona: "scoped_operator" });
+    const refused = await scoped.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
+    expect(refused.status).toBe(403);
+  });
 });

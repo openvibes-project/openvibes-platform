@@ -3,6 +3,8 @@
     "/",
     "/login",
     "/findings",
+    "/alarms",
+    "/alarm-suppressions",
     "/vulnerabilities",
     "/agents",
     "/enrollment",

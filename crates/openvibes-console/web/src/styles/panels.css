@@ -208,3 +208,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .gallery__item span.grow { display: grid; }
 .dashboard-name { font-size: 20px; font-weight: 600; height: 40px; width: min(420px, 100%); }
 .dashboard-header .view-header__title h1 { font-size: 22px; }
+/* Alarm process tree: oldest ancestor at the top, the alarming process last. */
+.process-tree { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.process { position: relative; padding: 8px 10px 8px 22px; border-radius: var(--r-2); background: var(--surface-2); overflow-wrap: anywhere; }
+.process::before { content: ""; position: absolute; left: 9px; top: 0; bottom: 0; border-left: 2px solid var(--line-strong); }
+.process--current { background: var(--surface-3); }
+.process--current::before { border-left-color: var(--bad); }
+.process__args { white-space: pre-wrap; }

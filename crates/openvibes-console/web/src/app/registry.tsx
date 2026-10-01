@@ -11,11 +11,13 @@ import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
 import { AssetGroupPanel, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
+import { AlarmPanel } from "../panels/AlarmPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
 import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPanel, UserPanel } from "../panels/OpsPanels";
 import type { IconName } from "../ui/Icon";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
 import { Agents } from "../views/Agents";
+import { AlarmSuppressions, Alarms } from "../views/Alarms";
 import { Findings } from "../views/Findings";
 import { Vulnerabilities } from "../views/Vulnerabilities";
 
@@ -37,9 +39,11 @@ export type ViewDef = {
 export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/findings", label: "Findings", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
+  { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Agents", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
+  { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
   { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
   { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
@@ -62,6 +66,7 @@ export function objectTitle(ref: { kind: string; id: string }): string {
 export const panels: Readonly<Record<string, PanelDef>> = {
   agent: { label: "Agent", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
   finding: { label: "Finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
+  alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
