@@ -87,7 +87,10 @@ the old key; and `m` after a first install that stopped before the CA step
 offers the install again, not a Repair (#87).
 Only rows on screen take the focus: with keep data, one `j` goes from the
 choice to `[ Uninstall ]` (#74).
-As root no password is asked (sudo needs none; #82). Each runs one step
+As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
+its helper directly, keeping `SUDO_USER` so Setup still names the person who
+started it (operators group, root key owner); otherwise the password prompt
+suggests starting it that way (#92). Each runs one step
 per refresh like the install, asking for the password
 once. The steps are those of
 `setup --quick` (below).

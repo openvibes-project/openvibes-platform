@@ -35,10 +35,18 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let (lines, help): (Vec<Line>, &str) = match setup.phase {
         Phase::Form => (form(app), FORM_KEYS),
         Phase::Password(_) => (
-            vec![Line::raw(format!(
-                "Your password (for sudo; used for this run only): {}",
-                setup.prompt.masked()
-            ))],
+            vec![
+                Line::raw(format!(
+                    "Your password (for sudo; used for this run only): {}",
+                    setup.prompt.masked()
+                )),
+                Line::raw(""),
+                // #92: started with sudo, the TUI never asks.
+                Line::styled(
+                    "Tired of typing it? Quit (Esc, then q) and start with: sudo openvibes-admin",
+                    Style::default().add_modifier(Modifier::DIM),
+                ),
+            ],
             "Enter confirm  Esc cancel",
         ),
         Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
