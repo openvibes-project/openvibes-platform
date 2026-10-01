@@ -185,6 +185,7 @@ jobs:
 
       - name: Build lower-version RPMs for the update test
         env:
+          OV_RELEASE: 1.1.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"
           OV_LLM: "0"
           OV_VERSION: "0.0.9"
@@ -196,11 +197,13 @@ jobs:
 
       - name: Build RPMs
         env:
+          OV_RELEASE: 1.1.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
       - name: Build offline console RPM
         env:
+          OV_RELEASE: 1.1.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"
         run: |
           archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)

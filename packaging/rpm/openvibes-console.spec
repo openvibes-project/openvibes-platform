@@ -4,7 +4,10 @@
 
 Name:           openvibes-console
 Version:        %{ov_version}
-Release:        1%{?dist}
+# Release builds use 1; CI builds pass ov_release=1.1.ci<run>, which sorts
+# above the published 0.x.y-1 and below the next version, so a test
+# install never looks identical to the published package (board #88).
+Release:        %{?ov_release}%{!?ov_release:1}%{?dist}
 Summary:        OpenVIBES web console
 License:        MIT
 URL:            https://github.com/openvibes-project/openvibes-platform
