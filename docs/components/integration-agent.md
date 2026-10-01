@@ -20,6 +20,11 @@ PostgreSQL. Everything runs as the current, unprivileged user under
    as started (protocol P13): two open `current_findings` rows with source
    `changes` for the agent and two history rows in `findings`, each naming
    its rule set.
+   Before that, with the agent's own certificate (read from its
+   `identity.sqlite`), curl posts an `AlarmBatch` (protocol P14) three
+   times: one alarm stored, its count raised to 3; after a `program`
+   suppression is inserted, a second alarm is stored closed as a false
+   positive.
 3. **Restart:** the agent is stopped and started; it reconnects (a new
    accepted heartbeat), scans again, and with unchanged matches nothing new
    is stored.
