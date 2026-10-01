@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { invalidate, request, useAllPages, useResource } from "../api/client";
-import type { AlarmDetail, AlarmSummary, AlarmSuppression } from "../api/types";
+import type { AlarmDetail, AlarmPage, AlarmSummary, AlarmSuppression } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
@@ -58,7 +58,7 @@ async function closeAndQuiet(alarmId: string, scope: string, note: string): Prom
   const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
   let alarm = await request<AlarmDetail>("GET", path);
   const step = async (state: string, withNote: boolean) => {
-    await request("PUT", `${path}/triage`, { state, note: withNote ? note : null, assigned_to: null, accepted_until: null },
+    await request("PUT", `${path}/triage`, { state, note: withNote ? note : null, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
       { "if-match": `"${alarm.triage.version}"` });
     alarm = await request<AlarmDetail>("GET", path);
   };
@@ -102,7 +102,10 @@ export function Alarms() {
   const loaded = useMemo(() => alarms.data ?? [], [alarms.data]);
   const rows = useMemo(() => selectAlarms(loaded, params), [loaded, params]);
   const top = panels[panels.length - 1];
-  const filtered = params.get("state") !== "all" || params.get("suppressed") !== "true";
+  // An empty filtered page: does any alarm exist at all? If not, the
+  // empty state explains how to turn alarms on, not the chips.
+  const any = useResource<AlarmPage>(alarms.data && loaded.length === 0 ? "/api/v1/alarms?suppressed=true&limit=1" : null);
+  const none = loaded.length === 0 && any.data !== undefined && any.data.items.length === 0;
 
   return (
     <div className="view">
@@ -113,10 +116,10 @@ export function Alarms() {
           ...(["critical", "high", "medium", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s })),
         ]} />
       {alarms.error ? <div className="view-pad"><ErrorBox error={alarms.error} /></div> : alarms.loading && !alarms.data ? <Loading /> : rows.length === 0 ? (
-        <Empty icon="alarm" title={loaded.length === 0 && !filtered ? "No alarms" : "Nothing matches these filters"}>
-          {loaded.length === 0 && !filtered
+        <Empty icon="alarm" title={none ? "No alarms" : "Nothing matches these filters"}>
+          {none
             ? "Alarms appear here within seconds of a matching program start. Agents report process starts only when auditd runs and \"process_events\" is in their collectors (agent.toml)."
-            : filtered ? "Resolved and suppressed alarms are hidden; use the chips to include them." : "Clear a filter to see more."}
+            : "Resolved and suppressed alarms are hidden unless their chips are on; clear a filter to see more."}
         </Empty>
       ) : (
         <DataTable label="Alarms" rows={rows} rowKey={(a) => a.id}

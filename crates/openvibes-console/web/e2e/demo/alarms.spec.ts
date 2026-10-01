@@ -53,3 +53,9 @@ test("quieting from the list asks first, closes the alarm and records why", asyn
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "download-and-run" })).toContainText("admin's install script");
 });
+
+test("with alarms present, an empty filter result hints at the filters, not setup", async ({ page }) => {
+  await page.goto("/alarms?q=no-such-alarm");
+  await expect(page.getByText("clear a filter to see more")).toBeVisible();
+  await expect(page.getByText("auditd")).toHaveCount(0);
+});
