@@ -440,9 +440,15 @@ port with direct TLS, and the `admin` account; a generated password is
 shown once), `services` (after the port check),
 `firewall` (skipped without firewalld), `rules` (skipped until
 `openvibes-rules-baseline` exists; done while the published version is at
-least the installed package's, so Repair publishes a newer package),
+least the installed package's, so Repair publishes a newer package; when
+the package also carries `alarms.json`/`alarms.key` (rules v2), the
+threat-alarm set is trusted and published the same way),
 `agent` (the agent on this host, waits
-up to 60 s for it to report), `ready` (and, on a first install, an endpoint token, 24 hours, 10
+up to 60 s for it to report; when the alarm rules are published and the
+installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` (a P14
+agent), its `agent.toml` adds `process_events` to `collectors` and the
+alarm rule set; an older agent never gets either, since it would refuse
+the collector name), `ready` (and, on a first install, an endpoint token, 24 hours, 10
 uses; a Repair mints none and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).
 
