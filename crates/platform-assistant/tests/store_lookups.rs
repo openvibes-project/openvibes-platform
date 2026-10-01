@@ -86,6 +86,8 @@ fn envelope(encoding: PayloadEncoding) -> Vec<u8> {
             confidence: Confidence::new(90).unwrap(),
             expression: "'22' in facts['port.tcp.exposed']".into(),
             finding_message: "SSH listens on a non-loopback address".into(),
+            kind: openvibes_core::RuleKind::Snapshot,
+            programs: None,
         }],
     };
     serde_json::to_vec(&SignedRuleEnvelope {

@@ -33,6 +33,8 @@ fn rule(id: &str, expression: &str) -> Rule {
         confidence: Confidence::new(100).expect("valid confidence"),
         expression: expression.into(),
         finding_message: "Integration test finding".into(),
+        kind: openvibes_core::RuleKind::Snapshot,
+        programs: None,
     }
 }
 

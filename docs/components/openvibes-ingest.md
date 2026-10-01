@@ -123,6 +123,18 @@ The usual request limits apply. Test: `tests/ca.rs`.
   `finding_changes::heartbeat` with its `health.last_scan.finished_at`; a
   digest that is not the stored one is 409 `findings_resync` (a malformed
   one 400). A heartbeat without it never gets a 409.
+- `POST /v1/alarms` (authenticated, protocol P14): an `AlarmBatch`, plain
+  or `Content-Encoding: gzip`, for the caller's own `agent_id` (another id
+  is 400). Over 256 KiB uncompressed is 413 (the only endpoint that keeps
+  413; the others answer 400). Each alarm the store cannot hold (outside
+  retention, beyond the clock-skew allowance, a day without an `alarms`
+  partition) is skipped, logged with its reason and counted, and the rest
+  stored, then 204: a batch queued through a long outage never stalls the
+  agent. Storing is `platform_store::alarms::insert_batch`: a resend raises
+  `count` and `last_seen` only, active suppressions close a new alarm as a
+  false positive, a recurrence reopens a mitigated one (or one whose
+  accepted risk has expired), and the agent's
+  largest `dropped_total` is kept.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

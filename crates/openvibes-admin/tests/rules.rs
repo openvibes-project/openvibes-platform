@@ -46,6 +46,8 @@ fn sign(version: u64, seed: u8, expires_in_ms: i64) -> Vec<u8> {
             confidence: Confidence::new(100).unwrap(),
             expression: "facts['process.count'] >= 1".into(),
             finding_message: format!("version {version}"),
+            kind: openvibes_core::RuleKind::Snapshot,
+            programs: None,
         }],
     })
     .unwrap();
