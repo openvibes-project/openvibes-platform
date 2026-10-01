@@ -22,7 +22,7 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
     <div className="callout callout--warn" role="status"><Icon name="alert" size={16} /><span>Last report refused <Ago value={data.refused_at} />: {REFUSED[data.refused] ?? data.refused}.{data.reported_at ? " These lists are from the report before." : null}</span></div>
   ) : null;
   if (!data?.reported_at) {
-    return <div className="panel-body stack">{refused}<Empty title="Not reported yet">Agents from 0.3 on report open ports and running services about an hour after they start.</Empty></div>;
+    return <div className="panel-body stack">{refused}<Empty title="Not reported yet">Agents report open ports and running services about an hour after they start, once upgraded.</Empty></div>;
   }
   return (
     <div className="panel-body stack">

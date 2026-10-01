@@ -139,7 +139,10 @@ The usual request limits apply. Test: `tests/ca.rs`.
   plain or `Content-Encoding: gzip`, for the caller's own `agent_id`.
   - Over 512 KiB uncompressed is 413, and like `/v1/alarms` it keeps that
     413.
-  - Not a valid report is 400, and another agent's id is 400.
+  - Not a valid report is 400, and so is a `sha256` that isn't the
+    services digest of its lists (recomputed, never trusted). Another
+    agent's id is 400 too. A gzip body whose output passes 512 KiB is 413,
+    like a plain one.
   - A refusal is recorded on the sender's row (`host_services::refused`,
     code `too_large`, `invalid` or `wrong_agent`), so the console says the
     lists are stale.

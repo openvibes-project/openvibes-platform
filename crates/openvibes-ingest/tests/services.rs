@@ -159,6 +159,34 @@ async fn over_512_kib_is_413_then_a_good_gzip_report_clears_the_refusal() {
         Some("invalid")
     );
 
+    // A digest that is not the lists' own: 400, invalid.
+    let mut lying = report(&agent.id, &[443]);
+    lying.sha256 = "0".repeat(64);
+    let platform = client(&world, &agent);
+    let result = blocking(move || platform.report_services(&lying)).await;
+    assert!(
+        matches!(result, Err(TransportError::Rejected)),
+        "{result:?}"
+    );
+    assert_eq!(
+        stored(&world, &agent.id).await.2.as_deref(),
+        Some("invalid")
+    );
+    // gzip whose output passes 512 KiB: 413, too large (not invalid).
+    let mut padded = serde_json::to_vec(&report(&agent.id, &[443])).unwrap();
+    padded.extend(std::iter::repeat_n(b' ', 524_288));
+    let mut gzip = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::default());
+    std::io::Write::write_all(&mut gzip, &padded).unwrap();
+    let (status, _) = world
+        .raw_encoded("/v1/services", &gzip.finish().unwrap(), "gzip", raw)
+        .await
+        .unwrap();
+    assert_eq!(status, 413);
+    assert_eq!(
+        stored(&world, &agent.id).await.2.as_deref(),
+        Some("too_large")
+    );
+
     // The agent's real client sends gzip; a good report clears it.
     let good = report(&agent.id, &[443]);
     let platform = client(&world, &agent);

@@ -26,7 +26,10 @@ pub fn body_limit(path: &str) -> usize {
 
 /// An inventory body as sent: gzip (`Content-Encoding: gzip`, P11) or
 /// plain. Decompresses as a stream and refuses more than `limit` bytes of
-/// output, so a small body cannot make the server allocate more.
+/// output (`TooLarge`; the limits middleware answers 400 for it except on
+/// the endpoints whose contract names 413), so a small body cannot make
+/// the server allocate more. A broken stream or another encoding is
+/// `BadRequest`.
 pub fn decoded_body<'a>(
     headers: &axum::http::HeaderMap,
     body: &'a [u8],
@@ -48,7 +51,7 @@ pub fn decoded_body<'a>(
                 .read_to_end(&mut out)
                 .map_err(|_| ApiError::BadRequest)?;
             if out.len() > limit {
-                return Err(ApiError::BadRequest);
+                return Err(ApiError::TooLarge);
             }
             Ok(out.into())
         }
@@ -116,7 +119,7 @@ mod tests {
         assert!(bomb.len() < 64 * 1024, "small on the wire");
         assert_eq!(
             decoded_body(&encoded("gzip"), &bomb, 8 * 1024 * 1024).unwrap_err(),
-            ApiError::BadRequest
+            ApiError::TooLarge
         );
         assert_eq!(
             decoded_body(&encoded("gzip"), b"not gzip", 10).unwrap_err(),

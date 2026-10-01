@@ -9,7 +9,8 @@ use chrono::{Duration, Utc};
 use openvibes_core::{
     ALARM_BATCH_BYTES, AlarmBatch, DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges,
     HOST_SERVICES_BYTES, Heartbeat, HostServices, Identifier, InventoryChanges, InventoryReport,
-    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, SchemaVersion, Validate,
+    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, SchemaVersion, Validate, hex,
+    services_digest,
 };
 use platform_store::{alarms, finding_changes, host_services, ingest, inventory, wire};
 
@@ -322,12 +323,13 @@ pub(crate) async fn services(
     body: Bytes,
 ) -> Result<StatusCode, ApiError> {
     let checked = (|| {
-        let body = platform_agent_server::decoded_body(
-            &headers,
-            &body,
-            platform_agent_server::MAX_BODY_BYTES,
-        )
-        .map_err(|error| (error, host_services::Refusal::Invalid))?;
+        // A gzip body whose output passes the limit is too large, like a
+        // plain one; a broken stream is invalid.
+        let body = platform_agent_server::decoded_body(&headers, &body, HOST_SERVICES_BYTES)
+            .map_err(|error| match error {
+                ApiError::TooLarge => (error, host_services::Refusal::TooLarge),
+                error => (error, host_services::Refusal::Invalid),
+            })?;
         if body.len() > HOST_SERVICES_BYTES {
             return Err((ApiError::TooLarge, host_services::Refusal::TooLarge));
         }
@@ -335,6 +337,11 @@ pub(crate) async fn services(
             parse(&body).map_err(|error| (error, host_services::Refusal::Invalid))?;
         if report.agent_id.as_str() != agent_id {
             return Err((ApiError::BadRequest, host_services::Refusal::WrongAgent));
+        }
+        // The digest is what later reports are compared with: recompute it
+        // rather than trust the agent's (reviewer, #145).
+        if hex(&services_digest(&report.listeners, &report.services)) != report.sha256 {
+            return Err((ApiError::BadRequest, host_services::Refusal::Invalid));
         }
         Ok(report)
     })();
