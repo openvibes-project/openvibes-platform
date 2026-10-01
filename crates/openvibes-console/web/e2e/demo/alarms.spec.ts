@@ -35,3 +35,21 @@ test("resolved alarms are hidden by default and counted in the empty state", asy
   await page.goto("/alarms?q=nothing-matches-this");
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
 });
+
+test("quieting from the list asks first, closes the alarm and records why", async ({ page }) => {
+  await page.goto("/alarms");
+  const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
+  // Choosing a scope (as arrow keys on a closed select do) changes nothing yet.
+  // (The demo keeps its data in memory, so this test never reloads.)
+  await row.getByRole("combobox", { name: /Quiet/ }).selectOption("program");
+  await expect(page.locator(".toast")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Confirm" })).toHaveCount(0);
+  await row.getByRole("button", { name: "Quiet" }).click();
+  await expect(row).toContainText("/usr/bin/curl on every host?");
+  await row.getByRole("textbox", { name: "Why (saved as the note)" }).fill("admin's install script");
+  await row.getByRole("button", { name: "Confirm" }).click();
+  // Closed as a false positive: it leaves the default (active) list.
+  await expect(page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Alarm suppressions" }).click();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "download-and-run" })).toContainText("admin's install script");
+});

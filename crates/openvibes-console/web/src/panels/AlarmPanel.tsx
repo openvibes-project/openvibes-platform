@@ -51,13 +51,20 @@ export function AlarmPanel({ id }: { id: string }) {
     try {
       await request("PUT", `/api/v1/alarms/${encodeURIComponent(id)}/triage`,
         triageBody({ state: choice, assignee, note, acceptedUntil }), { "if-match": `"${a.triage.version}"` });
-      if (choice === "false_positive" && scope) await quiet(id, scope, note.trim());
       invalidate("/api/v1/alarm");
-      setNote("");
-      setScope("");
       toast(`Alarm ${triageLabel[choice] ?? choice}`);
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Save failed", true);
+      setBusy(false);
+      return;
+    }
+    // The triage is saved; a failed suppression must not read as if it weren't.
+    try {
+      if (choice === "false_positive" && scope) await quiet(id, scope, note.trim());
+      setNote("");
+      setScope("");
+    } catch (error) {
+      toast(`Saved as false positive; quieting failed: ${error instanceof ApiError ? error.message : "try again"}`, true);
     } finally {
       setBusy(false);
     }

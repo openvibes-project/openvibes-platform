@@ -280,7 +280,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   });
   route("GET", "/api/v1/alarms", "alarms.read", (_, query) => {
     const suppressed = query.get("suppressed") === "true";
-    const items = alarmList().filter((alarm) => suppressed || !alarm.suppressed_by)
+    const state = query.get("state");
+    const severity = query.get("severity");
+    const items = alarmList().filter((alarm) => (suppressed || !alarm.suppressed_by)
+        && (!state || alarm.state === state || (state === "active" && ["open", "investigating"].includes(alarm.state)))
+        && (!severity || alarm.severity === severity))
       .sort((a, b) => b.last_seen.localeCompare(a.last_seen)).map(summary);
     return json(page(items, query));
   });
