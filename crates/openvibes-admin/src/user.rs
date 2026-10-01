@@ -49,6 +49,11 @@ pub enum UserCommand {
         /// prompting twice (for scripts and Setup).
         #[arg(long)]
         password_stdin: bool,
+        /// Make the user set their own password at first console sign-in
+        /// (treat the given password as one-time), as the console's New
+        /// user does.
+        #[arg(long)]
+        must_change: bool,
     },
     /// List local users without credential or token material.
     List,
@@ -93,6 +98,7 @@ pub async fn run(
             display_name,
             role,
             password_stdin,
+            must_change,
         } => {
             let username = match canonical_username(username) {
                 Ok(username) => username,
@@ -145,7 +151,7 @@ pub async fn run(
                     role_id: role.as_str(),
                     actor_id: actor,
                     actor_kind: "local_admin",
-                    password_must_change: false,
+                    password_must_change: *must_change,
                     now,
                 },
             )

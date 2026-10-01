@@ -5884,8 +5884,6 @@ async fn login(
         Some(Extension(proxy)) => proxy.source.map(|address| address.to_string()),
         None => Some(peer.source_label()),
     };
-    const ACCOUNT_FAILURE_LIMIT: i32 = 5;
-    const SOURCE_FAILURE_LIMIT: i32 = 25;
     let (account_bucket, source_bucket) =
         login_throttle_buckets(username.as_deref(), source_for_limit.as_deref());
     let mut buckets: Vec<&[u8]> = vec![&account_bucket];
@@ -6160,6 +6158,17 @@ fn canonical_username(username: &str) -> Option<String> {
         return None;
     }
     Some(username.to_ascii_lowercase())
+}
+
+/// Failed password checks per account (sign-in and set-password together)
+/// before the account is locked for the window.
+pub(crate) const ACCOUNT_FAILURE_LIMIT: i32 = 5;
+const SOURCE_FAILURE_LIMIT: i32 = 25;
+
+/// The per-account throttle bucket sign-in uses; set-password counts a wrong
+/// current password against it too (#85).
+pub(crate) fn account_throttle_bucket(username: &str) -> [u8; 32] {
+    login_throttle_buckets(Some(username), None).0
 }
 
 fn throttle_digest(kind: &[u8], value: &[u8]) -> [u8; 32] {

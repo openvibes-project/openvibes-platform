@@ -19,8 +19,8 @@ use crate::{
     },
     problem::{ProblemDetails, problem_response},
     router::{
-        AuthHttpState, authenticated_permission, authentication_required, bounded_user_agent,
-        checked_session, unavailable_auth,
+        ACCOUNT_FAILURE_LIMIT, AuthHttpState, account_throttle_bucket, authenticated_permission,
+        authentication_required, bounded_user_agent, checked_session, unavailable_auth,
     },
 };
 
@@ -184,7 +184,16 @@ pub(crate) async fn create_user(
     )
     .await;
     if created.is_err() {
-        return unavailable_auth();
+        // Lost a race with another create of the same name (the unique
+        // username refused it): a conflict, not an outage.
+        return match console_auth::username_taken(&client, &username).await {
+            Ok(true) => problem_response(ProblemDetails::new(
+                StatusCode::CONFLICT,
+                "user_conflict",
+                "A user with this username already exists",
+            )),
+            _ => unavailable_auth(),
+        };
     }
     no_store(
         (
@@ -199,6 +208,14 @@ pub(crate) async fn create_user(
         )
             .into_response(),
     )
+}
+
+fn too_many_attempts() -> Response {
+    problem_response(ProblemDetails::new(
+        StatusCode::TOO_MANY_REQUESTS,
+        "too_many_attempts",
+        "Too many wrong passwords; wait 15 minutes",
+    ))
 }
 
 fn busy() -> Response {
@@ -219,6 +236,7 @@ fn busy() -> Response {
         (status = 204, description = "Password set; the user's other sessions are signed out"),
         (status = 400, description = "Wrong current password, or a new password that is too short or unchanged", body = ProblemDetails),
         (status = 401, description = "Not signed in", body = ProblemDetails),
+        (status = 429, description = "Too many wrong passwords for this account (shared with sign-in)", body = ProblemDetails),
     ))]
 pub(crate) async fn change_password(
     State(state): State<AuthHttpState>,
@@ -268,6 +286,16 @@ pub(crate) async fn change_password(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
+    // A wrong current password counts against sign-in's per-account limit,
+    // so a stolen session cannot guess it faster than sign-in could.
+    let bucket = account_throttle_bucket(&active.username);
+    let buckets: [&[u8]; 1] = [&bucket];
+    let now = Utc::now();
+    match console_auth::login_is_throttled(&client, &buckets, now).await {
+        Ok(false) => {}
+        Ok(true) => return too_many_attempts(),
+        Err(_) => return unavailable_auth(),
+    }
     let credential = match console_auth::credential_by_username(&client, &active.username).await {
         Ok(Some(credential)) if credential.enabled => credential,
         Ok(_) => return authentication_required(),
@@ -287,28 +315,48 @@ pub(crate) async fn change_password(
         })
     })
     .await;
-    let phc = match hashed {
-        Ok(Ok(Some(phc))) => phc,
-        Ok(Ok(None)) => {
-            return bad_request(
-                "invalid_current_password",
-                "The current password is not right",
-            );
-        }
-        _ => return unavailable_auth(),
-    };
     let user_agent = bounded_user_agent(&headers);
     let audit = console_auth::AuditContext {
         request_id: None,
         source_address: None,
         user_agent: user_agent.as_deref(),
     };
+    let phc = match hashed {
+        Ok(Ok(Some(phc))) => phc,
+        Ok(Ok(None)) => {
+            let window = chrono::Duration::minutes(15);
+            let recorded = console_auth::record_login_failure(
+                &mut client,
+                &buckets,
+                now,
+                window,
+                &[ACCOUNT_FAILURE_LIMIT],
+                window,
+                &audit,
+            )
+            .await;
+            return match recorded {
+                Ok(()) => bad_request(
+                    "invalid_current_password",
+                    "The current password is not right",
+                ),
+                Err(_) => unavailable_auth(),
+            };
+        }
+        _ => return unavailable_auth(),
+    };
+    if console_auth::clear_login_throttle(&client, &buckets, now)
+        .await
+        .is_err()
+    {
+        return unavailable_auth();
+    }
     match console_auth::change_own_password(
         &mut client,
         &active.user_id,
         &digest,
         &phc,
-        Utc::now(),
+        now,
         &audit,
     )
     .await

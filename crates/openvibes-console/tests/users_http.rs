@@ -350,3 +350,39 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn guessing_the_current_password_is_throttled_like_sign_in() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        eprintln!("skipping: OPENVIBES_TEST_DATABASE_URL is unset");
+        return;
+    }
+    let db = TestDb::create().await;
+    platform_store::migrate(&mut db.pool.get().await.unwrap())
+        .await
+        .unwrap();
+    local_user(&db, "dave", "viewer", 3).await;
+    let router = authenticated_router(db.pool.clone(), ORIGIN);
+    let dave = sign_in(&router, "dave", ADMIN_PASSWORD).await;
+    let path = "/api/v1/session/password";
+    let change = |current: &str| serde_json::json!({"current_password": current, "new_password": "a-long-enough-new-password"});
+    // Five wrong guesses are refused one by one, as at sign-in ...
+    for guess in 0..5 {
+        let wrong = post(
+            &router,
+            path,
+            &dave,
+            change(&format!("guess-number-{guess}-wrong")),
+        )
+        .await;
+        assert_eq!(
+            body(wrong).await["code"],
+            "invalid_current_password",
+            "guess {guess}"
+        );
+    }
+    // ... then the account is locked: even the right one is 429 now.
+    let locked = post(&router, path, &dave, change(ADMIN_PASSWORD)).await;
+    assert_eq!(locked.status(), StatusCode::TOO_MANY_REQUESTS);
+    db.drop().await;
+}

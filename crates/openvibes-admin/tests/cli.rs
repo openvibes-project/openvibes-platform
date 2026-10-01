@@ -303,5 +303,22 @@ async fn user_create_reads_one_password_line_from_stdin() {
     let short = fixture.run_input(&create("bob"), "short\n");
     assert!(!short.status.success());
     assert!(String::from_utf8_lossy(&short.stderr).contains("15 to 128"));
+    // #85: --must-change makes the password one-time, as the console's
+    // New user does; without it the user is not asked to change it.
+    let mut one_time = create("carol").to_vec();
+    one_time.push("--must-change");
+    let out = fixture.run_input(&one_time, "violet quartz lantern 2027\n");
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let must_change = |name: &str| {
+        format!(
+            "SELECT count(*) FROM console_users WHERE username = '{name}' AND password_must_change"
+        )
+    };
+    assert_eq!(fixture.count(&must_change("carol")).await, 1);
+    assert_eq!(fixture.count(&must_change("admin")).await, 0);
     fixture.drop().await;
 }

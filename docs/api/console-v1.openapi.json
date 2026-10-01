@@ -3739,6 +3739,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "Too many wrong passwords for this account (shared with sign-in)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
         }
       }

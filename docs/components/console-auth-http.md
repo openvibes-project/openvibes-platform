@@ -68,7 +68,8 @@ permission-checked read models, enrollment-token management, and audit routes.
 
 - `POST /api/v1/access-control/users` (`rbac.manage`, global binding, CSRF):
   username (the CLI's rule, stored lowercase), display name and a built-in
-  role. The answer (201, `no-store`) carries a generated one-time password
+  role (a create that loses a race on the same name is 409, not 503). The
+  answer (201, `no-store`) carries a generated one-time password
   (20 symbols from an unambiguous alphabet, about 99 bits), shown only
   there. 409 when the username is taken. Audited as `user.created` with
   `actor_kind = user`.
@@ -80,6 +81,9 @@ permission-checked read models, enrollment-token management, and audit routes.
 - `POST /api/v1/session/password` (browser sessions, CSRF): the current
   password and a new one of at least 15 characters that differs from it.
   400 `invalid_current_password`, `weak_password` or `password_unchanged`.
+  A wrong current password counts against sign-in's per-account limit (5
+  in 15 minutes, shared with sign-in), then 429 `too_many_attempts`, so a
+  stolen session cannot guess it faster than sign-in could.
   On success (204) the flag is cleared, the user's other sessions are
   signed out, and `auth.password.changed` is audited. The same route is the
   account menu's Change password.
