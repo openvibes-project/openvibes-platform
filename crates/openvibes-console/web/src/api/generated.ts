@@ -2037,6 +2037,13 @@ export interface components {
              *     not visible to the agent).
              */
             owners?: string | null;
+            /** @description Why: `too_large` (over 512 KiB), `invalid`, or `wrong_agent`. */
+            refused?: string | null;
+            /**
+             * @description RFC 3339 time ingest refused the host's last report, if it did since
+             *     the last good one; the lists are then from that older report.
+             */
+            refused_at?: string | null;
             /** @description RFC 3339 time of the last report; absent if the host never sent one. */
             reported_at?: string | null;
             /** @description Services, by unit. */

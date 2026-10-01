@@ -32,7 +32,11 @@ ALTER TABLE agents
     ADD COLUMN services_at timestamptz,
     -- complete: every owner the host has is named; partial: owners may be
     -- missing (no opt-in capability on the agent, or a capped walk).
-    ADD COLUMN services_owners text CHECK (services_owners IN ('complete', 'partial'));
+    ADD COLUMN services_owners text CHECK (services_owners IN ('complete', 'partial')),
+    -- The last report ingest refused (400/413), until a good one: the
+    -- console says so instead of showing stale lists silently.
+    ADD COLUMN services_refused_at timestamptz,
+    ADD COLUMN services_refused text CHECK (services_refused IN ('too_large', 'invalid', 'wrong_agent'));
 
 GRANT SELECT, INSERT, DELETE ON host_listeners, host_services TO "openvibes-ingest";
 GRANT SELECT ON host_listeners, host_services TO "openvibes-console";

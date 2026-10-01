@@ -135,6 +135,18 @@ The usual request limits apply. Test: `tests/ca.rs`.
   false positive, a recurrence reopens a mitigated one (or one whose
   accepted risk has expired), and the agent's
   largest `dropped_total` is kept.
+- `POST /v1/services` (authenticated, protocol P15): a `HostServices`,
+  plain or `Content-Encoding: gzip`, for the caller's own `agent_id`.
+  - Over 512 KiB uncompressed is 413, and like `/v1/alarms` it keeps that
+    413.
+  - Not a valid report is 400, and another agent's id is 400.
+  - A refusal is recorded on the sender's row (`host_services::refused`,
+    code `too_large`, `invalid` or `wrong_agent`), so the console says the
+    lists are stale.
+  - A good report replaces the host's listeners and services
+    (`host_services::replace`; with an unchanged digest it only touches
+    `services_at`), clears the refusal, and answers 204.
+  - `truncated` is not stored yet and is logged at debug.
 - `POST /v1/findings` (authenticated): `FindingBatch`, attributed to the
   authenticated agent. **One bad finding never fails its batch**: each finding
   is stored or refused on its own. Refused findings are acknowledged too (so

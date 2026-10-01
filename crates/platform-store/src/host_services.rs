@@ -98,13 +98,54 @@ pub async fn replace(
             .await?;
         }
     }
+    // A good report clears the last refusal.
     tx.execute(
-        "UPDATE agents SET services_sha256 = $2, services_at = $3, services_owners = $4
+        "UPDATE agents SET services_sha256 = $2, services_at = $3, services_owners = $4,
+             services_refused_at = NULL, services_refused = NULL
          WHERE agent_id = $1",
         &[&agent_id, &report.sha256, &now, &report.owners],
     )
     .await?;
     tx.commit().await?;
+    Ok(())
+}
+
+/// Why ingest refused a report (stored on the host until a good one).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Refusal {
+    /// Over 512 KiB uncompressed (413).
+    TooLarge,
+    /// Not a valid `HostServices` (400).
+    Invalid,
+    /// Its `agent_id` is not the authenticated agent's (400).
+    WrongAgent,
+}
+
+impl Refusal {
+    /// The stored code.
+    #[must_use]
+    pub fn code(self) -> &'static str {
+        match self {
+            Refusal::TooLarge => "too_large",
+            Refusal::Invalid => "invalid",
+            Refusal::WrongAgent => "wrong_agent",
+        }
+    }
+}
+
+/// Records that `agent_id`'s report was refused; its stored lists stay.
+pub async fn refused(
+    client: &Client,
+    agent_id: &str,
+    refusal: Refusal,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "UPDATE agents SET services_refused_at = $2, services_refused = $3 WHERE agent_id = $1",
+            &[&agent_id, &now, &refusal.code()],
+        )
+        .await?;
     Ok(())
 }
 
@@ -122,6 +163,9 @@ pub struct HostServices {
     pub reported_at: Option<DateTime<Utc>>,
     /// `complete` or `partial`.
     pub owners: Option<String>,
+    /// The last refused report since the last good one: when, and the
+    /// code (`too_large`, `invalid`, `wrong_agent`).
+    pub refused: Option<(DateTime<Utc>, String)>,
     /// Its listeners, exposed first, then by port.
     pub listeners: Vec<Listener>,
     /// Its services, by unit.
@@ -140,7 +184,8 @@ pub async fn for_host(
     let Some(agent) = client
         .query_opt(
             &format!(
-                "SELECT a.services_at, a.services_owners FROM agents a
+                "SELECT a.services_at, a.services_owners, a.services_refused_at, a.services_refused
+                 FROM agents a
                  WHERE a.agent_id = $3 AND {visible}"
             ),
             &[&global, &groups, &agent_id],
@@ -184,6 +229,9 @@ pub async fn for_host(
     Ok(Some(HostServices {
         reported_at: agent.get(0),
         owners: agent.get(1),
+        refused: agent
+            .get::<_, Option<DateTime<Utc>>>(2)
+            .zip(agent.get::<_, Option<String>>(3)),
         listeners,
         services,
     }))

@@ -7104,6 +7104,20 @@
             ],
             "description": "`complete` (every owner is named) or `partial` (some owners are\nnot visible to the agent)."
           },
+          "refused": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why: `too_large` (over 512 KiB), `invalid`, or `wrong_agent`."
+          },
+          "refused_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time ingest refused the host's last report, if it did since\nthe last good one; the lists are then from that older report."
+          },
           "reported_at": {
             "type": [
               "string",

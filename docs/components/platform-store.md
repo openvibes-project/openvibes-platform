@@ -419,6 +419,25 @@ Code over these tables:
   alarm; `program`/`command` need global scope) and `remove` (kept as
   history), audited.
 
+## Open ports and running services (`host_services::…`, schema 31, protocol P15)
+
+`0031_host_services.sql` (additive):
+- `host_listeners` and `host_services`, replaced per report like
+  `host_packages`.
+- New `agents` columns: `services_sha256`, `services_at` and
+  `services_owners`, plus `services_refused_at` and `services_refused`.
+
+Functions:
+- `replace` (ingest): one transaction. A new digest replaces the rows; an
+  unchanged one only touches `services_at`. It always clears a refusal.
+- `refused` (ingest): records a refused report (`Refusal::TooLarge`,
+  `Invalid`, `WrongAgent`) and keeps the stored lists.
+- `for_host`, `fleet_ports` and `fleet_services` (console): scoped like
+  agents, and the fleet reads leave revoked hosts out.
+
+Grants: ingest inserts and deletes the two tables, and already updates
+`agents`; the console reads.
+
 ## Console password change (schema 30)
 
 `0030_console_password_change.sql` (additive): `console_users.password_must_change`

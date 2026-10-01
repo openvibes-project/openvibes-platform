@@ -173,3 +173,42 @@ async fn fleet_views_count_visible_non_revoked_hosts() {
     drop(console);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_refusal_shows_until_the_next_good_report_and_keeps_the_lists() {
+    let db = setup().await;
+    let mut ingest = as_role(&db, "openvibes-ingest").await;
+    let console = as_role(&db, "openvibes-console").await;
+    let global = AgentScope::Global;
+    let now = Utc::now();
+    host_services::refused(&ingest, WEB, host_services::Refusal::TooLarge, now)
+        .await
+        .unwrap();
+    let host = host_services::for_host(&console, &global, WEB)
+        .await
+        .unwrap()
+        .unwrap();
+    let (at, code) = host.refused.clone().unwrap();
+    assert_eq!(code, "too_large");
+    assert!((at - now).num_seconds().abs() < 2);
+    assert_eq!(host.listeners.len(), 2, "the last good lists stay");
+    // The next good report, even with an unchanged digest, clears it.
+    let same = report(
+        'a',
+        vec![
+            listener(443, true, Some("nginx.service")),
+            listener(22, true, None),
+        ],
+        &["nginx.service", "sshd.service"],
+    );
+    host_services::replace(&mut ingest, WEB, &same, Utc::now())
+        .await
+        .unwrap();
+    let host = host_services::for_host(&console, &global, WEB)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(host.refused, None);
+    drop((ingest, console));
+    db.drop().await;
+}

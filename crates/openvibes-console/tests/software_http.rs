@@ -416,3 +416,46 @@ async fn ports_and_services_per_host_and_across_hosts() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_refused_services_report_shows_on_the_host_until_a_good_one() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "UPDATE agents SET services_refused_at = now(), services_refused = 'too_large'
+                WHERE agent_id = '{AGENT}';"
+        ))
+        .await
+        .unwrap();
+    let (cookie, _) = login(&router, "vera").await;
+    let path = format!("/api/v1/agents/{AGENT}/services");
+    let (status, host) = get(&router, &cookie, &path).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(host["refused"], "too_large");
+    assert!(
+        host["refused_at"]
+            .as_str()
+            .is_some_and(|at| at.ends_with('Z'))
+    );
+    assert!(
+        host["reported_at"].is_null(),
+        "refused before any good report"
+    );
+    // What ingest does with the next good report clears it.
+    client
+        .batch_execute(&format!(
+            "UPDATE agents SET services_at = now(), services_owners = 'partial',
+                 services_refused_at = NULL, services_refused = NULL
+                WHERE agent_id = '{AGENT}';"
+        ))
+        .await
+        .unwrap();
+    let (_, host) = get(&router, &cookie, &path).await;
+    assert!(host["refused"].is_null() && host["refused_at"].is_null());
+    assert!(host["reported_at"].is_string());
+    db.drop().await;
+}

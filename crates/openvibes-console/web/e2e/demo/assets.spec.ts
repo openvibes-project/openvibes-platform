@@ -50,3 +50,13 @@ test("a host page shows its open ports and services; the fleet lists them (Asset
   await expect(page.locator(".view tbody tr").filter({ hasText: "53/udp" })).toHaveCount(0);
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("a host whose last services report was refused says so above its old lists", async ({ page }) => {
+  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.locator(".view tbody tr").filter({ hasText: "mail-" }).first().locator("td").nth(1).click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("tab", { name: "Ports" }).click();
+  await expect(inspector.getByRole("status").filter({ hasText: "Last report refused" })).toContainText("over 512 KiB");
+  await expect(inspector.getByRole("table", { name: "Open ports" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

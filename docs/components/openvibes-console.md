@@ -159,7 +159,10 @@ hosts out.
   `service`/`program` where the agent saw it) and services (unit,
   programs, processes, `run_as`), with `reported_at` and `owners`
   (`complete`, or `partial` when some owners were not visible: see the
-  agent's opt-in `owners.conf`). 404 outside the caller's scope.
+  agent's opt-in `owners.conf`), and `refused_at`/`refused` when ingest
+  refused the host's last report since the last good one (`too_large`,
+  `invalid`, `wrong_agent`; the Ports and Services tabs then say so above
+  the older lists). 404 outside the caller's scope.
 - `GET /api/v1/ports`: one row per (protocol, port) with `hosts`,
   `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
   exposed on at least one host.

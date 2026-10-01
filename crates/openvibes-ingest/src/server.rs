@@ -75,6 +75,7 @@ fn routes(state: AppState) -> Router {
             inventory_route(post(crate::delivery::finding_changes), &state),
         )
         .route("/v1/alarms", post(crate::delivery::alarms))
+        .route("/v1/services", post(crate::delivery::services))
         .route("/v1/enroll", post(crate::enroll::enroll))
         .route("/v1/renew", post(crate::enroll::renew))
         .route("/v1/ca", axum::routing::get(crate::ca::ca))

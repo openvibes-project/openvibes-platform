@@ -405,7 +405,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const units = new Map(listeners.map((l) => [l.service, l.program]));
     units.set("chronyd.service", "chronyd");
     const services = [...units].map(([unit, program]) => ({ unit, programs: [program], processes: unit === "nginx.service" ? 3 : 1, run_as: "root" })).sort((a, b) => a.unit.localeCompare(b.unit));
-    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", listeners, services };
+    // The mail hosts' last report was refused (over 512 KiB): the tab says so.
+    const refused = role === "mail" ? { refused: "too_large", refused_at: new Date(Date.now() - 5 * 60_000).toISOString() } : { refused: null, refused_at: null };
+    return { reported_at: new Date(Date.now() - 20 * 60_000).toISOString(), owners: "partial", ...refused, listeners, services };
   };
   route("GET", "/api/v1/agents/{id}/services", "agents.read", ({ id = "" }) => {
     if (!agentById(id)) return problem(404, "agent_not_found", "Agent not found");

@@ -1,6 +1,13 @@
 import { useResource } from "../api/client";
 import type { HostServices } from "../api/types";
 import { Ago, Empty, ErrorBox, Loading } from "../ui/bits";
+import { Icon } from "../ui/Icon";
+
+const REFUSED: Record<string, string> = {
+  too_large: "over 512 KiB",
+  invalid: "not a valid report",
+  wrong_agent: "sent with another agent's id",
+};
 
 const OWNERS_NOTE = "Some owners are not visible to the agent. Admins can opt in to exact program names on this host (see the agent's owners.conf).";
 
@@ -10,11 +17,16 @@ export function HostServicesTab({ id, show }: { id: string; show: "ports" | "ser
   if (report.error) return <div className="panel-body"><ErrorBox error={report.error} /></div>;
   if (report.loading && !report.data) return <div className="panel-body"><Loading rows={4} /></div>;
   const data = report.data;
+  // Ingest refused the last report: say so, or the lists look current.
+  const refused = data?.refused && data.refused_at ? (
+    <div className="callout callout--warn" role="status"><Icon name="alert" size={16} /><span>Last report refused <Ago value={data.refused_at} />: {REFUSED[data.refused] ?? data.refused}.{data.reported_at ? " These lists are from the report before." : null}</span></div>
+  ) : null;
   if (!data?.reported_at) {
-    return <div className="panel-body"><Empty title="Not reported yet">Agents from 0.3 on report open ports and running services about an hour after they start.</Empty></div>;
+    return <div className="panel-body stack">{refused}<Empty title="Not reported yet">Agents from 0.3 on report open ports and running services about an hour after they start.</Empty></div>;
   }
   return (
     <div className="panel-body stack">
+      {refused}
       <p className="subtle">As of <Ago value={data.reported_at} />{show === "ports" && data.owners === "partial" ? <> · <span title={OWNERS_NOTE}>some owners not visible</span></> : null}</p>
       {show === "ports" ? (
         data.listeners.length === 0 ? <Empty title="No open ports" /> : (

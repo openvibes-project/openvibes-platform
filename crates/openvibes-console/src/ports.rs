@@ -58,6 +58,11 @@ pub struct HostServicesView {
     /// `complete` (every owner is named) or `partial` (some owners are
     /// not visible to the agent).
     pub owners: Option<String>,
+    /// RFC 3339 time ingest refused the host's last report, if it did since
+    /// the last good one; the lists are then from that older report.
+    pub refused_at: Option<String>,
+    /// Why: `too_large` (over 512 KiB), `invalid`, or `wrong_agent`.
+    pub refused: Option<String>,
     /// Listeners, exposed first, then by port.
     pub listeners: Vec<ListenerView>,
     /// Services, by unit.
@@ -141,6 +146,11 @@ pub(crate) async fn get_host_services(
                 .reported_at
                 .map(|at| at.to_rfc3339_opts(SecondsFormat::Millis, true)),
             owners: host.owners,
+            refused_at: host
+                .refused
+                .as_ref()
+                .map(|(at, _)| at.to_rfc3339_opts(SecondsFormat::Millis, true)),
+            refused: host.refused.map(|(_, code)| code),
             listeners: host.listeners.into_iter().map(listener_view).collect(),
             services: host.services.into_iter().map(service_view).collect(),
         })
