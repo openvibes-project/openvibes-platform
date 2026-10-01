@@ -95,7 +95,11 @@ EOF
 sudo systemd-run --quiet --collect --unit ov-alarms-e2e-agent --uid "$(id -u)" --gid "$(id -g)" \
     -p AmbientCapabilities=CAP_AUDIT_READ -p CapabilityBoundingSet=CAP_AUDIT_READ \
     -p NoNewPrivileges=yes "$X/usr/bin/openvibes-agent" "$W/agent/agent.toml"
-trap 'sudo systemctl stop ov-alarms-e2e-agent 2>/dev/null; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20; cleanup' EXIT
+# cleanup (integration-lib.sh) exits with the status it finds in $?: keep
+# the script's own.
+trap 'status=$?; sudo systemctl stop ov-alarms-e2e-agent 2>/dev/null
+      ((status == 0)) || sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20
+      (exit "$status"); cleanup' EXIT
 agent_log() { sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager; }
 enrolled() { [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'")" == 1 ]]; }
 wait_for "agent enrolled" 60 enrolled
