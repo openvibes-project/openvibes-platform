@@ -122,6 +122,22 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
 - The demo serves alarms and suppressions with the server's rules
   (scoped persona, workflow, global-only program/command).
 
+## Assets v1 (hosts and software)
+
+- **Hosts** (`/agents`, the former Agents view): a row opens the **Host
+  page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
+  ones), **Software** (the host's packages, filtered on the server by name
+  and "Fix available", 200 at a time) and Details (identity, system and
+  running kernel, "software as of", tags, certificates).
+- **Software** (`/software`, `g w`): packages across the caller's hosts with
+  hosts, versions and hosts with a fix available; the name filter and the
+  "Fix available" chip go to the API; Load 100 more. A row opens the
+  `package` panel: versions in use with host counts, and the hosts.
+- "Fix available" means an open vulnerability that has a fix (quiet by
+  default; no-fix ones stay in Vulnerabilities).
+- On a phone, Software sits under More (`phoneMore`), so the bar keeps five
+  labelled slots.
+
 ## Interfaces
 
 - **Entry:** `web/index.html` → `src/main.tsx` → `shell/App.tsx`.

@@ -170,7 +170,7 @@
   .rail__group { display: contents; }
   .rail__item { flex: 1; min-width: 0; height: 48px; padding: 0; justify-content: center; flex-direction: column; gap: 2px; }
   /* Investigate views and More, each labeled (#85); the rest sit in More. */
-  .rail__group--secondary { display: none; }
+  .rail__group--secondary, .rail__item--phone-more { display: none; }
   .rail__short { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10.5px; line-height: 1.1; }
   .rail__more { display: flex; flex: 1; min-width: 0; }
   .rail__more > .rail__item { width: 100%; }

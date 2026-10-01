@@ -12,12 +12,14 @@ import { AssetGroupPanel, PublishBundle, RetentionPanel } from "../panels/AdminP
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { AlarmPanel } from "../panels/AlarmPanel";
+import { PackagePanel, splitPackageId } from "../panels/PackagePanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
 import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPanel, UserPanel } from "../panels/OpsPanels";
 import type { IconName } from "../ui/Icon";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
+import { Software } from "../views/Software";
 import { Findings } from "../views/Findings";
 import { Vulnerabilities } from "../views/Vulnerabilities";
 
@@ -26,6 +28,8 @@ export type ViewDef = {
   /** Paths below this prefix belong to the view too (e.g. /dashboards/{id}). */
   prefix?: string;
   label: string;
+  /** On a phone, under More instead of on the bar (the bar has room for five). */
+  phoneMore?: boolean;
   /** A shorter label for the phone bar, when `label` is too long for it. */
   short?: string;
   icon: IconName;
@@ -41,7 +45,8 @@ export const views: readonly ViewDef[] = [
   { path: "/findings", label: "Findings", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
-  { path: "/agents", label: "Agents", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
+  { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
+  { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
@@ -64,9 +69,10 @@ export function objectTitle(ref: { kind: string; id: string }): string {
 }
 
 export const panels: Readonly<Record<string, PanelDef>> = {
-  agent: { label: "Agent", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
+  agent: { label: "Host", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
   finding: { label: "Finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
+  package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },
