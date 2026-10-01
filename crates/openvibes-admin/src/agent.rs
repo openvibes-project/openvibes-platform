@@ -334,14 +334,25 @@ async fn agent_command(
         .as_deref()
         .and_then(|line| line.split_whitespace().next())
         .unwrap_or("baseline");
-    let served: Vec<crate::setup::Served> = served(client, set).await.into_iter().collect();
+    let baseline_served: Vec<crate::setup::Served> =
+        served(client, set).await.into_iter().collect();
     let rules = key_line
         .as_deref()
-        .and_then(|line| crate::setup::published_rules_arg(line, &served));
+        .and_then(|line| crate::setup::published_rules_arg(line, &baseline_served));
+    let alarm_line = std::fs::read_to_string(crate::setup::ALARMS_KEY).ok();
+    let alarm_rules = match alarm_line.as_deref() {
+        Some(line) => {
+            let set = line.split_whitespace().next().unwrap_or("baseline-alarms");
+            let alarm_served: Vec<crate::setup::Served> =
+                served(client, set).await.into_iter().collect();
+            crate::setup::published_rules_arg(line, &alarm_served)
+        }
+        None => None,
+    };
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
             "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",
-            crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref())
+            crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref(), alarm_rules.as_deref())
         )
     });
     (output, target)

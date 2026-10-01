@@ -300,12 +300,18 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         let served: Vec<super::Served> = served(ctx, &set).into_iter().collect();
         super::published_rules_arg(&line, &served)
     });
+    let alarm_rules = ctx.read(super::ALARMS_KEY).ok().and_then(|line| {
+        let set = line.split_whitespace().next()?.to_owned();
+        let served: Vec<super::Served> = served(ctx, &set).into_iter().collect();
+        super::published_rules_arg(&line, &served)
+    });
     let command = super::agent_install_command(
         &ctx.plan.hostname,
         (ctx.plan.ingest_port, ctx.plan.distribution_port),
         &token,
         &super::pki::fingerprint(&root)?,
         rules.as_deref(),
+        alarm_rules.as_deref(),
     );
     Ok(StepState::Done(format!(
         "ready: {}; add an agent on another host (token valid 24 hours, 10 enrollments; \

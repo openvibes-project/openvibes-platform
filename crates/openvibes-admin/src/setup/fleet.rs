@@ -14,12 +14,37 @@ const RULES: &str = "/usr/share/openvibes/rules";
 const AGENT: &str = "/etc/openvibes-agent";
 const AGENT_WAIT: u32 = 60;
 
-/// `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` from `baseline.key`.
-fn baseline_key<R: Runner>(ctx: &Ctx<R>) -> Result<[String; 3], String> {
-    let text = ctx.read(&format!("{RULES}/baseline.key"))?;
+/// The rule sets the rules package may carry, as `STEM.json` and
+/// `STEM.key`: the baseline findings rules, and (from rules v2) the
+/// threat-alarm rules, which only a P14 agent can run.
+const BASELINE: &str = "baseline";
+const ALARMS: &str = "alarms";
+
+/// The audit rule the P14 agent package ships: an agent that has it knows
+/// the `process_events` collector (an older one refuses the name).
+const AGENT_AUDIT_RULE: &str = "/etc/audit/rules.d/openvibes-agent.rules";
+
+/// `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` from `STEM.key`.
+fn set_key<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Result<[String; 3], String> {
+    let text = ctx.read(&format!("{RULES}/{stem}.key"))?;
     let fields: Vec<String> = text.split_whitespace().map(str::to_owned).collect();
     <[String; 3]>::try_from(fields)
-        .map_err(|_| format!("{RULES}/baseline.key: want RULE_SET ISSUER_KEY_ID PUBLIC_KEY"))
+        .map_err(|_| format!("{RULES}/{stem}.key: want RULE_SET ISSUER_KEY_ID PUBLIC_KEY"))
+}
+
+fn baseline_key<R: Runner>(ctx: &Ctx<R>) -> Result<[String; 3], String> {
+    set_key(ctx, BASELINE)
+}
+
+/// The alarm rule set's trust line when the package carries the set; an
+/// unreadable or malformed key next to `alarms.json` is an error, as for
+/// the baseline, so the rules are never silently left unpublished.
+fn alarms_key<R: Runner>(ctx: &Ctx<R>) -> Result<Option<[String; 3]>, String> {
+    if ctx.exists(&format!("{RULES}/{ALARMS}.json")) {
+        set_key(ctx, ALARMS).map(Some)
+    } else {
+        Ok(None)
+    }
 }
 
 /// The published version of `set` (`rules list`: `SET vN keys …`).
@@ -42,8 +67,8 @@ fn retired<R: Runner>(ctx: &Ctx<R>, set: &str) -> Result<bool, String> {
 }
 
 /// The version of the envelope the installed package carries, if any.
-fn installed<R: Runner>(ctx: &Ctx<R>) -> Option<u64> {
-    let text = ctx.read(&format!("{RULES}/baseline.json")).ok()?;
+fn installed<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Option<u64> {
+    let text = ctx.read(&format!("{RULES}/{stem}.json")).ok()?;
     serde_json::from_str::<serde_json::Value>(&text).ok()?["rule_set_version"].as_u64()
 }
 
@@ -60,12 +85,23 @@ pub fn rules_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if retired(ctx, &set)? {
         return Ok(StepState::Skipped(format!("rule set {set} retired")));
     }
-    Ok(match published(ctx, &set)? {
-        Some(version) if installed(ctx).is_none_or(|newest| newest <= version) => {
-            StepState::Done(format!("rule set {set} v{version} published"))
+    let current = |set: &str, stem: &str| -> Result<Option<u64>, String> {
+        Ok(published(ctx, set)?
+            .filter(|version| installed(ctx, stem).is_none_or(|newest| newest <= *version)))
+    };
+    let Some(version) = current(&set, BASELINE)? else {
+        return Ok(StepState::Todo);
+    };
+    let mut done = format!("rule set {set} v{version} published");
+    if let Some([alarms, _, _]) = alarms_key(ctx)?
+        && !retired(ctx, &alarms)?
+    {
+        match current(&alarms, ALARMS)? {
+            Some(version) => done.push_str(&format!(", {alarms} v{version}")),
+            None => return Ok(StepState::Todo),
         }
-        _ => StepState::Todo,
-    })
+    }
+    Ok(StepState::Done(done))
 }
 
 pub fn rules_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -88,8 +124,16 @@ pub fn rules_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     }
     let [set, issuer, key] = baseline_key(ctx)?;
     ctx.as_admin(&["rules", "trust", "add", &set, &issuer, "--", &key])?;
-    ctx.as_admin(&["rules", "publish", &format!("{RULES}/baseline.json")])?;
-    Ok(StepState::Done(format!("rule set {set} published")))
+    ctx.as_admin(&["rules", "publish", &format!("{RULES}/{BASELINE}.json")])?;
+    let mut done = format!("rule set {set} published");
+    if let Some([alarms, issuer, key]) = alarms_key(ctx)?
+        && !retired(ctx, &alarms)?
+    {
+        ctx.as_admin(&["rules", "trust", "add", &alarms, &issuer, "--", &key])?;
+        ctx.as_admin(&["rules", "publish", &format!("{RULES}/{ALARMS}.json")])?;
+        done.push_str(&format!(", {alarms} published"));
+    }
+    Ok(StepState::Done(done))
 }
 
 /// `https://localhost`, with `:PORT` unless it is the agent's default.
@@ -111,16 +155,32 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
          enrollment_token_file = \"/etc/openvibes-agent/token\"\n",
     );
     if ctx.plan.has(Component::Rules)
-        && let Ok([set, issuer, key]) = baseline_key(ctx)
+        && let Ok(baseline) = baseline_key(ctx)
     {
         let distribution = local_url(
             ctx.plan.distribution_port,
             super::ports::DISTRIBUTION_DEFAULT,
         );
-        text.push_str(&format!(
-            "distribution_url = \"{distribution}\"\n\n[[rule_sets]]\nid = \"{set}\"\n\
-             trusted_keys = [{{ issuer_key_id = \"{issuer}\", public_key = \"{key}\" }}]\n"
-        ));
+        // Threat alarms (P14): only for an agent that knows the collector,
+        // and only when the rules package carries the alarm rules.
+        // (A broken alarms.key already failed the rules step.)
+        let alarms = alarms_key(ctx)
+            .ok()
+            .flatten()
+            .filter(|_| ctx.exists(AGENT_AUDIT_RULE));
+        if alarms.is_some() {
+            text.push_str(
+                "# Threat alarms need auditd running (it loads the agent's exec rule).\n\
+                 collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n",
+            );
+        }
+        text.push_str(&format!("distribution_url = \"{distribution}\"\n"));
+        for [set, issuer, key] in std::iter::once(baseline).chain(alarms) {
+            text.push_str(&format!(
+                "\n[[rule_sets]]\nid = \"{set}\"\n\
+                 trusted_keys = [{{ issuer_key_id = \"{issuer}\", public_key = \"{key}\" }}]\n"
+            ));
+        }
     }
     text
 }
@@ -456,5 +516,91 @@ mod tests {
             state.detail().contains("journalctl -u openvibes-agent"),
             "{state:?}"
         );
+    }
+
+    const ALARMS_KEY: &str =
+        "baseline-alarms org.rules BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB";
+
+    /// Rules v2 carries the alarm rules: both sets are trusted and published,
+    /// and the step stays Todo until the alarm set is published too.
+    #[test]
+    fn the_alarm_rule_set_is_published_beside_the_baseline() {
+        let fake = rules_at("rules-alarms", 1);
+        fake.file(
+            "/usr/share/openvibes/rules/alarms.key",
+            &format!("{ALARMS_KEY}\n"),
+        );
+        fake.file(
+            "/usr/share/openvibes/rules/alarms.json",
+            "{\"rule_set_version\":1,\"payload\":\"x\"}",
+        );
+        let plan = plan(&[Ingest, Distribution, Rules]);
+        assert_eq!(rules_check(&fake.ctx(&plan)).unwrap(), StepState::Todo);
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
+            0,
+            "",
+        );
+        fake.answer(&admin(&["rules", "trust", "add"]), 0, "trusted\n");
+        fake.answer(&admin(&["rules", "publish"]), 0, "published\n");
+        let state = run_step(&fake.ctx(&plan), Step::Rules);
+        assert!(
+            state.detail().contains("baseline-alarms published"),
+            "{state:?}"
+        );
+        let published: Vec<String> = fake
+            .calls
+            .borrow()
+            .iter()
+            .filter(|call| call.get(6).is_some_and(|word| word == "publish"))
+            .map(|call| call[7].clone())
+            .collect();
+        assert_eq!(
+            published,
+            [
+                "/usr/share/openvibes/rules/baseline.json",
+                "/usr/share/openvibes/rules/alarms.json"
+            ]
+        );
+    }
+
+    /// The local agent gets the alarm rules and `process_events` only when
+    /// its package ships the audit rule (a P14 agent); an older agent would
+    /// refuse the collector name and not start.
+    #[test]
+    fn only_a_p14_agent_is_configured_for_alarms() {
+        let fake = rules_at("agent-alarms", 1);
+        fake.file(
+            "/usr/share/openvibes/rules/alarms.key",
+            &format!("{ALARMS_KEY}\n"),
+        );
+        fake.file("/usr/share/openvibes/rules/alarms.json", "{}");
+        let old = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(!old.contains("process_events"), "{old}");
+        assert!(!old.contains("baseline-alarms"), "{old}");
+        fake.file(
+            "/etc/audit/rules.d/openvibes-agent.rules",
+            "-a always,exit\n",
+        );
+        let new = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(
+            new.contains(
+                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n"
+            ),
+            "{new}"
+        );
+        assert!(new.contains("id = \"baseline-alarms\""), "{new}");
+        // collectors is a top-level key: it must come before any table.
+        assert!(new.find("collectors").unwrap() < new.find("[[rule_sets]]").unwrap());
+        assert!(toml::from_str::<toml::Value>(&new).is_ok(), "{new}");
+    }
+
+    #[test]
+    fn a_malformed_alarms_key_fails_the_rules_step() {
+        let fake = rules_at("rules-alarms-bad", 1);
+        fake.file("/usr/share/openvibes/rules/alarms.json", "{}");
+        fake.file("/usr/share/openvibes/rules/alarms.key", "only-two fields\n");
+        let error = rules_check(&fake.ctx(&plan(&[Ingest, Distribution, Rules]))).unwrap_err();
+        assert!(error.contains("alarms.key"), "{error}");
     }
 }
