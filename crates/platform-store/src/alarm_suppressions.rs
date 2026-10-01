@@ -171,8 +171,11 @@ pub async fn create(
     else {
         return Ok(Change::NotFound);
     };
-    let args: Vec<String> =
-        serde_json::from_value(alarm.get::<_, serde_json::Value>(4)).unwrap_or_default();
+    // Args that do not parse would hash as `[]` and quiet another command.
+    let Ok(args) = serde_json::from_value::<Vec<String>>(alarm.get::<_, serde_json::Value>(4))
+    else {
+        return Ok(Change::Invalid);
+    };
     let exe: Option<String> = alarm.get(3);
     let (agent_id, exe, hash) = match kind {
         "host" => (Some(alarm.get::<_, String>(2)), None, None),

@@ -225,3 +225,84 @@ async fn a_scoped_caller_cannot_suppress_everywhere_nor_see_it() {
     drop(client);
     db.drop().await;
 }
+
+/// The console's `command` hash and ingest's agree end to end, with args
+/// that need escaping: a suppression made from one alarm closes the same
+/// command when it is reported again.
+#[tokio::test]
+async fn a_command_suppression_closes_the_same_command_on_reingest() {
+    let (db, _) = setup().await;
+    let mut admin = db.pool.get().await.unwrap();
+    let now = Utc::now();
+    let args = vec![
+        "sh".to_owned(),
+        "-c".to_owned(),
+        "echo \"é\"\tdone".to_owned(),
+    ];
+    let alarm = |n: u32| Alarm {
+        alarm_id: Identifier::new(format!("alarm.{n:032x}")).unwrap(),
+        rule_set_id: Identifier::new("baseline").unwrap(),
+        rule_set_version: 1,
+        rule_id: Identifier::new("web-server-spawns-shell").unwrap(),
+        rule_version: 1,
+        severity: Severity::High,
+        confidence: Confidence::new(80).unwrap(),
+        message: "A web server started a shell".into(),
+        first_seen_unix_ms: now.timestamp_millis(),
+        last_seen_unix_ms: now.timestamp_millis(),
+        count: 1,
+        process: AlarmProcess {
+            pid: 1,
+            exe: "/usr/bin/sh".into(),
+            args: args.clone(),
+            cwd: None,
+            uid: 0,
+            euid: 0,
+            truncated: false,
+            seeded: false,
+        },
+        ancestors: vec![],
+    };
+    let partitions = platform_store::partition_days_of(&admin, "alarms")
+        .await
+        .unwrap();
+    let row = |n| {
+        alarms::row(
+            &alarm(n),
+            now - Duration::days(1),
+            now + Duration::minutes(5),
+            &partitions,
+        )
+        .unwrap()
+    };
+    alarms::insert_batch(&mut admin, AGENT, 0, &[row(7)], now)
+        .await
+        .unwrap();
+    let first: i64 = admin
+        .query_one(
+            "SELECT id FROM alarms WHERE alarm_id = $1",
+            &[&format!("alarm.{:032x}", 7)],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    let mut client = as_console(&db).await;
+    let made = alarm_suppressions::create(
+        &mut client,
+        &AgentScope::Global,
+        first,
+        "command",
+        "ok",
+        "a",
+        now,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(made, Change::Done(_)), "{made:?}");
+    let done = alarms::insert_batch(&mut admin, AGENT, 0, &[row(8)], now)
+        .await
+        .unwrap();
+    assert_eq!(done.suppressed, 1, "the re-reported command is closed");
+    drop((client, admin));
+    db.drop().await;
+}
