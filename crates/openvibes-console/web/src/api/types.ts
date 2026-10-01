@@ -13,6 +13,13 @@ export type Finding = S["FindingView"];
 export type FindingPage = S["FindingPage"];
 export type FindingSummary = S["FindingSummary"];
 export type FindingGroup = S["FindingGroupView"];
+export type AlarmSummary = S["AlarmSummaryView"];
+export type AlarmPage = S["AlarmPage"];
+export type AlarmDetail = S["AlarmDetailView"];
+export type AlarmTriage = S["AlarmTriageView"];
+export type AlarmSuppression = S["AlarmSuppressionView"];
+/** One process in an alarm, as the agent sent it (masked args). */
+export type AlarmProcess = { pid: number; exe: string; args: string[]; cwd?: string; uid: number; euid: number; truncated: boolean; seeded?: boolean };
 export type FindingGroupPage = S["FindingGroupPage"];
 export type GroupEndpoint = S["FindingGroupEndpointView"];
 export type GroupEndpointPage = S["FindingGroupEndpointPage"];
