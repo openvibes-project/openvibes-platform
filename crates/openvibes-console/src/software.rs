@@ -168,17 +168,20 @@ fn bad(code: &'static str, title: &'static str) -> Response {
     problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
 }
 
-fn limit(limit: Option<u16>) -> Result<i64, Response> {
+/// A refused query parameter: (problem code, title), answered as 400.
+type Invalid = (&'static str, &'static str);
+
+fn limit(limit: Option<u16>) -> Result<i64, Invalid> {
     match limit.unwrap_or(50) {
         limit @ 1..=100 => Ok(i64::from(limit)),
-        _ => Err(bad("invalid_query", "limit must be 1 to 100")),
+        _ => Err(("invalid_query", "limit must be 1 to 100")),
     }
 }
 
-fn query(q: Option<String>) -> Result<Option<String>, Response> {
+fn query(q: Option<String>) -> Result<Option<String>, Invalid> {
     match q {
         Some(q) if q.len() > MAX_QUERY || q.contains('\0') => {
-            Err(bad("invalid_query", "q must be at most 128 bytes"))
+            Err(("invalid_query", "q must be at most 128 bytes"))
         }
         Some(q) if q.is_empty() => Ok(None),
         q => Ok(q),
@@ -190,14 +193,14 @@ fn encode<T: Serialize>(key: &T) -> String {
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(key).unwrap_or_default())
 }
 
-fn decode<T: for<'de> Deserialize<'de>>(cursor: Option<&str>) -> Result<Option<T>, Response> {
+fn decode<T: for<'de> Deserialize<'de>>(cursor: Option<&str>) -> Result<Option<T>, Invalid> {
     cursor
         .map(|text| {
             URL_SAFE_NO_PAD
                 .decode(text)
                 .ok()
                 .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-                .ok_or_else(|| bad("invalid_cursor", "cursor is invalid"))
+                .ok_or(("invalid_cursor", "cursor is invalid"))
         })
         .transpose()
 }
@@ -275,7 +278,9 @@ pub(crate) async fn list_host_packages(
         decode::<(String, i64)>(params.cursor.as_deref()),
     ) {
         (Ok(q), Ok(limit), Ok(after)) => (q, limit, after),
-        (Err(response), _, _) | (_, Err(response), _) | (_, _, Err(response)) => return response,
+        (Err((code, title)), _, _) | (_, Err((code, title)), _) | (_, _, Err((code, title))) => {
+            return bad(code, title);
+        }
     };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
@@ -326,7 +331,9 @@ pub(crate) async fn list_software(
         decode::<(String, String)>(params.cursor.as_deref()),
     ) {
         (Ok(q), Ok(limit), Ok(after)) => (q, limit, after),
-        (Err(response), _, _) | (_, Err(response), _) | (_, _, Err(response)) => return response,
+        (Err((code, title)), _, _) | (_, Err((code, title)), _) | (_, _, Err((code, title))) => {
+            return bad(code, title);
+        }
     };
     let filters = SoftwareFilters {
         q,
@@ -381,7 +388,7 @@ pub(crate) async fn get_software(
         decode::<(String, String, i64)>(params.cursor.as_deref()),
     ) {
         (Ok(limit), Ok(after)) => (limit, after),
-        (Err(response), _) | (_, Err(response)) => return response,
+        (Err((code, title)), _) | (_, Err((code, title))) => return bad(code, title),
     };
     let not_found = || {
         problem_response(ProblemDetails::not_found(
