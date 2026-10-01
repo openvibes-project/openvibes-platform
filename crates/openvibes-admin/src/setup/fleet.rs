@@ -36,11 +36,15 @@ fn baseline_key<R: Runner>(ctx: &Ctx<R>) -> Result<[String; 3], String> {
     set_key(ctx, BASELINE)
 }
 
-/// The alarm rule set's trust line, when the package carries it.
-fn alarms_key<R: Runner>(ctx: &Ctx<R>) -> Option<[String; 3]> {
-    ctx.exists(&format!("{RULES}/{ALARMS}.json"))
-        .then(|| set_key(ctx, ALARMS).ok())
-        .flatten()
+/// The alarm rule set's trust line when the package carries the set; an
+/// unreadable or malformed key next to `alarms.json` is an error, as for
+/// the baseline, so the rules are never silently left unpublished.
+fn alarms_key<R: Runner>(ctx: &Ctx<R>) -> Result<Option<[String; 3]>, String> {
+    if ctx.exists(&format!("{RULES}/{ALARMS}.json")) {
+        set_key(ctx, ALARMS).map(Some)
+    } else {
+        Ok(None)
+    }
 }
 
 /// The published version of `set` (`rules list`: `SET vN keys …`).
@@ -89,7 +93,7 @@ pub fn rules_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Todo);
     };
     let mut done = format!("rule set {set} v{version} published");
-    if let Some([alarms, _, _]) = alarms_key(ctx)
+    if let Some([alarms, _, _]) = alarms_key(ctx)?
         && !retired(ctx, &alarms)?
     {
         match current(&alarms, ALARMS)? {
@@ -122,7 +126,7 @@ pub fn rules_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     ctx.as_admin(&["rules", "trust", "add", &set, &issuer, "--", &key])?;
     ctx.as_admin(&["rules", "publish", &format!("{RULES}/{BASELINE}.json")])?;
     let mut done = format!("rule set {set} published");
-    if let Some([alarms, issuer, key]) = alarms_key(ctx)
+    if let Some([alarms, issuer, key]) = alarms_key(ctx)?
         && !retired(ctx, &alarms)?
     {
         ctx.as_admin(&["rules", "trust", "add", &alarms, &issuer, "--", &key])?;
@@ -159,7 +163,11 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
         );
         // Threat alarms (P14): only for an agent that knows the collector,
         // and only when the rules package carries the alarm rules.
-        let alarms = alarms_key(ctx).filter(|_| ctx.exists(AGENT_AUDIT_RULE));
+        // (A broken alarms.key already failed the rules step.)
+        let alarms = alarms_key(ctx)
+            .ok()
+            .flatten()
+            .filter(|_| ctx.exists(AGENT_AUDIT_RULE));
         if alarms.is_some() {
             text.push_str(
                 "# Threat alarms need auditd running (it loads the agent's exec rule).\n\
@@ -585,5 +593,14 @@ mod tests {
         // collectors is a top-level key: it must come before any table.
         assert!(new.find("collectors").unwrap() < new.find("[[rule_sets]]").unwrap());
         assert!(toml::from_str::<toml::Value>(&new).is_ok(), "{new}");
+    }
+
+    #[test]
+    fn a_malformed_alarms_key_fails_the_rules_step() {
+        let fake = rules_at("rules-alarms-bad", 1);
+        fake.file("/usr/share/openvibes/rules/alarms.json", "{}");
+        fake.file("/usr/share/openvibes/rules/alarms.key", "only-two fields\n");
+        let error = rules_check(&fake.ctx(&plan(&[Ingest, Distribution, Rules]))).unwrap_err();
+        assert!(error.contains("alarms.key"), "{error}");
     }
 }
