@@ -33,6 +33,8 @@ pub mod enrichment;
 pub mod finding_changes;
 /// Host package inventories (vulnerability management).
 pub mod health;
+/// Open ports and running services per host (P15, Assets v2).
+pub mod host_services;
 /// Queries the ingest service runs.
 pub mod imports;
 pub mod ingest;
