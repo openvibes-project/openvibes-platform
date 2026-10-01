@@ -425,7 +425,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       }
     }
     const exposed = query.get("exposed") === "true";
-    return json([...rows.values()].filter((r) => !exposed || r.exposed_hosts > 0).sort((a, b) => a.port - b.port || a.protocol.localeCompare(b.protocol)).map((r) => ({ ...r, services: [...r.services].sort().slice(0, 8) })));
+    return json([...rows.values()].filter((r) => !exposed || r.exposed_hosts > 0).sort((a, b) => a.port - b.port || a.protocol.localeCompare(b.protocol)).map((r) => ({ ...r, services: [...r.services].sort((a, b) => a.localeCompare(b)).slice(0, 8) })));
   });
   route("GET", "/api/v1/services", "agents.read", () => {
     const counts = new Map<string, number>();
