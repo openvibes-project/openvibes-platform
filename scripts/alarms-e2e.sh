@@ -10,52 +10,65 @@
 # Usage: alarms-e2e.sh RPM_DIR
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-source "$ROOT/scripts/integration-lib.sh"
 RPMS=$(realpath "$1")
-W=${INTEGRATION_DIR:-$HOME/alarms-e2e}
-INGEST_PORT=28423
-HEALTH_PORT=28480
+SHARED=${INTEGRATION_DIR:-$HOME/alarms-e2e}
+W=$SHARED/platform/run # the platform's integration directory
 CONSOLE_PORT=28490
 CONSOLE_HEALTH_PORT=28491
 ORIGIN="https://127.0.0.1:$CONSOLE_PORT"
 PASSWORD="alarms-e2e-Passw0rd!"
 fail() { echo "FAIL: $*" >&2; exit 1; }
+wait_for() { # DESCRIPTION SECONDS COMMAND...
+    local desc=$1 seconds=$2 i
+    shift 2
+    for ((i = 0; i < seconds; i++)); do
+        "$@" >/dev/null 2>&1 && { echo "ok: $desc"; return 0; }
+        sleep 1
+    done
+    fail "$desc (after ${seconds}s)"
+}
+rm -rf "$SHARED"; mkdir -p "$SHARED/agent/state"; chmod 700 "$SHARED/agent/state"
 
-# This build's RPMs, unpacked (the runner has no rpm database to use). Only
-# the platform's own version; dist may hold other builds.
-X=$(mktemp -d)
-for package in admin ingest console agent; do
-    rpm=$(ls "$RPMS"/openvibes-"$package"-[0-9]*.x86_64.rpm | sort -V | tail -1)
-    (cd "$X" && rpm2cpio "$rpm" | cpio -idm --quiet)
-done
-export OPENVIBES_BIN_DIR="$X/usr/bin"
-PATH=$(ls -d /usr/lib/postgresql/*/bin | sort -V | tail -1):$PATH
-
-start_platform # PostgreSQL, schema, CA, ingest (integration-lib.sh)
-
-# Console: direct TLS on 127.0.0.1, its own least-privilege role.
+# The platform: this build's RPMs in fedora:44 (Fedora's glibc), on the
+# host network so both sides use 127.0.0.1, as an unprivileged user.
 openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes -days 1 \
     -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1 \
-    -keyout "$W/console.key" -out "$W/console.crt" 2>/dev/null
-cat > "$W/console.toml" <<EOF
-development_listen = "127.0.0.1:$CONSOLE_PORT"
-health_listen = "127.0.0.1:$CONSOLE_HEALTH_PORT"
-transport_mode = "direct_tls"
-database_url = "postgresql:///openvibes?host=$W/pg/run&user=openvibes-console"
-public_origin = "$ORIGIN"
-server_certificate_file = "$W/console.crt"
-server_key_file = "$W/console.key"
-EOF
-printf '%s\n' "$PASSWORD" | admin user create --username alex --display-name "Alex Admin" \
+    -keyout "$SHARED/console.key" -out "$SHARED/console.crt" 2>/dev/null
+chmod 644 "$SHARED/console.key" # the container's console user reads it (test key)
+podman run -d --name ov-alarms-e2e --network host -v "$ROOT:/src:ro,Z" -v "$RPMS:/rpms:ro,Z" \
+    -v "$SHARED:$SHARED:z" -e RPMS=/rpms -e SHARED="$SHARED" -e CONSOLE_PORT="$CONSOLE_PORT" \
+    -e CONSOLE_HEALTH_PORT="$CONSOLE_HEALTH_PORT" registry.fedoraproject.org/fedora:44 \
+    bash /src/scripts/alarms-e2e-platform.sh >/dev/null
+cleanup() {
+    local status=$?
+    sudo systemctl stop ov-alarms-e2e-agent 2>/dev/null || true
+    if ((status != 0)); then
+        echo "--- platform (tail)"; podman logs --tail 30 ov-alarms-e2e 2>&1 || true
+        for log in "$W"/*.log; do [[ -f $log ]] && { echo "--- $(basename "$log") (tail)"; tail -n 20 "$log"; }; done
+        echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20
+    fi
+    podman rm -f ov-alarms-e2e >/dev/null 2>&1 || true
+    exit "$status"
+}
+trap cleanup EXIT
+in_platform() { podman exec ov-alarms-e2e runuser -u ci -- "$@"; }
+admin() { in_platform openvibes-admin --config "$W/admin.toml" "$@"; }
+sql() { in_platform psql -h "$W/pg/run" -U openvibes-admin -d openvibes -AtX -c "$1"; }
+platform_up() { [[ -e $W/ready ]]; }
+wait_for "platform up in fedora:44 (ingest and console)" 300 platform_up
+printf '%s\n' "$PASSWORD" | podman exec -i ov-alarms-e2e runuser -u ci -- openvibes-admin \
+    --config "$W/admin.toml" user create --username alex --display-name "Alex Admin" \
     --role admin --password-stdin >/dev/null
-"$OPENVIBES_BIN_DIR/openvibes-console" --config "$W/console.toml" 2> "$W/console.log" &
-PIDS+=("$!")
-wait_for "console ready" 30 curl -fsS "http://127.0.0.1:$CONSOLE_HEALTH_PORT/ready"
+
+# The agent on the host, from this build's RPM.
+X=$(mktemp -d)
+(cd "$X" && rpm2cpio "$(ls "$RPMS"/openvibes-agent-[0-9]*.x86_64.rpm | sort -V | tail -1)" |
+    cpio -idm --quiet)
 
 # Console session: preauth CSRF → login → the session's own CSRF value.
-JAR="$W/cookies"
+JAR="$SHARED/cookies"
 api() { # METHOD PATH [JSON]
-    curl -sS --cacert "$W/console.crt" -b "$JAR" -c "$JAR" -H "Origin: $ORIGIN" \
+    curl -sS --cacert "$SHARED/console.crt" -b "$JAR" -c "$JAR" -H "Origin: $ORIGIN" \
         -H "Sec-Fetch-Site: same-origin" -H "X-CSRF-Token: ${CSRF:-}" \
         -H 'content-type: application/json' -X "$1" "$ORIGIN$2" ${3:+--data-binary "$3"}
 }
@@ -66,40 +79,36 @@ CSRF=$(api GET /api/v1/session | jq -r .csrf_token)
 echo "ok: signed in to the console API"
 
 # The agent: packaged binary, its exec audit rule, one signed alarm rule.
+A=$SHARED/agent
 sudo auditctl -R "$X/etc/audit/rules.d/openvibes-agent.rules" >/dev/null
-mkdir -p "$W/agent/state"; chmod 700 "$W/agent/state"
-SIGN="$RPMS/sign_bundle"; chmod +x "$SIGN"
-KEY=$("$SIGN" keygen "$W/agent/signing.key" | tail -1)
-cat > "$W/agent/rules.json" <<'RULES'
+SIGN="$RPMS/sign_bundle"; chmod +x "$SIGN" 2>/dev/null || { cp "$SIGN" "$A/sign_bundle"; chmod +x "$A/sign_bundle"; SIGN=$A/sign_bundle; }
+KEY=$("$SIGN" keygen "$A/signing.key" | tail -1)
+cat > "$A/rules.json" <<'RULES'
 {"schema_version":1,"rules":[
  {"id":"web-shell","version":1,"title":"Shell from a web server","severity":"high","confidence":80,
   "kind":"process_event",
   "expression":"event['parent.name'] == 'fake-nginx' && event['process.cmdline'].startsWith('sh -c ')",
   "finding_message":"A web server started a shell"}]}
 RULES
-"$SIGN" sign "$W/agent/signing.key" "$W/agent/rules.json" alarms-e2e 1 e2e.rules 1 \
-    "$W/agent/bundle.json" >/dev/null
-admin token create --expires 1h | sed -n 's/^token \([A-Za-z0-9_-]\{43\}\)$/\1/p' > "$W/agent/token"
-chmod 600 "$W/agent/token"
-cat > "$W/agent/agent.toml" <<EOF
-platform_url = "https://127.0.0.1:$INGEST_PORT"
-platform_ca_file = "$W/ca/root/root.crt"
-state_dir = "$W/agent/state"
-enrollment_token_file = "$W/agent/token"
+"$SIGN" sign "$A/signing.key" "$A/rules.json" alarms-e2e 1 e2e.rules 1 "$A/bundle.json" >/dev/null
+admin token create --expires 1h | sed -n 's/^token \([A-Za-z0-9_-]\{43\}\)$/\1/p' > "$A/token"
+chmod 600 "$A/token"
+[[ -s $A/token ]] || fail "no enrollment token"
+cp "$W/ca/root/root.crt" "$A/platform-ca.crt"
+cat > "$A/agent.toml" <<EOF
+platform_url = "https://127.0.0.1:28423"
+platform_ca_file = "$A/platform-ca.crt"
+state_dir = "$A/state"
+enrollment_token_file = "$A/token"
 collectors = ["processes", "process_events"]
 [[rule_sets]]
 id = "alarms-e2e"
-bundle_file = "$W/agent/bundle.json"
+bundle_file = "$A/bundle.json"
 trusted_keys = [{ issuer_key_id = "e2e.rules", public_key = "$KEY" }]
 EOF
 sudo systemd-run --quiet --collect --unit ov-alarms-e2e-agent --uid "$(id -u)" --gid "$(id -g)" \
     -p AmbientCapabilities=CAP_AUDIT_READ -p CapabilityBoundingSet=CAP_AUDIT_READ \
-    -p NoNewPrivileges=yes "$X/usr/bin/openvibes-agent" "$W/agent/agent.toml"
-# cleanup (integration-lib.sh) exits with the status it finds in $?: keep
-# the script's own.
-trap 'status=$?; sudo systemctl stop ov-alarms-e2e-agent 2>/dev/null
-      ((status == 0)) || sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20
-      (exit "$status"); cleanup' EXIT
+    -p NoNewPrivileges=yes "$X/usr/bin/openvibes-agent" "$A/agent.toml"
 agent_log() { sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager; }
 enrolled() { [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'")" == 1 ]]; }
 wait_for "agent enrolled" 60 enrolled

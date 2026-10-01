@@ -330,11 +330,11 @@ jobs:
           name: rpms
           path: dist
 
-      - name: Install auditd, PostgreSQL and tools
+      - name: Install auditd, podman and tools
         timeout-minutes: 10
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q auditd postgresql rpm2cpio cpio jq
+          sudo apt-get install -y -q auditd rpm2cpio cpio jq podman
 
       - name: Alarms end to end
         run: bash scripts/alarms-e2e.sh dist
