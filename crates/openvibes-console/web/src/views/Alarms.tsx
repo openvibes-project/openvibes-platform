@@ -73,11 +73,15 @@ function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
   const scopes = quietScopes.filter((s) => can("alarms.suppress", s.global));
   if (scopes.length === 0 || alarm.suppressed_by) return null;
   const chosen = quietScopes.find((s) => s.scope === scope);
-  const what = scope === "host" ? `on ${alarm.hostname ?? alarm.agent_id}` : scope === "program" ? `${alarm.exe} on every host` : `this exact ${alarm.exe} command on every host`;
+  const what = {
+    host: `on ${alarm.hostname ?? alarm.agent_id}`,
+    program: `${alarm.exe} on every host`,
+    command: `this exact ${alarm.exe} command on every host`,
+  }[scope] ?? "";
   // Choosing a scope does nothing by itself (arrow keys change a closed
   // select); only the confirmation acts, and it names what it quiets.
   return (
-    <div className="row" onClick={(event) => event.stopPropagation()}>
+    <div className="row">
       <select className="select select--small" aria-label={`Quiet ${alarm.message}`} value={scope} onChange={(event) => setScope(event.target.value)}>
         <option value="">Quiet…</option>
         {scopes.map((s) => <option key={s.scope} value={s.scope}>{s.label}</option>)}
@@ -105,7 +109,7 @@ export function Alarms() {
   // An empty filtered page: does any alarm exist at all? If not, the
   // empty state explains how to turn alarms on, not the chips.
   const any = useResource<AlarmPage>(alarms.data && loaded.length === 0 ? "/api/v1/alarms?suppressed=true&limit=1" : null);
-  const none = loaded.length === 0 && any.data !== undefined && any.data.items.length === 0;
+  const none = loaded.length === 0 && any.data?.items.length === 0;
 
   return (
     <div className="view">
