@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use platform_host::{
-    StepState, Unit, UpdateStep,
+    REFRESH_OURS, StepState, Unit, UpdateStep,
     runner::{
         Program::{Dnf, Rpm, Systemctl},
         Runner,
@@ -85,7 +85,13 @@ fn upgrade<R: Runner>(ctx: &Ctx<R>, args: &UpdateArgs) -> Result<StepState, Stri
     names.sort_unstable();
     let mut argv = vec!["upgrade".to_owned(), "-y".to_owned()];
     match args.repo_dir.as_ref().or(ctx.plan.repo_dir.as_ref()) {
-        None => argv.extend(names.iter().map(|name| (*name).to_owned())),
+        None => {
+            // dnf keeps repository metadata up to 48 hours; without a
+            // refresh, a release from today reads as "nothing to do".
+            // Only our repository is refreshed, not the whole system's.
+            argv.push(REFRESH_OURS.to_owned());
+            argv.extend(names.iter().map(|name| (*name).to_owned()));
+        }
         Some(dir) => {
             let check = if ctx.plan.allow_unsigned_local {
                 "0"
@@ -316,6 +322,7 @@ mod tests {
                 "/usr/bin/dnf",
                 "upgrade",
                 "-y",
+                "--setopt=openvibes.metadata_expire=0",
                 "openvibes-admin",
                 "openvibes-agent",
                 "openvibes-ingest"
