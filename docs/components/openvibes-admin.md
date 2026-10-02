@@ -476,8 +476,13 @@ refused while one works):
   installed `openvibes-*` packages (the agent too), `migrate` and
   `maintenance` (and, with the rules component, publishing the upgraded
   baseline rule set when it is newer than the published one), start the
-  remembered units, readiness (a unit not ready after 30 s fails with its
-  own last journal line, as in Setup).
+  remembered platform units, readiness (a unit not ready after 30 s fails
+  with its own last journal line, as in Setup), and only then the agent,
+  if it was running (board #111: started together with distribution, it
+  found nothing listening and had no rules for a scan interval; it's
+  started even when a unit isn't ready, since it fetches again soon
+  itself). Setup's Agent step likewise waits for distribution to be ready
+  before it restarts the agent.
 - `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
