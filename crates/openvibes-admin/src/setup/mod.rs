@@ -184,6 +184,7 @@ pub fn run_step<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
 /// Runs every step in order until one fails or waits; true when all
 /// finished.
 pub fn run_all<R: Runner>(ctx: &Ctx<R>, mut report: impl FnMut(Step, &StepState)) -> bool {
+    update::resume_agent(ctx);
     for step in Step::ALL {
         let state = run_step(ctx, step);
         report(step, &state);

@@ -157,7 +157,8 @@ status` (an unreachable database is a problem here); disk use of
 each published rule set's current bundle from `rules list` (a problem under
 90 days to expiry or expired, with the fix: install the newer rules package
 and run Repair, or publish a newer bundle; retired sets and sets without a
-bundle are left out). Loaded on opening and on `R`.
+bundle are left out). With distribution installed and no rule set
+published at all, a problem: agents get no rules (board #111). Loaded on opening and on `R`.
 
 Every TUI action (service action, boot change, config save, Setup step) is
 also recorded in `audit_log` when the database is reachable, through
@@ -487,8 +488,13 @@ refused while one works):
   installed `openvibes-*` packages (the agent too), `migrate` and
   `maintenance` (and, with the rules component, publishing the upgraded
   baseline rule set when it is newer than the published one), start the
-  remembered units, readiness (a unit not ready after 30 s fails with its
-  own last journal line, as in Setup).
+  remembered platform units, readiness (a unit not ready after 30 s fails
+  with its own last journal line, as in Setup), and only then the agent,
+  if it was running (board #111: started together with distribution, it
+  found nothing listening and had no rules for a scan interval; it's
+  started even when a unit isn't ready, since it fetches again soon
+  itself). Setup's Agent step likewise waits for distribution to be ready
+  before it restarts the agent.
 - `setup --uninstall --keep-data [--backup PATH]`: stop and disable, close
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every

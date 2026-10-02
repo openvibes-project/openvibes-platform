@@ -16,6 +16,10 @@ use super::{Ctx, backup, base::local_rpm, fleet, run::ready};
 
 const ACTIVE: &str = "/run/openvibes-admin/update-active";
 const AGENT: &str = "openvibes-agent.service";
+/// The agent was running before the update: Ready starts it once the
+/// platform answers (board #111: started together, it found distribution
+/// not listening and waited a scan interval without rules).
+const AGENT_PENDING: &str = "/run/openvibes-admin/update-agent";
 
 #[derive(clap::Args, Clone, Debug, Default)]
 pub struct UpdateArgs {
@@ -149,16 +153,45 @@ fn start<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .read(ACTIVE)
         .map_err(|_| "no record of the stopped services: run the Stop step first".to_owned())?;
     let active: Vec<&str> = text.lines().filter(|line| units().contains(line)).collect();
-    if !active.is_empty() {
+    let platform: Vec<&str> = active
+        .iter()
+        .copied()
+        .filter(|unit| *unit != AGENT)
+        .collect();
+    let agent = active.contains(&AGENT);
+    if !platform.is_empty() {
         let mut args = vec!["start"];
-        args.extend(&active);
-        ctx.ok(Systemctl, &args)?;
+        args.extend(&platform);
+        if let Err(error) = ctx.ok(Systemctl, &args) {
+            // Never leave the security tool switched off: the agent runs
+            // on and fetches its rules again itself (reviewer, #157).
+            if agent {
+                let _ = ctx.ok(Systemctl, &["start", AGENT]);
+            }
+            return Err(error);
+        }
+    }
+    if agent {
+        ctx.put(AGENT_PENDING, b"\n", None, 0o600)?;
     }
     let _ = std::fs::remove_file(ctx.path(ACTIVE));
     Ok(StepState::Done(format!(
-        "started again: {}",
-        active.join(" ")
+        "started again: {}{}",
+        platform.join(" "),
+        if agent {
+            " (the agent once they are ready)"
+        } else {
+            ""
+        }
     )))
+}
+
+/// Starts the agent an earlier Update stopped and never started again (it
+/// was quit between Start and Ready); run when an Update or Setup begins.
+pub(super) fn resume_agent<R: Runner>(ctx: &Ctx<R>) {
+    if ctx.exists(AGENT_PENDING) && ctx.ok(Systemctl, &["start", AGENT]).is_ok() {
+        let _ = std::fs::remove_file(ctx.path(AGENT_PENDING));
+    }
 }
 
 fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -166,23 +199,42 @@ fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .into_iter()
         .filter(|unit| ctx.succeeds(Systemctl, &["is-active", "--quiet", unit.name()]))
         .collect();
-    for unit in &running {
+    let mut not_ready = None;
+    'units: for unit in &running {
         let mut attempts = 0;
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == super::run::READY_ATTEMPTS {
-                return Err(super::run::not_ready(ctx, *unit));
+                not_ready = Some(super::run::not_ready(ctx, *unit));
+                break 'units;
             }
             ctx.pause();
         }
     }
+    // The agent last, once the platform answers; started even when a
+    // service isn't ready, since it fetches its rules again soon itself.
+    let agent = ctx.exists(AGENT_PENDING);
+    if agent {
+        ctx.ok(Systemctl, &["start", AGENT])?;
+        let _ = std::fs::remove_file(ctx.path(AGENT_PENDING));
+    }
+    if let Some(error) = not_ready {
+        return Err(error);
+    }
     let names: Vec<&str> = running.iter().map(|unit| unit.name()).collect();
-    Ok(StepState::Done(format!("ready: {}", names.join(" "))))
+    Ok(StepState::Done(format!(
+        "ready: {}{}",
+        names.join(" "),
+        if agent { "; agent started" } else { "" }
+    )))
 }
 
 pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> StepState {
     if let Err(error) = super::system::job_guard(ctx.root, "update") {
         return StepState::Failed(error);
+    }
+    if matches!(step, UpdateStep::Backup | UpdateStep::Stop) {
+        resume_agent(ctx);
     }
     let result = match step {
         UpdateStep::Backup => match &args.backup {
@@ -287,15 +339,27 @@ mod tests {
         ));
         assert_eq!(
             fake.call(&["/usr/bin/systemctl", "start"]),
-            [
-                "/usr/bin/systemctl",
-                "start",
-                "openvibes-ingest.service",
-                "openvibes-agent.service"
-            ],
-            "distribution was stopped before and stays stopped"
+            ["/usr/bin/systemctl", "start", "openvibes-ingest.service"],
+            "distribution was stopped before and stays stopped; the agent waits"
         );
         assert!(!fake.root.join("run/openvibes-admin/update-active").exists());
+
+        // Board #111: the agent starts only once the platform answers.
+        fake.answer(&["/usr/bin/curl"], 0, "");
+        let ready = run(&ctx, UpdateStep::Ready, &UpdateArgs::default());
+        assert!(ready.detail().contains("agent started"), "{ready:?}");
+        let starts: Vec<Vec<String>> = fake
+            .calls
+            .borrow()
+            .iter()
+            .filter(|call| call.get(1).is_some_and(|verb| verb == "start"))
+            .cloned()
+            .collect();
+        assert_eq!(
+            starts.last().unwrap(),
+            &["/usr/bin/systemctl", "start", "openvibes-agent.service"]
+        );
+        assert!(!fake.root.join("run/openvibes-admin/update-agent").exists());
     }
 
     #[test]
@@ -581,5 +645,44 @@ mod tests {
             StepState::Done(_)
         ));
         assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
+    }
+
+    /// Reviewer on #157: a failed Start must not leave the agent stopped,
+    /// and an Update quit before Ready is made good by the next run.
+    #[test]
+    fn the_agent_is_never_left_stopped() {
+        let fake = Fake::new("update-agent-left");
+        fake.file(
+            "/run/openvibes-admin/update-active",
+            "openvibes-ingest.service\nopenvibes-agent.service\n",
+        );
+        fake.answer(
+            &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+            0,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "start"], 1, "");
+        let plan = plan(&[Ingest, Agent]);
+        let ctx = fake.ctx(&plan);
+        let state = run(&ctx, UpdateStep::Start, &UpdateArgs::default());
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+        assert!(
+            fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]),
+            "the agent is started even though ingest failed"
+        );
+
+        // Quit between Start and Ready: the next run starts the agent first.
+        let later = Fake::new("update-agent-resumed");
+        later.file("/run/openvibes-admin/update-agent", "\n");
+        later.answer(
+            &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+            0,
+            "",
+        );
+        later.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+        let ctx = later.ctx(&plan);
+        let _ = run(&ctx, UpdateStep::Stop, &UpdateArgs::default());
+        assert!(later.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+        assert!(!later.root.join("run/openvibes-admin/update-agent").exists());
     }
 }
