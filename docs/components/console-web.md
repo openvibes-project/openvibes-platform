@@ -233,3 +233,14 @@ types, unit tests and the demo end-to-end tests on pull requests; on pushes
 to `main` it also builds the demo and publishes it to GitHub Pages
 (https://openvibes-project.github.io/openvibes-platform/). A failing check
 stops the deploy. The main CI workflow runs the live tests.
+
+## Host export (#119)
+
+The Host page's **Export** button lets the user pick sections (details,
+findings, alarms, vulnerabilities, software, ports, services; only those
+their role may read) and saves one CSV with the columns `section, name,
+detail, state, severity, extra`. The browser fetches each section through
+the same scoped API as the Host page (at most 10,000 rows per section).
+Cells are quoted, and a leading `= + - @` is prefixed with `'` so a
+spreadsheet never runs it as a formula (`ui/csv.ts`, unit-tested).
+

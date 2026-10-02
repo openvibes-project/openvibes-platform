@@ -9,6 +9,7 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge }
 import { date, severityOrder } from "../ui/format";
 import { lineage } from "../views/Alarms";
 import { packageId } from "../views/Software";
+import { HostExport } from "./HostExport";
 import { HostServicesTab } from "./HostServices";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section, Tabs } from "../ui/panel";
@@ -83,6 +84,7 @@ export function AgentPanel({ id }: { id: string }) {
         askAbout={{ ref: { kind: "agent", id }, label: name }}
         actions={<>
           <button type="button" className="button" onClick={() => nav.open({ kind: "compare", id: data.id })}><Icon name="layers" size={14} /> Compare</button>
+          <HostExport agent={data} />
           {can("agents.revoke") && data.status !== "revoked" && data.status !== "imported" && (
           <Confirm danger label={`Revoke ${name}? Its certificate stops working at once; the host must enroll again.`} reason="Reason (kept in the audit log)"
             onConfirm={async (reason) => {
