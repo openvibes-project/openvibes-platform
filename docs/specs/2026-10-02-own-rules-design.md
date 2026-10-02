@@ -103,6 +103,21 @@ A console rule set still needs a signature that agents trust. Options:
     - Someone who controls the console process can already read
       everything the platform stores. The channel adds only what agents
       never send.
+  - **Site alarm rules see masked command lines** (lead, 2026-10-02):
+    - The agent masks the `event` command line and arguments with the same
+      `mask_args` it uses for alarms, before a site set's rules evaluate
+      them. Only the official baseline sets see the full form.
+    - It's set per set in the agent's own `agent.toml`
+      (`masked_events = true`). `install.sh` and `agent command` write it
+      for `site-alarms`.
+    - A stolen key signs bundles but can't edit `agent.toml`, so it can't
+      turn masking off. That closes the probe on secrets in argv.
+    - What's lost: rules can't match argument *values* that masking hides
+      (after `-p`, `--password`, `TOKEN=` and so on). Rules about a
+      command's shape (program, flags) still work.
+    - Cost: masking runs on every exec that passes a site rule's
+      `programs` prefilter, not only when an alarm is raised. It's gated
+      by an `alarms-cost` measurement (§9).
   - **Mitigations:**
     - separate permissions (D3);
     - publishing asks for the password again;
@@ -124,10 +139,12 @@ A console rule set still needs a signature that agents trust. Options:
     rules quick.
   - It costs a little more UI than A alone.
 
-**Recommendation: A**, with B kept working (it already does: export plus
-the existing upload). A is what makes "write a rule in the console" true,
-and the risk is confined to the site sets, whose worst case is noise. C
-only if the user wants offline signing for some sets from day one.
+**Recommendation: A, with masked command lines for site alarm rules**,
+and B kept working (it already does: export plus the existing upload). A
+is what makes "write a rule in the console" true. The risk is confined to
+the site sets: their worst case is noise plus a slow one-bit channel over
+facts that carry no argv secrets. C only if the user wants offline signing
+for some sets from day one.
 
 ## 5. The editor
 
@@ -208,7 +225,7 @@ only if the user wants offline signing for some sets from day one.
 
 | # | Question | Options | Recommended |
 |---|---|---|---|
-| D1 | How site rules are signed | A: site key on the platform · B: export, sign offline · C: both, per set | **A** (B keeps working) |
+| D1 | How site rules are signed | A: site key on the platform · B: export, sign offline · C: both, per set | **A**, site alarm rules see masked command lines (B keeps working) |
 | D2 | Which rule sets | A: `site` + `site-alarms` · B: one set · C: one pair per asset group | **A** |
 | D3 | Who may do what | A: `rules.write` does all · B: `rules.write` drafts, `rules.upload` publishes | **B** |
 | D4 | What a test runs against | A: packages and ports the platform holds · B: agents upload all facts · C: A now, B later | **C** |
@@ -218,10 +235,14 @@ only if the user wants offline signing for some sets from day one.
 
 1. Store and API: drafts, validate, test and dry run (`rules.write`).
 2. Site key in Setup, plus publish that signs (D1 A). Agent command and
-   `install.sh` site lines (D5). Docs.
-3. Console UI: rule list, editor panel, test, dry run, publish with diff,
+   `install.sh` site lines (D5), with `masked_events = true` for
+   `site-alarms`. Docs.
+3. Agent: `masked_events` per rule set, masking the `event` command line
+   before that set's rules evaluate it. **Gate:** an `alarms-cost` run
+   with a site alarm rule set must stay within the P14 budget (#86).
+4. Console UI: rule list, editor panel, test, dry run, publish with diff,
    history.
-4. Demo routes and e2e; a full-stack e2e where a console-published rule
+5. Demo routes and e2e; a full-stack e2e where a console-published rule
    reaches a real agent.
 
 One PR each, each with its component docs.
