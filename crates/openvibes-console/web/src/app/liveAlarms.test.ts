@@ -3,24 +3,36 @@ import { describe, expect, it } from "vitest";
 import type { AlarmPage } from "../api/types";
 import { compareNewest } from "./liveAlarms";
 
-const page = (id: string, count = 1, last_seen = "2026-10-02T10:00:00Z"): AlarmPage =>
-  ({ items: [{ id, count, last_seen }] }) as unknown as AlarmPage;
-const empty = { items: [] } as unknown as AlarmPage;
+const alarm = (id: string, first_seen: string, last_seen = first_seen, count = 1) => ({ id, first_seen, last_seen, count });
+const page = (...items: ReturnType<typeof alarm>[]) => ({ items }) as unknown as AlarmPage;
+const T = (s: number) => `2026-10-02T10:00:${String(s).padStart(2, "0")}.000Z`;
 
 describe("live alarms", () => {
   it("treats the first answer as the baseline", () => {
-    expect(compareNewest(undefined, page("a"))).toMatchObject({ changed: false, fresh: false });
-    expect(compareNewest(undefined, empty)).toMatchObject({ seen: null, changed: false });
+    expect(compareNewest(undefined, page(alarm("a", T(1))))).toMatchObject({ changed: false, fresh: false });
+    expect(compareNewest(undefined, page())).toMatchObject({ changed: false, fresh: false });
   });
 
-  it("a new alarm is fresh; a repeat of the newest only refreshes", () => {
-    const base = compareNewest(undefined, page("a")).seen;
-    expect(compareNewest(base, page("b"))).toMatchObject({ changed: true, fresh: true });
-    expect(compareNewest(base, page("a", 2, "2026-10-02T10:00:05Z"))).toMatchObject({ changed: true, fresh: false });
-    expect(compareNewest(base, page("a"))).toMatchObject({ changed: false, fresh: false });
+  it("a newly appeared alarm is fresh", () => {
+    const { seen } = compareNewest(undefined, page(alarm("a", T(1))));
+    expect(compareNewest(seen, page(alarm("b", T(5))))).toMatchObject({ changed: true, fresh: true });
   });
 
-  it("the first alarm after none is fresh", () => {
-    expect(compareNewest(null, page("a"))).toMatchObject({ changed: true, fresh: true });
+  it("an older alarm repeating moves to the top but is not fresh", () => {
+    const { seen } = compareNewest(undefined, page(alarm("b", T(5))));
+    expect(compareNewest(seen, page(alarm("a", T(1), T(9), 2)))).toMatchObject({ changed: true, fresh: false });
+  });
+
+  it("the newest going away refreshes but is not fresh", () => {
+    const { seen } = compareNewest(undefined, page(alarm("b", T(5))));
+    expect(compareNewest(seen, page(alarm("a", T(1))))).toMatchObject({ changed: true, fresh: false });
+    expect(compareNewest(seen, page())).toMatchObject({ changed: true, fresh: false });
+  });
+
+  it("the first alarm after none is fresh, once", () => {
+    const { seen } = compareNewest(undefined, page());
+    const next = compareNewest(seen, page(alarm("a", T(1))));
+    expect(next).toMatchObject({ changed: true, fresh: true });
+    expect(compareNewest(next.seen, page(alarm("a", T(1), T(3), 2)))).toMatchObject({ changed: true, fresh: false });
   });
 });

@@ -24,16 +24,22 @@ export function useUnseenAlarms(): boolean {
   return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, () => unseen);
 }
 
-type Seen = { id: string; key: string } | null | undefined;
+/** What the poll remembers: the newest alarm's identity (for "did the
+ *  list change") and the latest `first_seen` so far (for "is it new"). */
+export type Seen = { key: string | null; newest: string } | undefined;
 
-/** Compares the newest alarm with the last one seen: `changed` when the
- *  list should refresh, `fresh` when it is a new alarm (not a repeat). The
- *  first answer (`last` undefined) is the baseline and is never news. */
+/** Compares the newest-active alarm with what was seen before. `changed`:
+ *  the list should refresh (anything moved, including the last alarm going
+ *  away). `fresh`: an alarm that first appeared after everything seen so
+ *  far; an older alarm repeating or resurfacing is not news. The first
+ *  answer (`last` undefined) is the baseline and is never news. */
 export function compareNewest(last: Seen, page: AlarmPage): { seen: Seen; changed: boolean; fresh: boolean } {
   const top = page.items[0];
-  const seen = top ? { id: top.id, key: `${top.id}:${top.count}:${top.last_seen}` } : null;
-  const changed = last !== undefined && seen !== null && seen.key !== last?.key;
-  return { seen, changed, fresh: changed && seen?.id !== last?.id };
+  const key = top ? `${top.id}:${top.count}:${top.last_seen}` : null;
+  if (last === undefined) return { seen: { key, newest: top?.first_seen ?? "" }, changed: false, fresh: false };
+  // RFC 3339 times from one server compare correctly as strings.
+  const fresh = top !== undefined && top.first_seen > last.newest;
+  return { seen: { key, newest: fresh ? top.first_seen : last.newest }, changed: key !== last.key, fresh };
 }
 
 /** Polls while `enabled` and the page is visible; `onAlarms` clears the mark. */
@@ -49,7 +55,8 @@ export function useLiveAlarms(enabled: boolean, onAlarms: boolean): void {
     const poll = async () => {
       if (document.visibilityState !== "visible") return;
       try {
-        const page = await request<AlarmPage>("GET", "/api/v1/alarms?state=active&limit=1");
+        // Marked as background: the poll must not keep an idle session alive.
+        const page = await request<AlarmPage>("GET", "/api/v1/alarms?state=active&limit=1", undefined, { "X-OpenVIBES-Background": "1" });
         if (stopped) return;
         const { seen, changed, fresh } = compareNewest(last, page);
         last = seen;
