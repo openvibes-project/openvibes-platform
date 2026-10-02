@@ -43,8 +43,9 @@
 .rail__item:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .rail__item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .rail__item[aria-current="page"]::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
-/* A new alarm since Alarms was last open. */
-.rail__dot { position: absolute; left: 24px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
+/* Counts beside Findings, Alarms and Vulnerabilities (#117). */
+.rail__count { position: absolute; left: 22px; top: 3px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; background: var(--surface-2); color: var(--text-2); box-shadow: 0 0 0 2px var(--surface); font-variant-numeric: tabular-nums; }
+.rail__count--bad { background: var(--bad); color: #fff; }
 .rail__label { opacity: 0; transition: opacity var(--fast); }
 .rail:hover .rail__label, .rail:has(:focus-visible) .rail__label, .rail--pinned .rail__label { opacity: 1; }
 .rail__tip { display: none; }

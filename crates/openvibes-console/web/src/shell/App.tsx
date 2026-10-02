@@ -63,7 +63,7 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   useEffect(() => { document.title = `${current?.label ?? "OpenVIBES"} · OpenVIBES`; }, [current]);
   // Signed in with alarms.read (and no forced password change): new alarms
   // appear without a reload.
-  useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"), view === "/alarms");
+  useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"));
 
   useEffect(() => {
     let pending = "";
