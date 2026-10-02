@@ -6,6 +6,8 @@ rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
+# Only its request limit, so the client checks the same bound.
+openvibes-signer = { path = "../openvibes-signer" }
 openvibes-console = { path = "../openvibes-console" }
 chrono.workspace = true
 clap.workspace = true

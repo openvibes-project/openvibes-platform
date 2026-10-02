@@ -199,6 +199,102 @@ fn a_certificate_missing_one_of_the_hosts_addresses_is_a_problem() {
     );
 }
 
+/// Board #107: the site's own sets warn a month ahead and say to publish
+/// again (the signer never re-signs on its own); a baseline set at the same
+/// distance is fine.
+#[test]
+fn site_rule_sets_warn_a_month_ahead_to_publish_again() {
+    let now = DateTime::parse_from_rfc3339("2026-09-28T00:00:00Z")
+        .unwrap()
+        .with_timezone(&Utc);
+    let list = "site v4 keys 1 expires 2026-10-20T00:00:00Z\n\
+                site-alarms v2 keys 1 expires 2026-12-28T00:00:00Z\n";
+    let got = checks(
+        &[] as &[ServiceStatus],
+        &[],
+        Ok(String::new()),
+        Ok(Vec::new()),
+        Ok(list.into()),
+        now,
+    );
+    let soon = got
+        .iter()
+        .find(|c| c.text.contains("rule set site v4"))
+        .unwrap();
+    assert!(soon.problem, "{got:?}");
+    assert!(
+        soon.text.contains("publish again in the console to renew"),
+        "{got:?}"
+    );
+    let later = got
+        .iter()
+        .find(|c| c.text.contains("site-alarms v2"))
+        .unwrap();
+    assert!(!later.problem, "91 days left: no warning yet ({got:?})");
+}
+
+#[test]
+fn the_signers_state_and_refusals_show_in_health() {
+    use super::database::signer_checks;
+    use platform_host::SignerFiles;
+    let key = "Zm9vYmFyYmF6".to_owned() + &"A".repeat(31);
+    let trust = Some(format!("site site.key {key}\nsite-alarms site.key {key}\n"));
+    let quiet = signer_checks(&SignerFiles {
+        status: Ok(
+            r#"{"version_state":true,"publishes_last_hour":2,"refusals_last_day":{}}"#.into(),
+        ),
+        trust: trust.clone(),
+    });
+    assert!(quiet.iter().all(|c| !c.problem), "{quiet:?}");
+    assert!(
+        quiet[0].text.contains("2 publishes in the last hour"),
+        "{quiet:?}"
+    );
+    assert!(quiet[1].text.contains("site key Zm9vYmFy…"), "{quiet:?}");
+    assert!(
+        quiet[1].text.contains("agents trusting an old site key"),
+        "{quiet:?}"
+    );
+
+    // A wrong password now and then is no problem; the hourly limit is.
+    let typo = signer_checks(&SignerFiles {
+        status: Ok(r#"{"version_state":true,"refusals_last_day":{"credentials":1}}"#.into()),
+        trust: None,
+    });
+    assert!(
+        !typo[0].problem && typo[0].text.contains("credentials 1"),
+        "{typo:?}"
+    );
+    let busy = signer_checks(&SignerFiles {
+        status: Ok(
+            r#"{"version_state":true,"refusals_last_day":{"rate":3,"credentials":1}}"#.into(),
+        ),
+        trust: None,
+    });
+    assert!(
+        busy[0].problem && busy[0].text.contains("4 publishes refused"),
+        "{busy:?}"
+    );
+
+    let lost = signer_checks(&SignerFiles {
+        status: Ok(r#"{"version_state":false,"refusals_last_day":{}}"#.into()),
+        trust: None,
+    });
+    assert!(
+        lost.iter()
+            .any(|c| c.problem && c.text.contains("run Repair")),
+        "{lost:?}"
+    );
+    let denied = signer_checks(&SignerFiles {
+        status: Err(HostError::Failed("status.json: permission denied".into())),
+        trust: None,
+    });
+    assert!(
+        denied[0].problem && denied[0].text.contains("permission denied"),
+        "{denied:?}"
+    );
+}
+
 /// Board #111: distribution with nothing published leaves every agent
 /// without rules; Health says so. Without distribution there's nothing to say.
 #[test]

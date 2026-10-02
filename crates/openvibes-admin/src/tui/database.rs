@@ -13,6 +13,8 @@ const DISK_FULL_PERCENT: u8 = 90;
 /// A published rule bundle expiring sooner than this is a problem
 /// (baseline rules spec §8).
 const RULES_WARN_DAYS: i64 = 90;
+/// Days before a site rule set expires that Health warns (board #107).
+const SITE_WARN_DAYS: i64 = 30;
 
 /// Both screens' state.
 #[derive(Default)]
@@ -193,11 +195,20 @@ fn rule_set(line: &str, now: DateTime<Utc>) -> Option<Check> {
     };
     let expires = expires.with_timezone(&Utc);
     let date = expires.format("%Y-%m-%d");
-    let fix = "install the newer rules package and run Repair, or publish a newer bundle";
+    // The site's own sets are renewed by publishing again (board #107);
+    // the signer re-signs only with a live password, so warn a month ahead.
+    let (fix, warn_days) = if *set == "site" || *set == "site-alarms" {
+        ("publish again in the console to renew", SITE_WARN_DAYS)
+    } else {
+        (
+            "install the newer rules package and run Repair, or publish a newer bundle",
+            RULES_WARN_DAYS,
+        )
+    };
     let days = (expires - now).num_days();
     Some(if expires <= now {
         check(true, format!("{name}: expired on {date}; {fix}"))
-    } else if days < RULES_WARN_DAYS {
+    } else if days < warn_days {
         check(
             true,
             format!("{name}: expires in {days} days ({date}); {fix}"),
@@ -205,6 +216,79 @@ fn rule_set(line: &str, now: DateTime<Utc>) -> Option<Check> {
     } else {
         check(false, format!("{name}: expires in {days} days ({date})"))
     })
+}
+
+/// Health's lines about the rule signer (board #107): its version state,
+/// recent refusals, and the site key agents must trust.
+pub fn signer_checks(files: &platform_host::SignerFiles) -> Vec<Check> {
+    let mut checks = Vec::new();
+    match &files.status {
+        Err(error) => checks.push(check(true, format!("rule signer: {error}"))),
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(text) {
+            Err(_) => checks.push(check(
+                true,
+                "rule signer: status.json is not readable JSON".into(),
+            )),
+            Ok(status) => {
+                if status["version_state"] != true {
+                    checks.push(check(
+                        true,
+                        "rule signer: no version state, so it signs nothing: run Repair".into(),
+                    ));
+                }
+                let refusals = status["refusals_last_day"]
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_default();
+                let total: u64 = refusals
+                    .values()
+                    .filter_map(serde_json::Value::as_u64)
+                    .sum();
+                let publishes = status["publishes_last_hour"].as_u64().unwrap_or(0);
+                if total == 0 {
+                    checks.push(check(
+                        false,
+                        format!("rule signer: {publishes} publishes in the last hour, none refused today"),
+                    ));
+                } else {
+                    let codes: Vec<String> = refusals
+                        .iter()
+                        .map(|(code, n)| format!("{code} {}", n.as_u64().unwrap_or(0)))
+                        .collect();
+                    // Rate, lockouts and failures need a look; a wrong
+                    // password now and then doesn't.
+                    let serious = ["rate", "throttled", "unavailable", "version_state"]
+                        .iter()
+                        .any(|code| {
+                            refusals.get(*code).and_then(serde_json::Value::as_u64) > Some(0)
+                        });
+                    checks.push(check(
+                        serious,
+                        format!(
+                            "rule signer: {total} publishes refused in the last day ({})",
+                            codes.join(", ")
+                        ),
+                    ));
+                }
+            }
+        },
+    }
+    if let Some(key) = files
+        .trust
+        .as_deref()
+        .and_then(|trust| trust.lines().next())
+        .and_then(|line| line.split_whitespace().nth(2))
+    {
+        let short: String = key.chars().take(8).collect();
+        checks.push(check(
+            false,
+            format!(
+                "site key {short}…: agents need its lines from `agent command`; \
+                 after a reinstall the key is new, and agents trusting an old site key refuse the site rules"
+            ),
+        ));
+    }
+    checks
 }
 
 impl<H: Host> App<H> {
@@ -269,11 +353,14 @@ impl<H: Host> App<H> {
         self.database
             .health
             .extend(uncovered(&certificates, &self.host.addresses()));
+        if let Some(files) = self.host.signer() {
+            self.database.health.extend(signer_checks(&files));
+        }
         // Readable as root only; as another user the line is left out.
         if let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES) {
             self.database.health.extend(audit_check(&rules));
-            self.database.health.sort_by_key(|check| !check.problem);
         }
+        self.database.health.sort_by_key(|check| !check.problem);
     }
 
     /// R reloads, Tab opens Setup, q quits.

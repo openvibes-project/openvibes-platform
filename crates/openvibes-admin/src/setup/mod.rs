@@ -44,6 +44,9 @@ pub(crate) use run::token_from;
 pub const BASELINE_KEY: &str = "/usr/share/openvibes/rules/baseline.key";
 /// The threat-alarm rule set's trust line (rules v2 and later).
 pub const ALARMS_KEY: &str = "/usr/share/openvibes/rules/alarms.key";
+/// The site key's trust lines (`site` and `site-alarms`), saved by Setup
+/// from `openvibes-signer seed` (board #107); public, 0644.
+pub const SITE_KEY: &str = "/etc/openvibes/site-rules.trust";
 
 /// The one line that installs and enrolls an agent (releases spec §5), with
 /// `--rules SET,ISSUER,KEY` when the platform has the baseline rules, so the
@@ -105,6 +108,27 @@ pub struct Served {
     pub set: String,
     pub issuer: String,
     pub key: String,
+}
+
+/// The `agent.toml` lines for the site's own rule sets (board #107, D5),
+/// from the saved trust lines: an agent installed with `--rules` (so it
+/// has a `distribution_url`) gets them pasted in. No `restricted` key, so
+/// the agent restricts both sets. `None` unless both lines are valid.
+pub fn site_rules_block(trust: &str) -> Option<String> {
+    let mut block = String::new();
+    for set in ["site", "site-alarms"] {
+        let line = trust
+            .lines()
+            .find(|line| line.split_whitespace().next() == Some(set))?;
+        let arg = rules_arg(line)?;
+        let [_, issuer, key] = arg.split(',').collect::<Vec<_>>()[..] else {
+            return None;
+        };
+        block.push_str(&format!(
+            "[[rule_sets]]\nid = \"{set}\"\ntrusted_keys = [{{ issuer_key_id = \"{issuer}\", public_key = \"{key}\" }}]\n"
+        ));
+    }
+    Some(block)
 }
 
 /// `SET,ISSUER,KEY` from a `baseline.key` line, or `None` when any part has

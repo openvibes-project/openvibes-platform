@@ -28,6 +28,24 @@ pub enum RulesCommand {
         /// Signed rule envelope (JSON, at most 1 MiB).
         file: PathBuf,
     },
+    /// Have the rule signer sign the site's own rules (asking for USER's
+    /// password; USER needs rules.upload) and publish them (board #107).
+    PublishSite {
+        /// Rule set JSON (schema 1).
+        rules_file: PathBuf,
+        /// The console user who publishes.
+        #[arg(long)]
+        user: String,
+        /// `site` (findings rules) or `site-alarms` (alarm rules).
+        #[arg(long = "set")]
+        rule_set: String,
+        /// The rule signer's socket.
+        #[arg(long, default_value = crate::rules_site::SOCKET)]
+        socket: PathBuf,
+        /// Read the password from the first line of stdin (scripts).
+        #[arg(long)]
+        password_stdin: bool,
+    },
     /// List rule sets with their current version.
     List,
     /// Show a rule set's published bundles, newest first.
@@ -126,6 +144,7 @@ impl RulesCommand {
                 command: TrustCommand::Remove { .. },
             } => "rules trust remove",
             Self::Publish { .. } => "rules publish",
+            Self::PublishSite { .. } => "rules publish-site",
             Self::List => "rules list",
             Self::Show { .. } => "rules show",
             Self::Retire { .. } => "rules retire",
@@ -219,6 +238,16 @@ pub async fn run(
     match command {
         RulesCommand::Trust { command } => trust(command, client).await,
         RulesCommand::Publish { file } => publish(file, client, actor).await,
+        RulesCommand::PublishSite {
+            rules_file,
+            user,
+            rule_set,
+            socket,
+            password_stdin,
+        } => match crate::rules_site::sign(socket, user, rule_set, rules_file, *password_stdin) {
+            Ok(bytes) => publish_bytes(&bytes, client, actor).await,
+            Err(error) => (Err(error), Some(rule_set.clone())),
+        },
         RulesCommand::List => (list(client).await, None),
         RulesCommand::Show { rule_set } => (show(client, rule_set).await, Some(rule_set.clone())),
         RulesCommand::Retire { rule_set } => {
@@ -325,18 +354,25 @@ async fn publish(
     client: &mut platform_store::Client,
     actor: &str,
 ) -> (Result<String, String>, Option<String>) {
-    let bytes = match read_envelope(file) {
-        Ok(bytes) => bytes,
-        Err(error) => return (Err(error), None),
-    };
-    let Ok(envelope) = serde_json::from_slice::<SignedRuleEnvelope>(&bytes) else {
+    match read_envelope(file) {
+        Ok(bytes) => publish_bytes(&bytes, client, actor).await,
+        Err(error) => (Err(error), None),
+    }
+}
+
+async fn publish_bytes(
+    bytes: &[u8],
+    client: &mut platform_store::Client,
+    actor: &str,
+) -> (Result<String, String>, Option<String>) {
+    let Ok(envelope) = serde_json::from_slice::<SignedRuleEnvelope>(bytes) else {
         return (Err("not a signed rule envelope".into()), None);
     };
-    let digest: [u8; 32] = Sha256::digest(&bytes).into();
+    let digest: [u8; 32] = Sha256::digest(bytes).into();
     let set = envelope.rule_set_id.as_str().to_owned();
     let version = envelope.rule_set_version;
     let target = Some(format!("{set} v{version} sha256:{}", hex(&digest)));
-    let result = verify_and_store(client, actor, &bytes, &envelope, digest).await;
+    let result = verify_and_store(client, actor, bytes, &envelope, digest).await;
     (result, target)
 }
 

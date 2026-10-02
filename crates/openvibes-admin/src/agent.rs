@@ -349,9 +349,25 @@ async fn agent_command(
         }
         None => None,
     };
+    // The site's own rules (board #107): installers don't take them yet,
+    // so the lines to paste, for agents that fetch rules (--rules).
+    let site = std::fs::read_to_string(crate::setup::SITE_KEY)
+        .ok()
+        .and_then(|trust| crate::setup::site_rules_block(&trust))
+        .filter(|_| rules.is_some())
+        .map(|block| {
+            format!(
+                "\nYour own rules: add these lines to /etc/openvibes-agent/agent.toml on each agent \
+                 installed with the line above (and on older agents with --rules), then restart \
+                 openvibes-agent. The agent restricts both sets.\n\n{block}\n\
+                 After the signer is reinstalled its key is new: replace these lines on every agent, \
+                 or it refuses the site rules.\n"
+            )
+        })
+        .unwrap_or_default();
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
-            "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n",
+            "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n{site}",
             crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref(), alarm_rules.as_deref())
         )
     });

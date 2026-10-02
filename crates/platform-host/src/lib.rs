@@ -101,6 +101,20 @@ pub const CERTIFICATES: [&str; 3] = [
     "/etc/openvibes/pki/intermediate.crt",
 ];
 
+/// The rule signer's `status.json` (operators may read it).
+pub const SIGNER_STATUS: &str = "/var/lib/openvibes-signer/status.json";
+/// The site key's trust lines Setup saved (public).
+pub const SITE_TRUST: &str = "/etc/openvibes/site-rules.trust";
+
+/// What Health shows about the rule signer (board #107).
+#[derive(Debug)]
+pub struct SignerFiles {
+    /// [`SIGNER_STATUS`] as text, or why it can't be read.
+    pub status: Result<String, HostError>,
+    /// [`SITE_TRUST`] as text, when saved.
+    pub trust: Option<String>,
+}
+
 /// Disk use of the file system holding one data directory.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiskUse {
@@ -184,6 +198,10 @@ pub trait Host {
     /// This host's own global IPv4 addresses ([`host_addresses`]).
     fn addresses(&self) -> Vec<String> {
         Vec::new()
+    }
+    /// The rule signer's files; `None` when it isn't set up here.
+    fn signer(&self) -> Option<SignerFiles> {
+        None
     }
     /// The home directory of `user`, directory users included; `None` when
     /// unknown (the TUI then keeps `HOME`).
