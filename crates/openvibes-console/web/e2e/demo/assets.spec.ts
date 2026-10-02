@@ -33,3 +33,30 @@ test("a host page shows its installed software, filterable", async ({ page }) =>
   await inspector.getByRole("textbox", { name: "Filter installed software" }).fill("sudo");
   await expect(list.locator("li")).toHaveCount(1);
 });
+
+test("a host page shows its open ports and services; the fleet lists them (Assets v2)", async ({ page }) => {
+  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("tab", { name: "Ports" }).click();
+  const ports = inspector.getByRole("table", { name: "Open ports" });
+  await expect(ports.locator("tr").filter({ hasText: "22/tcp" })).toContainText("sshd.service");
+  await inspector.getByRole("tab", { name: "Services" }).click();
+  await expect(inspector.getByRole("table", { name: "Running services" }).locator("tr").filter({ hasText: "chronyd.service" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  await page.keyboard.press("Escape");
+  await page.goto("/ports?exposed=true");
+  await expect(page.locator(".view tbody tr").filter({ hasText: "22/tcp" })).toBeVisible();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "53/udp" })).toHaveCount(0);
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("a host whose last services report was refused says so above its old lists", async ({ page }) => {
+  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.locator(".view tbody tr").filter({ hasText: "mail-" }).first().locator("td").nth(1).click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("tab", { name: "Ports" }).click();
+  await expect(inspector.getByRole("status").filter({ hasText: "Last report refused" })).toContainText("over 512 KiB");
+  await expect(inspector.getByRole("table", { name: "Open ports" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

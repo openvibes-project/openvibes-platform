@@ -19,6 +19,7 @@ import type { IconName } from "../ui/Icon";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
+import { Ports, Services } from "../views/Ports";
 import { Software } from "../views/Software";
 import { Findings } from "../views/Findings";
 import { Vulnerabilities } from "../views/Vulnerabilities";
@@ -47,6 +48,8 @@ export const views: readonly ViewDef[] = [
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
+  { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "agents.read" }], render: () => <Ports /> },
+  { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "agents.read" }], render: () => <Services /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },

@@ -25,7 +25,8 @@ pub(crate) struct Limits {
 
 /// Refuses a request with 503 when `max_in_flight` requests are already
 /// being served, and turns an over-limit body (413) into the spec's 400,
-/// except on `/v1/alarms`, whose contract answers 413 (P14).
+/// except on `/v1/alarms` and `/v1/services`, whose contracts answer 413
+/// (P14, P15).
 pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: Next) -> Response {
     // A declared length over the limit is refused before any body is read.
     let declared = request
@@ -42,8 +43,9 @@ pub(crate) async fn bound(State(state): State<Limits>, request: Request, next: N
     };
     // The whole request, body included, must finish within the deadline,
     // so a slow client cannot keep its permit.
-    // P14 names 413 for an oversized AlarmBatch; the older endpoints keep 400.
-    let keeps_413 = request.uri().path() == "/v1/alarms";
+    // P14 and P15 name 413 for an oversized document; the older endpoints
+    // keep 400.
+    let keeps_413 = matches!(request.uri().path(), "/v1/alarms" | "/v1/services");
     let deadline = if crate::request::INVENTORY_PATHS.contains(&request.uri().path()) {
         state.inventory_request_timeout
     } else {

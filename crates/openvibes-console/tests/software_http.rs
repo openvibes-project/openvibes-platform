@@ -360,3 +360,102 @@ async fn bad_queries_are_refused_and_a_session_is_required() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn ports_and_services_per_host_and_across_hosts() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "UPDATE agents SET services_at = now(), services_owners = 'partial'
+                WHERE agent_id = '{AGENT}';
+             INSERT INTO host_listeners VALUES
+                ('{AGENT}', 'tcp', '0.0.0.0', 443, true, 'nginx.service', 'nginx'),
+                ('{AGENT}', 'tcp', '127.0.0.1', 5432, false, NULL, NULL);
+             INSERT INTO host_services VALUES
+                ('{AGENT}', 'nginx.service', '{{nginx}}', 3, 'root');"
+        ))
+        .await
+        .unwrap();
+    let (cookie, _) = login(&router, "vera").await;
+    let (status, host) = get(
+        &router,
+        &cookie,
+        &format!("/api/v1/agents/{AGENT}/services"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(host["owners"], "partial");
+    assert_eq!(host["listeners"][0]["port"], 443, "exposed first");
+    assert_eq!(host["listeners"][0]["address"], "0.0.0.0");
+    assert_eq!(host["services"][0]["programs"][0], "nginx");
+    let (_, exposed) = get(&router, &cookie, "/api/v1/ports?exposed=true").await;
+    assert_eq!(exposed.as_array().unwrap().len(), 1);
+    assert_eq!(exposed[0]["services"][0], "nginx.service");
+    let (_, all) = get(&router, &cookie, "/api/v1/ports").await;
+    assert_eq!(all.as_array().unwrap().len(), 2);
+    let (_, units) = get(&router, &cookie, "/api/v1/services").await;
+    assert_eq!(units[0]["hosts"], 1);
+    let missing = "/api/v1/agents/agent.00000000-0000-4000-8000-0000000004ff/services";
+    assert_eq!(
+        get(&router, &cookie, missing).await.0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get(&router, &cookie, "/api/v1/ports?exposed=maybe").await.0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        get(&router, "", "/api/v1/ports").await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_refused_services_report_shows_on_the_host_until_a_good_one() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "UPDATE agents SET services_refused_at = now(), services_refused = 'too_large'
+                WHERE agent_id = '{AGENT}';"
+        ))
+        .await
+        .unwrap();
+    let (cookie, _) = login(&router, "vera").await;
+    let path = format!("/api/v1/agents/{AGENT}/services");
+    let (status, host) = get(&router, &cookie, &path).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(host["refused"], "too_large");
+    assert!(
+        host["refused_at"]
+            .as_str()
+            .is_some_and(|at| at.ends_with('Z'))
+    );
+    assert!(
+        host["reported_at"].is_null(),
+        "refused before any good report"
+    );
+    // What ingest does with the next good report clears it.
+    client
+        .batch_execute(&format!(
+            "UPDATE agents SET services_at = now(), services_owners = 'partial',
+                 services_refused_at = NULL, services_refused = NULL
+                WHERE agent_id = '{AGENT}';"
+        ))
+        .await
+        .unwrap();
+    let (_, host) = get(&router, &cookie, &path).await;
+    assert!(host["refused"].is_null() && host["refused_at"].is_null());
+    assert!(host["reported_at"].is_string());
+    db.drop().await;
+}

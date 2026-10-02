@@ -8,10 +8,11 @@ use axum::{
 use chrono::{Duration, Utc};
 use openvibes_core::{
     ALARM_BATCH_BYTES, AlarmBatch, DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges,
-    Heartbeat, Identifier, InventoryChanges, InventoryReport, RejectedFinding, ResourceLimits,
-    SchemaVersion, Validate,
+    HOST_SERVICES_BYTES, Heartbeat, HostServices, Identifier, InventoryChanges, InventoryReport,
+    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, SchemaVersion, Validate, hex,
+    services_digest,
 };
-use platform_store::{alarms, finding_changes, ingest, inventory, wire};
+use platform_store::{alarms, finding_changes, host_services, ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
@@ -308,5 +309,91 @@ pub(crate) async fn alarms(
         suppressed = done.suppressed,
         "alarms stored"
     );
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /v1/services` (P15): the host's listeners and services replace
+/// its stored ones. Over 512 KiB is 413; an invalid report or another
+/// agent's id is 400. A refusal is recorded on the host, so the console
+/// says the lists are stale instead of showing them silently.
+pub(crate) async fn services(
+    State(state): State<AppState>,
+    AuthenticatedAgent(agent_id): AuthenticatedAgent,
+    headers: HeaderMap,
+    body: Bytes,
+) -> Result<StatusCode, ApiError> {
+    let checked = (|| {
+        // A gzip body whose output passes the limit is too large, like a
+        // plain one; a broken stream is invalid.
+        let body = platform_agent_server::decoded_body(&headers, &body, HOST_SERVICES_BYTES)
+            .map_err(|error| match error {
+                ApiError::TooLarge => (error, host_services::Refusal::TooLarge),
+                error => (error, host_services::Refusal::Invalid),
+            })?;
+        if body.len() > HOST_SERVICES_BYTES {
+            return Err((ApiError::TooLarge, host_services::Refusal::TooLarge));
+        }
+        let report: HostServices =
+            parse(&body).map_err(|error| (error, host_services::Refusal::Invalid))?;
+        if report.agent_id.as_str() != agent_id {
+            return Err((ApiError::BadRequest, host_services::Refusal::WrongAgent));
+        }
+        // The digest is what later reports are compared with: recompute it
+        // rather than trust the agent's (reviewer, #145).
+        if hex(&services_digest(&report.listeners, &report.services)) != report.sha256 {
+            return Err((ApiError::BadRequest, host_services::Refusal::Invalid));
+        }
+        Ok(report)
+    })();
+    let now = Utc::now();
+    let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    let report = match checked {
+        Ok(report) => report,
+        Err((error, refusal)) => {
+            tracing::warn!(reason = refusal.code(), "services report refused");
+            host_services::refused(&client, &agent_id, refusal, now).await?;
+            return Err(error);
+        }
+    };
+    if report.truncated {
+        // ponytail: not stored yet; the console cannot say "incomplete".
+        tracing::debug!("services report cut to the protocol limits (truncated)");
+    }
+    let stored = host_services::Report {
+        sha256: report.sha256,
+        owners: match report.owners {
+            Owners::Complete => "complete",
+            Owners::Partial => "partial",
+        }
+        .into(),
+        listeners: report
+            .listeners
+            .into_iter()
+            .map(|l| host_services::Listener {
+                protocol: match l.protocol {
+                    ListenerProtocol::Tcp => "tcp",
+                    ListenerProtocol::Udp => "udp",
+                }
+                .into(),
+                address: l.address,
+                port: i32::from(l.port),
+                exposed: l.exposed,
+                service: l.service,
+                program: l.program,
+            })
+            .collect(),
+        services: report
+            .services
+            .into_iter()
+            .map(|s| host_services::Service {
+                unit: s.unit,
+                programs: s.programs,
+                // Validated: at most 2^31-1.
+                processes: i32::try_from(s.processes).unwrap_or(i32::MAX),
+                run_as: s.user,
+            })
+            .collect(),
+    };
+    host_services::replace(&mut client, &agent_id, &stored, now).await?;
     Ok(StatusCode::NO_CONTENT)
 }

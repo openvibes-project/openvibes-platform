@@ -23,6 +23,7 @@ mod error;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
 mod openapi;
+mod ports;
 mod problem;
 mod rbac;
 mod router;

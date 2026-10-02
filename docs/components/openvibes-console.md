@@ -147,6 +147,30 @@ vulnerabilities: a software page takes ~235 ms, the `fixable` filter
 ~365 ms, a 100-host scope 78 ms, and one host's packages 6 ms
 (`platform-store` test `measure_the_fleet_aggregate_on_1000_hosts`).
 
+### Open ports and running services (P15, `src/ports.rs`)
+
+Assets v2, from each agent's `HostServices` report (stored by ingest in
+`host_listeners` and `host_services`, replaced per report). Reads need
+`agents.read` and are scoped like agents; fleet counts leave revoked
+hosts out.
+
+- `GET /api/v1/agents/{agent_id}/services`: the host's listeners (exposed
+  first, then by port: protocol, address, port, `exposed`, and the owning
+  `service`/`program` where the agent saw it) and services (unit,
+  programs, processes, `run_as`), with `reported_at` and `owners`
+  (`complete`, or `partial` when some owners were not visible: see the
+  agent's opt-in `owners.conf`), and `refused_at`/`refused` when ingest
+  refused the host's last report since the last good one (`too_large`,
+  `invalid`, `wrong_agent`; the Ports and Services tabs then say so above
+  the older lists). 404 outside the caller's scope.
+- `GET /api/v1/ports`: one row per (protocol, port) with `hosts`,
+  `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
+  exposed on at least one host.
+- `GET /api/v1/services`: one row per unit with `hosts`.
+
+The fleet lists are not paged: distinct ports and units across a fleet
+stay in the low thousands.
+
 ### Threat alarms (P14, `src/alarms.rs`)
 
 - `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped

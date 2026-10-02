@@ -8,6 +8,7 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge }
 import { date, severityOrder } from "../ui/format";
 import { lineage } from "../views/Alarms";
 import { packageId } from "../views/Software";
+import { HostServicesTab } from "./HostServices";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section, Tabs } from "../ui/panel";
 import { toast } from "../ui/toast";
@@ -102,6 +103,8 @@ export function AgentPanel({ id }: { id: string }) {
         { id: "vulns", label: "Vulnerabilities", count: vulnItems.length },
         ...(can("alarms.read") ? [{ id: "alarms", label: "Alarms", count: alarmItems.length }] as const : []),
         { id: "software", label: "Software" },
+        { id: "ports", label: "Ports" },
+        { id: "services", label: "Services" },
         { id: "details", label: "Details" },
       ]}>
         {(tab) => tab === "findings" ? (
@@ -149,6 +152,8 @@ export function AgentPanel({ id }: { id: string }) {
           )
         ) : tab === "software" ? (
           <SoftwareTab id={id} />
+        ) : tab === "ports" || tab === "services" ? (
+          <HostServicesTab id={id} show={tab} />
         ) : (
           <div className="panel-body stack">
             <Section title="Identity">
