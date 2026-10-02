@@ -16,8 +16,8 @@ export const BUILTIN_LAYOUT: Layout = {
     { id: "attention", type: "attention", x: 0, y: 2, w: 7, h: 9, config: { include: ["alarms", "exploited", "findings", "stale"], limit: 14 } },
     { id: "findings", type: "breakdown", x: 7, y: 2, w: 5, h: 2, config: { source: "findings" } },
     { id: "hosts", type: "top-hosts", x: 7, y: 4, w: 5, h: 7, config: { limit: 7 } },
-    { id: "online", type: "number", x: 0, y: 11, w: 4, h: 2, config: { metric: "agents.active", title: "Fleet · hosts online" } },
-    { id: "stale", type: "number", x: 4, y: 11, w: 4, h: 2, config: { metric: "agents.stale", title: "Fleet · stale hosts" } },
-    { id: "reboot", type: "number", x: 8, y: 11, w: 4, h: 2, config: { metric: "vulns.reboot_hosts", title: "Fleet · hosts needing a reboot" } },
+    { id: "online", type: "number", x: 0, y: 11, w: 4, h: 2, config: { metric: "agents.active", title: "Fleet · online" } },
+    { id: "stale", type: "number", x: 4, y: 11, w: 4, h: 2, config: { metric: "agents.stale", title: "Fleet · stale" } },
+    { id: "reboot", type: "number", x: 8, y: 11, w: 4, h: 2, config: { metric: "vulns.reboot_hosts", title: "Fleet · need a reboot" } },
   ],
 };
