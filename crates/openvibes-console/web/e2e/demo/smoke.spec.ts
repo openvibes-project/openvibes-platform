@@ -167,3 +167,33 @@ test("the Overview shows active alarms and lists them under Needs attention", as
   await tile.locator("button").click();
   await expect(page).toHaveURL(/\/alarms/);
 });
+
+// User, 2026-10-02: opening the rail made the page jump for a moment. The
+// unpinned rail opens over the page, so the page's left edge must not move
+// at any frame while it opens or closes.
+const pageLeft = (page: import("@playwright/test").Page, ms: number) =>
+  page.evaluate(
+    (ms) =>
+      new Promise<number[]>((done) => {
+        const seen: number[] = [];
+        const end = performance.now() + ms;
+        const tick = () => {
+          seen.push(document.querySelector(".app__main")?.getBoundingClientRect().left ?? Number.NaN);
+          if (performance.now() < end) requestAnimationFrame(tick);
+          else done(seen);
+        };
+        requestAnimationFrame(tick);
+      }),
+    ms,
+  );
+
+test("opening the rail over the page never moves the page", async ({ page }) => {
+  const start = (await pageLeft(page, 0))[0] ?? Number.NaN;
+  const opening = pageLeft(page, 700);
+  await page.mouse.move(20, 300);
+  const opened = await opening;
+  expect(await page.locator(".rail").evaluate((rail) => rail.getBoundingClientRect().width)).toBeGreaterThan(200);
+  const closing = pageLeft(page, 700);
+  await page.mouse.move(900, 500);
+  for (const left of [...opened, ...(await closing)]) expect(Math.abs(left - start)).toBeLessThan(0.5);
+});

@@ -11,7 +11,10 @@
 .rail {
   position: relative; z-index: 30; width: var(--rail); flex: none; display: flex; flex-direction: column; gap: 8px;
   padding: 12px 10px; background: var(--surface); border-right: 1px solid var(--line);
-  transition: width var(--slow), box-shadow var(--slow);
+  /* The margin moves with the width, so an unpinned rail opening over the
+     page keeps its 60px footprint all the way and nothing beside it shifts
+     (user, 2026-10-02: the page jumped while the rail opened). */
+  transition: width var(--slow), margin-right var(--slow), box-shadow var(--slow);
 }
 .rail:not(.rail--pinned):hover, .rail:not(.rail--pinned):has(:focus-visible) { width: var(--rail-open); box-shadow: var(--shadow-3); margin-right: calc(var(--rail) - var(--rail-open)); }
 .rail--pinned { width: var(--rail-open); }
