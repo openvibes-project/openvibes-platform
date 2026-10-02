@@ -83,6 +83,10 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   - Each tile loads data with the viewer's own permissions.
   - A tile the viewer's role can't read says so.
   - A tile that fails to render doesn't take the dashboard down.
+- **The rail** is icons until hovered or focused, then opens over the page
+  (its width and negative margin animate together, so the page never moves
+  while it opens; e2e "opening the rail over the page never moves the
+  page"), or stays open when pinned, which narrows the page.
 - **Phones:** tiles stack in reading order, number tiles two to a row
   (titles wrap rather than truncate), the greeting sits above its buttons,
   and editing is hidden, "Edit" and "Duplicate to edit" included (the
