@@ -86,18 +86,23 @@ A console rule set still needs a signature that agents trust. Options:
       - It signs only if the password matches, the user holds
         `rules.upload`, the rule set is a site set, and the rules pass the
         loader.
-    - **It limits and records what it signs, out of the console's reach:**
-      - a rate limit of a few publishes per hour per site (for example 6),
-        past which it refuses;
+    - **It limits and records what it signs, out of the console's reach**
+      (the implementation's baseline, reviewer and lead, 2026-10-02):
+      - at most N publishes per hour per site (for example 6) and at most
+        M rules changed per publish (for example 50), past which it
+        refuses;
+      - it re-checks the restricted-set rules itself (programs caps, no
+        empty name), so a console that skipped them gains nothing;
       - its **own** audit line for every request, signed or refused (who,
-        set, version, SHA-256, reason). It writes it to its own journal and
-        to an append-only table the console can't write, so the console
-        can't suppress it.
+        set, version, SHA-256, reason). It writes it to its own journal,
+        outside the database, so a compromised console can't erase the
+        trail.
     - **What this buys:** a console RCE can't read or copy the key, and it
       can't sign without a live user's password. It would have to capture
       one first (for example by waiting for a real step-up), within the
       rate limit, and leave a record it can't erase. That raises the bar
-      without closing it fully.
+      without closing it fully. A second factor (TOTP or WebAuthn)
+      verified by the signer would close it, and can come later.
     - The public key becomes a trust line (`site site-1 KEY`) in
       `rule_trust_keys` and in every agent command.
     - Because the key is online, the signer can also re-sign before
@@ -305,8 +310,9 @@ offline-signed from day one.
 3. The signer: a local service holding the site key.
    - It signs over a Unix socket only after verifying the user's password
      itself (read-only grant on the credential hashes).
-   - It rate-limits publishes and writes its own audit record, which the
-     console can't write.
+   - It limits publishes per hour and rules per publish, re-checks the
+     programs caps, and writes its own audit log in its journal, outside
+     the database. A second factor comes later.
    - Setup generates the key. The trust line goes into `agent command` and
      `install.sh`, with the site lines (absent `restricted` = restricted,
      D5). Docs.
