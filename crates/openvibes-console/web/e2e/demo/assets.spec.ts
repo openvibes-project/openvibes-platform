@@ -90,6 +90,15 @@ test("the fleet Ports and Services views work from the keyboard: j moves, Enter 
   }
 });
 
+test("wider than a phone every Host tab is visible: the strip wraps (reviewer, #148)", async ({ page }) => {
+  await page.goto("/agents");
+  await page.getByPlaceholder("Filter by host name, ID or version…").fill("web-");
+  await page.locator(".view tbody tr").filter({ hasText: "web-" }).first().click();
+  const tabs = page.locator(".inspector").getByRole("tab");
+  await expect(tabs).toHaveCount(7);
+  for (const tab of await tabs.all()) await expect(tab).toBeInViewport({ ratio: 1 });
+});
+
 test("on a phone the Host page's tab strip scrolls itself, never the page", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/agents");

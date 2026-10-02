@@ -119,10 +119,15 @@
 .meter span { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
 
 /* Tabs */
-/* The strip scrolls itself when its tabs don't fit (the Host page has
-   seven), so it never widens and scrolls the panel around it. */
-.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
-.tabs::-webkit-scrollbar { display: none; }
+/* On a phone the strip scrolls itself when its tabs don't fit (the Host
+   page has seven), so it never widens and scrolls the panel around it; a
+   cut-off tab is the swipe cue. Wider, the tabs wrap so every one shows
+   (a hidden scrollbar would hide tabs from a mouse). */
+.tabs { display: flex; flex-wrap: wrap; gap: 2px; border-bottom: 1px solid var(--line); padding: 0 16px; }
+@media (max-width: 480px) {
+  .tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
+}
 .tabs button {
   all: unset; flex: none; white-space: nowrap; cursor: pointer; padding: 10px 10px; font-size: 13px; font-weight: 500; color: var(--text-2);
   border-bottom: 2px solid transparent; margin-bottom: -1px; display: inline-flex; gap: 6px; align-items: center;
