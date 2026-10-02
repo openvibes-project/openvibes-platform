@@ -16,7 +16,7 @@ import { diff } from "./compare";
 const MAX_SOFTWARE = 20_000;
 const MAX_FINDINGS = 5_000;
 
-type Side = { agent: Agent | undefined; ports: Map<string, string>; services: Map<string, string>; software: Map<string, string>; findings: Map<string, string>; cut: { software: boolean; findings: boolean }; loading: boolean; error: Error | undefined };
+type Side = { agent: Agent | undefined; reported: boolean; ports: Map<string, string>; services: Map<string, string>; software: Map<string, string>; findings: Map<string, string>; cut: { software: boolean; findings: boolean }; loading: boolean; error: Error | undefined };
 
 function useSide(id: string, withFindings: boolean): Side {
   const path = `/api/v1/agents/${encodeURIComponent(id)}`;
@@ -27,17 +27,21 @@ function useSide(id: string, withFindings: boolean): Side {
   const findings = findingRows.data;
   return useMemo(() => ({
     agent: agent.data,
+    reported: Boolean(report.data?.reported_at),
     ports: new Map((report.data?.listeners ?? []).map((l) => [`${l.port}/${l.protocol}`, l.exposed ? "exposed" : "local"])),
     services: new Map((report.data?.services ?? []).map((s) => [s.unit, s.programs.join(" ")])),
     software: new Map((packages.data ?? []).map((p) => [`${p.name}.${p.arch}`, `${p.version}${p.release ? `-${p.release}` : ""}`])),
     findings: new Map((findings ?? []).map((f) => [`${f.rule_set_id}/${f.rule_id}`, f.message])),
     cut: { software: (packages.data?.length ?? 0) >= MAX_SOFTWARE, findings: (findings?.length ?? 0) >= MAX_FINDINGS },
     loading: agent.loading || report.loading || packages.loading || findingRows.loading,
-    error: agent.error ?? packages.error ?? findingRows.error,
-  }), [agent.data, agent.loading, agent.error, report.data, report.loading, packages.data, packages.loading, packages.error, findings, findingRows.loading, findingRows.error]);
+    // Any failed request is an error, never an empty list ("the same on both").
+    error: agent.error ?? report.error ?? packages.error ?? findingRows.error,
+  }), [agent.data, agent.loading, agent.error, report.data, report.loading, report.error, packages.data, packages.loading, packages.error, findings, findingRows.loading, findingRows.error]);
 }
 
-function Differences({ title, a, b, nameA, nameB, show, cut = false }: { title: string; a: Map<string, string>; b: Map<string, string>; nameA: string; nameB: string; show: (key: string, value?: string) => string; cut?: boolean }) {
+function Differences({ title, a, b, nameA, nameB, show, cut = false, missing }: { title: string; a: Map<string, string>; b: Map<string, string>; nameA: string; nameB: string; show: (key: string, value?: string) => string; cut?: boolean; missing?: string | undefined }) {
+  // A host that never reported this has nothing to compare: say so.
+  if (missing) return <Section title={title}><p className="subtle">Can't compare: {missing} hasn't reported its ports and services yet.</p></Section>;
   // A cut list would show false "only on one" rows: say so instead.
   if (cut) return <Section title={title}><p className="subtle">Comparison incomplete: one host has more than can be compared here. Use Export to compare the full lists.</p></Section>;
   const { onlyA, onlyB, changed } = diff(a, b);
@@ -92,6 +96,7 @@ function Compare({ a, b }: { a: string; b: string }) {
   const nameB = right.agent?.hostname ?? b;
   if (left.error || right.error) return <div className="panel-body"><ErrorBox error={(left.error ?? right.error) as never} /></div>;
   if ((left.loading && !left.agent) || (right.loading && !right.agent)) return <Loading />;
+  const notReported = !left.reported ? nameA : !right.reported ? nameB : undefined;
   const system = (s: Side) => new Map([["system", `${s.agent?.os_id ?? ""} ${s.agent?.os_version ?? ""}`.trim()], ["running kernel", s.agent?.running_kernel ?? ""], ["agent version", s.agent?.scanner_version ?? ""]]);
   return (
     <>
@@ -99,8 +104,8 @@ function Compare({ a, b }: { a: string; b: string }) {
       <div className="panel-body stack">
         {(left.loading || right.loading) && <p className="subtle">Loading…</p>}
         <Differences title="System" a={system(left)} b={system(right)} nameA={nameA} nameB={nameB} show={(_, v) => v || "—"} />
-        <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} />
-        <Differences title="Services" a={left.services} b={right.services} nameA={nameA} nameB={nameB} show={(_, v) => v || "running"} />
+        <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} missing={notReported} />
+        <Differences title="Services" a={left.services} b={right.services} nameA={nameA} nameB={nameB} show={(_, v) => v || "running"} missing={notReported} />
         <Differences title="Software" a={left.software} b={right.software} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.software || right.cut.software} />
         {can("findings.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
       </div>
