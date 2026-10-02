@@ -185,6 +185,22 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
     text
 }
 
+/// Fedora's default audit rules switch syscall auditing off, so alarms
+/// configured for this host's agent could never fire: a note for the
+/// Agent step's line (empty when alarms are off or auditing is on).
+fn audit_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
+    let off = agent_toml(ctx).contains("process_events")
+        && ctx
+            .read(super::AUDIT_RULES)
+            .is_ok_and(|rules| super::audit_off(&rules));
+    if off {
+        "; but threat alarms can't fire: /etc/audit/audit.rules has `-a task,never`. \
+         Comment it out in /etc/audit/rules.d/, run `augenrules --load`, then reboot (see Health)"
+    } else {
+        ""
+    }
+}
+
 pub fn agent_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Agent) {
         return Ok(StepState::Skipped("agent on this host not chosen".into()));
@@ -194,7 +210,10 @@ pub fn agent_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .is_ok_and(|text| text == agent_toml(ctx));
     Ok(
         if configured && ctx.succeeds(Systemctl, &["is-active", "--quiet", "openvibes-agent"]) {
-            StepState::Done("the agent on this host is running".into())
+            StepState::Done(format!(
+                "the agent on this host is running{}",
+                audit_note(ctx)
+            ))
         } else {
             StepState::Todo
         },
@@ -234,9 +253,10 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     ctx.ok(Systemctl, &["restart", "openvibes-agent"])?;
     for _ in 0..AGENT_WAIT {
         if reporting(ctx) {
-            return Ok(StepState::Done(
-                "the agent on this host enrolled and is reporting".into(),
-            ));
+            return Ok(StepState::Done(format!(
+                "the agent on this host enrolled and is reporting{}",
+                audit_note(ctx)
+            )));
         }
         ctx.pause();
     }
@@ -516,6 +536,37 @@ mod tests {
             state.detail().contains("journalctl -u openvibes-agent"),
             "{state:?}"
         );
+    }
+
+    /// Fedora's default audit rules (`-a task,never`) would leave the
+    /// alarms just configured silent: the Agent step says so.
+    #[test]
+    fn the_agent_step_warns_when_syscall_auditing_is_off() {
+        let fake = rules_at("agent-audit-off", 1);
+        fake.file(
+            "/usr/share/openvibes/rules/alarms.key",
+            &format!("{ALARMS_KEY}\n"),
+        );
+        fake.file("/usr/share/openvibes/rules/alarms.json", "{}");
+        fake.file(
+            "/etc/audit/rules.d/openvibes-agent.rules",
+            "-a always,exit\n",
+        );
+        fake.file(
+            "/etc/audit/audit.rules",
+            "-D\n-a task,never\n-a always,exit\n",
+        );
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 0, "");
+        fake.answer(&admin(&["token", "create"]), 0, &format!("token {TOKEN}\n"));
+        fake.answer(&["/usr/bin/systemctl"], 0, "");
+        fake.answer(&admin(&["agent", "list"]), 0, "agent.x  active  host\n");
+        fake.file("/etc/openvibes/pki/root.crt", "ROOT\n");
+        let state = run_step(&fake.ctx(&plan_defaults()), Step::Agent);
+        assert!(state.detail().contains("-a task,never"), "{state:?}");
+        // Without that line the step reads as before.
+        fake.file("/etc/audit/audit.rules", "-D\n-a always,exit\n");
+        let state = run_step(&fake.ctx(&plan_defaults()), Step::Agent);
+        assert!(!state.detail().contains("never"), "{state:?}");
     }
 
     const ALARMS_KEY: &str =

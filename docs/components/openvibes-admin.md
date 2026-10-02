@@ -451,7 +451,11 @@ up to 60 s for it to report; when the alarm rules are published and the
 installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` (a P14
 agent), its `agent.toml` adds `process_events` to `collectors` and the
 alarm rule set; an older agent never gets either, since it would refuse
-the collector name), `ready` (and, on a first install, an endpoint token, 24 hours, 10
+the collector name. When `/etc/audit/audit.rules` has `-a task,never`
+(Fedora's default, which switches syscall auditing off), the step's line
+says alarms can't fire and how to fix it; Setup never edits audit rules
+itself. Health shows the same as a problem when the TUI runs as root),
+`ready` (and, on a first install, an endpoint token, 24 hours, 10
 uses; a Repair mints none and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).
 

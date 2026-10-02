@@ -198,3 +198,21 @@ fn a_certificate_missing_one_of_the_hosts_addresses_is_a_problem() {
         "/c.crt: does not cover 192.168.1.23 (this host): press r on Setup to repair"
     );
 }
+
+#[test]
+fn fedoras_task_never_audit_rule_is_a_health_problem() {
+    use super::database::audit_check;
+    use crate::setup::audit_off;
+    let fedora = "## First rule - delete all\n-D\n-b 8192\n-a task,never\n\
+                  -a always,exit -F arch=b64 -S execve,execveat -F key=openvibes-exec\n";
+    assert!(audit_off(fedora));
+    assert!(audit_off("-a never,task\n"));
+    let check = audit_check(fedora).expect("a problem line");
+    assert!(check.problem);
+    assert!(check.text.contains("reboot"), "{}", check.text);
+    // Commented out, or only our exec rule: nothing to report.
+    assert!(!audit_off(
+        "#-a task,never\n-a always,exit -F key=openvibes-exec\n"
+    ));
+    assert!(audit_check("-a always,exit -S execve -F key=openvibes-exec\n").is_none());
+}
