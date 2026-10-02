@@ -99,6 +99,22 @@ A console rule set still needs a signature that agents trust. Options:
       more than 8 names, or a set naming more than 32 distinct programs.
       This is enforced in the agent's loader, because a stolen key never
       goes through the console. The console refuses the same at save.
+    - **Absent means restricted** (reviewer and lead, 2026-10-02). A set
+      whose line has no `restricted` key is restricted, except the
+      project's offline-signed `baseline-alarms`. A forgotten or pasted
+      line therefore fails closed, and the baseline alarm rules behave
+      exactly as today. (`baseline` holds no alarm rules, so it's
+      unaffected either way.) Only an explicit `restricted = false` lifts
+      the restriction.
+    - Exempting `baseline-alarms` by name is safe because each agent binds
+      a rule set's name to the keys trusted for it, so the site key can't
+      sign a bundle the agent accepts as `baseline-alarms`.
+    - The agent tests cover an absent key, `true`, `false`, and the
+      `baseline-alarms` exemption.
+  - Restriction closes the bit-by-bit probe of command-line *values*.
+    It does **not** cover the three points below, which each need their
+    own measure: what a site alarm rule can still log, CPU per event, and
+    where the key lives (above).
   - **The worst case, plainly.** Whoever can get the signer to sign can
     publish any rules in the site sets to every agent that trusts them.
     The baseline sets stay untouched: their key is still offline, and
@@ -259,9 +275,10 @@ offline-signed from day one.
 1. **Agent prerequisites**, before any site rule can ship:
    - an aggregate CEL budget per process event across all `process_event`
      rules, counted in health when it cuts;
-   - `restricted = true` per rule set: masked command lines, a required
-     `programs` prefilter (at most 8 per rule, 32 distinct per set),
-     refused in the loader;
+   - `restricted` per rule set, **absent = restricted** except
+     `baseline-alarms`: masked command lines, a required `programs`
+     prefilter (at most 8 per rule, 32 distinct per set), refused in the
+     loader; tests for absent, `true`, `false` and the exemption;
    - **Gate:** an `alarms-cost` run with a restricted set at its limits
      stays within the P14 budget (#86).
 2. Store and API: drafts, validation, test and dry run (`rules.write`).
