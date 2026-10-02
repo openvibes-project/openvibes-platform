@@ -240,7 +240,7 @@ The Host page's **Export** button lets the user pick sections (details,
 findings, alarms, vulnerabilities, software, ports, services; only those
 their role may read) and saves one CSV with the columns `section, name,
 detail, state, severity, extra`. The browser fetches each section through
-the same scoped API as the Host page (at most 10,000 rows per section).
+the same scoped API as the Host page (at most 50,000 rows per section, above what Compare can handle, so its "use Export" advice holds).
 Cells are quoted, and a leading `= + - @` is prefixed with `'` so a
 spreadsheet never runs it as a formula (`ui/csv.ts`, unit-tested).
 
