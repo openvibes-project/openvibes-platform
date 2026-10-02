@@ -31,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-signer; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -42,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$W"; mkdir -p "$W"
-cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent}-*.rpm "$W/"
+cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer}-*.rpm "$W/"
 (($(ls "$W"/openvibes-agent-*.rpm | wc -l) == 1)) || fail "want exactly one agent RPM in $1"
 cp "$2" "$W/sign_bundle"
 KEY=$("$W/sign_bundle" keygen "$W/signing.key" | tail -1)
@@ -93,6 +93,28 @@ in_c "$SETUP --root-key-out /root/ca-root-2.key" > "$W/setup2.out" 2>&1 || { cat
 ! grep -qE ': (to do|failed|waiting)' "$W/setup2.out" || { cat "$W/setup2.out"; fail "second run redid a step"; }
 in_c '! test -e /root/ca-root-2.key' || fail "second run created another root"
 ok "platform installed and set up by setup --quick (and re-run safely)"
+
+# The rule signer (board #107) under its unit: seeded as its user, it
+# starts sandboxed with no network, and only its socket group reaches it.
+in_c 'dnf -q -y install /test/openvibes-signer-*.rpm' >/dev/null 2>&1 || fail "install openvibes-signer"
+in_c 'runuser -u openvibes-signer -g openvibes-signer-clients -- openvibes-signer seed --min-version 1' \
+    | grep -q '^site-alarms site.key ' || fail "signer seed printed no trust line"
+in_c 'systemctl start openvibes-signer' || fail "start openvibes-signer"
+wait_for "the signer listens on its socket" 30 'test -S /run/openvibes-signer/sign.sock'
+[[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-signer /run/openvibes-signer/sign.sock /var/lib/openvibes-signer/site.key')" == \
+    $'750 openvibes-signer:openvibes-signer-clients\n660 openvibes-signer:openvibes-signer-clients\n600 openvibes-signer:openvibes-operators' ]] ||
+    fail "signer socket or key has the wrong owner or mode"
+[[ "$(in_c 'grep -E "^(NoNewPrivs|Seccomp):" /proc/$(systemctl show -p MainPID --value openvibes-signer)/status | tr -s "\t " " "')" == \
+    $'NoNewPrivs: 1\nSeccomp: 2' ]] || fail "signer runs without no_new_privs and seccomp"
+in_c 'useradd -M outsider && useradd -M insider -G openvibes-signer-clients' || fail "add test users"
+in_c '! runuser -u outsider -- test -r /run/openvibes-signer/sign.sock' || fail "a non-member reaches the signer socket"
+in_c 'runuser -u insider -- test -w /run/openvibes-signer/sign.sock' || fail "a member of openvibes-signer-clients cannot reach the socket"
+# status.json (written on the first tick) reaches operators, not others,
+# under the unit's UMask=0077.
+wait_for "the signer wrote status.json" 10 'test -s /var/lib/openvibes-signer/status.json'
+[[ "$(in_c 'stat -c "%a %U:%G" /var/lib/openvibes-signer/status.json')" == "640 openvibes-signer:openvibes-operators" ]] ||
+    fail "status.json is $(in_c 'stat -c "%a %U:%G" /var/lib/openvibes-signer/status.json'), want 640 openvibes-signer:openvibes-operators"
+ok "the signer runs sandboxed and only its socket group reaches it"
 
 # Optional C5 package validation. Install only after the platform migrations
 # create the least-privilege console database role and schema.

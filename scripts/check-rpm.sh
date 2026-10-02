@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, and -llm (run as root).
+# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer and -llm (run as root).
 set -euo pipefail
 fail() { echo "FAIL: $*" >&2; exit 1; }
 expect_stat() { # PATH MODE OWNER:GROUP
@@ -75,4 +75,28 @@ out=$(/usr/libexec/openvibes-llm/openvibes-llm-check 2>&1) && fail "llm check ra
 out=$(runuser -u openvibes-llm -- env -i $(grep -E '^OPENVIBES_LLM_' /etc/openvibes/llm.conf) \
     /usr/libexec/openvibes-llm/openvibes-llm-check 2>&1) && fail "llm check passed without a model"
 [[ "$out" == *"OPENVIBES_LLM_MODEL is not set"* ]] || fail "llm check without a model: $out"
+
+# openvibes-signer (board #107): the socket's group, a state directory only
+# it writes (setgid, so status.json reaches operators), and `seed` creating
+# the key and version state once.
+getent passwd openvibes-signer >/dev/null || fail "no user openvibes-signer"
+getent group openvibes-signer-clients >/dev/null || fail "no group openvibes-signer-clients"
+expect_stat /etc/openvibes/signer.toml 640 root:openvibes-signer-clients
+expect_stat /var/lib/openvibes-signer 2750 openvibes-signer:openvibes-operators
+rpm -qc openvibes-signer | grep -qx /etc/openvibes/signer.toml || fail "signer.toml not %config"
+systemd-analyze verify /usr/lib/systemd/system/openvibes-signer.service || fail "signer unit verification"
+for line in 'User=openvibes-signer' 'Group=openvibes-signer-clients' 'PrivateNetwork=yes' \
+    'RestrictAddressFamilies=AF_UNIX' 'CapabilityBoundingSet=' 'ReadWritePaths=/var/lib/openvibes-signer'; do
+    grep -qx "$line" /usr/lib/systemd/system/openvibes-signer.service || fail "signer unit lacks $line"
+done
+seed() { runuser -u openvibes-signer -g openvibes-signer-clients -- /usr/bin/openvibes-signer seed --min-version "$1"; }
+lines=$(seed 3) || fail "signer seed failed"
+grep -qE '^site site\.key [A-Za-z0-9_-]{43}$' <<<"$lines" || fail "seed printed no site trust line: $lines"
+grep -qE '^site-alarms site\.key [A-Za-z0-9_-]{43}$' <<<"$lines" || fail "seed printed no site-alarms trust line"
+expect_stat /var/lib/openvibes-signer/site.key 600 openvibes-signer:openvibes-operators
+grep -q '"version": 2' /var/lib/openvibes-signer/versions.json || fail "seed did not set the next version to 3"
+[[ "$(seed 1)" == "$lines" ]] || fail "a second seed changed the key"
+grep -q '"version": 2' /var/lib/openvibes-signer/versions.json || fail "a second seed lowered the version"
+out=$(/usr/bin/openvibes-signer --config /nonexistent 2>&1) && fail "signer started without config"
+[[ "$out" == *"openvibes-signer:"* ]] || fail "signer error: $out"
 echo "check-rpm: ok"

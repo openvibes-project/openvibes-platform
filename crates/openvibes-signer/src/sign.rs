@@ -23,6 +23,32 @@ const DAY_MS: i64 = 86_400_000;
 const RULE_PROGRAMS: usize = 8;
 const SET_PROGRAMS: usize = 32;
 
+/// Creates the site key at `path` (0600) unless it exists, and returns
+/// its public half, base64url, for agents' trust lines.
+///
+/// # Errors
+/// No randomness, or the key can't be written or read back.
+pub fn create_key(path: &Path) -> Result<String, String> {
+    use std::{io::Write, os::unix::fs::OpenOptionsExt};
+    if !path.exists() {
+        let mut seed = [0u8; 32];
+        ring::rand::SecureRandom::fill(&ring::rand::SystemRandom::new(), &mut seed)
+            .map_err(|_| "no randomness available".to_owned())?;
+        let written = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(path)
+            .and_then(|mut file| {
+                file.write_all(&seed)?;
+                file.sync_all()
+            });
+        seed.zeroize();
+        written.map_err(|e| format!("cannot create {}: {e}", path.display()))?;
+    }
+    Ok(URL_SAFE_NO_PAD.encode(read_key(path)?.verifying_key().to_bytes()))
+}
+
 /// Reads the site key: a regular file of exactly 32 bytes that only its
 /// owner can read.
 ///

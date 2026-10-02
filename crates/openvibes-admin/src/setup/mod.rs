@@ -493,3 +493,16 @@ pub fn quick(args: &PlanArgs) -> ExitCode {
         (false, false) => ExitCode::FAILURE,
     }
 }
+
+/// The rules auditd loads at boot (`augenrules` writes them here).
+pub const AUDIT_RULES: &str = "/etc/audit/audit.rules";
+
+/// True when `audit.rules` switches syscall auditing off for every task
+/// (`-a task,never`, Fedora's default): the kernel then reports no
+/// program starts, so threat alarms can never fire.
+pub fn audit_off(rules: &str) -> bool {
+    rules.lines().any(|line| {
+        let mut words = line.split_whitespace();
+        words.next() == Some("-a") && matches!(words.next(), Some("task,never" | "never,task"))
+    })
+}

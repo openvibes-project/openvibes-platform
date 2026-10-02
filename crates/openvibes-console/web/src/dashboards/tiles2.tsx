@@ -5,6 +5,7 @@ import { useSession } from "../app/session";
 import { daysAgo } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
 import { LIST_VIEWS } from "../views/rows";
+import { ATTENTION_KINDS } from "./attention";
 import { int, list, noteLines, noteParts, str, toInt } from "./config";
 import { METRICS, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
@@ -55,13 +56,13 @@ export function BreakdownSettings({ widget, onChange }: SettingsProps) {
 }
 
 export function AttentionSettings({ widget, onChange }: SettingsProps) {
-  const include = list(widget.config, "include", ["exploited", "findings", "stale"] as const);
+  const include = list(widget.config, "include", ATTENTION_KINDS);
   const toggle = (value: string) => onChange({ ...widget.config, include: include.includes(value as never) ? include.filter((v) => v !== value) : [...include, value] });
   return (
     <div className="stack">
-      {(["exploited", "findings", "stale"] as const).map((value) => (
+      {ATTENTION_KINDS.map((value) => (
         <label key={value} className="row"><input type="checkbox" checked={include.length === 0 || include.includes(value)} onChange={() => toggle(value)} />
-          {{ exploited: "Exploited vulnerabilities", findings: "Open critical and high findings", stale: "Hosts that stopped reporting" }[value]}</label>
+          {{ alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", findings: "Open critical and high findings", stale: "Hosts that stopped reporting" }[value]}</label>
       ))}
       {field("Show at most", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 20, 8) })} />)}
     </div>

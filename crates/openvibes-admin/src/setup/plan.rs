@@ -27,10 +27,11 @@ pub enum Component {
     Assistant,
     Rules,
     Agent,
+    Signer,
 }
 
 impl Component {
-    pub const ALL: [Component; 7] = [
+    pub const ALL: [Component; 8] = [
         Component::Ingest,
         Component::Console,
         Component::Distribution,
@@ -38,6 +39,7 @@ impl Component {
         Component::Assistant,
         Component::Rules,
         Component::Agent,
+        Component::Signer,
     ];
 
     /// The name `--components` takes.
@@ -50,6 +52,7 @@ impl Component {
             Component::Assistant => "assistant",
             Component::Rules => "rules",
             Component::Agent => "agent",
+            Component::Signer => "signer",
         }
     }
 
@@ -63,6 +66,7 @@ impl Component {
             Component::Assistant => "local LLM for the console (heavy; needs a model)",
             Component::Rules => "OpenVIBES baseline rules (needs distribution)",
             Component::Agent => "the agent on this host",
+            Component::Signer => "signer for your own rules (preview: no console screen yet)",
         }
     }
 
@@ -76,6 +80,7 @@ impl Component {
             Component::Assistant => &["openvibes-llm"],
             Component::Rules => &["openvibes-rules-baseline"],
             Component::Agent => &["openvibes-agent"],
+            Component::Signer => &["openvibes-signer"],
         }
     }
 
@@ -87,6 +92,7 @@ impl Component {
             Component::Console => &[Unit::Console],
             Component::Distribution => &[Unit::Distribution],
             Component::Vulns => &[Unit::Vulns],
+            Component::Signer => &[Unit::Signer],
             Component::Assistant | Component::Rules | Component::Agent => &[],
         }
     }
@@ -279,7 +285,7 @@ impl Plan {
 #[derive(clap::Args, Clone, Debug)]
 pub struct PlanArgs {
     /// Components, comma-separated: ingest (required), console,
-    /// distribution, vulns, assistant, rules, agent.
+    /// distribution, vulns, assistant, rules, agent, signer.
     #[arg(long, value_delimiter = ',', value_enum)]
     pub components: Vec<Component>,
     /// This host's DNS name, put in the server certificates.
@@ -372,6 +378,12 @@ impl PlanArgs {
         if components.contains(&Component::Rules) && !components.contains(&Component::Distribution)
         {
             return Err("rules need distribution (agents fetch rules from it)".into());
+        }
+        if components.contains(&Component::Signer)
+            && !(components.contains(&Component::Console)
+                && components.contains(&Component::Distribution))
+        {
+            return Err("the signer needs console and distribution (it signs the console's rules for agents to fetch)".into());
         }
         check_name(&self.hostname)?;
         let (console_port, ingest_port, distribution_port) = (

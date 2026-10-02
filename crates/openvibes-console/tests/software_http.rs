@@ -533,3 +533,54 @@ async fn the_hosts_of_a_port_or_service_are_paged_and_scoped() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_background_request_does_not_extend_the_idle_expiry() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let (cookie, _) = login(&router, "vera").await;
+    let admin = db.pool.get().await.unwrap();
+    let idle = || async {
+        admin
+            .query_one(
+                "SELECT extract(epoch FROM idle_expires_at - now())::float8 FROM console_sessions",
+                &[],
+            )
+            .await
+            .unwrap()
+            .get::<_, f64>(0)
+    };
+    admin
+        .execute(
+            "UPDATE console_sessions SET idle_expires_at = now() + interval '5 minutes'",
+            &[],
+        )
+        .await
+        .unwrap();
+    let background = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/software")
+                .header(header::COOKIE, &cookie)
+                .header("x-openvibes-background", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(background.status(), StatusCode::OK);
+    assert!(
+        idle().await < 6.0 * 60.0,
+        "a background poll kept the session alive"
+    );
+    assert_eq!(
+        get(&router, &cookie, "/api/v1/software").await.0,
+        StatusCode::OK
+    );
+    assert!(idle().await > 25.0 * 60.0, "a user request extends it");
+    drop(admin);
+    db.drop().await;
+}

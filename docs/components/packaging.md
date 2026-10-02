@@ -61,6 +61,21 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
+| `/usr/bin/openvibes-signer` | 0755 root | signer |
+| `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
+| `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |
+| `/etc/openvibes/signer.toml` | 0640 root:openvibes-signer-clients, `%config(noreplace)` | signer |
+| `/var/lib/openvibes-signer/` | 2750 openvibes-signer:openvibes-operators (setgid: `status.json` 0640 reaches operators; `site.key`, `versions.json` and the signed rules are 0600) | signer |
+
+**openvibes-signer** (own rules, board #107) runs as `openvibes-signer`
+with `openvibes-signer-clients` as its group, so its socket
+(`/run/openvibes-signer/sign.sock`, 0660, in a 0750 runtime directory)
+reaches only that group's members: Setup adds `openvibes-console`. The unit
+has no network (`PrivateNetwork=yes`, `AF_UNIX` only), no capabilities, and
+writes only its state directory. It refuses to sign until `openvibes-signer
+seed --min-version N` (run as `openvibes-signer`, group
+`openvibes-signer-clients`) has created the site key and version state;
+Setup does this. It needs `openvibes-admin` for the operators group.
 
 Edited configs survive upgrades. The service users are named exactly like
 the PostgreSQL roles, so Fedora's default `local all all peer`

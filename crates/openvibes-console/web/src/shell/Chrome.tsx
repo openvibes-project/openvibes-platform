@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { isDemo } from "../api/client";
 import { assistant, useAssistant } from "../app/assistant";
+import { useUnseenAlarms } from "../app/liveAlarms";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
 import { useSession } from "../app/session";
@@ -16,6 +17,7 @@ const pinKey = "openvibes.v2.rail.pinned";
 
 export function Rail({ canView }: { canView: (path: string) => boolean }) {
   const { view } = useLocation();
+  const unseenAlarms = useUnseenAlarms();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(pinKey) === "true"; } catch { return false; } });
   const groups = ["Investigate", "Operate", "Administer"] as const;
   // On a phone the bar holds the Investigate views with short labels; the
@@ -45,9 +47,10 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
+                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.path === "/alarms" && unseenAlarms ? `${item.label} (new)` : item.label} aria-current={view === item.path ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
+                  {item.path === "/alarms" && unseenAlarms && <span className="rail__dot" aria-hidden="true" />}
                   <span className="rail__label">{item.label}</span>
                   <span className="rail__short" aria-hidden="true">{item.short ?? item.label}</span>
                   <span className="rail__tip" aria-hidden="true">{item.label}</span>

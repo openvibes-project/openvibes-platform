@@ -384,7 +384,14 @@ arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
 step waits (careful CA: sign the request offline, then run it again), 1 on a
 failure, 2 on bad arguments (checked before the root check).
-`--components` must include `ingest`; `rules` needs `distribution`.
+`--components` must include `ingest`; `rules` needs `distribution`;
+`signer` (own rules, board #107; not in the default set while the console
+has no publish screen) needs `console` and `distribution`. With `signer`,
+the Console step runs `openvibes-signer seed --min-version 1` as the
+signer's user (the site key and version state, kept if present) and adds
+`openvibes-console` to `openvibes-signer-clients`; Services then starts
+`openvibes-signer`. Remove everything deletes `/var/lib/openvibes-signer`
+(the site key), the `openvibes-signer` account and the clients group.
 A `setup.toml` from before the port choices (0.1.1) has no port fields;
 each missing one is taken from the service using it (`console.toml`
 `development_listen` with direct TLS, `ingest.toml`/`distribution.toml`
@@ -452,7 +459,11 @@ up to 60 s for it to report; when the alarm rules are published and the
 installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` (a P14
 agent), its `agent.toml` adds `process_events` to `collectors` and the
 alarm rule set; an older agent never gets either, since it would refuse
-the collector name), `ready` (and, on a first install, an endpoint token, 24 hours, 10
+the collector name. When `/etc/audit/audit.rules` has `-a task,never`
+(Fedora's default, which switches syscall auditing off), the step's line
+says alarms can't fire and how to fix it; Setup never edits audit rules
+itself. Health shows the same as a problem when the TUI runs as root),
+`ready` (and, on a first install, an endpoint token, 24 hours, 10
 uses; a Repair mints none and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).
 
