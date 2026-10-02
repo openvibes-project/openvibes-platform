@@ -129,6 +129,9 @@ A console rule set still needs a signature that agents trust. Options:
       distinct programs.
       This is enforced in the agent's loader, because a stolen key never
       goes through the console. The console refuses the same at save.
+    - **runs restricted sets after every unrestricted one** (lead,
+      2026-10-02), whatever order `agent.toml` lists them in, so a site set
+      can never spend a start's CEL budget before the baseline runs;
     - **Absent means restricted** (reviewer and lead, 2026-10-02). A set
       whose line has no `restricted` key is restricted, except the
       project's offline-signed `baseline-alarms`. A forgotten or pasted
@@ -313,6 +316,8 @@ offline-signed from day one.
      prefilter (at most 8 per rule, 32 distinct per set, no empty name),
      refused in the
      loader; tests for absent, `true`, `false` and the exemption;
+   - restricted sets always evaluated after unrestricted ones, whatever the
+     configured order, with a test;
    - **Gate:** an `alarms-cost` run with a restricted set at its limits
      stays within the P14 budget (#86).
 2. Store and API: drafts, validation, test and dry run (`rules.write`).
