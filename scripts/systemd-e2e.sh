@@ -109,6 +109,11 @@ wait_for "the signer listens on its socket" 30 'test -S /run/openvibes-signer/si
 in_c 'useradd -M outsider && useradd -M insider -G openvibes-signer-clients' || fail "add test users"
 in_c '! runuser -u outsider -- test -r /run/openvibes-signer/sign.sock' || fail "a non-member reaches the signer socket"
 in_c 'runuser -u insider -- test -w /run/openvibes-signer/sign.sock' || fail "a member of openvibes-signer-clients cannot reach the socket"
+# status.json (written on the first tick) reaches operators, not others,
+# under the unit's UMask=0077.
+wait_for "the signer wrote status.json" 10 'test -s /var/lib/openvibes-signer/status.json'
+[[ "$(in_c 'stat -c "%a %U:%G" /var/lib/openvibes-signer/status.json')" == "640 openvibes-signer:openvibes-operators" ]] ||
+    fail "status.json is $(in_c 'stat -c "%a %U:%G" /var/lib/openvibes-signer/status.json'), want 640 openvibes-signer:openvibes-operators"
 ok "the signer runs sandboxed and only its socket group reaches it"
 
 # Optional C5 package validation. Install only after the platform migrations
