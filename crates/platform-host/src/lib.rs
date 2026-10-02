@@ -217,7 +217,8 @@ pub fn passwd_home(passwd: &str, user: &str) -> Option<String> {
 /// `ip` arguments listing the host's global addresses, IPv4 and IPv6.
 /// A dnf option that refreshes only the OpenVIBES repository's metadata
 /// (dnf otherwise trusts a cache up to 48 hours old, so a release from
-/// today reads as "nothing to do").
+/// today reads as "nothing to do"). Only for dnf run as root: as a user,
+/// a refresh needs the repository key in the user's own cache.
 pub const REFRESH_OURS: &str = "--setopt=openvibes.metadata_expire=0";
 
 pub const IP_ADDRESSES: [&str; 5] = ["-o", "addr", "show", "scope", "global"];
