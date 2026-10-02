@@ -6,7 +6,10 @@
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
-use openvibes_signer::{Signer, SignerConfig, state::State};
+use openvibes_signer::{
+    Signer, SignerConfig,
+    state::{Seeded, State},
+};
 
 const DEFAULT_CONFIG: &str = "/etc/openvibes/signer.toml";
 const USAGE: &str = "usage: openvibes-signer [--config PATH]\n       \
@@ -45,12 +48,18 @@ async fn main() -> ExitCode {
             return ExitCode::from(2);
         };
         return match State::seed(&config.state_dir, min_version) {
-            Ok(true) => {
+            Ok(Seeded::Created) => {
                 println!("the next version signed is {min_version}");
                 ExitCode::SUCCESS
             }
-            Ok(false) => {
+            Ok(Seeded::Kept) => {
                 println!("version state already exists; kept");
+                ExitCode::SUCCESS
+            }
+            Ok(Seeded::Replaced) => {
+                println!(
+                    "the version state could not be read; replaced: the next version signed is {min_version}"
+                );
                 ExitCode::SUCCESS
             }
             Err(error) => fail(&error),

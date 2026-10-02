@@ -34,6 +34,9 @@ pub const MAX_REQUEST: u64 = 1 << 20;
 pub const READ_TIMEOUT: Duration = Duration::from_secs(5);
 /// Argon2id checks at once: each takes ~19 MiB.
 pub const VERIFICATIONS: usize = 2;
+/// Connections at once (each may hold up to [`MAX_REQUEST`] for
+/// [`READ_TIMEOUT`]); more are closed at once.
+pub const CONNECTIONS: usize = 8;
 /// Wrong passwords per account before it locks, the same bucket and limit
 /// as console sign-in.
 const ACCOUNT_FAILURE_LIMIT: i32 = 5;
@@ -98,7 +101,7 @@ impl Signer {
                 SignResponse::Refused { code }
             }
         };
-        if let Err(error) = state.write_status(now_ms) {
+        if let Err(error) = state.write_status(now_ms, false) {
             eprintln!("openvibes-signer: cannot write status.json: {error}");
         }
         response
@@ -114,12 +117,17 @@ impl Signer {
         if request.rule_set != SITE && request.rule_set != SITE_ALARMS {
             return Err(Refusal::Invalid);
         }
-        let version = self
+        // Fail fast without state; the version itself is taken under the
+        // lock below.
+        if self
             .state
             .lock()
             .await
             .next_version(&request.rule_set)
-            .ok_or(Refusal::VersionState)?;
+            .is_none()
+        {
+            return Err(Refusal::VersionState);
+        }
         let client = self.pool.get().await.map_err(|_| Refusal::Unavailable)?;
         // An impossible name still costs a full check (and gets the same
         // answer), so names can't be probed.
@@ -160,15 +168,22 @@ impl Signer {
         {
             return Err(Refusal::Forbidden);
         }
-        let limit = usize::try_from(self.config.publishes_per_hour).unwrap_or(usize::MAX);
-        if self.state.lock().await.publishes_this_hour(now_ms) >= limit {
-            return Err(Refusal::Rate);
-        }
         sign::check_rules(
             &request.rule_set,
             &request.rules,
             self.config.rules_per_publish,
         )?;
+        // One lock from the rate check to the recorded version: two
+        // publishes at once must never both pass the limit or sign the same
+        // version (signing takes microseconds).
+        let mut state = self.state.lock().await;
+        let limit = usize::try_from(self.config.publishes_per_hour).unwrap_or(usize::MAX);
+        if state.publishes_this_hour(now_ms) >= limit {
+            return Err(Refusal::Rate);
+        }
+        let version = state
+            .next_version(&request.rule_set)
+            .ok_or(Refusal::VersionState)?;
         let signed = sign::sign(
             &self.key,
             &self.config.issuer_key_id,
@@ -178,9 +193,7 @@ impl Signer {
             now_ms,
             self.config.validity_days,
         )?;
-        self.state
-            .lock()
-            .await
+        state
             .record_signed(
                 &request.rule_set,
                 version,
@@ -192,6 +205,7 @@ impl Signer {
                 eprintln!("openvibes-signer: {error}");
                 Refusal::Unavailable
             })?;
+        drop(state);
         let rules = serde_json::from_str::<openvibes_core::RuleSet>(&request.rules)
             .map_or(0, |set| set.rules.len());
         Ok((signed, version, rules))
@@ -231,15 +245,36 @@ impl Signer {
         shutdown: impl Future<Output = ()>,
     ) {
         tokio::pin!(shutdown);
+        let connections = Arc::new(Semaphore::new(CONNECTIONS));
+        let mut flush = tokio::time::interval(Duration::from_secs(1));
         loop {
             tokio::select! {
-                () = &mut shutdown => return,
+                () = &mut shutdown => {
+                    self.flush_status().await;
+                    return;
+                }
+                _ = flush.tick() => self.flush_status().await,
                 accepted = listener.accept() => {
                     let Ok((stream, _)) = accepted else { continue };
+                    // Over the cap the stream is dropped unread.
+                    let Ok(permit) = Arc::clone(&connections).try_acquire_owned() else {
+                        continue;
+                    };
                     let signer = Arc::clone(&self);
-                    tokio::spawn(async move { signer.connection(stream).await });
+                    tokio::spawn(async move {
+                        signer.connection(stream).await;
+                        drop(permit);
+                    });
                 }
             }
+        }
+    }
+
+    /// Writes `status.json` if something changed since it was last written.
+    pub async fn flush_status(&self) {
+        let now_ms = Utc::now().timestamp_millis();
+        if let Err(error) = self.state.lock().await.write_status(now_ms, true) {
+            eprintln!("openvibes-signer: cannot write status.json: {error}");
         }
     }
 

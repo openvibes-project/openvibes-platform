@@ -10,7 +10,7 @@ use common::TestDb;
 use openvibes_signer::{
     Signer, SignerConfig,
     request::{Refusal, SignResponse},
-    state::State,
+    state::{Seeded, State},
 };
 use platform_store::console_auth::{NewLocalUser, create_local_user};
 
@@ -28,6 +28,7 @@ fn alarm_rules(programs: &[&str]) -> String {
 struct Fixture {
     db: TestDb,
     dir: PathBuf,
+    config: SignerConfig,
     signer: Arc<Signer>,
 }
 
@@ -90,8 +91,24 @@ impl Fixture {
             validity_days: 365,
         };
         let pool = platform_store::connect(&config.database_url).await.unwrap();
-        let signer = Arc::new(Signer::new(config, pool).unwrap());
-        Self { db, dir, signer }
+        let signer = Arc::new(Signer::new(config.clone(), pool).unwrap());
+        Self {
+            db,
+            dir,
+            config,
+            signer,
+        }
+    }
+
+    /// A new signer over the same database and state directory, as after
+    /// a restart.
+    async fn reopened(self) -> Self {
+        let config = self.config.clone();
+        let pool = platform_store::connect(&config.database_url).await.unwrap();
+        Self {
+            signer: Arc::new(Signer::new(config, pool).unwrap()),
+            ..self
+        }
     }
 
     async fn sign(&self, user: &str, password: &str, set: &str, rules: &str) -> SignResponse {
@@ -257,6 +274,7 @@ async fn refuses_with_fixed_codes() {
     );
 
     // Refusals are counted for Health, in a file only the operators read.
+    fixture.signer.flush_status().await;
     let status_path = fixture.dir.join("status.json");
     let status: serde_json::Value =
         serde_json::from_slice(&std::fs::read(&status_path).unwrap()).unwrap();
@@ -302,11 +320,19 @@ async fn no_version_state_means_no_signature() {
     let response = fixture.sign("publisher", PASSWORD, "site", SNAPSHOT).await;
     assert_eq!(refused(&response), Some(Refusal::VersionState));
     assert!(State::seed(&fixture.dir, 0).is_err());
-    assert!(State::seed(&fixture.dir, 3).unwrap());
-    assert!(
-        !State::seed(&fixture.dir, 1).unwrap(),
-        "an existing state is kept"
+    assert_eq!(State::seed(&fixture.dir, 3).unwrap(), Seeded::Created);
+    assert_eq!(
+        State::seed(&fixture.dir, 1).unwrap(),
+        Seeded::Kept,
+        "a readable state is kept: seeding never lowers a version"
     );
+    // A corrupt file is no state (refused), and seeding replaces it.
+    std::fs::write(fixture.dir.join("versions.json"), "{not json").unwrap();
+    let fixture = fixture.reopened().await;
+    let response = fixture.sign("publisher", PASSWORD, "site", SNAPSHOT).await;
+    assert_eq!(refused(&response), Some(Refusal::VersionState));
+    assert_eq!(State::seed(&fixture.dir, 9).unwrap(), Seeded::Replaced);
+    assert_eq!(State::open(&fixture.dir).next_version("site"), Some(9));
     fixture.done().await;
 }
 
@@ -351,6 +377,63 @@ async fn the_socket_answers_one_request_and_drops_a_slow_one() {
     slow.read_to_string(&mut answer).await.unwrap();
     assert_eq!(answer, "{\"result\":\"refused\",\"code\":\"invalid\"}");
 
+    let _ = stop.send(());
+    server.await.unwrap();
+    fixture.done().await;
+}
+
+/// Two valid publishes at once get consecutive versions, never the same
+/// one: one lock covers the rate check, the version and its record.
+#[tokio::test]
+async fn concurrent_publishes_sign_consecutive_versions() {
+    let fixture = Fixture::new(Some(4), 12).await;
+    let (a, b) = tokio::join!(
+        fixture.sign("publisher", PASSWORD, "site", SNAPSHOT),
+        fixture.sign("publisher", PASSWORD, "site", SNAPSHOT),
+    );
+    let mut versions: Vec<u64> = [a, b]
+        .iter()
+        .map(|response| match response {
+            SignResponse::Signed { version, .. } => *version,
+            SignResponse::Refused { code } => panic!("refused: {code:?}"),
+        })
+        .collect();
+    versions.sort_unstable();
+    assert_eq!(versions, [4, 5]);
+    assert_eq!(State::open(&fixture.dir).next_version("site"), Some(6));
+    fixture.done().await;
+}
+
+/// Over the connection cap, a connection is closed unread: slow clients
+/// can't make the signer hold more than CONNECTIONS request buffers.
+#[tokio::test]
+async fn connections_over_the_cap_are_closed_unread() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fixture = Fixture::new(Some(1), 12).await;
+    let path = fixture.dir.join("sign.sock");
+    let listener = openvibes_signer::bind(&path).unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let server = tokio::spawn(Arc::clone(&fixture.signer).serve(listener, async {
+        let _ = stopped.await;
+    }));
+    let mut held = Vec::new();
+    for _ in 0..openvibes_signer::CONNECTIONS {
+        let mut stream = tokio::net::UnixStream::connect(&path).await.unwrap();
+        stream.write_all(b"{").await.unwrap();
+        held.push(stream);
+    }
+    // Let the server take them all.
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    let mut extra = tokio::net::UnixStream::connect(&path).await.unwrap();
+    let mut answer = String::new();
+    let read = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        extra.read_to_string(&mut answer),
+    )
+    .await;
+    assert!(read.is_ok(), "closed at once, not after the read timeout");
+    assert_eq!(answer, "", "nothing read, nothing answered");
+    drop(held);
     let _ = stop.send(());
     server.await.unwrap();
     fixture.done().await;

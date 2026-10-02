@@ -29,13 +29,29 @@ pub struct SetState {
     pub expires_at_unix_ms: Option<i64>,
 }
 
+/// What `seed` did.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Seeded {
+    /// There was no version state.
+    Created,
+    /// A readable state was kept.
+    Kept,
+    /// An unreadable state was replaced.
+    Replaced,
+}
+
 /// In memory: the publish rate and refusals reset on restart, which a
 /// console can't cause.
 pub struct State {
     dir: PathBuf,
     sets: Option<BTreeMap<String, SetState>>,
     publishes: VecDeque<i64>,
-    refusals: VecDeque<(i64, Refusal)>,
+    /// Refusals per code, per hour (the hour's start), for the last day:
+    /// bounded however many requests arrive.
+    refusals: BTreeMap<i64, BTreeMap<Refusal, u64>>,
+    /// `status.json` is behind.
+    dirty: bool,
+    written_at_ms: i64,
 }
 
 impl State {
@@ -51,22 +67,26 @@ impl State {
             dir: dir.to_owned(),
             sets,
             publishes: VecDeque::new(),
-            refusals: VecDeque::new(),
+            refusals: BTreeMap::new(),
+            dirty: true,
+            written_at_ms: i64::MIN,
         }
     }
 
     /// Creates `versions.json` so the next version signed is `min_version`
-    /// (at least the version agents last accepted, after a restore). An
-    /// existing file is kept: seeding never lowers a version.
+    /// (at least the version agents last accepted, after a restore). A
+    /// readable file is kept: seeding never lowers a version. One that
+    /// can't be read (corrupt, or missing a set) is replaced.
     ///
     /// # Errors
     /// `min_version` 0, or the file can't be written.
-    pub fn seed(dir: &Path, min_version: u64) -> Result<bool, String> {
+    pub fn seed(dir: &Path, min_version: u64) -> Result<Seeded, String> {
         if min_version == 0 {
             return Err("--min-version must be at least 1".into());
         }
-        if dir.join(VERSIONS).exists() {
-            return Ok(false);
+        let existed = dir.join(VERSIONS).exists();
+        if existed && Self::open(dir).sets.is_some() {
+            return Ok(Seeded::Kept);
         }
         let last = SetState {
             version: min_version - 1,
@@ -80,7 +100,11 @@ impl State {
             &serde_json::to_vec_pretty(&sets).map_err(|e| e.to_string())?,
         )
         .map_err(|e| format!("cannot write {}: {e}", dir.join(VERSIONS).display()))?;
-        Ok(true)
+        Ok(if existed {
+            Seeded::Replaced
+        } else {
+            Seeded::Created
+        })
     }
 
     /// The version to sign `rule_set` with next, if the state is known.
@@ -135,30 +159,42 @@ impl State {
         .map_err(|e| format!("cannot write the signer state: {e}"))?;
         self.sets = Some(sets);
         self.publishes.push_back(now_ms);
+        self.dirty = true;
+        // A signature reaches status.json now, not at the next tick.
+        self.written_at_ms = i64::MIN;
         Ok(())
     }
 
     /// Counts a refusal for `status.json` (kept for a day).
     pub fn record_refusal(&mut self, code: Refusal, now_ms: i64) {
-        self.refusals.push_back((now_ms, code));
+        *self
+            .refusals
+            .entry(now_ms - now_ms.rem_euclid(HOUR_MS))
+            .or_default()
+            .entry(code)
+            .or_default() += 1;
+        self.dirty = true;
     }
 
     /// Writes `status.json` (0640; the state directory's group is the
-    /// operators'), atomically so Health never reads half a file.
+    /// operators'), atomically so Health never reads half a file. At most
+    /// once a second unless `flush` (the serve loop's tick), and only when
+    /// something changed; a signature is written at once.
     ///
     /// # Errors
     /// The file can't be written.
-    pub fn write_status(&mut self, now_ms: i64) -> std::io::Result<()> {
-        while self
-            .refusals
-            .front()
-            .is_some_and(|(at, _)| *at <= now_ms - DAY_MS)
-        {
-            self.refusals.pop_front();
+    pub fn write_status(&mut self, now_ms: i64, flush: bool) -> std::io::Result<()> {
+        let due = now_ms.saturating_sub(self.written_at_ms) >= 1_000;
+        if !self.dirty || !(flush || due) {
+            return Ok(());
         }
+        self.refusals
+            .retain(|hour, _| *hour > now_ms - DAY_MS - HOUR_MS);
         let mut refusals: BTreeMap<&str, u64> = BTreeMap::new();
-        for (_, code) in &self.refusals {
-            *refusals.entry(code.code()).or_default() += 1;
+        for codes in self.refusals.values() {
+            for (code, count) in codes {
+                *refusals.entry(code.code()).or_default() += count;
+            }
         }
         let status = serde_json::json!({
             "updated_at_unix_ms": now_ms,
@@ -168,7 +204,10 @@ impl State {
             "refusals_last_day": refusals,
         });
         let bytes = serde_json::to_vec_pretty(&status).map_err(std::io::Error::other)?;
-        write_atomic(&self.dir, STATUS, 0o640, &bytes)
+        write_atomic(&self.dir, STATUS, 0o640, &bytes)?;
+        self.dirty = false;
+        self.written_at_ms = now_ms;
+        Ok(())
     }
 }
 

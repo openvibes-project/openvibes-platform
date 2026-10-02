@@ -35,7 +35,8 @@ password.
 
 - **CLI:** `openvibes-signer [--config PATH]` serves. `openvibes-signer seed
   --min-version N` creates the version state so the next version signed is
-  `N`, and keeps an existing state (seeding never lowers a version).
+  `N`, keeps a readable one (seeding never lowers a version), and replaces
+  one it can't read (corrupt, or missing a set), saying so.
 
 ## Configuration
 
@@ -67,16 +68,22 @@ password.
 - **Versions:** it always signs the set's last version + 1, and writes the
   new version and the signed rules to `state_dir` (temp file, fsync,
   rename) before handing the envelope out, so a console can't roll a set
-  back and a version is never signed twice.
+  back and a version is never signed twice. One lock covers the rate
+  check, the version, the signature and its record, so two publishes at
+  once get consecutive versions and can't both pass the hourly limit.
 - **`status.json`** (0640, for the admin Health screen): whether version
   state exists, each set's last version and expiry, publishes in the last
-  hour, and refusals by code in the last day. Written atomically.
+  hour, and refusals by code in the last day (counted in hourly buckets,
+  so memory stays bounded however many requests arrive). Written
+  atomically, at most once a second (a signature at once; the rest on a
+  one-second tick), so a flood of bad requests causes no fsync storm.
 
 ## Failure behaviour
 
 - At most 2 password checks at once (each Argon2id takes ~19 MiB); more
-  wait. A connection that doesn't send its whole request within 5 seconds
-  gets `invalid`.
+  wait. At most 8 connections at once; more are closed unread. A
+  connection that doesn't send its whole request within 5 seconds gets
+  `invalid`.
 - The password stays in a redacting, zeroizing wrapper; the request body
   is cleared after use and never logged, also on `invalid`.
 - A wrong key file (not 32 bytes, or readable by group or others) stops
@@ -91,4 +98,7 @@ tests connect **as the `openvibes-signer` role**, so the grants are what's
 tested (removing one fails them): signing at the next version and after a
 restart, every refusal code, the lock after 5 wrong passwords, no version
 state, the hourly limit, the socket's mode, one request over it, and a slow
-body cut at the timeout.
+body cut at the timeout, two concurrent publishes getting consecutive
+versions (the old ordering gives both the same, and fails it), the
+connection cap, and `seed` keeping a readable state and replacing a
+corrupt one.
