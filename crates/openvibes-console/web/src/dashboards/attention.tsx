@@ -3,10 +3,13 @@
 import { useMemo } from "react";
 
 import { useAllPages, useResource } from "../api/client";
-import type { Agent, FindingGroup, VulnerabilityPage } from "../api/types";
+import type { Agent, AlarmPage, FindingGroup, VulnerabilityPage } from "../api/types";
 import { useSession } from "../app/session";
 import { plural } from "../ui/format";
 import type { IconName } from "../ui/Icon";
+
+/** What "Needs attention" can include, in the settings' order. */
+export const ATTENTION_KINDS = ["alarms", "exploited", "findings", "stale"] as const;
 
 export type AttentionItem = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
 
@@ -15,14 +18,21 @@ export function greeting(now = new Date()) {
   return hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-/** The "Needs attention" list: exploited vulnerabilities, open critical and
- *  high findings, and hosts that stopped reporting, most urgent first. */
+/** The "Needs attention" list: active threat alarms, exploited
+ *  vulnerabilities, open critical and high findings, and hosts that stopped
+ *  reporting, most urgent first. */
 export function useAttention(include: readonly string[], limit: number): { items: AttentionItem[]; loading: boolean } {
   const { can } = useSession();
   const want = (kind: string) => include.includes(kind);
   const groups = useAllPages<FindingGroup>(want("findings") && can("findings.read") ? "/api/v1/findings/groups" : null);
   const exploited = useResource<VulnerabilityPage>(want("exploited") && can("vulnerabilities.read") ? "/api/v1/vulnerabilities?exploited=true" : null);
   const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
+  // Newest first by last_seen: repeating medium alarms could push an older
+  // critical one off one page, so critical ones are fetched on their own.
+  // (Alarms closed by a suppression are hidden unless suppressed=true.)
+  const alarmsOn = want("alarms") && can("alarms.read");
+  const alarms = useResource<AlarmPage>(alarmsOn ? "/api/v1/alarms?state=active&limit=20" : null);
+  const critical = useResource<AlarmPage>(alarmsOn ? "/api/v1/alarms?state=active&severity=critical&limit=20" : null);
 
   const items = useMemo(() => {
     const items: AttentionItem[] = [];
@@ -31,6 +41,17 @@ export function useAttention(include: readonly string[], limit: number): { items
       const entry = byAdvisory.get(item.advisory_id) ?? { title: item.title, severity: item.severity, hosts: 0 };
       entry.hosts += 1;
       byAdvisory.set(item.advisory_id, entry);
+    }
+    // An active critical alarm is an incident: above everything else.
+    const alarmRank: Record<string, number> = { critical: -1, high: 0.5, medium: 2.5 };
+    const seen = new Set<string>();
+    for (const alarm of [...(critical.data?.items ?? []), ...(alarms.data?.items ?? [])]) {
+      if (seen.has(alarm.id)) continue;
+      seen.add(alarm.id);
+      const rank = alarmRank[alarm.severity];
+      if (rank === undefined) continue;
+      const program = alarm.exe.split("/").pop() ?? alarm.exe;
+      items.push({ key: `m${alarm.id}`, icon: "alarm", to: { kind: "alarm", id: alarm.id }, severity: alarm.severity, title: alarm.message, meta: `Alarm · ${alarm.hostname ?? alarm.agent_id} · ${program}${alarm.count > 1 ? ` · ${alarm.count}×` : ""}`, rank });
     }
     for (const [id, entry] of byAdvisory) {
       items.push({ key: `a${id}`, icon: "flame", to: { kind: "advisory", id }, severity: entry.severity, title: entry.title, meta: `Known exploited · ${plural(entry.hosts, "host")}`, rank: 0 - entry.hosts / 1000 });
@@ -44,6 +65,6 @@ export function useAttention(include: readonly string[], limit: number): { items
       items.push({ key: `g${agent.id}`, icon: "agents", to: { kind: "agent", id: agent.id }, severity: "stale", title: agent.hostname ?? agent.id, meta: "Stopped reporting", rank: 2 });
     }
     return items.sort((a, b) => a.rank - b.rank);
-  }, [exploited.data, groups.data, stale.data]);
-  return { items: items.slice(0, limit), loading: groups.loading || exploited.loading || stale.loading };
+  }, [alarms.data, critical.data, exploited.data, groups.data, stale.data]);
+  return { items: items.slice(0, limit), loading: groups.loading || exploited.loading || stale.loading || alarms.loading || critical.loading };
 }
