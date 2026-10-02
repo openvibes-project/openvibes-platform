@@ -70,60 +70,74 @@ limits), checked as you type.
 
 A console rule set still needs a signature that agents trust. Options:
 
-- **A. A site signing key held by the platform.**
-  - Setup generates an Ed25519 key for the site rule sets
-    (`/var/lib/openvibes-console/site-rules.key`, 0600, owned by the
-    console's service user). Its public key becomes a trust line
-    (`site site-1 KEY`) in `rule_trust_keys` and in every agent command.
-  - Publishing in the console signs and stores the bundle in one step.
-  - Because the key is online, the console can also re-sign before expiry,
-    and Health warns if it can't.
-  - **Risk:** whoever controls the console process can publish any rules
-    *in the site sets* to every agent that trusts them. The baseline sets
-    stay untouched: their key is still offline, and agents trust keys per
-    rule set.
-  - A rule can raise false findings or alarms, or cost CPU within the
-    evaluation limits. It cannot run code, read files or change the host.
-  - **It can leak facts one bit at a time.** A finding's `evidence` names
-    fact keys, never their values, and alarm events are masked before
-    they are sent. But whether a rule matches is itself a bit, so a
-    stolen key could publish rules that probe a value ("does a process
-    name start with `a`?").
-    - The cap: 512 rules per set, 1,024 across the two site sets, so at
-      most about 1,000 bits per host per scan (hourly). Re-publishing
-      can probe further, a version at a time.
-    - What it can reach: only facts the agent collects. That is process
-      names, packages and ports, plus the `event` keys for alarm rules.
-      The platform already receives the packages, the ports and the
-      masked alarm events, so what's new to an attacker is mainly
-      process names and unmasked command lines.
-    - Each publish is audited, with the count of rules added (§7). A
-      burst of near-identical rules is visible there and in the rule
-      set's history.
-    - Someone who controls the console process can already read
-      everything the platform stores. The channel adds only what agents
-      never send.
-  - **Site alarm rules see masked command lines** (lead, 2026-10-02):
-    - The agent masks the `event` command line and arguments with the same
-      `mask_args` it uses for alarms, before a site set's rules evaluate
-      them. Only the official baseline sets see the full form.
-    - It's set per set in the agent's own `agent.toml`
-      (`masked_events = true`). `install.sh` and `agent command` write it
-      for `site-alarms`.
-    - A stolen key signs bundles but can't edit `agent.toml`, so it can't
-      turn masking off. That closes the probe on secrets in argv.
-    - What's lost: rules can't match argument *values* that masking hides
-      (after `-p`, `--password`, `TOKEN=` and so on). Rules about a
-      command's shape (program, flags) still work.
-    - Cost: masking runs on every exec that passes a site rule's
-      `programs` prefilter, not only when an alarm is raised. It's gated
-      by an `alarms-cost` measurement (§9).
-  - **Mitigations:**
-    - separate permissions (D3);
-    - publishing asks for the password again;
-    - a full audit trail (§7);
-    - rotation through a second trust line (agents accept several issuer
-      keys per set).
+- **A. A site signing key held by the platform, hardened.**
+  - **Where the key lives:** not in the console. The console is the most
+    exposed process, since users put it on a network.
+    - Setup generates an Ed25519 key for the site rule sets and gives it
+      to a small **signer** (a new `openvibes-signer` unit, or the
+      distribution service). The signer holds it as
+      `/var/lib/openvibes-signer/site-rules.key`, 0600, under its own
+      service user, and listens only on a local Unix socket.
+    - The console asks the signer to sign after its step-up check (the
+      user's password again). The signer checks the rule set is a site
+      set and the rules pass the loader. It doesn't hold or check
+      sessions, so a console RCE could still ask it to sign. What it
+      gains is that the key itself can't be read or copied off the host
+      from the console.
+    - The public key becomes a trust line (`site site-1 KEY`) in
+      `rule_trust_keys` and in every agent command.
+    - Because the key is online, the signer can also re-sign before
+      expiry, and Health warns if it can't.
+  - **Agents restrict what site sets can do**, in their own `agent.toml`.
+    A stolen key signs bundles but can't edit that file. `install.sh`
+    and `agent command` write `restricted = true` on both site sets
+    (§6). For a restricted set the agent:
+    - masks the `event` command line and arguments with the same
+      `mask_args` it uses for alarms, before that set's rules see them,
+      while the official baseline sets see the full form;
+    - **refuses an alarm rule without a `programs` prefilter**, or with
+      more than 8 names, or a set naming more than 32 distinct programs.
+      This is enforced in the agent's loader, because a stolen key never
+      goes through the console. The console refuses the same at save.
+  - **The worst case, plainly.** Whoever can get the signer to sign can
+    publish any rules in the site sets to every agent that trusts them.
+    The baseline sets stay untouched: their key is still offline, and
+    agents trust keys per rule set. No rule can run code, read files or
+    change a host. The reach:
+    - **A process-start logger for the named programs.** A site alarm
+      rule whose expression is `true` raises an alarm for every start of
+      the programs it names. Each alarm carries exe, cwd, uid, the
+      ancestors' exes and cwds, and the masked arguments. With the caps
+      above, that is every exec of up to 32 named programs, for example
+      `sh`, `bash` and `python3` (not every exec on the host). The
+      agent's collapse of repeats and its 1,000-alarm queue bound the
+      volume, not the reach.
+    - **A one-bit channel over facts.** A finding's `evidence` names fact
+      keys, never their values, but whether a rule matches is itself a
+      bit, so rules can probe a value ("does a process name start with
+      `a`?"). It's capped by 512 rules per set, 1,024 across the two
+      site sets, so about 1,000 bits per host per hourly scan;
+      re-publishing probes further, a version at a time. Restricted sets
+      see masked command lines, so it can't reach secrets in argv: what's
+      new to an attacker is mainly process names. Someone who controls
+      the console can already read everything the platform stores.
+    - **CPU on every host.** Alarm rules run on every process start, each
+      within its own evaluation limit, so hundreds of rules tuned near
+      that limit could pin a core on a busy host. The agent needs an
+      **aggregate budget per event across all `process_event` rules**:
+      past it, it stops evaluating that event and counts it in health.
+      This is a prerequisite before site alarm rules ship (§9). Snapshot
+      rules are already bounded per scan.
+  - **Also visible and reversible:**
+    - every publish is audited with the rules added, changed and removed
+      (§7), so a burst of near-identical rules, or `true` expressions,
+      stands out there and in the set's history;
+    - permissions are separate (D3);
+    - the key rotates through a second trust line, since agents accept
+      several issuer keys per set.
+  - **Cost:** masking runs on every exec that passes a restricted set's
+    prefilter, not only when an alarm is raised. Both this and the
+    aggregate budget are gated by an `alarms-cost` measurement (§9).
 - **B. Export, then sign offline.**
   - The console drafts and tests. "Export" downloads the rules JSON.
   - The admin runs `openvibes-admin rules sign` on the machine that holds
@@ -139,12 +153,21 @@ A console rule set still needs a signature that agents trust. Options:
     rules quick.
   - It costs a little more UI than A alone.
 
-**Recommendation: A, with masked command lines for site alarm rules**,
-and B kept working (it already does: export plus the existing upload). A
-is what makes "write a rule in the console" true. The risk is confined to
-the site sets: their worst case is noise plus a slow one-bit channel over
-facts that carry no argv secrets. C only if the user wants offline signing
-for some sets from day one.
+**Recommendation: A, hardened** (lead, 2026-10-02, from the reviewer's
+read):
+- the key is held by a local signer, not the console;
+- site sets are restricted by the agent: masked command lines, a
+  required and capped `programs` prefilter;
+- an aggregate per-event CEL budget comes first.
+
+B keeps working (export plus the existing upload). A is what makes
+"write a rule in the console" true. Its worst case is stated above:
+- an alarm logger for at most 32 named programs;
+- a slow one-bit channel without argv secrets;
+- CPU bounded by the aggregate budget.
+
+C only if the user wants some sets, for example the alarm rules,
+offline-signed from day one.
 
 ## 5. The editor
 
@@ -190,7 +213,7 @@ for some sets from day one.
 - **D5, existing agents** need the new `[[rule_sets]]` lines. The
   distribution service can't add them, by design:
   - **A.** `agent command` and `install.sh` include the site lines from
-    now on. For hosts already enrolled, the console shows the two lines to
+    now on, each with `restricted = true` (§4). For hosts already enrolled, the console shows the two lines to
     paste, and Hosts flags agents that don't report the site set.
   - **B.** Ship the site lines empty in the agent package's default
     `agent.toml`, with the key filled in at install.
@@ -225,7 +248,7 @@ for some sets from day one.
 
 | # | Question | Options | Recommended |
 |---|---|---|---|
-| D1 | How site rules are signed | A: site key on the platform · B: export, sign offline · C: both, per set | **A**, site alarm rules see masked command lines (B keeps working) |
+| D1 | How site rules are signed | A: site key on the platform · B: export, sign offline · C: both, per set | **A, hardened**: key in a local signer; restricted site sets (masked, capped prefilter); aggregate CEL budget first. B keeps working. |
 | D2 | Which rule sets | A: `site` + `site-alarms` · B: one set · C: one pair per asset group | **A** |
 | D3 | Who may do what | A: `rules.write` does all · B: `rules.write` drafts, `rules.upload` publishes | **B** |
 | D4 | What a test runs against | A: packages and ports the platform holds · B: agents upload all facts · C: A now, B later | **C** |
@@ -233,16 +256,24 @@ for some sets from day one.
 
 ## 9. Delivery, once decided
 
-1. Store and API: drafts, validate, test and dry run (`rules.write`).
-2. Site key in Setup, plus publish that signs (D1 A). Agent command and
-   `install.sh` site lines (D5), with `masked_events = true` for
-   `site-alarms`. Docs.
-3. Agent: `masked_events` per rule set, masking the `event` command line
-   before that set's rules evaluate it. **Gate:** an `alarms-cost` run
-   with a site alarm rule set must stay within the P14 budget (#86).
+1. **Agent prerequisites**, before any site rule can ship:
+   - an aggregate CEL budget per process event across all `process_event`
+     rules, counted in health when it cuts;
+   - `restricted = true` per rule set: masked command lines, a required
+     `programs` prefilter (at most 8 per rule, 32 distinct per set),
+     refused in the loader;
+   - **Gate:** an `alarms-cost` run with a restricted set at its limits
+     stays within the P14 budget (#86).
+2. Store and API: drafts, validation, test and dry run (`rules.write`).
+   The console applies the same restricted-set checks at save.
+3. The signer: a local service holding the site key, signing over a Unix
+   socket after the console's step-up check; Setup generates the key; the
+   trust line goes into `agent command` and `install.sh`, with the site
+   lines and `restricted = true` (D5). Docs.
 4. Console UI: rule list, editor panel, test, dry run, publish with diff,
    history.
 5. Demo routes and e2e; a full-stack e2e where a console-published rule
-   reaches a real agent.
+   reaches a real agent, and a site alarm rule without `programs` is
+   refused by that agent.
 
 One PR each, each with its component docs.
