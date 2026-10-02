@@ -69,6 +69,14 @@ fn bad_plans_are_refused() {
         (args(&[Console], host, &[]), "must include ingest"),
         (args(&[Ingest, Rules], host, &[]), "rules need distribution"),
         (
+            args(&[Ingest, Console, Signer], host, &[]),
+            "signer needs console and distribution",
+        ),
+        (
+            args(&[Ingest, Distribution, Signer], host, &[]),
+            "signer needs console and distribution",
+        ),
+        (
             args(&[Ingest], "Platform.example.com", &[]),
             "lowercase DNS name",
         ),

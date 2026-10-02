@@ -1,0 +1,10 @@
+# The rule signer (own rules); see docs/components/openvibes-signer.md.
+# Setup creates the key and version state: openvibes-signer seed --min-version N.
+socket = "/run/openvibes-signer/sign.sock"
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-signer"
+key_file = "/var/lib/openvibes-signer/site.key"
+issuer_key_id = "site.key"
+state_dir = "/var/lib/openvibes-signer"
+publishes_per_hour = 12
+rules_per_publish = 200
+validity_days = 365

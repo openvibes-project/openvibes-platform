@@ -1841,6 +1841,7 @@ dependencies = [
  "platform-config",
  "platform-password",
  "platform-store",
+ "ring",
  "serde",
  "serde_json",
  "sha2 0.11.0",

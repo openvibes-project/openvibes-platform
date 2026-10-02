@@ -4,7 +4,10 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use platform_host::{
     Service, StepState,
-    runner::{Program::Systemctl, Runner},
+    runner::{
+        Program::{Runuser, Systemctl, Usermod},
+        Runner,
+    },
 };
 use ring::rand::{SecureRandom, SystemRandom};
 use zeroize::Zeroizing;
@@ -45,15 +48,73 @@ fn admin_exists<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
         .any(|line| line.split('\t').next() == Some("admin")))
 }
 
+const SIGNER_DIR: &str = "/var/lib/openvibes-signer";
+const SIGNER_CLIENTS: &str = "openvibes-signer-clients";
+
+/// The signer (own rules, board #107): its site key and version state
+/// exist, and the console may reach its socket.
+fn signer_ready<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
+    if !ctx.plan.has(Component::Signer) {
+        return Ok(true);
+    }
+    let groups = ctx.read("/etc/group")?;
+    let console_joined = groups
+        .lines()
+        .find_map(|line| line.strip_prefix(&format!("{SIGNER_CLIENTS}:")))
+        .and_then(|rest| rest.rsplit(':').next())
+        .is_some_and(|members| members.split(',').any(|m| m == "openvibes-console"));
+    Ok(console_joined
+        && ctx.exists(&format!("{SIGNER_DIR}/site.key"))
+        && ctx.exists(&format!("{SIGNER_DIR}/versions.json")))
+}
+
+/// Creates the site key and version state as the signer's user (the next
+/// version signed is 1; an existing state is kept), and lets the console
+/// reach the signer's socket.
+fn signer_apply<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
+    ctx.ok(
+        Runuser,
+        &[
+            "-u",
+            "openvibes-signer",
+            "-g",
+            SIGNER_CLIENTS,
+            "--",
+            "/usr/bin/openvibes-signer",
+            "seed",
+            "--min-version",
+            "1",
+        ],
+    )?;
+    ctx.ok(Usermod, &["-aG", SIGNER_CLIENTS, "openvibes-console"])?;
+    // The console's group list is read at start.
+    ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
+    Ok(())
+}
+
+fn signer_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
+    if ctx.plan.has(Component::Signer) {
+        " · rule signer ready"
+    } else {
+        ""
+    }
+}
+
 pub fn console_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Console) {
         return Ok(StepState::Skipped("console not chosen".into()));
     }
-    Ok(if origin_set(ctx)? && admin_exists(ctx)? {
-        StepState::Done(format!("{} · console admin: admin", origin(ctx)))
-    } else {
-        StepState::Todo
-    })
+    Ok(
+        if origin_set(ctx)? && admin_exists(ctx)? && signer_ready(ctx)? {
+            StepState::Done(format!(
+                "{} · console admin: admin{}",
+                origin(ctx),
+                signer_note(ctx)
+            ))
+        } else {
+            StepState::Todo
+        },
+    )
 }
 
 /// 24 characters, base64url of 18 random bytes.
@@ -86,6 +147,9 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         // A running console reads it only on a restart (#72: `[::]` on an
         // existing host); try-restart leaves a stopped one alone.
         ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
+    }
+    if !signer_ready(ctx)? {
+        signer_apply(ctx)?;
     }
     let mut shown = "console admin: admin".to_owned();
     if !admin_exists(ctx)? {
@@ -121,7 +185,11 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             );
         }
     }
-    Ok(StepState::Done(format!("{} · {shown}", origin(ctx))))
+    Ok(StepState::Done(format!(
+        "{} · {shown}{}",
+        origin(ctx),
+        signer_note(ctx)
+    )))
 }
 
 #[cfg(test)]
@@ -256,5 +324,65 @@ mod tests {
             run_step(&fake.ctx(&plan(&[Ingest])), Step::Console),
             StepState::Skipped(_)
         ));
+    }
+
+    /// Board #107: with the signer chosen, the console step creates the
+    /// site key and version state as the signer's user and lets the console
+    /// reach its socket; once both are in place it does neither again.
+    #[test]
+    fn the_signer_gets_its_key_and_the_console_its_socket_group() {
+        let fake = Fake::new("console-signer");
+        console(&fake);
+        fake.file("/etc/group", "openvibes-signer-clients:x:991:\n");
+        fake.answer(
+            &["/usr/sbin/runuser", "-u", "openvibes-signer"],
+            0,
+            "site site.key AAAA\n",
+        );
+        fake.answer(&["/usr/sbin/usermod"], 0, "");
+        let plan = plan(&[Ingest, Console, Distribution, Signer]);
+        let state = run_step(&fake.ctx(&plan), Step::Console);
+        assert!(state.detail().contains("rule signer ready"), "{state:?}");
+        assert_eq!(
+            fake.call(&["/usr/sbin/runuser", "-u", "openvibes-signer"])[1..],
+            [
+                "-u",
+                "openvibes-signer",
+                "-g",
+                "openvibes-signer-clients",
+                "--",
+                "/usr/bin/openvibes-signer",
+                "seed",
+                "--min-version",
+                "1"
+            ]
+        );
+        assert_eq!(
+            fake.call(&["/usr/sbin/usermod"])[1..],
+            ["-aG", "openvibes-signer-clients", "openvibes-console"]
+        );
+
+        // Once both are in place, the step finds it done and runs neither.
+        let done = Fake::new("console-signer-done");
+        done.answer(
+            &[&ADMIN[..], &["user", "list"]].concat(),
+            0,
+            "USERNAME\tSTATUS\nadmin\tactive\n",
+        );
+        console(&done);
+        done.file(
+            "/etc/openvibes/console.toml",
+            &fake.text("/etc/openvibes/console.toml"),
+        );
+        done.file(
+            "/etc/group",
+            "openvibes-signer-clients:x:991:alice,openvibes-console\n",
+        );
+        done.file("/var/lib/openvibes-signer/site.key", "k");
+        done.file("/var/lib/openvibes-signer/versions.json", "{}");
+        let state = run_step(&done.ctx(&plan), Step::Console);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(!done.called(&["/usr/sbin/runuser", "-u", "openvibes-signer"]));
+        assert!(!done.called(&["/usr/sbin/usermod"]));
     }
 }

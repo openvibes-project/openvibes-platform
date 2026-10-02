@@ -16,17 +16,20 @@ pub enum Unit {
     Llm,
     /// `openvibes-maintenance.timer`.
     Maintenance,
+    /// `openvibes-signer.service` (own rules; no network, no readiness URL).
+    Signer,
 }
 
 impl Unit {
     /// Every unit, in display order.
-    pub const ALL: [Unit; 6] = [
+    pub const ALL: [Unit; 7] = [
         Unit::Ingest,
         Unit::Distribution,
         Unit::Vulns,
         Unit::Console,
         Unit::Llm,
         Unit::Maintenance,
+        Unit::Signer,
     ];
 
     /// The systemd unit name.
@@ -39,6 +42,7 @@ impl Unit {
             Unit::Console => "openvibes-console.service",
             Unit::Llm => "openvibes-llm.service",
             Unit::Maintenance => "openvibes-maintenance.timer",
+            Unit::Signer => "openvibes-signer.service",
         }
     }
 
@@ -52,6 +56,7 @@ impl Unit {
             Unit::Console => "console",
             Unit::Llm => "llm",
             Unit::Maintenance => "maintenance",
+            Unit::Signer => "signer",
         }
     }
 
@@ -64,7 +69,7 @@ impl Unit {
             Unit::Vulns => Some("http://127.0.0.1:18483/ready"),
             Unit::Console => Some("http://127.0.0.1:18482/ready"),
             Unit::Llm => Some("http://127.0.0.1:18430/health"),
-            Unit::Maintenance => None,
+            Unit::Maintenance | Unit::Signer => None,
         }
     }
 
