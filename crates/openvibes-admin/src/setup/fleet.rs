@@ -249,6 +249,16 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         Some(("root", "openvibes_agent")),
         0o640,
     )?;
+    // Distribution first (board #111): an agent started before it answers
+    // has no rules until its next fetch. Never fatal: the agent retries.
+    if ctx.plan.has(Component::Distribution) {
+        for _ in 0..super::run::READY_ATTEMPTS {
+            if super::run::ready(ctx, platform_host::Unit::Distribution) {
+                break;
+            }
+            ctx.pause();
+        }
+    }
     ctx.ok(Systemctl, &["enable", "openvibes-agent"])?;
     ctx.ok(Systemctl, &["restart", "openvibes-agent"])?;
     for _ in 0..AGENT_WAIT {
