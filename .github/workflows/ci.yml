@@ -22,9 +22,8 @@ env:
 
 jobs:
   test:
-    # The name is a required check in the main ruleset; it keeps saying
-    # ubuntu-latest until an admin renames the check (board #29).
-    name: Lint, audit, and tests (ubuntu-latest)
+    # The name is a required check in the main ruleset (board #59).
+    name: Lint, audit, and tests (ubuntu-24.04)
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
