@@ -158,12 +158,19 @@ fn start<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .copied()
         .filter(|unit| *unit != AGENT)
         .collect();
+    let agent = active.contains(&AGENT);
     if !platform.is_empty() {
         let mut args = vec!["start"];
         args.extend(&platform);
-        ctx.ok(Systemctl, &args)?;
+        if let Err(error) = ctx.ok(Systemctl, &args) {
+            // Never leave the security tool switched off: the agent runs
+            // on and fetches its rules again itself (reviewer, #157).
+            if agent {
+                let _ = ctx.ok(Systemctl, &["start", AGENT]);
+            }
+            return Err(error);
+        }
     }
-    let agent = active.contains(&AGENT);
     if agent {
         ctx.put(AGENT_PENDING, b"\n", None, 0o600)?;
     }
@@ -177,6 +184,14 @@ fn start<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             ""
         }
     )))
+}
+
+/// Starts the agent an earlier Update stopped and never started again (it
+/// was quit between Start and Ready); run when an Update or Setup begins.
+pub(super) fn resume_agent<R: Runner>(ctx: &Ctx<R>) {
+    if ctx.exists(AGENT_PENDING) && ctx.ok(Systemctl, &["start", AGENT]).is_ok() {
+        let _ = std::fs::remove_file(ctx.path(AGENT_PENDING));
+    }
 }
 
 fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -217,6 +232,9 @@ fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> StepState {
     if let Err(error) = super::system::job_guard(ctx.root, "update") {
         return StepState::Failed(error);
+    }
+    if matches!(step, UpdateStep::Backup | UpdateStep::Stop) {
+        resume_agent(ctx);
     }
     let result = match step {
         UpdateStep::Backup => match &args.backup {
@@ -627,5 +645,44 @@ mod tests {
             StepState::Done(_)
         ));
         assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
+    }
+
+    /// Reviewer on #157: a failed Start must not leave the agent stopped,
+    /// and an Update quit before Ready is made good by the next run.
+    #[test]
+    fn the_agent_is_never_left_stopped() {
+        let fake = Fake::new("update-agent-left");
+        fake.file(
+            "/run/openvibes-admin/update-active",
+            "openvibes-ingest.service\nopenvibes-agent.service\n",
+        );
+        fake.answer(
+            &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+            0,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "start"], 1, "");
+        let plan = plan(&[Ingest, Agent]);
+        let ctx = fake.ctx(&plan);
+        let state = run(&ctx, UpdateStep::Start, &UpdateArgs::default());
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+        assert!(
+            fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]),
+            "the agent is started even though ingest failed"
+        );
+
+        // Quit between Start and Ready: the next run starts the agent first.
+        let later = Fake::new("update-agent-resumed");
+        later.file("/run/openvibes-admin/update-agent", "\n");
+        later.answer(
+            &["/usr/bin/systemctl", "start", "openvibes-agent.service"],
+            0,
+            "",
+        );
+        later.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+        let ctx = later.ctx(&plan);
+        let _ = run(&ctx, UpdateStep::Stop, &UpdateArgs::default());
+        assert!(later.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+        assert!(!later.root.join("run/openvibes-admin/update-agent").exists());
     }
 }
