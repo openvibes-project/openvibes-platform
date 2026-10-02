@@ -1,7 +1,7 @@
-# Own rules in the console — design draft
+# Own rules in the console — design
 
-Board #19. Status: **draft for the user's decisions** (§8). No code until
-they are made. User, 2026-09-28: users write their own rules in the web
+Board #19. Status: **decided**. The user accepted every recommendation in
+§8 on 2026-10-02 (chat #2037). User, 2026-09-28: users write their own rules in the web
 console, findings rules and threat-alarm rules, signed like the baseline.
 
 ## 1. Goal
@@ -298,7 +298,9 @@ offline-signed from day one.
 
 ## 8. Decisions for the user
 
-| # | Question | Options | Recommended |
+Decided 2026-10-02: the recommended option for each (chat #2037).
+
+| # | Question | Options | Decided |
 |---|---|---|---|
 | D1 | How site rules are signed | A: site key on the platform · B: export, sign offline · C: both, per set | **A, hardened**: key in a local signer; restricted site sets (masked, capped prefilter); aggregate CEL budget first. B keeps working. |
 | D2 | Which rule sets | A: `site` + `site-alarms` · B: one set · C: one pair per asset group | **A** |
@@ -306,9 +308,11 @@ offline-signed from day one.
 | D4 | What a test runs against | A: packages and ports the platform holds · B: agents upload all facts · C: A now, B later | **C** |
 | D5 | How existing agents get the site sets | A: new lines in installs, paste for old hosts · B: package default config · C: trust-by-key (no) | **A** |
 
-## 9. Delivery, once decided
+## 9. Delivery
 
-1. **Agent prerequisites**, before any site rule can ship:
+1. **Agent prerequisites**, before any site rule can ship. The budget,
+   `restricted` and the ordering are in agent #40 (board #105); masking
+   and the `programs` caps for restricted sets are still to do:
    - an aggregate CEL budget per process event across all `process_event`
      rules, counted in health when it cuts;
    - `restricted` per rule set, **absent = restricted** except
