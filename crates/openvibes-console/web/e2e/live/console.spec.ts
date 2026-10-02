@@ -84,7 +84,7 @@ test("Most exposed hosts says scanning is not set up before any feed imported", 
 test("vulnerability number tiles show no zero before any feed imported", async ({ page }) => {
   // A 0 would claim nothing was found; nothing was looked for (board #47).
   await signIn(page, "alex");
-  for (const title of ["Exploited", "Hosts needing a reboot"]) {
+  for (const title of ["Exploited", "need a reboot"]) {
     const tile = page.locator(".tile", { hasText: title });
     await expect(tile.locator(".stat__value")).toHaveText("—");
     // Read aloud as "Not set up", not "dash, Not set up".
