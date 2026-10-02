@@ -84,6 +84,25 @@ A console rule set still needs a signature that agents trust. Options:
     rule set.
   - A rule can raise false findings or alarms, or cost CPU within the
     evaluation limits. It cannot run code, read files or change the host.
+  - **It can leak facts one bit at a time.** A finding's `evidence` names
+    fact keys, never their values, and alarm events are masked before
+    they are sent. But whether a rule matches is itself a bit, so a
+    stolen key could publish rules that probe a value ("does a process
+    name start with `a`?").
+    - The cap: 512 rules per set, 1,024 across the two site sets, so at
+      most about 1,000 bits per host per scan (hourly). Re-publishing
+      can probe further, a version at a time.
+    - What it can reach: only facts the agent collects. That is process
+      names, packages and ports, plus the `event` keys for alarm rules.
+      The platform already receives the packages, the ports and the
+      masked alarm events, so what's new to an attacker is mainly
+      process names and unmasked command lines.
+    - Each publish is audited, with the count of rules added (§7). A
+      burst of near-identical rules is visible there and in the rule
+      set's history.
+    - Someone who controls the console process can already read
+      everything the platform stores. The channel adds only what agents
+      never send.
   - **Mitigations:**
     - separate permissions (D3);
     - publishing asks for the password again;
