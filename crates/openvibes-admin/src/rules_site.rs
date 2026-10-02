@@ -32,6 +32,41 @@ fn refusal(code: &str) -> String {
     }
 }
 
+/// The request bytes, serialized straight into a zeroized buffer (no copy
+/// of the password lingers in a JSON value), within the signer's limit:
+/// the rules travel as an escaped JSON string, so a file under the limit
+/// can still come out over it, and the signer would answer `invalid`.
+fn request(
+    user: &str,
+    password: &str,
+    rule_set: &str,
+    rules: &str,
+) -> Result<Zeroizing<Vec<u8>>, String> {
+    #[derive(serde::Serialize)]
+    struct Request<'a> {
+        username: &'a str,
+        password: &'a str,
+        rule_set: &'a str,
+        rules: &'a str,
+    }
+    let request = Zeroizing::new(
+        serde_json::to_vec(&Request {
+            username: user,
+            password,
+            rule_set,
+            rules,
+        })
+        .map_err(|error| error.to_string())?,
+    );
+    if request.len() as u64 > openvibes_signer::MAX_REQUEST {
+        return Err(format!(
+            "too large: the request to the signer must stay under {} bytes (quotes in the rules count twice)",
+            openvibes_signer::MAX_REQUEST
+        ));
+    }
+    Ok(request)
+}
+
 /// Asks the signer to sign `rules_file` as `rule_set` for `user`, whose
 /// password is read from the terminal. Returns the envelope bytes.
 pub fn sign(
@@ -69,15 +104,8 @@ pub fn sign(
                 "password input requires an interactive terminal (or --password-stdin)".to_owned()
             })?
     };
-    let request = Zeroizing::new(
-        serde_json::to_vec(&serde_json::json!({
-            "username": user,
-            "password": password.as_str(),
-            "rule_set": rule_set,
-            "rules": rules,
-        }))
-        .map_err(|error| error.to_string())?,
-    );
+    let request = request(user, &password, rule_set, &rules)
+        .map_err(|error| format!("{}: {error}", rules_file.display()))?;
     let mut stream = UnixStream::connect(socket).map_err(|error| {
         format!(
             "cannot reach the rule signer at {}: {error}",
@@ -87,6 +115,7 @@ pub fn sign(
     // Argon2 and a busy signer take a moment; never hang a script.
     stream
         .set_read_timeout(Some(Duration::from_secs(30)))
+        .and_then(|()| stream.set_write_timeout(Some(Duration::from_secs(30))))
         .map_err(|error| error.to_string())?;
     stream
         .write_all(&request)
@@ -107,5 +136,21 @@ pub fn sign(
             .map(|envelope| envelope.as_bytes().to_vec())
             .ok_or_else(|| "the rule signer's answer has no envelope".to_owned()),
         _ => Err(refusal(answer["code"].as_str().unwrap_or("unknown"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// A rule file under the read limit whose quotes push the escaped
+    /// request over the signer's limit is "too large", not sent.
+    #[test]
+    fn escaping_counts_against_the_signers_limit() {
+        let quotes = "\"".repeat(600 * 1024);
+        let error = super::request("u", "p", "site", &quotes).unwrap_err();
+        assert!(error.starts_with("too large"), "{error}");
+        let fits = super::request("u", "p", "site", "{}").unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&fits).unwrap();
+        assert_eq!(value["password"], "p");
+        assert_eq!(value["rules"], "{}");
     }
 }

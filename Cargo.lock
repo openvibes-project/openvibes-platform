@@ -1685,6 +1685,7 @@ dependencies = [
  "openvibes-ingest",
  "openvibes-llm",
  "openvibes-rules",
+ "openvibes-signer",
  "openvibes-vulns",
  "platform-assistant",
  "platform-config",
