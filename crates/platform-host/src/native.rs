@@ -310,9 +310,19 @@ impl<R: Runner> Host for Native<R> {
             })
             .collect();
         packages.sort_by(|a, b| a.name.cmp(&b.name));
-        // ponytail: dnf as the user reads its own metadata cache; offline or
-        // failing, the list simply shows no newer versions.
-        let upgrades = self.run(Dnf, &["-q", "list", "--upgrades", "openvibes-*"])?;
+        // dnf as the user keeps its own metadata cache; our repository is
+        // refreshed each time. Offline or failing, the list simply shows no
+        // newer versions.
+        let upgrades = self.run(
+            Dnf,
+            &[
+                "-q",
+                crate::REFRESH_OURS,
+                "list",
+                "--upgrades",
+                "openvibes-*",
+            ],
+        )?;
         if upgrades.status == 0 {
             for line in upgrades.stdout.lines() {
                 let fields: Vec<&str> = line.split_whitespace().collect();

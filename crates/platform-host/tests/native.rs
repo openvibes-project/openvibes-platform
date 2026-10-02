@@ -584,7 +584,13 @@ fn packages_lists_installed_versions_and_newer_ones() {
             ),
         ),
         (
-            vec!["/usr/bin/dnf", "-q", "list", "--upgrades"],
+            vec![
+                "/usr/bin/dnf",
+                "-q",
+                "--setopt=openvibes.metadata_expire=0",
+                "list",
+                "--upgrades",
+            ],
             out(
                 0,
                 "Available upgrades\nopenvibes-ingest.x86_64 0.2.0-1.fc44 openvibes\n",
