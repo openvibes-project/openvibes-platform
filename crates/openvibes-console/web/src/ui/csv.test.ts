@@ -10,7 +10,8 @@ describe("csv", () => {
   });
 
   it("never lets a spreadsheet run a cell as a formula", () => {
-    for (const bad of ["=1+1", "+cmd", "-2", "@SUM(A1)", "\tx"]) expect(csvCell(bad).startsWith(`"'`)).toBe(true);
+    for (const bad of ["=1+1", "+cmd", "-2", "@SUM(A1)", "\tx", "a;=cmd", "b, @x"]) expect(csvCell(bad).startsWith(`"'`)).toBe(true);
+    expect(csvCell("nginx, 1.2")).toBe('"nginx, 1.2"');
   });
 
   it("joins rows with a header", () => {

@@ -23,8 +23,11 @@ const PERMISSION: Partial<Record<Section, "findings.read" | "alarms.read" | "vul
 /** At most this many rows per section: a runaway list never freezes the tab. */
 const CAP = 10_000;
 
+/** Sections cut at CAP in the last export (said in the file and the UI). */
+let cutSections: Section[] = [];
+
 /** Every page of a cursor-paged list, up to CAP items. */
-async function all<T>(path: string): Promise<T[]> {
+async function all<T>(path: string, section: Section): Promise<T[]> {
   const items: T[] = [];
   let cursor: string | null | undefined = null;
   do {
@@ -33,10 +36,12 @@ async function all<T>(path: string): Promise<T[]> {
     items.push(...page.items);
     cursor = page.next_cursor;
   } while (cursor && items.length < CAP);
+  if (cursor || items.length > CAP) cutSections.push(section);
   return items.slice(0, CAP);
 }
 
 async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> {
+  cutSections = [];
   const id = encodeURIComponent(agent.id);
   const out: Row[] = [];
   for (const section of sections) {
@@ -46,19 +51,19 @@ async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> 
         out.push(["details", key, String(value ?? ""), "", "", ""]);
       }
     } else if (section === "findings") {
-      for (const f of (await all<Finding>("/api/v1/findings/latest")).filter((f) => f.agent_id === agent.id)) {
+      for (const f of await all<Finding>(`/api/v1/findings/latest?agent_id=${id}`, "findings")) {
         out.push(["findings", f.message, `${f.rule_set_id}/${f.rule_id}`, "", f.severity, f.last_observed_at]);
       }
     } else if (section === "alarms") {
-      for (const a of await all<AlarmSummary>(`/api/v1/alarms?agent_id=${id}&state=all&suppressed=true`)) {
+      for (const a of await all<AlarmSummary>(`/api/v1/alarms?agent_id=${id}&state=all&suppressed=true`, "alarms")) {
         out.push(["alarms", a.message, a.exe, a.state, a.severity, `${a.count}× · last ${a.last_seen}`]);
       }
     } else if (section === "vulnerabilities") {
-      for (const v of await all<Vulnerability>(`/api/v1/vulnerabilities?host=${id}`)) {
+      for (const v of await all<Vulnerability>(`/api/v1/vulnerabilities?host=${id}`, "vulnerabilities")) {
         out.push(["vulnerabilities", v.title, `${v.advisory_id}${v.cves.length ? ` (${v.cves.join(" ")})` : ""}`, v.fixed_at ? "fixed" : "open", v.severity, v.exploited ? "known exploited" : ""]);
       }
     } else if (section === "software") {
-      for (const p of await all<HostPackage>(`/api/v1/agents/${id}/packages`)) {
+      for (const p of await all<HostPackage>(`/api/v1/agents/${id}/packages`, "software")) {
         out.push(["software", p.name, `${p.version}${p.release ? `-${p.release}` : ""}`, p.arch, "", p.fixable_vulnerable ? "fix available" : ""]);
       }
     } else {
@@ -70,6 +75,7 @@ async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> 
       }
     }
   }
+  for (const section of cutSections) out.push([section, `truncated at ${CAP} rows`, "the list is longer; this file holds the first rows only", "", "", ""]);
   return out;
 }
 
@@ -86,6 +92,7 @@ export function HostExport({ agent }: { agent: Agent }) {
       const data = await rows(agent, allowed.filter((s) => picked.includes(s)));
       const day = new Date().toISOString().slice(0, 10);
       downloadCsv(`openvibes-${agent.hostname ?? agent.id}-${day}.csv`, [["section", "name", "detail", "state", "severity", "extra"], ...data]);
+      if (cutSections.length) toast(`Exported; ${cutSections.join(", ")} cut at ${CAP} rows`);
       setOpen(false);
     } catch {
       toast("The export failed; try again", true);

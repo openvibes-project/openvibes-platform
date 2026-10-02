@@ -176,6 +176,7 @@ test("two hosts compare to only what differs (#120)", async ({ page }) => {
   await expect(ports).toContainText("443/tcp");
   await expect(ports).toContainText("5432/tcp");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
 
 test("a host exports the chosen sections to one CSV (#119)", async ({ page }) => {
   await page.getByRole("link", { name: "Hosts", exact: true }).click();
@@ -187,7 +188,7 @@ test("a host exports the chosen sections to one CSV (#119)", async ({ page }) =>
   const [download] = await Promise.all([page.waitForEvent("download"), picker.getByRole("button", { name: "Download CSV" }).click()]);
   expect(download.suggestedFilename()).toMatch(/^openvibes-.*\.csv$/);
   const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString());
-  expect(text.split("\n")[0]).toBe('"section","name","detail","state","severity","extra"');
+  expect(text.split("\n")[0]).toBe('\uFEFF"section","name","detail","state","severity","extra"');
   expect(text).toContain('"ports","22/tcp"');
   expect(text).toContain('"software","bash"');
   expect(text).not.toContain('"findings",');
