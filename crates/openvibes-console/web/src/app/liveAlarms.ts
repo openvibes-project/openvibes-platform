@@ -37,8 +37,9 @@ export function compareNewest(last: Seen, page: AlarmPage): { seen: Seen; change
   const top = page.items[0];
   const key = top ? `${top.id}:${top.count}:${top.last_seen}` : null;
   if (last === undefined) return { seen: { key, newest: top?.first_seen ?? "" }, changed: false, fresh: false };
-  // RFC 3339 times from one server compare correctly as strings.
-  const fresh = top !== undefined && top.first_seen > last.newest;
+  // Compared as times: RFC 3339 strings with fractions of varying length
+  // don't sort as text ("…:00.5Z" < "…:00Z").
+  const fresh = top !== undefined && Date.parse(top.first_seen) > (Date.parse(last.newest) || 0);
   return { seen: { key, newest: fresh ? top.first_seen : last.newest }, changed: key !== last.key, fresh };
 }
 

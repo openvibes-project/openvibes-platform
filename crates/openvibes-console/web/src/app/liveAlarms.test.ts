@@ -35,4 +35,9 @@ describe("live alarms", () => {
     expect(next).toMatchObject({ changed: true, fresh: true });
     expect(compareNewest(next.seen, page(alarm("a", T(1), T(3), 2)))).toMatchObject({ changed: true, fresh: false });
   });
+
+  it("compares times, not text: a fraction of a second later is fresh", () => {
+    const { seen } = compareNewest(undefined, page(alarm("a", "2026-10-02T10:00:00Z")));
+    expect(compareNewest(seen, page(alarm("b", "2026-10-02T10:00:00.5Z")))).toMatchObject({ fresh: true });
+  });
 });
