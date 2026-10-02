@@ -13,6 +13,7 @@ import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { AlarmPanel } from "../panels/AlarmPanel";
 import { PackagePanel, splitPackageId } from "../panels/PackagePanel";
+import { PortPanel, UnitPanel, splitPortId } from "../panels/PortPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
 import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPanel, UserPanel } from "../panels/OpsPanels";
 import type { IconName } from "../ui/Icon";
@@ -76,6 +77,8 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   finding: { label: "Finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
+  port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },
+  unit: { label: "Service", icon: "layers", title: (id) => id, render: (id) => <UnitPanel id={id} /> },
   advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },
   "enrollment-token": { label: "Enrollment token", icon: "enrollment", title: (id) => id === "new" ? "New token" : id, render: (id) => <EnrollmentTokenPanel id={id} /> },

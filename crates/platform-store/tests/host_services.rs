@@ -32,6 +32,7 @@ fn report(sha: char, listeners: Vec<Listener>, units: &[&str]) -> Report {
     Report {
         sha256: sha.to_string().repeat(64),
         owners: "partial".into(),
+        truncated: false,
         listeners,
         services: units
             .iter()
@@ -209,6 +210,94 @@ async fn a_refusal_shows_until_the_next_good_report_and_keeps_the_lists() {
         .unwrap()
         .unwrap();
     assert_eq!(host.refused, None);
+    drop((ingest, console));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn hosts_of_a_port_or_unit_are_scoped_paged_and_skip_revoked_hosts() {
+    let db = setup().await;
+    let console = as_role(&db, "openvibes-console").await;
+    let global = AgentScope::Global;
+    // :22 is on WEB, DB and the revoked GONE: two hosts, one page each.
+    let first = host_services::port_hosts(&console, &global, "tcp", 22, None, 1)
+        .await
+        .unwrap();
+    assert_eq!(first.len(), 1);
+    let key = (
+        first[0].hostname.clone().unwrap_or_default(),
+        first[0].agent_id.clone(),
+        first[0].address.to_string(),
+    );
+    let second = host_services::port_hosts(
+        &console,
+        &global,
+        "tcp",
+        22,
+        Some((&key.0, &key.1, &key.2)),
+        10,
+    )
+    .await
+    .unwrap();
+    let mut seen: Vec<String> = first
+        .iter()
+        .chain(&second)
+        .map(|h| h.agent_id.clone())
+        .collect();
+    seen.sort();
+    let mut want = vec![WEB.to_owned(), DB.to_owned()];
+    want.sort();
+    assert_eq!(seen, want, "no revoked host, none twice");
+    assert!(
+        host_services::port_hosts(&console, &global, "udp", 22, None, 10)
+            .await
+            .unwrap()
+            .is_empty(),
+        "the protocol is part of the key"
+    );
+    let units = host_services::unit_hosts(&console, &global, "nginx.service", None, 10)
+        .await
+        .unwrap();
+    assert_eq!(units.len(), 1);
+    assert_eq!((units[0].agent_id.as_str(), units[0].processes), (WEB, 2));
+    let nobody = AgentScope::AssetGroups(vec!["00000000-0000-4000-8000-00000000000f".into()]);
+    assert!(
+        host_services::unit_hosts(&console, &nobody, "sshd.service", None, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    drop(console);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn truncated_is_stored_with_the_report() {
+    let db = setup().await;
+    let mut ingest = as_role(&db, "openvibes-ingest").await;
+    let console = as_role(&db, "openvibes-console").await;
+    let global = AgentScope::Global;
+    assert!(
+        !host_services::for_host(&console, &global, WEB)
+            .await
+            .unwrap()
+            .unwrap()
+            .truncated
+    );
+    let cut = Report {
+        truncated: true,
+        ..report('e', vec![listener(443, true, None)], &["nginx.service"])
+    };
+    host_services::replace(&mut ingest, WEB, &cut, Utc::now())
+        .await
+        .unwrap();
+    assert!(
+        host_services::for_host(&console, &global, WEB)
+            .await
+            .unwrap()
+            .unwrap()
+            .truncated
+    );
     drop((ingest, console));
     db.drop().await;
 }

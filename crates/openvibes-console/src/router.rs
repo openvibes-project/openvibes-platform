@@ -563,7 +563,9 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(crate::ports::get_host_services),
         )
         .route("/v1/ports", get(crate::ports::list_ports))
+        .route("/v1/ports/{protocol}/{port}", get(crate::ports::get_port))
         .route("/v1/services", get(crate::ports::list_services))
+        .route("/v1/services/{unit}", get(crate::ports::get_unit))
         .route("/v1/alarms", get(crate::alarms::list_alarms))
         .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
         .route(

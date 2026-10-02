@@ -167,6 +167,18 @@ hosts out.
   `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
   exposed on at least one host.
 - `GET /api/v1/services`: one row per unit with `hosts`.
+- `GET /api/v1/ports/{protocol}/{port}` and `GET /api/v1/services/{unit}`:
+  the visible, non-revoked hosts that listen on the port (once per bound
+  address: `address`, `exposed`, `service`/`program`) or run the unit
+  (`programs`, `processes`, `run_as`), with `hostname` and
+  `last_seen_at`. They are keyset-paged by hostname like a package's
+  hosts (`limit` 1–100, default 50; opaque `cursor`). An unknown
+  protocol, a port outside 1–65535 or a bad cursor is 400; 404 when no
+  visible host has it. The fleet Ports and Services rows open these as
+  panels, each host linking to its Host page.
+- The host view also carries `truncated`: the agent cut a list to the
+  protocol limits. The Ports and Services tabs then say "some ports (or
+  services) not listed" in their "As of" line.
 
 The fleet lists are not paged: distinct ports and units across a fleet
 stay in the low thousands.

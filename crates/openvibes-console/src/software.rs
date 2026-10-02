@@ -169,9 +169,9 @@ fn bad(code: &'static str, title: &'static str) -> Response {
 }
 
 /// A refused query parameter: (problem code, title), answered as 400.
-type Invalid = (&'static str, &'static str);
+pub(crate) type Invalid = (&'static str, &'static str);
 
-fn limit(limit: Option<u16>) -> Result<i64, Invalid> {
+pub(crate) fn limit(limit: Option<u16>) -> Result<i64, Invalid> {
     match limit.unwrap_or(50) {
         limit @ 1..=100 => Ok(i64::from(limit)),
         _ => Err(("invalid_query", "limit must be 1 to 100")),
@@ -189,11 +189,13 @@ fn query(q: Option<String>) -> Result<Option<String>, Invalid> {
 }
 
 /// Cursors are base64url JSON arrays of the keyset values.
-fn encode<T: Serialize>(key: &T) -> String {
+pub(crate) fn encode<T: Serialize>(key: &T) -> String {
     URL_SAFE_NO_PAD.encode(serde_json::to_vec(key).unwrap_or_default())
 }
 
-fn decode<T: for<'de> Deserialize<'de>>(cursor: Option<&str>) -> Result<Option<T>, Invalid> {
+pub(crate) fn decode<T: for<'de> Deserialize<'de>>(
+    cursor: Option<&str>,
+) -> Result<Option<T>, Invalid> {
     cursor
         .map(|text| {
             URL_SAFE_NO_PAD

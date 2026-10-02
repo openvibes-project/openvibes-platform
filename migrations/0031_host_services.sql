@@ -33,6 +33,9 @@ ALTER TABLE agents
     -- complete: every owner the host has is named; partial: owners may be
     -- missing (no opt-in capability on the agent, or a capped walk).
     ADD COLUMN services_owners text CHECK (services_owners IN ('complete', 'partial')),
+    -- The agent cut a list to the protocol limits: the stored lists are
+    -- incomplete.
+    ADD COLUMN services_truncated boolean NOT NULL DEFAULT false,
     -- The last report ingest refused (400/413), until a good one: the
     -- console says so instead of showing stale lists silently.
     ADD COLUMN services_refused_at timestamptz,
