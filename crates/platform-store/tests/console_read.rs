@@ -162,6 +162,7 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
     let latest = platform_store::console_read::latest_findings(
         &client,
         &LatestQuery {
+            agent_id: None,
             severity: Some(Severity::Critical),
             after: None,
             limit: PageLimit::new(1).unwrap(),
@@ -458,6 +459,7 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
     assert_eq!(findings_summary.total, 1);
     assert_eq!(findings_summary.impacted_agents, 1);
     let latest_query = LatestQuery {
+        agent_id: None,
         severity: None,
         after: None,
         limit: PageLimit::new(10).unwrap(),

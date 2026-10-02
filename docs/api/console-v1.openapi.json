@@ -2828,6 +2828,15 @@
             }
           },
           {
+            "name": "agent_id",
+            "in": "query",
+            "description": "One host's findings only",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "cursor",
             "in": "query",
             "description": "Opaque continuation cursor",

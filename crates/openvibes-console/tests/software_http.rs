@@ -584,3 +584,100 @@ async fn a_background_request_does_not_extend_the_idle_expiry() {
     drop(admin);
     db.drop().await;
 }
+
+/// Reviewer on #167: `findings/latest?agent_id=` only narrows the caller's
+/// scope. A user scoped to one host gets nothing for another host, and
+/// only that host's findings for their own.
+#[tokio::test]
+async fn latest_findings_by_host_stay_inside_the_callers_scope() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let other = "agent.00000000-0000-4000-8000-000000000402";
+    let mut client = db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at)
+                VALUES ('{other}', 'active', now(), 'web-02', now());
+             INSERT INTO console_asset_groups VALUES
+                ('33333333-3333-4333-8333-333333333333', 'Prod', now(), 'test');
+             INSERT INTO console_asset_group_selectors VALUES
+                ('33333333-3333-4333-8333-333333333333', 'env', 'prod', now());
+             INSERT INTO console_agent_tags VALUES ('{AGENT}', 'env', 'prod', now(), 'test');"
+        ))
+        .await
+        .unwrap();
+    let now = Utc::now();
+    platform_store::ensure_partitions(&client, now.date_naive(), 1)
+        .await
+        .unwrap();
+    for agent in [AGENT, other] {
+        platform_store::ingest::store_findings(
+            &mut client,
+            agent,
+            &[platform_store::ingest::StoredFinding {
+                finding_id: format!("f-{agent}"),
+                scan_id: format!("s-{agent}"),
+                rule_set_id: "base".into(),
+                rule_id: "credential".into(),
+                rule_version: 1,
+                observed_at: now,
+                severity: "high".into(),
+                confidence: 90,
+                message: format!("finding on {agent}"),
+                evidence: vec!["package=x".into()],
+            }],
+            platform_store::ingest::Origin::Online,
+            now,
+        )
+        .await
+        .unwrap();
+    }
+    user(
+        &mut client,
+        "11111111-1111-4111-8111-111111111113",
+        "21111111-1111-4111-8111-111111111113",
+        "sam",
+        "viewer",
+    )
+    .await;
+    client
+        .execute(
+            "UPDATE console_role_bindings SET asset_group_id = '33333333-3333-4333-8333-333333333333'
+             WHERE binding_id = '21111111-1111-4111-8111-111111111113'",
+            &[],
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let (scoped, _) = login(&router, "sam").await;
+    let (status, outside) = get(
+        &router,
+        &scoped,
+        &format!("/api/v1/findings/latest?agent_id={other}"),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(outside["items"].as_array().unwrap().is_empty(), "{outside}");
+    let (_, own) = get(
+        &router,
+        &scoped,
+        &format!("/api/v1/findings/latest?agent_id={AGENT}"),
+    )
+    .await;
+    let items = own["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["agent_id"], AGENT);
+    // A global viewer narrowed to the other host sees exactly that host.
+    let (global, _) = login(&router, "vera").await;
+    let (_, narrowed) = get(
+        &router,
+        &global,
+        &format!("/api/v1/findings/latest?agent_id={other}"),
+    )
+    .await;
+    assert_eq!(narrowed["items"].as_array().unwrap().len(), 1);
+    assert_eq!(narrowed["items"][0]["agent_id"], other);
+    db.drop().await;
+}
