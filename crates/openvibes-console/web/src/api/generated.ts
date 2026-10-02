@@ -4793,6 +4793,8 @@ export interface operations {
             query?: {
                 /** @description critical, high, medium, or low */
                 severity?: string;
+                /** @description One host's findings only */
+                agent_id?: string;
                 /** @description Opaque continuation cursor */
                 cursor?: string;
                 /** @description Page size from 1 to 100 */

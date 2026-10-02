@@ -97,6 +97,8 @@ struct CertificateCursorToken {
 #[serde(deny_unknown_fields)]
 pub(crate) struct LatestFindingListParams {
     severity: Option<String>,
+    /// One host's findings only.
+    agent_id: Option<String>,
     cursor: Option<String>,
     limit: Option<u16>,
 }
@@ -4107,6 +4109,7 @@ fn retention_policy_response(policy: platform_store::audit::RetentionPolicy) -> 
     tag = "findings",
     params(
         ("severity" = Option<String>, Query, description = "critical, high, medium, or low"),
+        ("agent_id" = Option<String>, Query, description = "One host's findings only"),
         ("cursor" = Option<String>, Query, description = "Opaque continuation cursor"),
         ("limit" = Option<u16>, Query, description = "Page size from 1 to 100")
     ),
@@ -4181,6 +4184,10 @@ pub(crate) async fn authenticated_latest_findings(
         &client,
         &LatestQuery {
             severity,
+            // ponytail: the cursor isn't bound to agent_id (it is to
+            // severity and scope); a client changing hosts mid-paging
+            // just reads another page. Scope still applies.
+            agent_id: params.agent_id.filter(|id| !id.is_empty()),
             after,
             limit,
         },

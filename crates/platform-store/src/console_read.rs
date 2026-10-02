@@ -299,6 +299,8 @@ pub struct LatestCursor {
 pub struct LatestQuery {
     /// Optional allow-listed severity filter.
     pub severity: Option<Severity>,
+    /// Optional single host (one agent's findings only).
+    pub agent_id: Option<String>,
     /// Exclusive keyset cursor.
     pub after: Option<LatestCursor>,
     /// Bounded page size.
@@ -863,6 +865,7 @@ pub async fn latest_findings_in_scope(
              FROM current_findings c JOIN agents a USING (agent_id)
              WHERE {visible_agent}
                AND ($1::text IS NULL OR c.severity = $1)
+               AND ($10::text IS NULL OR c.agent_id = $10)
                AND ($6::boolean = false OR
                     c.last_observed_at < $2 OR
                     (c.last_observed_at = $2 AND
@@ -881,6 +884,7 @@ pub async fn latest_findings_in_scope(
                 &(query.limit.value() + 1),
                 &global,
                 &groups,
+                &query.agent_id,
             ],
         )
         .await?;

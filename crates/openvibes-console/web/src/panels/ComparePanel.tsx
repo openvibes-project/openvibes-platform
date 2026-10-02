@@ -12,25 +12,34 @@ import { PanelHeader, Section } from "../ui/panel";
 import { diff } from "./compare";
 
 
-type Side = { agent: Agent | undefined; ports: Map<string, string>; services: Map<string, string>; software: Map<string, string>; findings: Map<string, string>; loading: boolean; error: Error | undefined };
+/** Lists longer than this are cut: a cut side can't be compared honestly. */
+const MAX_SOFTWARE = 20_000;
+const MAX_FINDINGS = 5_000;
 
-function useSide(id: string, findings: readonly Finding[] | undefined): Side {
+type Side = { agent: Agent | undefined; ports: Map<string, string>; services: Map<string, string>; software: Map<string, string>; findings: Map<string, string>; cut: { software: boolean; findings: boolean }; loading: boolean; error: Error | undefined };
+
+function useSide(id: string, withFindings: boolean): Side {
   const path = `/api/v1/agents/${encodeURIComponent(id)}`;
   const agent = useResource<Agent>(path);
   const report = useResource<HostServices>(`${path}/services`);
-  const packages = useAllPages<HostPackage>(`${path}/packages`, 20_000);
+  const packages = useAllPages<HostPackage>(`${path}/packages`, MAX_SOFTWARE);
+  const findingRows = useAllPages<Finding>(withFindings ? `/api/v1/findings/latest?agent_id=${encodeURIComponent(id)}` : null, MAX_FINDINGS);
+  const findings = findingRows.data;
   return useMemo(() => ({
     agent: agent.data,
     ports: new Map((report.data?.listeners ?? []).map((l) => [`${l.port}/${l.protocol}`, l.exposed ? "exposed" : "local"])),
     services: new Map((report.data?.services ?? []).map((s) => [s.unit, s.programs.join(" ")])),
     software: new Map((packages.data ?? []).map((p) => [`${p.name}.${p.arch}`, `${p.version}${p.release ? `-${p.release}` : ""}`])),
-    findings: new Map((findings ?? []).filter((f) => f.agent_id === id).map((f) => [`${f.rule_set_id}/${f.rule_id}`, f.message])),
-    loading: agent.loading || report.loading || packages.loading,
-    error: agent.error ?? packages.error,
-  }), [agent.data, agent.loading, agent.error, report.data, report.loading, packages.data, packages.loading, packages.error, findings, id]);
+    findings: new Map((findings ?? []).map((f) => [`${f.rule_set_id}/${f.rule_id}`, f.message])),
+    cut: { software: (packages.data?.length ?? 0) >= MAX_SOFTWARE, findings: (findings?.length ?? 0) >= MAX_FINDINGS },
+    loading: agent.loading || report.loading || packages.loading || findingRows.loading,
+    error: agent.error ?? packages.error ?? findingRows.error,
+  }), [agent.data, agent.loading, agent.error, report.data, report.loading, packages.data, packages.loading, packages.error, findings, findingRows.loading, findingRows.error]);
 }
 
-function Differences({ title, a, b, nameA, nameB, show }: { title: string; a: Map<string, string>; b: Map<string, string>; nameA: string; nameB: string; show: (key: string, value?: string) => string }) {
+function Differences({ title, a, b, nameA, nameB, show, cut = false }: { title: string; a: Map<string, string>; b: Map<string, string>; nameA: string; nameB: string; show: (key: string, value?: string) => string; cut?: boolean }) {
+  // A cut list would show false "only on one" rows: say so instead.
+  if (cut) return <Section title={title}><p className="subtle">Comparison incomplete: one host has more than can be compared here. Use Export to compare the full lists.</p></Section>;
   const { onlyA, onlyB, changed } = diff(a, b);
   const total = onlyA.length + onlyB.length + changed.length;
   return (
@@ -77,9 +86,8 @@ export function ComparePanel({ id }: { id: string }) {
 
 function Compare({ a, b }: { a: string; b: string }) {
   const { can } = useSession();
-  const findings = useAllPages<Finding>(can("findings.read") ? "/api/v1/findings/latest" : null);
-  const left = useSide(a, findings.data);
-  const right = useSide(b, findings.data);
+  const left = useSide(a, can("findings.read"));
+  const right = useSide(b, can("findings.read"));
   const nameA = left.agent?.hostname ?? a;
   const nameB = right.agent?.hostname ?? b;
   if (left.error || right.error) return <div className="panel-body"><ErrorBox error={(left.error ?? right.error) as never} /></div>;
@@ -93,8 +101,8 @@ function Compare({ a, b }: { a: string; b: string }) {
         <Differences title="System" a={system(left)} b={system(right)} nameA={nameA} nameB={nameB} show={(_, v) => v || "—"} />
         <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} />
         <Differences title="Services" a={left.services} b={right.services} nameA={nameA} nameB={nameB} show={(_, v) => v || "running"} />
-        <Differences title="Software" a={left.software} b={right.software} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} />
-        {can("findings.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} />}
+        <Differences title="Software" a={left.software} b={right.software} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.software || right.cut.software} />
+        {can("findings.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
       </div>
     </>
   );
