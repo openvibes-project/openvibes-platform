@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { ApiError, configureDemo, onSignedOut, request, setCsrfToken } from "../api/client";
 import type { Permission, Session } from "../api/types";
+import { useLiveAlarms } from "../app/liveAlarms";
 import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
@@ -60,6 +61,9 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   // Old sign-in bookmarks: once signed in, /login is just the home dashboard.
   useEffect(() => { if (auth === "ok" && view === "/login") nav.view("/"); }, [auth, view]);
   useEffect(() => { document.title = `${current?.label ?? "OpenVIBES"} · OpenVIBES`; }, [current]);
+  // Signed in with alarms.read (and no forced password change): new alarms
+  // appear without a reload.
+  useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"), view === "/alarms");
 
   useEffect(() => {
     let pending = "";
