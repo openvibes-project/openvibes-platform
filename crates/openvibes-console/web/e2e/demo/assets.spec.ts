@@ -153,3 +153,14 @@ test("a host whose last services report was refused says so above its old lists"
   await expect(inspector.getByRole("table", { name: "Open ports" })).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("the Host page's tabs follow the left menu's order (#118)", async ({ page }) => {
+  const menu = (await page.locator(".rail .rail__label").allTextContents()).map((t) => t.trim());
+  await page.getByRole("link", { name: "Hosts", exact: true }).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  const tabs = (await page.locator(".inspector").getByRole("tab").allTextContents()).map((t) => t.replace(/\d+$/, "").trim());
+  const shared = tabs.filter((t) => menu.includes(t));
+  expect(shared).toEqual(menu.filter((m) => shared.includes(m)));
+  expect(shared.slice(0, 3)).toEqual(["Findings", "Alarms", "Vulnerabilities"]);
+  expect(tabs.at(-1)).toBe("Details");
+});
