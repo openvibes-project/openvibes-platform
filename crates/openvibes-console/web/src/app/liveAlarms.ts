@@ -1,27 +1,38 @@
 // Alarms show up without a reload: while the console is visible it asks
 // for the newest active alarm every few seconds. When that changes, alarm
-// views refresh, a new alarm gets a toast, and the rail marks Alarms until
-// it is opened. One small request per poll; no websocket.
-import { useEffect, useRef, useSyncExternalStore } from "react";
+// views refresh, a new alarm gets a toast, and the menu's Alarms count is
+// recounted. One small request per poll; no websocket.
+import { useEffect, useSyncExternalStore } from "react";
 
-import { invalidate, request } from "../api/client";
+import { invalidate, request, subscribe } from "../api/client";
 import type { AlarmPage } from "../api/types";
 import { toast } from "../ui/toast";
 
 /** How often the console checks for a newer alarm. */
 export const POLL_MS = 5000;
 
-let unseen = false;
 const listeners = new Set<() => void>();
-const setUnseen = (value: boolean) => {
-  if (unseen === value) return;
-  unseen = value;
+
+/** Active alarms for the menu's count: up to 100 (`more` beyond). */
+let active: { count: number; more: boolean } | undefined;
+const setActive = (value: typeof active) => {
+  active = value;
   for (const listener of listeners) listener();
 };
 
-/** True when an alarm arrived since Alarms was last open. */
-export function useUnseenAlarms(): boolean {
-  return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, () => unseen);
+/** The active-alarm count the poll keeps (undefined until the first answer). */
+export function useActiveAlarms(): { count: number; more: boolean } | undefined {
+  return useSyncExternalStore((listener) => { listeners.add(listener); return () => listeners.delete(listener); }, () => active);
+}
+
+/** Recounts active alarms (one page of 100), as a background request. */
+async function recount(): Promise<void> {
+  try {
+    const page = await request<AlarmPage>("GET", "/api/v1/alarms?state=active&limit=100", undefined, { "X-OpenVIBES-Background": "1" });
+    setActive({ count: page.items.length, more: Boolean(page.next_cursor) });
+  } catch {
+    // The next change tries again.
+  }
 }
 
 /** What the poll remembers: the newest alarm's identity (for "did the
@@ -43,11 +54,8 @@ export function compareNewest(last: Seen, page: AlarmPage): { seen: Seen; change
   return { seen: { key, newest: fresh ? top.first_seen : last.newest }, changed: key !== last.key, fresh };
 }
 
-/** Polls while `enabled` and the page is visible; `onAlarms` clears the mark. */
-export function useLiveAlarms(enabled: boolean, onAlarms: boolean): void {
-  // A ref, so moving between views keeps the poll and its baseline.
-  const viewing = useRef(onAlarms);
-  useEffect(() => { viewing.current = onAlarms; if (onAlarms) setUnseen(false); }, [onAlarms]);
+/** Polls while `enabled` and the page is visible. */
+export function useLiveAlarms(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
     // The first answer is the baseline: only later changes are news.
@@ -59,13 +67,15 @@ export function useLiveAlarms(enabled: boolean, onAlarms: boolean): void {
         // Marked as background: the poll must not keep an idle session alive.
         const page = await request<AlarmPage>("GET", "/api/v1/alarms?state=active&limit=1", undefined, { "X-OpenVIBES-Background": "1" });
         if (stopped) return;
+        const first = last === undefined;
         const { seen, changed, fresh } = compareNewest(last, page);
+        // The count changes only with the newest alarm (or its going away).
+        if (first || changed) void recount();
         last = seen;
         if (changed) invalidate("/api/v1/alarms");
         const top = page.items[0];
         if (fresh && top) {
           toast(`New alarm: ${top.message}${top.hostname ? ` on ${top.hostname}` : ""}`);
-          if (!viewing.current) setUnseen(true);
         }
       } catch {
         // Offline or signed out: the next poll tries again.
@@ -73,6 +83,13 @@ export function useLiveAlarms(enabled: boolean, onAlarms: boolean): void {
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, POLL_MS);
-    return () => { stopped = true; window.clearInterval(timer); };
+    // Triage elsewhere (resolving or quieting an older alarm) invalidates
+    // the alarm lists without changing the newest: recount then too.
+    let pending: number | undefined;
+    const unsubscribe = subscribe(() => {
+      window.clearTimeout(pending);
+      pending = window.setTimeout(() => { void recount(); }, 300);
+    });
+    return () => { stopped = true; window.clearInterval(timer); window.clearTimeout(pending); unsubscribe(); };
   }, [enabled]);
 }

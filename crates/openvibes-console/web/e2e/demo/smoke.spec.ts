@@ -197,3 +197,12 @@ test("opening the rail over the page never moves the page", async ({ page }) => 
   await page.mouse.move(900, 500);
   for (const left of [...opened, ...(await closing)]) expect(Math.abs(left - start)).toBeLessThan(0.5);
 });
+
+test("the menu shows counts beside Findings, Alarms and Vulnerabilities (#117)", async ({ page }) => {
+  for (const name of ["Findings", "Alarms", "Vulnerabilities"]) {
+    const item = page.locator(".rail .rail__item").filter({ hasText: name }).first();
+    await expect(item.locator(".rail__count")).toHaveText(/^(\d{1,2}|99\+)$/);
+  }
+  await expect(page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count--bad")).toBeVisible();
+  await expect(page.locator(".rail .rail__item").filter({ hasText: "Software" }).first().locator(".rail__count")).toHaveCount(0);
+});

@@ -9,6 +9,9 @@ test.beforeEach(async ({ page }) => {
 
 test("an alarm shows its process tree and is triaged and quieted", async ({ page }) => {
   await page.getByRole("link", { name: "Alarms", exact: true }).click();
+  const badge = page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count");
+  await expect(badge).toHaveText(/\d/);
+  const before = Number((await badge.textContent())?.replace("+", ""));
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await expect(row).toContainText("postgres → bash");
   await row.locator("td").nth(1).click();
@@ -25,6 +28,8 @@ test("an alarm shows its process tree and is triaged and quieted", async ({ page
   await inspector.getByRole("textbox", { name: "Triage note" }).fill("our backup job");
   await inspector.getByRole("button", { name: "Apply" }).click();
   await expect(inspector.locator(".panel-header")).toContainText("False positive");
+  // Closing an alarm that isn't the newest still lowers the menu count (#164).
+  if (before < 99) await expect(badge).toHaveText(String(before - 1));
 
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "shell-from-database" })).toContainText("our backup job");
