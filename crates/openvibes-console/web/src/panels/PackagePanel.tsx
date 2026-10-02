@@ -5,6 +5,7 @@ import type { SoftwareDetail } from "../api/types";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { PanelHeader, Section } from "../ui/panel";
+import { ShowMore, useMoreHosts } from "./MoreHosts";
 
 /** `manager/name` → [manager, name]; the name may itself contain "/". */
 export function splitPackageId(id: string): [string, string] {
@@ -18,7 +19,9 @@ function fullVersion(v: { epoch: number; version: string; release: string }): st
 
 export function PackagePanel({ id }: { id: string }) {
   const [manager, name] = splitPackageId(id);
-  const detail = useResource<SoftwareDetail>(`/api/v1/software/${encodeURIComponent(manager)}/${encodeURIComponent(name)}`);
+  const path = `/api/v1/software/${encodeURIComponent(manager)}/${encodeURIComponent(name)}`;
+  const detail = useResource<SoftwareDetail>(path);
+  const page = useMoreHosts(path, detail.data);
   useProvideTitle({ kind: "package", id }, name);
   if (detail.error) return <div className="panel-body"><ErrorBox error={detail.error} /></div>;
   if (!detail.data) return <Loading />;
@@ -41,9 +44,9 @@ export function PackagePanel({ id }: { id: string }) {
           </ul>
         </Section>
         <Section title="Hosts" flush>
-          {data.hosts.length === 0 ? <Empty title="No host in your scope has it" /> : (
-            <ul className="list">
-              {data.hosts.map((host) => (
+          {page.hosts.length === 0 ? <Empty title="No host in your scope has it" /> : (
+            <ul className="list" aria-label="Hosts that have it">
+              {page.hosts.map((host) => (
                 <li key={`${host.agent_id}.${host.version}.${host.arch}`}>
                   <ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
                     <span className="cell-two grow">
@@ -56,7 +59,7 @@ export function PackagePanel({ id }: { id: string }) {
               ))}
             </ul>
           )}
-          {data.next_cursor && <p className="subtle view-pad">Showing the first {data.hosts.length} hosts.</p>}
+          <ShowMore shown={page.hosts.length} {...page} />
         </Section>
       </div>
     </>
