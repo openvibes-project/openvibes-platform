@@ -8,6 +8,7 @@ import type { Permission } from "../api/types";
 import { panelTitle } from "./titles";
 import { DashboardsView } from "../dashboards/DashboardsView";
 import { WidgetGalleryPanel, WidgetSettingsPanel } from "../dashboards/panels";
+import { ComparePanel } from "../panels/ComparePanel";
 import { AssetGroupPanel, NewUser, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AgentPanel } from "../panels/AgentPanel";
@@ -78,6 +79,7 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },
+  compare: { label: "Compare", icon: "agents", title: (id) => id.includes(" ") ? "Compare hosts" : "Compare with…", render: (id) => <ComparePanel id={id} /> },
   unit: { label: "Service", icon: "layers", title: (id) => id, render: (id) => <UnitPanel id={id} /> },
   advisory: { label: "Advisory", icon: "vulnerabilities", title: (id) => id, render: (id) => <AdvisoryPanel id={id} /> },
   "rule-set": { label: "Rule set", icon: "rules", title: (id) => id, render: (id) => <RuleSetPanel id={id} /> },

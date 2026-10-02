@@ -164,3 +164,16 @@ test("the Host page's tabs follow the left menu's order (#118)", async ({ page }
   expect(shared.slice(0, 3)).toEqual(["Findings", "Alarms", "Vulnerabilities"]);
   expect(tabs.at(-1)).toBe("Details");
 });
+
+test("two hosts compare to only what differs (#120)", async ({ page }) => {
+  await page.goto("/agents?q=web-");
+  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("button", { name: "Compare" }).click();
+  await inspector.getByRole("list", { name: "Hosts to compare with" }).getByRole("button").filter({ hasText: "db-" }).first().click();
+  await expect(inspector.locator(".panel-header")).toContainText("↔");
+  const ports = inspector.getByRole("table", { name: "Open ports differences" });
+  await expect(ports).toContainText("443/tcp");
+  await expect(ports).toContainText("5432/tcp");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

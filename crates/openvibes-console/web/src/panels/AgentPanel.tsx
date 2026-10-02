@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { Agent, AlarmSummary, Certificate, Finding, HostPackage, Tag, TagPreview, VulnerabilityPage } from "../api/types";
+import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge } from "../ui/bits";
@@ -80,7 +81,9 @@ export function AgentPanel({ id }: { id: string }) {
         subtitle={<span className="mono subtle">{data.id}</span>}
         badges={<><StatusBadge status={data.status} />{data.scanner_version && <span className="badge badge--plain">agent {data.scanner_version}</span>}</>}
         askAbout={{ ref: { kind: "agent", id }, label: name }}
-        actions={can("agents.revoke") && data.status !== "revoked" && data.status !== "imported" && (
+        actions={<>
+          <button type="button" className="button" onClick={() => nav.open({ kind: "compare", id: data.id })}><Icon name="layers" size={14} /> Compare</button>
+          {can("agents.revoke") && data.status !== "revoked" && data.status !== "imported" && (
           <Confirm danger label={`Revoke ${name}? Its certificate stops working at once; the host must enroll again.`} reason="Reason (kept in the audit log)"
             onConfirm={async (reason) => {
               await request("POST", `/api/v1/agents/${encodeURIComponent(id)}/revoke`, { reason });
@@ -89,7 +92,8 @@ export function AgentPanel({ id }: { id: string }) {
             }}>
             <Icon name="ban" size={14} /> Revoke
           </Confirm>
-        )}
+          )}
+        </>}
       />
       <div className="panel-glance">
         <div><span className="subtle">Last contact</span><strong><Ago value={data.last_seen_at} /></strong></div>
