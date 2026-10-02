@@ -188,6 +188,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
         String::new()
     };
     let kept: Vec<&str> = kept.lines().map(str::trim).collect();
+    let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
     for dir in DATA {
         let path = ctx.path(dir);
         if !path.exists() {
@@ -235,9 +236,15 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
             let _ = ctx.ok(Groupdel, &[group]);
         }
     }
-    Ok(StepState::Done(
-        "database, roles, configuration, data and service accounts removed; PostgreSQL itself stays installed".into(),
-    ))
+    // A reinstalled signer makes a new site key (lead, #2086).
+    let site_key = if site_key {
+        "; the site rule key is gone: after a reinstall, agents need the new key's lines from `agent command`"
+    } else {
+        ""
+    };
+    Ok(StepState::Done(format!(
+        "database, roles, configuration, data and service accounts removed; PostgreSQL itself stays installed{site_key}"
+    )))
 }
 
 pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> StepState {

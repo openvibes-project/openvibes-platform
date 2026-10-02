@@ -56,7 +56,7 @@ pub fn update_lines<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
 pub fn uninstall_lines<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
     let setup = &app.setup;
     let mode = if setup.everything {
-        "Remove everything: database, CA, configuration and accounts too"
+        "Remove everything: database, CA, site key, configuration and accounts too"
     } else {
         "Keep data: remove the software, keep database, CA and configuration"
     };

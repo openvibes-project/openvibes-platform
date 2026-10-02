@@ -157,7 +157,16 @@ status` (an unreachable database is a problem here); disk use of
 each published rule set's current bundle from `rules list` (a problem under
 90 days to expiry or expired, with the fix: install the newer rules package
 and run Repair, or publish a newer bundle; retired sets and sets without a
-bundle are left out). Loaded on opening and on `R`.
+bundle are left out). The site's own sets `site` and `site-alarms` (board
+#107) warn under 30 days instead, with "publish again in the console to
+renew": the signer re-signs only with a live password. With the signer set
+up, also its `status.json`: no version state is a problem ("run Repair");
+refusals in the last day are listed by code, a problem when they include
+`rate`, `throttled`, `unavailable` or `version_state` (a wrong password now
+and then is not); and the site key's first characters, noting that agents
+need its lines from `agent command` and that after a reinstall agents
+trusting an old site key refuse the site rules. Loaded on opening and on
+`R`.
 
 Every TUI action (service action, boot change, config save, Setup step) is
 also recorded in `audit_log` when the database is reachable, through
@@ -237,7 +246,7 @@ the service. The first account can be created after schema 23 is applied.
 | `agent list [--offline \| --revoked \| --imported \| --health STATUS]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id; active agents end with `health <status>` and, when degraded, the reasons in brackets (protocol P12). `--offline` = active with no heartbeat for 15 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`); `--health healthy\|degraded\|offline\|unknown` = active agents with that health. |
 | `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; for an active agent, its health and reasons, then the latest report: queue (pending, oldest age, dropped, rejected by reason), last scan and rule counts, each collector's outcome, each rule set's version, expiry and refusal, storage errors, clock jump, and when the report was written; `unknown agent` (exit 1) if absent |
 | `agent revoke ID` | `revoked ID`; `agent already revoked`, `unknown agent`, or `imported hosts have no identity to revoke` are errors. The agent's next request gets `identity_revoked` (PM3). |
-| `agent command [--platform HOST] [--root-cert PATH]` | the one-line command that installs and enrolls an agent on another host (`curl -fsSL https://openvibes-project.github.io/install.sh \| sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT`), with a new token (24 hours, 10 enrollments, label `agent command`, audited like `token create`). HOST defaults to Setup's hostname (`setup.toml`) and must be a DNS name or IP address; the fingerprint is the root certificate's (default `/etc/openvibes/pki/root.crt`). With the baseline rules package installed and its set served with a bundle signed by that same key (current, non-retired, issuer and trusted key equal to `baseline.key`), the line ends with `--rules SET,ISSUER,KEY` from `/usr/share/openvibes/rules/baseline.key`, and the installer configures the agent to fetch and trust that rule set (the key rides the same fingerprint-checked line). Setup's last screen shows the same line. |
+| `agent command [--platform HOST] [--root-cert PATH]` | the one-line command that installs and enrolls an agent on another host (`curl -fsSL https://openvibes-project.github.io/install.sh \| sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT`), with a new token (24 hours, 10 enrollments, label `agent command`, audited like `token create`). HOST defaults to Setup's hostname (`setup.toml`) and must be a DNS name or IP address; the fingerprint is the root certificate's (default `/etc/openvibes/pki/root.crt`). With the baseline rules package installed and its set served with a bundle signed by that same key (current, non-retired, issuer and trusted key equal to `baseline.key`), the line ends with `--rules SET,ISSUER,KEY` from `/usr/share/openvibes/rules/baseline.key`, and the installer configures the agent to fetch and trust that rule set (the key rides the same fingerprint-checked line). With the rule signer set up and `--rules` on the line, it also prints the `[[rule_sets]]` lines for the site's own sets (`site`, `site-alarms`, from `/etc/openvibes/site-rules.trust`, which Setup saves from `openvibes-signer seed`), to paste into each agent's `agent.toml`: the installer doesn't take them yet. No `restricted` key, so the agent restricts both; after a signer reinstall the key is new and the lines must be replaced. Setup's last screen shows the same line. |
 
 `show` and `revoke` are audited with the agent id as target. Health is
 computed by `platform_store::health` (thresholds in the platform-store
@@ -388,9 +397,12 @@ failure, 2 on bad arguments (checked before the root check).
 has no publish screen) needs `console` and `distribution`. With `signer`,
 the Console step runs `openvibes-signer seed --min-version 1` as the
 signer's user (the site key and version state, kept if present) and adds
-`openvibes-console` to `openvibes-signer-clients`; Services then starts
-`openvibes-signer`. Remove everything deletes `/var/lib/openvibes-signer`
-(the site key), the `openvibes-signer` account and the clients group.
+`openvibes-console` to `openvibes-signer-clients`, and saves the two trust
+lines `seed` prints to `/etc/openvibes/site-rules.trust` (0644, for `agent
+command`); Services then starts `openvibes-signer`. Remove everything
+deletes `/var/lib/openvibes-signer` (the site key), the `openvibes-signer`
+account and the clients group, and says so: after a reinstall the key is
+new, so agents need its lines again.
 A `setup.toml` from before the port choices (0.1.1) has no port fields;
 each missing one is taken from the service using it (`console.toml`
 `development_listen` with direct TLS, `ingest.toml`/`distribution.toml`

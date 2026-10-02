@@ -65,14 +65,15 @@ fn signer_ready<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
         .is_some_and(|members| members.split(',').any(|m| m == "openvibes-console"));
     Ok(console_joined
         && ctx.exists(&format!("{SIGNER_DIR}/site.key"))
-        && ctx.exists(&format!("{SIGNER_DIR}/versions.json")))
+        && ctx.exists(&format!("{SIGNER_DIR}/versions.json"))
+        && ctx.exists(super::SITE_KEY))
 }
 
 /// Creates the site key and version state as the signer's user (the next
 /// version signed is 1; an existing state is kept), and lets the console
 /// reach the signer's socket.
 fn signer_apply<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
-    ctx.ok(
+    let lines = ctx.ok(
         Runuser,
         &[
             "-u",
@@ -86,6 +87,20 @@ fn signer_apply<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
             "1",
         ],
     )?;
+    // Exactly the two trust lines, each one `rules_arg` accepts, before
+    // they are saved for `agent command`.
+    let trust: Vec<&str> = lines.lines().collect();
+    let sets: Vec<&str> = trust
+        .iter()
+        .filter(|line| super::rules_arg(line).is_some())
+        .filter_map(|line| line.split_whitespace().next())
+        .collect();
+    if sets != ["site", "site-alarms"] {
+        return Err(format!(
+            "openvibes-signer seed printed no trust lines: {lines:?}"
+        ));
+    }
+    ctx.put(super::SITE_KEY, lines.as_bytes(), None, 0o644)?;
     ctx.ok(Usermod, &["-aG", SIGNER_CLIENTS, "openvibes-console"])?;
     // The console's group list is read at start.
     ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
@@ -334,11 +349,9 @@ mod tests {
         let fake = Fake::new("console-signer");
         console(&fake);
         fake.file("/etc/group", "openvibes-signer-clients:x:991:\n");
-        fake.answer(
-            &["/usr/sbin/runuser", "-u", "openvibes-signer"],
-            0,
-            "site site.key AAAA\n",
-        );
+        let key = "A".repeat(43);
+        let trust = format!("site site.key {key}\nsite-alarms site.key {key}\n");
+        fake.answer(&["/usr/sbin/runuser", "-u", "openvibes-signer"], 0, &trust);
         fake.answer(&["/usr/sbin/usermod"], 0, "");
         let plan = plan(&[Ingest, Console, Distribution, Signer]);
         let state = run_step(&fake.ctx(&plan), Step::Console);
@@ -361,6 +374,11 @@ mod tests {
             fake.call(&["/usr/sbin/usermod"])[1..],
             ["-aG", "openvibes-signer-clients", "openvibes-console"]
         );
+        assert_eq!(
+            fake.text("/etc/openvibes/site-rules.trust"),
+            trust,
+            "saved for agent command"
+        );
 
         // Once both are in place, the step finds it done and runs neither.
         let done = Fake::new("console-signer-done");
@@ -380,6 +398,7 @@ mod tests {
         );
         done.file("/var/lib/openvibes-signer/site.key", "k");
         done.file("/var/lib/openvibes-signer/versions.json", "{}");
+        done.file("/etc/openvibes/site-rules.trust", &trust);
         let state = run_step(&done.ctx(&plan), Step::Console);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
         assert!(!done.called(&["/usr/sbin/runuser", "-u", "openvibes-signer"]));

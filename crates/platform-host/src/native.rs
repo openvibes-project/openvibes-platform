@@ -354,6 +354,18 @@ impl<R: Runner> Host for Native<R> {
             .collect()
     }
 
+    fn signer(&self) -> Option<crate::SignerFiles> {
+        let trust = std::fs::read_to_string(crate::SITE_TRUST).ok();
+        let status = match std::fs::read_to_string(crate::SIGNER_STATUS) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound && trust.is_none() => {
+                return None;
+            }
+            read => read
+                .map_err(|error| HostError::Failed(format!("{}: {error}", crate::SIGNER_STATUS))),
+        };
+        Some(crate::SignerFiles { status, trust })
+    }
+
     fn addresses(&self) -> Vec<String> {
         self.run(Ip, &crate::IP_ADDRESSES)
             .ok()

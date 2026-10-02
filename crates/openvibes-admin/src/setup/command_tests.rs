@@ -96,3 +96,27 @@ fn the_alarm_rules_ride_along_with_the_rules() {
     let line = super::agent_install_command("h.example", DEFAULTS, "T", "AB:CD", None, alarms);
     assert!(!line.contains("--alarm-rules"), "{line}");
 }
+
+#[test]
+fn site_rules_become_agent_toml_lines() {
+    let key = "A".repeat(43);
+    let trust = format!("site site.key {key}\nsite-alarms site.key {key}\n");
+    let block = super::site_rules_block(&trust).unwrap();
+    assert_eq!(
+        block,
+        format!(
+            "[[rule_sets]]\nid = \"site\"\ntrusted_keys = [{{ issuer_key_id = \"site.key\", public_key = \"{key}\" }}]\n\
+             [[rule_sets]]\nid = \"site-alarms\"\ntrusted_keys = [{{ issuer_key_id = \"site.key\", public_key = \"{key}\" }}]\n"
+        )
+    );
+    assert!(!block.contains("restricted"), "restricted by default");
+    assert!(block.parse::<toml::Table>().is_ok(), "pastes as TOML");
+    assert_eq!(
+        super::site_rules_block(&format!("site site.key {key}\n")),
+        None
+    );
+    assert_eq!(
+        super::site_rules_block("site site.key \"x\nsite-alarms site.key y\n"),
+        None
+    );
+}
