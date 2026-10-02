@@ -209,7 +209,7 @@ fn fedoras_task_never_audit_rule_is_a_health_problem() {
     assert!(audit_off("-a never,task\n"));
     let check = audit_check(fedora).expect("a problem line");
     assert!(check.problem);
-    assert!(check.text.contains("reboot"), "{}", check.text);
+    assert!(check.text.contains("rules.d/audit.rules"), "{}", check.text);
     // Commented out, or only our exec rule: nothing to report.
     assert!(!audit_off(
         "#-a task,never\n-a always,exit -F key=openvibes-exec\n"

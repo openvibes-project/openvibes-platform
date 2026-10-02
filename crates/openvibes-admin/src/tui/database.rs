@@ -152,8 +152,8 @@ pub fn audit_check(rules: &str) -> Option<Check> {
             true,
             format!(
                 "threat alarms can't fire: {} has `-a task,never` (syscall auditing off). \
-                 Comment that line out in /etc/audit/rules.d/, run `augenrules --load`, \
-                 then reboot (or restart services) so running programs are watched too",
+                 Comment that line out in /etc/audit/rules.d/audit.rules and run `augenrules --load`: \
+                 new logins and restarted services are watched; a reboot covers everything",
                 crate::setup::AUDIT_RULES
             ),
         )

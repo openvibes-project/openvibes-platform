@@ -195,7 +195,7 @@ fn audit_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
             .is_ok_and(|rules| super::audit_off(&rules));
     if off {
         "; but threat alarms can't fire: /etc/audit/audit.rules has `-a task,never`. \
-         Comment it out in /etc/audit/rules.d/, run `augenrules --load`, then reboot (see Health)"
+         Comment it out in /etc/audit/rules.d/audit.rules, run `augenrules --load`; new logins and restarted services are watched, a reboot covers everything (see Health)"
     } else {
         ""
     }
