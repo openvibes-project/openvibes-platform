@@ -159,3 +159,11 @@ test("an administrator creates a user and sees the one-time password once (board
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "jdoe" })).toBeVisible();
 });
+
+test("the Overview shows active alarms and lists them under Needs attention", async ({ page }) => {
+  const tile = page.locator(".tile").filter({ hasText: "Active alarms" });
+  await expect(tile).toBeVisible();
+  await expect(page.locator(".attention__row").filter({ hasText: "Alarm ·" }).first()).toBeVisible();
+  await tile.locator("button").click();
+  await expect(page).toHaveURL(/\/alarms/);
+});
