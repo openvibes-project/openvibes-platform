@@ -4,7 +4,7 @@
 // recounted. One small request per poll; no websocket.
 import { useEffect, useSyncExternalStore } from "react";
 
-import { invalidate, request } from "../api/client";
+import { invalidate, request, subscribe } from "../api/client";
 import type { AlarmPage } from "../api/types";
 import { toast } from "../ui/toast";
 
@@ -83,6 +83,13 @@ export function useLiveAlarms(enabled: boolean): void {
     };
     void poll();
     const timer = window.setInterval(() => { void poll(); }, POLL_MS);
-    return () => { stopped = true; window.clearInterval(timer); };
+    // Triage elsewhere (resolving or quieting an older alarm) invalidates
+    // the alarm lists without changing the newest: recount then too.
+    let pending: number | undefined;
+    const unsubscribe = subscribe(() => {
+      window.clearTimeout(pending);
+      pending = window.setTimeout(() => { void recount(); }, 300);
+    });
+    return () => { stopped = true; window.clearInterval(timer); window.clearTimeout(pending); unsubscribe(); };
   }, [enabled]);
 }

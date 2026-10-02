@@ -65,10 +65,10 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
             <div key={group} className={group === "Investigate" ? "rail__group" : "rail__group rail__group--secondary"}>
               <div className="rail__heading">{group}</div>
               {items.map((item) => (
-                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-current={view === item.path ? "page" : undefined}
+                <a key={item.path} className={item.phoneMore ? "rail__item rail__item--phone-more" : "rail__item"} href={nav.href(item.path)} aria-label={item.label} aria-describedby={counts[item.path] ? `count-${item.icon}` : undefined} aria-current={view === item.path ? "page" : undefined}
                   onClick={(event) => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); nav.view(item.path); }}>
                   <Icon name={item.icon} size={19} />
-                  {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} title={`${counts[item.path]} ${item.label.toLowerCase()}`} aria-hidden="true">{counts[item.path]}</span>}
+                  {counts[item.path] && <span className={item.path === "/alarms" ? "rail__count rail__count--bad" : "rail__count"} id={`count-${item.icon}`} title={`${counts[item.path]} ${item.label.toLowerCase()}`}>{counts[item.path]}</span>}
                   <span className="rail__label">{item.label}</span>
                   <span className="rail__short" aria-hidden="true">{item.short ?? item.label}</span>
                   <span className="rail__tip" aria-hidden="true">{item.label}</span>
