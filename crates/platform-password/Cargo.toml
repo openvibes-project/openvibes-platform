@@ -1,0 +1,14 @@
+[package]
+name = "platform-password"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+argon2 = { version = "=0.6.0", features = ["zeroize"] }
+unicode-normalization = "=0.1.25"
+zeroize = "=1.9.0"
+
+[lints]
+workspace = true

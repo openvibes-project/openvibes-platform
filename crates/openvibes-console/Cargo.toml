@@ -11,6 +11,7 @@ embedded-ui = ["dep:include_dir"]
 dev-seed = []
 
 [dependencies]
+platform-password.workspace = true
 argon2 = { version = "=0.6.0", features = ["zeroize"] }
 axum = { workspace = true, features = ["matched-path", "query"] }
 base64.workspace = true
@@ -32,7 +33,6 @@ tokio.workspace = true
 tokio-rustls.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
-unicode-normalization = "=0.1.25"
 x509-parser.workspace = true
 utoipa = { version = "=5.5.0", default-features = false, features = ["macros"] }
 zeroize = "=1.9.0"

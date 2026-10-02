@@ -1719,6 +1719,7 @@ dependencies = [
  "openvibes-rules",
  "platform-assistant",
  "platform-config",
+ "platform-password",
  "platform-store",
  "rcgen",
  "ring",
@@ -1732,7 +1733,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "unicode-normalization",
  "utoipa",
  "x509-parser",
  "zeroize",
@@ -1826,6 +1826,26 @@ dependencies = [
  "serde-saphyr",
  "serde_json",
  "sha2 0.11.0",
+]
+
+[[package]]
+name = "openvibes-signer"
+version = "0.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "deadpool-postgres",
+ "ed25519-dalek",
+ "openvibes-core",
+ "openvibes-rules",
+ "platform-config",
+ "platform-password",
+ "platform-store",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
 ]
 
 [[package]]
@@ -2144,6 +2164,15 @@ dependencies = [
 name = "platform-host"
 version = "0.2.1"
 dependencies = [
+ "zeroize",
+]
+
+[[package]]
+name = "platform-password"
+version = "0.2.1"
+dependencies = [
+ "argon2",
+ "unicode-normalization",
  "zeroize",
 ]
 

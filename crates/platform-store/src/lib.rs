@@ -43,6 +43,7 @@ mod maintenance;
 mod migrate;
 /// Rule sets, trust keys, and published bundles.
 pub mod rules;
+pub mod signer;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;

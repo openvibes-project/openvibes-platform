@@ -6163,18 +6163,7 @@ async fn logout(State(state): State<AuthHttpState>, request: axum::extract::Requ
     response
 }
 
-fn canonical_username(username: &str) -> Option<String> {
-    if username.is_empty()
-        || username.len() > 64
-        || !username.is_ascii()
-        || !username
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._@+-".contains(&byte))
-    {
-        return None;
-    }
-    Some(username.to_ascii_lowercase())
-}
+use platform_password::canonical_username;
 
 /// Failed password checks per account (sign-in and set-password together)
 /// before the account is locked for the window.
@@ -6217,17 +6206,7 @@ pub(crate) fn bounded_user_agent(headers: &HeaderMap) -> Option<String> {
 }
 
 fn dummy_password_phc() -> Option<String> {
-    static DUMMY_PHC: std::sync::OnceLock<Option<String>> = std::sync::OnceLock::new();
-    DUMMY_PHC
-        .get_or_init(|| {
-            use crate::auth::{NormalizedPassword, hash_password};
-
-            let password = NormalizedPassword::new("internal-only-dummy-console-password").ok()?;
-            hash_password(&password)
-                .ok()
-                .map(|hash| hash.as_str().to_owned())
-        })
-        .clone()
+    platform_password::dummy_password_phc().map(str::to_owned)
 }
 
 fn login_rejected() -> Response {
