@@ -198,3 +198,44 @@ fn a_certificate_missing_one_of_the_hosts_addresses_is_a_problem() {
         "/c.crt: does not cover 192.168.1.23 (this host): press r on Setup to repair"
     );
 }
+
+/// Board #111: distribution with nothing published leaves every agent
+/// without rules; Health says so. Without distribution there's nothing to say.
+#[test]
+fn distribution_with_no_rule_set_published_is_a_problem() {
+    let distribution = |installed| ServiceStatus {
+        unit: Unit::Distribution,
+        installed,
+        enabled: true,
+        active: "active".into(),
+        ready: Some(true),
+        since: None,
+    };
+    let health = |installed, list: &str| {
+        checks(
+            &[distribution(installed)],
+            &[],
+            Ok(String::new()),
+            Ok(Vec::new()),
+            Ok(list.into()),
+            Utc::now(),
+        )
+    };
+    let empty = health(true, "baseline none keys 1 expires -\n");
+    assert!(
+        empty
+            .iter()
+            .any(|c| c.problem && c.text.starts_with("no rule set published")),
+        "{empty:?}"
+    );
+    let published = health(true, "baseline v2 keys 1 expires 2030-01-01T00:00:00Z\n");
+    assert!(
+        !published.iter().any(|c| c.text.starts_with("no rule set")),
+        "{published:?}"
+    );
+    let without = health(false, "");
+    assert!(
+        !without.iter().any(|c| c.text.starts_with("no rule set")),
+        "{without:?}"
+    );
+}

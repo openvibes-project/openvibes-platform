@@ -137,7 +137,23 @@ pub fn checks(
         Err(error) => checks.push(check(true, format!("disk use: {error}"))),
     }
     match rules {
-        Ok(out) => checks.extend(out.lines().filter_map(|line| rule_set(line, now))),
+        Ok(out) => {
+            let sets: Vec<Check> = out.lines().filter_map(|line| rule_set(line, now)).collect();
+            // Board #111: distribution running with nothing to serve leaves
+            // every agent without rules, silently.
+            let distribution = services
+                .iter()
+                .any(|status| status.installed && status.unit == platform_host::Unit::Distribution);
+            if distribution && sets.is_empty() {
+                checks.push(check(
+                    true,
+                    "no rule set published: agents get no rules; press r on Setup to repair, \
+                     or publish one (rules publish)"
+                        .into(),
+                ));
+            }
+            checks.extend(sets);
+        }
         Err(error) => checks.push(check(true, format!("rule sets: {error}"))),
     }
     // Stable: within problems and within the rest, the order above stays.

@@ -157,7 +157,8 @@ status` (an unreachable database is a problem here); disk use of
 each published rule set's current bundle from `rules list` (a problem under
 90 days to expiry or expired, with the fix: install the newer rules package
 and run Repair, or publish a newer bundle; retired sets and sets without a
-bundle are left out). Loaded on opening and on `R`.
+bundle are left out). With distribution installed and no rule set
+published at all, a problem: agents get no rules (board #111). Loaded on opening and on `R`.
 
 Every TUI action (service action, boot change, config save, Setup step) is
 also recorded in `audit_log` when the database is reachable, through
