@@ -78,12 +78,26 @@ A console rule set still needs a signature that agents trust. Options:
       distribution service). The signer holds it as
       `/var/lib/openvibes-signer/site-rules.key`, 0600, under its own
       service user, and listens only on a local Unix socket.
-    - The console asks the signer to sign after its step-up check (the
-      user's password again). The signer checks the rule set is a site
-      set and the rules pass the loader. It doesn't hold or check
-      sessions, so a console RCE could still ask it to sign. What it
-      gains is that the key itself can't be read or copied off the host
-      from the console.
+    - **The signer checks the step-up itself** (lead, 2026-10-02).
+      - Publishing asks for the user's password again. The console only
+        passes it through, with the user name, over the socket.
+      - The signer verifies it against the credential hash, using its own
+        **read-only** database grant on the console's credential table.
+      - It signs only if the password matches, the user holds
+        `rules.upload`, the rule set is a site set, and the rules pass the
+        loader.
+    - **It limits and records what it signs, out of the console's reach:**
+      - a rate limit of a few publishes per hour per site (for example 6),
+        past which it refuses;
+      - its **own** audit line for every request, signed or refused (who,
+        set, version, SHA-256, reason). It writes it to its own journal and
+        to an append-only table the console can't write, so the console
+        can't suppress it.
+    - **What this buys:** a console RCE can't read or copy the key, and it
+      can't sign without a live user's password. It would have to capture
+      one first (for example by waiting for a real step-up), within the
+      rate limit, and leave a record it can't erase. That raises the bar
+      without closing it fully.
     - The public key becomes a trust line (`site site-1 KEY`) in
       `rule_trust_keys` and in every agent command.
     - Because the key is online, the signer can also re-sign before
@@ -96,7 +110,8 @@ A console rule set still needs a signature that agents trust. Options:
       `mask_args` it uses for alarms, before that set's rules see them,
       while the official baseline sets see the full form;
     - **refuses an alarm rule without a `programs` prefilter**, or with
-      more than 8 names, or a set naming more than 32 distinct programs.
+      more than 8 names, or an empty name, or a set naming more than 64
+      distinct programs.
       This is enforced in the agent's loader, because a stolen key never
       goes through the console. The console refuses the same at save.
     - **Absent means restricted** (reviewer and lead, 2026-10-02). A set
@@ -124,10 +139,12 @@ A console rule set still needs a signature that agents trust. Options:
       rule whose expression is `true` raises an alarm for every start of
       the programs it names. Each alarm carries exe, cwd, uid, the
       ancestors' exes and cwds, and the masked arguments. With the caps
-      above, that is every exec of up to 32 named programs, for example
-      `sh`, `bash` and `python3` (not every exec on the host). The
-      agent's collapse of repeats and its 1,000-alarm queue bound the
-      volume, not the reach.
+      above, that is every exec of up to 64 named programs, not every exec
+      on the host. Honestly, 64 common names (`sh`, `bash`, `python3`,
+      `curl` and so on) still cover a large share of a host's execs. The
+      caps narrow the reach. The per-event CPU budget and the agent's
+      collapse of repeats and 1,000-alarm queue bound the volume. The
+      audit trail (§7) and the signer's own record show it.
     - **A one-bit channel over facts.** A finding's `evidence` names fact
       keys, never their values, but whether a rule matches is itself a
       bit, so rules can probe a value ("does a process name start with
@@ -178,7 +195,8 @@ read):
 
 B keeps working (export plus the existing upload). A is what makes
 "write a rule in the console" true. Its worst case is stated above:
-- an alarm logger for at most 32 named programs;
+- an alarm logger for at most 64 named programs, which can still be a
+  large share of execs;
 - a slow one-bit channel without argv secrets;
 - CPU bounded by the aggregate budget.
 
@@ -277,16 +295,21 @@ offline-signed from day one.
      rules, counted in health when it cuts;
    - `restricted` per rule set, **absent = restricted** except
      `baseline-alarms`: masked command lines, a required `programs`
-     prefilter (at most 8 per rule, 32 distinct per set), refused in the
+     prefilter (at most 8 per rule, 64 distinct per set, no empty name),
+     refused in the
      loader; tests for absent, `true`, `false` and the exemption;
    - **Gate:** an `alarms-cost` run with a restricted set at its limits
      stays within the P14 budget (#86).
 2. Store and API: drafts, validation, test and dry run (`rules.write`).
    The console applies the same restricted-set checks at save.
-3. The signer: a local service holding the site key, signing over a Unix
-   socket after the console's step-up check; Setup generates the key; the
-   trust line goes into `agent command` and `install.sh`, with the site
-   lines and `restricted = true` (D5). Docs.
+3. The signer: a local service holding the site key.
+   - It signs over a Unix socket only after verifying the user's password
+     itself (read-only grant on the credential hashes).
+   - It rate-limits publishes and writes its own audit record, which the
+     console can't write.
+   - Setup generates the key. The trust line goes into `agent command` and
+     `install.sh`, with the site lines (absent `restricted` = restricted,
+     D5). Docs.
 4. Console UI: rule list, editor panel, test, dry run, publish with diff,
    history.
 5. Demo routes and e2e; a full-stack e2e where a console-published rule
