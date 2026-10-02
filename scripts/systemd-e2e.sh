@@ -97,8 +97,9 @@ ok "platform installed and set up by setup --quick (and re-run safely)"
 # The rule signer (board #107) under its unit: seeded as its user, it
 # starts sandboxed with no network, and only its socket group reaches it.
 in_c 'dnf -q -y install /test/openvibes-signer-*.rpm' >/dev/null 2>&1 || fail "install openvibes-signer"
-in_c 'runuser -u openvibes-signer -g openvibes-signer-clients -- openvibes-signer seed --min-version 1' \
-    | grep -q '^site-alarms site.key ' || fail "signer seed printed no trust line"
+SITE_TRUST=$(in_c 'runuser -u openvibes-signer -g openvibes-signer-clients -- openvibes-signer seed --min-version 1')
+grep -q '^site-alarms site.key ' <<<"$SITE_TRUST" || fail "signer seed printed no trust line"
+SITE_KEY=$(awk '$1 == "site" { print $3 }' <<<"$SITE_TRUST")
 in_c 'systemctl start openvibes-signer' || fail "start openvibes-signer"
 wait_for "the signer listens on its socket" 30 'test -S /run/openvibes-signer/sign.sock'
 [[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-signer /run/openvibes-signer/sign.sock /var/lib/openvibes-signer/site.key')" == \
@@ -298,6 +299,38 @@ wait_for "agent fetched its rules from distribution (200)" 120 \
     'journalctl -u openvibes-distribution -o cat | grep -q "\"endpoint\":\"/v1/rule-bundle\".*\"status\":200"'
 wait_for "findings from the published rule set in PostgreSQL" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM findings WHERE rule_set_id = 'baseline' AND rule_id = 'host.has.processes'\") -ge 1 ]]"
+
+# The site's own rules end to end (board #107): a console user publishes a
+# rule set through the signer (which checks the password itself), the
+# platform serves it, and an agent with the site lines reports findings.
+cat > "$W/site.json" <<'RULES'
+{"schema_version":1,"rules":[
+ {"id":"site.processes","version":1,"title":"Our own check","severity":"info",
+  "confidence":100,"expression":"facts['process.count'] >= 1","finding_message":"Written by the site"}]}
+RULES
+in_c "set -e
+      printf '%s\n' 'a long enough publisher password' |
+          runuser -u openvibes-admin -- openvibes-admin user create --username publisher \
+              --display-name Publisher --role operator --password-stdin
+      usermod -aG openvibes-signer-clients openvibes-admin
+      runuser -u openvibes-admin -- openvibes-admin rules trust add site site.key -- '$SITE_KEY'" >/dev/null 2>&1 ||
+    fail "site publisher, socket group and trust"
+out=$(in_c "printf 'wrong password, long enough\n' | runuser -u openvibes-admin -- openvibes-admin rules publish-site \
+    --user publisher --set site --password-stdin /test/site.json" 2>&1) && fail "published with a wrong password"
+[[ "$out" == *"wrong username or password"* ]] || fail "wrong password: $out"
+in_c "printf 'a long enough publisher password\n' | runuser -u openvibes-admin -- openvibes-admin rules publish-site \
+    --user publisher --set site --password-stdin /test/site.json" > "$W/publish-site.out" 2>&1 ||
+    { cat "$W/publish-site.out"; fail "publish-site"; }
+in_c 'journalctl -u openvibes-signer -o cat | grep -q "\"audit\":\"rules.sign\".*\"result\":\"signed\""' ||
+    fail "the signer's journal has no audit line for the signature"
+in_c "cat >> /etc/openvibes-agent/agent.toml <<TOML
+[[rule_sets]]
+id = \"site\"
+trusted_keys = [{ issuer_key_id = \"site.key\", public_key = \"$SITE_KEY\" }]
+TOML
+systemctl restart openvibes-agent" >/dev/null 2>&1 || fail "add the site rule set to the agent"
+wait_for "findings from the site's own published rule set" 180 \
+    "[[ \$($SQL \"SELECT count(*) FROM findings WHERE rule_set_id = 'site' AND rule_id = 'site.processes'\") -ge 1 ]]"
 wait_for "the agent's inventory is stored (protocol P8)" 120 \
     "[[ \$($SQL \"SELECT count(*) FROM host_packages\") -gt 100 ]]"
 # P11: a package change reaches the platform as a change set, not a full

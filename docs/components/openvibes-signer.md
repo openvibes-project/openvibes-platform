@@ -9,8 +9,15 @@ password.
 
 ## Interface
 
-- **Socket:** a Unix socket (`socket`, mode 0660). The console's user is in
-  its group; nothing else connects.
+- **Socket:** a Unix socket (`socket`, mode 0660, group
+  `openvibes-signer-clients`). **Two local accounts** are in that group:
+  `openvibes-console` (the console's publish screen, board #109) and
+  `openvibes-admin` (`openvibes-admin rules publish-site`, for scripts and
+  for testing the chain before the console screen exists). That is fine
+  because the group isn't the boundary: every request still needs a
+  console user's live password, `rules.upload` through a global binding,
+  and the signer's limits, and wrong passwords lock the account as at
+  sign-in (lead, #2110).
 - **Request:** one JSON object per connection, at most 1 MiB, all of it
   within 5 seconds, then the client shuts its write side:
 

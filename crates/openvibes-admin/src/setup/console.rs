@@ -50,6 +50,10 @@ fn admin_exists<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
 
 const SIGNER_DIR: &str = "/var/lib/openvibes-signer";
 const SIGNER_CLIENTS: &str = "openvibes-signer-clients";
+/// Who may reach the signer's socket: the console, and the admin CLI
+/// (`rules publish-site`). The signer's own password, permission and limit
+/// checks are the boundary, not the group (lead, #2110).
+const SIGNER_USERS: [&str; 2] = ["openvibes-console", "openvibes-admin"];
 
 /// The signer (own rules, board #107): its site key and version state
 /// exist, and the console may reach its socket.
@@ -58,12 +62,15 @@ fn signer_ready<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
         return Ok(true);
     }
     let groups = ctx.read("/etc/group")?;
-    let console_joined = groups
+    let members = groups
         .lines()
         .find_map(|line| line.strip_prefix(&format!("{SIGNER_CLIENTS}:")))
         .and_then(|rest| rest.rsplit(':').next())
-        .is_some_and(|members| members.split(',').any(|m| m == "openvibes-console"));
-    Ok(console_joined
+        .unwrap_or("");
+    let joined = SIGNER_USERS
+        .iter()
+        .all(|user| members.split(',').any(|m| m == *user));
+    Ok(joined
         && ctx.exists(&format!("{SIGNER_DIR}/site.key"))
         && ctx.exists(&format!("{SIGNER_DIR}/versions.json"))
         && ctx.exists(super::SITE_KEY))
@@ -100,8 +107,15 @@ fn signer_apply<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
             "openvibes-signer seed printed no trust lines: {lines:?}"
         ));
     }
+    // Distribution must trust the key before it serves a site bundle.
+    for line in &trust {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        ctx.as_admin(&["rules", "trust", "add", fields[0], fields[1], fields[2]])?;
+    }
     ctx.put(super::SITE_KEY, lines.as_bytes(), None, 0o644)?;
-    ctx.ok(Usermod, &["-aG", SIGNER_CLIENTS, "openvibes-console"])?;
+    for user in SIGNER_USERS {
+        ctx.ok(Usermod, &["-aG", SIGNER_CLIENTS, user])?;
+    }
     // The console's group list is read at start.
     ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
     Ok(())
@@ -352,6 +366,11 @@ mod tests {
         let key = "A".repeat(43);
         let trust = format!("site site.key {key}\nsite-alarms site.key {key}\n");
         fake.answer(&["/usr/sbin/runuser", "-u", "openvibes-signer"], 0, &trust);
+        fake.answer(
+            &[&ADMIN[..], &["rules", "trust", "add"]].concat(),
+            0,
+            "trusted\n",
+        );
         fake.answer(&["/usr/sbin/usermod"], 0, "");
         let plan = plan(&[Ingest, Console, Distribution, Signer]);
         let state = run_step(&fake.ctx(&plan), Step::Console);
@@ -370,9 +389,27 @@ mod tests {
                 "1"
             ]
         );
+        let added: Vec<String> = fake
+            .calls
+            .borrow()
+            .iter()
+            .filter(|call| call[0] == "/usr/sbin/usermod")
+            .map(|call| call[3].clone())
+            .collect();
+        assert_eq!(added, ["openvibes-console", "openvibes-admin"]);
+        let trusted: Vec<String> = fake
+            .calls
+            .borrow()
+            .iter()
+            .filter(|call| {
+                call.get(5..8) == Some(&["rules".into(), "trust".into(), "add".into()][..])
+            })
+            .map(|call| call[8].clone())
+            .collect();
         assert_eq!(
-            fake.call(&["/usr/sbin/usermod"])[1..],
-            ["-aG", "openvibes-signer-clients", "openvibes-console"]
+            trusted,
+            ["site", "site-alarms"],
+            "distribution trusts the key"
         );
         assert_eq!(
             fake.text("/etc/openvibes/site-rules.trust"),
@@ -394,7 +431,7 @@ mod tests {
         );
         done.file(
             "/etc/group",
-            "openvibes-signer-clients:x:991:alice,openvibes-console\n",
+            "openvibes-signer-clients:x:991:alice,openvibes-console,openvibes-admin\n",
         );
         done.file("/var/lib/openvibes-signer/site.key", "k");
         done.file("/var/lib/openvibes-signer/versions.json", "{}");

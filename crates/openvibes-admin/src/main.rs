@@ -16,6 +16,7 @@ mod import;
 mod model;
 mod rules;
 mod rules_sign;
+mod rules_site;
 #[cfg(unix)]
 mod run_as;
 mod setup;
