@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/platform-assistant", "crates/openvibes-llm", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/platform-config", "crates/platform-store", "crates/openvibes-admin", "crates/openvibes-console", "crates/platform-pki", "crates/platform-host", "scripts/load"]
+members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/platform-assistant", "crates/openvibes-llm", "crates/openvibes-distribution", "crates/openvibes-vulns", "crates/platform-config", "crates/platform-password", "crates/platform-store", "crates/openvibes-admin", "crates/openvibes-console", "crates/platform-pki", "crates/platform-host", "scripts/load"]
 
 [workspace.package]
 version = "0.2.1"
@@ -9,6 +9,7 @@ rust-version = "1.95"
 license = "MIT"
 
 [workspace.dependencies]
+platform-password = { path = "crates/platform-password" }
 openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "17b6baafd469a513140dc6a89d2930dd84874cb4" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"

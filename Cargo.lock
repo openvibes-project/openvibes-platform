@@ -1719,6 +1719,7 @@ dependencies = [
  "openvibes-rules",
  "platform-assistant",
  "platform-config",
+ "platform-password",
  "platform-store",
  "rcgen",
  "ring",
@@ -1732,7 +1733,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
- "unicode-normalization",
  "utoipa",
  "x509-parser",
  "zeroize",
@@ -2144,6 +2144,15 @@ dependencies = [
 name = "platform-host"
 version = "0.2.1"
 dependencies = [
+ "zeroize",
+]
+
+[[package]]
+name = "platform-password"
+version = "0.2.1"
+dependencies = [
+ "argon2",
+ "unicode-normalization",
  "zeroize",
 ]
 
