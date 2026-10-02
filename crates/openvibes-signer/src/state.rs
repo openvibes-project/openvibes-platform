@@ -6,7 +6,7 @@ use std::{
     collections::{BTreeMap, VecDeque},
     fs::{self, File, OpenOptions},
     io::Write,
-    os::unix::fs::OpenOptionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::{Path, PathBuf},
 };
 
@@ -221,6 +221,9 @@ fn write_atomic(dir: &Path, name: &str, mode: u32, bytes: &[u8]) -> std::io::Res
         .create_new(true)
         .mode(mode)
         .open(&temp)?;
+    // The exact mode, whatever the umask (the unit's is 0077): open's
+    // mode is masked by it, a chmod isn't.
+    file.set_permissions(fs::Permissions::from_mode(mode))?;
     file.write_all(bytes)?;
     file.sync_all()?;
     fs::rename(&temp, dir.join(name))?;
