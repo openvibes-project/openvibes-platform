@@ -84,8 +84,18 @@ A console rule set still needs a signature that agents trust. Options:
       - The signer verifies it against the credential hash, using its own
         **read-only** database grant on the console's credential table.
       - It signs only if the password matches, the user holds
-        `rules.upload`, the rule set is a site set, and the rules pass the
-        loader.
+        `rules.upload` and is neither disabled nor on
+        `password_must_change`, the rule set is a site set, and the rules
+        pass the loader.
+      - **Its password check is throttled like sign-in** (reviewer,
+        2026-10-02), or a compromised console could use it to guess
+        passwords outside the sign-in limiter:
+        - a wrong password counts against the **same per-account failure
+          bucket** as sign-in (5 per 15 minutes, as #129 does for
+          set-password);
+        - the signer's database role may write only that bucket;
+        - refused attempts count toward its rate limit, not only
+          successful publishes.
     - **It limits and records what it signs, out of the console's reach**
       (the implementation's baseline, reviewer and lead, 2026-10-02):
       - at most N publishes per hour per site (for example 6) and at most
@@ -309,7 +319,10 @@ offline-signed from day one.
    The console applies the same restricted-set checks at save.
 3. The signer: a local service holding the site key.
    - It signs over a Unix socket only after verifying the user's password
-     itself (read-only grant on the credential hashes).
+     itself: a read-only grant on the credential hashes and user state,
+     and write access only to the per-account sign-in failure bucket.
+     Wrong passwords count there, and disabled or must-change users are
+     refused.
    - It limits publishes per hour and rules per publish, re-checks the
      programs caps, and writes its own audit log in its journal, outside
      the database. A second factor comes later.
