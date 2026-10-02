@@ -1,4 +1,4 @@
-# Visibility finder: opt-in network discovery by agents — design draft
+# Visibility finder: opt-in network discovery by agents — design
 
 Board #122 (epic #93). User, 2026-10-02 (item 9): agents can map the
 network around them, like nmap: find other hosts and their open ports.
@@ -6,8 +6,8 @@ Found hosts go to an **Unmanaged** list (many will be TVs, lights and
 printers). It must be strictly opt-in and controlled from the platform:
 include and exclude networks, which agents scan, and rate limits.
 
-This is a draft for the user's decisions (§9). Nothing is built until
-they are made. Protocol first, as always: the policy and the report are
+**Decided** (user, 2026-10-02, #2259): option A for all four decisions in
+§9. Protocol first, as always: the policy and the report are
 new contracts (P16).
 
 ## 1. What it is, and what it is not
