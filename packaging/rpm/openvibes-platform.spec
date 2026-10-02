@@ -88,6 +88,19 @@ Summary:        OpenVIBES operator CLI and maintenance timer
 %description -n openvibes-admin
 Schema migration, built-in CA, tokens, agents, and daily partition maintenance.
 
+%package -n openvibes-signer
+Summary:        OpenVIBES rule signer for the site's own rules
+License:        MIT
+# Its state directory's group is openvibes-operators, from openvibes-admin.
+Requires:       openvibes-admin = %{version}-%{release}
+Requires(pre):  openvibes-admin = %{version}-%{release}
+%{?systemd_requires}
+
+%description -n openvibes-signer
+Holds the site rule-signing key and signs the site's own rule sets for the
+console, only after checking the publishing user's password and permission
+itself. Listens on a Unix socket only the console can reach.
+
 %if %{with llm}
 %package -n openvibes-llm
 Requires(pre):  shadow-utils procps-ng systemd
@@ -125,6 +138,12 @@ install -D -m 0644 $S/packaging/rpm/openvibes-distribution.service %{buildroot}%
 install -D -m 0644 $S/packaging/rpm/openvibes-distribution.sysusers %{buildroot}%{_sysusersdir}/openvibes-distribution.conf
 install -D -m 0640 $S/packaging/rpm/distribution.toml %{buildroot}%{_sysconfdir}/openvibes/distribution.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-distribution/LICENSE
+install -D -m 0755 $S/target/release/openvibes-signer %{buildroot}%{_bindir}/openvibes-signer
+install -D -m 0644 $S/packaging/rpm/openvibes-signer.service %{buildroot}%{_unitdir}/openvibes-signer.service
+install -D -m 0644 $S/packaging/rpm/openvibes-signer.sysusers %{buildroot}%{_sysusersdir}/openvibes-signer.conf
+install -D -m 0640 $S/packaging/rpm/signer.toml %{buildroot}%{_sysconfdir}/openvibes/signer.toml
+install -d -m 2750 %{buildroot}%{_sharedstatedir}/openvibes-signer
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-signer/LICENSE
 install -D -m 0755 $S/target/release/openvibes-vulns %{buildroot}%{_bindir}/openvibes-vulns
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.service %{buildroot}%{_unitdir}/openvibes-vulns.service
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.sysusers %{buildroot}%{_sysusersdir}/openvibes-vulns.conf
@@ -186,6 +205,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_preun openvibes-distribution.service
 %postun -n openvibes-distribution
 %systemd_postun_with_restart openvibes-distribution.service
+
+%post -n openvibes-signer
+%systemd_post openvibes-signer.service
+%preun -n openvibes-signer
+%systemd_preun openvibes-signer.service
+%postun -n openvibes-signer
+%systemd_postun_with_restart openvibes-signer.service
 
 %pre -n openvibes-vulns
 %rename_pre vulns openvibes-vulns.service
@@ -253,6 +279,16 @@ fi
 %dir %{_sysconfdir}/openvibes/tls
 %dir %{_sysconfdir}/openvibes/pki
 %config(noreplace) %attr(0640, root, openvibes-distribution) %{_sysconfdir}/openvibes/distribution.toml
+
+%files -n openvibes-signer
+%license %{_licensedir}/openvibes-signer/LICENSE
+%{_bindir}/openvibes-signer
+%{_unitdir}/openvibes-signer.service
+%{_sysusersdir}/openvibes-signer.conf
+%dir %{_sysconfdir}/openvibes
+%config(noreplace) %attr(0640, root, openvibes-signer-clients) %{_sysconfdir}/openvibes/signer.toml
+# setgid: status.json takes the operators' group; the key and versions are 0600.
+%dir %attr(2750, openvibes-signer, openvibes-operators) %{_sharedstatedir}/openvibes-signer
 
 %files -n openvibes-vulns
 %license %{_licensedir}/openvibes-vulns/LICENSE

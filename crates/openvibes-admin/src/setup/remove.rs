@@ -49,7 +49,7 @@ impl RemoveArgs {
 }
 
 /// Data directories Remove everything deletes (fixed; never from input).
-const DATA: [&str; 9] = [
+const DATA: [&str; 10] = [
     "/etc/openvibes",
     "/etc/openvibes-agent",
     "/var/lib/openvibes-admin",
@@ -59,14 +59,17 @@ const DATA: [&str; 9] = [
     "/var/lib/openvibes-console",
     "/var/lib/openvibes-llm",
     "/var/lib/openvibes-agent",
+    // The site rule-signing key and version state (own rules).
+    "/var/lib/openvibes-signer",
 ];
 /// Service accounts (user and group of the same name) it deletes.
-const ACCOUNTS: [&str; 7] = [
+const ACCOUNTS: [&str; 8] = [
     "openvibes-ingest",
     "openvibes-distribution",
     "openvibes-vulns",
     "openvibes-console",
     "openvibes-llm",
+    "openvibes-signer",
     "openvibes_agent",
     "openvibes-admin",
 ];
@@ -220,7 +223,10 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
         }
     }
     let groups = ctx.read("/etc/group")?;
-    for group in ACCOUNTS.iter().chain(&["openvibes-operators"]) {
+    for group in ACCOUNTS
+        .iter()
+        .chain(&["openvibes-operators", "openvibes-signer-clients"])
+    {
         if groups
             .lines()
             .any(|line| line.starts_with(&format!("{group}:")))

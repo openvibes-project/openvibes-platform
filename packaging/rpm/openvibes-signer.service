@@ -1,0 +1,45 @@
+[Unit]
+Description=OpenVIBES rule signer (own rules)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+After=postgresql.service openvibes-migrate.service
+Wants=openvibes-migrate.service
+
+[Service]
+Type=exec
+User=openvibes-signer
+# The socket's group: only its members (the console) can connect.
+Group=openvibes-signer-clients
+ExecStart=/usr/bin/openvibes-signer --config /etc/openvibes/signer.toml
+Restart=on-failure
+RestartSec=5s
+RuntimeDirectory=openvibes-signer
+RuntimeDirectoryMode=0750
+# The RPM owns the state directory (setgid, group openvibes-operators, so
+# status.json reaches operators); StateDirectory= would reset that.
+ReadWritePaths=/var/lib/openvibes-signer
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

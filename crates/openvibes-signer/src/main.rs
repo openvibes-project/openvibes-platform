@@ -1,13 +1,15 @@
 #![forbid(unsafe_code)]
 
 //! `openvibes-signer [--config PATH]`: the rule signer.
-//! `openvibes-signer seed --min-version N [--config PATH]`: creates its
-//! version state, so the next version it signs is N (Setup runs it).
+//! `openvibes-signer seed --min-version N [--config PATH]`: creates the
+//! site key if missing and the version state, so the next version it
+//! signs is N, and prints the agents' trust lines (Setup runs it as the
+//! signer's user).
 
 use std::{path::PathBuf, process::ExitCode, sync::Arc};
 
 use openvibes_signer::{
-    Signer, SignerConfig,
+    Signer, SignerConfig, request,
     state::{Seeded, State},
 };
 
@@ -47,19 +49,26 @@ async fn main() -> ExitCode {
             eprintln!("{USAGE}");
             return ExitCode::from(2);
         };
+        let public = match openvibes_signer::sign::create_key(&config.key_file) {
+            Ok(public) => public,
+            Err(error) => return fail(&error),
+        };
         return match State::seed(&config.state_dir, min_version) {
-            Ok(Seeded::Created) => {
-                println!("the next version signed is {min_version}");
-                ExitCode::SUCCESS
-            }
-            Ok(Seeded::Kept) => {
-                println!("version state already exists; kept");
-                ExitCode::SUCCESS
-            }
-            Ok(Seeded::Replaced) => {
-                println!(
-                    "the version state could not be read; replaced: the next version signed is {min_version}"
-                );
+            Ok(seeded) => {
+                match seeded {
+                    Seeded::Created => {}
+                    Seeded::Kept => {
+                        eprintln!("openvibes-signer: version state already exists; kept");
+                    }
+                    Seeded::Replaced => eprintln!(
+                        "openvibes-signer: the version state could not be read; replaced: \
+                         the next version signed is {min_version}"
+                    ),
+                }
+                // Stdout carries only the trust lines (Setup and B2 read them).
+                for set in [request::SITE, request::SITE_ALARMS] {
+                    println!("{set} {} {public}", config.issuer_key_id);
+                }
                 ExitCode::SUCCESS
             }
             Err(error) => fail(&error),

@@ -383,7 +383,14 @@ arguments, then runs every Setup step in order and prints one line per step
 (`TITLE: STATE DETAIL`). Exit 0 when every step is done or skipped, 3 when a
 step waits (careful CA: sign the request offline, then run it again), 1 on a
 failure, 2 on bad arguments (checked before the root check).
-`--components` must include `ingest`; `rules` needs `distribution`.
+`--components` must include `ingest`; `rules` needs `distribution`;
+`signer` (own rules, board #107; not in the default set while the console
+has no publish screen) needs `console` and `distribution`. With `signer`,
+the Console step runs `openvibes-signer seed --min-version 1` as the
+signer's user (the site key and version state, kept if present) and adds
+`openvibes-console` to `openvibes-signer-clients`; Services then starts
+`openvibes-signer`. Remove everything deletes `/var/lib/openvibes-signer`
+(the site key), the `openvibes-signer` account and the clients group.
 A `setup.toml` from before the port choices (0.1.1) has no port fields;
 each missing one is taken from the service using it (`console.toml`
 `development_listen` with direct TLS, `ingest.toml`/`distribution.toml`

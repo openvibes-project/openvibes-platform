@@ -11,6 +11,7 @@ chrono.workspace = true
 ed25519-dalek.workspace = true
 openvibes-core.workspace = true
 openvibes-rules.workspace = true
+ring.workspace = true
 platform-config = { path = "../platform-config" }
 platform-password.workspace = true
 platform-store = { path = "../platform-store" }
