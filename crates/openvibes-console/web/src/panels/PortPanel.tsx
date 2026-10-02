@@ -19,6 +19,8 @@ export function PortPanel({ id }: { id: string }) {
   const path = `/api/v1/ports/${encodeURIComponent(protocol)}/${encodeURIComponent(port)}`;
   const detail = useResource<PortDetail>(path);
   const page = useMoreHosts(path, detail.data);
+  // Rows are per bound address; a host on two addresses is one host.
+  const hostCount = new Set(page.hosts.map((h) => h.agent_id)).size;
   useProvideTitle({ kind: "port", id }, `${port}/${protocol}`);
   if (detail.error) return <div className="panel-body"><ErrorBox error={detail.error} /></div>;
   if (!detail.data) return <Loading />;
@@ -26,7 +28,7 @@ export function PortPanel({ id }: { id: string }) {
   return (
     <>
       <PanelHeader icon="activity" kind="Port" title={<span className="mono">{data.port}/{data.protocol}</span>}
-        badges={<span className="badge badge--plain">{page.hosts.length}{page.more ? "+" : ""} hosts</span>} />
+        badges={<span className="badge badge--plain">{hostCount}{page.more ? "+" : ""} hosts</span>} />
       <div className="panel-body stack">
         <Section title="Hosts listening on it" flush>
           {page.hosts.length === 0 ? <Empty title="No host in your scope listens on it" /> : (
@@ -44,7 +46,7 @@ export function PortPanel({ id }: { id: string }) {
               ))}
             </ul>
           )}
-          <ShowMore shown={page.hosts.length} {...page} />
+          <ShowMore shown={hostCount} {...page} />
         </Section>
       </div>
     </>
