@@ -563,7 +563,9 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(crate::ports::get_host_services),
         )
         .route("/v1/ports", get(crate::ports::list_ports))
+        .route("/v1/ports/{protocol}/{port}", get(crate::ports::get_port))
         .route("/v1/services", get(crate::ports::list_services))
+        .route("/v1/services/{unit}", get(crate::ports::get_unit))
         .route("/v1/alarms", get(crate::alarms::list_alarms))
         .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
         .route(
@@ -2561,9 +2563,10 @@ async fn authenticated_session(
             "Authentication required",
         ));
     }
-    if !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
-        .await
-        .unwrap_or(false)
+    if !background_request(request.headers())
+        && !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
+            .await
+            .unwrap_or(false)
     {
         return problem_response(ProblemDetails::new(
             StatusCode::UNAUTHORIZED,
@@ -5645,13 +5648,24 @@ pub(crate) async fn checked_session(
             "The request was rejected",
         )));
     }
-    if !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
-        .await
-        .unwrap_or(false)
+    if !background_request(headers)
+        && !console_auth::touch_session(&client, &digest, now, Duration::minutes(30))
+            .await
+            .unwrap_or(false)
     {
         return Err(authentication_required());
     }
     Ok((active, digest))
+}
+
+/// A request the web app makes on its own (the live-alarm poll), marked
+/// with `X-OpenVIBES-Background: 1`. It is checked like any other, but it
+/// does not extend the session's idle expiry: an unattended open console
+/// still signs out after 30 idle minutes.
+pub(crate) fn background_request(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-openvibes-background")
+        .is_some_and(|value| value.as_bytes() == b"1")
 }
 
 /// 403 for a user who must set their own password first.

@@ -294,3 +294,21 @@ fn the_signers_state_and_refusals_show_in_health() {
         "{denied:?}"
     );
 }
+
+#[test]
+fn fedoras_task_never_audit_rule_is_a_health_problem() {
+    use super::database::audit_check;
+    use crate::setup::audit_off;
+    let fedora = "## First rule - delete all\n-D\n-b 8192\n-a task,never\n\
+                  -a always,exit -F arch=b64 -S execve,execveat -F key=openvibes-exec\n";
+    assert!(audit_off(fedora));
+    assert!(audit_off("-a never,task\n"));
+    let check = audit_check(fedora).expect("a problem line");
+    assert!(check.problem);
+    assert!(check.text.contains("rules.d/audit.rules"), "{}", check.text);
+    // Commented out, or only our exec rule: nothing to report.
+    assert!(!audit_off(
+        "#-a task,never\n-a always,exit -F key=openvibes-exec\n"
+    ));
+    assert!(audit_check("-a always,exit -S execve -F key=openvibes-exec\n").is_none());
+}

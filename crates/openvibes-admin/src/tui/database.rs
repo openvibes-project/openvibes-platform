@@ -147,6 +147,21 @@ pub fn checks(
     checks
 }
 
+/// Health's line for [`audit_off`](crate::setup::audit_off), when it applies.
+pub fn audit_check(rules: &str) -> Option<Check> {
+    crate::setup::audit_off(rules).then(|| {
+        check(
+            true,
+            format!(
+                "threat alarms can't fire: {} has `-a task,never` (syscall auditing off). \
+                 Comment that line out in /etc/audit/rules.d/audit.rules and run `augenrules --load`: \
+                 new logins and restarted services are watched; a reboot covers everything",
+                crate::setup::AUDIT_RULES
+            ),
+        )
+    })
+}
+
 /// One `rules list` line (`SET vN keys K expires TIME [flags]`, rules.rs):
 /// the current bundle's expiry. Sets that are retired or have no bundle
 /// are left out.
@@ -324,6 +339,10 @@ impl<H: Host> App<H> {
             .extend(uncovered(&certificates, &self.host.addresses()));
         if let Some(files) = self.host.signer() {
             self.database.health.extend(signer_checks(&files));
+        }
+        // Readable as root only; as another user the line is left out.
+        if let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES) {
+            self.database.health.extend(audit_check(&rules));
         }
         self.database.health.sort_by_key(|check| !check.problem);
     }

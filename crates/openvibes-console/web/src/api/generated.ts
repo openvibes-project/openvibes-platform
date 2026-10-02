@@ -690,6 +690,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ports/{protocol}/{port}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_port"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-bundles/preview": {
         parameters: {
             query?: never;
@@ -836,6 +852,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["list_services"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/services/{unit}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_unit"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2048,6 +2080,11 @@ export interface components {
             reported_at?: string | null;
             /** @description Services, by unit. */
             services: components["schemas"]["ServiceView"][];
+            /**
+             * @description The agent cut a list to the protocol limits: the lists are
+             *     incomplete.
+             */
+            truncated: boolean;
         };
         /** @description One listening socket on a host. */
         ListenerView: {
@@ -2096,6 +2133,37 @@ export interface components {
             asset_group_ids: string[];
             /** @enum {string} */
             kind: "asset_groups";
+        };
+        /** @description One port across the caller's hosts: a page of the hosts listening on it. */
+        PortDetail: {
+            /** @description Hosts on this page, by hostname. */
+            hosts: components["schemas"]["PortHostView"][];
+            /** @description Opaque cursor for the next page of hosts. */
+            next_cursor?: string | null;
+            /**
+             * Format: int32
+             * @description The port.
+             */
+            port: number;
+            /** @description `tcp` or `udp`. */
+            protocol: string;
+        };
+        /** @description One host listening on a port (once per bound address). */
+        PortHostView: {
+            /** @description The bound address. */
+            address: string;
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Bound to a non-loopback address. */
+            exposed: boolean;
+            /** @description Hostname, when known. */
+            hostname?: string | null;
+            /** @description Last contact (RFC 3339). */
+            last_seen_at?: string | null;
+            /** @description The owning program, when the agent saw it. */
+            program?: string | null;
+            /** @description The owning unit, when the agent saw it. */
+            service?: string | null;
         };
         /** @description One port across the caller's hosts. */
         PortView: {
@@ -2470,6 +2538,36 @@ export interface components {
              * @description Distinct versions in use.
              */
             versions: number;
+        };
+        /**
+         * @description One service unit across the caller's hosts: a page of the hosts
+         *     running it.
+         */
+        UnitDetail: {
+            /** @description Hosts on this page, by hostname. */
+            hosts: components["schemas"]["UnitHostView"][];
+            /** @description Opaque cursor for the next page of hosts. */
+            next_cursor?: string | null;
+            /** @description The systemd unit. */
+            unit: string;
+        };
+        /** @description One host running a unit. */
+        UnitHostView: {
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Hostname, when known. */
+            hostname?: string | null;
+            /** @description Last contact (RFC 3339). */
+            last_seen_at?: string | null;
+            /**
+             * Format: int32
+             * @description How many processes it runs there.
+             */
+            processes: number;
+            /** @description The unit's programs there, sorted. */
+            programs: string[];
+            /** @description The user it runs as there. */
+            run_as?: string | null;
         };
         /** @description One service unit across the caller's hosts. */
         UnitView: {
@@ -5114,6 +5212,70 @@ export interface operations {
             };
         };
     };
+    get_port: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `tcp` or `udp` */
+                protocol: string;
+                port: number;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's hosts listening on the port */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortDetail"];
+                };
+            };
+            /** @description Invalid protocol, port, query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No visible host listens on it */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     preview_authenticated_rule_bundle: {
         parameters: {
             query?: never;
@@ -5467,6 +5629,68 @@ export interface operations {
             };
             /** @description Permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_unit: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                unit: string;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A page of the caller's hosts running the unit */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnitDetail"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No visible host runs it */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -167,6 +167,18 @@ hosts out.
   `exposed_hosts` and up to 8 owning services; `exposed=true` keeps ports
   exposed on at least one host.
 - `GET /api/v1/services`: one row per unit with `hosts`.
+- `GET /api/v1/ports/{protocol}/{port}` and `GET /api/v1/services/{unit}`:
+  the visible, non-revoked hosts that listen on the port (once per bound
+  address: `address`, `exposed`, `service`/`program`) or run the unit
+  (`programs`, `processes`, `run_as`), with `hostname` and
+  `last_seen_at`. They are keyset-paged by hostname like a package's
+  hosts (`limit` 1–100, default 50; opaque `cursor`). An unknown
+  protocol, a port outside 1–65535 or a bad cursor is 400; 404 when no
+  visible host has it. The fleet Ports and Services rows open these as
+  panels, each host linking to its Host page.
+- The host view also carries `truncated`: the agent cut a list to the
+  protocol limits. The Ports and Services tabs then say "some ports (or
+  services) not listed" in their "As of" line.
 
 The fleet lists are not paged: distinct ports and units across a fleet
 stay in the low thousands.
@@ -178,6 +190,15 @@ stay in the low thousands.
   `state`, `suppressed` (closed-by-suppression alarms are hidden unless
   true); keyset cursor on `(last_seen, id)`, `limit` 1–100. A resend moves
   `last_seen`, so the list is a live view.
+- **Live in the web app** (`web/src/app/liveAlarms.ts`): while the tab is
+  visible and the user has `alarms.read`, the app asks for the newest
+  active alarm (`limit=1`) every 5 s. A change refreshes alarm views; an
+  alarm whose `first_seen` is newer than any seen so far shows a toast and
+  marks Alarms in the rail until it is opened (an older alarm repeating
+  only refreshes). No websocket; one small request per poll, paused while
+  the tab is hidden. The poll sends `X-OpenVIBES-Background: 1`, and such
+  requests are checked as usual but never extend the session's 30-minute
+  idle expiry, so an unattended console still signs out.
 - `GET /api/v1/alarms/{id}` (`alarms.read`): the alarm with its process and
   ancestors (masked args, as the agent sent them) and triage; ETag is the
   triage version. `{id}` is the platform's id, never the agent's

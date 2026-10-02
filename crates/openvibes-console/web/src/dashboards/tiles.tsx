@@ -1,16 +1,17 @@
 import { useResource } from "../api/client";
-import type { AgentSummary, FindingSummary, VulnerabilitySummary } from "../api/types";
+import type { AgentSummary, AlarmPage, FindingSummary, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { useListRows } from "../views/rows";
-import { useAttention } from "./attention";
+import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import type { WidgetProps } from "./widgets";
 
 export const METRICS = {
+  "alarms.active": { label: "Active alarms", permission: "alarms.read", view: ["/alarms", {}] },
   "agents.active": { label: "Hosts online", permission: "agents.read", view: ["/agents", { status: "active" }] },
   "agents.stale": { label: "Stale hosts", permission: "agents.read", view: ["/agents", { status: "stale" }] },
   "agents.revoked": { label: "Revoked hosts", permission: "agents.read", view: ["/agents", { status: "revoked" }] },
@@ -37,7 +38,18 @@ export function NumberTile({ widget }: WidgetProps) {
   const agents = useResource<AgentSummary>(allowed && metric.startsWith("agents.") ? "/api/v1/agents/summary" : null);
   const findings = useResource<FindingSummary>(allowed && metric.startsWith("findings.") ? "/api/v1/findings/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
+  // Active alarms: one page of at most 100 (shown as "100+" beyond). Alarms
+  // closed by a suppression are hidden unless suppressed=true.
+  const alarms = useResource<AlarmPage>(allowed && metric === "alarms.active" ? "/api/v1/alarms?state=active&limit=100" : null);
   if (!allowed) return <Unavailable />;
+  if (metric === "alarms.active") {
+    const n = alarms.data?.items.length;
+    return (
+      <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
+        <span className={`stat__value num${n ? " stat__value--crit" : ""}`}>{n === undefined ? "…" : alarms.data?.next_cursor ? "100+" : count(n)}</span>
+      </button>
+    );
+  }
   const value = metric === "agents.active" ? agents.data?.active : metric === "agents.stale" ? agents.data?.stale : metric === "agents.revoked" ? agents.data?.revoked
     : metric.startsWith("findings.open.") ? findings.data?.[metric.slice(14) as "critical" | "high" | "medium" | "low"]
       : metric === "vulns.exploited" ? vulns.data?.exploited : metric === "vulns.reboot_hosts" ? vulns.data?.reboot_hosts : vulns.data?.no_fix;
@@ -79,8 +91,8 @@ export function BreakdownTile({ widget }: WidgetProps) {
 }
 
 export function AttentionTile({ widget }: WidgetProps) {
-  const include = list(widget.config, "include", ["exploited", "findings", "stale"] as const);
-  const { items, loading } = useAttention(include.length ? include : ["exploited", "findings", "stale"], int(widget.config, "limit", 8, 1, 20));
+  const include = list(widget.config, "include", ATTENTION_KINDS);
+  const { items, loading } = useAttention(include.length ? include : ATTENTION_KINDS, int(widget.config, "limit", 8, 1, 20));
   if (loading && items.length === 0) return <div className="skeleton" />;
   if (items.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> All clear</div>;
   return (

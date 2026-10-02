@@ -40,6 +40,8 @@
 .rail__item:hover { background: var(--surface-2); color: var(--text); text-decoration: none; }
 .rail__item[aria-current="page"] { background: var(--accent-soft); color: var(--accent); }
 .rail__item[aria-current="page"]::before { content: ""; position: absolute; left: -10px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--accent); }
+/* A new alarm since Alarms was last open. */
+.rail__dot { position: absolute; left: 24px; top: 7px; width: 8px; height: 8px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--surface); }
 .rail__label { opacity: 0; transition: opacity var(--fast); }
 .rail:hover .rail__label, .rail:has(:focus-visible) .rail__label, .rail--pinned .rail__label { opacity: 1; }
 .rail__tip { display: none; }

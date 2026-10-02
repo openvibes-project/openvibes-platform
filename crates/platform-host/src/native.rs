@@ -310,7 +310,9 @@ impl<R: Runner> Host for Native<R> {
             })
             .collect();
         packages.sort_by(|a, b| a.name.cmp(&b.name));
-        // ponytail: dnf as the user reads its own metadata cache; offline or
+        // ponytail: dnf as the user reads the system's metadata cache, which
+        // Update (as root) refreshes; refreshing here as the user would need
+        // the repository key in the user's own cache (a prompt). Offline or
         // failing, the list simply shows no newer versions.
         let upgrades = self.run(Dnf, &["-q", "list", "--upgrades", "openvibes-*"])?;
         if upgrades.status == 0 {

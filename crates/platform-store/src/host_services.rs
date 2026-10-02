@@ -46,6 +46,8 @@ pub struct Report {
     pub sha256: String,
     /// `complete` or `partial` (are owners named wherever they exist?).
     pub owners: String,
+    /// The agent cut a list to the protocol limits.
+    pub truncated: bool,
     /// Listening sockets.
     pub listeners: Vec<Listener>,
     /// Running services.
@@ -101,9 +103,15 @@ pub async fn replace(
     // A good report clears the last refusal.
     tx.execute(
         "UPDATE agents SET services_sha256 = $2, services_at = $3, services_owners = $4,
-             services_refused_at = NULL, services_refused = NULL
+             services_truncated = $5, services_refused_at = NULL, services_refused = NULL
          WHERE agent_id = $1",
-        &[&agent_id, &report.sha256, &now, &report.owners],
+        &[
+            &agent_id,
+            &report.sha256,
+            &now,
+            &report.owners,
+            &report.truncated,
+        ],
     )
     .await?;
     tx.commit().await?;
@@ -163,6 +171,8 @@ pub struct HostServices {
     pub reported_at: Option<DateTime<Utc>>,
     /// `complete` or `partial`.
     pub owners: Option<String>,
+    /// The agent cut a list to the protocol limits.
+    pub truncated: bool,
     /// The last refused report since the last good one: when, and the
     /// code (`too_large`, `invalid`, `wrong_agent`).
     pub refused: Option<(DateTime<Utc>, String)>,
@@ -184,7 +194,8 @@ pub async fn for_host(
     let Some(agent) = client
         .query_opt(
             &format!(
-                "SELECT a.services_at, a.services_owners, a.services_refused_at, a.services_refused
+                "SELECT a.services_at, a.services_owners, a.services_refused_at, a.services_refused,
+                    a.services_truncated
                  FROM agents a
                  WHERE a.agent_id = $3 AND {visible}"
             ),
@@ -232,6 +243,7 @@ pub async fn for_host(
         refused: agent
             .get::<_, Option<DateTime<Utc>>>(2)
             .zip(agent.get::<_, Option<String>>(3)),
+        truncated: agent.get(4),
         listeners,
         services,
     }))
@@ -322,6 +334,132 @@ pub async fn fleet_services(
         .map(|r| UnitRow {
             unit: r.get(0),
             hosts: r.get(1),
+        })
+        .collect())
+}
+
+/// One visible host listening on a port, once per bound address.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PortHost {
+    /// Agent id.
+    pub agent_id: String,
+    /// Hostname, when known.
+    pub hostname: Option<String>,
+    /// The bound address.
+    pub address: std::net::IpAddr,
+    /// Bound to a non-loopback address.
+    pub exposed: bool,
+    /// The owning unit, when the agent saw it.
+    pub service: Option<String>,
+    /// The owning program, when the agent saw it.
+    pub program: Option<String>,
+    /// Last contact.
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// Visible, non-revoked hosts listening on `protocol`/`port`, by hostname,
+/// agent id and address, after that key (hostless agents sort as "").
+pub async fn port_hosts(
+    client: &Client,
+    scope: &AgentScope,
+    protocol: &str,
+    port: i32,
+    after: Option<(&str, &str, &str)>,
+    limit: i64,
+) -> Result<Vec<PortHost>, StoreError> {
+    let (global, groups) = scope_params(scope);
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let (after_host, after_agent, after_address) = after
+        .map_or((None, "", ""), |(host, agent, address)| {
+            (Some(host), agent, address)
+        });
+    let rows = client
+        .query(
+            &format!(
+                "SELECT a.agent_id, a.hostname, l.address, l.exposed, l.service, l.program,
+                    a.last_seen_at
+                 FROM host_listeners l JOIN agents a ON a.agent_id = l.agent_id
+                 WHERE l.protocol = $3 AND l.port = $4 AND a.status <> 'revoked' AND {visible}
+                   AND ($5::text IS NULL
+                        OR (coalesce(a.hostname, ''), a.agent_id, host(l.address)) > ($5, $6, $7))
+                 ORDER BY coalesce(a.hostname, ''), a.agent_id, host(l.address) LIMIT $8"
+            ),
+            &[
+                &global,
+                &groups,
+                &protocol,
+                &port,
+                &after_host,
+                &after_agent,
+                &after_address,
+                &limit,
+            ],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| PortHost {
+            agent_id: r.get(0),
+            hostname: r.get(1),
+            address: r.get(2),
+            exposed: r.get(3),
+            service: r.get(4),
+            program: r.get(5),
+            last_seen_at: r.get(6),
+        })
+        .collect())
+}
+
+/// One visible host running a unit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct UnitHost {
+    /// Agent id.
+    pub agent_id: String,
+    /// Hostname, when known.
+    pub hostname: Option<String>,
+    /// The unit's programs there, sorted.
+    pub programs: Vec<String>,
+    /// How many processes it runs there.
+    pub processes: i32,
+    /// The user it runs as there.
+    pub run_as: Option<String>,
+    /// Last contact.
+    pub last_seen_at: Option<DateTime<Utc>>,
+}
+
+/// Visible, non-revoked hosts running `unit`, by hostname and agent id,
+/// after that key.
+pub async fn unit_hosts(
+    client: &Client,
+    scope: &AgentScope,
+    unit: &str,
+    after: Option<(&str, &str)>,
+    limit: i64,
+) -> Result<Vec<UnitHost>, StoreError> {
+    let (global, groups) = scope_params(scope);
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let (after_host, after_agent) = after.map_or((None, ""), |(host, agent)| (Some(host), agent));
+    let rows = client
+        .query(
+            &format!(
+                "SELECT a.agent_id, a.hostname, s.programs, s.processes, s.run_as, a.last_seen_at
+                 FROM host_services s JOIN agents a ON a.agent_id = s.agent_id
+                 WHERE s.unit = $3 AND a.status <> 'revoked' AND {visible}
+                   AND ($4::text IS NULL OR (coalesce(a.hostname, ''), a.agent_id) > ($4, $5))
+                 ORDER BY coalesce(a.hostname, ''), a.agent_id LIMIT $6"
+            ),
+            &[&global, &groups, &unit, &after_host, &after_agent, &limit],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| UnitHost {
+            agent_id: r.get(0),
+            hostname: r.get(1),
+            programs: r.get(2),
+            processes: r.get(3),
+            run_as: r.get(4),
+            last_seen_at: r.get(5),
         })
         .collect())
 }

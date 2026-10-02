@@ -355,10 +355,6 @@ pub(crate) async fn services(
             return Err(error);
         }
     };
-    if report.truncated {
-        // ponytail: not stored yet; the console cannot say "incomplete".
-        tracing::debug!("services report cut to the protocol limits (truncated)");
-    }
     let stored = host_services::Report {
         sha256: report.sha256,
         owners: match report.owners {
@@ -366,6 +362,7 @@ pub(crate) async fn services(
             Owners::Partial => "partial",
         }
         .into(),
+        truncated: report.truncated,
         listeners: report
             .listeners
             .into_iter()

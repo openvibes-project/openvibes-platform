@@ -58,6 +58,9 @@ pub struct HostServicesView {
     /// `complete` (every owner is named) or `partial` (some owners are
     /// not visible to the agent).
     pub owners: Option<String>,
+    /// The agent cut a list to the protocol limits: the lists are
+    /// incomplete.
+    pub truncated: bool,
     /// RFC 3339 time ingest refused the host's last report, if it did since
     /// the last good one; the lists are then from that older report.
     pub refused_at: Option<String>,
@@ -146,6 +149,7 @@ pub(crate) async fn get_host_services(
                 .reported_at
                 .map(|at| at.to_rfc3339_opts(SecondsFormat::Millis, true)),
             owners: host.owners,
+            truncated: host.truncated,
             refused_at: host
                 .refused
                 .as_ref()
@@ -231,6 +235,244 @@ pub(crate) async fn list_services(
                 .collect::<Vec<_>>(),
         )
         .into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
+/// One host listening on a port (once per bound address).
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct PortHostView {
+    /// Agent id.
+    pub agent_id: String,
+    /// Hostname, when known.
+    pub hostname: Option<String>,
+    /// The bound address.
+    pub address: String,
+    /// Bound to a non-loopback address.
+    pub exposed: bool,
+    /// The owning unit, when the agent saw it.
+    pub service: Option<String>,
+    /// The owning program, when the agent saw it.
+    pub program: Option<String>,
+    /// Last contact (RFC 3339).
+    pub last_seen_at: Option<String>,
+}
+
+/// One port across the caller's hosts: a page of the hosts listening on it.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct PortDetail {
+    /// `tcp` or `udp`.
+    pub protocol: String,
+    /// The port.
+    pub port: i32,
+    /// Hosts on this page, by hostname.
+    pub hosts: Vec<PortHostView>,
+    /// Opaque cursor for the next page of hosts.
+    pub next_cursor: Option<String>,
+}
+
+/// One host running a unit.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct UnitHostView {
+    /// Agent id.
+    pub agent_id: String,
+    /// Hostname, when known.
+    pub hostname: Option<String>,
+    /// The unit's programs there, sorted.
+    pub programs: Vec<String>,
+    /// How many processes it runs there.
+    pub processes: i32,
+    /// The user it runs as there.
+    pub run_as: Option<String>,
+    /// Last contact (RFC 3339).
+    pub last_seen_at: Option<String>,
+}
+
+/// One service unit across the caller's hosts: a page of the hosts
+/// running it.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct UnitDetail {
+    /// The systemd unit.
+    pub unit: String,
+    /// Hosts on this page, by hostname.
+    pub hosts: Vec<UnitHostView>,
+    /// Opaque cursor for the next page of hosts.
+    pub next_cursor: Option<String>,
+}
+
+/// Paging for the hosts of one port or unit.
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct HostsParams {
+    /// Opaque continuation cursor.
+    cursor: Option<String>,
+    /// Page size from 1 to 100 (default 50).
+    limit: Option<u16>,
+}
+
+fn invalid((code, title): crate::software::Invalid) -> Response {
+    problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
+}
+
+fn rfc3339(at: Option<chrono::DateTime<chrono::Utc>>) -> Option<String> {
+    at.map(|at| at.to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
+/// The page size and the decoded cursor, or why the query is refused.
+fn paging<T: for<'de> Deserialize<'de>>(
+    params: Result<Query<HostsParams>, QueryRejection>,
+) -> Result<(i64, Option<T>), crate::software::Invalid> {
+    let Ok(Query(params)) = params else {
+        return Err(("invalid_query", "Query is invalid"));
+    };
+    let limit = crate::software::limit(params.limit)?;
+    let after = crate::software::decode::<T>(params.cursor.as_deref())?;
+    Ok((limit, after))
+}
+
+/// The page, cut to `limit`, and whether more follow.
+fn page<T>(mut rows: Vec<T>, limit: i64) -> (Vec<T>, bool) {
+    let limit = usize::try_from(limit).unwrap_or(usize::MAX);
+    let more = rows.len() > limit;
+    rows.truncate(limit);
+    (rows, more)
+}
+
+#[utoipa::path(get, path = "/api/v1/ports/{protocol}/{port}", tag = "assets",
+    params(("protocol" = String, Path, description = "`tcp` or `udp`"), ("port" = u16, Path), HostsParams),
+    responses((status = 200, description = "A page of the caller's hosts listening on the port", body = crate::ports::PortDetail),
+        (status = 400, description = "Invalid protocol, port, query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "No visible host listens on it", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn get_port(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path((protocol, port)): Path<(String, String)>,
+    params: Result<Query<HostsParams>, QueryRejection>,
+) -> Response {
+    let (scope, _) =
+        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+            Ok(context) => context,
+            Err(response) => return response,
+        };
+    let port = match port.parse::<u16>() {
+        Ok(port) if port > 0 && (protocol == "tcp" || protocol == "udp") => i32::from(port),
+        _ => {
+            return invalid((
+                "invalid_port",
+                "protocol must be tcp or udp, port 1 to 65535",
+            ));
+        }
+    };
+    let (limit, after) = match paging::<(String, String, String)>(params) {
+        Ok(paging) => paging,
+        Err(refused) => return invalid(refused),
+    };
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    let after = after
+        .as_ref()
+        .map(|(host, agent, address)| (host.as_str(), agent.as_str(), address.as_str()));
+    match store::port_hosts(&client, &scope, &protocol, port, after, limit + 1).await {
+        Ok(rows) if rows.is_empty() && after.is_none() => problem_response(
+            ProblemDetails::not_found("port_not_found", "No host listens on this port"),
+        ),
+        Ok(rows) => {
+            let (rows, more) = page(rows, limit);
+            let next_cursor = more
+                .then(|| {
+                    rows.last().map(|h| {
+                        crate::software::encode(&(
+                            h.hostname.as_deref().unwrap_or(""),
+                            &h.agent_id,
+                            h.address.to_string(),
+                        ))
+                    })
+                })
+                .flatten();
+            Json(PortDetail {
+                protocol,
+                port,
+                hosts: rows
+                    .into_iter()
+                    .map(|h| PortHostView {
+                        agent_id: h.agent_id,
+                        hostname: h.hostname,
+                        address: h.address.to_string(),
+                        exposed: h.exposed,
+                        service: h.service,
+                        program: h.program,
+                        last_seen_at: rfc3339(h.last_seen_at),
+                    })
+                    .collect(),
+                next_cursor,
+            })
+            .into_response()
+        }
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(get, path = "/api/v1/services/{unit}", tag = "assets",
+    params(("unit" = String, Path), HostsParams),
+    responses((status = 200, description = "A page of the caller's hosts running the unit", body = crate::ports::UnitDetail),
+        (status = 400, description = "Invalid query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "No visible host runs it", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn get_unit(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Path(unit): Path<String>,
+    params: Result<Query<HostsParams>, QueryRejection>,
+) -> Response {
+    let (scope, _) =
+        match authenticated_permission(&state, &headers, Permission::AgentsRead, false).await {
+            Ok(context) => context,
+            Err(response) => return response,
+        };
+    let (limit, after) = match paging::<(String, String)>(params) {
+        Ok(paging) => paging,
+        Err(refused) => return invalid(refused),
+    };
+    let Ok(client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    let after = after
+        .as_ref()
+        .map(|(host, agent)| (host.as_str(), agent.as_str()));
+    match store::unit_hosts(&client, &scope, &unit, after, limit + 1).await {
+        Ok(rows) if rows.is_empty() && after.is_none() => problem_response(
+            ProblemDetails::not_found("service_not_found", "No host runs this service"),
+        ),
+        Ok(rows) => {
+            let (rows, more) = page(rows, limit);
+            let next_cursor = more
+                .then(|| {
+                    rows.last().map(|h| {
+                        crate::software::encode(&(h.hostname.as_deref().unwrap_or(""), &h.agent_id))
+                    })
+                })
+                .flatten();
+            Json(UnitDetail {
+                unit,
+                hosts: rows
+                    .into_iter()
+                    .map(|h| UnitHostView {
+                        agent_id: h.agent_id,
+                        hostname: h.hostname,
+                        programs: h.programs,
+                        processes: h.processes,
+                        run_as: h.run_as,
+                        last_seen_at: rfc3339(h.last_seen_at),
+                    })
+                    .collect(),
+                next_cursor,
+            })
+            .into_response()
+        }
         Err(_) => unavailable_auth(),
     }
 }

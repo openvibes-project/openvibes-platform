@@ -459,3 +459,128 @@ async fn a_refused_services_report_shows_on_the_host_until_a_good_one() {
     assert!(host["reported_at"].is_string());
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_hosts_of_a_port_or_service_are_paged_and_scoped() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let other = "agent.00000000-0000-4000-8000-000000000402";
+    let revoked = "agent.00000000-0000-4000-8000-000000000403";
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
+                ('{other}', 'active', now(), 'web-02', now()),
+                ('{revoked}', 'revoked', now(), 'old-01', now());
+             UPDATE agents SET services_at = now(), services_owners = 'partial',
+                 services_truncated = true WHERE agent_id = '{AGENT}';
+             INSERT INTO host_listeners VALUES
+                ('{AGENT}', 'tcp', '0.0.0.0', 443, true, 'nginx.service', 'nginx'),
+                ('{other}', 'tcp', '::', 443, true, NULL, NULL),
+                ('{revoked}', 'tcp', '0.0.0.0', 443, true, NULL, NULL);
+             INSERT INTO host_services VALUES
+                ('{AGENT}', 'nginx.service', '{{nginx}}', 3, 'root'),
+                ('{revoked}', 'nginx.service', '{{nginx}}', 1, 'root');"
+        ))
+        .await
+        .unwrap();
+    let (cookie, _) = login(&router, "vera").await;
+    let (status, first) = get(&router, &cookie, "/api/v1/ports/tcp/443?limit=1").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["hosts"][0]["hostname"], "web-01");
+    assert_eq!(first["hosts"][0]["program"], "nginx");
+    let cursor = first["next_cursor"].as_str().unwrap();
+    let (_, second) = get(
+        &router,
+        &cookie,
+        &format!("/api/v1/ports/tcp/443?limit=1&cursor={cursor}"),
+    )
+    .await;
+    assert_eq!(second["hosts"][0]["hostname"], "web-02");
+    assert_eq!(second["hosts"][0]["address"], "::");
+    assert!(
+        second["next_cursor"].is_null(),
+        "the revoked host is left out"
+    );
+    let (_, unit) = get(&router, &cookie, "/api/v1/services/nginx.service").await;
+    assert_eq!(unit["hosts"].as_array().unwrap().len(), 1);
+    assert_eq!(unit["hosts"][0]["processes"], 3);
+    let (_, host) = get(
+        &router,
+        &cookie,
+        &format!("/api/v1/agents/{AGENT}/services"),
+    )
+    .await;
+    assert_eq!(host["truncated"], true);
+    for (path, want) in [
+        ("/api/v1/ports/tcp/8080", StatusCode::NOT_FOUND),
+        ("/api/v1/services/none.service", StatusCode::NOT_FOUND),
+        ("/api/v1/ports/sctp/443", StatusCode::BAD_REQUEST),
+        ("/api/v1/ports/tcp/0", StatusCode::BAD_REQUEST),
+        ("/api/v1/ports/tcp/65536", StatusCode::BAD_REQUEST),
+        ("/api/v1/ports/tcp/443?cursor=bad", StatusCode::BAD_REQUEST),
+        ("/api/v1/ports/tcp/443?limit=0", StatusCode::BAD_REQUEST),
+    ] {
+        assert_eq!(get(&router, &cookie, path).await.0, want, "{path}");
+    }
+    assert_eq!(
+        get(&router, "", "/api/v1/services/nginx.service").await.0,
+        StatusCode::UNAUTHORIZED
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_background_request_does_not_extend_the_idle_expiry() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let (cookie, _) = login(&router, "vera").await;
+    let admin = db.pool.get().await.unwrap();
+    let idle = || async {
+        admin
+            .query_one(
+                "SELECT extract(epoch FROM idle_expires_at - now())::float8 FROM console_sessions",
+                &[],
+            )
+            .await
+            .unwrap()
+            .get::<_, f64>(0)
+    };
+    admin
+        .execute(
+            "UPDATE console_sessions SET idle_expires_at = now() + interval '5 minutes'",
+            &[],
+        )
+        .await
+        .unwrap();
+    let background = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/software")
+                .header(header::COOKIE, &cookie)
+                .header("x-openvibes-background", "1")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(background.status(), StatusCode::OK);
+    assert!(
+        idle().await < 6.0 * 60.0,
+        "a background poll kept the session alive"
+    );
+    assert_eq!(
+        get(&router, &cookie, "/api/v1/software").await.0,
+        StatusCode::OK
+    );
+    assert!(idle().await > 25.0 * 60.0, "a user request extends it");
+    drop(admin);
+    db.drop().await;
+}
