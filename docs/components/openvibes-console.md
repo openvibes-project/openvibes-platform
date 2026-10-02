@@ -190,6 +190,15 @@ stay in the low thousands.
   `state`, `suppressed` (closed-by-suppression alarms are hidden unless
   true); keyset cursor on `(last_seen, id)`, `limit` 1–100. A resend moves
   `last_seen`, so the list is a live view.
+- **Live in the web app** (`web/src/app/liveAlarms.ts`): while the tab is
+  visible and the user has `alarms.read`, the app asks for the newest
+  active alarm (`limit=1`) every 5 s. A change refreshes alarm views; an
+  alarm whose `first_seen` is newer than any seen so far shows a toast and
+  marks Alarms in the rail until it is opened (an older alarm repeating
+  only refreshes). No websocket; one small request per poll, paused while
+  the tab is hidden. The poll sends `X-OpenVIBES-Background: 1`, and such
+  requests are checked as usual but never extend the session's 30-minute
+  idle expiry, so an unattended console still signs out.
 - `GET /api/v1/alarms/{id}` (`alarms.read`): the alarm with its process and
   ancestors (masked args, as the agent sent them) and triage; ETag is the
   triage version. `{id}` is the platform's id, never the agent's
