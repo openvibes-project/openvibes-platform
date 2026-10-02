@@ -216,3 +216,18 @@ pub fn dummy_password_phc() -> Option<&'static str> {
         })
         .as_deref()
 }
+
+/// A console username as stored (ASCII lowercase), or `None` when it can't
+/// be one: empty, over 64 bytes, or a character outside `[A-Za-z0-9._@+-]`.
+pub fn canonical_username(username: &str) -> Option<String> {
+    if username.is_empty()
+        || username.len() > 64
+        || !username.is_ascii()
+        || !username
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || b"._@+-".contains(&byte))
+    {
+        return None;
+    }
+    Some(username.to_ascii_lowercase())
+}

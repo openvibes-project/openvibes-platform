@@ -1829,6 +1829,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvibes-signer"
+version = "0.2.1"
+dependencies = [
+ "base64 0.23.1",
+ "chrono",
+ "deadpool-postgres",
+ "ed25519-dalek",
+ "openvibes-core",
+ "openvibes-rules",
+ "platform-config",
+ "platform-password",
+ "platform-store",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "tokio",
+ "zeroize",
+]
+
+[[package]]
 name = "openvibes-transport"
 version = "0.2.1"
 source = "git+https://github.com/openvibes-project/openvibes-agent.git?rev=17b6baafd469a513140dc6a89d2930dd84874cb4#17b6baafd469a513140dc6a89d2930dd84874cb4"

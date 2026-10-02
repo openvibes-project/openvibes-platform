@@ -1278,7 +1278,7 @@ pub async fn unlock_local_user(
 }
 
 /// Derives the same account bucket used by local browser login throttling.
-fn account_throttle_bucket(username: &str) -> [u8; 32] {
+pub fn account_throttle_bucket(username: &str) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(b"openvibes-console-login-throttle-v1\0account\0");
     hash.update(username.as_bytes());
@@ -1911,27 +1911,18 @@ pub async fn login_is_throttled(
     Ok(row.get(0))
 }
 
-/// Records one failed login in every supplied bucket. Each bucket carries an
-/// independent limit so source-address protection can be less restrictive
-/// than the per-account limit.
-pub async fn record_login_failure(
-    client: &mut Client,
-    bucket_sha256: &[&[u8]],
+/// Counts one failure in a throttle bucket: `failure_limit` failures within
+/// `window` lock it for `lock_for`. Shared by sign-in and the rule signer.
+pub(crate) async fn count_failure(
+    client: &impl deadpool_postgres::GenericClient,
+    bucket_sha256: &[u8],
     now: DateTime<Utc>,
     window: Duration,
-    failure_limits: &[i32],
+    failure_limit: i32,
     lock_for: Duration,
-    audit: &AuditContext<'_>,
 ) -> Result<(), StoreError> {
-    if bucket_sha256.len() != failure_limits.len() || failure_limits.iter().any(|limit| *limit < 1)
-    {
-        return Err(StoreError::Query);
-    }
-    let tx = client.transaction().await?;
-    let window_cutoff = now - window;
-    let locked_until = now + lock_for;
-    for (bucket, failure_limit) in bucket_sha256.iter().zip(failure_limits) {
-        tx.execute(
+    client
+        .execute(
             "INSERT INTO console_auth_throttle
                 (bucket_sha256, window_started_at, failures, locked_until, updated_at)
              VALUES ($1, $2, 1, CASE WHEN $4 <= 1 THEN $5::timestamptz END, $2)
@@ -1950,9 +1941,37 @@ pub async fn record_login_failure(
                                       $5)
                     ELSE console_auth_throttle.locked_until END,
                 updated_at = $2",
-            &[bucket, &now, &window_cutoff, failure_limit, &locked_until],
+            &[
+                &bucket_sha256,
+                &now,
+                &(now - window),
+                &failure_limit,
+                &(now + lock_for),
+            ],
         )
         .await?;
+    Ok(())
+}
+
+/// Records one failed login in every supplied bucket. Each bucket carries an
+/// independent limit so source-address protection can be less restrictive
+/// than the per-account limit.
+pub async fn record_login_failure(
+    client: &mut Client,
+    bucket_sha256: &[&[u8]],
+    now: DateTime<Utc>,
+    window: Duration,
+    failure_limits: &[i32],
+    lock_for: Duration,
+    audit: &AuditContext<'_>,
+) -> Result<(), StoreError> {
+    if bucket_sha256.len() != failure_limits.len() || failure_limits.iter().any(|limit| *limit < 1)
+    {
+        return Err(StoreError::Query);
+    }
+    let tx = client.transaction().await?;
+    for (bucket, failure_limit) in bucket_sha256.iter().zip(failure_limits) {
+        count_failure(&tx, bucket, now, window, *failure_limit, lock_for).await?;
     }
     append_auth_event(
         &tx,

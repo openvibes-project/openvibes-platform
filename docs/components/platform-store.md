@@ -589,3 +589,15 @@ permission-checked console API, so sharing never exposes data.
   transaction. The row carries the name, never the layout.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
+
+## The rule signer's access (`signer::…`, schema 32, board #107)
+
+Migration 32 creates the `openvibes-signer` role with column grants for a
+password and permission check only (see
+[openvibes-signer.md](openvibes-signer.md)). `signer_user` reads a
+credential (either must-change flag counts), `may_upload_rules` checks
+`rules.upload` through an active global role binding, and
+`record_signer_failure` counts a wrong password in the account's sign-in
+bucket without an audit row. Sign-in and the signer share
+`console_auth::count_failure` and `account_throttle_bucket`, so a wrong
+password counts the same in both.

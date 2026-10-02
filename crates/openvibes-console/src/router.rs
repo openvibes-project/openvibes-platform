@@ -6161,18 +6161,7 @@ async fn logout(State(state): State<AuthHttpState>, request: axum::extract::Requ
     response
 }
 
-fn canonical_username(username: &str) -> Option<String> {
-    if username.is_empty()
-        || username.len() > 64
-        || !username.is_ascii()
-        || !username
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || b"._@+-".contains(&byte))
-    {
-        return None;
-    }
-    Some(username.to_ascii_lowercase())
-}
+use platform_password::canonical_username;
 
 /// Failed password checks per account (sign-in and set-password together)
 /// before the account is locked for the window.

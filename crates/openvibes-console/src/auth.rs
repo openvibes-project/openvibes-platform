@@ -77,7 +77,6 @@ impl SessionLifetime {
     }
 }
 
-
 /// Credentials presented by one request, selected before authentication.
 #[derive(Debug)]
 pub enum PresentedCredentials {
@@ -211,8 +210,6 @@ fn valid_session_token(value: &str) -> bool {
         bytes.len() == SESSION_SECRET_BYTES && URL_SAFE_NO_PAD.encode(bytes) == value
     })
 }
-
-
 
 /// Newly generated opaque session secret and its database-safe SHA-256 digest.
 ///
