@@ -115,7 +115,7 @@ A console rule set still needs a signature that agents trust. Options:
       `mask_args` it uses for alarms, before that set's rules see them,
       while the official baseline sets see the full form;
     - **refuses an alarm rule without a `programs` prefilter**, or with
-      more than 8 names, or an empty name, or a set naming more than 64
+      more than 8 names, or an empty name, or a set naming more than 32
       distinct programs.
       This is enforced in the agent's loader, because a stolen key never
       goes through the console. The console refuses the same at save.
@@ -144,8 +144,8 @@ A console rule set still needs a signature that agents trust. Options:
       rule whose expression is `true` raises an alarm for every start of
       the programs it names. Each alarm carries exe, cwd, uid, the
       ancestors' exes and cwds, and the masked arguments. With the caps
-      above, that is every exec of up to 64 named programs, not every exec
-      on the host. Honestly, 64 common names (`sh`, `bash`, `python3`,
+      above, that is every exec of up to 32 named programs, not every exec
+      on the host. Honestly, 32 common names (`sh`, `bash`, `python3`,
       `curl` and so on) still cover a large share of a host's execs. The
       caps narrow the reach. The per-event CPU budget and the agent's
       collapse of repeats and 1,000-alarm queue bound the volume. The
@@ -200,7 +200,7 @@ read):
 
 B keeps working (export plus the existing upload). A is what makes
 "write a rule in the console" true. Its worst case is stated above:
-- an alarm logger for at most 64 named programs, which can still be a
+- an alarm logger for at most 32 named programs, which can still be a
   large share of execs;
 - a slow one-bit channel without argv secrets;
 - CPU bounded by the aggregate budget.
@@ -300,7 +300,7 @@ offline-signed from day one.
      rules, counted in health when it cuts;
    - `restricted` per rule set, **absent = restricted** except
      `baseline-alarms`: masked command lines, a required `programs`
-     prefilter (at most 8 per rule, 64 distinct per set, no empty name),
+     prefilter (at most 8 per rule, 32 distinct per set, no empty name),
      refused in the
      loader; tests for absent, `true`, `false` and the exemption;
    - **Gate:** an `alarms-cost` run with a restricted set at its limits
