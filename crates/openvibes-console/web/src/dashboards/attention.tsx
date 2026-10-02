@@ -27,7 +27,12 @@ export function useAttention(include: readonly string[], limit: number): { items
   const groups = useAllPages<FindingGroup>(want("findings") && can("findings.read") ? "/api/v1/findings/groups" : null);
   const exploited = useResource<VulnerabilityPage>(want("exploited") && can("vulnerabilities.read") ? "/api/v1/vulnerabilities?exploited=true" : null);
   const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
-  const alarms = useResource<AlarmPage>(want("alarms") && can("alarms.read") ? "/api/v1/alarms?state=active&limit=20" : null);
+  // Newest first by last_seen: repeating medium alarms could push an older
+  // critical one off one page, so critical ones are fetched on their own.
+  // (Alarms closed by a suppression are hidden unless suppressed=true.)
+  const alarmsOn = want("alarms") && can("alarms.read");
+  const alarms = useResource<AlarmPage>(alarmsOn ? "/api/v1/alarms?state=active&limit=20" : null);
+  const critical = useResource<AlarmPage>(alarmsOn ? "/api/v1/alarms?state=active&severity=critical&limit=20" : null);
 
   const items = useMemo(() => {
     const items: AttentionItem[] = [];
@@ -39,7 +44,10 @@ export function useAttention(include: readonly string[], limit: number): { items
     }
     // An active critical alarm is an incident: above everything else.
     const alarmRank: Record<string, number> = { critical: -1, high: 0.5, medium: 2.5 };
-    for (const alarm of alarms.data?.items ?? []) {
+    const seen = new Set<string>();
+    for (const alarm of [...(critical.data?.items ?? []), ...(alarms.data?.items ?? [])]) {
+      if (seen.has(alarm.id)) continue;
+      seen.add(alarm.id);
       const rank = alarmRank[alarm.severity];
       if (rank === undefined) continue;
       const program = alarm.exe.split("/").pop() ?? alarm.exe;
@@ -57,6 +65,6 @@ export function useAttention(include: readonly string[], limit: number): { items
       items.push({ key: `g${agent.id}`, icon: "agents", to: { kind: "agent", id: agent.id }, severity: "stale", title: agent.hostname ?? agent.id, meta: "Stopped reporting", rank: 2 });
     }
     return items.sort((a, b) => a.rank - b.rank);
-  }, [alarms.data, exploited.data, groups.data, stale.data]);
-  return { items: items.slice(0, limit), loading: groups.loading || exploited.loading || stale.loading || alarms.loading };
+  }, [alarms.data, critical.data, exploited.data, groups.data, stale.data]);
+  return { items: items.slice(0, limit), loading: groups.loading || exploited.loading || stale.loading || alarms.loading || critical.loading };
 }

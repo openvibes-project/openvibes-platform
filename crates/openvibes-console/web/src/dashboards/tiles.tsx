@@ -38,7 +38,8 @@ export function NumberTile({ widget }: WidgetProps) {
   const agents = useResource<AgentSummary>(allowed && metric.startsWith("agents.") ? "/api/v1/agents/summary" : null);
   const findings = useResource<FindingSummary>(allowed && metric.startsWith("findings.") ? "/api/v1/findings/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
-  // Active alarms: one page of at most 100 (shown as "100+" beyond).
+  // Active alarms: one page of at most 100 (shown as "100+" beyond). Alarms
+  // closed by a suppression are hidden unless suppressed=true.
   const alarms = useResource<AlarmPage>(allowed && metric === "alarms.active" ? "/api/v1/alarms?state=active&limit=100" : null);
   if (!allowed) return <Unavailable />;
   if (metric === "alarms.active") {
