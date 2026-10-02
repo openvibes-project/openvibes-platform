@@ -27,7 +27,7 @@ export function PackagePanel({ id }: { id: string }) {
   return (
     <>
       <PanelHeader icon="package" kind={`Software · ${manager}`} title={<span className="mono">{name}</span>}
-        badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} versions</span></>} />
+        badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} {data.versions.length === 1 ? "version" : "versions"}</span></>} />
       <div className="panel-body stack">
         <Section title="Versions in use">
           <ul className="list list--plain">
@@ -46,10 +46,11 @@ export function PackagePanel({ id }: { id: string }) {
               {data.hosts.map((host) => (
                 <li key={`${host.agent_id}.${host.version}.${host.arch}`}>
                   <ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
-                    <span className="grow truncate">{host.hostname ?? host.agent_id}</span>
-                    <span className="mono subtle nowrap">{host.version}</span>
+                    <span className="cell-two grow">
+                      <span>{host.hostname ?? host.agent_id}</span>
+                      <span className="subtle"><span className="mono">{host.version}</span> · <Ago value={host.last_seen_at} /></span>
+                    </span>
                     {host.fixable_vulnerable && <span className="badge badge--warn badge--plain">fix available</span>}
-                    <span className="subtle nowrap"><Ago value={host.last_seen_at} /></span>
                   </ObjectLink>
                 </li>
               ))}
