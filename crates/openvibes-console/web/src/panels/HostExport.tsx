@@ -21,7 +21,7 @@ const PERMISSION: Partial<Record<Section, "findings.read" | "alarms.read" | "vul
   findings: "findings.read", alarms: "alarms.read", vulnerabilities: "vulnerabilities.read",
 };
 /** At most this many rows per section: a runaway list never freezes the tab. */
-const CAP = 10_000;
+const CAP = 50_000;
 
 /** Sections cut at CAP in the last export (said in the file and the UI). */
 let cutSections: Section[] = [];
