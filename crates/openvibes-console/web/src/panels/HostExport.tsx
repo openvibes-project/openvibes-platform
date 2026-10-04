@@ -47,7 +47,7 @@ async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> 
   for (const section of sections) {
     if (section === "details") {
       for (const [key, value] of [["host name", agent.hostname], ["agent id", agent.id], ["status", agent.status], ["agent version", agent.scanner_version],
-        ["system", [agent.os_id, agent.os_version].filter(Boolean).join(" ")], ["running kernel", agent.running_kernel], ["enrolled", agent.enrolled_at], ["last contact", agent.last_seen_at]] as const) {
+        ["system", [agent.os_id, agent.os_version].filter(Boolean).join(" ")], ["running kernel", agent.running_kernel], ["enrolled", agent.enrolled_at], ["last saved heartbeat", agent.last_seen_at]] as const) {
         out.push(["details", key, String(value ?? ""), "", "", ""]);
       }
     } else if (section === "findings") {

@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { useAllPages, useResource } from "../api/client";
 import type { Agent, AgentSummary } from "../api/types";
 import { nav, useLocation } from "../app/nav";
-import { Ago, Empty, ErrorBox, Loading, StatusBadge } from "../ui/bits";
+import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
 import { olderThan, selectAgents } from "./rows";
@@ -40,7 +40,7 @@ export function Agents() {
           columns={[
             { key: "host", header: "Host", sort: (a) => a.hostname ?? a.id, render: (a) => <div className="cell-two"><span className="truncate">{a.hostname ?? "—"}</span><span className="mono subtle">{a.id}</span></div> },
             { key: "status", header: "Status", width: "110px", sort: (a) => a.status, render: (a) => <StatusBadge status={a.status} /> },
-            { key: "seen", header: "Last contact", width: "140px", hideBelow: 480, sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} /></span> },
+            { key: "seen", header: "Last saved heartbeat", width: "175px", hideBelow: 480, sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></span> },
             { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => a.scanner_version
               ? platform && olderThan(a.scanner_version, platform)
                 ? <span className="mono warn-text" title={`Older than this platform (${platform})`}>{a.scanner_version}</span>

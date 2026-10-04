@@ -29,8 +29,10 @@ export function TriageBadge({ state }: { state: string }) {
   return <span className={`badge badge--${triageTone[state] ?? "plain"}`}>{triageLabel[state] ?? state}</span>;
 }
 
-export function Ago({ value }: { value: string | number | null | undefined }) {
-  return <time className="nowrap" title={when(value)} dateTime={typeof value === "string" ? value : undefined}>{ago(value)}</time>;
+export const SAVED_HEARTBEAT_HINT = "The agent sends a heartbeat about every minute. The platform saves this time about every five minutes, so an online host can show several minutes ago.";
+
+export function Ago({ value, hint }: { value: string | number | null | undefined; hint?: string }) {
+  return <time className="nowrap" title={hint ? `${when(value)}\n${hint}` : when(value)} dateTime={typeof value === "string" ? value : undefined}>{ago(value)}</time>;
 }
 
 /** A link that opens an object in the inspector (a new stack from lists). */

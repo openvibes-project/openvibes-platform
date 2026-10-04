@@ -92,7 +92,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   and editing is hidden, "Edit" and "Duplicate to edit" included (the
   dashboard menu says "Editing needs a wider screen"). Below 720px the rail is a bottom bar in which every
   destination fits (icons only, each link keeps its name for screen
-  readers); tables wrap long names, and Agents drops Last contact below
+  readers); tables wrap long names, and Agents drops Last saved heartbeat below
   480px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
@@ -132,7 +132,11 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
-  running kernel, "software as of", tags, certificates).
+  running kernel, "software as of", tags, certificates). The list, panel and
+  host export call `last_seen_at` **Last saved heartbeat**. Its hover text
+  explains that agents send one about every minute but ingest persists the
+  timestamp about every five minutes; a connected host can therefore show
+  several minutes ago.
 - **Software** (`/software`, `g w`): packages across the caller's hosts with
   hosts, versions and hosts with a fix available; the name filter and the
   "Fix available" chip go to the API; Load 100 more. A row opens the
@@ -243,4 +247,3 @@ detail, state, severity, extra`. The browser fetches each section through
 the same scoped API as the Host page (at most 50,000 rows per section, above what Compare can handle, so its "use Export" advice holds).
 Cells are quoted, and a leading `= + - @` is prefixed with `'` so a
 spreadsheet never runs it as a formula (`ui/csv.ts`, unit-tested).
-
