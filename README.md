@@ -236,6 +236,8 @@ cargo test --locked --workspace --all-features
   implementation.
 - [`docs/plans/`](docs/plans/): implementation plans with progress.
 - [`docs/sizing.md`](docs/sizing.md): measured and estimated requirements.
+- [`docs/dev-setup.md`](docs/dev-setup.md): run the console interface locally
+  with live reload.
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md): how
   changes are made, including by AI coding agents.
 
