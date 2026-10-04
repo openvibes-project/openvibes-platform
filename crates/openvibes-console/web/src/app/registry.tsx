@@ -12,6 +12,7 @@ import { ComparePanel } from "../panels/ComparePanel";
 import { AssetGroupPanel, NewUser, PublishBundle, RetentionPanel } from "../panels/AdminPanels";
 import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AlarmPanel } from "../panels/AlarmPanel";
+import { CasePanel, NewCasePanel } from "../panels/CasePanel";
 import { AgentPanel } from "../panels/AgentPanel";
 import { PackagePanel, splitPackageId } from "../panels/PackagePanel";
 import { PortPanel, UnitPanel, splitPortId } from "../panels/PortPanel";
@@ -78,6 +79,7 @@ export function objectTitle(ref: { kind: string; id: string }): string {
 export const panels: Readonly<Record<string, PanelDef>> = {
   agent: { label: "Host", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
+  case: { label: "Case", icon: "cases", title: (id) => id === "new" ? "New case" : "Case", render: (id) => id === "new" ? <NewCasePanel /> : <CasePanel id={id} /> },
   finding: { label: "Finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },

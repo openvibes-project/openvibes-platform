@@ -183,3 +183,16 @@ export function caseErrorText(error: unknown): string {
 
 /** True when a refusal means the data on screen is out of date. */
 export const isStale = (error: unknown) => error instanceof ApiError && (error.status === 412 || error.status === 404 || error.code === "items_unresolved" || error.code === "evidence_present");
+
+/** A local date as `YYYY-MM-DD`, the value of a date input. */
+export function localDay(value: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`;
+}
+
+/** The status badge's text and tone: a closed case also says how it ended. */
+export function statusBadge(status: string, resolution: string | null | undefined): { label: string; tone: string } {
+  if (status !== "closed") return { label: statusLabel[status] ?? status, tone: statusTone[status] ?? "plain" };
+  const tone = resolution === "mitigated" ? "ok" : resolution === "accepted_risk" ? "info" : "plain";
+  return { label: resolution ? `Closed · ${(resolutionLabel[resolution] ?? resolution).toLowerCase()}` : "Closed", tone };
+}

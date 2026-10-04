@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../api/client";
 import type { CaseEvent, CaseItem, CaseSummary } from "../api/types";
-import { blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, endingOf, eventText, findingRef, itemPanel, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
+import { statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, endingOf, eventText, findingRef, itemPanel, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
 
 const item = (over: Partial<CaseItem>): CaseItem => ({
   item_id: "i", kind: "alarm", ref: "1", active: true, added_at: "2026-01-01T00:00:00Z", added_by: { user_id: "u", username: "sam", display_name: "Sam" },
@@ -121,5 +121,16 @@ describe("timeline and errors", () => {
       .toBe("The id does not have the shape of this kind of item");
     expect(caseErrorText(new ApiError(409, "case_closed", "The case is closed; reopen it first"))).toBe("The case is closed; reopen it first");
     expect(caseErrorText(new Error("boom"))).toBe("Something went wrong; try again");
+  });
+});
+
+describe("status badge", () => {
+  it("names the way a closed case ended", () => {
+    expect(statusBadge("open", null)).toEqual({ label: "Open", tone: "bad" });
+    expect(statusBadge("investigating", null)).toEqual({ label: "Investigating", tone: "warn" });
+    expect(statusBadge("closed", "mitigated")).toEqual({ label: "Closed · mitigated", tone: "ok" });
+    expect(statusBadge("closed", "accepted_risk")).toEqual({ label: "Closed · accepted risk", tone: "info" });
+    expect(statusBadge("closed", "false_positive")).toEqual({ label: "Closed · false positive", tone: "plain" });
+    expect(localDay(new Date(2031, 0, 5))).toBe("2031-01-05");
   });
 });
