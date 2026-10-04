@@ -125,6 +125,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
                     | P::AlarmsTriage
                     | P::AlarmsSuppress
                     | P::CasesRead
+                    | P::CasesManage
             )
         }
         BuiltInRole::Operator => matches!(
@@ -155,6 +156,7 @@ fn is_agent_bound(permission: Permission) -> bool {
             | Permission::AlarmsTriage
             | Permission::AlarmsSuppress
             | Permission::CasesRead
+            | Permission::CasesManage
     )
 }
 
@@ -183,6 +185,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::AssistantUse,
     Permission::DashboardsShare,
     Permission::CasesRead,
+    Permission::CasesManage,
 ];
 
 #[cfg(test)]

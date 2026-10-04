@@ -127,6 +127,9 @@ pub enum Permission {
     /// Access to the cases view and its details.
     #[serde(rename = "cases.read")]
     CasesRead,
+    /// Create and change cases: items, notes, assignment, closing.
+    #[serde(rename = "cases.manage")]
+    CasesManage,
     /// Change human triage state for alarms.
     #[serde(rename = "alarms.triage")]
     AlarmsTriage,

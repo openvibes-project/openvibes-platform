@@ -7441,6 +7441,7 @@
           "findings.triage",
           "alarms.read",
           "cases.read",
+          "cases.manage",
           "alarms.triage",
           "alarms.suppress",
           "tokens.read",
