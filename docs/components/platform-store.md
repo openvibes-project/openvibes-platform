@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 24; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 33; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -163,7 +163,9 @@ links, never edit or delete versions (a test checks it).
   notification); otherwise it inserts unknown versions, replaces the host's
   links, records OS, running kernel (schema 9) and digest, and sends `NOTIFY inventory_changed` with
   the agent id (delivered at commit) → `Stored`. Several installed versions
-  of one package (kernels) are all kept.
+  of one package (kernels) are all kept. A changed inventory resets
+  `vulnerability_match_version`, leaving it pending until the matcher
+  successfully evaluates it.
 - `apply_changes(&mut client, agent_id, os, running_kernel, added, removed,
   base, expected, now)` (protocol P11) locks the agent row; unless the
   stored digest is `base`, every removed row is linked, every added row is
@@ -245,7 +247,14 @@ Migration 15 lets `agents.status` be `imported` only with an id
 fixed at — kept after fixing; `reboot_needed` since schema 9), and
 `feed_sources` (last check, last change,
 content digest, advisories, last error). Role `openvibes-vulns` writes only
-these and reads `agents`, `package_versions`, `host_packages`.
+these and reads `agents`, `package_versions`, `host_packages`. Schema 33 adds
+`agents.vulnerability_match_version`: zero means the current inventory still
+needs matching; successful host or release matches record the matcher
+version. `hosts_needing_match` finds work after a restart, and the service
+retries pending hosts every minute. This also marks existing inventories for
+one re-match when deploying a new matcher. Host-specific version candidates
+start from that host's materialized inventory rows so the query does not
+expand the whole release catalog before filtering the host.
 
 - `replace_advisories` upserts in bulk and never deletes advisories.
 - `candidates(release, host?)` joins advisories to installed versions of the
@@ -604,3 +613,10 @@ credential (either must-change flag counts), `may_upload_rules` checks
 bucket without an audit row. Sign-in and the signer share
 `console_auth::count_failure` and `account_throttle_bucket`, so a wrong
 password counts the same in both.
+
+## Vulnerability match state (schema 33)
+
+Migration 33 adds a pending-match version to `agents`, indexed for the
+vulnerability service. Inventory changes reset it to zero. The matcher
+records its version only after a successful host or release match; failed
+queries therefore remain eligible for retry after the service restarts.

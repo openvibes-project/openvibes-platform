@@ -78,6 +78,12 @@ pub async fn run(
     };
     let (changed, mut notifications) = mpsc::unbounded_channel();
     let listener = tokio::spawn(listen(config.database_url.clone(), changed));
+    let rematch_retry = tokio::spawn(rematch_pending_loop(
+        pool.clone(),
+        fetcher.clone(),
+        config.arch.clone(),
+        osv_task.as_ref().map(|_| osv_changed.clone()),
+    ));
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(shutdown);
@@ -98,6 +104,7 @@ pub async fn run(
         }
     }
     listener.abort();
+    rematch_retry.abort();
     health_task.abort();
     for task in [nvd_task, osv_task].into_iter().flatten() {
         task.abort();
@@ -344,6 +351,39 @@ async fn rematch(
     match matching::match_host(&mut client, agent, Utc::now()).await {
         Ok(open) => tracing::info!(agent_id = %agent, open, "host re-matched"),
         Err(error) => tracing::warn!(agent_id = %agent, %error, "host re-match failed"),
+    }
+}
+
+/// Reconciles inventories that were never matched or whose re-match failed.
+/// The state is in the database, so a process restart does not lose retries.
+async fn rematch_pending_loop(
+    pool: Pool,
+    fetcher: Fetcher,
+    arch: String,
+    osv_changed: Option<mpsc::UnboundedSender<Release>>,
+) {
+    loop {
+        let pending = match pool.get().await {
+            Ok(client) => vulns::hosts_needing_match(&client, matching::MATCHER_VERSION).await,
+            Err(_) => Err(platform_store::StoreError::Unavailable),
+        };
+        match pending {
+            Ok(hosts) => {
+                let mut processed = 0;
+                for (index, agent) in hosts.iter().enumerate() {
+                    rematch(&pool, &fetcher, &arch, osv_changed.as_ref(), agent).await;
+                    processed += 1;
+                    if index % 25 == 24 {
+                        tokio::task::yield_now().await;
+                    }
+                }
+                if processed > 0 {
+                    tracing::info!(processed, "pending vulnerability re-matches processed");
+                }
+            }
+            Err(error) => tracing::warn!(%error, "cannot load pending vulnerability re-matches"),
+        }
+        tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
 

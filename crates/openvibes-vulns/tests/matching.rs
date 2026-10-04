@@ -649,6 +649,63 @@ async fn euvd_counts_as_exploited_and_cvss_breaks_ties() {
 }
 
 #[tokio::test]
+async fn failed_host_match_stays_pending_until_a_successful_retry() {
+    let (db, mut admin, mut vulns) = setup().await;
+    host(
+        &mut admin,
+        A,
+        "44",
+        &[pkg("bash", 0, "5.2.36", "x86_64")],
+        1,
+    )
+    .await;
+    load(
+        &mut vulns,
+        &[advisory("FEDORA-1", "bash", 0, "5.2.37", "x86_64")],
+        "44",
+    )
+    .await;
+    assert_eq!(
+        vulns::hosts_needing_match(&vulns, matching::MATCHER_VERSION)
+            .await
+            .unwrap(),
+        [A]
+    );
+
+    // A query failure must not record the inventory as evaluated.
+    admin
+        .batch_execute("REVOKE SELECT ON host_packages FROM \"openvibes-vulns\"")
+        .await
+        .unwrap();
+    assert!(
+        matching::match_host(&mut vulns, A, Utc::now())
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        vulns::hosts_needing_match(&vulns, matching::MATCHER_VERSION)
+            .await
+            .unwrap(),
+        [A]
+    );
+
+    admin
+        .batch_execute("GRANT SELECT ON host_packages TO \"openvibes-vulns\"")
+        .await
+        .unwrap();
+    matching::match_host(&mut vulns, A, Utc::now())
+        .await
+        .unwrap();
+    assert!(
+        vulns::hosts_needing_match(&vulns, matching::MATCHER_VERSION)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn a_release_is_matched_in_batches_of_hosts() {
     let (db, mut admin, mut vulns) = setup().await;
     let c = "agent.00000000-0000-4000-8000-00000000000c";
