@@ -271,6 +271,33 @@ mod tests {
     }
 
     #[test]
+    fn only_analysts_and_admins_manage_cases_and_the_permission_follows_the_scope() {
+        let manages = |binding: RoleBinding| {
+            resolve_capabilities(&[binding])
+                .into_iter()
+                .find(|item| item.permission == Permission::CasesManage)
+                .map(|item| item.scope)
+        };
+        for role in [BuiltInRole::Viewer, BuiltInRole::Operator] {
+            assert_eq!(manages(RoleBinding::global(role)), None, "{role:?}");
+        }
+        for role in [BuiltInRole::Analyst, BuiltInRole::Admin] {
+            assert_eq!(
+                manages(RoleBinding::global(role)),
+                Some(PermissionScope::Global),
+                "{role:?}"
+            );
+            assert_eq!(
+                manages(RoleBinding::scoped(role, ["group-a".to_owned()]).unwrap()),
+                Some(PermissionScope::AssetGroups {
+                    asset_group_ids: vec!["group-a".to_owned()]
+                }),
+                "{role:?}: an agent-bound permission, so a scoped binding keeps it"
+            );
+        }
+    }
+
+    #[test]
     fn scoped_binding_rejects_missing_groups() {
         assert_eq!(
             RoleBinding::scoped(BuiltInRole::Analyst, std::iter::empty()),

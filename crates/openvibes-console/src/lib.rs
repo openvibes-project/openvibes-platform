@@ -17,6 +17,7 @@ mod assets;
 mod assistant;
 mod auth;
 mod auth_first;
+mod cases;
 mod config;
 mod dashboards;
 mod error;

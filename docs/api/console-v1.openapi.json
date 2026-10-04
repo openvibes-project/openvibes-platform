@@ -1763,6 +1763,1020 @@
         }
       }
     },
+    "/api/v1/cases": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "list_cases",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "path",
+            "description": "`open`, `investigating`, `closed` or `all`; open and investigating\nwhen absent.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "severity",
+            "in": "path",
+            "description": "Exact severity.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "assignee",
+            "in": "path",
+            "description": "A user id, `me`, or `none` for unassigned.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "q",
+            "in": "path",
+            "description": "Text in the title, or a case number such as `C-104`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "path",
+            "description": "Opaque continuation cursor.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "Page size from 1 to 100 (default 50).",
+            "required": true,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The cases the caller can see, newest change first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CasePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query or cursor",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "create_case",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Opened",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Case version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetailView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "An item does not exist or is outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "An item is already in another open case",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid field",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/assignees": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "list_assignees",
+        "responses": {
+          "200": {
+            "description": "Users a case can be assigned to",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseAssigneesView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/for-item": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "cases_for_item",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "description": "`alarm`, `finding`, `vulnerability`, `host` or `software`.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ref",
+            "in": "path",
+            "description": "The object's id (see `CaseItemView.ref`).",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The visible cases that hold the item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ItemCasesView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid query",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid kind or ref",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "get_case",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The case, its visible items and timeline",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Case version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetailView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "update_case",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Quoted version from ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateCaseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New case version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseDetailView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body or If-Match",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Items still need an outcome, an item is in another open case, or the case is closed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid field",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/items": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "add_item",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CaseItemRef"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Added",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseItemView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The case or the item does not exist or is outside the caller's scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "In another open case, already in this one, or the case is closed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid kind or ref, or the case is full",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/items/{item_id}": {
+      "delete": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "remove_item",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The case or the item is absent or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The case is closed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/items/{item_id}/outcome": {
+      "put": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "set_item_outcome",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "item_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetCaseItemOutcomeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Set or cleared",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseItemView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The case or the item is absent or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The case is closed, or resolved was asked for while the evidence is still there",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid outcome or note, or a kind that takes no outcome",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/cases/{case_id}/notes": {
+      "post": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "add_note",
+        "parameters": [
+          {
+            "name": "case_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddCaseNoteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Added to the timeline",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CaseEventView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid body",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Absent or not visible",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid note, or the timeline is full",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/dashboards": {
       "get": {
         "tags": [
@@ -4880,6 +5894,20 @@
           }
         }
       },
+      "AddCaseNoteRequest": {
+        "type": "object",
+        "description": "A note for the timeline.",
+        "required": [
+          "body"
+        ],
+        "properties": {
+          "body": {
+            "type": "string",
+            "description": "Plain text, 1 to 4000 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "AgentDetail": {
         "allOf": [
           {
@@ -5982,6 +7010,358 @@
           }
         }
       },
+      "CaseAssigneesView": {
+        "type": "object",
+        "description": "Users a case can be assigned to.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseUserView"
+            },
+            "description": "Enabled users who hold `cases.read`."
+          }
+        }
+      },
+      "CaseDetailView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CaseSummaryView",
+            "description": "The list fields."
+          },
+          {
+            "type": "object",
+            "required": [
+              "items",
+              "events"
+            ],
+            "properties": {
+              "events": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CaseEventView"
+                },
+                "description": "The timeline, oldest first, without entries about hidden items."
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/CaseItemView"
+                },
+                "description": "Visible items, oldest first."
+              },
+              "resolution_note": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Why it was closed."
+              }
+            }
+          }
+        ],
+        "description": "A case with the items and timeline the viewer can see."
+      },
+      "CaseEventView": {
+        "type": "object",
+        "description": "One timeline entry.",
+        "required": [
+          "event_id",
+          "at",
+          "kind",
+          "detail"
+        ],
+        "properties": {
+          "actor": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseUserView",
+                "description": "Who; absent for the platform itself."
+              }
+            ]
+          },
+          "at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "body": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The note's text; for `resolved` the resolution note; for\n`item_outcome` the outcome note."
+          },
+          "detail": {
+            "type": "object",
+            "description": "Structured facts: `from`/`to` for `status`, `assigned` (usernames)\nand `severity`; `item_id`, `item_kind`, `item_ref` and\n`item_agent_id` for item entries; `resolution` and `accepted_until`\nfor `resolved`; `reason` for `reopened`."
+          },
+          "event_id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Position on the timeline."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`created`, `note`, `status`, `assigned`, `severity`, `item_added`,\n`item_removed`, `item_outcome`, `resolved` or `reopened`."
+          }
+        }
+      },
+      "CaseItemRef": {
+        "type": "object",
+        "description": "An item to add: what it is and its id.",
+        "required": [
+          "kind",
+          "ref"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`alarm`, `finding`, `vulnerability`, `host` or `software`."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The object's id as the console's panels write it (see\n`CaseItemView.ref`)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CaseItemView": {
+        "type": "object",
+        "description": "One item of a case that the viewer can see.",
+        "required": [
+          "item_id",
+          "kind",
+          "ref",
+          "active",
+          "added_by",
+          "added_at",
+          "evidence_gone"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean",
+            "description": "True while the case is not closed."
+          },
+          "added_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "added_by": {
+            "$ref": "#/components/schemas/CaseUserView",
+            "description": "Who added it."
+          },
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The host that decides who sees the item; absent for software."
+          },
+          "evidence_gone": {
+            "type": "boolean",
+            "description": "True when the evidence is gone, so that `resolved` is accepted: the\nfinding is no longer reported, the vulnerability no longer matches\nthe host, the alarm is closed as mitigated or no longer exists.\nAlways false for hosts and software."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "That host's name, when known."
+          },
+          "item_id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`alarm`, `finding`, `vulnerability`, `host` or `software`."
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`resolved`, `false_positive` or `accepted_risk`."
+          },
+          "outcome_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, for the last two."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The object's id as the console's panels write it: the alarm id;\n`agent/rule_set/rule` for a finding; `agent/advisory` for a\nvulnerability on a host; the agent id for a host; `manager/name`\nfor software."
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its own severity as its page states it (alarm and finding:\n`critical` to `info`; vulnerability: the advisory's), when it has one."
+          },
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What to show for it, when it still exists."
+          }
+        }
+      },
+      "CasePage": {
+        "type": "object",
+        "description": "A page of cases, newest change first.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseSummaryView"
+            },
+            "description": "The cases the viewer can see."
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; absent on the last page."
+          }
+        }
+      },
+      "CaseSummaryView": {
+        "type": "object",
+        "description": "One case as listed. Counts include only items the viewer can see.",
+        "required": [
+          "case_id",
+          "number",
+          "title",
+          "status",
+          "severity",
+          "opened_by",
+          "created_at",
+          "updated_at",
+          "version",
+          "item_count",
+          "pending_item_count"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When accepted risk runs out and the case reopens (RFC 3339)."
+          },
+          "assignee": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/CaseUserView",
+                "description": "Who works on it."
+              }
+            ]
+          },
+          "case_id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "closed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339, once closed."
+          },
+          "created_at": {
+            "type": "string",
+            "description": "RFC 3339."
+          },
+          "item_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Items the viewer can see."
+          },
+          "number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Shown as `C-<number>`; unique, never reused."
+          },
+          "opened_by": {
+            "$ref": "#/components/schemas/CaseUserView",
+            "description": "Who opened it."
+          },
+          "pending_item_count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible alarms, findings and vulnerabilities that have no outcome."
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`mitigated`, `false_positive` or `accepted_risk`, once closed."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium` or `low`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, `investigating` or `closed`."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 120 characters."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "Last change of any kind (RFC 3339)."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for `If-Match` (also the ETag of the detail).",
+            "minimum": 0
+          }
+        }
+      },
+      "CaseUserView": {
+        "type": "object",
+        "description": "A console user as a case shows them.",
+        "required": [
+          "user_id",
+          "username",
+          "display_name"
+        ],
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Name to show."
+          },
+          "user_id": {
+            "type": "string",
+            "description": "Stable UUID."
+          },
+          "username": {
+            "type": "string",
+            "description": "Login name."
+          }
+        }
+      },
       "CertificatePage": {
         "type": "object",
         "description": "A page of certificate metadata using the shared cursor response shape.",
@@ -6131,6 +7511,41 @@
           "scope": {
             "type": "string",
             "description": "`host` (this alarm's host), `program` (this program on any host) or\n`command` (this exact command line on any host)."
+          }
+        },
+        "additionalProperties": false
+      },
+      "CreateCaseRequest": {
+        "type": "object",
+        "description": "Opens a case.",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "assignee_user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A user with `cases.read` (see the assignees route)."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CaseItemRef"
+            },
+            "description": "Items to start with, at most 50."
+          },
+          "severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`critical`, `high`, `medium` or `low`; the highest item severity\n(medium without one) when absent."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 120 characters."
           }
         },
         "additionalProperties": false
@@ -7351,6 +8766,47 @@
           }
         }
       },
+      "ItemCaseView": {
+        "type": "object",
+        "description": "A case that holds an item.",
+        "required": [
+          "case",
+          "item_id"
+        ],
+        "properties": {
+          "case": {
+            "$ref": "#/components/schemas/CaseSummaryView",
+            "description": "The case."
+          },
+          "item_id": {
+            "type": "string",
+            "description": "The item's id in that case."
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The item's outcome there."
+          }
+        }
+      },
+      "ItemCasesView": {
+        "type": "object",
+        "description": "The visible cases that hold an item.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ItemCaseView"
+            },
+            "description": "For an alarm, finding or vulnerability at most one: the open case.\nFor a host or software, up to 50, newest change first, open or closed."
+          }
+        }
+      },
       "ListenerView": {
         "type": "object",
         "description": "One listening socket on a host.",
@@ -7651,6 +9107,14 @@
           "request_id"
         ],
         "properties": {
+          "case_number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "With `item_in_case`: the number of the open case that holds the\nitem, only when the caller may see that case."
+          },
           "code": {
             "type": "string",
             "description": "Stable machine-readable error code."
@@ -8143,6 +9607,27 @@
           }
         }
       },
+      "SetCaseItemOutcomeRequest": {
+        "type": "object",
+        "description": "Sets or clears an item's outcome.",
+        "properties": {
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for `false_positive` and `accepted_risk`."
+          },
+          "outcome": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`resolved` (only when the evidence is gone), `false_positive` or\n`accepted_risk`; absent or `null` clears it."
+          }
+        },
+        "additionalProperties": false
+      },
       "Severity": {
         "type": "string",
         "description": "Severity attached to the latest observation for a rule.",
@@ -8562,6 +10047,58 @@
         },
         "additionalProperties": false
       },
+      "UpdateCaseRequest": {
+        "type": "object",
+        "description": "Replaces a case's editable fields; send every field.",
+        "required": [
+          "title",
+          "severity",
+          "status"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required for `accepted_risk` (RFC 3339, in the future): the case\nreopens when it passes."
+          },
+          "assignee_user_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A user with `cases.read`; absent or `null` means nobody."
+          },
+          "resolution": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "How it ended, required with `closed`: `mitigated`, `false_positive`\nor `accepted_risk`. Absent otherwise."
+          },
+          "resolution_note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why, required with a resolution (at most 4000 characters)."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`critical`, `high`, `medium` or `low`."
+          },
+          "status": {
+            "type": "string",
+            "description": "`open`, `investigating` or `closed`. `closed` closes the case; any\nother status on a closed case reopens it."
+          },
+          "title": {
+            "type": "string",
+            "description": "1 to 120 characters."
+          }
+        },
+        "additionalProperties": false
+      },
       "UpdateFindingTriageRequest": {
         "type": "object",
         "description": "Requested human workflow update for a latest finding.",
@@ -8906,6 +10443,10 @@
     {
       "name": "alarms",
       "description": "Scope-filtered threat alarms and their triage"
+    },
+    {
+      "name": "cases",
+      "description": "Investigations: items, notes, assignment and closing, scope-filtered"
     },
     {
       "name": "software",
