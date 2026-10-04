@@ -1,10 +1,10 @@
 # Console cases: one place to investigate
 
-**Status:** draft, 2026-10-04. Not approved. Nothing here is built except the
+**Status:** all questions answered, awaiting final approval to start
+implementation (2026-10-04). Nothing here is built except the
 `/cases` rail entry, the `cases.read` permission and an empty page.
 
-Items marked **Decided** come from the author. Items marked **Proposed** are
-suggestions the author has not yet confirmed.
+Every item below is **Decided** by the author.
 
 ## Purpose
 
@@ -42,18 +42,18 @@ supersedes that exclusion for cases only.
 3. **Later:** cases eventually replace per-item triage. A separate spec and
    migration plan will cover that; this spec does not remove anything.
 
-**Proposed:** Phase 1 must already let a user add items to a case (even if
+**Decided:** Phase 1 must already let a user add items to a case (even if
 only from the case page), otherwise a new case is empty and cannot be tried.
 
 ## Case
 
 | Field | Notes |
 |---|---|
-| Number | Shown as `C-104`; unique, never reused. **Proposed** |
+| Number | Shown as `C-104`; unique, never reused. **Decided** |
 | Title | Required, set by the creator. |
 | Status | See below. |
 | Resolution | Set when closing; see below. |
-| Severity | **Proposed:** starts as the highest item severity, can be changed by hand. |
+| Severity | **Decided:** starts as the highest item severity, can be changed by hand. |
 | Assignee | One user, or nobody. |
 | Opened by, opened at, updated at | Set by the console. |
 | Version | For `If-Match`, like dashboards and triage, so two analysts do not overwrite each other. |
@@ -69,7 +69,7 @@ today's triage.
 - **Resolution** (required to close): `mitigated`, `false_positive` or
   `accepted_risk`.
 - Every resolution needs a note (as today).
-- `accepted_risk` also needs an "accepted until" date (as today). **Proposed:**
+- `accepted_risk` also needs an "accepted until" date (as today). **Decided:**
   when it passes, the case reopens.
 
 ## Items
@@ -92,7 +92,7 @@ whom.
 - **Hosts, software** and other things that exist on many hosts can be in
   several cases.
 
-**Proposed**
+**Decided**
 
 - The rule applies to **open** cases only. Closing a case frees its items.
 - A recurring alarm (alarms count occurrences) stays in the case it is
@@ -110,7 +110,7 @@ evidence closes it.
 | Alarm | closed; suppression stays available | it stops happening, unless suppressed |
 | Finding | closed, accepted risk, false positive | the agent no longer reports it |
 
-**Proposed**
+**Decided**
 
 - A case can close only when every item has an outcome: resolved by evidence,
   or marked false positive or accepted risk with a note.
@@ -124,7 +124,7 @@ roles. Anyone who manages cases can assign to themselves or to any other user
 who can see cases.
 
 - `cases.read`: see cases (exists today; analyst and admin).
-- `cases.manage` **(Proposed name)**: create, edit, add items, change status,
+- `cases.manage` : create, edit, add items, change status,
   assign, close.
 - An assignee must be a user who has `cases.read`.
 
@@ -134,7 +134,7 @@ who can see cases.
 enforces scope in SQL, so a user with a limited scope never sees items
 outside it. Those items are hidden completely: no placeholder, no count.
 
-**Proposed**, because of that choice:
+**Decided**, because of that choice:
 
 - A user sees a case only if they can see at least one of its items, or they
   opened it or are its assignee.
@@ -149,7 +149,7 @@ outside it. Those items are hidden completely: no placeholder, no count.
 
 ## Timeline and audit
 
-**Proposed**
+**Decided**
 
 - Every note, status change, assignment and item added or removed is an
   entry on an append-only timeline (author, time, text).
@@ -158,7 +158,7 @@ outside it. Those items are hidden completely: no placeholder, no count.
 
 ## Interface
 
-**Proposed**
+**Decided**
 
 - `/cases`: the list (filters by status, severity, assignee; default shows
   open and investigating).
@@ -184,6 +184,5 @@ version is refused, and closing with items still unresolved is refused.
 
 ## Open questions
 
-None are blocking. Still to confirm: the **Proposed** items above, mainly the
-rule that closing a case needs every item resolved, the reopen behaviour, the
-case numbers, and the permission name `cases.manage`.
+None. Everything above is decided; implementation follows once the author
+approves the spec.
