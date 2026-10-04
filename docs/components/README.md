@@ -30,6 +30,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-assistant` | console module and web page | opt-in local model chat with permission-scoped agent and finding lookups, safe citations, and in-tab-only history | [console-assistant.md](console-assistant.md) |
 | `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards; demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
+| `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 34) | [console-cases.md](console-cases.md) |
 | `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 

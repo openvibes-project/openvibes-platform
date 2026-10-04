@@ -1,8 +1,10 @@
 # Console cases: one place to investigate
 
-**Status:** all questions answered, awaiting final approval to start
-implementation (2026-10-04). Nothing here is built except the
-`/cases` rail entry, the `cases.read` permission and an empty page.
+**Status:** all questions answered. The backend of the first version is
+built (migration 0034, `platform-store::console_cases`, the `/api/v1/cases`
+routes; see [console-cases.md](../components/console-cases.md) and "As built"
+below). The web pages are not built yet: the `/cases` rail entry still opens
+an empty page.
 
 Every item below is **Decided** by the author.
 
@@ -258,6 +260,46 @@ version is refused, and closing with items still unresolved is refused.
 Audit actions: `case.create`, `case.update`, `case.note` (never the text),
 `case.item.add`, `case.item.remove`, `case.item.outcome`, `case.close`,
 `case.reopen`.
+
+### As built (backend)
+
+Where the build settled something the design left open, or differs from it:
+
+- **Fields.** Responses name the counts `item_count` and
+  `pending_item_count`; an item's id is `ref` in JSON. Requests take
+  `assignee_user_id`; responses carry `assignee` and `opened_by` as
+  `{user_id, username, display_name}`. Items also carry `title`, `severity`,
+  `hostname` and `evidence_gone` so the UI need not fetch each object.
+- **`PUT` replaces.** It takes every editable field (a missing assignee means
+  nobody). The version rises only when those fields change; notes, items and
+  outcomes move `updated_at` but not the version.
+- **Closing** is allowed from `open` as well as `investigating`. A blank
+  resolution note counts as none. A case closed with hidden unresolved items
+  answers 409 `hidden_items_unresolved`, with no count.
+- **Evidence.** A finding is gone when its current row is missing or has
+  `ended_at`; a vulnerability when there is no open `vulnerabilities` row and
+  no no-fix match through the host's package versions; an alarm when its own
+  triage is `mitigated` or it no longer exists (`false_positive` and
+  `accepted_risk` are decisions, not evidence). The check runs when the
+  outcome is set and again at close.
+- **Software** can be added only if a host the caller can see has the
+  package, so adding never says whether other hosts do. Once in a case,
+  software is shown to every reader, as decided.
+- **For-item** lists a case only if the caller can see the case and the item.
+  A host or software item lists open and closed cases (up to 50); an alarm,
+  finding or vulnerability only the open one.
+- **Accepted risk running out** reopens the case when cases are next listed or
+  read (no background job), as the platform, and clears the `accepted_risk`
+  outcomes of its items. A case whose item has joined another open case stays
+  closed. Reopening a case by hand names the clashing case only if the caller
+  can see both the case and the item.
+- **Not built:** reopening a closed case automatically when evidence returns
+  for one of its items (existing triage does this for findings); a closed
+  case keeps its `resolved` items until someone reopens it by hand.
+- **Limits:** 500 items and 2,000 timeline entries per case.
+- `ProblemDetails` gains an optional `case_number`, set on `item_in_case`.
+- An empty case is seen only by its opener and its assignee (a consequence of
+  the visibility rule).
 
 ### Order of work
 
