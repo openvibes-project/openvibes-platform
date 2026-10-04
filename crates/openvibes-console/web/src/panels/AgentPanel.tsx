@@ -9,6 +9,8 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge }
 import { date, severityOrder } from "../ui/format";
 import { lineage } from "../views/Alarms";
 import { packageId } from "../views/Software";
+import { AddToCase } from "./AddToCase";
+import { vulnerabilityRef } from "./cases";
 import { HostExport } from "./HostExport";
 import { HostServicesTab } from "./HostServices";
 import { Icon } from "../ui/Icon";
@@ -85,6 +87,7 @@ export function AgentPanel({ id }: { id: string }) {
         actions={<>
           <button type="button" className="button" onClick={() => nav.open({ kind: "compare", id: data.id })}><Icon name="layers" size={14} /> Compare</button>
           <HostExport agent={data} />
+          <AddToCase kind="host" id={data.id} label={name} />
           {can("agents.revoke") && data.status !== "revoked" && data.status !== "imported" && (
           <Confirm danger label={`Revoke ${name}? Its certificate stops working at once; the host must enroll again.`} reason="Reason (kept in the audit log)"
             onConfirm={async (reason) => {
@@ -132,13 +135,14 @@ export function AgentPanel({ id }: { id: string }) {
           vulnItems.length === 0 ? <Empty title={vulns.loading ? "Loading…" : "No open vulnerabilities"} /> : (
             <ul className="list">
               {vulnItems.map((item) => (
-                <li key={item.advisory_id}>
+                <li key={item.advisory_id} className="list__item">
                   <ObjectLink to={{ kind: "advisory", id: item.advisory_id }} className="list__row">
                     <SeverityBadge severity={item.severity} />
                     <span className="grow truncate">{item.title}</span>
                     {item.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> KEV</span>}
                     {item.reboot_needed && <span className="badge badge--warn badge--plain">Reboot</span>}
                   </ObjectLink>
+                  <AddToCase compact kind="vulnerability" id={vulnerabilityRef(id, item.advisory_id)} label={item.title} />
                 </li>
               ))}
             </ul>
