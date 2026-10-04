@@ -124,6 +124,9 @@ pub enum Permission {
     /// Read threat alarms.
     #[serde(rename = "alarms.read")]
     AlarmsRead,
+    /// Access to the cases view and its details.
+    #[serde(rename = "cases.read")]
+    CasesRead,
     /// Change human triage state for alarms.
     #[serde(rename = "alarms.triage")]
     AlarmsTriage,

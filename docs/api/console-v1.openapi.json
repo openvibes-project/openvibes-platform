@@ -7440,6 +7440,7 @@
           "vulnerabilities.read",
           "findings.triage",
           "alarms.read",
+          "cases.read",
           "alarms.triage",
           "alarms.suppress",
           "tokens.read",

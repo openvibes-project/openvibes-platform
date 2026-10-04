@@ -3,6 +3,7 @@
     "/",
     "/login",
     "/findings",
+    "/cases",
     "/alarms",
     "/alarm-suppressions",
     "/vulnerabilities",

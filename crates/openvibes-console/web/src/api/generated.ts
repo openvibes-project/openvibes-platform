@@ -2123,7 +2123,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "cases.read" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "cases.read" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
