@@ -98,6 +98,26 @@ async fn wait_for(db: &TestDb, sql: &str, want: i64) {
     panic!("timed out waiting for {sql} = {want}");
 }
 
+fn config(db: &TestDb, health_addr: SocketAddr, template: String, kev_url: String) -> VulnsConfig {
+    VulnsConfig {
+        database_url: db.url(),
+        health_listen: health_addr,
+        check_interval_minutes: 60,
+        metalink_url: template,
+        arch: "x86_64".into(),
+        proxy_url: None,
+        max_download_bytes: 64 << 20,
+        kev_url,
+        epss_url: String::new(),
+        nvd_url: String::new(),
+        nvd_api_key_file: None,
+        euvd_url: String::new(),
+        osv_url: String::new(),
+        osv_dir: std::env::temp_dir(),
+        osv_max_download_bytes: 1 << 30,
+    }
+}
+
 #[tokio::test]
 async fn checks_feeds_at_start_and_rematches_changed_hosts() {
     let db = TestDb::create().await;
@@ -134,23 +154,7 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
     let (template, kev_url) = mirror(content).await;
     let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let health_addr = health.local_addr().unwrap();
-    let config = VulnsConfig {
-        database_url: db.url(),
-        health_listen: health_addr,
-        check_interval_minutes: 60,
-        metalink_url: template,
-        arch: "x86_64".into(),
-        proxy_url: None,
-        max_download_bytes: 64 << 20,
-        kev_url,
-        epss_url: String::new(),
-        nvd_url: String::new(),
-        nvd_api_key_file: None,
-        euvd_url: String::new(),
-        osv_url: String::new(),
-        osv_dir: std::env::temp_dir(),
-        osv_max_download_bytes: 1 << 30,
-    };
+    let config = config(&db, health_addr, template, kev_url);
     let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
     let task = tokio::spawn(service::run(config, health, async {
         let _ = stopped.await;
@@ -189,6 +193,77 @@ async fn checks_feeds_at_start_and_rematches_changed_hosts() {
     .await;
     let ready = reqwest_like(health_addr, "/ready").await;
     assert_eq!(ready, 200);
+    let _ = stop.send(());
+    task.await.unwrap().unwrap();
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn first_inventory_fetches_its_feed_without_waiting_for_the_hourly_check() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let content = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/updateinfo-f44.xml.zst"),
+    )
+    .unwrap();
+    let (template, kev_url) = mirror(content).await;
+    let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let health_addr = health.local_addr().unwrap();
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(service::run(
+        config(&db, health_addr, template, kev_url),
+        health,
+        async {
+            let _ = stopped.await;
+        },
+    ));
+    // Finish the startup check while there are no hosts or Fedora feeds.
+    wait_for(
+        &db,
+        "SELECT count(*) FROM cve_enrichment WHERE kev_added IS NOT NULL",
+        5,
+    )
+    .await;
+    wait_for(
+        &db,
+        "SELECT count(*) FROM feed_sources WHERE source LIKE 'fedora-%'",
+        0,
+    )
+    .await;
+
+    let agent = "agent.00000000-0000-4000-8000-0000000000c3";
+    admin
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
+            &[&agent],
+        )
+        .await
+        .unwrap();
+    inventory::replace(
+        &mut admin,
+        agent,
+        "fedora",
+        "44",
+        None,
+        &[wordpress()],
+        [3; 32],
+        Utc::now(),
+    )
+    .await
+    .unwrap();
+    wait_for(
+        &db,
+        "SELECT coalesce(max(advisories), 0)::bigint FROM feed_sources WHERE source = 'fedora-44-x86_64'",
+        3,
+    )
+    .await;
+    wait_for(
+        &db,
+        "SELECT count(*) FROM vulnerabilities WHERE agent_id = 'agent.00000000-0000-4000-8000-0000000000c3' AND fixed_at IS NULL",
+        1,
+    )
+    .await;
     let _ = stop.send(());
     task.await.unwrap().unwrap();
     db.drop().await;

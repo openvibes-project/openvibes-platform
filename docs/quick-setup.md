@@ -97,9 +97,9 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 
 - **Agents:** both hosts, with their health.
 - **Vulnerabilities:** each host's packages matched against the Fedora
-  advisories. The first feed download starts with the vulnerability
-  service; results appear once it and the agents' first inventories are
-  in.
+  advisories. The vulnerability service checks a feed at startup if a host
+  already reports that release, or when the first inventory for a new
+  release arrives. Results appear after that check completes.
 - **Findings:** rule findings appear once a rule set is published. The
   baseline rules package is not released yet, so Setup skips its `rules`
   step for now.
