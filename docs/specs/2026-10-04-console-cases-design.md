@@ -182,6 +182,91 @@ security-sensitive changes): no `cases.read` is refused, a scoped user does
 not see out-of-scope items, an item cannot join a second open case, a stale
 version is refused, and closing with items still unresolved is refused.
 
+## Technical design (first version)
+
+### Tables (migration 0034, schema 34; append-only)
+
+- `cases`: `case_id uuid`, `number bigint` (identity, unique, shown as
+  `C-n`), `title` (1 to 120 characters), `status` (`open`, `investigating`,
+  `closed`), `resolution` (null, `mitigated`, `false_positive`,
+  `accepted_risk`), `resolution_note`, `accepted_until`, `severity`
+  (`critical`, `high`, `medium`, `low`), `assignee_user_id` (null),
+  `opened_by_user_id`, `created_at`, `updated_at`, `closed_at`, `version`.
+- `case_items`: `item_id`, `case_id`, `kind` (`alarm`, `finding`,
+  `vulnerability`, `host`, `software`), `ref` (the object's id as the
+  console's panels already write it: alarm id; `agent/rule_set/rule` for a
+  finding; `agent/advisory` for a vulnerability on a host; agent id for a
+  host; `manager/name` for software), `agent_id` (null for software; used
+  for scope), `active` (true while the case is not closed), `outcome` (null,
+  `resolved`, `false_positive`, `accepted_risk`), `outcome_note`,
+  `added_by_user_id`, `added_at`. Unique `(case_id, kind, ref)`. Exclusive
+  kinds (alarm, finding, vulnerability) are unique on `(kind, ref)` among
+  `active` items, so one item is in at most one open case. Host and
+  software are not exclusive.
+- `case_events`: append-only timeline: `event_id`, `case_id`, `at`,
+  `actor_user_id`, `kind` (`created`, `note`, `status`, `assigned`,
+  `severity`, `item_added`, `item_removed`, `item_outcome`, `resolved`,
+  `reopened`), `body` (note text, at most 4000 characters) and `detail`
+  (json, never the note).
+- Permission `cases.manage` (scope class `agent`) for analyst and admin;
+  `cases.read` already exists. Both are agent-bound.
+
+### Rules
+
+- A user sees a case if they hold `cases.read` and the case has at least
+  one item they can see (host or agent in their scope; software is visible
+  to every reader), or they opened it, or it is assigned to them. A case
+  they cannot see answers 404.
+- Adding an item requires `cases.manage` and that the user can see the
+  item (its agent is in their scope). A failed add does not reveal whether
+  the item exists.
+- An item in another open case answers 409 naming that case's number only
+  if the user can see that case; otherwise a generic 409.
+- Closing needs a resolution, a note, `accepted_until` for accepted risk
+  (a future date), and every alarm, finding and vulnerability item must have
+  an outcome. `resolved` is accepted only when the evidence is gone (the
+  finding is no longer reported by its agent, the vulnerability no longer
+  matches the host, the alarm is closed); otherwise the user marks
+  `false_positive` or `accepted_risk` with a note. Host and software items
+  need no outcome. Items the closing user cannot see are not checked by the
+  user, so closing is refused for them with 409 unless someone with the
+  scope clears them; this is a known limit.
+- Closing sets `active=false` on all items. Reopening (by `cases.manage`,
+  or automatically when `accepted_until` passes) sets `active=true` and
+  fails with 409 if an item has since joined another open case.
+- Updates use `If-Match` with the case version (412 stale, 428 missing),
+  like dashboards. Every change and its audit row commit together.
+- Assignee: a user with `cases.read`. Severity is set at creation (default:
+  the highest item severity) and then by hand.
+- Browser session only; a bearer token gets 403, like dashboards.
+
+### Routes
+
+| Route | Permission | Result |
+|---|---|---|
+| `GET /api/v1/cases` | `cases.read` | page, filters `status` (default open + investigating, or `all`), `severity`, `assignee`, `q`; newest update first; cursor |
+| `POST /api/v1/cases` | `cases.manage` | `201` case + `ETag`; body title, severity (optional), assignee (optional), items (optional, 50 max) |
+| `GET /api/v1/cases/{id}` | `cases.read` | case, visible items, timeline + `ETag` |
+| `PUT /api/v1/cases/{id}` | `cases.manage`, `If-Match` | title, severity, status, assignee, resolution fields |
+| `POST /api/v1/cases/{id}/notes` | `cases.manage` | timeline entry |
+| `POST /api/v1/cases/{id}/items` | `cases.manage` | add one item |
+| `DELETE /api/v1/cases/{id}/items/{item_id}` | `cases.manage` | remove (on an open case only) |
+| `PUT /api/v1/cases/{id}/items/{item_id}/outcome` | `cases.manage` | set or clear an outcome |
+| `GET /api/v1/cases/for-item?kind=&ref=` | `cases.read` | the open case holding an exclusive item, or the cases holding a host or software item, visible ones only |
+| `GET /api/v1/cases/assignees` | `cases.manage` | users with `cases.read`: id, username, display name |
+
+Audit actions: `case.create`, `case.update`, `case.note` (never the text),
+`case.item.add`, `case.item.remove`, `case.item.outcome`, `case.close`,
+`case.reopen`.
+
+### Order of work
+
+1. Migration, store module and store tests (`platform-store`, separate
+   commits).
+2. Console API, OpenAPI snapshot, RBAC and HTTP tests.
+3. Web: demo API, list, case panel, "Add to case".
+4. Component documentation and end-to-end tests.
+
 ## Open questions
 
 None. Everything above is decided; implementation follows once the author
