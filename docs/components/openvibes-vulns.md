@@ -83,8 +83,13 @@ the offline core used by `openvibes-admin feeds import` and the
   (2 MB), later checks report unchanged.
 - `service::run(config, health, shutdown)` — the daemon: checks every
   Fedora release its hosts report at start and every interval, and
-  re-matches a host within a second of ingest's `inventory_changed`
-  notification (dedicated LISTEN connection, reconnecting every 30 s).
+  re-matches a host after ingest's `inventory_changed` notification
+  (dedicated LISTEN connection, reconnecting every 30 s). If a newly
+  reported release has no feed yet, it checks Fedora immediately or wakes
+  the separate OSV worker for Debian, Ubuntu, Rocky Linux and AlmaLinux.
+  Matching waits for that first feed instead of recording a misleading zero;
+  a failed check is retried on the normal interval. Later inventory changes
+  use the stored feed without downloading it again.
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.

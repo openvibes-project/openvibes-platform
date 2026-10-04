@@ -11,6 +11,7 @@ use std::{
         Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use axum::{
@@ -23,9 +24,11 @@ use axum::{
 use chrono::Utc;
 use common::TestDb;
 use openvibes_vulns::{
+    config::VulnsConfig,
     fetch::Fetcher,
     osv::Release,
     osv_fetch::{self, OsvSync, Synced},
+    service,
 };
 use platform_store::{
     Client,
@@ -167,6 +170,59 @@ async fn open(client: &Client) -> Vec<String> {
         .iter()
         .map(|r| r.get(0))
         .collect()
+}
+
+#[tokio::test]
+async fn first_debian_inventory_wakes_osv_sync() {
+    let db = TestDb::create().await;
+    let mut admin = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut admin).await.unwrap();
+    let (osv, addr) = start().await;
+    *osv.records.lock().unwrap() = vec![openssl("DEBIAN-CVE-2026-3333", "3.0.13-1~deb12u1")];
+    *osv.changes.lock().unwrap() = vec!["2026-09-20T10:00:00Z,DEBIAN-CVE-2026-3333".into()];
+    let dir = std::env::temp_dir().join(format!("ov-osv-service-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let health = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let config = VulnsConfig {
+        database_url: db.url(),
+        health_listen: health.local_addr().unwrap(),
+        check_interval_minutes: 60,
+        metalink_url: "http://127.0.0.1/metalink?release={release}&arch={arch}".into(),
+        arch: "x86_64".into(),
+        proxy_url: None,
+        max_download_bytes: 64 << 20,
+        kev_url: String::new(),
+        epss_url: String::new(),
+        nvd_url: String::new(),
+        nvd_api_key_file: None,
+        euvd_url: String::new(),
+        osv_url: format!("http://{addr}"),
+        osv_dir: dir.clone(),
+        osv_max_download_bytes: 1 << 20,
+    };
+    let (stop, stopped) = tokio::sync::oneshot::channel::<()>();
+    let task = tokio::spawn(service::run(config, health, async {
+        let _ = stopped.await;
+    }));
+    // Give the startup sync and notification listener time to enter their
+    // loops before the first inventory arrives.
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let agent = "agent.00000000-0000-4000-8000-0000000000d4";
+    host(&mut admin, agent, "12", 4).await;
+    let mut matched = false;
+    for _ in 0..100 {
+        matched = !open(&admin).await.is_empty();
+        if matched {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(matched, "new Debian release was not synced and matched");
+    assert_eq!(osv.zips.load(Ordering::SeqCst), 1);
+    let _ = stop.send(());
+    task.await.unwrap().unwrap();
+    db.drop().await;
+    std::fs::remove_dir_all(dir).unwrap();
 }
 
 #[tokio::test]
