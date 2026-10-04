@@ -415,6 +415,9 @@ describe("demo cases data", () => {
     expect(data.access.roles.find((r) => r.role_id === "analyst")?.permissions).toContain("cases.manage");
     expect(data.access.roles.find((r) => r.role_id === "admin")?.permissions).toContain("cases.manage");
     expect(data.access.roles.find((r) => r.role_id === "viewer")?.permissions).not.toContain("cases.read");
+    // The server's admin holds every permission the other roles do.
+    const admin = data.access.roles.find((r) => r.role_id === "admin")?.permissions ?? [];
+    for (const role of data.access.roles) expect(admin, role.role_id).toEqual(expect.arrayContaining(role.permissions));
   });
 });
 
