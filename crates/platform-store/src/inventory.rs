@@ -344,7 +344,8 @@ async fn finish(
     transaction
         .execute(
             "UPDATE agents SET os_id = $2, os_version = $3, inventory_sha256 = $4,
-                 inventory_at = $5, running_kernel = $6 WHERE agent_id = $1",
+                 inventory_at = $5, running_kernel = $6, vulnerability_match_version = 0
+             WHERE agent_id = $1",
             &[
                 &agent_id,
                 &os_id,
