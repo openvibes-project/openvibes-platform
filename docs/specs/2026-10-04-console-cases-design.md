@@ -3,8 +3,8 @@
 **Status:** all questions answered. The backend of the first version is
 built (migration 0034, `platform-store::console_cases`, the `/api/v1/cases`
 routes; see [console-cases.md](../components/console-cases.md) and "As built"
-below). The web pages are not built yet: the `/cases` rail entry still opens
-an empty page.
+below), and so are the web pages: the list, the case panel and "Add to case"
+(see [console-web.md](../components/console-web.md#cases)).
 
 Every item below is **Decided** by the author.
 

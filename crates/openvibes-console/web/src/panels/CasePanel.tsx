@@ -40,8 +40,14 @@ function useAssignees(manage: boolean): CaseUser[] {
   return useResource<{ items: CaseUser[] }>(manage ? "/api/v1/cases/assignees" : null).data?.items ?? [];
 }
 
-function AssigneeSelect({ value, onChange, assignees, meId }: { value: string; onChange: (id: string) => void; assignees: CaseUser[]; meId: string | undefined }) {
-  const mine = assignees.some((user) => user.user_id === meId);
+/** The assignable user who is the signed-in one: by id, else by username. */
+function useMe(assignees: CaseUser[]): CaseUser | undefined {
+  const principal = useSession().session?.principal;
+  return assignees.find((user) => user.user_id === principal?.id || (principal?.username != null && user.username === principal.username));
+}
+
+function AssigneeSelect({ value, onChange, assignees }: { value: string; onChange: (id: string) => void; assignees: CaseUser[] }) {
+  const me = useMe(assignees);
   return (
     <div className="row row--wrap">
       <select className="select grow" value={value} onChange={(event) => onChange(event.target.value)} aria-label="Assignee">
@@ -49,13 +55,12 @@ function AssigneeSelect({ value, onChange, assignees, meId }: { value: string; o
         {assignees.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name} ({user.username})</option>)}
         {value !== "" && !assignees.some((user) => user.user_id === value) && <option value={value}>Current assignee</option>}
       </select>
-      {mine && meId !== value && <button type="button" className="button button--small" onClick={() => onChange(meId ?? "")}><Icon name="user" size={14} /> Assign to me</button>}
+      {me && me.user_id !== value && <button type="button" className="button button--small" onClick={() => onChange(me.user_id)}><Icon name="user" size={14} /> Assign to me</button>}
     </div>
   );
 }
 
 export function NewCasePanel() {
-  const { session } = useSession();
   const assignees = useAssignees(true);
   const [title, setTitle] = useState("");
   const [severity, setSeverity] = useState("");
@@ -83,7 +88,7 @@ export function NewCasePanel() {
             {severities.map((s) => <option key={s} value={s}>{s[0]?.toUpperCase() + s.slice(1)}</option>)}
           </select>
         </label>
-        <div className="field">Assignee<AssigneeSelect value={assignee} onChange={setAssignee} assignees={assignees} meId={session?.principal.id} /></div>
+        <div className="field">Assignee<AssigneeSelect value={assignee} onChange={setAssignee} assignees={assignees} /></div>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy || title.trim() === ""}><Icon name="plus" size={15} /> {busy ? "Opening…" : "Open case"}</button></div>
       </form>
@@ -123,7 +128,6 @@ export function CasePanel({ id }: { id: string }) {
 
 /** Title, severity, assignee and status. Remounted on each new version, so the form always starts from what is saved. */
 function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
-  const { session } = useSession();
   const assignees = useAssignees(manage);
   const [draft, setDraft] = useState<CaseFields>({ title: c.title, severity: c.severity, assignee: c.assignee?.user_id ?? "" });
   const [closing, setClosing] = useState(false);
@@ -158,7 +162,7 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
                   {severities.map((s) => <option key={s} value={s}>{s[0]?.toUpperCase() + s.slice(1)}</option>)}
                 </select>
               </label>
-              <div className="field grow">Assignee<AssigneeSelect value={draft.assignee} onChange={(assignee) => setDraft({ ...draft, assignee })} assignees={assignees} meId={session?.principal.id} /></div>
+              <div className="field grow">Assignee<AssigneeSelect value={draft.assignee} onChange={(assignee) => setDraft({ ...draft, assignee })} assignees={assignees} /></div>
             </div>
             <div className="row row--wrap">
               <button type="submit" className="button button--primary button--small" disabled={!dirty || busy || draft.title.trim() === ""}>{busy ? "Saving…" : "Save changes"}</button>
