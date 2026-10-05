@@ -83,7 +83,8 @@ Production data routes remain unavailable until their later milestones
 provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
 OpenAPI snapshot or package. The seeded API also supplies deterministic
-vulnerability and grouped-finding data so both pages can be reviewed locally.
+vulnerability and grouped-finding data so both pages can be reviewed locally. It does not serve
+alarms or cases; those are reviewed with the in-browser demo or against a database.
 
 ### Vulnerability review and X-M7 grouped findings
 
