@@ -653,6 +653,9 @@ pub async fn serve(
                     public_origin.as_str(),
                     hosts.clone(),
                     assistant_runtime,
+                    config
+                        .update_check
+                        .then(|| std::sync::Arc::new(crate::about::UpdateChecker::new())),
                 ),
                 Some(pool),
             )

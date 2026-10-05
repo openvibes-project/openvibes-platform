@@ -56,6 +56,14 @@ pub struct ConsoleConfig {
     /// Optional local model assistant. Omitted or disabled means no model connection.
     #[serde(default)]
     pub assistant: Option<platform_assistant::AssistantConfig>,
+    /// Lets the About page ask GitHub for the latest release. Turn off on
+    /// hosts that must make no outbound connections.
+    #[serde(default = "default_update_check")]
+    pub update_check: bool,
+}
+
+fn default_update_check() -> bool {
+    true
 }
 
 impl fmt::Debug for ConsoleConfig {
@@ -79,6 +87,7 @@ impl fmt::Debug for ConsoleConfig {
                 "assistant",
                 &self.assistant.as_ref().map(|_| "[CONFIGURED]"),
             )
+            .field("update_check", &self.update_check)
             .finish()
     }
 }
@@ -263,6 +272,7 @@ mod tests {
             unix_socket_file: None,
             trusted_proxy_uids: vec![],
             assistant: None,
+            update_check: true,
         };
 
         assert!(config.validate().is_ok());
@@ -283,6 +293,7 @@ mod tests {
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
                 assistant: None,
+                update_check: true,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -296,6 +307,7 @@ mod tests {
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
                 assistant: None,
+                update_check: true,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -309,6 +321,7 @@ mod tests {
                 unix_socket_file: None,
                 trusted_proxy_uids: vec![],
                 assistant: None,
+                update_check: true,
             },
         ] {
             assert!(config.validate().is_err());
@@ -329,6 +342,7 @@ mod tests {
             unix_socket_file: None,
             trusted_proxy_uids: vec![],
             assistant: None,
+            update_check: true,
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));

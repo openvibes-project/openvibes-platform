@@ -2,6 +2,8 @@
 import type { components } from "./generated";
 
 type S = components["schemas"];
+export type About = S["AboutResponse"];
+export type AboutUpdate = S["UpdateResponse"];
 export type Agent = S["AgentView"];
 export type AgentPage = S["AgentPage"];
 export type AgentSummary = S["AgentSummary"];

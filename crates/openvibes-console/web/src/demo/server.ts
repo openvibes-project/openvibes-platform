@@ -189,6 +189,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const items = data.agents.filter((agent) => visible(agent.id) && (state === null || agent.status === state));
     return json({ ...page(items, query), generated_at: iso() });
   });
+  route("GET", "/api/v1/about", null, () => json({ platform_version: "0.4.2", schema_version: 33, applied_schema_version: 33, database_version: "16.4", web_ui_embedded: true }));
+  route("GET", "/api/v1/about/update", null, () => json({ state: "available", latest_version: "0.4.3", release_url: "https://github.com/openvibes-project/openvibes-platform/releases/tag/v0.4.3" }));
   route("GET", "/api/v1/agents/summary", "agents.read", () => {
     const items = data.agents.filter((agent) => visible(agent.id));
     const count = (status: Agent["status"]) => items.filter((agent) => agent.status === status).length;
