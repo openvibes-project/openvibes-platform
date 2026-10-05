@@ -139,6 +139,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-package": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Downloads the agent install package: one script that installs and enrolls
+         *     an agent, the same on every host, carrying the standing fleet token.
+         */
+        get: operations["authenticated_agent_package"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents": {
         parameters: {
             query?: never;
@@ -3141,6 +3161,35 @@ export interface operations {
             };
             /** @description The username is taken */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_agent_package: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Install script (text/x-shellscript) carrying the standing fleet token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/x-shellscript": unknown;
+                };
+            };
+            /** @description The package is not configured or there is no standing token */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -34,6 +34,7 @@ async fn main() -> ExitCode {
             trusted_proxy_uids: vec![],
             assistant: None,
             update_check: false,
+            agent_install: None,
         },
         Some(config_path) => match openvibes_console::load_config(&config_path) {
             Ok(config) => config,

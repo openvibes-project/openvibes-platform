@@ -47,7 +47,8 @@ readiness check). The migrating role needs `CREATEROLE`.
   returns the token or its hash; includes `uses`, `revoked` and `standing`),
   `tokens::create_standing` / `tokens::live_standing` (the standing token:
   never expires, no use limit, one live at a time; its secret sits in
-  `standing_token_secret`, granted to no role but the owner),
+  `standing_token_secret`, readable by the owner and, from migration 0035,
+  the console role, which serves it only in the agent install package),
   `tokens::revoke(&client, id, now) -> bool` (was usable; an unknown id is
   `false`, a malformed id `StoreError::Query`). Ids are UUIDs, passed as
   text.
