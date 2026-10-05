@@ -1347,6 +1347,7 @@ pub(crate) async fn authenticated_enrollment_tokens(
                 max_uses: token.max_uses,
                 uses: token.uses,
                 revoked: token.revoked,
+                standing: token.standing,
             })
             .collect(),
     })
@@ -1428,6 +1429,7 @@ pub(crate) async fn authenticated_enrollment_token(
             max_uses: token.max_uses,
             uses: token.uses,
             revoked: token.revoked,
+            standing: token.standing,
         })
         .into_response(),
     )

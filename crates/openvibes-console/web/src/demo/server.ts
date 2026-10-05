@@ -612,7 +612,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const token_id = `tok-${Date.now().toString(16).slice(-4)}${idempotent.size}`;
     const expires = iso(Date.now() + Number(body.expires_in_hours ?? 24) * 3_600_000);
     idempotent.set(key, { token_id, expires_at: expires });
-    data.enrollmentTokens.unshift({ token_id, label: (body.label as string | null) ?? null, created_at: iso(), expires_at: expires, max_uses: Number(body.max_uses ?? 1), uses: 0, revoked: false });
+    data.enrollmentTokens.unshift({ token_id, label: (body.label as string | null) ?? null, created_at: iso(), expires_at: expires, max_uses: Number(body.max_uses ?? 1), uses: 0, revoked: false, standing: false });
     audit("enrollment_token.create", token_id, "enrollment_token");
     return json({ token_id, token: `ovet_demo_${crypto.randomUUID().replaceAll("-", "")}`, expires_at: expires, secret_available: true, replayed: false }, 201);
   });

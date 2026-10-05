@@ -68,3 +68,52 @@ async fn tokens_are_created_listed_and_revoked() {
     drop(client);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_standing_token_is_single_hidden_and_never_runs_out() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let now = Utc::now();
+    assert_eq!(tokens::live_standing(&client).await.unwrap(), None);
+    let id = tokens::create_standing(&client, "secret-one", [7; 32], "ov-test", now)
+        .await
+        .unwrap()
+        .expect("created");
+    assert_eq!(
+        tokens::live_standing(&client).await.unwrap(),
+        Some((id.clone(), "secret-one".to_owned()))
+    );
+    // One live standing token: a second is refused, not duplicated.
+    assert_eq!(
+        tokens::create_standing(&client, "secret-two", [8; 32], "ov-test", now)
+            .await
+            .unwrap(),
+        None
+    );
+    let listed = tokens::list(&client).await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert!(listed[0].standing && !listed[0].revoked);
+    // It counts as usable, and the hash column never holds the secret.
+    assert_eq!(
+        platform_store::status(&client, now)
+            .await
+            .unwrap()
+            .tokens_usable,
+        1
+    );
+    // Revoking it frees the slot for a replacement with a new secret.
+    assert!(tokens::revoke(&client, &id, now).await.unwrap());
+    assert_eq!(tokens::live_standing(&client).await.unwrap(), None);
+    let next = tokens::create_standing(&client, "secret-two", [8; 32], "ov-test", now)
+        .await
+        .unwrap()
+        .expect("replacement");
+    assert_ne!(next, id);
+    assert_eq!(
+        tokens::live_standing(&client).await.unwrap().unwrap().1,
+        "secret-two"
+    );
+    drop(client);
+    db.drop().await;
+}

@@ -8104,7 +8104,8 @@
           "expires_at",
           "max_uses",
           "uses",
-          "revoked"
+          "revoked",
+          "standing"
         ],
         "properties": {
           "created_at": {
@@ -8130,6 +8131,10 @@
           "revoked": {
             "type": "boolean",
             "description": "Whether the token was revoked."
+          },
+          "standing": {
+            "type": "boolean",
+            "description": "The standing token: never expires and has no use limit; its expiry\nand maximum are placeholders."
           },
           "token_id": {
             "type": "string",

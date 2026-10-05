@@ -7,7 +7,7 @@ import { isDemo, useAllPages, useResource } from "../api/client";
 import type { AccessInventory, AuditEvent, AuditRetention, EnrollmentToken, RuleSet, ServiceAccount } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
-import { tokenState } from "../panels/OpsPanels";
+import { tokenState, tokenUsable } from "../panels/tokens";
 import { Ago, Empty, ErrorBox, Loading } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { auditSince, within } from "../ui/format";
@@ -37,17 +37,22 @@ export function Enrollment() {
   const tokens = useResource<{ items: EnrollmentToken[] }>("/api/v1/enrollment-tokens");
   const top = useTop();
   const all = tokens.data?.items ?? [];
-  const usable = params.get("usable") === "true";
-  const rows = all.filter((t) => (!usable || tokenState(t).label === "Usable") && matches([t.label, t.token_id], params.get("q") ?? ""));
+  // Expired, used-up and revoked tokens pile up (each short-lived token
+  // stays listed), so only the ones a host can still use show by default.
+  const showAll = params.get("all") === "true";
+  const hidden = all.filter((t) => !tokenUsable(t)).length;
+  const rows = all.filter((t) => (showAll || tokenUsable(t)) && matches([t.label, t.token_id], params.get("q") ?? ""));
   return (
     <div className="view">
       <ViewHeader title="Enrollment" count={rows.length} refresh="/api/v1/enrollment-tokens" placeholder="Filter tokens…"
-        chips={[{ label: "Usable", param: "usable", value: "true", count: all.filter((t) => tokenState(t).label === "Usable").length }]}
+        chips={[{ label: "Show expired and revoked", param: "all", value: "true", count: hidden }]}
         actions={can("tokens.create", true) && (
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "enrollment-token", id: "new" }, true)}><Icon name="plus" size={15} /> New token</button>
         )} />
       {tokens.error ? <div className="view-pad"><ErrorBox error={tokens.error} /></div> : !tokens.data ? <Loading /> : rows.length === 0 ? (
-        <Empty icon="enrollment" title="No enrollment tokens">Create one to let new hosts enroll.</Empty>
+        <Empty icon="enrollment" title={all.length === 0 ? "No enrollment tokens" : "No usable enrollment tokens"}>
+          {all.length === 0 ? "Create one to let new hosts enroll." : `${hidden} expired or revoked ${hidden === 1 ? "token is" : "tokens are"} hidden. Run openvibes-admin agent command to create the standing token.`}
+        </Empty>
       ) : (
         <DataTable label="Enrollment tokens" rows={rows} rowKey={(t) => t.token_id}
           onOpen={(t) => nav.open({ kind: "enrollment-token", id: t.token_id }, true)}
@@ -56,8 +61,10 @@ export function Enrollment() {
           columns={[
             { key: "label", header: "Label", sort: (t) => t.label, render: (t) => <div className="cell-two"><span>{t.label ?? "Unlabelled"}</span><span className="mono subtle">{t.token_id}</span></div> },
             { key: "state", header: "State", width: "110px", sort: (t) => tokenState(t).label, render: (t) => { const s = tokenState(t); return <span className={`badge badge--${s.tone}`}>{s.label}</span>; } },
-            { key: "uses", header: "Uses", width: "110px", sort: (t) => t.uses / t.max_uses, render: (t) => <span className="row"><span className="meter"><span style={{ width: `${Math.min(100, (t.uses / t.max_uses) * 100)}%` }} /></span><span className="num subtle">{t.uses}/{t.max_uses}</span></span> },
-            { key: "expires", header: "Expires", width: "130px", sort: (t) => t.expires_at, render: (t) => <span className="subtle"><Ago value={t.expires_at} /></span> },
+            { key: "uses", header: "Uses", width: "110px", sort: (t) => (t.standing ? 0 : t.uses / t.max_uses), render: (t) => t.standing
+              ? <span className="num subtle">{t.uses} / no limit</span>
+              : <span className="row"><span className="meter"><span style={{ width: `${Math.min(100, (t.uses / t.max_uses) * 100)}%` }} /></span><span className="num subtle">{t.uses}/{t.max_uses}</span></span> },
+            { key: "expires", header: "Expires", width: "130px", sort: (t) => (t.standing ? "9999" : t.expires_at), render: (t) => <span className="subtle">{t.standing ? "Never" : <Ago value={t.expires_at} />}</span> },
             { key: "created", header: "Created", width: "130px", hideBelow: 800, sort: (t) => t.created_at, render: (t) => <span className="subtle"><Ago value={t.created_at} /></span> },
           ]} />
       )}

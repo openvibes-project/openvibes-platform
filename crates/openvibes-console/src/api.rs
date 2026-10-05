@@ -439,6 +439,9 @@ pub struct EnrollmentTokenView {
     pub uses: i64,
     /// Whether the token was revoked.
     pub revoked: bool,
+    /// The standing token: never expires and has no use limit; its expiry
+    /// and maximum are placeholders.
+    pub standing: bool,
 }
 
 /// Full bounded enrollment-token inventory.

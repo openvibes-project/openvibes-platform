@@ -229,10 +229,11 @@ export function buildDemoData(now = Date.now()) {
   };
 
   const enrollmentTokens: EnrollmentToken[] = [
-    { token_id: "tok-7f3a", label: "Office laptops", created_at: iso(now - 2 * DAY), expires_at: iso(now + 5 * DAY), max_uses: 25, uses: 9, revoked: false },
-    { token_id: "tok-19c2", label: "k8s node pool", created_at: iso(now - 6 * DAY), expires_at: iso(now + 1 * DAY), max_uses: 10, uses: 10, revoked: false },
-    { token_id: "tok-88e0", label: "Lab rebuild", created_at: iso(now - 20 * DAY), expires_at: iso(now - 13 * DAY), max_uses: 5, uses: 3, revoked: false },
-    { token_id: "tok-02bd", label: "Leaked in a ticket", created_at: iso(now - 9 * DAY), expires_at: iso(now + 20 * DAY), max_uses: 50, uses: 1, revoked: true },
+    { token_id: "tok-standing", label: "standing token", created_at: iso(now - 30 * DAY), expires_at: iso(now + 36500 * DAY), max_uses: 2147483647, uses: 41, revoked: false, standing: true },
+    { token_id: "tok-7f3a", label: "Office laptops", created_at: iso(now - 2 * DAY), expires_at: iso(now + 5 * DAY), max_uses: 25, uses: 9, revoked: false, standing: false },
+    { token_id: "tok-19c2", label: "k8s node pool", created_at: iso(now - 6 * DAY), expires_at: iso(now + 1 * DAY), max_uses: 10, uses: 10, revoked: false, standing: false },
+    { token_id: "tok-88e0", label: "Lab rebuild", created_at: iso(now - 20 * DAY), expires_at: iso(now - 13 * DAY), max_uses: 5, uses: 3, revoked: false, standing: false },
+    { token_id: "tok-02bd", label: "Leaked in a ticket", created_at: iso(now - 9 * DAY), expires_at: iso(now + 20 * DAY), max_uses: 50, uses: 1, revoked: true, standing: false },
   ];
 
   const ruleSets: RuleSet[] = ["baseline-linux", "hardening-ssh", "cis-fedora"].map((rule_set_id, index) => ({
