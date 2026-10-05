@@ -20,6 +20,10 @@ pub enum TokenCommand {
         #[arg(long)]
         label: Option<String>,
     },
+    /// Show the standing token every agent can enroll with (never expires,
+    /// no use limit), creating it first if there is none. Revoke it with
+    /// `token revoke` to replace it; agents already enrolled keep working.
+    Fleet,
     /// List tokens (never shows the tokens themselves).
     List,
     /// Revoke a token by id.
@@ -33,6 +37,7 @@ impl TokenCommand {
     pub fn name(&self) -> &'static str {
         match self {
             Self::Create { .. } => "token create",
+            Self::Fleet => "token fleet",
             Self::List => "token list",
             Self::Revoke { .. } => "token revoke",
         }
@@ -55,6 +60,37 @@ fn parse_expiry(value: &str) -> Result<Duration, String> {
     Ok(Duration::hours(
         i64::try_from(hours).map_err(|_| HINT.to_owned())?,
     ))
+}
+
+/// The standing token's id and secret, created on first use. The `bool` is
+/// whether this call created it.
+pub async fn fleet(
+    client: &platform_store::Client,
+    actor: &str,
+) -> Result<(String, String, bool), String> {
+    let store = |error: platform_store::StoreError| error.to_string();
+    if let Some((id, secret)) = tokens::live_standing(client).await.map_err(store)? {
+        return Ok((id, secret, false));
+    }
+    let mut bytes = [0u8; 32];
+    if SystemRandom::new().fill(&mut bytes).is_err() {
+        return Err("no randomness available".into());
+    }
+    let secret = URL_SAFE_NO_PAD.encode(bytes);
+    let Some(hash) = platform_pki::enrollment_token_sha256(&secret) else {
+        return Err("token encoding failed".into());
+    };
+    if let Some(id) = tokens::create_standing(client, &secret, hash, actor, Utc::now())
+        .await
+        .map_err(store)?
+    {
+        return Ok((id, secret, true));
+    }
+    // Lost a race with another creator: theirs is the standing token.
+    match tokens::live_standing(client).await.map_err(store)? {
+        Some((id, secret)) => Ok((id, secret, false)),
+        None => Err("the standing token could not be created".into()),
+    }
 }
 
 /// Runs a token command; returns the output and the audit target (the
@@ -96,6 +132,20 @@ pub async fn run(
                 Err(error) => (Err(error.to_string()), None),
             }
         }
+        TokenCommand::Fleet => match fleet(client, actor).await {
+            Ok((id, token, created)) => (
+                Ok(format!(
+                    "token id {id}\ntoken {token}\n{}\n",
+                    if created {
+                        "Created the standing token: it never expires and has no use limit."
+                    } else {
+                        "The standing token: it never expires and has no use limit."
+                    }
+                )),
+                Some(id),
+            ),
+            Err(error) => (Err(error), None),
+        },
         TokenCommand::List => {
             let now = Utc::now();
             let listed = tokens::list(client)
@@ -107,6 +157,8 @@ pub async fn run(
                     .map(|token| {
                         let state = if token.revoked {
                             "revoked"
+                        } else if token.standing {
+                            "standing"
                         } else if token.expires_at <= now {
                             "expired"
                         } else if token.uses >= i64::from(token.max_uses) {
@@ -114,12 +166,18 @@ pub async fn run(
                         } else {
                             "usable"
                         };
+                        let (limit, expires) = if token.standing {
+                            ("unlimited".to_owned(), "never".to_owned())
+                        } else {
+                            (
+                                token.max_uses.to_string(),
+                                token.expires_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                            )
+                        };
                         format!(
-                            "{}  {state}  uses {}/{}  expires {}  {}\n",
+                            "{}  {state}  uses {}/{limit}  expires {expires}  {}\n",
                             token.token_id,
                             token.uses,
-                            token.max_uses,
-                            token.expires_at.format("%Y-%m-%d %H:%M UTC"),
                             token.label.as_deref().unwrap_or(""),
                         )
                     })

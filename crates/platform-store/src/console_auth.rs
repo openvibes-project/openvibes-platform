@@ -706,7 +706,7 @@ pub async fn list_enrollment_tokens(
     client: &Client,
     limit: i64,
 ) -> Result<Vec<crate::tokens::TokenInfo>, StoreError> {
-    let rows=client.query("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL FROM enrollment_tokens t ORDER BY t.created_at DESC,t.token_id ASC LIMIT $1",&[&limit]).await?;
+    let rows=client.query("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL,t.standing FROM enrollment_tokens t ORDER BY t.created_at DESC,t.token_id ASC LIMIT $1",&[&limit]).await?;
     Ok(rows
         .into_iter()
         .map(|row| crate::tokens::TokenInfo {
@@ -717,6 +717,7 @@ pub async fn list_enrollment_tokens(
             max_uses: row.get(4),
             uses: row.get(5),
             revoked: row.get(6),
+            standing: row.get(7),
         })
         .collect())
 }
@@ -726,7 +727,7 @@ pub async fn enrollment_token(
     client: &Client,
     token_id: &str,
 ) -> Result<Option<crate::tokens::TokenInfo>, StoreError> {
-    let row = client.query_opt("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL FROM enrollment_tokens t WHERE t.token_id::text=$1", &[&token_id]).await?;
+    let row = client.query_opt("SELECT t.token_id::text,t.label,t.created_at,t.expires_at,t.max_uses,(SELECT count(*) FROM token_uses u WHERE u.token_id=t.token_id),t.revoked_at IS NOT NULL,t.standing FROM enrollment_tokens t WHERE t.token_id::text=$1", &[&token_id]).await?;
     Ok(row.map(|row| crate::tokens::TokenInfo {
         token_id: row.get(0),
         label: row.get(1),
@@ -735,6 +736,7 @@ pub async fn enrollment_token(
         max_uses: row.get(4),
         uses: row.get(5),
         revoked: row.get(6),
+        standing: row.get(7),
     }))
 }
 

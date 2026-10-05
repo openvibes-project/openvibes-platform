@@ -1789,6 +1789,11 @@ export interface components {
             max_uses: number;
             /** @description Whether the token was revoked. */
             revoked: boolean;
+            /**
+             * @description The standing token: never expires and has no use limit; its expiry
+             *     and maximum are placeholders.
+             */
+            standing: boolean;
             /** @description Stable token identifier. */
             token_id: string;
             /**

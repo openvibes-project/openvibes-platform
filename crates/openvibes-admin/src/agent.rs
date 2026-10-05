@@ -41,7 +41,7 @@ pub enum AgentCommand {
         id: String,
     },
     /// Print the one-line command that installs and enrolls an agent on
-    /// another host, with a new token (24 hours, 10 enrollments).
+    /// another host, with the standing token.
     Command {
         /// This platform's name as agents reach it (default: Setup's hostname).
         #[arg(long)]
@@ -259,7 +259,6 @@ pub async fn run(
     }
 }
 
-/// `agent command`: a new endpoint token and the install line around it.
 /// What the platform serves for `set`: its current, non-retired bundle's
 /// issuer and that issuer's active trusted key.
 async fn served(client: &platform_store::Client, set: &str) -> Option<crate::setup::Served> {
@@ -286,6 +285,7 @@ async fn served(client: &platform_store::Client, set: &str) -> Option<crate::set
     })
 }
 
+/// `agent command`: the standing token and the install line around it.
 async fn agent_command(
     platform: Option<&str>,
     root_cert: &std::path::Path,
@@ -323,12 +323,10 @@ async fn agent_command(
         Ok(fingerprint) => fingerprint,
         Err(error) => return (Err(error), None),
     };
-    let create = crate::token::TokenCommand::Create {
-        expires: chrono::Duration::hours(24),
-        uses: 10,
-        label: Some("agent command".into()),
+    let (created, target) = match crate::token::fleet(client, actor).await {
+        Ok((id, token, _)) => (Ok(format!("token {token}\n")), Some(id)),
+        Err(error) => (Err(error), None),
     };
-    let (created, target) = crate::token::run(&create, client, actor).await;
     let key_line = std::fs::read_to_string(crate::setup::BASELINE_KEY).ok();
     let set = key_line
         .as_deref()
@@ -367,7 +365,7 @@ async fn agent_command(
         .unwrap_or_default();
     let output = created.and_then(|out| crate::setup::token_from(&out)).map(|token| {
         format!(
-            "{}\ntoken valid 24 hours, 10 enrollments; it is visible in the host's process list while the command runs\n{site}",
+            "{}\nthe standing token never expires and has no use limit (revoke it with `openvibes-admin token revoke` to replace it; enrolled agents keep working); it is visible in the host's process list while the command runs\n{site}",
             crate::setup::agent_install_command(&platform, ports, &token, &fingerprint, rules.as_deref(), alarm_rules.as_deref())
         )
     });

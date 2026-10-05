@@ -44,7 +44,10 @@ readiness check). The migrating role needs `CREATEROLE`.
 ## Tokens, agents, CA certificates (schema 2)
 
 - `tokens::create(&client, &NewToken) -> token_id`, `tokens::list` (never
-  returns the token or its hash; includes `uses` and `revoked`),
+  returns the token or its hash; includes `uses`, `revoked` and `standing`),
+  `tokens::create_standing` / `tokens::live_standing` (the standing token:
+  never expires, no use limit, one live at a time; its secret sits in
+  `standing_token_secret`, granted to no role but the owner),
   `tokens::revoke(&client, id, now) -> bool` (was usable; an unknown id is
   `false`, a malformed id `StoreError::Query`). Ids are UUIDs, passed as
   text.

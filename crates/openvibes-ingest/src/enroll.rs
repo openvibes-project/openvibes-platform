@@ -53,7 +53,7 @@ pub(crate) async fn enroll(
     let now = Utc::now();
     let token = ingest::token_by_hash(&client, hash)
         .await?
-        .filter(|token| !token.revoked && token.expires_at > now)
+        .filter(|token| !token.revoked && (token.standing || token.expires_at > now))
         .ok_or(ApiError::Unauthorized)?;
     let csr = platform_pki::check_csr(&request.csr_pem).map_err(|_| ApiError::BadRequest)?;
     match ingest::enroll(
