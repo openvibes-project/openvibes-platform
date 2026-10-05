@@ -2084,6 +2084,121 @@ async fn the_list_filters_by_status_severity_assignee_and_text_and_pages() {
 }
 
 #[tokio::test]
+async fn evidence_that_returns_reopens_a_resolved_case() {
+    let mut fx = setup().await;
+    let alarm = fx.web_alarm.clone();
+    let web_finding = finding(WEB);
+    let case = open_case(
+        &mut fx.console,
+        &global(),
+        ALICE,
+        "Back again",
+        &[("alarm", &alarm), ("finding", &web_finding), ("host", WEB)],
+    )
+    .await;
+    let alarm_item = item_id(&case, "alarm").to_owned();
+    let finding_item = item_id(&case, "finding").to_owned();
+    fx.admin
+        .batch_execute(&format!(
+            "UPDATE alarms SET state = 'mitigated', note = 'done' WHERE id = {alarm};
+             UPDATE current_findings SET ended_at = now() WHERE agent_id = '{WEB}';"
+        ))
+        .await
+        .unwrap();
+    // The alarm is resolved by evidence; the finding is a decision.
+    outcome(
+        &mut fx,
+        &global(),
+        ALICE,
+        &case,
+        &alarm_item,
+        Some(OutcomeChange {
+            outcome: "resolved",
+            note: None,
+        }),
+    )
+    .await
+    .unwrap();
+    outcome(
+        &mut fx,
+        &global(),
+        ALICE,
+        &case,
+        &finding_item,
+        Some(OutcomeChange {
+            outcome: "false_positive",
+            note: Some("Scanner noise"),
+        }),
+    )
+    .await
+    .unwrap();
+    let ready = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    let closed = update(
+        &mut fx,
+        &global(),
+        ALICE,
+        &ready,
+        &closing(&ready, "mitigated", "Fixed"),
+    )
+    .await
+    .unwrap();
+    let now = Utc::now() + Duration::minutes(1);
+    // Nothing came back.
+    assert_eq!(
+        cases::reopen_returned(&mut fx.console, now).await.unwrap(),
+        0
+    );
+    // A decision does not reopen the case when its finding is reported again.
+    fx.admin
+        .batch_execute(&format!(
+            "UPDATE current_findings SET ended_at = NULL WHERE agent_id = '{WEB}';"
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        cases::reopen_returned(&mut fx.console, now).await.unwrap(),
+        0
+    );
+    // The alarm coming back does.
+    fx.admin
+        .batch_execute(&format!(
+            "UPDATE alarms SET state = 'open' WHERE id = {alarm};"
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        cases::reopen_returned(&mut fx.console, now).await.unwrap(),
+        1
+    );
+    assert_eq!(
+        cases::reopen_returned(&mut fx.console, now).await.unwrap(),
+        0
+    );
+    let reopened = fetch(&fx, &global(), ALICE, &case).await.unwrap();
+    assert_eq!(reopened.summary.status, "open");
+    assert!(reopened.summary.resolution.is_none() && reopened.summary.closed_at.is_none());
+    assert_eq!(reopened.summary.version, closed.summary.version + 1);
+    let alarm_now = reopened.items.iter().find(|i| i.kind == "alarm").unwrap();
+    assert!(alarm_now.active && alarm_now.outcome.is_none());
+    let finding_now = reopened.items.iter().find(|i| i.kind == "finding").unwrap();
+    assert_eq!(finding_now.outcome.as_deref(), Some("false_positive"));
+    let last = reopened.events.last().unwrap();
+    assert_eq!(last.kind, "reopened");
+    assert!(last.actor.is_none(), "the platform did it");
+    assert_eq!(last.detail["reason"], "evidence_returned");
+    let who: String = fx
+        .admin
+        .query_one(
+            "SELECT actor FROM audit_log WHERE action = 'case.reopen'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(who, "system");
+}
+
+#[tokio::test]
 async fn accepted_risk_that_runs_out_reopens_the_case() {
     let mut fx = setup().await;
     let alarm = fx.web_alarm.clone();

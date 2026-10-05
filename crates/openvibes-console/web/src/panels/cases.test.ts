@@ -111,6 +111,7 @@ describe("timeline and errors", () => {
     expect(eventText(event("resolved", { resolution: "accepted_risk", accepted_until: "2031-01-15T12:00:00Z" }))).toMatch(/^closed the case as accepted risk until .*2031/);
     expect(eventText(event("reopened", { reason: "manual" }))).toBe("reopened the case");
     expect(eventText(event("reopened", { reason: "accepted_risk_expired" }))).toBe("reopened the case because the accepted risk ran out");
+    expect(eventText(event("reopened", { reason: "evidence_returned" }))).toBe("reopened the case because the evidence came back");
   });
 
   it("explains refusals, naming the other case for a clash", () => {

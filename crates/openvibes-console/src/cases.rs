@@ -675,10 +675,11 @@ pub(crate) async fn list_cases(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    // Accepted risk that has run out reopens its case before anyone looks.
-    if store::reopen_expired(&mut client, Utc::now())
-        .await
-        .is_err()
+    // Accepted risk that has run out, or evidence that has come back,
+    // reopens its case before anyone looks.
+    let now = Utc::now();
+    if store::reopen_expired(&mut client, now).await.is_err()
+        || store::reopen_returned(&mut client, now).await.is_err()
     {
         return unavailable_auth();
     }
@@ -769,9 +770,9 @@ pub(crate) async fn get_case(
     let Ok(mut client) = state.pool.get().await else {
         return unavailable_auth();
     };
-    if store::reopen_expired(&mut client, Utc::now())
-        .await
-        .is_err()
+    let now = Utc::now();
+    if store::reopen_expired(&mut client, now).await.is_err()
+        || store::reopen_returned(&mut client, now).await.is_err()
     {
         return unavailable_auth();
     }

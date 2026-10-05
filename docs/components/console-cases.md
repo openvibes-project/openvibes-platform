@@ -77,7 +77,7 @@ text; the resolution note for `resolved`; the outcome note for
 `item_outcome`) and `detail`: `{from, to}` for `status`, `severity` and
 `assigned` (usernames); `{item_id, item_kind, item_ref, item_agent_id}` on
 item entries; `{resolution, accepted_until}` for `resolved`; `{reason}` for
-`reopened` (`manual` or `accepted_risk_expired`). The timeline is oldest
+`reopened` (`manual`, `accepted_risk_expired` or `evidence_returned`). The timeline is oldest
 first and append-only (a trigger refuses UPDATE and DELETE).
 
 ### Changing a case
@@ -134,6 +134,14 @@ marked `accepted_risk` lose that outcome so someone decides again, and the
 resolution fields clear. This runs when cases are listed or read, so it happens
 the next time anyone looks. A case whose item has since joined another open
 case stays closed.
+
+When the evidence comes back for an alarm, finding or vulnerability that was
+closed as `resolved` (the alarm is no longer mitigated, the finding is
+reported again, the advisory matches again), the case reopens the same way
+(audit actor `system`, timeline `reopened` with reason `evidence_returned`)
+and those items lose their `resolved` outcome. Items closed as false positive
+or accepted risk are decisions and do not reopen the case. This also runs when
+cases are listed or read, and the same rule about another open case applies.
 
 ### Audit
 

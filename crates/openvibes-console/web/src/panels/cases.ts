@@ -167,7 +167,10 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
       const until = text(d.accepted_until);
       return `closed the case as ${(resolutionLabel[text(d.resolution) ?? ""] ?? "resolved").toLowerCase()}${until ? ` until ${date(until)}` : ""}`;
     }
-    case "reopened": return d.reason === "accepted_risk_expired" ? "reopened the case because the accepted risk ran out" : "reopened the case";
+    case "reopened":
+      if (d.reason === "accepted_risk_expired") return "reopened the case because the accepted risk ran out";
+      if (d.reason === "evidence_returned") return "reopened the case because the evidence came back";
+      return "reopened the case";
     default: return event.kind;
   }
 }

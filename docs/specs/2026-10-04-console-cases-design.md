@@ -293,9 +293,12 @@ Where the build settled something the design left open, or differs from it:
   outcomes of its items. A case whose item has joined another open case stays
   closed. Reopening a case by hand names the clashing case only if the caller
   can see both the case and the item.
-- **Not built:** reopening a closed case automatically when evidence returns
-  for one of its items (existing triage does this for findings); a closed
-  case keeps its `resolved` items until someone reopens it by hand.
+- **Evidence returning** reopens a closed case when cases are next listed or
+  read, as the platform, if an alarm, finding or vulnerability that was closed
+  as `resolved` has its evidence back. Those items lose the `resolved`
+  outcome; false positive and accepted risk are decisions and never reopen a
+  case. A case whose item has joined another open case stays closed. The
+  timeline reason is `evidence_returned`.
 - **Limits:** 500 items and 2,000 timeline entries per case.
 - `ProblemDetails` gains an optional `case_number`, set on `item_in_case`.
 - An empty case is seen only by its opener and its assignee (a consequence of

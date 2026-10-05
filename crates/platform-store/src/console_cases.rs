@@ -1866,25 +1866,67 @@ pub async fn for_item(
 /// outcome, so someone decides again. A case with an item that has since
 /// joined another open case is left closed. Returns how many reopened.
 pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
-    let due = client
+    reopen_where(
+        client,
+        now,
+        "c.status = 'closed' AND c.resolution = 'accepted_risk' AND c.accepted_until <= $1",
+        "outcome = 'accepted_risk'",
+        "accepted_risk_expired",
+    )
+    .await
+}
+
+/// Reopens closed cases when the evidence comes back for an item that was
+/// closed as `resolved` (the same behaviour triage has for mitigated
+/// items), as the platform (audit actor `system`). Those items lose their
+/// outcome, so someone decides again; items closed as false positive or
+/// accepted risk are decisions and never reopen a case. A case with an item
+/// that has since joined another open case is left closed. Returns how many
+/// reopened.
+pub async fn reopen_returned(client: &mut Client, now: DateTime<Utc>) -> Result<u32, StoreError> {
+    let gone = item_gone();
+    let returned = format!(
+        "i.outcome = 'resolved' AND i.kind IN ('alarm', 'finding', 'vulnerability')
+         AND NOT ({gone})"
+    );
+    let due = format!(
+        "c.status = 'closed' AND c.closed_at <= $1 AND EXISTS (
+             SELECT 1 FROM case_items i WHERE i.case_id = c.case_id AND {returned})"
+    );
+    reopen_where(client, now, &due, &returned, "evidence_returned").await
+}
+
+/// Reopens the closed cases `due` selects (alias `c`, `$1` is `now`), as the
+/// platform. `lose_outcome` (alias `i`) picks the items whose outcome is
+/// cleared; `reason` goes into the timeline and the audit row.
+async fn reopen_where(
+    client: &mut Client,
+    now: DateTime<Utc>,
+    due: &str,
+    lose_outcome: &str,
+    reason: &str,
+) -> Result<u32, StoreError> {
+    let candidates = client
         .query(
-            "SELECT case_id::text FROM cases
-             WHERE status = 'closed' AND resolution = 'accepted_risk' AND accepted_until <= $1
-             ORDER BY accepted_until LIMIT 100",
+            &format!(
+                "SELECT c.case_id::text FROM cases c WHERE {due}
+                 ORDER BY c.updated_at LIMIT 100"
+            ),
             &[&now],
         )
         .await?;
     let mut reopened = 0;
-    for row in due {
+    for row in candidates {
         let case_id: String = row.get(0);
         let tx = client.transaction().await?;
         let locked = tx
             .query_opt(
-                "SELECT number FROM cases
-                 WHERE case_id = $1::text::uuid AND status = 'closed'
-                   AND resolution = 'accepted_risk' AND accepted_until <= $2
-                 FOR UPDATE SKIP LOCKED",
-                &[&case_id, &now],
+                &format!(
+                    "SELECT c.number, c.resolution FROM cases c
+                     WHERE c.case_id = $2::text::uuid AND {due}
+                     FOR UPDATE OF c SKIP LOCKED"
+                ),
+                &[&now, &case_id],
             )
             .await?;
         let Some(locked) = locked else {
@@ -1892,6 +1934,7 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
             continue;
         };
         let number: i64 = locked.get(0);
+        let previous: Option<String> = locked.get(1);
         let taken = tx
             .query_opt(
                 "SELECT 1 FROM case_items mine
@@ -1909,10 +1952,12 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
         }
         let activated = tx
             .execute(
-                "UPDATE case_items SET active = true,
-                    outcome = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome END,
-                    outcome_note = CASE WHEN outcome = 'accepted_risk' THEN NULL ELSE outcome_note END
-                 WHERE case_id = $1::text::uuid",
+                &format!(
+                    "UPDATE case_items i SET active = true,
+                        outcome = CASE WHEN {lose_outcome} THEN NULL ELSE i.outcome END,
+                        outcome_note = CASE WHEN {lose_outcome} THEN NULL ELSE i.outcome_note END
+                     WHERE i.case_id = $1::text::uuid"
+                ),
                 &[&case_id],
             )
             .await;
@@ -1940,8 +1985,7 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
             None,
             "reopened",
             None,
-            json!({ "reason": "accepted_risk_expired", "status": "open",
-                    "previous_resolution": "accepted_risk" }),
+            json!({ "reason": reason, "status": "open", "previous_resolution": previous }),
         )
         .await?;
         audit(
@@ -1949,7 +1993,7 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
             None,
             "case.reopen",
             &case_id,
-            json!({ "number": number, "reason": "accepted_risk_expired" }),
+            json!({ "number": number, "reason": reason }),
         )
         .await?;
         tx.commit().await?;
