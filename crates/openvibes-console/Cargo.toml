@@ -21,6 +21,7 @@ openvibes-rules.workspace = true
 futures-util = { version = "=0.3.34", default-features = false, features = ["std"] }
 include_dir = { workspace = true, optional = true }
 platform-config = { path = "../platform-config" }
+platform-pki = { path = "../platform-pki" }
 platform-assistant = { path = "../platform-assistant" }
 platform-store = { path = "../platform-store" }
 ring.workspace = true

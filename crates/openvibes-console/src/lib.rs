@@ -10,6 +10,7 @@
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
 mod about;
+mod agent_package;
 mod alarm_suppressions;
 mod alarms;
 mod api;
