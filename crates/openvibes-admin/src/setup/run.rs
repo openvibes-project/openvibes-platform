@@ -283,8 +283,8 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         firewall.push_str(&line);
     }
     let closed = firewall;
-    // A Repair mints no token: each one used to leave another 10-use
-    // token behind (#64); the install line is one command away.
+    // A Repair shows no install line (it may be stale after an agent port
+    // move); it is one command away.
     if ctx.repair {
         return Ok(StepState::Done(format!(
             "ready: {}{closed}; for an agent install line (new after moving an agent \
@@ -292,8 +292,7 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             names(&units).join(" ")
         )));
     }
-    let token =
-        token_from(&ctx.as_admin(&["token", "create", "--expires", "24h", "--uses", "10"])?)?;
+    let token = token_from(&ctx.as_admin(&["token", "fleet"])?)?;
     let root = ctx.read(super::pki::ROOT_CERT)?;
     let rules = ctx.read(super::BASELINE_KEY).ok().and_then(|line| {
         let set = line.split_whitespace().next()?.to_owned();
@@ -314,7 +313,7 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         alarm_rules.as_deref(),
     );
     Ok(StepState::Done(format!(
-        "ready: {}; add an agent on another host (token valid 24 hours, 10 enrollments; \
+        "ready: {}; add an agent on another host (the standing token, which never expires; \
          visible in its process list while it runs): {command}",
         names(&units).join(" ")
     )))

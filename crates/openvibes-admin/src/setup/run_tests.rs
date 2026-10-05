@@ -102,11 +102,7 @@ fn readiness_waits_then_creates_an_endpoint_token() {
             "--",
             "/usr/bin/openvibes-admin",
             "token",
-            "create",
-            "--expires",
-            "24h",
-            "--uses",
-            "10",
+            "fleet",
         ],
         0,
         &format!("token id 7\ntoken {TOKEN}\n"),
@@ -114,7 +110,7 @@ fn readiness_waits_then_creates_an_endpoint_token() {
     let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
     fake.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
     // Everything is already ready (the usual case on a first install):
-    // the run still creates the endpoint token and the agent command.
+    // the run still shows the standing token and the agent command.
     let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
     let fingerprint = crate::setup::pki::fingerprint(&root.cert_pem).unwrap();
     let command = format!(

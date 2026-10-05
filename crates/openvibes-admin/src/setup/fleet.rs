@@ -234,7 +234,7 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.succeeds(Rpm, &["-q", "--quiet", "openvibes-agent"]) {
         install(ctx, &["openvibes-agent"])?;
     }
-    let token = token_from(&ctx.as_admin(&["token", "create", "--expires", "1h"])?)?;
+    let token = token_from(&ctx.as_admin(&["token", "fleet"])?)?;
     let agent = Some(("openvibes_agent", "openvibes_agent"));
     ctx.copy(ROOT_CERT, &format!("{AGENT}/platform-ca.crt"), None, 0o644)?;
     ctx.put(
@@ -458,7 +458,7 @@ mod tests {
         fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 0, "");
         fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
         fake.answer(
-            &admin(&["token", "create", "--expires", "1h"]),
+            &admin(&["token", "fleet"]),
             0,
             &format!("token id 3\ntoken {TOKEN}\n"),
         );

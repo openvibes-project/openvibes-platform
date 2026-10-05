@@ -232,7 +232,7 @@ async fn agent_show_prints_the_report() {
 }
 
 #[tokio::test]
-async fn agent_command_prints_the_install_line_with_a_fresh_token() {
+async fn agent_command_prints_the_install_line_with_the_standing_token() {
     let fixture = Fixture::create().await;
     stdout(&fixture.run(&["migrate"]));
     let dir = common::scratch_dir("agent-command");
@@ -255,7 +255,35 @@ async fn agent_command_prints_the_install_line_with_a_fresh_token() {
         "{out}"
     );
     assert!(line.contains(" --ca-sha256 "), "{out}");
-    assert!(out.contains("24 hours, 10 enrollments"), "{out}");
+    assert!(out.contains("never expires and has no use limit"), "{out}");
+    let token_of = |out: &str| {
+        out.lines()
+            .next()
+            .unwrap()
+            .split(" --token ")
+            .nth(1)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap()
+            .to_owned()
+    };
+    // Every later run shows the same token: no new row per install line.
+    let again = stdout(&fixture.run(&[
+        "agent",
+        "command",
+        "--platform",
+        "platform.example.com",
+        "--root-cert",
+        dir.join("root.crt").to_str().unwrap(),
+    ]));
+    assert_eq!(token_of(&again), token_of(&out));
+    let list = stdout(&fixture.run(&["token", "list"]));
+    assert_eq!(list.lines().count(), 1, "{list}");
+    assert!(
+        list.contains("standing") && list.contains("never"),
+        "{list}"
+    );
     let refused = fixture.run(&[
         "agent",
         "command",

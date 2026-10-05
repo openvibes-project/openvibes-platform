@@ -36,6 +36,8 @@ pub struct TokenInfo {
     pub uses: i64,
     /// Whether it was revoked.
     pub revoked: bool,
+    /// Whether it is the standing token: never expires, no use limit.
+    pub standing: bool,
 }
 
 /// Creates a token and returns its id.
@@ -64,7 +66,7 @@ pub async fn list(client: &Client) -> Result<Vec<TokenInfo>, StoreError> {
         .query(
             "SELECT t.token_id::text, t.label, t.created_at, t.expires_at, t.max_uses,
                     (SELECT count(*) FROM token_uses u WHERE u.token_id = t.token_id),
-                    t.revoked_at IS NOT NULL
+                    t.revoked_at IS NOT NULL, t.standing
              FROM enrollment_tokens t ORDER BY t.created_at DESC",
             &[],
         )
@@ -79,8 +81,61 @@ pub async fn list(client: &Client) -> Result<Vec<TokenInfo>, StoreError> {
             max_uses: row.get(4),
             uses: row.get(5),
             revoked: row.get(6),
+            standing: row.get(7),
         })
         .collect())
+}
+
+/// Stand-in expiry stored for a standing token, which ignores it: far past
+/// any deployment's life, so readers that predate the flag still see a
+/// valid token.
+const STANDING_YEARS: i64 = 100;
+
+/// Creates the standing token: it never expires and has no use limit. The
+/// secret is stored beside the hash (see migration 0034) so the install
+/// line can be shown again. Returns its id, or `None` when a live standing
+/// token already exists (revoke it first to replace it).
+pub async fn create_standing(
+    client: &Client,
+    secret: &str,
+    token_sha256: [u8; 32],
+    created_by: &str,
+    now: DateTime<Utc>,
+) -> Result<Option<String>, StoreError> {
+    let row = client
+        .query_opt(
+            "WITH t AS (
+                 INSERT INTO enrollment_tokens
+                     (token_id, token_sha256, label, created_at, created_by, expires_at, max_uses, standing)
+                 VALUES (gen_random_uuid(), $1, 'standing token', $2, $3, $4, $5, true)
+                 ON CONFLICT ((true)) WHERE standing AND revoked_at IS NULL DO NOTHING
+                 RETURNING token_id)
+             INSERT INTO standing_token_secret (token_id, secret)
+             SELECT token_id, $6 FROM t RETURNING token_id::text",
+            &[
+                &token_sha256.as_slice(),
+                &now,
+                &created_by,
+                &(now + chrono::Duration::days(365 * STANDING_YEARS)),
+                &i32::MAX,
+                &secret,
+            ],
+        )
+        .await?;
+    Ok(row.map(|row| row.get(0)))
+}
+
+/// The live (unrevoked) standing token's id and secret, if there is one.
+pub async fn live_standing(client: &Client) -> Result<Option<(String, String)>, StoreError> {
+    let row = client
+        .query_opt(
+            "SELECT t.token_id::text, s.secret
+             FROM enrollment_tokens t JOIN standing_token_secret s USING (token_id)
+             WHERE t.standing AND t.revoked_at IS NULL",
+            &[],
+        )
+        .await?;
+    Ok(row.map(|row| (row.get(0), row.get(1))))
 }
 
 /// Revokes a token. Returns whether it was unrevoked before; an unknown id

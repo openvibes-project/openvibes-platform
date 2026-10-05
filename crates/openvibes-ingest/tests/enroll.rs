@@ -156,3 +156,64 @@ async fn a_revoked_agent_cannot_renew() {
     assert_eq!(error, Some(TransportError::IdentityRevoked));
     world.stop().await;
 }
+
+#[tokio::test]
+async fn the_standing_token_enrolls_any_number_of_agents_until_revoked() {
+    use base64::Engine;
+    let world = World::start().await;
+    let transport = world.transport();
+    let secret = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode([9u8; 32]);
+    let id = platform_store::tokens::create_standing(
+        &world.db().await,
+        &secret,
+        platform_pki::enrollment_token_sha256(&secret).unwrap(),
+        "test",
+        Utc::now(),
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    let token = EnrollmentToken::new(secret).unwrap();
+
+    let (agents, refused) = blocking({
+        let transport = transport.clone();
+        let token = token.clone();
+        move || {
+            let client = PlatformClient::new(&transport, None).unwrap();
+            // More than any ordinary token's limit, each with its own key.
+            let agents: Vec<_> = (0..12)
+                .map(|_| {
+                    client
+                        .enroll(&token, &HostKey::generate().unwrap())
+                        .unwrap()
+                })
+                .collect();
+            (agents, client.enroll(&token, &HostKey::generate().unwrap()))
+        }
+    })
+    .await;
+    assert_eq!(refused.err(), None, "still open after 12 uses");
+    let mut ids: Vec<_> = agents.iter().map(|a| a.agent_id.as_str()).collect();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), 12, "each agent has its own identity");
+
+    // Revoking the token stops new enrollments only.
+    assert!(
+        platform_store::tokens::revoke(&world.db().await, &id, Utc::now())
+            .await
+            .unwrap()
+    );
+    let after = blocking({
+        let transport = transport.clone();
+        move || {
+            PlatformClient::new(&transport, None)
+                .unwrap()
+                .enroll(&token, &HostKey::generate().unwrap())
+                .err()
+        }
+    })
+    .await;
+    assert_eq!(after, Some(TransportError::Unauthorized));
+    world.stop().await;
+}

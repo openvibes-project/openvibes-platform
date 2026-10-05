@@ -20,7 +20,8 @@ pub struct Status {
     pub agents_revoked: i64,
     /// Hosts imported from export files (P3b).
     pub imported_hosts: i64,
-    /// Enrollment tokens that are unrevoked, unexpired, and not used up.
+    /// Enrollment tokens that are unrevoked, unexpired, and not used up (the
+    /// standing token always, until revoked).
     pub tokens_usable: i64,
     /// Oldest day with a findings partition.
     pub oldest_partition: Option<NaiveDate>,
@@ -49,8 +50,9 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
     let tokens: i64 = client
         .query_one(
             "SELECT count(*) FROM enrollment_tokens t
-             WHERE t.revoked_at IS NULL AND t.expires_at > $1
-               AND (SELECT count(*) FROM token_uses u WHERE u.token_id = t.token_id) < t.max_uses",
+             WHERE t.revoked_at IS NULL
+               AND (t.standing OR (t.expires_at > $1
+                 AND (SELECT count(*) FROM token_uses u WHERE u.token_id = t.token_id) < t.max_uses))",
             &[&now],
         )
         .await?
