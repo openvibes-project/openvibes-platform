@@ -22,6 +22,10 @@ use crate::{dpkgver, rpmver::compare_evr};
 /// exceeded the 10 s statement timeout at 10,000 hosts (`docs/sizing.md`).
 pub const MATCH_BATCH: usize = 500;
 
+/// Increment when a deployment must re-evaluate inventories already stored
+/// by an older matcher. The platform retries hosts below this version.
+pub const MATCHER_VERSION: i32 = 1;
+
 /// What evaluating each distinct package version once finds: the fixable
 /// (advisory, package) pairs worth matching per host, and the no-fix hits,
 /// kept per version (the user, 2026-09-26).
@@ -103,6 +107,7 @@ pub async fn match_release_in_batches(
         open += vulns::apply(client, scope, &found, now).await?;
         vulns::refresh_counts(client, agents, now).await?;
     }
+    vulns::mark_release_matched(client, os_id, os_version, MATCHER_VERSION).await?;
     Ok(open)
 }
 
@@ -130,6 +135,7 @@ pub async fn match_host(
     let found = evaluate(&candidates);
     let open = vulns::apply(client, Scope::Host(agent_id), &found, now).await?;
     vulns::refresh_counts(client, &[agent_id.to_owned()], now).await?;
+    vulns::mark_host_matched(client, agent_id, MATCHER_VERSION).await?;
     Ok(open)
 }
 

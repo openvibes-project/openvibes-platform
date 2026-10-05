@@ -271,7 +271,7 @@ hold, and chooses a home; service-account bearer tokens get 403. See
 [console-dashboards.md](console-dashboards.md).
 
 Cases (`/api/v1/cases` and below) are read with `cases.read` and changed with
-`cases.manage` (new in schema 34; Analyst and Admin, both agent-scoped, so a
+`cases.manage` (new in schema 35; Analyst and Admin, both agent-scoped, so a
 scoped user sees and adds only what their asset groups cover). They are
 browser-session only like dashboards; service-account bearer tokens get 403.
 A case the caller cannot see answers 404. See

@@ -71,6 +71,11 @@ the offline core used by `openvibes-admin feeds import` and the
   fix that is not yet running keeps the vulnerability open with
   `reboot_needed` and the running version in its package entry; a reboot
   into the fix closes it with the next inventory.
+- A host-specific candidate query starts from that host's materialized
+  package inventory, avoiding a release-wide advisory/package join before
+  applying the host filter. Matcher version state in `agents` leaves failed
+  evaluations pending; a background reconciliation retries them every
+  minute and also evaluates stored inventories once after a matcher upgrade.
 - `repodata::{metalink, updateinfo_location}` — Fedora's mirror list (the
   current `repomd.xml` digest first, then alternates for lagging mirrors;
   https then http mirrors) and repository index (updateinfo location under
@@ -83,8 +88,15 @@ the offline core used by `openvibes-admin feeds import` and the
   (2 MB), later checks report unchanged.
 - `service::run(config, health, shutdown)` — the daemon: checks every
   Fedora release its hosts report at start and every interval, and
-  re-matches a host within a second of ingest's `inventory_changed`
-  notification (dedicated LISTEN connection, reconnecting every 30 s).
+  re-matches a host after ingest's `inventory_changed` notification
+  (dedicated LISTEN connection, reconnecting every 30 s). If a newly
+  reported release has no feed yet, it checks Fedora immediately or wakes
+  the separate OSV worker for Debian, Ubuntu, Rocky Linux and AlmaLinux.
+  Matching waits for that first feed instead of recording a misleading zero;
+  a failed check is retried on the normal interval. Later inventory changes
+  use the stored feed without downloading it again. Pending host matches are
+  reconciled every minute, so transient query or database failures survive a
+  process restart and do not leave stale vulnerability states indefinitely.
 - `feed::import(client, source, content, now)` — parse (plain or zstd by
   magic bytes), store advisories, record the feed state, re-match the
   release. A failure is recorded on the feed and changes nothing else.

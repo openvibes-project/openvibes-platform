@@ -20,7 +20,7 @@ pub mod ca;
 pub mod console_alarms;
 /// Local console credentials, throttles, pre-authentication, and sessions.
 pub mod console_auth;
-/// Cases: investigations with items, notes and a timeline (schema 34).
+/// Cases: investigations with items, notes and a timeline (schema 35).
 pub mod console_cases;
 /// Console reads of installed software: host packages and fleet software.
 pub mod console_inventory;

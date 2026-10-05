@@ -5,7 +5,7 @@ import type { Agent, AlarmSummary, Certificate, Finding, HostPackage, Tag, TagPr
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
-import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, StatusBadge } from "../ui/bits";
+import { Ago, Empty, ErrorBox, Loading, ObjectLink, SAVED_HEARTBEAT_HINT, SeverityBadge, StatusBadge } from "../ui/bits";
 import { date, severityOrder } from "../ui/format";
 import { lineage } from "../views/Alarms";
 import { packageId } from "../views/Software";
@@ -101,7 +101,7 @@ export function AgentPanel({ id }: { id: string }) {
         </>}
       />
       <div className="panel-glance">
-        <div><span className="subtle">Last contact</span><strong><Ago value={data.last_seen_at} /></strong></div>
+        <div><span className="subtle">Last saved heartbeat</span><strong><Ago value={data.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></strong></div>
         <div><span className="subtle">Findings</span><strong className="num">{findings.loading ? "…" : mine.length}</strong></div>
         {can("alarms.read") && <div><span className="subtle">Active alarms</span><strong className="num">{alarms.loading ? "…" : alarmCount}</strong></div>}
         <div><span className="subtle">Vulnerabilities</span><strong className="num">{vulns.loading ? "…" : vulnItems.length}</strong></div>

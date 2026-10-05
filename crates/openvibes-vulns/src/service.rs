@@ -2,7 +2,7 @@
 //! and the KEV and EPSS sources at start and every interval, re-matches a host when ingest notifies
 //! `inventory_changed`, and serves loopback `/health` and `/ready`.
 
-use std::{future::Future, time::Duration};
+use std::{collections::HashSet, future::Future, time::Duration};
 
 use axum::{Router, extract::State, http::StatusCode, routing::get};
 use chrono::Utc;
@@ -16,6 +16,7 @@ use crate::{
     feed::SourceId,
     fetch::{self, Checked, Fetcher},
     matching,
+    osv::Release,
     osv_fetch::{self, OsvSync},
     sources::{self, NvdClient},
 };
@@ -57,6 +58,7 @@ pub async fn run(
         Some(tokio::spawn(nvd_loop(pool.clone(), nvd, every)))
     };
     // OSV's first imports are large downloads: apart from the main loop.
+    let (osv_changed, osv_notifications) = mpsc::unbounded_channel();
     let osv_task = if config.osv_url.is_empty() {
         None
     } else {
@@ -67,10 +69,21 @@ pub async fn run(
             config.osv_max_download_bytes,
             osv_fetch::MAX_CHANGES,
         )?;
-        Some(tokio::spawn(osv_loop(pool.clone(), osv, every)))
+        Some(tokio::spawn(osv_loop(
+            pool.clone(),
+            osv,
+            every,
+            osv_notifications,
+        )))
     };
     let (changed, mut notifications) = mpsc::unbounded_channel();
     let listener = tokio::spawn(listen(config.database_url.clone(), changed));
+    let rematch_retry = tokio::spawn(rematch_pending_loop(
+        pool.clone(),
+        fetcher.clone(),
+        config.arch.clone(),
+        osv_task.as_ref().map(|_| osv_changed.clone()),
+    ));
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     tokio::pin!(shutdown);
@@ -81,10 +94,17 @@ pub async fn run(
                 check_all(&pool, &fetcher, &config.arch).await;
                 enrich_all(&pool, &fetcher, &config).await;
             }
-            Some(agent) = notifications.recv() => rematch(&pool, &agent).await,
+            Some(agent) = notifications.recv() => rematch(
+                &pool,
+                &fetcher,
+                &config.arch,
+                osv_task.as_ref().map(|_| &osv_changed),
+                &agent,
+            ).await,
         }
     }
     listener.abort();
+    rematch_retry.abort();
     health_task.abort();
     for task in [nvd_task, osv_task].into_iter().flatten() {
         task.abort();
@@ -135,12 +155,31 @@ async fn check_all(pool: &Pool, fetcher: &Fetcher, arch: &str) {
     }
 }
 
-/// Syncs OSV for the releases hosts run, every interval (first at start).
-async fn osv_loop(pool: Pool, osv: OsvSync, every: Duration) {
+/// Syncs OSV at startup, every interval, and when the first inventory for a
+/// release arrives after startup. The large download remains off the main
+/// notification loop.
+async fn osv_loop(
+    pool: Pool,
+    osv: OsvSync,
+    every: Duration,
+    mut new_releases: mpsc::UnboundedReceiver<Release>,
+) {
     let mut interval = tokio::time::interval(every);
     interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    let mut attempted = HashSet::new();
     loop {
-        interval.tick().await;
+        let requested = tokio::select! {
+            _ = interval.tick() => {
+                attempted.clear();
+                None
+            }
+            Some(release) = new_releases.recv() => {
+                if !attempted.insert(release.name()) {
+                    continue;
+                }
+                Some(release)
+            }
+        };
         let Ok(mut client) = pool.get().await else {
             tracing::warn!("database unavailable; osv sync skipped");
             continue;
@@ -153,6 +192,19 @@ async fn osv_loop(pool: Pool, osv: OsvSync, every: Duration) {
             }
         };
         for (ecosystem, releases) in groups {
+            if let Some(release) = &requested {
+                if release.ecosystem() != ecosystem {
+                    continue;
+                }
+                match platform_store::vulns::feed_digest(&client, &release.name()).await {
+                    Ok(Some(_)) => continue,
+                    Ok(None) => {}
+                    Err(error) => {
+                        tracing::warn!(%error, "cannot read OSV feed status");
+                        continue;
+                    }
+                }
+            }
             match osv_fetch::sync(&mut client, &osv, ecosystem, &releases, Utc::now()).await {
                 Ok(synced) => tracing::info!(ecosystem, ?synced, "osv synced"),
                 Err(error) => tracing::warn!(ecosystem, %error, "osv sync failed"),
@@ -212,14 +264,126 @@ async fn enrich_all(pool: &Pool, fetcher: &Fetcher, config: &VulnsConfig) {
     }
 }
 
-async fn rematch(pool: &Pool, agent: &str) {
+async fn rematch(
+    pool: &Pool,
+    fetcher: &Fetcher,
+    arch: &str,
+    osv_changed: Option<&mpsc::UnboundedSender<Release>>,
+    agent: &str,
+) {
     let Ok(mut client) = pool.get().await else {
         tracing::warn!("database unavailable; host re-match skipped");
         return;
     };
+    // The service may start before the first agent enrolls. Its startup feed
+    // check then sees no Fedora releases, so fetch this release as soon as its
+    // first inventory arrives instead of matching against an empty feed for
+    // up to a full check interval.
+    match vulns::host_release(&client, agent).await {
+        Ok(Some((os_id, os_version))) if os_id == "fedora" => {
+            let source = SourceId {
+                os_id,
+                os_version,
+                arch: arch.to_owned(),
+            };
+            let name = source.name();
+            match vulns::feed_digest(&client, &name).await {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    let checked = match vulns::feeds(&client).await {
+                        Ok(feeds) => feeds
+                            .iter()
+                            .any(|feed| feed.source == name && feed.last_checked_at.is_some()),
+                        Err(error) => {
+                            tracing::warn!(agent_id = %agent, %error, "cannot read feed status");
+                            return;
+                        }
+                    };
+                    if checked {
+                        tracing::info!(agent_id = %agent, source = %name, "host awaiting Fedora feed retry");
+                        return;
+                    }
+                    match fetch::check(&mut client, fetcher, &source, Utc::now()).await {
+                        Ok(Checked::Unchanged) => tracing::info!(source = %name, "feed unchanged"),
+                        Ok(Checked::Imported(report)) => tracing::info!(
+                            source = %name,
+                            advisories = report.advisories,
+                            open = report.open,
+                            "feed imported"
+                        ),
+                        Err(error) => {
+                            tracing::warn!(source = %name, %error, "feed check failed");
+                            return;
+                        }
+                    }
+                }
+                Err(error) => {
+                    tracing::warn!(agent_id = %agent, %error, "cannot read feed status");
+                    return;
+                }
+            }
+        }
+        Ok(Some((os_id, os_version))) => {
+            let Ok(release) = format!("{os_id}-{os_version}").parse::<Release>() else {
+                return;
+            };
+            match vulns::feed_digest(&client, &release.name()).await {
+                Ok(Some(_)) => {}
+                Ok(None) => {
+                    if let Some(sender) = osv_changed {
+                        let _ = sender.send(release.clone());
+                    }
+                    tracing::info!(agent_id = %agent, source = %release, "host awaiting OSV feed");
+                    return;
+                }
+                Err(error) => {
+                    tracing::warn!(agent_id = %agent, %error, "cannot read OSV feed status");
+                    return;
+                }
+            }
+        }
+        Ok(_) => {}
+        Err(error) => {
+            tracing::warn!(agent_id = %agent, %error, "cannot read host release");
+            return;
+        }
+    }
     match matching::match_host(&mut client, agent, Utc::now()).await {
         Ok(open) => tracing::info!(agent_id = %agent, open, "host re-matched"),
         Err(error) => tracing::warn!(agent_id = %agent, %error, "host re-match failed"),
+    }
+}
+
+/// Reconciles inventories that were never matched or whose re-match failed.
+/// The state is in the database, so a process restart does not lose retries.
+async fn rematch_pending_loop(
+    pool: Pool,
+    fetcher: Fetcher,
+    arch: String,
+    osv_changed: Option<mpsc::UnboundedSender<Release>>,
+) {
+    loop {
+        let pending = match pool.get().await {
+            Ok(client) => vulns::hosts_needing_match(&client, matching::MATCHER_VERSION).await,
+            Err(_) => Err(platform_store::StoreError::Unavailable),
+        };
+        match pending {
+            Ok(hosts) => {
+                let mut processed = 0;
+                for (index, agent) in hosts.iter().enumerate() {
+                    rematch(&pool, &fetcher, &arch, osv_changed.as_ref(), agent).await;
+                    processed += 1;
+                    if index % 25 == 24 {
+                        tokio::task::yield_now().await;
+                    }
+                }
+                if processed > 0 {
+                    tracing::info!(processed, "pending vulnerability re-matches processed");
+                }
+            }
+            Err(error) => tracing::warn!(%error, "cannot load pending vulnerability re-matches"),
+        }
+        tokio::time::sleep(Duration::from_secs(60)).await;
     }
 }
 

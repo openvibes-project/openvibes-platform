@@ -1,4 +1,4 @@
-//! Cases: where one investigation happens (schema 34, design in
+//! Cases: where one investigation happens (schema 35, design in
 //! `docs/specs/2026-10-04-console-cases-design.md`).
 //!
 //! A case holds a title, a status, items that link to existing objects

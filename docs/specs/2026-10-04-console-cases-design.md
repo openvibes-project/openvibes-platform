@@ -1,7 +1,7 @@
 # Console cases: one place to investigate
 
 **Status:** all questions answered. The backend of the first version is
-built (migration 0034, `platform-store::console_cases`, the `/api/v1/cases`
+built (migration 0035, `platform-store::console_cases`, the `/api/v1/cases`
 routes; see [console-cases.md](../components/console-cases.md) and "As built"
 below), and so are the web pages: the list, the case panel and "Add to case"
 (see [console-web.md](../components/console-web.md#cases)).
@@ -186,7 +186,7 @@ version is refused, and closing with items still unresolved is refused.
 
 ## Technical design (first version)
 
-### Tables (migration 0034, schema 34; append-only)
+### Tables (migration 0035, schema 35; append-only)
 
 - `cases`: `case_id uuid`, `number bigint` (identity, unique, shown as
   `C-n`), `title` (1 to 120 characters), `status` (`open`, `investigating`,

@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 34: cases (docs/specs/2026-10-04-console-cases-design.md).
+-- OpenVIBES platform schema version 35: cases (docs/specs/2026-10-04-console-cases-design.md).
 -- A case is where one investigation happens: a title, a status, items
 -- that link to existing objects (never copies), and an append-only
 -- timeline. Cases are visible by the viewer's asset-group scope, which the

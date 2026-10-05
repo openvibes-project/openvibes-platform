@@ -1,7 +1,7 @@
 # console-cases
 
 Cases over `/api/v1` (module `crates/openvibes-console/src/cases.rs`, store
-`platform_store::console_cases`, schema 34). Spec:
+`platform_store::console_cases`, schema 35). Spec:
 [2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md).
 The API, store and tests are built, and so are the web pages (list, case
 panel, "Add to case"; see [console-web.md](console-web.md#cases)).

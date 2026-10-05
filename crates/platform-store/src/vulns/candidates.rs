@@ -55,16 +55,24 @@ pub(crate) const INSTALLED: &str = "CASE WHEN pv.manager = 'dpkg' THEN COALESCE(
          || CASE WHEN pv.release <> '' THEN '-' || pv.release ELSE '' END)
      ELSE pv.epoch || ':' || pv.version || '-' || pv.release END";
 
-/// Advisory packages joined to the package versions they could apply to:
-/// a binary entry matches that binary (compatible arch); a source entry
-/// every binary built from it (protocol P10).
-const MATCH: &str = "FROM advisories a
-     JOIN advisory_packages ap ON ap.advisory_id = a.advisory_id
-     JOIN package_versions pv ON pv.manager = ap.scheme AND (
+/// How advisory packages match package versions: a binary entry matches that
+/// binary (compatible arch); a source entry every binary built from it (P10).
+const PACKAGE_MATCH: &str = "pv.manager = ap.scheme AND (
          (ap.match_on = 'binary' AND pv.name = ap.name
              AND (ap.arch IN ('', 'noarch') OR pv.arch = ap.arch OR pv.arch = 'noarch'))
          OR (ap.match_on = 'source'
              AND (pv.source = ap.name OR (pv.source IS NULL AND pv.name = ap.name))))";
+
+/// Release-wide advisory candidates. Host-specific matches use a materialized
+/// host package list instead; expanding every advisory against the fleet's
+/// package catalog before filtering one host can exceed the statement timeout.
+fn match_from() -> String {
+    format!(
+        "FROM advisories a
+         JOIN advisory_packages ap ON ap.advisory_id = a.advisory_id
+         JOIN package_versions pv ON {PACKAGE_MATCH}"
+    )
+}
 
 fn candidate(row: &tokio_postgres::Row) -> Candidate {
     Candidate {
@@ -94,12 +102,13 @@ pub async fn candidates(
 ) -> Result<Vec<Candidate>, StoreError> {
     let (advisories, names): (Vec<&str>, Vec<&str>) =
         pairs.iter().map(|(a, n)| (a.as_str(), n.as_str())).unzip();
+    let match_from = match_from();
     let rows = client
         .query(
             &format!(
                 "SELECT h.agent_id, ap.advisory_id, ap.name, ap.arch, ap.scheme, ap.introduced,
                         ap.fixed, ap.last_affected, {INSTALLED}, g.running_kernel, pv.id
-                 {MATCH}
+                 {match_from}
                  JOIN host_packages h ON h.package_version_id = pv.id
                  JOIN agents g ON g.agent_id = h.agent_id
                  WHERE a.os_id = $1 AND a.os_version = $2
@@ -123,22 +132,99 @@ pub async fn version_candidates(
     os_version: &str,
     agent: Option<&str>,
 ) -> Result<Vec<Candidate>, StoreError> {
-    let rows = client
+    let rows = if let Some(agent) = agent {
+        // Keep the host filter in a materialized CTE. The previous query
+        // joined every advisory package to every package version, then used
+        // `IN (host package versions)` to discard the fleet. On a normal F44
+        // inventory that plan could hit PostgreSQL's 10-second statement
+        // timeout and leave fixed findings open.
+        client
+            .query(
+                &format!(
+                    "WITH host_versions AS MATERIALIZED (
+                         SELECT pv.*
+                         FROM host_packages h
+                         JOIN agents g ON g.agent_id = h.agent_id
+                         JOIN package_versions pv ON pv.id = h.package_version_id
+                         WHERE g.os_id = $1 AND g.os_release = $2 AND h.agent_id = $3
+                     )
+                     SELECT '', ap.advisory_id, ap.name, ap.arch, ap.scheme, ap.introduced,
+                            ap.fixed, ap.last_affected, {INSTALLED}, NULL::text, pv.id
+                     FROM host_versions pv
+                     JOIN advisory_packages ap ON {PACKAGE_MATCH}
+                     JOIN advisories a ON a.advisory_id = ap.advisory_id
+                     WHERE a.os_id = $1 AND a.os_version = $2"
+                ),
+                &[&os_id, &os_version, &agent],
+            )
+            .await?
+    } else {
+        let match_from = match_from();
+        client
+            .query(
+                &format!(
+                    "SELECT '', ap.advisory_id, ap.name, ap.arch, ap.scheme, ap.introduced,
+                            ap.fixed, ap.last_affected, {INSTALLED}, NULL::text, pv.id
+                     {match_from}
+                     WHERE a.os_id = $1 AND a.os_version = $2
+                       AND pv.id IN (SELECT h.package_version_id FROM host_packages h
+                                     JOIN agents g ON g.agent_id = h.agent_id
+                                     WHERE g.os_id = $1 AND g.os_release = $2)"
+                ),
+                &[&os_id, &os_version],
+            )
+            .await?
+    };
+    Ok(rows.iter().map(candidate).collect())
+}
+
+/// Hosts whose installed inventory has not been evaluated by `version`.
+pub async fn hosts_needing_match(client: &Client, version: i32) -> Result<Vec<String>, StoreError> {
+    Ok(client
         .query(
-            &format!(
-                "SELECT '', ap.advisory_id, ap.name, ap.arch, ap.scheme, ap.introduced,
-                        ap.fixed, ap.last_affected, {INSTALLED}, NULL::text, pv.id
-                 {MATCH}
-                 WHERE a.os_id = $1 AND a.os_version = $2
-                   AND pv.id IN (SELECT h.package_version_id FROM host_packages h
-                                 JOIN agents g ON g.agent_id = h.agent_id
-                                 WHERE g.os_id = $1 AND g.os_release = $2
-                                   AND ($3::text IS NULL OR h.agent_id = $3))"
-            ),
-            &[&os_id, &os_version, &agent],
+            "SELECT agent_id FROM agents
+             WHERE inventory_sha256 IS NOT NULL AND os_id IS NOT NULL AND os_version IS NOT NULL
+               AND vulnerability_match_version < $1
+             ORDER BY agent_id",
+            &[&version],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect())
+}
+
+/// Records that a host's current inventory was successfully evaluated.
+pub async fn mark_host_matched(
+    client: &Client,
+    agent_id: &str,
+    version: i32,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "UPDATE agents SET vulnerability_match_version = $2
+             WHERE agent_id = $1 AND inventory_sha256 IS NOT NULL",
+            &[&agent_id, &version],
         )
         .await?;
-    Ok(rows.iter().map(candidate).collect())
+    Ok(())
+}
+
+/// Records that the release's current inventories were successfully matched.
+pub async fn mark_release_matched(
+    client: &Client,
+    os_id: &str,
+    os_version: &str,
+    version: i32,
+) -> Result<(), StoreError> {
+    client
+        .execute(
+            "UPDATE agents SET vulnerability_match_version = $3
+             WHERE os_id = $1 AND os_release = $2 AND inventory_sha256 IS NOT NULL",
+            &[&os_id, &os_version, &version],
+        )
+        .await?;
+    Ok(())
 }
 
 /// A vulnerability without a fix on one package version.
