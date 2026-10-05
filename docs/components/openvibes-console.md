@@ -83,7 +83,8 @@ Production data routes remain unavailable until their later milestones
 provide SQL-enforced authorisation. The C1 `dev-seed` feature exposes a synthetic read-only API
 only on the loopback development router; it is not part of the production
 OpenAPI snapshot or package. The seeded API also supplies deterministic
-vulnerability and grouped-finding data so both pages can be reviewed locally.
+vulnerability and grouped-finding data so both pages can be reviewed locally. It does not serve
+alarms or cases; those are reviewed with the in-browser demo or against a database.
 
 ### Vulnerability review and X-M7 grouped findings
 
@@ -269,6 +270,13 @@ Dashboards (`/api/v1/dashboards`, `/api/v1/dashboards/{id}`,
 users: any signed-in user keeps their own, sees those shared with a role they
 hold, and chooses a home; service-account bearer tokens get 403. See
 [console-dashboards.md](console-dashboards.md).
+
+Cases (`/api/v1/cases` and below) are read with `cases.read` and changed with
+`cases.manage` (new in schema 35; Analyst and Admin, both agent-scoped, so a
+scoped user sees and adds only what their asset groups cover). They are
+browser-session only like dashboards; service-account bearer tokens get 403.
+A case the caller cannot see answers 404. See
+[console-cases.md](console-cases.md).
 
 The implemented production UI covers sign-in, overview, agents, findings,
 enrollment, service accounts, rule sets, access control, audit, and

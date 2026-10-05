@@ -11,6 +11,8 @@ import { date, daysAgo, isPast, triageLabel } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
+import { AddToCase } from "./AddToCase";
+import { findingRef } from "./cases";
 import { allowedStates, noteRequired, triageBody } from "./triage";
 
 export const triageStates = ["open", "investigating", "mitigated", "accepted_risk", "false_positive"] as const;
@@ -100,6 +102,7 @@ export function FindingPanel({ id }: { id: string }) {
   };
 
   const canTriage = can("findings.triage");
+  const canCase = can("cases.manage");
   return (
     <>
       <PanelHeader
@@ -157,7 +160,7 @@ export function FindingPanel({ id }: { id: string }) {
               <tr>
                 {canTriage && <th className="check"><input type="checkbox" aria-label="Select all hosts" checked={items.length > 0 && items.every((item) => selected.has(item.agent_id))}
                   onChange={(event) => setSelected(event.target.checked ? new Set(items.map((item) => item.agent_id)) : new Set())} /></th>}
-                <th>Host</th><th>State</th><th>Assignee</th><th>Last seen</th>
+                <th>Host</th><th>State</th><th className="hide-narrow">Assignee</th><th>Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -165,13 +168,13 @@ export function FindingPanel({ id }: { id: string }) {
                 <tr key={item.agent_id} aria-selected={selected.has(item.agent_id) || undefined}>
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
-                  <td><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
+                  <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
                     ? <span className="badge badge--bad badge--plain" style={{ marginLeft: 6 }}>expired {date(item.accepted_until)}</span>
                     : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}
                     {item.ended_at && <span className="badge badge--ok badge--plain" style={{ marginLeft: 6 }}
                       title="The agent reported this match ended">fixed {item.end_approximate ? "about " : ""}{date(item.ended_at)}</span>}</td>
-                  <td className={item.assigned_to ? undefined : "subtle"}>{item.assigned_to ?? "—"}</td>
+                  <td className={item.assigned_to ? "hide-narrow" : "subtle hide-narrow"}>{item.assigned_to ?? "—"}</td>
                   <td className="subtle"><Ago value={item.last_observed_at} /></td>
                 </tr>
               ))}

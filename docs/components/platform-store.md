@@ -602,6 +602,39 @@ permission-checked console API, so sharing never exposes data.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
 
+## Cases (`console_cases::…`, schemas 35 and 36)
+
+- `cases`: `case_id`, a `number` from an identity column (unique, never
+  reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),
+  `resolution`, `resolution_note`, `accepted_until`, `severity`, assignee and
+  opener, times and `version`. CHECKs tie a closed case to its resolution,
+  note and close time, and accepted risk to its date.
+- `case_items`: a link (`kind`, `ref`, `agent_id` for scope; null for
+  software) with `active` (true while the case is not closed), `outcome` and
+  `outcome_note`. `(case_id, kind, ref)` is unique, and a partial unique index
+  on `(kind, ref)` where `active` for alarms, findings and vulnerabilities puts
+  each in at most one open case, even under concurrent requests. `seq` orders
+  items added in the same instant.
+- `case_events`: the append-only timeline; a trigger refuses UPDATE and
+  DELETE for every role. `detail` is JSON and never holds a note; item
+  entries carry `item_agent_id` so the timeline can be filtered by scope.
+- Permission `cases.manage` (agent scoped) for Analyst and Admin.
+- Grants: the console role has SELECT, INSERT, UPDATE on `cases`, SELECT,
+  INSERT, UPDATE, DELETE on `case_items`, and SELECT, INSERT on `case_events`.
+
+`console_cases` takes the caller's `AgentScope` and user id on every call and
+applies `agent_visibility` in SQL: a case is visible through a visible item,
+or to its opener or assignee; items, counts and timeline entries about hidden
+items are left out. Changes return `Result<_, Refusal>` (`NotFound`, `Stale`,
+`ItemInCase`, `ItemsUnresolved` and so on) and write the audit row and
+timeline entry in the same transaction. `reopen_due` runs two lazy checks that
+the console calls before it lists or reads cases: `reopen_expired` reopens
+closed cases whose accepted risk has run out, and `reopen_evidence_returned`
+reopens cases closed within the last 30 days whose `resolved` items have
+evidence again (migration 36 adds the partial index on `closed_at` it uses).
+Tested by `tests/console_cases.rs`, run as
+the console role. See [console-cases.md](console-cases.md).
+
 ## The rule signer's access (`signer::…`, schema 32, board #107)
 
 Migration 32 creates the `openvibes-signer` role with column grants for a

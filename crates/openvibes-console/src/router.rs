@@ -574,6 +574,32 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/ports/{protocol}/{port}", get(crate::ports::get_port))
         .route("/v1/services", get(crate::ports::list_services))
         .route("/v1/services/{unit}", get(crate::ports::get_unit))
+        .route(
+            "/v1/cases",
+            get(crate::cases::list_cases).post(crate::cases::create_case),
+        )
+        .route("/v1/cases/for-item", get(crate::cases::cases_for_item))
+        .route("/v1/cases/assignees", get(crate::cases::list_assignees))
+        .route(
+            "/v1/cases/{case_id}",
+            get(crate::cases::get_case).put(crate::cases::update_case),
+        )
+        .route(
+            "/v1/cases/{case_id}/notes",
+            axum::routing::post(crate::cases::add_note),
+        )
+        .route(
+            "/v1/cases/{case_id}/items",
+            axum::routing::post(crate::cases::add_item),
+        )
+        .route(
+            "/v1/cases/{case_id}/items/{item_id}",
+            axum::routing::delete(crate::cases::remove_item),
+        )
+        .route(
+            "/v1/cases/{case_id}/items/{item_id}/outcome",
+            axum::routing::put(crate::cases::set_item_outcome),
+        )
         .route("/v1/alarms", get(crate::alarms::list_alarms))
         .route("/v1/alarms/{alarm_id}", get(crate::alarms::get_alarm))
         .route(

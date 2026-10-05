@@ -2,9 +2,11 @@
 // many hosts run each, and the hosts themselves.
 import { useResource } from "../api/client";
 import type { SoftwareDetail } from "../api/types";
+import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { PanelHeader, Section } from "../ui/panel";
+import { AddToCase } from "./AddToCase";
 import { ShowMore, useMoreHosts } from "./MoreHosts";
 
 /** `manager/name` → [manager, name]; the name may itself contain "/". */
@@ -18,6 +20,7 @@ function fullVersion(v: { epoch: number; version: string; release: string }): st
 }
 
 export function PackagePanel({ id }: { id: string }) {
+  const { can } = useSession();
   const [manager, name] = splitPackageId(id);
   const path = `/api/v1/software/${encodeURIComponent(manager)}/${encodeURIComponent(name)}`;
   const detail = useResource<SoftwareDetail>(path);
@@ -30,7 +33,8 @@ export function PackagePanel({ id }: { id: string }) {
   return (
     <>
       <PanelHeader icon="package" kind={`Software · ${manager}`} title={<span className="mono">{name}</span>}
-        badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} {data.versions.length === 1 ? "version" : "versions"}</span></>} />
+        badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} {data.versions.length === 1 ? "version" : "versions"}</span></>}
+        actions={can("cases.manage") && <AddToCase kind="software" id={id} label={name} />} />
       <div className="panel-body stack">
         <Section title="Versions in use">
           <ul className="list list--plain">
