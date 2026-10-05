@@ -537,7 +537,7 @@ mod tests {
         let fake = Fake::new("agent-silent");
         fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 0, "");
         fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
-        fake.answer(&admin(&["token", "create"]), 0, &format!("token {TOKEN}\n"));
+        fake.answer(&admin(&["token", "fleet"]), 0, &format!("token {TOKEN}\n"));
         fake.answer(&["/usr/bin/systemctl"], 0, "");
         fake.answer(&admin(&["agent", "list"]), 0, "");
         fake.file("/etc/openvibes/pki/root.crt", "ROOT\n");
@@ -567,7 +567,7 @@ mod tests {
             "-D\n-a task,never\n-a always,exit\n",
         );
         fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 0, "");
-        fake.answer(&admin(&["token", "create"]), 0, &format!("token {TOKEN}\n"));
+        fake.answer(&admin(&["token", "fleet"]), 0, &format!("token {TOKEN}\n"));
         fake.answer(&["/usr/bin/systemctl"], 0, "");
         fake.answer(&admin(&["agent", "list"]), 0, "agent.x  active  host\n");
         fake.file("/etc/openvibes/pki/root.crt", "ROOT\n");
