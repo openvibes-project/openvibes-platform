@@ -201,26 +201,9 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
     }
   };
 
-  /** Evidence that comes back for an item closed as resolved reopens its case, and the item is decided again. */
-  const sweepReturned = () => {
-    for (const c of state.cases) {
-      if (c.status !== "closed") continue;
-      const back = itemsOf(c).filter((i) => i.outcome === "resolved" && EXCLUSIVE_KINDS.has(i.kind) && !(factsOf(i)?.gone ?? true));
-      if (back.length === 0 || itemsOf(c).some((i) => holder(i, c.case_id))) continue;
-      Object.assign(c, { status: "open", resolution: null, resolution_note: null, accepted_until: null, closed_at: null, version: c.version + 1 });
-      for (const i of itemsOf(c)) i.active = true;
-      for (const i of back) { i.outcome = null; i.outcome_note = null; }
-      touch(c);
-      push(c, "reopened", null, { reason: "evidence_returned" }, null);
-      world.audit("case.reopen", c.case_id);
-      persist();
-    }
-  };
-
   return {
     list(query: URLSearchParams): Result {
       sweep();
-      sweepReturned();
       const status = query.get("status");
       if (status !== null && !["open", "investigating", "closed", "all"].includes(status)) return problem(400, "invalid_query", "status must be open, investigating, closed or all");
       const severity = query.get("severity");
@@ -239,7 +222,6 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
 
     get(id: string): Result {
       sweep();
-      sweepReturned();
       const c = find(id);
       return c ? ok(200, c) : notFound();
     },
@@ -311,7 +293,6 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
         if (resolution !== "accepted_risk" && until !== null) return invalid("accepted_until", "accepted_until_not_allowed");
       }
       sweep();
-      sweepReturned();
       const c = find(id);
       if (!c) return notFound();
       if (c.version !== Number(match[1])) return problem(412, "stale_case", "The case changed since you loaded it");

@@ -169,8 +169,7 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
     }
     case "reopened":
       if (d.reason === "accepted_risk_expired") return "reopened the case because the accepted risk ran out";
-      if (d.reason === "evidence_returned") return "reopened the case because the evidence came back";
-      return "reopened the case";
+      return d.reason === "evidence_returned" ? "reopened the case because the evidence returned" : "reopened the case";
     default: return event.kind;
   }
 }
