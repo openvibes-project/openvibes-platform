@@ -174,3 +174,16 @@ the real console is `scripts/test-console-e2e.sh`.
 | `frontend contract validation failed` from cargo | a route or public file was added without updating `web/frontend-contract.json` |
 | `embedded-ui frontend validation failed` | run `scripts/build-console.sh` |
 | Port 5174 or 18490 already in use | another dev server or console is running; stop it or change the port |
+
+## CI tiers
+
+Every pull request runs the fast tier: `rust` (fmt, clippy, docs, tests,
+audit) and `console` (frontend build, npm audit, Chromium end to end), which
+the required check "Lint, audit, and tests" waits for.
+
+The heavy tier (RPM builds, agent integration, alarms, systemd and life cycle
+end to end jobs, Firefox and WebKit, the release-mode latency test) always
+runs on `main`, nightly and on manual runs. On a pull request it runs when any
+changed file is outside the web frontend sources (`src`, `e2e`, `public`) and
+`docs/`, or when the PR has the `full-ci` label. When it is skipped, its
+required checks show as skipped, which GitHub counts as passing.
