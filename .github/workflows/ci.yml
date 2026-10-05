@@ -5,15 +5,21 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+  schedule:
+    # Nightly: the full tier (every browser, RPMs, end to end jobs) on main.
+    - cron: "17 3 * * *"
   pull_request:
     branches: [main]
+    # "labeled" lets the full-ci label start a run that has the heavy tier.
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
 
+# Only pull requests cancel superseded runs; a run on main always finishes.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.event_name == 'schedule' && 'nightly' || 'run' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -21,10 +27,52 @@ env:
   OPENVIBES_TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/postgres
 
 jobs:
-  test:
-    # The name is a required check in the main ruleset; it keeps saying
-    # ubuntu-latest until an admin renames the check (board #29).
-    name: Lint, audit, and tests (ubuntu-latest)
+  # Decides which tiers run. Fast tier (rust, console): every run. Heavy tier
+  # (RPMs and the end to end jobs, Firefox/WebKit, release latency test): runs
+  # on main, nightly, on manual runs, with the full-ci label, and on pull
+  # requests that change anything outside the web frontend and the docs.
+  # Skipped jobs count as passing for required checks.
+  changes:
+    name: Choose test tiers
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      heavy: ${{ steps.pick.outputs.heavy }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Pick tiers
+        id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+        shell: bash
+        run: |
+          heavy=true
+          if [ "$EVENT" = pull_request ]; then
+            case ",$LABELS," in
+              *,full-ci,*) ;;
+              *)
+                # Heavy unless every changed file is frontend source or docs.
+                changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+                if ! grep -qvE '^(crates/openvibes-console/web/(src|tests|e2e|public)/|docs/|[^/]+\.md$)' <<<"$changed"; then
+                  heavy=false
+                fi
+                ;;
+            esac
+          fi
+          echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
+          echo "heavy tier: $heavy"
+
+  rust:
+    name: Rust lint and tests
+    needs: changes
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -72,26 +120,9 @@ jobs:
           "${apt[@]}" update
           "${apt[@]}" install --no-install-recommends imagemagick librsvg2-bin
 
+      # --all-features embeds the frontend, so clippy, docs and tests need it.
       - name: Build and validate console frontend
         run: bash scripts/build-console.sh
-
-      # Separate from the build so a new advisory fails CI loudly without
-      # making the build itself depend on the day it runs.
-      - name: Audit console npm dependencies
-        run: npm --prefix crates/openvibes-console/web audit --audit-level=low
-
-      - name: Prove console npm dependencies install offline
-        run: |
-          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
-          bash scripts/check-console-npm-cache.sh "$archive"
-
-      - name: Install pinned console browsers
-        run: >-
-          crates/openvibes-console/web/node_modules/.bin/playwright
-          install --with-deps chromium firefox webkit
-
-      - name: Test console in real browsers
-        run: bash scripts/test-console-e2e.sh
 
       - name: Format
         run: cargo fmt --all --check
@@ -120,7 +151,9 @@ jobs:
 
       # The Nagle stall (TCP_NODELAY missing) only shows when the server is
       # fast enough, i.e. in a release build; debug runs pass either way.
+      # Heavy tier only: it needs a separate release build.
       - name: Release-mode latency test
+        if: needs.changes.outputs.heavy == 'true'
         env:
           CARGO_NET_OFFLINE: "true"
         run: cargo test --release --locked -p openvibes-ingest --test delivery requests_are_not_delayed_by_nagle
@@ -133,8 +166,99 @@ jobs:
       - name: Audit dependencies (RustSec)
         run: cargo audit --deny warnings
 
+  console:
+    name: Console frontend and browsers
+    needs: changes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pinned toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22.23.1
+          cache: npm
+          cache-dependency-path: crates/openvibes-console/web/package-lock.json
+
+      - name: Fetch dependencies
+        shell: bash
+        run: |
+          git submodule update --init
+          cargo fetch --locked
+
+      - name: Install console brand renderer
+        timeout-minutes: 5
+        run: |
+          apt=(sudo apt-get -o Acquire::Retries=5 -o Acquire::http::Timeout=20 -o Acquire::https::Timeout=20)
+          "${apt[@]}" update
+          "${apt[@]}" install --no-install-recommends imagemagick librsvg2-bin
+
+      - name: Build and validate console frontend
+        run: bash scripts/build-console.sh
+
+      # Separate from the build so a new advisory fails CI loudly without
+      # making the build itself depend on the day it runs.
+      - name: Audit console npm dependencies
+        run: npm --prefix crates/openvibes-console/web audit --audit-level=low
+
+      - name: Prove console npm dependencies install offline
+        run: |
+          archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+          bash scripts/check-console-npm-cache.sh "$archive"
+
+      # Pull requests without the heavy tier test in Chromium only; main,
+      # nightly, manual runs and heavy PRs also run Firefox and WebKit.
+      - name: Install pinned console browsers
+        env:
+          BROWSERS: ${{ needs.changes.outputs.heavy == 'true' && 'chromium firefox webkit' || 'chromium' }}
+        run: >-
+          crates/openvibes-console/web/node_modules/.bin/playwright
+          install --with-deps $BROWSERS
+
+      - name: Test console in real browsers
+        env:
+          PROJECTS: ${{ needs.changes.outputs.heavy == 'true' && '' || '--project=chromium' }}
+        run: bash scripts/test-console-e2e.sh $PROJECTS
+
+  # The required check name; it keeps saying ubuntu-latest until an admin
+  # renames the check (board #29). It passes when both fast jobs pass.
+  test:
+    name: Lint, audit, and tests (ubuntu-latest)
+    needs: [rust, console]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require the fast tier
+        env:
+          RESULTS: ${{ needs.rust.result }} ${{ needs.console.result }}
+        run: |
+          echo "rust and console: $RESULTS"
+          [ "$RESULTS" = "success success" ]
+
   fedora:
     name: RPMs (fedora:44)
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     container: registry.fedoraproject.org/fedora:44

@@ -466,6 +466,134 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_cases"];
+        put?: never;
+        post: operations["create_case"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/assignees": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_assignees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/for-item": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["cases_for_item"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_case"];
+        put: operations["update_case"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_item"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/items/{item_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete: operations["remove_item"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/items/{item_id}/outcome": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_item_outcome"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/cases/{case_id}/notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["add_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/dashboards": {
         parameters: {
             query?: never;
@@ -1178,6 +1306,11 @@ export interface components {
             /** @description Canonical username. */
             username: string;
         };
+        /** @description A note for the timeline. */
+        AddCaseNoteRequest: {
+            /** @description Plain text, 1 to 4000 characters. */
+            body: string;
+        };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
             /** @description Certificate metadata for the agent. */
@@ -1575,6 +1708,160 @@ export interface components {
                 }
             ][];
         };
+        /** @description Users a case can be assigned to. */
+        CaseAssigneesView: {
+            /** @description Enabled users who hold `cases.read`. */
+            items: components["schemas"]["CaseUserView"][];
+        };
+        /** @description A case with the items and timeline the viewer can see. */
+        CaseDetailView: components["schemas"]["CaseSummaryView"] & {
+            /** @description The timeline, oldest first, without entries about hidden items. */
+            events: components["schemas"]["CaseEventView"][];
+            /** @description Visible items, oldest first. */
+            items: components["schemas"]["CaseItemView"][];
+            /** @description Why it was closed. */
+            resolution_note?: string | null;
+        };
+        /** @description One timeline entry. */
+        CaseEventView: {
+            actor?: null | components["schemas"]["CaseUserView"];
+            /** @description RFC 3339. */
+            at: string;
+            /**
+             * @description The note's text; for `resolved` the resolution note; for
+             *     `item_outcome` the outcome note.
+             */
+            body?: string | null;
+            /**
+             * @description Structured facts: `from`/`to` for `status`, `assigned` (usernames)
+             *     and `severity`; `item_id`, `item_kind`, `item_ref` and
+             *     `item_agent_id` for item entries; `resolution` and `accepted_until`
+             *     for `resolved`; `reason` for `reopened`.
+             */
+            detail: Record<string, never>;
+            /**
+             * Format: int64
+             * @description Position on the timeline.
+             */
+            event_id: number;
+            /**
+             * @description `created`, `note`, `status`, `assigned`, `severity`, `item_added`,
+             *     `item_removed`, `item_outcome`, `resolved` or `reopened`.
+             */
+            kind: string;
+        };
+        /** @description An item to add: what it is and its id. */
+        CaseItemRef: {
+            /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
+            kind: string;
+            /**
+             * @description The object's id as the console's panels write it (see
+             *     `CaseItemView.ref`).
+             */
+            ref: string;
+        };
+        /** @description One item of a case that the viewer can see. */
+        CaseItemView: {
+            /** @description True while the case is not closed. */
+            active: boolean;
+            /** @description RFC 3339. */
+            added_at: string;
+            /** @description Who added it. */
+            added_by: components["schemas"]["CaseUserView"];
+            /** @description The host that decides who sees the item; absent for software. */
+            agent_id?: string | null;
+            /**
+             * @description True when the evidence is gone, so that `resolved` is accepted: the
+             *     finding is no longer reported, the vulnerability no longer matches
+             *     the host, the alarm is closed as mitigated or no longer exists.
+             *     Always false for hosts and software.
+             */
+            evidence_gone: boolean;
+            /** @description That host's name, when known. */
+            hostname?: string | null;
+            /** @description Stable UUID. */
+            item_id: string;
+            /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
+            kind: string;
+            /** @description `resolved`, `false_positive` or `accepted_risk`. */
+            outcome?: string | null;
+            /** @description Why, for the last two. */
+            outcome_note?: string | null;
+            /**
+             * @description The object's id as the console's panels write it: the alarm id;
+             *     `agent/rule_set/rule` for a finding; `agent/advisory` for a
+             *     vulnerability on a host; the agent id for a host; `manager/name`
+             *     for software.
+             */
+            ref: string;
+            /**
+             * @description Its own severity as its page states it (alarm and finding:
+             *     `critical` to `info`; vulnerability: the advisory's), when it has one.
+             */
+            severity?: string | null;
+            /** @description What to show for it, when it still exists. */
+            title?: string | null;
+        };
+        /** @description A page of cases, newest change first. */
+        CasePage: {
+            /** @description The cases the viewer can see. */
+            items: components["schemas"]["CaseSummaryView"][];
+            /** @description Pass as `cursor` for the next page; absent on the last page. */
+            next_cursor?: string | null;
+        };
+        /** @description One case as listed. Counts include only items the viewer can see. */
+        CaseSummaryView: {
+            /** @description When accepted risk runs out and the case reopens (RFC 3339). */
+            accepted_until?: string | null;
+            assignee?: null | components["schemas"]["CaseUserView"];
+            /** @description Stable UUID. */
+            case_id: string;
+            /** @description RFC 3339, once closed. */
+            closed_at?: string | null;
+            /** @description RFC 3339. */
+            created_at: string;
+            /**
+             * Format: int64
+             * @description Items the viewer can see.
+             */
+            item_count: number;
+            /**
+             * Format: int64
+             * @description Shown as `C-<number>`; unique, never reused.
+             */
+            number: number;
+            /** @description Who opened it. */
+            opened_by: components["schemas"]["CaseUserView"];
+            /**
+             * Format: int64
+             * @description Visible alarms, findings and vulnerabilities that have no outcome.
+             */
+            pending_item_count: number;
+            /** @description `mitigated`, `false_positive` or `accepted_risk`, once closed. */
+            resolution?: string | null;
+            /** @description `critical`, `high`, `medium` or `low`. */
+            severity: string;
+            /** @description `open`, `investigating` or `closed`. */
+            status: string;
+            /** @description 1 to 120 characters. */
+            title: string;
+            /** @description Last change of any kind (RFC 3339). */
+            updated_at: string;
+            /**
+             * Format: int64
+             * @description Version for `If-Match` (also the ETag of the detail).
+             */
+            version: number;
+        };
+        /** @description A console user as a case shows them. */
+        CaseUserView: {
+            /** @description Name to show. */
+            display_name: string;
+            /** @description Stable UUID. */
+            user_id: string;
+            /** @description Login name. */
+            username: string;
+        };
         /** @description A page of certificate metadata using the shared cursor response shape. */
         CertificatePage: {
             /** @description RFC 3339 instant when this page was generated. */
@@ -1632,6 +1919,20 @@ export interface components {
              *     `command` (this exact command line on any host).
              */
             scope: string;
+        };
+        /** @description Opens a case. */
+        CreateCaseRequest: {
+            /** @description A user with `cases.read` (see the assignees route). */
+            assignee_user_id?: string | null;
+            /** @description Items to start with, at most 50. */
+            items?: components["schemas"]["CaseItemRef"][];
+            /**
+             * @description `critical`, `high`, `medium` or `low`; the highest item severity
+             *     (medium without one) when absent.
+             */
+            severity?: string | null;
+            /** @description 1 to 120 characters. */
+            title: string;
         };
         /** @description Bounded one-time enrollment-token creation request. */
         CreateEnrollmentTokenRequest: {
@@ -2162,6 +2463,23 @@ export interface components {
              */
             truncated: boolean;
         };
+        /** @description A case that holds an item. */
+        ItemCaseView: {
+            /** @description The case. */
+            case: components["schemas"]["CaseSummaryView"];
+            /** @description The item's id in that case. */
+            item_id: string;
+            /** @description The item's outcome there. */
+            outcome?: string | null;
+        };
+        /** @description The visible cases that hold an item. */
+        ItemCasesView: {
+            /**
+             * @description For an alarm, finding or vulnerability at most one: the open case.
+             *     For a host or software, up to 50, newest change first, open or closed.
+             */
+            items: components["schemas"]["ItemCaseView"][];
+        };
         /** @description One listening socket on a host. */
         ListenerView: {
             /** @description The bound address (`0.0.0.0` or `::` for any). */
@@ -2199,7 +2517,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -2270,6 +2588,12 @@ export interface components {
         };
         /** @description Stable RFC Problem Details-style error response used by the console API. */
         ProblemDetails: {
+            /**
+             * Format: int64
+             * @description With `item_in_case`: the number of the open case that holds the
+             *     item, only when the caller may see that case.
+             */
+            case_number?: number | null;
             /** @description Stable machine-readable error code. */
             code: string;
             /** @description Bounded request-field errors when validation can safely identify them. */
@@ -2489,6 +2813,16 @@ export interface components {
             /** @description Current human principal. Service-account tokens cannot call this route. */
             principal: components["schemas"]["SessionPrincipal"];
         };
+        /** @description Sets or clears an item's outcome. */
+        SetCaseItemOutcomeRequest: {
+            /** @description Required for `false_positive` and `accepted_risk`. */
+            note?: string | null;
+            /**
+             * @description `resolved` (only when the evidence is gone), `false_positive` or
+             *     `accepted_risk`; absent or `null` clears it.
+             */
+            outcome?: string | null;
+        };
         /**
          * @description Severity attached to the latest observation for a rule.
          * @enum {string}
@@ -2673,6 +3007,32 @@ export interface components {
              * @description Retention window in days, from 1 through 36500.
              */
             retention_days: number;
+        };
+        /** @description Replaces a case's editable fields; send every field. */
+        UpdateCaseRequest: {
+            /**
+             * @description Required for `accepted_risk` (RFC 3339, in the future): the case
+             *     reopens when it passes.
+             */
+            accepted_until?: string | null;
+            /** @description A user with `cases.read`; absent or `null` means nobody. */
+            assignee_user_id?: string | null;
+            /**
+             * @description How it ended, required with `closed`: `mitigated`, `false_positive`
+             *     or `accepted_risk`. Absent otherwise.
+             */
+            resolution?: string | null;
+            /** @description Why, required with a resolution (at most 4000 characters). */
+            resolution_note?: string | null;
+            /** @description `critical`, `high`, `medium` or `low`. */
+            severity: string;
+            /**
+             * @description `open`, `investigating` or `closed`. `closed` closes the case; any
+             *     other status on a closed case reopens it.
+             */
+            status: string;
+            /** @description 1 to 120 characters. */
+            title: string;
         };
         /** @description Requested human workflow update for a latest finding. */
         UpdateFindingTriageRequest: {
@@ -4210,6 +4570,781 @@ export interface operations {
                 };
             };
             /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_cases: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description `open`, `investigating`, `closed` or `all`; open and investigating
+                 *     when absent.
+                 */
+                status: string | null;
+                /** @description Exact severity. */
+                severity: string | null;
+                /** @description A user id, `me`, or `none` for unassigned. */
+                assignee: string | null;
+                /** @description Text in the title, or a case number such as `C-104`. */
+                q: string | null;
+                /** @description Opaque continuation cursor. */
+                cursor: string | null;
+                /** @description Page size from 1 to 100 (default 50). */
+                limit: number | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cases the caller can see, newest change first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CasePage"];
+                };
+            };
+            /** @description Invalid query or cursor */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    create_case: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Opened */
+            201: {
+                headers: {
+                    /** @description Case version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDetailView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description An item does not exist or is outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description An item is already in another open case */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid field */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_assignees: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Users a case can be assigned to */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseAssigneesView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    cases_for_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `alarm`, `finding`, `vulnerability`, `host` or `software`. */
+                kind: string;
+                /** @description The object's id (see `CaseItemView.ref`). */
+                ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The visible cases that hold the item */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ItemCasesView"];
+                };
+            };
+            /** @description Invalid query */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid kind or ref */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_case: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The case, its visible items and timeline */
+            200: {
+                headers: {
+                    /** @description Case version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDetailView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_case: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Quoted version from ETag */
+                "If-Match": string;
+            };
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    /** @description New case version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseDetailView"];
+                };
+            };
+            /** @description Invalid body or If-Match */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Items still need an outcome, an item is in another open case, or the case is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Stale version */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid field */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    add_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CaseItemRef"];
+            };
+        };
+        responses: {
+            /** @description Added */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseItemView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The case or the item does not exist or is outside the caller's scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description In another open case, already in this one, or the case is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid kind or ref, or the case is full */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    remove_item: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The case or the item is absent or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The case is closed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_item_outcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+                item_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetCaseItemOutcomeRequest"];
+            };
+        };
+        responses: {
+            /** @description Set or cleared */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseItemView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The case or the item is absent or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The case is closed, or resolved was asked for while the evidence is still there */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid outcome or note, or a kind that takes no outcome */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    add_note: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                case_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCaseNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Added to the timeline */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CaseEventView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Absent or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid note, or the timeline is full */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

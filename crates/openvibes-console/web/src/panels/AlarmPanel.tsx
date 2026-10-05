@@ -11,6 +11,7 @@ import { date, triageLabel } from "../ui/format";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
 import { quiet, quietScopes } from "../views/Alarms";
+import { AddToCase } from "./AddToCase";
 import { allowedStates, noteRequired, triageBody } from "./triage";
 
 function Process({ process, current }: { process: AlarmProcess; current: boolean }) {
@@ -76,6 +77,7 @@ export function AlarmPanel({ id }: { id: string }) {
         icon="alarm" kind={`Alarm · ${a.hostname ?? a.agent_id}`} title={a.message}
         subtitle={<span className="mono subtle">{a.rule_id} · {a.rule_set_id} (rule v{a.rule_version}, set v{a.rule_set_version})</span>}
         badges={<><SeverityBadge severity={a.severity} /><TriageBadge state={a.triage.state} /><span className="badge badge--plain">{a.count}×</span></>}
+        actions={can("cases.manage") && <AddToCase kind="alarm" id={a.id} label={a.message} />}
       />
       <div className="panel-body stack">
         <Section title="Process tree">

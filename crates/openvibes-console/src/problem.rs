@@ -26,6 +26,10 @@ pub struct ProblemDetails {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(max_items = 32)]
     pub field_errors: Option<Vec<FieldError>>,
+    /// With `item_in_case`: the number of the open case that holds the
+    /// item, only when the caller may see that case.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub case_number: Option<i64>,
 }
 
 /// Safe validation detail for one request field.
@@ -47,6 +51,7 @@ impl ProblemDetails {
             status: status.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
+            case_number: None,
         }
     }
 
@@ -57,6 +62,7 @@ impl ProblemDetails {
             status: StatusCode::NOT_FOUND.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
+            case_number: None,
         }
     }
 
@@ -67,6 +73,7 @@ impl ProblemDetails {
             status: StatusCode::SERVICE_UNAVAILABLE.as_u16(),
             request_id: next_request_id(),
             field_errors: None,
+            case_number: None,
         }
     }
 }

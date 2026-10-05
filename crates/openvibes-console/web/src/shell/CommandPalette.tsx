@@ -1,3 +1,4 @@
+
 // Ctrl+K: jump anywhere. Views, actions, recently opened objects, and a
 // search across hosts, advisories/CVEs and findings in the viewer's scope.
 import { useEffect, useMemo, useRef, useState } from "react";
