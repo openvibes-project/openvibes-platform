@@ -1,7 +1,7 @@
 # console-cases
 
 Cases over `/api/v1` (module `crates/openvibes-console/src/cases.rs`, store
-`platform_store::console_cases`, schema 35). Spec:
+`platform_store::console_cases`, schema 36). Spec:
 [2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md).
 The API, store and tests are built, and so are the web pages (list, case
 panel, "Add to case"; see [console-web.md](console-web.md#cases)).
@@ -134,6 +134,35 @@ marked `accepted_risk` lose that outcome so someone decides again, and the
 resolution fields clear. This runs when cases are listed or read, so it happens
 the next time anyone looks. A case whose item has since joined another open
 case stays closed.
+
+When the evidence of a `resolved` item comes back (the agent reports the
+finding again, the host matches the advisory again, the alarm recurs and
+reopens), the case reopens as `open` in the same lazy way (audit actor
+`system`, `case.reopen` with reason `evidence_returned` and the items'
+kinds and refs). The rules:
+
+- **Which cases are re-checked.** Only cases closed within the last 30 days
+  (`EVIDENCE_WATCH_DAYS`) that hold an alarm, finding or vulnerability item
+  with the outcome `resolved`, at most 100 per call, newest closing first. This
+  keeps every list and read cheap (one indexed query on `closed_at`, plus the
+  evidence lookups of a few `resolved` items) and covers the cases people still
+  care about. After 30 days a recurrence is a new matter: the item was freed
+  when the case closed, so it can go into a new case.
+- **The returning item** loses its outcome and note, so someone decides again.
+  The case's other outcomes stay, including `resolved` ones whose evidence is
+  still gone. The case's resolution, note and date clear.
+- **Decisions are never re-checked.** `false_positive` and `accepted_risk`
+  items stay as decided even while the object is plainly still there; accepted
+  risk reopens on its date, as above. A case closed as accepted risk does
+  reopen if one of its `resolved` items comes back.
+- **Exclusivity.** If a returning item has since joined another open case, the
+  case stays closed.
+- **Timeline.** One `reopened` entry (`detail.reason` `evidence_returned`)
+  that names no item, then one `item_outcome` entry per returning item (`from`
+  `resolved`, `to` null, `reason` `evidence_returned`). As with any item
+  entry, a viewer who cannot see an item is not shown its entry, so a hidden
+  item is never named. The `reopened` entry itself is shown to everyone who
+  sees the case.
 
 ### Audit
 

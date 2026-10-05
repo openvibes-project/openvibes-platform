@@ -293,9 +293,16 @@ Where the build settled something the design left open, or differs from it:
   outcomes of its items. A case whose item has joined another open case stays
   closed. Reopening a case by hand names the clashing case only if the caller
   can see both the case and the item.
-- **Not built:** reopening a closed case automatically when evidence returns
-  for one of its items (existing triage does this for findings); a closed
-  case keeps its `resolved` items until someone reopens it by hand.
+- **Evidence returning** reopens a closed case, lazily like the above (audit
+  actor `system`), when an item with the outcome `resolved` has its evidence
+  back. Only cases closed within the last 30 days are checked, so listing
+  stays cheap (migration 0036 adds a partial index on `closed_at`). The
+  returning item loses its outcome; `false_positive` and `accepted_risk`
+  outcomes are never re-checked (accepted risk reopens on its date). It
+  skips a case whose item joined another open case. The timeline gets a
+  `reopened` entry that names no item and an `item_outcome` entry per item,
+  the latter filtered by scope. After 30 days a closed case stays closed:
+  a recurrence can go into a new case, since closing freed the item.
 - **Limits:** 500 items and 2,000 timeline entries per case.
 - `ProblemDetails` gains an optional `case_number`, set on `item_in_case`.
 - An empty case is seen only by its opener and its assignee (a consequence of

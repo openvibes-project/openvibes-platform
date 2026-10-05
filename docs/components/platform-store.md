@@ -602,7 +602,7 @@ permission-checked console API, so sharing never exposes data.
 - Tested by `tests/console_dashboards.rs` (ownership, sharing through global
   and scoped bindings, revoked binding, versions, limit, home fallback).
 
-## Cases (`console_cases::…`, schema 35)
+## Cases (`console_cases::…`, schemas 35 and 36)
 
 - `cases`: `case_id`, a `number` from an identity column (unique, never
   reused), `title` (1–120), `status` (`open`, `investigating`, `closed`),
@@ -627,8 +627,12 @@ applies `agent_visibility` in SQL: a case is visible through a visible item,
 or to its opener or assignee; items, counts and timeline entries about hidden
 items are left out. Changes return `Result<_, Refusal>` (`NotFound`, `Stale`,
 `ItemInCase`, `ItemsUnresolved` and so on) and write the audit row and
-timeline entry in the same transaction. `reopen_expired` reopens closed cases
-whose accepted risk has run out. Tested by `tests/console_cases.rs`, run as
+timeline entry in the same transaction. `reopen_due` runs two lazy checks that
+the console calls before it lists or reads cases: `reopen_expired` reopens
+closed cases whose accepted risk has run out, and `reopen_evidence_returned`
+reopens cases closed within the last 30 days whose `resolved` items have
+evidence again (migration 36 adds the partial index on `closed_at` it uses).
+Tested by `tests/console_cases.rs`, run as
 the console role. See [console-cases.md](console-cases.md).
 
 ## The rule signer's access (`signer::…`, schema 32, board #107)
