@@ -12,7 +12,8 @@ use axum::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::SecondsFormat;
 use platform_store::console_inventory::{
-    self as store, HostPackage, Software, SoftwareFilters, SoftwareHost, SoftwareVersion,
+    self as store, HostPackage, Software, SoftwareAdvisory, SoftwareFilters, SoftwareHost,
+    SoftwareVersion,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -67,6 +68,15 @@ pub struct SoftwareView {
     pub versions: i64,
     /// Visible hosts where it has an open vulnerability with a fix.
     pub fixable_vulnerable_hosts: i64,
+    /// Distinct open advisories on it, with or without a fix.
+    pub advisories: i64,
+    /// Of those, advisories with no fix yet.
+    pub no_fix_advisories: i64,
+    /// Worst severity among them (`critical`, `important`, `moderate`,
+    /// `low`, `unrated`); absent without advisories.
+    pub worst_severity: Option<String>,
+    /// One of them is on an exploited list (CISA KEV or EUVD).
+    pub exploited: bool,
 }
 
 /// A page of the fleet's software, by name.
@@ -93,6 +103,33 @@ pub struct SoftwareVersionView {
     pub hosts: i64,
     /// Of those, hosts where it has an open vulnerability with a fix.
     pub fixable_vulnerable_hosts: i64,
+    /// Distinct open advisories that apply to this version.
+    pub advisories: i64,
+}
+
+/// An advisory open on the package.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct SoftwareAdvisoryView {
+    /// Advisory id (opens the advisory view).
+    pub advisory_id: String,
+    /// Severity (`critical`, `important`, `moderate`, `low`, `unrated`).
+    pub severity: String,
+    /// Advisory title.
+    pub title: String,
+    /// Link to the advisory.
+    pub url: String,
+    /// CVE ids.
+    pub cves: Vec<String>,
+    /// Visible hosts it is open on.
+    pub hosts: i64,
+    /// The version that fixes the package; absent while there is no fix.
+    pub fixed_in: Option<String>,
+    /// On CISA KEV or EUVD's exploited list.
+    pub exploited: bool,
+    /// Highest EPSS score among its CVEs.
+    pub epss: Option<f32>,
+    /// Highest CVSS base score among its CVEs.
+    pub cvss: Option<f32>,
 }
 
 /// One host that has the package.
@@ -121,6 +158,8 @@ pub struct SoftwareDetail {
     pub name: String,
     /// Versions in use on visible hosts, most hosts first.
     pub versions: Vec<SoftwareVersionView>,
+    /// Open advisories on the package, most urgent first (at most 200).
+    pub advisories: Vec<SoftwareAdvisoryView>,
     /// Hosts on this page, by hostname.
     pub hosts: Vec<SoftwareHostView>,
     /// Opaque cursor for the next page of hosts.
@@ -148,6 +187,8 @@ pub(crate) struct SoftwareParams {
     /// Only packages with an open vulnerability with a fix on at least
     /// one visible host.
     fixable: Option<bool>,
+    /// Only packages in use in more than one version.
+    multiple_versions: Option<bool>,
     /// Opaque continuation cursor.
     cursor: Option<String>,
     /// Page size from 1 to 100 (default 50).
@@ -226,6 +267,10 @@ fn software_view(software: Software) -> SoftwareView {
         hosts: software.hosts,
         versions: software.versions,
         fixable_vulnerable_hosts: software.fixable_vulnerable_hosts,
+        advisories: software.advisories,
+        no_fix_advisories: software.no_fix_advisories,
+        worst_severity: software.worst_severity,
+        exploited: software.exploited,
     }
 }
 
@@ -237,6 +282,22 @@ fn version_view(version: SoftwareVersion) -> SoftwareVersionView {
         arch: version.arch,
         hosts: version.hosts,
         fixable_vulnerable_hosts: version.fixable_vulnerable_hosts,
+        advisories: version.advisories,
+    }
+}
+
+fn advisory_view(advisory: SoftwareAdvisory) -> SoftwareAdvisoryView {
+    SoftwareAdvisoryView {
+        advisory_id: advisory.advisory_id,
+        severity: advisory.severity,
+        title: advisory.title,
+        url: advisory.url,
+        cves: advisory.cves,
+        hosts: advisory.hosts,
+        fixed_in: advisory.fixed_in,
+        exploited: advisory.exploited,
+        epss: advisory.epss,
+        cvss: advisory.cvss,
     }
 }
 
@@ -340,6 +401,7 @@ pub(crate) async fn list_software(
     let filters = SoftwareFilters {
         q,
         fixable: params.fixable.unwrap_or(false),
+        multiple_versions: params.multiple_versions.unwrap_or(false),
     };
     let Ok(client) = state.pool.get().await else {
         return unavailable_auth();
@@ -406,6 +468,10 @@ pub(crate) async fn get_software(
         Ok(versions) => versions,
         Err(_) => return unavailable_auth(),
     };
+    let advisories = match store::software_advisories(&client, &scope, &manager, &name, 200).await {
+        Ok(advisories) => advisories,
+        Err(_) => return unavailable_auth(),
+    };
     let after = after
         .as_ref()
         .map(|(host, agent, id)| (host.as_str(), agent.as_str(), *id));
@@ -424,6 +490,7 @@ pub(crate) async fn get_software(
                 manager,
                 name,
                 versions: versions.into_iter().map(version_view).collect(),
+                advisories: advisories.into_iter().map(advisory_view).collect(),
                 hosts: rows.into_iter().map(|(_, h)| host_view(h)).collect(),
                 next_cursor,
             })

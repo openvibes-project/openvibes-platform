@@ -136,10 +136,19 @@ and stay in the Vulnerabilities view.
   `q` is a case-insensitive substring of the name (at most 128 bytes).
 - `GET /api/v1/software`: one row per (manager, name) over visible hosts,
   by name, with `hosts`, `versions` (distinct epoch/version/release) and
-  `fixable_vulnerable_hosts`. Filters are `q` and `fixable=true`.
+  `fixable_vulnerable_hosts`, plus the package's open advisories on visible
+  hosts: `advisories` (distinct, fixable or not), `no_fix_advisories`,
+  `worst_severity` and `exploited` (KEV or EUVD). Filters are `q`,
+  `fixable=true` and `multiple_versions=true` (more than one version in
+  use on visible hosts).
 - `GET /api/v1/software/{manager}/{name}`: the versions in use (most hosts
-  first) and a page of the hosts that have it (hostname, version, arch,
-  last contact, `fixable_vulnerable`).
+  first, each with its `advisories` count), the open `advisories` on the
+  package (most urgent first: exploited, EPSS, severity, CVSS; each with
+  CVEs, hosts affected and `fixed_in`, absent while there is no fix; at
+  most 200) and a page of the hosts that have it (hostname, version, arch,
+  last contact, `fixable_vulnerable`). Advisories come from the hosts'
+  matches (fixable) and from the package versions the hosts have (no fix);
+  no migration is involved.
 
 Cursors are opaque (base64url JSON of the keyset), and `limit` is 1–100
 (default 50). Measured on 1,000 hosts × 2,000 packages with 50 k open

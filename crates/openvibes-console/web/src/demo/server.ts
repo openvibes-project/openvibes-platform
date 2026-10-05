@@ -391,6 +391,23 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     }
     return [...rows.values()].sort((a, b) => a.name.localeCompare(b.name));
   };
+  // Open advisories naming a package, grouped by advisory, on visible hosts.
+  const packageAdvisories = (name: string) => {
+    const byAdvisory = new Map<string, { item: Vulnerability; hosts: Set<string>; fixed: string | null }>();
+    for (const item of vulnerabilities()) {
+      const named = Array.isArray(item.packages) ? (item.packages as { name: string; fixed?: string | null }[]).find((p) => p.name === name) : undefined;
+      if (!named) continue;
+      const row = byAdvisory.get(item.advisory_id) ?? { item, hosts: new Set<string>(), fixed: named.fixed ?? null };
+      row.hosts.add(item.agent_id);
+      byAdvisory.set(item.advisory_id, row);
+    }
+    return [...byAdvisory.values()]
+      .map(({ item, hosts: set, fixed }) => ({
+        advisory_id: item.advisory_id, severity: item.severity, title: item.title, url: item.url, cves: item.cves, hosts: set.size,
+        fixed_in: fixed, exploited: item.exploited, epss: item.epss ?? null, cvss: item.cvss ?? null,
+      }))
+      .sort((a, b) => Number(b.exploited) - Number(a.exploited) || (b.epss ?? 0) - (a.epss ?? 0) || (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9));
+  };
   // Assets v2: open ports and running services, from the host's role.
   const PORTS: Record<string, [number, string, string][]> = {
     web: [[443, "nginx.service", "nginx"], [80, "nginx.service", "nginx"]], proxy: [[443, "haproxy.service", "haproxy"]], api: [[8080, "api.service", "node"]],
@@ -455,23 +472,31 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   route("GET", "/api/v1/software", "agents.read", (_, query) => {
     const q = (query.get("q") ?? "").toLowerCase();
     const fixable = query.get("fixable") === "true";
-    const items = fleet().filter((row) => row.name.toLowerCase().includes(q) && (!fixable || row.fixable.size > 0))
-      .map((row) => ({ manager: row.manager, name: row.name, hosts: row.hosts.size, versions: row.versions.size, fixable_vulnerable_hosts: row.fixable.size }));
+    const multiple = query.get("multiple_versions") === "true";
+    const items = fleet().filter((row) => row.name.toLowerCase().includes(q) && (!fixable || row.fixable.size > 0) && (!multiple || row.versions.size > 1))
+      .map((row) => {
+        const advisories = packageAdvisories(row.name);
+        const worst = advisories.map((a) => a.severity).sort((a, b) => (severityRank[a] ?? 9) - (severityRank[b] ?? 9))[0] ?? null;
+        return {
+          manager: row.manager, name: row.name, hosts: row.hosts.size, versions: row.versions.size, fixable_vulnerable_hosts: row.fixable.size,
+          advisories: advisories.length, no_fix_advisories: advisories.filter((a) => a.fixed_in == null).length, worst_severity: worst, exploited: advisories.some((a) => a.exploited),
+        };
+      });
     return json(page(items, query));
   });
   route("GET", "/api/v1/software/{manager}/{name}", "agents.read", ({ manager = "", name = "" }, query) => {
     const found = hosts().flatMap((agent) => hostPackages(agent.id).filter((p) => p.manager === manager && p.name === decodeURIComponent(name)).map((p) => ({ agent, p })));
     if (found.length === 0) return problem(404, "not_found", "No visible host has it");
-    const versions = new Map<string, { epoch: number; version: string; release: string; arch: string; hosts: number; fixable_vulnerable_hosts: number }>();
+    const versions = new Map<string, { epoch: number; version: string; release: string; arch: string; hosts: number; fixable_vulnerable_hosts: number; advisories: number }>();
     for (const { p } of found) {
       const key = `${p.version}-${p.release}.${p.arch}`;
-      const v = versions.get(key) ?? { epoch: p.epoch, version: p.version, release: p.release, arch: p.arch, hosts: 0, fixable_vulnerable_hosts: 0 };
+      const v = versions.get(key) ?? { epoch: p.epoch, version: p.version, release: p.release, arch: p.arch, hosts: 0, fixable_vulnerable_hosts: 0, advisories: 0 };
       v.hosts += 1;
-      if (p.fixable_vulnerable) v.fixable_vulnerable_hosts += 1;
+      if (p.fixable_vulnerable) { v.fixable_vulnerable_hosts += 1; v.advisories = packageAdvisories(p.name).length; }
       versions.set(key, v);
     }
     const { items, next_cursor } = page(found.map(({ agent, p }) => ({ agent_id: agent.id, hostname: agent.hostname ?? null, version: `${p.version}-${p.release}`, arch: p.arch, last_seen_at: agent.last_seen_at ?? null, fixable_vulnerable: p.fixable_vulnerable })), query);
-    return json({ manager, name: decodeURIComponent(name), versions: [...versions.values()], hosts: items, next_cursor });
+    return json({ manager, name: decodeURIComponent(name), versions: [...versions.values()], advisories: packageAdvisories(decodeURIComponent(name)), hosts: items, next_cursor });
   });
 
   route("GET", "/api/v1/vulnerabilities", "vulnerabilities.read", (_, query) => {
