@@ -37,7 +37,7 @@ export function Rail({ canView }: { canView: (path: string) => boolean }) {
   const { view } = useLocation();
   const counts = useMenuCounts();
   const [pinned, setPinned] = useState(() => { try { return localStorage.getItem(pinKey) === "true"; } catch { return false; } });
-  const groups = ["Investigate", "Operate", "Administer"] as const;
+  const groups = ["Investigate", "Operate", "Administer", "Help"] as const;
   // On a phone the bar holds the Investigate views with short labels; the
   // rest are under More, so no destination is an unlabeled icon (#85).
   const secondary = views.filter((item) => (item.group !== "Investigate" || item.phoneMore) && canView(item.path));

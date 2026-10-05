@@ -33,6 +33,7 @@ async fn main() -> ExitCode {
             unix_socket_file: None,
             trusted_proxy_uids: vec![],
             assistant: None,
+            update_check: false,
         },
         Some(config_path) => match openvibes_console::load_config(&config_path) {
             Ok(config) => config,

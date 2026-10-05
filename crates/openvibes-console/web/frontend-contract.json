@@ -15,6 +15,7 @@
     "/access",
     "/service-accounts",
     "/audit",
+    "/about",
     "/dashboards/{dashboard_id}"
   ],
   "publicAssets": [

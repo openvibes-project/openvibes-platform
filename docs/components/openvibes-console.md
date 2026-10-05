@@ -305,6 +305,10 @@ database_url = "postgresql:///openvibes?host=/run/postgresql" # optional
 public_origin = "http://localhost:8443" # required with database_url
 ```
 
+`update_check` (default `true`) lets the About page ask GitHub for the latest
+release; set it to `false` on hosts that must make no outbound connections
+(see [`console-about.md`](console-about.md)).
+
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
 origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if

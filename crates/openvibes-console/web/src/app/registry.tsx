@@ -19,6 +19,7 @@ import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
 import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPanel, UserPanel } from "../panels/OpsPanels";
 import type { IconName } from "../ui/Icon";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
+import { About } from "../views/About";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
 import { Ports, Services } from "../views/Ports";
@@ -36,7 +37,7 @@ export type ViewDef = {
   /** A shorter label for the phone bar, when `label` is too long for it. */
   short?: string;
   icon: IconName;
-  group: "Investigate" | "Operate" | "Administer";
+  group: "Investigate" | "Operate" | "Administer" | "Help";
   /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
   access: readonly { permission: Permission; global?: boolean }[];
   keys: string;
@@ -58,6 +59,7 @@ export const views: readonly ViewDef[] = [
   { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
   { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
   { path: "/audit", label: "Audit log", icon: "audit", group: "Administer", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 
 export type PanelDef = {

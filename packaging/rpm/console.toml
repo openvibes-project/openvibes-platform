@@ -5,3 +5,6 @@ database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-cons
 public_origin = "https://console.example.invalid"
 server_certificate_file = "/etc/openvibes/tls/console-chain.pem"
 server_key_file = "/etc/openvibes/tls/console-key.pem"
+# The About page asks GitHub for the latest release. Uncomment on hosts
+# that must make no outbound connections.
+# update_check = false
