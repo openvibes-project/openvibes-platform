@@ -92,7 +92,7 @@ pub async fn list(client: &Client) -> Result<Vec<TokenInfo>, StoreError> {
 const STANDING_YEARS: i64 = 100;
 
 /// Creates the standing token: it never expires and has no use limit. The
-/// secret is stored beside the hash (see migration 0034) so the install
+/// secret is stored beside the hash (see migration 0037) so the install
 /// line can be shown again. Returns its id, or `None` when a live standing
 /// token already exists (revoke it first to replace it).
 pub async fn create_standing(

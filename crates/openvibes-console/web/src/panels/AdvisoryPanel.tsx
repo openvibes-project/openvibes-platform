@@ -6,7 +6,10 @@ import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
 import { date, pct } from "../ui/format";
 import { Icon } from "../ui/Icon";
+import { useSession } from "../app/session";
 import { PanelHeader, Section } from "../ui/panel";
+import { AddToCase } from "./AddToCase";
+import { vulnerabilityRef } from "./cases";
 
 type Pkg = { name?: unknown; installed?: unknown; fixed?: unknown };
 
@@ -28,6 +31,7 @@ function cvssTone(score: number | null | undefined) {
 }
 
 export function AdvisoryPanel({ id }: { id: string }) {
+  const { can } = useSession();
   const detail = useResource<AdvisoryDetail>(`/api/v1/vulnerabilities/advisories/${encodeURIComponent(id)}`);
   useProvideTitle({ kind: "advisory", id }, detail.data?.hosts.items[0]?.title);
   if (detail.error) return <div className="panel-body"><ErrorBox error={detail.error} /></div>;
@@ -96,15 +100,15 @@ export function AdvisoryPanel({ id }: { id: string }) {
       <Section title="Affected hosts" flush>
         {hosts.length === 0 ? <Empty title="No host in your scope needs this" /> : (
           <table className="table table--compact">
-            <thead><tr><th>Host</th><th>State</th><th>Since</th></tr></thead>
+            <thead><tr><th>Host</th><th>State</th><th className="hide-narrow">Since</th></tr></thead>
             <tbody>
               {hosts.map((host) => {
                 const state = fixState(host);
                 return (
                   <tr key={host.agent_id}>
-                    <td><ObjectLink to={{ kind: "agent", id: host.agent_id }}>{host.hostname ?? host.agent_id}</ObjectLink></td>
+                    <td><span className="row"><ObjectLink to={{ kind: "agent", id: host.agent_id }}>{host.hostname ?? host.agent_id}</ObjectLink>{can("cases.manage") && <AddToCase compact kind="vulnerability" id={vulnerabilityRef(host.agent_id, host.advisory_id)} label={`${host.title} on ${host.hostname ?? host.agent_id}`} />}</span></td>
                     <td><span className={`badge badge--${state.tone} badge--plain`}>{state.label}</span></td>
-                    <td className="subtle"><Ago value={host.first_seen_at} /></td>
+                    <td className="subtle hide-narrow"><Ago value={host.first_seen_at} /></td>
                   </tr>
                 );
               })}

@@ -126,6 +126,67 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
 - The demo serves alarms and suppressions with the server's rules
   (scoped persona, workflow, global-only program/command).
 
+## Cases
+
+One place for an investigation ([console-cases.md](console-cases.md); spec
+[2026-10-04-console-cases-design.md](../specs/2026-10-04-console-cases-design.md)).
+A case gathers hosts, alarms, findings, vulnerabilities on a host and
+software, with notes and a timeline. It does not replace those views, and
+triage on alarms and findings stays as it is.
+
+- **Cases** (`/cases`, `g c`, `cases.read`): C-number, title, severity,
+  status (a closed case also says how it ended), assignee, items with the
+  count that still need an outcome, and last change. Chips: Open,
+  Investigating, Closed, Include closed (the default list shows open and
+  investigating), the four severities, Assigned to me and Unassigned. The
+  chips and severity go to the API; the text filter (title, `C-104`,
+  assignee) applies to what is loaded. **New case** (with `cases.manage`)
+  opens a form in the inspector. A row opens the case.
+- **Case panel** (`case`, id is the case's UUID, `case:new` is the form):
+  - the header shows number, title, status, severity, assignee and how many
+    items are unresolved;
+  - with `cases.manage`, title, severity and assignee (a picker from
+    `/cases/assignees`, plus Assign to me) save together with the version
+    (`If-Match`). Status moves open to investigating and back, and **Close
+    case…** asks for the resolution, a note and, for accepted risk, the date
+    it is accepted until (the case reopens then). It lists the alarms,
+    findings and vulnerabilities that still need an outcome and stays
+    disabled until the rules are met (`panels/cases.ts`, `closeProblems`).
+    A closed case offers **Reopen**;
+  - **Items**: each row shows its kind, title, severity and host and opens
+    that object's own panel (alarm `alarm:<id>`, finding `finding:<rule
+    set>/<rule>`, vulnerability `advisory:<advisory>`, host `agent:<id>`,
+    software `package:<manager>/<name>`). Alarms, findings and
+    vulnerabilities take an outcome: resolved (offered only while the
+    evidence is gone), false positive or accepted risk (a note is required).
+    Hosts and software need none. **Remove** and **Add item** (kind and
+    pasted id) work on open cases;
+  - **Notes** (plain text) and the **Timeline**, newest first, with who did
+    what.
+  - Without `cases.manage` the panel is read-only.
+- **Add to case** (`panels/AddToCase.tsx`, with `cases.manage`): a button on
+  the alarm panel, on each host row of a finding and of an advisory, on the
+  host panel and its vulnerabilities, and on the software panel. Its dialog
+  asks `/cases/for-item` first. An alarm, finding or vulnerability that is
+  already in an open case shows that case (a link) and offers nothing else,
+  because it can be in one at a time; a host or software lists the cases
+  that hold it and can join another. Otherwise pick an open case or **New
+  case…**, which opens one with the item.
+- **Refusals**: a stale version (412) reloads the case and says someone else
+  changed it; an item in another open case (409) names that case when the
+  server does; a case closed or an outcome the evidence does not allow shows
+  the server's message.
+- **The demo** (`demo/cases.ts`) serves the same routes, JSON, status codes
+  and rules as the server: filters, `If-Match`, exclusivity, close rules,
+  outcomes decided by the demo's own alarms and findings (mitigating an alarm
+  in the Alarm panel makes "resolved" available for it), the visibility rule
+  for a scoped viewer, and accepted risk that reopens when its date passes.
+  It starts with four cases over real demo objects (an SSH and shell
+  investigation, an exploited advisory on three hosts, web servers starting
+  shells, and a closed one) and keeps cases in `localStorage`
+  (`openvibes.v2.demo.cases`). Analyst and admin hold `cases.read` and
+  `cases.manage`; the viewer and operator have neither.
+
 ## Assets v1 (hosts and software)
 
 - **Hosts** (`/agents`, the former Agents view): a row opens the **Host
@@ -208,7 +269,7 @@ correctness:
 cd crates/openvibes-console/web
 npm ci --ignore-scripts      # no dependency install scripts; esbuild's binary is an optional dependency
 npm run lint && npm run typecheck
-npm test                     # location, client, table, source, contract, demo server
+npm test                     # location, client, table, source, contract, demo server, demo cases, case rules
 npm run test:e2e:demo        # demo build: smoke, dashboards + axe (both themes), Chromium and Firefox
 npm run dev                  # http://127.0.0.1:5174 with demo data; add ?live=1 for CONSOLE_URL
 ```

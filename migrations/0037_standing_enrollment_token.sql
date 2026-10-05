@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 34: a standing enrollment token. One
+-- OpenVIBES platform schema version 37: a standing enrollment token. One
 -- long-lived token every agent may enroll with, so operators need not mint
 -- short-lived ones per install. It never expires and has no use limit; it is
 -- revoked (and replaced) like any other token. expires_at and max_uses stay

@@ -11,6 +11,10 @@ dashboards with a role (schema 26).
 `alarms.read` (all four roles), `alarms.triage` and `alarms.suppress`
 (Analyst, Admin) are agent-scoped like their findings counterparts
 (schema 29); the routes that use them come with threat alarms (P14).
+`cases.read` (Analyst, Admin; schema 34) and `cases.manage` (Analyst, Admin;
+schema 35) are agent-scoped too: a scoped binding grants them for its asset
+groups, and cases show only the items those groups cover (see
+[console-cases.md](console-cases.md)).
 
 The resolver is pure and has no configuration or database access. Persisted
 bindings are loaded from PostgreSQL for each authenticated request. The
