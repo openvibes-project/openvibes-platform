@@ -9,6 +9,106 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/about": {
+      "get": {
+        "tags": [
+          "about"
+        ],
+        "operationId": "about",
+        "responses": {
+          "200": {
+            "description": "Versions of the running platform",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AboutResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/about/update": {
+      "get": {
+        "tags": [
+          "about"
+        ],
+        "operationId": "about_update",
+        "responses": {
+          "200": {
+            "description": "Whether a newer release is published; never an error for network problems",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/access-control": {
       "get": {
         "tags": [
@@ -5717,6 +5817,45 @@
   },
   "components": {
     "schemas": {
+      "AboutResponse": {
+        "type": "object",
+        "description": "Versions of the running platform.",
+        "required": [
+          "platform_version",
+          "schema_version",
+          "web_ui_embedded"
+        ],
+        "properties": {
+          "applied_schema_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "Database schema version actually applied."
+          },
+          "database_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "PostgreSQL server version, when the database reports one."
+          },
+          "platform_version": {
+            "type": "string",
+            "description": "Platform release this console belongs to."
+          },
+          "schema_version": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Database schema version the platform requires."
+          },
+          "web_ui_embedded": {
+            "type": "boolean",
+            "description": "Whether this console serves its web UI from the same build."
+          }
+        }
+      },
       "AccessAssetGroup": {
         "type": "object",
         "description": "Manual asset group and exact selectors.",
@@ -10134,6 +10273,43 @@
         },
         "additionalProperties": false
       },
+      "UpdateResponse": {
+        "type": "object",
+        "description": "Result of the newer-version check.",
+        "required": [
+          "state"
+        ],
+        "properties": {
+          "latest_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest published release, without a leading `v`."
+          },
+          "release_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Page of the latest release."
+          },
+          "state": {
+            "$ref": "#/components/schemas/UpdateState",
+            "description": "Outcome of the check."
+          }
+        }
+      },
+      "UpdateState": {
+        "type": "string",
+        "description": "Outcome of comparing against the latest published release.",
+        "enum": [
+          "disabled",
+          "unavailable",
+          "up_to_date",
+          "available"
+        ]
+      },
       "VulnerabilityAdvisoryDetail": {
         "type": "object",
         "description": "Advisory view and in-scope affected hosts.",
@@ -10435,6 +10611,10 @@
     {
       "name": "authentication",
       "description": "Local browser authentication"
+    },
+    {
+      "name": "about",
+      "description": "Platform versions and newer-release check"
     },
     {
       "name": "agents",

@@ -9,6 +9,7 @@
 //! remain unavailable until their implementation milestones. Production frontend assets are included only
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
+mod about;
 mod alarm_suppressions;
 mod alarms;
 mod api;

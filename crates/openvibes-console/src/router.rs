@@ -58,6 +58,8 @@ pub(crate) struct AuthHttpState {
     dummy_password_phc: Option<String>,
     pub(crate) password_slots: Arc<Semaphore>,
     assistant: Option<crate::assistant::AssistantRuntime>,
+    /// `None` when the About page's newer-version check is turned off.
+    pub(crate) update_checker: Option<Arc<crate::about::UpdateChecker>>,
 }
 
 #[derive(Deserialize)]
@@ -252,7 +254,7 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None)
+    authenticated_router_with_assistant(pool, public_origin, [], None, None)
 }
 
 /// As [`authenticated_router`], also serving `hosts` (`name:port`, e.g. the
@@ -262,7 +264,7 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None)
+    authenticated_router_with_assistant(pool, public_origin, hosts, None, None)
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -270,6 +272,7 @@ pub(crate) fn authenticated_router_with_assistant(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
     assistant: Option<crate::assistant::AssistantRuntime>,
+    update_checker: Option<Arc<crate::about::UpdateChecker>>,
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -289,6 +292,7 @@ pub(crate) fn authenticated_router_with_assistant(
         dummy_password_phc: dummy_password_phc(),
         password_slots: Arc::new(Semaphore::new(4)),
         assistant,
+        update_checker,
     };
     let router = Router::new()
         .nest(
@@ -413,6 +417,8 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/assistant/messages",
             axum::routing::post(authenticated_assistant_message),
         )
+        .route("/v1/about", get(crate::about::about))
+        .route("/v1/about/update", get(crate::about::about_update))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
         .route("/v1/agents", get(authenticated_agents))
         .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))

@@ -32,6 +32,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `console-rbac` | console module | permission resolution and access-control inventory, role-binding, and asset-group selector APIs | [console-rbac.md](console-rbac.md) |
+| `console-about` | console module | About page, platform/component versions, newer-release check | [console-about.md](console-about.md) |
 | `console-build-stamp` | build-script module | sorted frontend inventories and SHA-256 validation | [console-build-stamp.md](console-build-stamp.md) |
 
 Sizing (measured and estimated requirements): [`../sizing.md`](../sizing.md).

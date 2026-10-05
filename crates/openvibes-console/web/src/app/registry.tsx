@@ -21,6 +21,7 @@ import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPane
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/Cases";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
+import { About } from "../views/About";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
 import { Ports, Services } from "../views/Ports";
@@ -38,7 +39,7 @@ export type ViewDef = {
   /** A shorter label for the phone bar, when `label` is too long for it. */
   short?: string;
   icon: IconName;
-  group: "Investigate" | "Operate" | "Admin";
+  group: "Investigate" | "Operate" | "Administer" | "Help";
   /** Any of these opens the view; `global` requires an unscoped grant. Empty: any signed-in user. */
   access: readonly { permission: Permission; global?: boolean }[];
   keys: string;
@@ -58,9 +59,10 @@ export const views: readonly ViewDef[] = [
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
-  { path: "/access", label: "Access", icon: "access", group: "Admin", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
-  { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Admin", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
-  { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
+  { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
+  { path: "/audit", label: "Audit log", icon: "audit", group: "Administer", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 
 export type PanelDef = {
