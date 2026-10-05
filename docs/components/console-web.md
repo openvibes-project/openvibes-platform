@@ -199,9 +199,12 @@ triage on alarms and findings stays as it is.
   timestamp about every five minutes; a connected host can therefore show
   several minutes ago.
 - **Software** (`/software`, `g w`): packages across the caller's hosts with
-  hosts, versions and hosts with a fix available; the name filter and the
-  "Fix available" chip go to the API; Load 100 more. A row opens the
-  `package` panel: versions in use with host counts, and the hosts.
+  hosts, versions (highlighted when more than one is in use), open
+  advisories (worst severity, count, no-fix count, an Exploited flag) and
+  hosts with a fix available; the name filter and the "Fix available" and
+  "Multiple versions" chips go to the API; Load 100 more. A row opens the
+  `package` panel: versions in use with host share and advisory count, the
+  open advisories (each opens the advisory) and the hosts.
 - "Fix available" means an open vulnerability that has a fix (quiet by
   default; no-fix ones stay in Vulnerabilities).
 - On a phone, Software sits under More (`phoneMore`), so the bar keeps five

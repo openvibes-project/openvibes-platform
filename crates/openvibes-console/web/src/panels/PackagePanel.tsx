@@ -4,7 +4,9 @@ import { useResource } from "../api/client";
 import type { SoftwareDetail } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
-import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
+import { Icon } from "../ui/Icon";
+import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
+import { pct } from "../ui/format";
 import { PanelHeader, Section } from "../ui/panel";
 import { AddToCase } from "./AddToCase";
 import { ShowMore, useMoreHosts } from "./MoreHosts";
@@ -36,16 +38,43 @@ export function PackagePanel({ id }: { id: string }) {
         badges={<><span className="badge badge--plain">{hosts} hosts</span><span className="badge badge--plain">{data.versions.length} {data.versions.length === 1 ? "version" : "versions"}</span></>}
         actions={can("cases.manage") && <AddToCase kind="software" id={id} label={name} />} />
       <div className="panel-body stack">
-        <Section title="Versions in use">
-          <ul className="list list--plain">
+        <Section title={`Versions in use (${data.versions.length})`}>
+          <ul className="list list--plain" aria-label="Versions in use">
             {data.versions.map((v) => (
               <li key={`${fullVersion(v)}.${v.arch}`} className="list__row list__row--static">
-                <span className="mono grow truncate">{fullVersion(v)} <span className="subtle">{v.arch}</span></span>
+                <span className="cell-two grow">
+                  <span className="mono truncate">{fullVersion(v)} <span className="subtle">{v.arch}</span></span>
+                  <span className="subtle">{hosts > 0 ? Math.round((v.hosts / hosts) * 100) : 0}% of hosts</span>
+                </span>
+                {v.advisories > 0 && <span className="badge badge--bad badge--plain">{v.advisories} {v.advisories === 1 ? "advisory" : "advisories"}</span>}
                 {v.fixable_vulnerable_hosts > 0 && <span className="badge badge--warn badge--plain">fix available</span>}
                 <span className="num nowrap">{v.hosts} hosts</span>
               </li>
             ))}
           </ul>
+        </Section>
+        <Section title={`Vulnerabilities (${data.advisories.length})`} flush>
+          {data.advisories.length === 0 ? <Empty title="No open advisories on this package" /> : (
+            <ul className="list" aria-label="Open advisories">
+              {data.advisories.map((a) => (
+                <li key={a.advisory_id}>
+                  <ObjectLink to={{ kind: "advisory", id: a.advisory_id }} className="list__row">
+                    <span className="cell-two grow">
+                      <span className="truncate">{a.advisory_id} <span className="subtle">{a.title}</span></span>
+                      <span className="subtle">
+                        {a.cves.slice(0, 3).join(", ")}{a.cves.length > 3 ? ` +${a.cves.length - 3}` : ""}
+                        {a.epss != null && ` · EPSS ${pct(a.epss)}`}{a.cvss != null && ` · CVSS ${a.cvss.toFixed(1)}`}
+                        {" · "}{a.fixed_in ? <>fixed in <span className="mono">{a.fixed_in}</span></> : "no fix yet"}
+                      </span>
+                    </span>
+                    {a.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}
+                    <SeverityBadge severity={a.severity} />
+                    <span className="num nowrap">{a.hosts} {a.hosts === 1 ? "host" : "hosts"}</span>
+                  </ObjectLink>
+                </li>
+              ))}
+            </ul>
+          )}
         </Section>
         <Section title="Hosts" flush>
           {page.hosts.length === 0 ? <Empty title="No host in your scope has it" /> : (
