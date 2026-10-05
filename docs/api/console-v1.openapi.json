@@ -5291,6 +5291,18 @@
             }
           },
           {
+            "name": "multiple_versions",
+            "in": "path",
+            "description": "Only packages in use in more than one version.",
+            "required": true,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "cursor",
             "in": "path",
             "description": "Opaque continuation cursor.",
@@ -9856,6 +9868,76 @@
         },
         "additionalProperties": false
       },
+      "SoftwareAdvisoryView": {
+        "type": "object",
+        "description": "An advisory open on the package.",
+        "required": [
+          "advisory_id",
+          "severity",
+          "title",
+          "url",
+          "cves",
+          "hosts",
+          "exploited"
+        ],
+        "properties": {
+          "advisory_id": {
+            "type": "string",
+            "description": "Advisory id (opens the advisory view)."
+          },
+          "cves": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "CVE ids."
+          },
+          "cvss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Highest CVSS base score among its CVEs."
+          },
+          "epss": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "Highest EPSS score among its CVEs."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "On CISA KEV or EUVD's exploited list."
+          },
+          "fixed_in": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version that fixes the package; absent while there is no fix."
+          },
+          "hosts": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Visible hosts it is open on."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity (`critical`, `important`, `moderate`, `low`, `unrated`)."
+          },
+          "title": {
+            "type": "string",
+            "description": "Advisory title."
+          },
+          "url": {
+            "type": "string",
+            "description": "Link to the advisory."
+          }
+        }
+      },
       "SoftwareDetail": {
         "type": "object",
         "description": "One package: its versions in use and, paged, its hosts.",
@@ -9863,9 +9945,17 @@
           "manager",
           "name",
           "versions",
+          "advisories",
           "hosts"
         ],
         "properties": {
+          "advisories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SoftwareAdvisoryView"
+            },
+            "description": "Open advisories on the package, most urgent first (at most 200)."
+          },
           "hosts": {
             "type": "array",
             "items": {
@@ -9971,9 +10061,15 @@
           "release",
           "arch",
           "hosts",
-          "fixable_vulnerable_hosts"
+          "fixable_vulnerable_hosts",
+          "advisories"
         ],
         "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct open advisories that apply to this version."
+          },
           "arch": {
             "type": "string",
             "description": "Architecture."
@@ -10011,9 +10107,21 @@
           "name",
           "hosts",
           "versions",
-          "fixable_vulnerable_hosts"
+          "fixable_vulnerable_hosts",
+          "advisories",
+          "no_fix_advisories",
+          "exploited"
         ],
         "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Distinct open advisories on it, with or without a fix."
+          },
+          "exploited": {
+            "type": "boolean",
+            "description": "One of them is on an exploited list (CISA KEV or EUVD)."
+          },
           "fixable_vulnerable_hosts": {
             "type": "integer",
             "format": "int64",
@@ -10032,10 +10140,22 @@
             "type": "string",
             "description": "Package name."
           },
+          "no_fix_advisories": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Of those, advisories with no fix yet."
+          },
           "versions": {
             "type": "integer",
             "format": "int64",
             "description": "Distinct versions in use."
+          },
+          "worst_severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Worst severity among them (`critical`, `important`, `moderate`,\n`low`, `unrated`); absent without advisories."
           }
         }
       },

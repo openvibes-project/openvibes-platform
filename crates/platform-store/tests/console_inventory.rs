@@ -219,6 +219,44 @@ async fn fleet_software_counts_only_visible_hosts() {
     assert_eq!(row(&scoped, "openssl"), Some((1, 1, 1)));
     assert_eq!(row(&scoped, "bash"), Some((1, 1, 0)));
 
+    // Advisory counts: openssl has FEDORA-1 open (fixable, important); bash
+    // has FEDORA-2 (no fix, low); glibc's only one needs a reboot, so none.
+    let risk = |name: &str| {
+        global.iter().find(|s| s.name == name).map(|s| {
+            (
+                s.advisories,
+                s.no_fix_advisories,
+                s.worst_severity.clone(),
+                s.exploited,
+            )
+        })
+    };
+    assert_eq!(
+        risk("openssl"),
+        Some((1, 0, Some("important".into()), false))
+    );
+    assert_eq!(risk("bash"), Some((1, 1, Some("low".into()), false)));
+    assert_eq!(risk("glibc"), Some((0, 0, None, false)));
+    // Multiple versions: only openssl (3.0.13 and 3.0.14).
+    let multi = SoftwareFilters {
+        multiple_versions: true,
+        ..SoftwareFilters::default()
+    };
+    let multiple = console_inventory::software(&client, &AgentScope::Global, &multi, None, 10)
+        .await
+        .unwrap();
+    assert_eq!(
+        multiple.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(),
+        ["openssl"]
+    );
+    // Scoped to prod, openssl has one version in use: not multiple.
+    assert!(
+        console_inventory::software(&client, &prod(), &multi, None, 10)
+            .await
+            .unwrap()
+            .is_empty()
+    );
+
     // Vulnerable only, a name filter, and the keyset cursor.
     let vulnerable = SoftwareFilters {
         fixable: true,
@@ -263,6 +301,40 @@ async fn one_packages_versions_and_hosts() {
         .map(|v| (v.version.as_str(), v.hosts, v.fixable_vulnerable_hosts))
         .collect();
     assert_eq!(summary, [("3.0.13", 2, 1), ("3.0.14", 1, 0)]);
+    // 3.0.13's host has FEDORA-1 open; db-01's is fixed.
+    assert_eq!(
+        versions.iter().map(|v| v.advisories).collect::<Vec<_>>(),
+        [1, 0]
+    );
+    let advisories =
+        console_inventory::software_advisories(&client, &AgentScope::Global, "rpm", "openssl", 10)
+            .await
+            .unwrap();
+    assert_eq!(advisories.len(), 1);
+    assert_eq!(
+        (advisories[0].advisory_id.as_str(), advisories[0].hosts),
+        ("FEDORA-1", 1)
+    );
+    assert_eq!(advisories[0].fixed_in.as_deref(), Some("1:3.0.14-1.fc44"));
+    let bash =
+        console_inventory::software_advisories(&client, &AgentScope::Global, "rpm", "bash", 10)
+            .await
+            .unwrap();
+    assert_eq!(
+        (
+            bash[0].advisory_id.as_str(),
+            bash[0].hosts,
+            bash[0].fixed_in.clone()
+        ),
+        ("FEDORA-2", 2, None)
+    );
+    assert!(
+        console_inventory::software_advisories(&client, &prod(), "rpm", "bash", 10)
+            .await
+            .unwrap()[0]
+            .hosts
+            == 1
+    );
     let hosts =
         console_inventory::software_hosts(&client, &AgentScope::Global, "rpm", "openssl", None, 10)
             .await

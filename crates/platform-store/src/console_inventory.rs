@@ -58,6 +58,15 @@ pub struct Software {
     pub versions: i64,
     /// Visible hosts where it has an open vulnerability with a fix.
     pub fixable_vulnerable_hosts: i64,
+    /// Distinct open advisories on it, with or without a fix, on visible
+    /// hosts.
+    pub advisories: i64,
+    /// Open advisories with no fix yet (a subset of `advisories`).
+    pub no_fix_advisories: i64,
+    /// Worst severity among those advisories.
+    pub worst_severity: Option<String>,
+    /// One of those advisories is on an exploited list (KEV or EUVD).
+    pub exploited: bool,
 }
 
 /// One version of a package in use.
@@ -75,6 +84,34 @@ pub struct SoftwareVersion {
     pub hosts: i64,
     /// Of those, hosts where it has an open vulnerability with a fix.
     pub fixable_vulnerable_hosts: i64,
+    /// Distinct open advisories that apply to this version (with or
+    /// without a fix).
+    pub advisories: i64,
+}
+
+/// An advisory open on a package, with the visible hosts it affects.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SoftwareAdvisory {
+    /// Advisory id.
+    pub advisory_id: String,
+    /// Severity.
+    pub severity: String,
+    /// Advisory title.
+    pub title: String,
+    /// Link to the advisory.
+    pub url: String,
+    /// CVE ids.
+    pub cves: Vec<String>,
+    /// Visible hosts it is open on.
+    pub hosts: i64,
+    /// The version that fixes the package, `None` while there is no fix.
+    pub fixed_in: Option<String>,
+    /// On CISA KEV or EUVD's exploited list.
+    pub exploited: bool,
+    /// Highest EPSS score among its CVEs.
+    pub epss: Option<f32>,
+    /// Highest CVSS base score among its CVEs.
+    pub cvss: Option<f32>,
 }
 
 /// One host that has a package.
@@ -103,6 +140,8 @@ pub struct SoftwareFilters {
     /// Only packages with an open vulnerability with a fix on at least
     /// one visible host.
     pub fixable: bool,
+    /// Only packages in use in more than one version on visible hosts.
+    pub multiple_versions: bool,
 }
 
 fn scope_params(scope: &AgentScope) -> (bool, Vec<String>) {
@@ -228,6 +267,12 @@ pub async fn software(
             WHERE ($3::text IS NULL OR strpos(lower(pv.name), lower($3)) > 0)
               AND ($4::text IS NULL OR (pv.name, pv.manager) > ($4, $5))
               AND (NOT $6 OR pv.name IN (SELECT name FROM vulnerable_names))
+              AND (NOT $8 OR (SELECT count(DISTINCT (p2.epoch, p2.version, p2.release))
+                              FROM package_versions p2
+                              WHERE p2.name = pv.name AND p2.manager = pv.manager
+                                AND EXISTS (SELECT 1 FROM host_packages hp
+                                            WHERE hp.package_version_id = p2.id
+                                              AND {visible_host})) > 1)
               AND EXISTS (SELECT 1 FROM host_packages hp
                           WHERE hp.package_version_id = pv.id AND {visible_host})
             GROUP BY pv.name, pv.manager
@@ -278,10 +323,11 @@ pub async fn software(
                 &after_manager,
                 &filters.fixable,
                 &limit,
+                &filters.multiple_versions,
             ],
         )
         .await?;
-    Ok(rows
+    let mut software: Vec<Software> = rows
         .iter()
         .map(|row| Software {
             manager: row.get(0),
@@ -289,8 +335,112 @@ pub async fn software(
             hosts: row.get(2),
             versions: row.get(3),
             fixable_vulnerable_hosts: row.get(4),
+            advisories: 0,
+            no_fix_advisories: 0,
+            worst_severity: None,
+            exploited: false,
         })
-        .collect())
+        .collect();
+    fill_risk(client, scope, &mut software).await?;
+    Ok(software)
+}
+
+/// SQL: the advisories in `ids` (an expression yielding `text[]`) with
+/// their CVEs and each one's exploited flag, EPSS and CVSS over its CVEs.
+fn advisory_enrichment(ids: &str) -> String {
+    format!(
+        "SELECT a.advisory_id, a.severity, a.title, a.url,
+            COALESCE(array_agg(DISTINCT c.cve_id) FILTER (WHERE c.cve_id IS NOT NULL), '{{}}') AS cves,
+            COALESCE(bool_or(x.kev_added IS NOT NULL OR COALESCE(x.euvd_exploited, false)), false) AS exploited,
+            max(x.epss) AS epss, max(x.cvss_score) AS cvss
+         FROM advisories a
+         LEFT JOIN advisory_cves c ON c.advisory_id = a.advisory_id
+         LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
+         WHERE a.advisory_id = ANY({ids})
+         GROUP BY a.advisory_id, a.severity, a.title, a.url"
+    )
+}
+
+/// Severity names, worst first.
+const SEVERITIES: &str = "ARRAY['critical','important','moderate','low','unrated']";
+
+/// Fills the advisory counts of a page of packages: the open advisories
+/// on visible hosts (fixable per host, from `vulnerabilities`; without a
+/// fix, from the versions the hosts have), the worst severity, and
+/// whether one is exploited. One query for the whole page.
+async fn fill_risk(
+    client: &Client,
+    scope: &AgentScope,
+    page: &mut [Software],
+) -> Result<(), StoreError> {
+    if page.is_empty() {
+        return Ok(());
+    }
+    let (global, groups) = scope_params(scope);
+    let names: Vec<&str> = page.iter().map(|s| s.name.as_str()).collect();
+    // As in `software`: a global caller needs no per-row visibility join,
+    // a scoped caller's hosts are worked out once.
+    let visible = |agent: &str| {
+        if global {
+            format!(
+                "($1::boolean OR $2::text[] IS NULL)
+                 AND NOT EXISTS (SELECT 1 FROM revoked_agents r WHERE r.agent_id = {agent})"
+            )
+        } else {
+            format!("{agent} IN (SELECT agent_id FROM visible_agents)")
+        }
+    };
+    let (visible_vulnerability, visible_host) = (visible("v.agent_id"), visible("hp.agent_id"));
+    let visibility = agent_visibility("a.agent_id", "$1", "$2");
+    let query = format!(
+        "WITH visible_agents AS MATERIALIZED (
+            SELECT a.agent_id FROM agents a
+            WHERE NOT $1 AND a.status <> 'revoked' AND {visibility}
+         ),
+         revoked_agents AS MATERIALIZED (
+            SELECT agent_id FROM agents WHERE status = 'revoked'
+         ),
+         pairs AS (
+            SELECT DISTINCT p->>'name' AS name, v.advisory_id, true AS fixable
+            FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
+            WHERE v.fixed_at IS NULL AND NOT v.reboot_needed AND p->>'name' = ANY($3::text[])
+              AND {visible_vulnerability}
+            UNION
+            SELECT pv.name, vv.advisory_id, false
+            FROM package_versions pv
+            JOIN version_vulnerabilities vv ON vv.package_version_id = pv.id
+            WHERE pv.name = ANY($3::text[])
+              AND EXISTS (SELECT 1 FROM host_packages hp
+                          WHERE hp.package_version_id = pv.id AND {visible_host})
+         ),
+         enriched AS ({enrichment_sql})
+         SELECT p.name,
+                count(DISTINCT p.advisory_id),
+                count(DISTINCT p.advisory_id) FILTER (WHERE NOT p.fixable
+                    AND NOT EXISTS (SELECT 1 FROM pairs f
+                                    WHERE f.fixable AND f.name = p.name AND f.advisory_id = p.advisory_id)),
+                min(array_position({SEVERITIES}, e.severity)),
+                COALESCE(bool_or(e.exploited), false)
+         FROM pairs p JOIN enriched e ON e.advisory_id = p.advisory_id
+         GROUP BY p.name",
+        enrichment_sql = advisory_enrichment("ARRAY(SELECT advisory_id FROM pairs)")
+    );
+    let rows = client.query(&query, &[&global, &groups, &names]).await?;
+    for row in rows {
+        let name: String = row.get(0);
+        let severity: Option<i32> = row.get(3);
+        for software in page.iter_mut().filter(|s| s.name == name) {
+            software.advisories = row.get(1);
+            software.no_fix_advisories = row.get(2);
+            software.worst_severity = severity.and_then(|rank| {
+                ["critical", "important", "moderate", "low", "unrated"]
+                    .get(usize::try_from(rank).ok()?.checked_sub(1)?)
+                    .map(|s| (*s).to_string())
+            });
+            software.exploited = row.get(4);
+        }
+    }
+    Ok(())
 }
 
 /// The versions of `manager`/`name` in use on visible hosts, newest
@@ -304,9 +454,20 @@ pub async fn software_versions(
 ) -> Result<Vec<SoftwareVersion>, StoreError> {
     let (global, groups) = scope_params(scope);
     let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let visible_h2 = agent_visibility("a2.agent_id", "$1", "$2").replace("a.status", "a2.status");
     let query = format!(
         "SELECT pv.epoch, pv.version, pv.release, pv.arch, count(DISTINCT hp.agent_id),
-            count(DISTINCT hp.agent_id) FILTER (WHERE {VULNERABLE})
+            count(DISTINCT hp.agent_id) FILTER (WHERE {VULNERABLE}),
+            (SELECT count(*) FROM (
+                SELECT vv.advisory_id FROM version_vulnerabilities vv
+                WHERE vv.package_version_id = pv.id
+                UNION
+                SELECT v.advisory_id FROM vulnerabilities v
+                JOIN host_packages h2 ON h2.agent_id = v.agent_id AND h2.package_version_id = pv.id
+                JOIN agents a2 ON a2.agent_id = h2.agent_id AND a2.status <> 'revoked'
+                WHERE v.fixed_at IS NULL AND NOT v.reboot_needed
+                  AND v.packages @> jsonb_build_array(jsonb_build_object('name', pv.name))
+                  AND {visible_h2}) x)
          FROM package_versions pv
          JOIN host_packages hp ON hp.package_version_id = pv.id
          JOIN agents a ON a.agent_id = hp.agent_id
@@ -326,6 +487,72 @@ pub async fn software_versions(
             arch: row.get(3),
             hosts: row.get(4),
             fixable_vulnerable_hosts: row.get(5),
+            advisories: row.get(6),
+        })
+        .collect())
+}
+
+/// The open advisories on `manager`/`name` across visible hosts, most
+/// urgent first: exploited, then EPSS, severity, CVSS and host count.
+/// Fixable ones come from the hosts' matches, those without a fix from the
+/// versions the visible hosts have. At most `limit` are returned.
+pub async fn software_advisories(
+    client: &Client,
+    scope: &AgentScope,
+    manager: &str,
+    name: &str,
+    limit: i64,
+) -> Result<Vec<SoftwareAdvisory>, StoreError> {
+    let (global, groups) = scope_params(scope);
+    let visible = agent_visibility("a.agent_id", "$1", "$2");
+    let query = format!(
+        "WITH hits AS (
+            SELECT v.advisory_id, v.agent_id, p->>'fixed' AS fixed
+            FROM vulnerabilities v CROSS JOIN jsonb_array_elements(v.packages) p
+            JOIN agents a ON a.agent_id = v.agent_id
+            WHERE v.fixed_at IS NULL AND NOT v.reboot_needed AND p->>'name' = $4
+              AND a.status <> 'revoked' AND {visible}
+              AND EXISTS (SELECT 1 FROM host_packages hp
+                          JOIN package_versions pv ON pv.id = hp.package_version_id
+                          WHERE hp.agent_id = v.agent_id AND pv.manager = $3 AND pv.name = $4)
+            UNION ALL
+            SELECT vv.advisory_id, hp.agent_id, NULL
+            FROM package_versions pv
+            JOIN version_vulnerabilities vv ON vv.package_version_id = pv.id
+            JOIN host_packages hp ON hp.package_version_id = pv.id
+            JOIN agents a ON a.agent_id = hp.agent_id
+            WHERE pv.manager = $3 AND pv.name = $4 AND a.status <> 'revoked' AND {visible}
+         ),
+         grouped AS (
+            SELECT advisory_id, count(DISTINCT agent_id) AS hosts, max(fixed) AS fixed
+            FROM hits GROUP BY advisory_id
+         ),
+         enriched AS ({enrichment})
+         SELECT e.advisory_id, e.severity, e.title, e.url, e.cves, g.hosts, g.fixed,
+                e.exploited, e.epss, e.cvss
+         FROM grouped g JOIN enriched e ON e.advisory_id = g.advisory_id
+         ORDER BY e.exploited DESC, e.epss DESC NULLS LAST,
+                  array_position({SEVERITIES}, e.severity), e.cvss DESC NULLS LAST,
+                  g.hosts DESC, e.advisory_id
+         LIMIT $5",
+        enrichment = advisory_enrichment("ARRAY(SELECT advisory_id FROM grouped)")
+    );
+    let rows = client
+        .query(&query, &[&global, &groups, &manager, &name, &limit])
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| SoftwareAdvisory {
+            advisory_id: row.get(0),
+            severity: row.get(1),
+            title: row.get(2),
+            url: row.get(3),
+            cves: row.get(4),
+            hosts: row.get(5),
+            fixed_in: row.get(6),
+            exploited: row.get(7),
+            epss: row.get(8),
+            cvss: row.get(9),
         })
         .collect())
 }

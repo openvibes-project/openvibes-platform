@@ -23,9 +23,26 @@ test("software lists packages across hosts and opens the hosts that run one", as
   const inspector = page.locator(".inspector");
   await expect(inspector.locator(".panel-header__kind")).toContainText("Software");
   await expect(inspector.getByRole("heading", { name: "Versions in use" }).or(inspector.getByText("Versions in use"))).toBeVisible();
-  await inspector.locator(".list a").first().click();
+  await expect(inspector.getByText("Vulnerabilities (", { exact: false })).toBeVisible();
+  await inspector.getByRole("list", { name: "Hosts that have it" }).locator("a").first().click();
   await expect(inspector.locator(".panel-header__kind")).toContainText("Host");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("software shows advisories per package and filters to packages in several versions", async ({ page }) => {
+  await page.getByRole("link", { name: "Software", exact: true }).click();
+  await expect(page.getByRole("columnheader", { name: "Advisories" })).toBeVisible();
+  await page.getByRole("button", { name: "Multiple versions" }).or(page.getByRole("link", { name: "Multiple versions" })).first().click();
+  await expect(page).toHaveURL(/multiple_versions=true/);
+  const rows = page.locator(".view tbody tr");
+  await expect(rows.first()).toBeVisible();
+  // A package with an advisory lists it, linking to the advisory.
+  await page.goto("/software");
+  const withAdvisory = page.locator(".view tbody tr").filter({ has: page.locator(".badge--critical, .badge--important, .badge--moderate, .badge--low") }).first();
+  await withAdvisory.locator("td").first().click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("list", { name: "Open advisories" }).locator("a").first().click();
+  await expect(inspector.locator(".panel-header__kind")).toContainText("Advisory");
 });
 
 test("a host page shows its installed software, filterable", async ({ page }) => {

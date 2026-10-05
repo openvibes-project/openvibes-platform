@@ -413,7 +413,11 @@ Code over these tables:
   `args_sha256` is the `command` suppression hash (SHA-256 of the args'
   JSON array).
 - `console_inventory` (console): a host's packages, the fleet's software
-  and one package's versions and hosts, scoped to the caller's agents
+  and one package's versions, open advisories and hosts. The software page
+  also gets each name's advisory counts, worst severity and exploited flag
+  from one extra query over the page's names (`fill_risk`), and one
+  package's advisories come from `software_advisories`; no migration.
+  Reads are scoped to the caller's agents
   (counts over visible hosts only). The fleet query picks the page's names
   first, in name order, so the scan stops early. It then counts hosts and
   versions by grouping, not `count(DISTINCT)`, which sorted every row

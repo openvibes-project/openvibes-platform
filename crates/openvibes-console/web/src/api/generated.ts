@@ -2843,8 +2843,42 @@ export interface components {
             /** @description Base64url Ed25519 signature. */
             signature_base64url: string;
         };
+        /** @description An advisory open on the package. */
+        SoftwareAdvisoryView: {
+            /** @description Advisory id (opens the advisory view). */
+            advisory_id: string;
+            /** @description CVE ids. */
+            cves: string[];
+            /**
+             * Format: float
+             * @description Highest CVSS base score among its CVEs.
+             */
+            cvss?: number | null;
+            /**
+             * Format: float
+             * @description Highest EPSS score among its CVEs.
+             */
+            epss?: number | null;
+            /** @description On CISA KEV or EUVD's exploited list. */
+            exploited: boolean;
+            /** @description The version that fixes the package; absent while there is no fix. */
+            fixed_in?: string | null;
+            /**
+             * Format: int64
+             * @description Visible hosts it is open on.
+             */
+            hosts: number;
+            /** @description Severity (`critical`, `important`, `moderate`, `low`, `unrated`). */
+            severity: string;
+            /** @description Advisory title. */
+            title: string;
+            /** @description Link to the advisory. */
+            url: string;
+        };
         /** @description One package: its versions in use and, paged, its hosts. */
         SoftwareDetail: {
+            /** @description Open advisories on the package, most urgent first (at most 200). */
+            advisories: components["schemas"]["SoftwareAdvisoryView"][];
             /** @description Hosts on this page, by hostname. */
             hosts: components["schemas"]["SoftwareHostView"][];
             /** @description Package manager. */
@@ -2880,6 +2914,11 @@ export interface components {
         };
         /** @description One version of a package in use. */
         SoftwareVersionView: {
+            /**
+             * Format: int64
+             * @description Distinct open advisories that apply to this version.
+             */
+            advisories: number;
             /** @description Architecture. */
             arch: string;
             /**
@@ -2906,6 +2945,13 @@ export interface components {
         SoftwareView: {
             /**
              * Format: int64
+             * @description Distinct open advisories on it, with or without a fix.
+             */
+            advisories: number;
+            /** @description One of them is on an exploited list (CISA KEV or EUVD). */
+            exploited: boolean;
+            /**
+             * Format: int64
              * @description Visible hosts where it has an open vulnerability with a fix.
              */
             fixable_vulnerable_hosts: number;
@@ -2920,9 +2966,19 @@ export interface components {
             name: string;
             /**
              * Format: int64
+             * @description Of those, advisories with no fix yet.
+             */
+            no_fix_advisories: number;
+            /**
+             * Format: int64
              * @description Distinct versions in use.
              */
             versions: number;
+            /**
+             * @description Worst severity among them (`critical`, `important`, `moderate`,
+             *     `low`, `unrated`); absent without advisories.
+             */
+            worst_severity?: string | null;
         };
         /**
          * @description One service unit across the caller's hosts: a page of the hosts
@@ -7095,6 +7151,8 @@ export interface operations {
                  *     one visible host.
                  */
                 fixable: boolean | null;
+                /** @description Only packages in use in more than one version. */
+                multiple_versions: boolean | null;
                 /** @description Opaque continuation cursor. */
                 cursor: string | null;
                 /** @description Page size from 1 to 100 (default 50). */

@@ -122,6 +122,7 @@ use crate::{
         crate::software::SoftwareView,
         crate::software::SoftwarePage,
         crate::software::SoftwareVersionView,
+        crate::software::SoftwareAdvisoryView,
         crate::software::SoftwareHostView,
         crate::software::SoftwareDetail,
         crate::ports::ListenerView,
