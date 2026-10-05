@@ -1834,3 +1834,84 @@ async fn accepted_risk_that_runs_out_reopens_the_case_when_it_is_next_read() {
     );
     fx.db.drop().await;
 }
+
+#[tokio::test]
+async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() {
+    let fx = fixture!();
+    let alice = fx.session("alice").await;
+    let finding = format!("{WEB}/baseline/ssh-root");
+    let case = fx
+        .open(
+            &alice,
+            "Resolved",
+            json!([{"kind": "finding", "ref": finding}, {"kind": "host", "ref": WEB}]),
+        )
+        .await;
+    let uri = case_uri(&case);
+    fx.sql("UPDATE current_findings SET ended_at = now()").await;
+    let item = item_of(&case, "finding")["item_id"].as_str().unwrap();
+    let (status, set, _) = fx
+        .send(
+            &alice,
+            "PUT",
+            &format!("{uri}/items/{item}/outcome"),
+            Some(json!({"outcome": "resolved"})),
+            None,
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{set}");
+    let (status, closed, _) = fx
+        .send(
+            &alice,
+            "PUT",
+            &uri,
+            Some(put_body(
+                &case,
+                json!({"status": "closed", "resolution": "mitigated", "resolution_note": "Fixed"}),
+            )),
+            Some("\"1\""),
+        )
+        .await;
+    assert_eq!(status, StatusCode::OK, "{closed}");
+    let (_, still_closed) = fx.get(&alice, &uri).await;
+    assert_eq!(still_closed["status"], "closed");
+    // The agent reports it again.
+    fx.sql("UPDATE current_findings SET ended_at = NULL").await;
+    let (_, page) = fx.get(&alice, "/api/v1/cases").await;
+    assert_eq!(
+        page["items"][0]["status"], "open",
+        "back in the default list"
+    );
+    let (status, reopened, etag) = fx.send(&alice, "GET", &uri, None, None).await;
+    assert_eq!((status, etag.as_deref()), (StatusCode::OK, Some("\"3\"")));
+    assert_eq!(
+        (
+            reopened["resolution"].clone(),
+            reopened["resolution_note"].clone()
+        ),
+        (Value::Null, Value::Null)
+    );
+    let item = item_of(&reopened, "finding");
+    assert_eq!(
+        (item["outcome"].clone(), item["active"].clone()),
+        (Value::Null, json!(true))
+    );
+    assert_eq!(reopened["pending_item_count"], 1);
+    let events = reopened["events"].as_array().unwrap();
+    let last = &events[events.len() - 2];
+    assert_eq!(last["kind"], "reopened");
+    assert_eq!(
+        (last["actor"].clone(), last["detail"]["reason"].clone()),
+        (Value::Null, json!("evidence_returned"))
+    );
+    assert_eq!(events[events.len() - 1]["kind"], "item_outcome");
+    assert_eq!(events[events.len() - 1]["detail"]["item_ref"], finding);
+    let reopen_audits = fx
+        .audit()
+        .await
+        .iter()
+        .filter(|(a, _)| a == "case.reopen")
+        .count();
+    assert_eq!(reopen_audits, 1);
+    fx.db.drop().await;
+}
