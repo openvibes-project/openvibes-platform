@@ -129,7 +129,11 @@ pub fn render(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
     {
         return Err(PackageError::Token);
     }
-    if spec.rules.iter().chain(&spec.alarm_rules).any(|r| !r.valid())
+    if spec
+        .rules
+        .iter()
+        .chain(&spec.alarm_rules)
+        .any(|r| !r.valid())
         || (spec.alarm_rules.is_some() && spec.rules.is_none())
     {
         return Err(PackageError::Rules);
