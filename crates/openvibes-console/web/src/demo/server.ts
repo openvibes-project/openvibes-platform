@@ -748,6 +748,23 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort((a, b) => a.localeCompare(b));
     return out;
   };
+  route("GET", "/api/v1/site-rules/fleet", "rules.write", () => {
+    const sets = ["site", "site-alarms"].map((id) => ({ rule_set_id: id, published_version: published.get(id)?.version ?? null, current: 0, behind: 0, refused: 0, missing: 0 }));
+    const hosts: { agent_id: string; hostname: string | null; site: string; site_alarms: string }[] = [];
+    const stateOf = (agent: Agent, set: (typeof sets)[number]) => {
+      const entry = agent.rule_sets.find((candidate) => candidate.id === set.rule_set_id);
+      if (!entry?.version) return "missing";
+      if (entry.refused) return "refused";
+      return set.published_version !== null && entry.version < set.published_version ? "behind" : "current";
+    };
+    for (const agent of data.agents.filter((candidate) => candidate.status === "active" || candidate.status === "stale")) {
+      const states = sets.map((set) => stateOf(agent, set));
+      sets.forEach((set, index) => { set[states[index] as "current" | "behind" | "refused" | "missing"] += 1; });
+      if (states.some((state) => state !== "current") && hosts.length < 200) hosts.push({ agent_id: agent.id, hostname: agent.hostname ?? null, site: states[0] ?? "missing", site_alarms: states[1] ?? "missing" });
+    }
+    const line = (id: string) => `[[rule_sets]]\nid = "${id}"\ntrusted_keys = [{ issuer_key_id = "site.key", public_key = "DEMO-PUBLIC-KEY-NOT-REAL" }]\n`;
+    return json({ sets, reporting: hosts.length, not_reporting: 0, hosts, hosts_truncated: false, paste: line("site") + line("site-alarms") });
+  });
   route("GET", "/api/v1/rule-drafts/{set}/changes", "rules.write", ({ set = "" }) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");

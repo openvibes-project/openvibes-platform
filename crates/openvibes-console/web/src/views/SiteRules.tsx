@@ -3,7 +3,7 @@
 import { type ReactNode, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { DraftChanges, PublishedDrafts, RuleDraft } from "../api/types";
+import type { DraftChanges, PublishedDrafts, RuleDraft, SiteFleet } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
@@ -96,6 +96,52 @@ function Publish({ set }: { set: (typeof SITE_SETS)[number] }) {
   );
 }
 
+const STATE_TEXT: Record<string, string> = { current: "Current", behind: "Behind", refused: "Refused the bundle", missing: "Not in agent.toml" };
+
+function Fleet() {
+  const fleet = useResource<SiteFleet>("/api/v1/site-rules/fleet");
+  const data = fleet.data;
+  const lacking = data ? data.sets.reduce((sum, set) => sum + set.missing, 0) : 0;
+  return (
+    <section className="view-section">
+      <h2>Hosts</h2>
+      {fleet.error ? <ErrorBox error={fleet.error} /> : !data ? <Loading rows={2} /> : (
+        <>
+          <ul className="plain">
+            {data.sets.map((set) => (
+              <li key={set.rule_set_id}>
+                <strong>{set.rule_set_id === "site" ? "Compliance rules" : "Alarm rules"}:</strong>{" "}
+                {set.published_version === null || set.published_version === undefined ? "nothing published yet. " : `version ${set.published_version}. `}
+                {set.current} current, {set.behind} behind, {set.refused} refused, {set.missing} not set up.
+              </li>
+            ))}
+          </ul>
+          {data.not_reporting > 0 && <p className="subtle">{data.not_reporting} hosts haven't sent a health report yet and are not counted.</p>}
+          {data.hosts.length > 0 && (
+            <DataTable label="Hosts without the current site rules" rows={data.hosts} rowKey={(h) => h.agent_id}
+              onOpen={(h) => nav.open({ kind: "agent", id: h.agent_id }, true)}
+              columns={[
+                { key: "host", header: "Host", render: (h) => <div className="cell-two"><span>{h.hostname ?? h.agent_id}</span><span className="mono subtle">{h.agent_id}</span></div> },
+                { key: "site", header: "Compliance", width: "170px", render: (h) => STATE_TEXT[h.site] ?? h.site },
+                { key: "alarms", header: "Alarms", width: "170px", render: (h) => STATE_TEXT[h.site_alarms] ?? h.site_alarms },
+              ]} />
+          )}
+          {data.hosts_truncated && <p className="subtle">Showing the first {data.hosts.length} hosts.</p>}
+          {lacking > 0 && data.paste && (
+            <div className="stack">
+              <p className="subtle">A host marked "Not in agent.toml" needs these lines added to its <span className="mono">/etc/openvibes-agent/agent.toml</span>, then the agent restarted. Hosts installed from now on get them at install.</p>
+              <div className="row">
+                <pre className="code grow" tabIndex={0} aria-label="agent.toml lines">{data.paste}</pre>
+                <button type="button" className="icon-button" aria-label="Copy the agent.toml lines" onClick={() => { void navigator.clipboard?.writeText(data.paste ?? ""); toast("Copied"); }}><Icon name="copy" size={16} /></button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function SiteRules() {
   return (
     <div className="view">
@@ -105,6 +151,7 @@ export function SiteRules() {
         {SITE_SETS.map((set) => (
           <div key={set.id} className="stack"><SetTable set={set} intro={set.what} /><Publish set={set} /></div>
         ))}
+        <Fleet />
       </div>
     </div>
   );

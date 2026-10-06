@@ -37,6 +37,7 @@ mod rule_test;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
+mod site_fleet;
 mod software;
 mod users;
 

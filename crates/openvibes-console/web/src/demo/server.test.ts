@@ -238,6 +238,16 @@ describe("demo server", () => {
     expect((await server.handle("POST", "/api/v1/rule-drafts/site-alarms/a/test", { agent_id: agent, rule })).status).toBe(422);
   });
 
+  it("reports the fleet's site rule sets", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const fleet = await json(await server.handle("GET", "/api/v1/site-rules/fleet"));
+    const sets = fleet.sets as { rule_set_id: string; missing: number; current: number }[];
+    expect(sets.map((set) => set.rule_set_id)).toEqual(["site", "site-alarms"]);
+    expect(sets[0]?.missing).toBeGreaterThan(0);
+    expect(String(fleet.paste)).toContain('id = "site-alarms"');
+    expect((await server.handle("GET", "/api/v1/site-rules/fleet")).status).toBe(200);
+  });
+
   it("keeps draft site rules from a persona without rules.write", async () => {
     const server = createDemoServer({ persona: "viewer" });
     expect((await server.handle("GET", "/api/v1/rule-drafts/site")).status).toBe(403);

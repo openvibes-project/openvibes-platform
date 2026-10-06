@@ -291,6 +291,14 @@ Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
   that never reported its listeners) or `failed`. Alarm rules answer 422:
   they run on process starts, which the platform doesn't hold.
 
+- `GET /api/v1/site-rules/fleet` (`rules.write`, global): for `site` and
+  `site-alarms`, how many hosts are current, behind, refused the bundle, or
+  don't list the set (from each host's last health report), the hosts that
+  are not current in either set (up to 200), how many hosts have sent no
+  report yet (in no count), and the two `[[rule_sets]]` blocks to paste into
+  an agent's `agent.toml` when the platform trusts a key for both sets.
+  Before the first publish a host that lists a set counts as current.
+
 A draft reaches an agent only once published this way.
 
 ## Interfaces

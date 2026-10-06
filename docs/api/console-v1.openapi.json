@@ -5786,6 +5786,36 @@
         }
       }
     },
+    "/api/v1/site-rules/fleet": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "site_fleet",
+        "responses": {
+          "200": {
+            "description": "Which hosts run the site rule sets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteFleet"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs rules.write and global access",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/software": {
       "get": {
         "tags": [
@@ -11121,6 +11151,129 @@
           }
         },
         "additionalProperties": false
+      },
+      "SiteFleet": {
+        "type": "object",
+        "description": "The fleet's site rule sets.",
+        "required": [
+          "sets",
+          "reporting",
+          "not_reporting",
+          "hosts",
+          "hosts_truncated"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteHostFleet"
+            },
+            "description": "Hosts not current in some set, up to 200."
+          },
+          "hosts_truncated": {
+            "type": "boolean",
+            "description": "More than 200 hosts are not current."
+          },
+          "not_reporting": {
+            "type": "integer",
+            "description": "Hosts that haven't sent one yet; they are in no count.",
+            "minimum": 0
+          },
+          "paste": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The two `[[rule_sets]]` blocks for `agent.toml`, when the platform\ntrusts a key for both sets."
+          },
+          "reporting": {
+            "type": "integer",
+            "description": "Hosts that have sent a health report (the counts cover these).",
+            "minimum": 0
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteSetFleet"
+            },
+            "description": "Both site sets."
+          }
+        }
+      },
+      "SiteHostFleet": {
+        "type": "object",
+        "description": "One host's state for each site set.",
+        "required": [
+          "agent_id",
+          "site",
+          "site_alarms"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname, when known."
+          },
+          "site": {
+            "type": "string",
+            "description": "`current`, `behind`, `refused` or `missing` for `site`."
+          },
+          "site_alarms": {
+            "type": "string",
+            "description": "The same for `site-alarms`."
+          }
+        }
+      },
+      "SiteSetFleet": {
+        "type": "object",
+        "description": "One site set across the fleet.",
+        "required": [
+          "rule_set_id",
+          "current",
+          "behind",
+          "refused",
+          "missing"
+        ],
+        "properties": {
+          "behind": {
+            "type": "integer",
+            "description": "Hosts running an older version.",
+            "minimum": 0
+          },
+          "current": {
+            "type": "integer",
+            "description": "Hosts running the published version (or any, before a publish).",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "integer",
+            "description": "Hosts whose `agent.toml` doesn't list the set, or that haven't\naccepted a bundle yet.",
+            "minimum": 0
+          },
+          "published_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The published version; absent before the first publish."
+          },
+          "refused": {
+            "type": "integer",
+            "description": "Hosts that refused the bundle the platform serves.",
+            "minimum": 0
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "`site` or `site-alarms`."
+          }
+        }
       },
       "SoftwareAdvisoryView": {
         "type": "object",

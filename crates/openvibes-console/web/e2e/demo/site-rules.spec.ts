@@ -85,3 +85,13 @@ test("a rule is tested against a host", async ({ page }) => {
   await expect(inspector.getByRole("status")).toContainText("Unavailable here");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("the fleet view lists hosts without the site rule sets and the lines to paste", async ({ page }) => {
+  await page.goto("/site-rules");
+  const hosts = page.locator(".view-section").filter({ hasText: "Not in agent.toml" }).last();
+  await expect(hosts.getByRole("heading", { name: "Hosts" })).toBeVisible();
+  await expect(hosts).toContainText("not set up");
+  await expect(hosts.getByText('id = "site-alarms"')).toBeVisible();
+  await expect(hosts.getByRole("button", { name: "Copy the agent.toml lines" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

@@ -757,3 +757,77 @@ async fn a_rule_is_tested_against_the_facts_the_platform_holds() {
     assert_eq!(status, StatusCode::FORBIDDEN);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_fleet_view_counts_hosts_and_offers_the_lines_to_paste() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let mut client = db.pool.get().await.unwrap();
+    let key = ed25519_dalek::SigningKey::from_bytes(&[9; 32]).verifying_key();
+    for set in ["site", "site-alarms"] {
+        platform_store::rules::add_trust_key(&mut client, set, "site-key", key.to_bytes())
+            .await
+            .unwrap();
+    }
+    client
+        .batch_execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at) VALUES
+                ('agent.00000000-0000-4000-8000-000000000501', 'active', now(), 'current-01', now()),
+                ('agent.00000000-0000-4000-8000-000000000502', 'active', now(), 'old-01', now()),
+                ('agent.00000000-0000-4000-8000-000000000503', 'active', now(), 'bare-01', now()),
+                ('agent.00000000-0000-4000-8000-000000000504', 'active', now(), 'fresh-01', now());
+             UPDATE agents SET health_at = now(), health = '{\"rule_sets\":[
+                {\"id\":\"site\",\"version\":2},{\"id\":\"site-alarms\",\"version\":1}]}'
+                WHERE hostname = 'current-01';
+             UPDATE agents SET health_at = now(), health = '{\"rule_sets\":[
+                {\"id\":\"site\",\"version\":1},{\"id\":\"site-alarms\",\"version\":1}]}'
+                WHERE hostname = 'old-01';
+             UPDATE agents SET health_at = now(), health = '{\"rule_sets\":[{\"id\":\"baseline\",\"version\":4}]}'
+                WHERE hostname = 'bare-01';",
+        )
+        .await
+        .unwrap();
+    drop(client);
+    let (cookie, csrf) = login(&router, "olga").await;
+    let (_, none, _) = call(
+        &router,
+        "GET",
+        "/api/v1/site-rules/fleet",
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(none["reporting"], 3, "{none}");
+    assert_eq!(none["not_reporting"], 1);
+    let lines = none["paste"].as_str().unwrap();
+    assert!(lines.contains("id = \"site-alarms\""), "{lines}");
+    assert!(lines.contains("issuer_key_id = \"site-key\""));
+    // Nothing is published yet: hosts that list a set are current; the
+    // host without the site sets is missing both.
+    assert_eq!(none["sets"][0]["current"], 2);
+    assert_eq!(none["sets"][0]["missing"], 1);
+    let listed: Vec<&str> = none["hosts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|host| host["hostname"].as_str().unwrap())
+        .collect();
+    assert_eq!(listed, ["bare-01"]);
+    let (viewer, viewer_csrf) = login(&router, "vera").await;
+    let (status, _, _) = call(
+        &router,
+        "GET",
+        "/api/v1/site-rules/fleet",
+        &viewer,
+        &viewer_csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    db.drop().await;
+}

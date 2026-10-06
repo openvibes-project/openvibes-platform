@@ -56,6 +56,7 @@ export type RuleDraft = S["RuleDraftView"];
 export type RuleDraftInput = S["RuleDraftInput"];
 export type RuleCheck = S["RuleCheck"];
 export type RuleTestResult = S["RuleTestResult"];
+export type SiteFleet = S["SiteFleet"];
 export type DraftChanges = S["DraftChanges"];
 export type PublishedDrafts = S["PublishedDrafts"];
 export type RuleBundle = S["RuleBundleView"];

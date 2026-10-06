@@ -127,7 +127,10 @@ the set and the platform publishes it (needs `rules.upload`). A compliance
 rule's panel can also be tested against one host: it runs on the packages
 and listening ports the platform holds and says match, no match or
 unavailable (a rule over anything else, such as running processes, is
-unavailable here).
+unavailable here). A Hosts section at the bottom of Site rules counts the
+hosts running each set (current, behind, refused, not set up), lists the
+ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
+an existing agent's `agent.toml`.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
   process: program, masked command line, uid and euid when they differ,
   working directory, pid), rule and versions, first/last seen, count, and

@@ -1305,6 +1305,49 @@ fn agent_from_row(row: &Row) -> Agent {
     }
 }
 
+/// One enrolled host and the rule sets its last health report named.
+#[derive(Clone, Debug)]
+pub struct HostRuleSets {
+    /// Agent id.
+    pub agent_id: String,
+    /// Latest reported hostname.
+    pub hostname: Option<String>,
+    /// The agent has sent a health report (older agents and new installs
+    /// may not have yet).
+    pub reported: bool,
+    /// Its rule sets, as it reported them.
+    pub rule_sets: Vec<AgentRuleSet>,
+}
+
+/// Most hosts [`host_rule_sets`] reads.
+pub const HOST_RULE_SETS_LIMIT: i64 = 20_000;
+
+/// Every active or stale host's reported rule sets, by hostname then id, up
+/// to [`HOST_RULE_SETS_LIMIT`]. Not scoped: only global callers use it.
+pub async fn host_rule_sets(client: &Client) -> Result<Vec<HostRuleSets>, StoreError> {
+    let rows = client
+        .query(
+            "SELECT agent_id, hostname, health -> 'rule_sets', health_at
+             FROM agents WHERE status IN ('active', 'stale')
+             ORDER BY hostname NULLS LAST, agent_id LIMIT $1",
+            &[&HOST_RULE_SETS_LIMIT],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|row| HostRuleSets {
+            agent_id: row.get(0),
+            hostname: row.get(1),
+            reported: row.get::<_, Option<DateTime<Utc>>>(3).is_some(),
+            rule_sets: row
+                .get::<_, Option<serde_json::Value>>(2)
+                .as_ref()
+                .map(agent_rule_sets)
+                .unwrap_or_default(),
+        })
+        .collect())
+}
+
 /// The `rule_sets` of a stored health report. A report that does not parse
 /// counts as absent, like [`crate::agents`].
 fn agent_rule_sets(value: &serde_json::Value) -> Vec<AgentRuleSet> {

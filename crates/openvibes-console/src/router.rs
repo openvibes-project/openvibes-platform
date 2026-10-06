@@ -671,6 +671,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             axum::routing::post(crate::rule_drafts::check_draft),
         )
         .route(
+            "/v1/site-rules/fleet",
+            axum::routing::get(crate::site_fleet::site_fleet),
+        )
+        .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/test",
             axum::routing::post(crate::rule_test::test_rule),
         )

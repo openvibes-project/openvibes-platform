@@ -1222,6 +1222,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/site-rules/fleet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["site_fleet"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/software": {
         parameters: {
             query?: never;
@@ -3285,6 +3301,56 @@ export interface components {
             schema_version: number;
             /** @description Base64url Ed25519 signature. */
             signature_base64url: string;
+        };
+        /** @description The fleet's site rule sets. */
+        SiteFleet: {
+            /** @description Hosts not current in some set, up to 200. */
+            hosts: components["schemas"]["SiteHostFleet"][];
+            /** @description More than 200 hosts are not current. */
+            hosts_truncated: boolean;
+            /** @description Hosts that haven't sent one yet; they are in no count. */
+            not_reporting: number;
+            /**
+             * @description The two `[[rule_sets]]` blocks for `agent.toml`, when the platform
+             *     trusts a key for both sets.
+             */
+            paste?: string | null;
+            /** @description Hosts that have sent a health report (the counts cover these). */
+            reporting: number;
+            /** @description Both site sets. */
+            sets: components["schemas"]["SiteSetFleet"][];
+        };
+        /** @description One host's state for each site set. */
+        SiteHostFleet: {
+            /** @description Agent id. */
+            agent_id: string;
+            /** @description Hostname, when known. */
+            hostname?: string | null;
+            /** @description `current`, `behind`, `refused` or `missing` for `site`. */
+            site: string;
+            /** @description The same for `site-alarms`. */
+            site_alarms: string;
+        };
+        /** @description One site set across the fleet. */
+        SiteSetFleet: {
+            /** @description Hosts running an older version. */
+            behind: number;
+            /** @description Hosts running the published version (or any, before a publish). */
+            current: number;
+            /**
+             * @description Hosts whose `agent.toml` doesn't list the set, or that haven't
+             *     accepted a bundle yet.
+             */
+            missing: number;
+            /**
+             * Format: int64
+             * @description The published version; absent before the first publish.
+             */
+            published_version?: number | null;
+            /** @description Hosts that refused the bundle the platform serves. */
+            refused: number;
+            /** @description `site` or `site-alarms`. */
+            rule_set_id: string;
         };
         /** @description An advisory open on the package. */
         SoftwareAdvisoryView: {
@@ -7989,6 +8055,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    site_fleet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Which hosts run the site rule sets */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteFleet"];
+                };
+            };
+            /** @description Needs rules.write and global access */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
