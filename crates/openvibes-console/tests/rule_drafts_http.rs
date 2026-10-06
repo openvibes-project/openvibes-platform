@@ -12,7 +12,10 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use chrono::Utc;
-use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
+use openvibes_console::{
+    NormalizedPassword, TrustedPeer, authenticated_router, authenticated_router_with_signer,
+    hash_password,
+};
 use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::{Value, json};
 use tower::ServiceExt;
@@ -432,4 +435,206 @@ async fn drafts_are_checked_saved_versioned_listed_and_deleted() {
     );
     drop(client);
     db.drop().await;
+}
+
+/// A stand-in for the rule signer: checks the password the console sends,
+/// then signs with a fixed key like the real one.
+async fn fake_signer(socket: std::path::PathBuf, key: ed25519_dalek::SigningKey) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+    let mut version = 0;
+    loop {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut request = Vec::new();
+        stream.read_to_end(&mut request).await.unwrap();
+        let request: Value = serde_json::from_slice(&request).unwrap();
+        let answer = if request["password"] != PASSWORD {
+            json!({"result": "refused", "code": "credentials"})
+        } else {
+            version += 1;
+            let signed = openvibes_signer::sign::sign(
+                &key,
+                "site-key",
+                request["rule_set"].as_str().unwrap(),
+                version,
+                request["rules"].as_str().unwrap(),
+                Utc::now().timestamp_millis(),
+                365,
+            )
+            .unwrap();
+            json!({
+                "result": "signed",
+                "envelope": signed.envelope,
+                "version": version,
+                "expires_at_unix_ms": signed.expires_at_unix_ms
+            })
+        };
+        stream
+            .write_all(answer.to_string().as_bytes())
+            .await
+            .unwrap();
+    }
+}
+
+#[tokio::test]
+async fn drafts_publish_through_the_signer_and_show_what_changed() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    user(
+        &mut client,
+        "11111111-1111-4111-8111-111111111112",
+        "21111111-1111-4111-8111-111111111112",
+        "olga",
+        "operator",
+    )
+    .await;
+    let key = ed25519_dalek::SigningKey::from_bytes(&[7; 32]);
+    platform_store::rules::add_trust_key(
+        &mut client,
+        "site",
+        "site-key",
+        key.verifying_key().to_bytes(),
+    )
+    .await
+    .unwrap();
+    drop(client);
+    let dir = std::env::temp_dir().join(format!("ov-signer-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let socket = dir.join("sign.sock");
+    let _ = std::fs::remove_file(&socket);
+    tokio::spawn(fake_signer(socket.clone(), key));
+    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    let router =
+        authenticated_router_with_signer(db.pool.clone(), "https://console.example", socket);
+    let (cookie, csrf) = login(&router, "olga").await;
+    let base = "/api/v1/rule-drafts/site";
+    let publish = format!("{base}/publish");
+    let ok = json!({"password": PASSWORD});
+
+    let (status, none, _) = call(
+        &router,
+        "POST",
+        &publish,
+        &cookie,
+        &csrf,
+        Some(ok.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "{none}");
+
+    let (status, _, _) = call(
+        &router,
+        "PUT",
+        &format!("{base}/port.redis.exposed"),
+        &cookie,
+        &csrf,
+        Some(rule("'6379' in facts['port.tcp.exposed']")),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, changes, _) = call(
+        &router,
+        "GET",
+        &format!("{base}/changes"),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(changes["added"], json!(["port.redis.exposed"]));
+    assert!(changes["published_version"].is_null());
+
+    let wrong = json!({"password": "not the password at all"});
+    let (status, body, _) =
+        call(&router, "POST", &publish, &cookie, &csrf, Some(wrong), None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["code"], "wrong_password");
+
+    let (status, done, _) = call(
+        &router,
+        "POST",
+        &publish,
+        &cookie,
+        &csrf,
+        Some(ok.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CREATED, "{done}");
+    assert_eq!(
+        (done["version"].as_i64(), done["rules"].as_u64()),
+        (Some(1), Some(1))
+    );
+
+    let (_, changes, _) = call(
+        &router,
+        "GET",
+        &format!("{base}/changes"),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(changes["published_version"], 1);
+    assert_eq!(changes["unchanged"], 1);
+    let (status, _, _) = call(
+        &router,
+        "POST",
+        &publish,
+        &cookie,
+        &csrf,
+        Some(ok.clone()),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT, "nothing changed");
+
+    let mut edited = rule("'6379' in facts['port.tcp.exposed']");
+    edited["confidence"] = json!(70);
+    call(
+        &router,
+        "PUT",
+        &format!("{base}/port.redis.exposed"),
+        &cookie,
+        &csrf,
+        Some(edited),
+        None,
+    )
+    .await;
+    let (_, changes, _) = call(
+        &router,
+        "GET",
+        &format!("{base}/changes"),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(changes["changed"], json!(["port.redis.exposed"]));
+    let (status, done, _) = call(&router, "POST", &publish, &cookie, &csrf, Some(ok), None).await;
+    assert_eq!(status, StatusCode::CREATED, "{done}");
+    assert_eq!(done["version"], 2);
+
+    let client = db.pool.get().await.unwrap();
+    let published: i64 = client
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action LIKE 'rule.%publish%' OR action LIKE 'rule_bundle%'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(published >= 2, "each publish is audited");
+    drop(client);
+    db.drop().await;
+    let _ = std::fs::remove_dir_all(dir);
 }

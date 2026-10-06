@@ -211,6 +211,21 @@ describe("demo server", () => {
     expect((await server.handle("GET", "/api/v1/rule-drafts/baseline")).status).toBe(404);
   });
 
+  it("publishes drafts and reports what changed", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const rule = { title: "Redis", severity: "high", confidence: 90, expression: "'6379' in facts['port.tcp.exposed']", finding_message: "Redis is exposed." };
+    const url = "/api/v1/rule-drafts/site";
+    expect((await server.handle("POST", `${url}/publish`, { password: "pw" })).status).toBe(409);
+    await server.handle("PUT", `${url}/r1`, rule);
+    expect((await json(await server.handle("GET", `${url}/changes`))).added).toEqual(["r1"]);
+    expect((await server.handle("POST", `${url}/publish`, { password: "wrong" })).status).toBe(403);
+    expect((await json(await server.handle("POST", `${url}/publish`, { password: "pw" }))).version).toBe(1);
+    expect((await server.handle("POST", `${url}/publish`, { password: "pw" })).status).toBe(409);
+    await server.handle("PUT", `${url}/r1`, { ...rule, confidence: 70 });
+    expect((await json(await server.handle("GET", `${url}/changes`))).changed).toEqual(["r1"]);
+    expect((await json(await server.handle("POST", `${url}/publish`, { password: "pw" }))).version).toBe(2);
+  });
+
   it("keeps draft site rules from a persona without rules.write", async () => {
     const server = createDemoServer({ persona: "viewer" });
     expect((await server.handle("GET", "/api/v1/rule-drafts/site")).status).toBe(403);

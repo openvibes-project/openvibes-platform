@@ -718,6 +718,37 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("rule_draft.deleted", `${set}/${id}`, "rule_draft");
     return new Response(null, { status: 204 });
   });
+  // Publishing: the demo "signs" by remembering the drafts as the published set.
+  const published = new Map<string, { version: number; rules: Map<string, string> }>();
+  const draftChanges = (set: string, store: Map<string, RuleDraft>) => {
+    const before = published.get(set);
+    const out = { published_version: before?.version ?? null, added: [] as string[], changed: [] as string[], removed: [] as string[], unchanged: 0 };
+    for (const [id, draft] of [...store].sort(([a], [b]) => a.localeCompare(b))) {
+      const old = before?.rules.get(id);
+      if (old === undefined) out.added.push(id);
+      else if (old === JSON.stringify({ ...draft, version: 0, updated_at: "", updated_by: "" })) out.unchanged += 1;
+      else out.changed.push(id);
+    }
+    out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort();
+    return out;
+  };
+  route("GET", "/api/v1/rule-drafts/{set}/changes", "rules.write", ({ set = "" }) => {
+    const store = drafts.get(set);
+    if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    return json(draftChanges(set, store));
+  });
+  route("POST", "/api/v1/rule-drafts/{set}/publish", "rules.upload", ({ set = "" }, __, body) => {
+    const store = drafts.get(set);
+    if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    if (store.size === 0) return problem(409, "no_rules", "Write at least one rule before publishing");
+    const diff = draftChanges(set, store);
+    if (diff.added.length + diff.changed.length + diff.removed.length === 0) return problem(409, "nothing_changed", "The drafts match what is published");
+    if (String(body.password ?? "") === "" || body.password === "wrong") return problem(403, "wrong_password", "Wrong password");
+    const version = (published.get(set)?.version ?? 0) + 1;
+    published.set(set, { version, rules: new Map([...store].map(([id, draft]) => [id, JSON.stringify({ ...draft, version: 0, updated_at: "", updated_by: "" })])) });
+    audit("rule_bundle.publish", `${set} v${version}`, "rule_set");
+    return json({ rule_set_id: set, version, expires_at_ms: Date.now() + 365 * 86_400_000, rules: store.size }, 201);
+  });
   route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts }));
   route("GET", "/api/v1/service-accounts/{id}/tokens", "service_accounts.read", ({ id = "" }) => json({ items: data.serviceTokens.get(id) ?? [] }));
   route("POST", "/api/v1/service-accounts", "service_accounts.manage", (_, __, body) => {

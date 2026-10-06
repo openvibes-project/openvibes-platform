@@ -64,6 +64,8 @@ pub(crate) struct AuthHttpState {
     agent_install: Option<Arc<crate::config::AgentInstallConfig>>,
     /// Shared live-presence check behind the agent event stream.
     pub(crate) presence: crate::presence::PresenceHub,
+    /// The rule signer's socket: where a site rule set is signed to publish.
+    pub(crate) signer_socket: Arc<std::path::Path>,
 }
 
 #[derive(Deserialize)]
@@ -259,8 +261,21 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, None)
 }
+
+/// As [`authenticated_router`], with the rule signer at `socket` instead of
+/// its default path (tests, unusual installs).
+pub fn authenticated_router_with_signer(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    socket: std::path::PathBuf,
+) -> Router {
+    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, Some(socket))
+}
+
+/// Where the rule signer listens (`openvibes-signer.service`).
+const DEFAULT_SIGNER_SOCKET: &str = "/run/openvibes-signer/sign.sock";
 
 /// As [`authenticated_router`], also serving `hosts` (`name:port`, e.g. the
 /// certificate's IP addresses) besides `public_origin`'s own (board #71).
@@ -269,7 +284,7 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, None)
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -279,6 +294,7 @@ pub(crate) fn authenticated_router_with_assistant(
     assistant: Option<crate::assistant::AssistantRuntime>,
     update_checker: Option<Arc<crate::about::UpdateChecker>>,
     agent_install: Option<crate::config::AgentInstallConfig>,
+    signer_socket: Option<std::path::PathBuf>,
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -301,6 +317,9 @@ pub(crate) fn authenticated_router_with_assistant(
         update_checker,
         agent_install: agent_install.map(Arc::new),
         presence: crate::presence::PresenceHub::default(),
+        signer_socket: signer_socket
+            .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
+            .into(),
     };
     let router = Router::new()
         .nest(
@@ -638,6 +657,14 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/rule-drafts/{rule_set_id}/{rule_id}",
             axum::routing::put(crate::rule_drafts::save_draft)
                 .delete(crate::rule_drafts::delete_draft),
+        )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}/changes",
+            get(crate::rule_drafts::draft_changes),
+        )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}/publish",
+            axum::routing::post(crate::rule_drafts::publish_drafts),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/check",
@@ -2234,7 +2261,7 @@ pub(crate) async fn revoke_authenticated_service_token(
 }
 
 /// Shared signature verifier for exact signed-envelope request bytes.
-async fn verify_console_rule_envelope(
+pub(crate) async fn verify_console_rule_envelope(
     client: &platform_store::Client,
     bytes: &[u8],
 ) -> Result<(openvibes_core::SignedRuleEnvelope, [u8; 32]), ()> {

@@ -968,6 +968,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rule-drafts/{rule_set_id}/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["draft_changes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-drafts/{rule_set_id}/publish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["publish_drafts"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-drafts/{rule_set_id}/{rule_id}": {
         parameters: {
             query?: never;
@@ -2275,6 +2307,22 @@ export interface components {
             /** @description Some explanation detail could not be retained. */
             truncated: boolean;
         };
+        /** @description What publishing would change: the drafts against the published set. */
+        DraftChanges: {
+            /** @description Rules in the drafts but not published. */
+            added: string[];
+            /** @description Rules in both, whose content differs. */
+            changed: string[];
+            /**
+             * Format: int64
+             * @description The set's current published version; absent before the first publish.
+             */
+            published_version?: number | null;
+            /** @description Published rules the drafts no longer have. */
+            removed: string[];
+            /** @description Rules in both, the same. */
+            unchanged: number;
+        };
         /** @description One effective capability returned to the browser. */
         EffectiveCapability: {
             /** @description Permission granted to the current principal. */
@@ -2838,6 +2886,28 @@ export interface components {
             status: number;
             /** @description Short human-readable error title. */
             title: string;
+        };
+        /** @description The password the signer checks again before it signs. */
+        PublishDraftsRequest: {
+            /** @description The signed-in user's password, typed again for this publish. */
+            password: string;
+        };
+        /** @description A published draft set. */
+        PublishedDrafts: {
+            /**
+             * Format: int64
+             * @description When the signed bundle expires, in Unix milliseconds.
+             */
+            expires_at_ms: number;
+            /** @description `site` or `site-alarms`. */
+            rule_set_id: string;
+            /** @description Rules in the bundle. */
+            rules: number;
+            /**
+             * Format: int64
+             * @description The version now published.
+             */
+            version: number;
         };
         /** @description Reason supplied by an operator when revoking an agent. */
         RevokeAgentRequest: {
@@ -7176,6 +7246,108 @@ export interface operations {
             };
             /** @description Not a site rule set */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    draft_changes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description What publishing the drafts would change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DraftChanges"];
+                };
+            };
+            /** @description Not a site rule set */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    publish_drafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishDraftsRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed by the rule signer and published */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublishedDrafts"];
+                };
+            };
+            /** @description Wrong password, or the account may not publish */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No drafts, or nothing changed */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The signer refused the rule set */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Locked out or over the hourly limit */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The rule signer cannot be reached */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

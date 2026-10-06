@@ -121,8 +121,9 @@ the inspector as a form (id for a new rule, title, severity, confidence,
 for alarms the programs, expression, message). As you type, the server's
 check (the agent's own loader) shows what is wrong beside the field, and
 Save draft stays off until the rule passes. Delete asks first. Rules saved
-here are drafts; they reach hosts only once the set is signed and
-published, which is not on this screen yet.
+here are drafts. Under each table, Publish lists what changed against the
+published set; with the user's password typed again the rule signer signs
+the set and the platform publishes it (needs `rules.upload`).
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
   process: program, masked command line, uid and euid when they differ,
   working directory, pid), rule and versions, first/last seen, count, and
