@@ -299,3 +299,10 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .notice--ok { background: var(--ok-soft); color: var(--ok); }
 .notice--warn { background: var(--warn-soft); color: var(--warn); }
 @media (max-width: 560px) { .compare-hosts { grid-template-columns: 1fr; } .compare-hosts__vs { display: none; } }
+
+/* Compare: pick the second host */
+.pick-host { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: var(--r-3); background: var(--surface); overflow: hidden; }
+.pick-host li + li { border-top: 1px solid var(--line); }
+.pick-host__row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 14px; cursor: pointer; color: var(--text); transition: background var(--fast); }
+.pick-host__row:hover { background: var(--surface-2); }
+.pick-host__row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }

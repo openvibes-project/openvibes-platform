@@ -26,3 +26,15 @@ export function filterRows(list: readonly DiffRow[], text: string, kind: Kind | 
   const needle = text.trim().toLowerCase();
   return list.filter((r) => (!kind || r.kind === kind) && (!needle || r.key.toLowerCase().includes(needle)));
 }
+
+type Pickable = { id: string; hostname?: string | null; status: string; os_id?: string | null; os_version?: string | null };
+
+/** Hosts one can compare with: not the first host, not revoked, matching the text, by name. */
+export function pickable<T extends Pickable>(hosts: readonly T[], first: string, text: string): T[] {
+  const needle = text.trim().toLowerCase();
+  const name = (h: T) => h.hostname ?? h.id;
+  return hosts
+    .filter((h) => h.id !== first && h.status !== "revoked")
+    .filter((h) => !needle || [name(h), h.id, h.os_id ?? "", h.os_version ?? ""].some((s) => s.toLowerCase().includes(needle)))
+    .sort((x, y) => name(x).localeCompare(name(y), "en", { numeric: true }));
+}
