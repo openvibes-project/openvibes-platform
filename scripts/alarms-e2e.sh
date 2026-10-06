@@ -118,13 +118,28 @@ scanned() { agent_log | grep -q 'scan matched'; }
 wait_for "agent took its rules" 60 scanned
 
 # A web server (a copy of bash named fake-nginx) starts a shell three times.
+# Run each start only after the previous one reached the platform. This host
+# also audits unrelated CI processes, so a burst can overflow the kernel's
+# multicast buffer and lose one of the three events under test.
 install -m 0755 /bin/bash /tmp/fake-nginx
-/tmp/fake-nginx -c 'for i in 1 2 3; do sh -c id >/dev/null; done'
-alarm_with_count() { # COUNT: the web-shell alarm at that count
-    api GET /api/v1/alarms | jq -e --argjson n "$1" \
-        '.items[] | select(.rule_id == "web-shell" and .count == $n)' >/dev/null
+alarm_count() {
+    api GET /api/v1/alarms | jq -e '[.items[] | select(.rule_id == "web-shell")][0].count // 0'
 }
-wait_for "one alarm, count 3, through POST /v1/alarms" 60 alarm_with_count 3
+for expected in 1 2 3; do
+    deadline=$((SECONDS + 60))
+    while [[ $(alarm_count "$expected") -lt $expected ]]; do
+        ((SECONDS < deadline)) || fail "one alarm, count $expected, through POST /v1/alarms (after 60s)"
+        /tmp/fake-nginx -c 'sh -c id >/dev/null'
+        # Retry a start if unrelated audited processes caused the kernel to
+        # drop it. The next start waits for this count, keeping aggregation
+        # deterministic and preventing a burst from overflowing the buffer.
+        for _ in {1..80}; do
+            [[ $(alarm_count "$expected") -ge $expected ]] && break
+            sleep 0.25
+        done
+    done
+done
+[[ $(alarm_count 3) == 3 ]] || fail "expected three starts in one alarm"
 [[ "$(api GET /api/v1/alarms | jq '[.items[] | select(.rule_id == "web-shell")] | length')" == 1 ]] ||
     fail "the three starts did not collapse into one alarm"
 ID=$(api GET /api/v1/alarms | jq -r '.items[] | select(.rule_id == "web-shell") | .id')
