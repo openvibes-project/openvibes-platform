@@ -317,7 +317,14 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 }
 .detection-inputs .detection-input { display: contents; }
 .detection-inputs dt, .detection-inputs dd { overflow-wrap: anywhere; min-width: 0; }
-.detection-steps { padding-left: 20px; }
-.detection-steps li { margin-block: 8px; overflow-wrap: anywhere; }
-.detection-steps .badge { margin-left: 8px; }
-.detection-rule { border-left: 2px solid var(--border); padding-left: 12px; }
+.detection-verdict { margin: 0; font-weight: 600; }
+.detection-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.detection-steps li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; overflow-wrap: anywhere; }
+.detection-steps code { min-width: 0; white-space: pre-wrap; }
+.detection-mark { flex: none; font-weight: 700; line-height: 1.4; }
+.detection-mark--yes { color: var(--ok); }
+.detection-mark--no { color: var(--text-2); }
+.detection-note { margin: 0; }
+.detection-sub { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
+.detection-rule-line { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
+.detection-raw summary { cursor: pointer; }
