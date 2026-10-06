@@ -6,6 +6,7 @@
 
 mod agent;
 mod assistant;
+mod assistant_setup;
 mod ca;
 mod config_file;
 mod configs;

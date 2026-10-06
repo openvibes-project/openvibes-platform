@@ -1,9 +1,14 @@
 # Binary packaging: scripts/build-rpm.sh builds the release binaries with
 # the pinned toolchain first; this spec only installs them.
 %global debug_package %{nil}
+# The bundled model is already compressed: skip xz on a 2.5 GB file.
+%define _binary_payload w.ufdio
 # openvibes-llm: scripts/build-llama-server.sh builds llama-server first
 # (skip with --without llm); the Vulkan variant with --with vulkan.
 %bcond llm 1
+# openvibes-llm-model: the bundled GGUF (scripts/fetch-llm-model.sh fetches it
+# first; skip with --without model). Needs --with llm.
+%bcond model 1
 %bcond vulkan 0
 
 # Upgrade from openvibes_NAME service accounts (admin TUI spec §2): rename
@@ -112,10 +117,25 @@ Requires:       openvibes-admin = %{version}-%{release}
 Requires(pre):  openvibes-admin = %{version}-%{release}
 %{?systemd_requires}
 
+Recommends:     openvibes-llm-model = %{version}-%{release}
+
 %description -n openvibes-llm
 llama.cpp's llama-server from a pinned build (no subprocesses, RPC, TLS, or
 web UI), run on loopback as its own sandboxed user with a model file whose
 SHA-256 is pinned. Optional: the platform works without it.
+
+%if %{with model}
+%package -n openvibes-llm-model
+Summary:        Bundled model for the OpenVIBES local model server
+# The model's licence is Apache 2.0 (Qwen3-4B, packaging/llm/model.pin).
+License:        Apache-2.0
+Requires:       openvibes-llm = %{version}-%{release}
+
+%description -n openvibes-llm-model
+A 4B-parameter quantised model (Qwen3-4B Q4_K_M) pinned by SHA-256, installed
+read-only and selected for openvibes-llm, so the console's assistant works
+after `sudo openvibes-admin helper assistant-setup` with no download.
+%endif
 
 %if %{with vulkan}
 %package -n openvibes-llm-vulkan
@@ -176,6 +196,17 @@ install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
 install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
+%if %{with model}
+. $S/packaging/llm/model.pin
+install -D -m 0444 $S/target/llm-model/$LLM_MODEL_FILE %{buildroot}%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
+install -D -m 0644 $S/target/llm-model/LICENSE.model %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE.model
+cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
+OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
+OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
+OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
+EOF
+echo "%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
+%endif
 %if %{with vulkan}
 install -D -m 0755 $S/target/llama/vulkan/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server-vulkan
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_unitdir}/openvibes-llm.service.d/vulkan.conf
@@ -328,6 +359,12 @@ fi
 %ghost %config(noreplace) %attr(0600, root, root) %{_sysconfdir}/openvibes/llm-api-key
 %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm
 %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm/models
+
+%if %{with model}
+%files -n openvibes-llm-model -f model-files.list
+%license %{_licensedir}/openvibes-llm-model/LICENSE.model
+%config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
+%endif
 
 %if %{with vulkan}
 %files -n openvibes-llm-vulkan

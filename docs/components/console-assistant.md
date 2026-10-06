@@ -28,8 +28,10 @@ The `[assistant]` section is disabled when omitted. To enable it, set
 URLs may use HTTP. A network backend must use HTTPS, an explicit CA file, and
 a private literal IP address; third-party endpoints and DNS names are
 refused. The optional API key is read from an owner-only file. Configuration
-validation fails closed. The operator must run a local model service such as
-Ollama or llama.cpp separately.
+validation fails closed. With the `openvibes-llm` package, `sudo openvibes-admin helper
+assistant-setup` writes this section for the bundled llama.cpp and model
+([openvibes-llm.md](openvibes-llm.md)). Another local service such as Ollama
+is run separately and configured by hand.
 
 Example:
 

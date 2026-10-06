@@ -4,7 +4,10 @@
 `openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
 **openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
 (the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
-`OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**).
+`OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**;
+`OV_LLM_MODEL=0` skips **openvibes-llm-model**, the 2.5 GB bundled model that
+`scripts/fetch-llm-model.sh` downloads and verifies against
+`packaging/llm/model.pin`; `openvibes-llm` recommends it).
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
@@ -61,6 +64,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
+| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf`, `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |
 | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
 | `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |
