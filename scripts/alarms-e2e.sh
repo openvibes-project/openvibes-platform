@@ -45,7 +45,7 @@ cleanup() {
     if ((status != 0)); then
         echo "--- platform (tail)"; podman logs --tail 30 ov-alarms-e2e 2>&1 || true
         for log in "$W"/*.log; do [[ -f $log ]] && { echo "--- $(basename "$log") (tail)"; tail -n 20 "$log"; }; done
-        echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20
+        echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -100
     fi
     podman rm -f ov-alarms-e2e >/dev/null 2>&1 || true
     exit "$status"
@@ -81,6 +81,7 @@ echo "ok: signed in to the console API"
 # The agent: packaged binary, its exec audit rule, one signed alarm rule.
 A=$SHARED/agent
 sudo auditctl -R "$X/etc/audit/rules.d/openvibes-agent.rules" >/dev/null
+sudo auditctl -l | grep -q 'key=openvibes-exec' || fail "the packaged audit rule did not load"
 SIGN="$RPMS/sign_bundle"; chmod +x "$SIGN" 2>/dev/null || { cp "$SIGN" "$A/sign_bundle"; chmod +x "$A/sign_bundle"; SIGN=$A/sign_bundle; }
 KEY=$("$SIGN" keygen "$A/signing.key" | tail -1)
 cat > "$A/rules.json" <<'RULES'
@@ -108,7 +109,8 @@ trusted_keys = [{ issuer_key_id = "e2e.rules", public_key = "$KEY" }]
 EOF
 sudo systemd-run --quiet --collect --unit ov-alarms-e2e-agent --uid "$(id -u)" --gid "$(id -g)" \
     -p AmbientCapabilities=CAP_AUDIT_READ -p CapabilityBoundingSet=CAP_AUDIT_READ \
-    -p NoNewPrivileges=yes "$X/usr/bin/openvibes-agent" "$A/agent.toml"
+    -p NoNewPrivileges=yes -E OPENVIBES_TRACE_STARTS=1 \
+    "$X/usr/bin/openvibes-agent" "$A/agent.toml"
 agent_log() { sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager; }
 enrolled() { [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'")" == 1 ]]; }
 wait_for "agent enrolled" 60 enrolled
