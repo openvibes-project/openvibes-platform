@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { diff, filterRows, rows } from "./compare";
+import { diff, filterRows, pickable, rows } from "./compare";
 
 describe("compare hosts (#120)", () => {
   it("lists what only one side has and what differs", () => {
@@ -18,5 +18,13 @@ describe("compare hosts (#120)", () => {
     expect(filterRows(all, "", "onlyB")).toEqual([{ key: "80/tcp", kind: "onlyB" }]);
     expect(filterRows(all, " SSL ", undefined)).toEqual([{ key: "openssl.x86_64", kind: "changed" }]);
     expect(filterRows(all, "", undefined)).toHaveLength(3);
+  });
+
+  it("offers other, non-revoked hosts by name, filtered by text", () => {
+    const h = (id: string, hostname: string | null, status = "active", os_id = "fedora") => ({ id, hostname, status, os_id, os_version: "44" });
+    const all = [h("1", "web-10"), h("2", "web-2"), h("3", "db-1", "revoked"), h("4", null, "active", "debian"), h("5", "me")];
+    expect(pickable(all, "5", "").map((x) => x.id)).toEqual(["4", "2", "1"]);
+    expect(pickable(all, "5", "DEBIAN").map((x) => x.id)).toEqual(["4"]);
+    expect(pickable(all, "5", "web").map((x) => x.id)).toEqual(["2", "1"]);
   });
 });

@@ -7,10 +7,10 @@ import { useAllPages, useResource } from "../api/client";
 import type { Agent, Finding, HostPackage, HostServices } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
-import { Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
+import { Empty, ErrorBox, Loading, ObjectLink, StatusBadge } from "../ui/bits";
 import { PanelHeader, Section } from "../ui/panel";
 import { Icon } from "../ui/Icon";
-import { filterRows, type Kind, rows } from "./compare";
+import { filterRows, type Kind, pickable, rows } from "./compare";
 
 
 /** Lists longer than this are cut: a cut side can't be compared honestly. */
@@ -109,19 +109,36 @@ function HostCard({ side, id, label }: { side: Side; id: string; label: string }
 
 function PickSecond({ first }: { first: string }) {
   const hosts = useAllPages<Agent>("/api/v1/agents");
-  const others = (hosts.data ?? []).filter((a) => a.id !== first && a.status !== "revoked");
+  const [text, setText] = useState("");
+  const firstName = (hosts.data ?? []).find((a) => a.id === first)?.hostname ?? first;
+  const hasOthers = pickable(hosts.data ?? [], first, "").length > 0;
+  const others = pickable(hosts.data ?? [], first, text);
   return (
     <>
-      <PanelHeader icon="agents" kind="Compare" title="Compare with…" />
-      <div className="panel-body">
-        {hosts.error ? <ErrorBox error={hosts.error} /> : hosts.loading && !hosts.data ? <Loading rows={4} /> : others.length === 0 ? <Empty title="No other host to compare with" /> : (
-          <ul className="list" aria-label="Hosts to compare with">
-            {others.map((a) => (
-              <li key={a.id}><button type="button" className="list__row" onClick={() => nav.open({ kind: "compare", id: `${first} ${a.id}` })}>
-                <span className="grow truncate">{a.hostname ?? a.id}</span><span className="subtle mono">{a.os_id ?? ""} {a.os_version ?? ""}</span>
-              </button></li>
-            ))}
-          </ul>
+      <PanelHeader icon="agents" kind="Compare" title="Compare with…" subtitle={<span className="subtle">Pick the host to compare {firstName} with</span>} />
+      <div className="panel-body stack">
+        {hosts.error ? <ErrorBox error={hosts.error} /> : hosts.loading && !hosts.data ? <Loading rows={4} /> : !hasOthers ? <Empty title="No other host to compare with" /> : (
+          <>
+            <label className="search">
+              <Icon name="search" size={14} />
+              <input className="input" type="search" autoFocus placeholder="Filter by host name, ID or OS…" aria-label="Filter hosts" value={text} onChange={(e) => setText(e.target.value)} />
+            </label>
+            {others.length === 0 ? <p className="subtle">No host matches.</p> : (
+              <ul className="pick-host" aria-label="Hosts to compare with">
+                {others.map((a) => (
+                  <li key={a.id}>
+                    <button type="button" className="pick-host__row" onClick={() => nav.open({ kind: "compare", id: `${first} ${a.id}` })}>
+                      <span className="cell-two grow">
+                        <span className="truncate">{a.hostname ?? a.id}</span>
+                        <span className="subtle truncate">{`${a.os_id ?? ""} ${a.os_version ?? ""}`.trim() || a.id}</span>
+                      </span>
+                      <StatusBadge status={a.status} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </div>
     </>
