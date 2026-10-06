@@ -268,7 +268,19 @@ Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
 - `DELETE /api/v1/rule-drafts/{set}/{rule_id}` (CSRF): 204; audited
   (`rule_draft.deleted`).
 
-A draft never reaches an agent: publishing a signed set comes later.
+- `GET /api/v1/rule-drafts/{set}/changes` (`rules.write`): the drafts
+  against the published set: added, changed, removed, unchanged count.
+- `POST /api/v1/rule-drafts/{set}/publish` (`rules.upload`, CSRF; body
+  `{password}`): sends the drafts, the user's name and the password to the
+  rule signer's socket (`/run/openvibes-signer/sign.sock`; the signer checks
+  the password and `rules.upload` itself, rate-limits and keeps its audit),
+  verifies the returned envelope against the set's trusted keys like any
+  upload, and stores it (audited as a bundle publish). 201 `{version,
+  expires_at_ms, rules}`. Refusals: 403 wrong password or not allowed, 409
+  no drafts or nothing changed, 422 over a limit, 429 locked out or hourly
+  limit, 503 signer unreachable.
+
+A draft reaches an agent only once published this way.
 
 ## Interfaces
 

@@ -1718,6 +1718,7 @@ dependencies = [
  "include_dir",
  "openvibes-core",
  "openvibes-rules",
+ "openvibes-signer",
  "platform-assistant",
  "platform-config",
  "platform-password",

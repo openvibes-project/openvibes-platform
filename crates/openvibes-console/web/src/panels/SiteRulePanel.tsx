@@ -125,8 +125,8 @@ export function SiteRulePanel({ id }: { id: string }) {
             nav.remove({ kind: "site-rule", id });
           })}>Delete</Confirm>
         )}
-        <Section title="Not yet">
-          <p className="subtle">Testing a rule against a host and publishing the set are the next steps.</p>
+        <Section title="Next">
+          <p className="subtle">Saved rules are drafts. Publish the set from the Site rules page. Testing a rule against a host is the next step.</p>
         </Section>
       </div>
     </>

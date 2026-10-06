@@ -1,13 +1,15 @@
 // The site's own rules: compliance (findings) rules and alarm rules the
 // operator writes here. Saved rules are drafts; publishing is a later step.
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
-import { useResource } from "../api/client";
-import type { RuleDraft } from "../api/types";
+import { ApiError, invalidate, request, useResource } from "../api/client";
+import type { DraftChanges, PublishedDrafts, RuleDraft } from "../api/types";
 import { nav, useLocation } from "../app/nav";
+import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { Icon } from "../ui/Icon";
+import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
 
 function useTop() {
@@ -49,13 +51,60 @@ function SetTable({ set, intro }: { set: (typeof SITE_SETS)[number]; intro: Reac
   );
 }
 
+
+function Publish({ set }: { set: (typeof SITE_SETS)[number] }) {
+  const { can } = useSession();
+  const changes = useResource<DraftChanges>(`/api/v1/rule-drafts/${set.id}/changes`);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+  const data = changes.data;
+  const pending = data ? data.added.length + data.changed.length + data.removed.length : 0;
+  const publish = () => {
+    setBusy(true);
+    setError(undefined);
+    request<PublishedDrafts>("POST", `/api/v1/rule-drafts/${set.id}/publish`, { password })
+      .then((done) => {
+        setPassword("");
+        invalidate(`/api/v1/rule-drafts/${set.id}`);
+        invalidate("/api/v1/rule-sets");
+        toast(`${set.title} published as version ${done.version}`);
+      })
+      .catch((e: unknown) => setError(e instanceof ApiError ? e.message : "Could not publish"))
+      .finally(() => setBusy(false));
+  };
+  const list = (label: string, ids: string[]) => ids.length > 0 && <li><strong>{label}:</strong> <span className="mono">{ids.join(", ")}</span></li>;
+  return (
+    <section className="view-section">
+      <h2>Publish {set.title.toLowerCase()}</h2>
+      {changes.error ? <ErrorBox error={changes.error} /> : !data ? <Loading rows={1} /> : (
+        <>
+          <p className="subtle">{data.published_version === null || data.published_version === undefined ? "Nothing is published yet." : `Version ${data.published_version} is published.`}</p>
+          {pending === 0 ? <p className="subtle">{data.unchanged === 0 ? "Write a rule, then publish it here." : "The drafts match what is published."}</p> : (
+            <ul className="plain">{list("Added", data.added)}{list("Changed", data.changed)}{list("Removed", data.removed)}</ul>
+          )}
+          {can("rules.upload", true) ? (
+            <form className="row" onSubmit={(event) => { event.preventDefault(); publish(); }}>
+              <label className="field grow">Your password, to sign<input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} disabled={pending === 0} /></label>
+              <button className="button button--primary" type="submit" disabled={busy || pending === 0 || password === ""}>Publish</button>
+            </form>
+          ) : <p className="subtle">Publishing needs the rules.upload permission.</p>}
+          {error && <p className="confirm__error" role="alert">{error}</p>}
+        </>
+      )}
+    </section>
+  );
+}
+
 export function SiteRules() {
   return (
     <div className="view">
       <ViewHeader title="Site rules" />
       <div className="view-pad stack">
-        <div className="callout"><Icon name="help" size={16} /><span>Rules saved here are drafts. They reach hosts only once the set is signed and published, which is not part of this screen yet.</span></div>
-        {SITE_SETS.map((set) => <SetTable key={set.id} set={set} intro={set.what} />)}
+        <div className="callout"><Icon name="help" size={16} /><span>Rules saved here are drafts. They reach hosts only once you publish the set: the rule signer signs it after you type your password again.</span></div>
+        {SITE_SETS.map((set) => (
+          <div key={set.id} className="stack"><SetTable set={set} intro={set.what} /><Publish set={set} /></div>
+        ))}
       </div>
     </div>
   );

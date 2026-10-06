@@ -658,6 +658,7 @@ pub async fn serve(
                         .update_check
                         .then(|| std::sync::Arc::new(crate::about::UpdateChecker::new())),
                     config.agent_install.clone(),
+                    None,
                 ),
                 Some(pool),
             )

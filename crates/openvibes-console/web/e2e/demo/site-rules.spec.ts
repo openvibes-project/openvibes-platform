@@ -47,3 +47,21 @@ test("an alarm rule needs a program", async ({ page }) => {
   await inspector.getByLabel(/^Programs/).fill("nginx");
   await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
 });
+
+test("publishing a set asks for the password and shows what changes", async ({ page }) => {
+  await page.goto("/site-rules");
+  await page.getByRole("button", { name: "New rule" }).first().click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByLabel("Rule id").fill("port.redis.exposed");
+  await inspector.getByLabel("Title").fill("Redis is exposed");
+  await inspector.getByLabel("Expression").fill("'6379' in facts['port.tcp.exposed']");
+  await inspector.getByLabel("Finding message").fill("Redis listens beyond loopback.");
+  await inspector.getByRole("button", { name: "Save draft" }).click();
+  const section = page.locator(".view-section").filter({ hasText: "Publish compliance rules" });
+  await expect(section).toContainText("Added: port.redis.exposed");
+  await expect(section.getByRole("button", { name: "Publish" })).toBeDisabled();
+  await section.getByLabel("Your password, to sign").fill("correct horse");
+  await section.getByRole("button", { name: "Publish" }).click();
+  await expect(section).toContainText("Version 1 is published");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

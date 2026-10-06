@@ -4873,6 +4873,136 @@
         }
       }
     },
+    "/api/v1/rule-drafts/{rule_set_id}/changes": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "draft_changes",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "What publishing the drafts would change",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftChanges"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a site rule set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-drafts/{rule_set_id}/publish": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "publish_drafts",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishDraftsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Signed by the rule signer and published",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PublishedDrafts"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Wrong password, or the account may not publish",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No drafts, or nothing changed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The signer refused the rule set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Locked out or over the hourly limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The rule signer cannot be reached",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-drafts/{rule_set_id}/{rule_id}": {
       "put": {
         "tags": [
@@ -8666,6 +8796,52 @@
           }
         }
       },
+      "DraftChanges": {
+        "type": "object",
+        "description": "What publishing would change: the drafts against the published set.",
+        "required": [
+          "added",
+          "changed",
+          "removed",
+          "unchanged"
+        ],
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Rules in the drafts but not published."
+          },
+          "changed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Rules in both, whose content differs."
+          },
+          "published_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The set's current published version; absent before the first publish."
+          },
+          "removed": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Published rules the drafts no longer have."
+          },
+          "unchanged": {
+            "type": "integer",
+            "description": "Rules in both, the same.",
+            "minimum": 0
+          }
+        }
+      },
       "EffectiveCapability": {
         "type": "object",
         "description": "One effective capability returned to the browser.",
@@ -10008,6 +10184,51 @@
           "title": {
             "type": "string",
             "description": "Short human-readable error title."
+          }
+        }
+      },
+      "PublishDraftsRequest": {
+        "type": "object",
+        "description": "The password the signer checks again before it signs.",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "description": "The signed-in user's password, typed again for this publish."
+          }
+        },
+        "additionalProperties": false
+      },
+      "PublishedDrafts": {
+        "type": "object",
+        "description": "A published draft set.",
+        "required": [
+          "rule_set_id",
+          "version",
+          "expires_at_ms",
+          "rules"
+        ],
+        "properties": {
+          "expires_at_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "When the signed bundle expires, in Unix milliseconds."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "`site` or `site-alarms`."
+          },
+          "rules": {
+            "type": "integer",
+            "description": "Rules in the bundle.",
+            "minimum": 0
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The version now published."
           }
         }
       },
