@@ -563,3 +563,7 @@ cargo test --locked -p openvibes-admin
 ```
 
 `tests/cli.rs` runs the built binary against a fresh database.
+
+## Assistant setup
+
+`helper assistant-setup [--force]` (root, through sudoers) points the console at the bundled `openvibes-llm` model server: it gives the API key to the console's account, writes `[assistant]` into `console.toml`, and restarts both services (`assistant_setup.rs`; see [openvibes-llm.md](openvibes-llm.md)).

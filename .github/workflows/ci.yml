@@ -265,7 +265,7 @@ jobs:
     steps:
       # git first, so checkout makes a real repository (submodules need it).
       - name: Install build packages
-        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2
+        run: dnf -q -y install git gcc gcc-c++ cmake cargo rust rpm-build systemd-rpm-macros ImageMagick rpm-sign gnupg2 cpio
 
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -304,6 +304,12 @@ jobs:
           path: target/llama
           key: llama-${{ hashFiles('packaging/llm/llama-cpp.pin', 'scripts/build-llama-server.sh') }}
 
+      - name: Cache bundled model
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: target/llm-model
+          key: llm-model-${{ hashFiles('packaging/llm/model.pin', 'scripts/fetch-llm-model.sh') }}
+
       - name: Package signing script
         run: bash scripts/test-sign-rpms.sh
 
@@ -324,6 +330,21 @@ jobs:
           OV_RELEASE: 1.1.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
+
+      # The 2.5 GB model package is built (the pinned download is verified
+      # and the spec exercised) and inspected here, not uploaded.
+      - name: Check the bundled model package
+        run: |
+          rpm=$(ls target/rpm/RPMS/x86_64/openvibes-llm-model-*.rpm)
+          . packaging/llm/model.pin
+          rpm -qlp "$rpm" | grep -qx "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
+          rpm -qlp "$rpm" | grep -qx /var/lib/openvibes-llm/model.conf
+          rpm -qp --requires "$rpm" | grep -q '^openvibes-llm = '
+          rpm -qp --recommends target/rpm/RPMS/x86_64/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = '
+          rpm2cpio "$rpm" | cpio -i --to-stdout "./var/lib/openvibes-llm/model.conf" 2>/dev/null \
+            | grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256"
+          rpm2cpio "$rpm" | cpio -i --to-stdout "./var/lib/openvibes-llm/models/$LLM_MODEL_FILE" 2>/dev/null \
+            | sha256sum | grep -q "^$LLM_MODEL_SHA256 "
 
       - name: Build offline console RPM
         env:
@@ -350,7 +371,7 @@ jobs:
           cargo build --release --locked -p openvibes-load
           cargo build --release --locked -p openvibes-ingest --example integration_bundle
           mkdir -p dist tools
-          cp target/rpm/RPMS/x86_64/*.rpm /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
+          cp $(ls target/rpm/RPMS/x86_64/*.rpm | grep -v openvibes-llm-model) /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
           cp target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
           cp target/release/openvibes-load target/release/examples/integration_bundle tools/

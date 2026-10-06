@@ -65,6 +65,13 @@ pub enum HelperCommand {
         #[command(flatten)]
         args: crate::setup::remove::RemoveArgs,
     },
+    /// Points the console's assistant at the bundled openvibes-llm model
+    /// server and starts it.
+    AssistantSetup {
+        /// Replace an assistant backend that is already configured.
+        #[arg(long)]
+        force: bool,
+    },
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -82,6 +89,7 @@ enum Verb {
     UpdateStep(UpdateStep, crate::setup::update::UpdateArgs),
     RemoveStep(RemoveStep, crate::setup::remove::RemoveArgs),
     UnitFile(Unit, bool),
+    AssistantSetup(bool),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -123,6 +131,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
                 args.clone(),
             )
         }
+        HelperCommand::AssistantSetup { force } => Verb::AssistantSetup(*force),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -188,6 +197,13 @@ pub fn run(command: &HelperCommand) -> ExitCode {
                 Err(error) => failed(&error.to_string()),
             }
         }
+        Verb::AssistantSetup(force) => match crate::assistant_setup::run(force) {
+            Ok(text) => {
+                print!("{text}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => failed(&error),
+        },
         Verb::Logs(unit, lines) => logs(unit, lines),
         Verb::ConfigRead(service) => match config_file::read(dir, service) {
             Ok(text) => {

@@ -90,27 +90,53 @@ exempts them. They reveal only the alias, on loopback.
 
 ## Using it
 
+Out of the box, with the bundled model (`openvibes-llm-model`, which
+`dnf install openvibes-llm` pulls in as a recommended package):
+
 ```sh
-dnf install ./openvibes-llm-*.rpm            # and openvibes-llm-vulkan for a GPU
+dnf install openvibes-llm
+sudo openvibes-admin helper assistant-setup
+```
+
+`assistant-setup` hands the generated API key to the console's account
+(owner-only, as the console requires), writes `[assistant]` into
+`console.toml` (an enabled assistant on the `small` profile whose backend is
+`http://127.0.0.1:18430/v1`; other keys and comments stay), enables and
+restarts `openvibes-llm`, and restarts the console. It is safe to repeat and
+refuses to replace a backend you configured yourself unless you pass
+`--force`. Users still need the `assistant.use` permission.
+
+The bundled model is Qwen3-4B Q4_K_M (Apache 2.0, about 2.5 GB), selected by
+the package's `/var/lib/openvibes-llm/model.conf` and pinned by SHA-256 in
+`packaging/llm/model.pin`. Without the model package, or to use another
+model, install one yourself (the platform never downloads models while
+running):
+
+```sh
 # Download a GGUF model yourself (see `assistant check` for the recommended
 # ones) and take its SHA-256 from the publisher's page.
 runuser -u openvibes-admin -- openvibes-admin assistant model install \
     /path/Qwen3.5-4B-Instruct-Q4_K_M.gguf --sha256 <hex> --alias qwen3.5-4b
-systemctl enable --now openvibes-llm
+sudo openvibes-admin helper assistant-setup
 ```
 
-The console's configuration then points at it:
+The resulting console configuration is:
 
 ```toml
+[assistant]
+enabled = true
+profile = "small"
+lookup_mode = "auto"
+
 [assistant.backend]
 url = "http://127.0.0.1:18430/v1"
-model = "qwen3.5-4b"
-api_key_file = "/run/credentials/openvibes-console.service/llm-api-key"
+model = "qwen3-4b"
+api_key_file = "/etc/openvibes/llm-api-key"
 ```
 
-The console unit receives the key as its own credential
-(`LoadCredential=llm-api-key:/etc/openvibes/llm-api-key`), so the file
-stays root's. To run `assistant check` or `assistant eval` as
+`llm-api-key` is owned by `openvibes-console` (mode 0400) after setup;
+`openvibes-llm.service` still receives it as a systemd credential, which
+root loads. To run `assistant check` or `assistant eval` as
 `openvibes-admin`, give it a private copy
 (`install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key …`).
 
