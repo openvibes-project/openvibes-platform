@@ -26,6 +26,14 @@ function downloadCsv(events: readonly AuditEvent[]) {
   URL.revokeObjectURL(url);
 }
 
+/** The demo has no platform to build the install package from. */
+function downloadDemoPackage() {
+  const url = URL.createObjectURL(new Blob(["#!/bin/sh\n# Demo: the real package carries the platform's fleet token.\n"], { type: "text/x-shellscript" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: "openvibes-agent-install.sh" });
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 function useTop() {
   const { panels } = useLocation();
   return panels[panels.length - 1];
@@ -46,9 +54,12 @@ export function Enrollment() {
     <div className="view">
       <ViewHeader title="Enrollment" count={rows.length} refresh="/api/v1/enrollment-tokens" placeholder="Filter tokens…"
         chips={[{ label: "Show expired and revoked", param: "all", value: "true", count: hidden }]}
-        actions={can("tokens.create", true) && (
+        actions={can("tokens.create", true) && (<>
+          {all.some((t) => t.standing && !t.revoked) && (isDemo()
+            ? <button type="button" className="button" onClick={downloadDemoPackage} title="One install script for every host"><Icon name="download" size={15} /> Install package</button>
+            : <a className="button" href="/api/v1/agent-package" download title="One install script for every host"><Icon name="download" size={15} /> Install package</a>)}
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "enrollment-token", id: "new" }, true)}><Icon name="plus" size={15} /> New token</button>
-        )} />
+        </>)} />
       {tokens.error ? <div className="view-pad"><ErrorBox error={tokens.error} /></div> : !tokens.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="enrollment" title={all.length === 0 ? "No enrollment tokens" : "No usable enrollment tokens"}>
           {all.length === 0 ? "Create one to let new hosts enroll." : `${hidden} expired or revoked ${hidden === 1 ? "token is" : "tokens are"} hidden. Run openvibes-admin agent command to create the standing token.`}

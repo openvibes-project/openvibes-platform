@@ -60,6 +60,8 @@ pub(crate) struct AuthHttpState {
     assistant: Option<crate::assistant::AssistantRuntime>,
     /// `None` when the About page's newer-version check is turned off.
     pub(crate) update_checker: Option<Arc<crate::about::UpdateChecker>>,
+    /// `None` when the agent install package is not configured.
+    agent_install: Option<Arc<crate::config::AgentInstallConfig>>,
 }
 
 #[derive(Deserialize)]
@@ -254,7 +256,7 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None)
+    authenticated_router_with_assistant(pool, public_origin, [], None, None, None)
 }
 
 /// As [`authenticated_router`], also serving `hosts` (`name:port`, e.g. the
@@ -264,7 +266,7 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None, None)
+    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None)
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -273,6 +275,7 @@ pub(crate) fn authenticated_router_with_assistant(
     hosts: impl IntoIterator<Item = String>,
     assistant: Option<crate::assistant::AssistantRuntime>,
     update_checker: Option<Arc<crate::about::UpdateChecker>>,
+    agent_install: Option<crate::config::AgentInstallConfig>,
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -293,6 +296,7 @@ pub(crate) fn authenticated_router_with_assistant(
         password_slots: Arc::new(Semaphore::new(4)),
         assistant,
         update_checker,
+        agent_install: agent_install.map(Arc::new),
     };
     let router = Router::new()
         .nest(
@@ -419,6 +423,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route("/v1/about", get(crate::about::about))
         .route("/v1/about/update", get(crate::about::about_update))
+        .route("/v1/agent-package", get(authenticated_agent_package))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
         .route("/v1/agents", get(authenticated_agents))
         .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))
@@ -1352,6 +1357,122 @@ pub(crate) async fn authenticated_enrollment_tokens(
             .collect(),
     })
     .into_response();
+    no_store(response)
+}
+
+/// What the platform serves for rule set `set`: its trust line, only when a
+/// current, non-retired bundle is signed by a key the set trusts, so agents
+/// are never told to fetch what they cannot verify.
+async fn served_rule_trust(
+    client: &platform_store::Client,
+    set: &str,
+) -> Option<crate::agent_package::RuleTrust> {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use platform_store::rules;
+    rules::list(client).await.ok()?.into_iter().find(|row| {
+        row.rule_set_id == set && row.current_version.is_some() && row.retired_at.is_none()
+    })?;
+    let issuer = rules::bundles(client, set)
+        .await
+        .ok()?
+        .into_iter()
+        .next()?
+        .issuer_key_id;
+    let (key, _) = rules::active_trust_keys(client, set)
+        .await
+        .ok()?
+        .into_iter()
+        .find(|(_, id)| *id == issuer)?;
+    Some(crate::agent_package::RuleTrust {
+        set: set.to_owned(),
+        issuer,
+        key: URL_SAFE_NO_PAD.encode(key),
+    })
+}
+
+/// Downloads the agent install package: one script that installs and enrolls
+/// an agent, the same on every host, carrying the standing fleet token.
+#[utoipa::path(get,path="/api/v1/agent-package",tag="enrollment",responses((status=200,description="Install script (text/x-shellscript) carrying the standing fleet token",content_type="text/x-shellscript"),(status=404,description="The package is not configured or there is no standing token",body=ProblemDetails)))]
+pub(crate) async fn authenticated_agent_package(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    use platform_store::console_read::AgentScope;
+    let (scope, actor) =
+        match authenticated_permission(&state, &headers, crate::Permission::TokensCreate, false)
+            .await
+        {
+            Ok(v) => v,
+            Err(response) => return response,
+        };
+    if !matches!(scope, AgentScope::Global) {
+        return problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Access is not available",
+        ));
+    }
+    let Some(config) = state.agent_install.as_deref() else {
+        return problem_response(ProblemDetails::not_found(
+            "agent_package_not_configured",
+            "Set agent_install in console.toml to offer the agent install package",
+        ));
+    };
+    let Ok(root_cert) = std::fs::read_to_string(&config.root_cert_file) else {
+        return unavailable_auth();
+    };
+    let client = match state.pool.get().await {
+        Ok(v) => v,
+        Err(_) => return unavailable_auth(),
+    };
+    let token = match platform_store::tokens::live_standing(&client).await {
+        Ok(Some((_, secret))) => Zeroizing::new(secret),
+        Ok(None) => {
+            return problem_response(ProblemDetails::not_found(
+                "no_standing_token",
+                "There is no standing enrollment token; create one with `openvibes-admin token fleet`",
+            ));
+        }
+        Err(_) => return unavailable_auth(),
+    };
+    let rules = served_rule_trust(&client, "baseline").await;
+    let alarm_rules = match rules {
+        Some(_) => served_rule_trust(&client, "baseline-alarms").await,
+        None => None,
+    };
+    let Ok(script) = crate::agent_package::render(&crate::agent_package::PackageSpec {
+        platform: &config.platform,
+        ingest_port: config.ingest_port,
+        distribution_port: config.distribution_port,
+        root_cert_pem: &root_cert,
+        rules,
+        alarm_rules,
+        token: &token,
+    }) else {
+        return unavailable_auth();
+    };
+    if platform_store::audit::record(
+        &client,
+        &actor,
+        "agent_package.downloaded",
+        Some("agent_package"),
+        "success",
+    )
+    .await
+    .is_err()
+    {
+        return unavailable_auth();
+    }
+    let mut response = script.into_response();
+    let response_headers = response.headers_mut();
+    response_headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("text/x-shellscript; charset=utf-8"),
+    );
+    response_headers.insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_static("attachment; filename=\"openvibes-agent-install.sh\""),
+    );
     no_store(response)
 }
 

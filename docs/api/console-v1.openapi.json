@@ -397,6 +397,33 @@
         }
       }
     },
+    "/api/v1/agent-package": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "Downloads the agent install package: one script that installs and enrolls\nan agent, the same on every host, carrying the standing fleet token.",
+        "operationId": "authenticated_agent_package",
+        "responses": {
+          "200": {
+            "description": "Install script (text/x-shellscript) carrying the standing fleet token",
+            "content": {
+              "text/x-shellscript": {}
+            }
+          },
+          "404": {
+            "description": "The package is not configured or there is no standing token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agents": {
       "get": {
         "tags": [

@@ -34,6 +34,7 @@ use crate::{
         crate::router::update_authenticated_asset_group,
         crate::router::revoke_authenticated_agent,
         crate::router::authenticated_enrollment_tokens,
+        crate::router::authenticated_agent_package,
         crate::router::authenticated_enrollment_token,
         crate::router::create_authenticated_enrollment_token,
         crate::router::revoke_authenticated_enrollment_token,

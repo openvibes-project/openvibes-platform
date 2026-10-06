@@ -35,7 +35,13 @@ fn origin_set<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
     let table: toml::Table = toml::from_str(&ctx.read(CONSOLE_TOML)?)
         .map_err(|error| format!("{CONSOLE_TOML}: {error}"))?;
     let text = |key: &str| table.get(key).and_then(toml::Value::as_str);
+    let agent_install = table.get("agent_install").and_then(toml::Value::as_table);
+    let port = |key: &str| agent_install.and_then(|t| t.get(key)?.as_integer());
     Ok(text("public_origin") == Some(origin(ctx).as_str())
+        && agent_install.and_then(|t| t.get("platform")?.as_str())
+            == Some(ctx.plan.hostname.as_str())
+        && port("ingest_port") == Some(i64::from(ctx.plan.ingest_port))
+        && port("distribution_port") == Some(i64::from(ctx.plan.distribution_port))
         && (text("transport_mode") != Some("direct_tls")
             || text("development_listen") == Some(listen(ctx).as_str())))
 }
@@ -165,6 +171,15 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             .parse()
             .map_err(|error| format!("{CONSOLE_TOML}: {error}"))?;
         doc["public_origin"] = toml_edit::value(origin(ctx));
+        // Where agents reach the platform, for the console's agent install
+        // package (Enrollment page).
+        if !doc.contains_table("agent_install") {
+            doc["agent_install"] = toml_edit::table();
+        }
+        doc["agent_install"]["platform"] = toml_edit::value(ctx.plan.hostname.as_str());
+        doc["agent_install"]["ingest_port"] = toml_edit::value(i64::from(ctx.plan.ingest_port));
+        doc["agent_install"]["distribution_port"] =
+            toml_edit::value(i64::from(ctx.plan.distribution_port));
         if doc.get("transport_mode").and_then(|v| v.as_str()) == Some("direct_tls") {
             doc["development_listen"] = toml_edit::value(listen(ctx));
         }
@@ -274,6 +289,11 @@ mod tests {
             fake.text("/etc/openvibes/console.toml")
                 .contains("# kept by Setup"),
             "comments kept"
+        );
+        assert!(
+            fake.text("/etc/openvibes/console.toml")
+                .contains("[agent_install]\nplatform = \"platform.example.com\""),
+            "the install package knows where agents reach the platform"
         );
         let create = fake.call(&[&ADMIN[..], &["user", "create"]].concat());
         assert_eq!(

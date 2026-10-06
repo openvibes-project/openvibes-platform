@@ -60,6 +60,39 @@ pub struct ConsoleConfig {
     /// hosts that must make no outbound connections.
     #[serde(default = "default_update_check")]
     pub update_check: bool,
+    /// Where agents reach this platform, for the agent install package the
+    /// console generates. Omitted: the package is not offered.
+    #[serde(default)]
+    pub agent_install: Option<AgentInstallConfig>,
+}
+
+/// Settings for the agent install package.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct AgentInstallConfig {
+    /// This platform's name or address as agents reach it.
+    pub platform: String,
+    /// Agent port (default 18423).
+    #[serde(default = "default_ingest_port")]
+    pub ingest_port: u16,
+    /// Rule distribution port (default 18424).
+    #[serde(default = "default_distribution_port")]
+    pub distribution_port: u16,
+    /// The root certificate agents will trust.
+    #[serde(default = "default_root_cert")]
+    pub root_cert_file: PathBuf,
+}
+
+fn default_ingest_port() -> u16 {
+    18423
+}
+
+fn default_distribution_port() -> u16 {
+    18424
+}
+
+fn default_root_cert() -> PathBuf {
+    PathBuf::from("/etc/openvibes/pki/root.crt")
 }
 
 fn default_update_check() -> bool {
@@ -88,6 +121,7 @@ impl fmt::Debug for ConsoleConfig {
                 &self.assistant.as_ref().map(|_| "[CONFIGURED]"),
             )
             .field("update_check", &self.update_check)
+            .field("agent_install", &self.agent_install)
             .finish()
     }
 }
@@ -273,6 +307,7 @@ mod tests {
             trusted_proxy_uids: vec![],
             assistant: None,
             update_check: true,
+            agent_install: None,
         };
 
         assert!(config.validate().is_ok());
@@ -294,6 +329,7 @@ mod tests {
                 trusted_proxy_uids: vec![],
                 assistant: None,
                 update_check: true,
+                agent_install: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -308,6 +344,7 @@ mod tests {
                 trusted_proxy_uids: vec![],
                 assistant: None,
                 update_check: true,
+                agent_install: None,
             },
             ConsoleConfig {
                 development_listen: "127.0.0.1:8443".parse().unwrap(),
@@ -322,6 +359,7 @@ mod tests {
                 trusted_proxy_uids: vec![],
                 assistant: None,
                 update_check: true,
+                agent_install: None,
             },
         ] {
             assert!(config.validate().is_err());
@@ -343,6 +381,7 @@ mod tests {
             trusted_proxy_uids: vec![],
             assistant: None,
             update_check: true,
+            agent_install: None,
         };
         assert!(valid.validate().is_ok());
         assert!(!format!("{valid:?}").contains("secret"));

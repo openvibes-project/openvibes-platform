@@ -1721,6 +1721,7 @@ dependencies = [
  "platform-assistant",
  "platform-config",
  "platform-password",
+ "platform-pki",
  "platform-store",
  "rcgen",
  "ring",

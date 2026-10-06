@@ -326,6 +326,19 @@ public_origin = "http://localhost:8443" # required with database_url
 release; set it to `false` on hosts that must make no outbound connections
 (see [`console-about.md`](console-about.md)).
 
+`[agent_install]` (`platform`, `ingest_port` 18423, `distribution_port` 18424,
+`root_cert_file` `/etc/openvibes/pki/root.crt`) says where agents reach the
+platform; Setup writes it. With it, `GET /api/v1/agent-package` (global
+`tokens.create`, session or token, audited as `agent_package.downloaded`)
+returns `openvibes-agent-install.sh`: one script that installs and enrolls an
+agent the same way on every host, so no `agent.toml` is made per agent. It
+carries the standing fleet token (the console role can read
+`standing_token_secret` since migration 0038), the root CA fingerprint, and
+`--rules` / `--alarm-rules` for the sets the platform serves. The Enrollment
+page offers it as "Install package" while a standing token exists; without
+`[agent_install]` the route answers 404. The script file holds the token:
+keep it private, and revoke the standing token to rotate it.
+
 A non-loopback address, equal addresses, unpaired auth fields, non-loopback
 origin, unpaired TLS paths, relative TLS paths, or malformed file is refused at startup ("invalid console
 configuration"), and `run` refuses a listener that is not loopback even if
