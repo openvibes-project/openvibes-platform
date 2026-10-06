@@ -193,6 +193,16 @@ hosts out.
 The fleet lists are not paged: distinct ports and units across a fleet
 stay in the low thousands.
 
+### Live agent presence (`src/presence.rs`)
+
+- `GET /api/v1/agents/events` (`agents.read`): a `text/event-stream`. It sends
+  `event: presence` when the fleet's online set changed (a host came online or
+  went offline), a keep-alive comment every 20 s, and closes after 60 s (the
+  browser reconnects, which re-checks its session). Events carry no data: the
+  browser rereads the scoped agent endpoints. One shared task compares
+  `online_fingerprint` every 5 s, only while a stream is open. Not in the
+  OpenAPI snapshot (it is not JSON).
+
 ### Threat alarms (P14, `src/alarms.rs`)
 
 - `GET /api/v1/alarms` (`alarms.read`): newest `last_seen` first, scoped

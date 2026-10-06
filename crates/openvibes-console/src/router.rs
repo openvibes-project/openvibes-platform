@@ -62,6 +62,8 @@ pub(crate) struct AuthHttpState {
     pub(crate) update_checker: Option<Arc<crate::about::UpdateChecker>>,
     /// `None` when the agent install package is not configured.
     agent_install: Option<Arc<crate::config::AgentInstallConfig>>,
+    /// Shared live-presence check behind the agent event stream.
+    pub(crate) presence: crate::presence::PresenceHub,
 }
 
 #[derive(Deserialize)]
@@ -298,6 +300,7 @@ pub(crate) fn authenticated_router_with_assistant(
         assistant,
         update_checker,
         agent_install: agent_install.map(Arc::new),
+        presence: crate::presence::PresenceHub::default(),
     };
     let router = Router::new()
         .nest(
@@ -426,6 +429,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/about/update", get(crate::about::about_update))
         .route("/v1/agent-package", get(authenticated_agent_package))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
+        .route("/v1/agents/events", get(crate::presence::agent_events))
         .route("/v1/agents", get(authenticated_agents))
         .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))
         .route(

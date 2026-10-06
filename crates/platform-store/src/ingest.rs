@@ -302,7 +302,7 @@ pub async fn authenticate(
     })
 }
 
-/// Records a heartbeat, writing at most once per 5 minutes per agent unless
+/// Records a heartbeat: `agents` is written at most once per 5 minutes per agent unless
 /// the hostname or the capabilities (protocol P7: the enabled collectors)
 /// changed. A present hostname replaces the stored one; an
 /// absent one keeps it. Returns whether a write happened.
@@ -342,6 +342,16 @@ pub async fn heartbeat(
                 &hostname,
                 &health,
             ],
+        )
+        .await?;
+    // Every heartbeat refreshes the live presence row (an unlogged table),
+    // so "online" follows the agent within a heartbeat instead of lagging by
+    // the throttle above.
+    client
+        .execute(
+            "INSERT INTO agent_presence (agent_id, seen_at) VALUES ($1, $2)
+             ON CONFLICT (agent_id) DO UPDATE SET seen_at = GREATEST(agent_presence.seen_at, $2)",
+            &[&agent_id, &now],
         )
         .await?;
     Ok(changed == 1)

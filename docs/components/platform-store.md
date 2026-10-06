@@ -83,7 +83,8 @@ All run within the `openvibes-ingest` role's grants (the tests use
   at most every 5 minutes, or at once when the hostname, the capabilities
   or the health report's `rule_sets` change; an absent
   hostname keeps the stored one (migration 3 adds `agents.hostname`,
-  indexed). Returns whether it wrote.
+  indexed). Returns whether it wrote. Every call also upserts the agent's
+  row in `agent_presence` (see Live presence below).
 - `store_findings(&mut client, agent_id, &[StoredFinding], now) -> new`: one
   transaction, `ON CONFLICT DO NOTHING`, and a `current_findings` upsert
   keeping the newest observation and the first-seen time.
@@ -476,11 +477,27 @@ takes the flag and the audit `actor_kind` (`local_admin` from the CLI,
 `user` from the console). No new grants: the console already writes
 `console_users`, `console_credentials` and `console_sessions`.
 
+## Live presence (schema 40)
+
+`agent_presence(agent_id, seen_at)` is an UNLOGGED table: ingest upserts it on
+every heartbeat (a narrow row, no WAL), so "online" does not wait for the
+throttled `agents.last_seen_at` write. A crash only empties it; readers then
+fall back to the saved time until the next heartbeat. The SQL function
+`agent_seen_at(agent_id, saved)` returns the later of the two; every read that
+decides online or offline or shows a last-seen time (`console_read` agents and
+summary, `agents`, `status`, the assistant, host software and services) goes
+through it. `OFFLINE_AFTER_MINUTES` is 3. The health report is still saved on
+the throttled write, so its own freshness limit is the separate
+`health::HEALTH_REPORT_FRESH_MINUTES` (15).
+`console_read::online_fingerprint(&client, now) -> (count, id sum)` is a cheap
+"did the online set change" check for the console's event stream (not scoped,
+carries no agent identity).
+
 ## Status
 
 `status(&client, now) -> Status`: schema version; active, offline (no
-heartbeat for `OFFLINE_AFTER_MINUTES` = 15, well above the 5-minute
-`last_seen_at` write throttle), and revoked agents; usable tokens (not
+heartbeat for `OFFLINE_AFTER_MINUTES` = 3: three missed one-minute
+heartbeats, judged on `agent_seen_at`, see Live presence), and revoked agents; usable tokens (not
 revoked, not expired, uses left); oldest and newest partition. All zeros and
 `None` on an empty database.
 

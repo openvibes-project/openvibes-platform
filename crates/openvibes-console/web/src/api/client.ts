@@ -43,6 +43,9 @@ export function onSignedOut(listener: () => void): () => void {
 }
 export const setCsrfToken = (token: string) => { csrfToken = token; };
 
+/** Whether the in-browser demo (no server) is answering. */
+export const inDemo = (): boolean => demo !== undefined;
+
 export async function request<T>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<T> {
   const response = demo
     ? await demo.handle(method, path, body, extra)

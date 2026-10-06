@@ -377,7 +377,7 @@ pub async fn port_hosts(
         .query(
             &format!(
                 "SELECT a.agent_id, a.hostname, l.address, l.exposed, l.service, l.program,
-                    a.last_seen_at
+                    agent_seen_at(a.agent_id, a.last_seen_at)
                  FROM host_listeners l JOIN agents a ON a.agent_id = l.agent_id
                  WHERE l.protocol = $3 AND l.port = $4 AND a.status <> 'revoked' AND {visible}
                    AND ($5::text IS NULL
@@ -442,7 +442,7 @@ pub async fn unit_hosts(
     let rows = client
         .query(
             &format!(
-                "SELECT a.agent_id, a.hostname, s.programs, s.processes, s.run_as, a.last_seen_at
+                "SELECT a.agent_id, a.hostname, s.programs, s.processes, s.run_as, agent_seen_at(a.agent_id, a.last_seen_at)
                  FROM host_services s JOIN agents a ON a.agent_id = s.agent_id
                  WHERE s.unit = $3 AND a.status <> 'revoked' AND {visible}
                    AND ($4::text IS NULL OR (coalesce(a.hostname, ''), a.agent_id) > ($4, $5))

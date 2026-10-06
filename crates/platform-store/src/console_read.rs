@@ -524,9 +524,9 @@ pub async fn agent_summary_in_scope(
         .query_one(
             "SELECT count(*),
                     count(*) FILTER (WHERE a.status = 'active'
-                        AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= $1),
+                        AND agent_seen_at(a.agent_id, a.last_seen_at) IS NOT NULL AND agent_seen_at(a.agent_id, a.last_seen_at) >= $1),
                     count(*) FILTER (WHERE a.status = 'active'
-                        AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)),
+                        AND (agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1)),
                     count(*) FILTER (WHERE a.status = 'revoked'),
                     count(*) FILTER (WHERE a.status = 'imported')
              FROM agents a
@@ -554,6 +554,26 @@ pub async fn agent_summary_in_scope(
         revoked: row.get(3),
         imported: row.get(4),
     })
+}
+
+/// Which active agents are online right now, as a cheap fingerprint: how
+/// many, and a sum over their ids. It differs whenever an agent comes online
+/// or goes offline, so a watcher can tell "something changed" without
+/// reading the fleet. It carries no agent identity and ignores scope.
+pub async fn online_fingerprint(
+    client: &Client,
+    now: DateTime<Utc>,
+) -> Result<(i64, i64), StoreError> {
+    let threshold = now - Duration::minutes(OFFLINE_AFTER_MINUTES);
+    let row = client
+        .query_one(
+            "SELECT count(*), COALESCE(sum(hashtext(a.agent_id)::bigint), 0)::bigint
+             FROM agents a
+             WHERE a.status = 'active' AND agent_seen_at(a.agent_id, a.last_seen_at) >= $1",
+            &[&threshold],
+        )
+        .await?;
+    Ok((row.get(0), row.get(1)))
 }
 
 /// Returns agents in stable keyset order; scans at most `limit + 1` rows.
@@ -585,16 +605,16 @@ pub async fn agents_in_scope(
             "SELECT a.agent_id, a.hostname,
                     CASE WHEN a.status = 'imported' THEN 'imported'
                          WHEN a.status = 'revoked' THEN 'revoked'
-                         WHEN a.last_seen_at IS NULL OR a.last_seen_at < $1 THEN 'stale'
+                         WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1 THEN 'stale'
                          ELSE 'active' END AS state,
-                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                    a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at
              FROM agents a
              WHERE ($2::text IS NULL OR
                     ($2 = 'active' AND a.status = 'active'
-                        AND a.last_seen_at IS NOT NULL AND a.last_seen_at >= $1) OR
+                        AND agent_seen_at(a.agent_id, a.last_seen_at) IS NOT NULL AND agent_seen_at(a.agent_id, a.last_seen_at) >= $1) OR
                     ($2 = 'stale' AND a.status = 'active'
-                        AND (a.last_seen_at IS NULL OR a.last_seen_at < $1)) OR
+                        AND (agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1)) OR
                     ($2 = 'revoked' AND a.status = 'revoked') OR
                     ($2 = 'imported' AND a.status = 'imported'))
                AND ($7::boolean OR EXISTS (
@@ -613,10 +633,10 @@ pub async fn agents_in_scope(
                )) AND ($7::boolean OR a.status <> 'imported')
                AND ($5::boolean = false OR
                     ($3::timestamptz IS NOT NULL AND
-                        (a.last_seen_at < $3 OR (a.last_seen_at = $3 AND a.agent_id > $4)
-                         OR a.last_seen_at IS NULL)) OR
-                    ($3::timestamptz IS NULL AND a.last_seen_at IS NULL AND a.agent_id > $4))
-             ORDER BY a.last_seen_at DESC NULLS LAST, a.agent_id ASC
+                        (agent_seen_at(a.agent_id, a.last_seen_at) < $3 OR (agent_seen_at(a.agent_id, a.last_seen_at) = $3 AND a.agent_id > $4)
+                         OR agent_seen_at(a.agent_id, a.last_seen_at) IS NULL)) OR
+                    ($3::timestamptz IS NULL AND agent_seen_at(a.agent_id, a.last_seen_at) IS NULL AND a.agent_id > $4))
+             ORDER BY agent_seen_at(a.agent_id, a.last_seen_at) DESC NULLS LAST, a.agent_id ASC
              LIMIT $6",
             &[
                 &threshold,
@@ -668,9 +688,9 @@ pub async fn agent_in_scope(
             "SELECT a.agent_id, a.hostname,
                     CASE WHEN a.status = 'imported' THEN 'imported'
                          WHEN a.status = 'revoked' THEN 'revoked'
-                         WHEN a.last_seen_at IS NULL OR a.last_seen_at < $2 THEN 'stale'
+                         WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $2 THEN 'stale'
                          ELSE 'active' END AS state,
-                    a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                    a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at
              FROM agents a WHERE a.agent_id = $1
                AND ($3::boolean OR EXISTS (
@@ -710,9 +730,9 @@ pub async fn agent_matches_in_scope(
         "SELECT a.agent_id, a.hostname,
                 CASE WHEN a.status = 'imported' THEN 'imported'
                      WHEN a.status = 'revoked' THEN 'revoked'
-                     WHEN a.last_seen_at IS NULL OR a.last_seen_at < $4 THEN 'stale'
+                     WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $4 THEN 'stale'
                      ELSE 'active' END AS state,
-                a.enrolled_at, a.revoked_at, a.last_seen_at, a.scanner_version, a.capabilities,
+                a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at
          FROM agents a
          WHERE (a.agent_id::text = $1 OR lower(a.hostname) = lower($1))

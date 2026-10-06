@@ -16,7 +16,7 @@ fn health_arg(value: &str) -> Result<HealthStatus, String> {
 pub enum AgentCommand {
     /// List agents (all by default).
     List {
-        /// Only active agents with no heartbeat for 15 minutes.
+        /// Only active agents with no heartbeat for 3 minutes.
         #[arg(long, conflicts_with = "revoked")]
         offline: bool,
         /// Only revoked agents.
