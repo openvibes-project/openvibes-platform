@@ -15,17 +15,23 @@ export type ListRow = { key: string; open: PanelRef; title: string; meta: string
 export type AdvisoryRow = {
   id: string; title: string; severity: string; cves: string[]; cvss: number | null; epss: number | null;
   exploited: boolean; kev: boolean; ransomware: boolean; hosts: number; reboot: number; noFix: boolean;
+  /** The weakest mapping among the hosts, 0 to 100. */
+  confidence: number;
 };
+
+/** Mappings below this are hidden unless "Low confidence" is switched on. */
+export const MIN_CONFIDENCE = 50;
 
 export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] {
   const rows = new Map<string, AdvisoryRow>();
   for (const item of items) {
     const row = rows.get(item.advisory_id) ?? {
       id: item.advisory_id, title: item.title, severity: item.severity, cves: item.cves, cvss: item.cvss ?? null, epss: item.epss ?? null,
-      exploited: item.exploited, kev: item.kev, ransomware: item.ransomware, hosts: 0, reboot: 0,
+      exploited: item.exploited, kev: item.kev, ransomware: item.ransomware, hosts: 0, reboot: 0, confidence: item.confidence,
       noFix: Array.isArray(item.packages) && (item.packages as { fixed?: unknown }[]).every((p) => p?.fixed == null),
     };
     row.hosts += 1;
+    row.confidence = Math.min(row.confidence, item.confidence);
     if (item.reboot_needed) row.reboot += 1;
     rows.set(item.advisory_id, row);
   }
@@ -83,6 +89,7 @@ export function vulnerabilityQuery(params: URLSearchParams): string {
   if (params.get("reboot") === "true") query.set("reboot_needed", "true");
   const severity = params.get("severity");
   if (severity) query.set("severity", severity);
+  if (params.get("lowconf") !== "true") query.set("min_confidence", String(MIN_CONFIDENCE));
   return `/api/v1/vulnerabilities${query.size ? `?${query}` : ""}`;
 }
 

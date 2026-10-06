@@ -3,7 +3,7 @@
 import { useResource } from "../api/client";
 import type { AdvisoryDetail, Vulnerability } from "../api/types";
 import { useProvideTitle } from "../app/titles";
-import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
+import { Ago, ConfidenceBar, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
 import { date, pct } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { useSession } from "../app/session";
@@ -73,6 +73,15 @@ export function AdvisoryPanel({ id }: { id: string }) {
               ))}
             </ul>
             {reboot > 0 && <p className="subtle">{reboot} of {hosts.length} hosts have the fix installed and only need a reboot.</p>}
+          </Section>
+        )}
+        {first && (
+          <Section title="How this was matched">
+            <div className="stack">
+              <ConfidenceBar value={first.confidence} wide />
+              <p className="muted">{first.match_basis}</p>
+              <p className="subtle">Source <span className="mono">{first.source}</span> · method <span className="mono">{first.match_method}</span></p>
+            </div>
           </Section>
         )}
         <Section title={`CVEs (${detail.data.cves.length})`}>

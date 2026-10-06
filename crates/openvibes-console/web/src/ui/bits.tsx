@@ -16,6 +16,17 @@ export function SeverityBadge({ severity }: { severity: string }) {
   return <span className={`badge badge--${severity}`}>{severityText[severity] ?? severity}</span>;
 }
 
+/** A 0 to 100 % bar for how sure a mapping is. */
+export function ConfidenceBar({ value, wide }: { value: number; wide?: boolean }) {
+  const percent = Math.max(0, Math.min(100, Math.round(value)));
+  return (
+    <span className="row" title={`${percent}% confidence`}>
+      <span className={`meter${wide ? " meter--wide" : ""}`} role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-label="Confidence"><span style={{ width: `${percent}%` }} /></span>
+      <span className="num">{percent}%</span>
+    </span>
+  );
+}
+
 const statusTone: Record<string, string> = { active: "ok", stale: "warn", revoked: "bad", imported: "info" };
 const statusText: Record<string, string> = { active: "Online", stale: "Stale", revoked: "Revoked", imported: "Imported" };
 

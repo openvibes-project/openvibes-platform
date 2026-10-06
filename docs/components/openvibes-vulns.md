@@ -132,6 +132,13 @@ the offline core used by `openvibes-admin feeds import` and the
   exploited list, page by page (live: 1,735 CVEs, 18 pages, 6 s); an
   unchanged list is not re-imported. Checked every interval with KEV and
   EPSS.
+- **Mapping confidence** (spec `docs/specs/2026-10-06-vulnerability-confidence-design.md`),
+  derived when read by `platform_store::vulns::confidence` from the
+  advisory's source: Fedora updateinfo 98, AlmaLinux 97, Debian, Ubuntu and
+  Rocky source packages 95, no-fix tracker hits 90. The console shows it as a
+  0 to 100 % bar with the method and basis; `min_confidence` filters it, and
+  the vulnerabilities view hides findings under 50 % unless "Low confidence"
+  is on.
 - **Priority** (spec §9), computed when read by `platform_store::vulns`:
   exploited (a CVE on KEV or EUVD's list) first, then the highest EPSS
   percentile among the advisory's CVEs, then severity, then the highest

@@ -8,6 +8,7 @@ use serde_json::Value;
 use crate::{Client, StoreError};
 
 mod candidates;
+mod confidence;
 mod feeds;
 mod summary;
 use candidates::INSTALLED;
@@ -317,6 +318,14 @@ pub struct VulnRow {
     pub epss_percentile: Option<f32>,
     /// Highest CVSS base score among its CVEs (NVD).
     pub cvss: Option<f32>,
+    /// The advisory's feed, e.g. `fedora-44-x86_64`.
+    pub source: String,
+    /// How the host was matched (`distribution-advisory`, ...).
+    pub match_method: String,
+    /// Mapping confidence, 0 to 100.
+    pub confidence: u8,
+    /// A sentence saying how the host was matched.
+    pub match_basis: String,
 }
 
 /// Filters for [`list`].
@@ -336,6 +345,8 @@ pub struct ListFilter<'a> {
     pub exploited: Option<bool>,
     /// Whether the fix is installed but still needs a reboot.
     pub reboot_needed: Option<bool>,
+    /// Only mappings at or above this confidence (0 to 100).
+    pub min_confidence: Option<u8>,
 }
 
 /// Vulnerabilities by priority (VM spec §9): exploited (KEV or EUVD) first,
@@ -368,7 +379,7 @@ async fn list_for_agents(
     // Each advisory's CVEs, enrichment and priority, combined once (a few
     // tens of thousands of advisories), not once per vulnerability.
     let adv = "WITH adv AS (
-         SELECT a.advisory_id, a.severity, a.title, a.url,
+         SELECT a.advisory_id, a.severity, a.title, a.url, a.source,
                 COALESCE(array_agg(DISTINCT c.cve_id)
                     FILTER (WHERE c.cve_id IS NOT NULL), '{}') AS cves,
                 COALESCE(bool_or(x.kev_added IS NOT NULL), false) AS kev,
@@ -382,7 +393,7 @@ async fn list_for_agents(
          LEFT JOIN cve_enrichment x ON x.cve_id = c.cve_id
          WHERE ($3::text IS NULL OR a.advisory_id = $3)
            AND ($4::text IS NULL OR a.severity = $4)
-         GROUP BY a.advisory_id, a.severity, a.title, a.url),
+         GROUP BY a.advisory_id, a.severity, a.title, a.url, a.source),
      ranked AS (
          SELECT e.*, row_number() OVER (ORDER BY (e.kev OR e.euvd) DESC, e.pct DESC NULLS LAST,
                     array_position(ARRAY['critical','important','moderate','low','unrated'],
@@ -391,7 +402,7 @@ async fn list_for_agents(
          WHERE ($5::text IS NULL OR $5 = ANY(e.cves))
            AND ($6::boolean IS NULL OR (e.kev OR e.euvd) = $6))";
     let columns = "e.severity, e.title, e.cves";
-    let enrichment = "e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url";
+    let enrichment = "e.kev, e.due, e.ransomware, e.epss, e.pct, e.euvd, e.cvss, e.url, e.source";
     // A host by agent id or hostname, resolved first so the per-host
     // indexes apply.
     let hosts: Option<Vec<String>> = match filter.host {
@@ -500,26 +511,40 @@ async fn list_for_agents(
     };
     Ok(rows
         .iter()
-        .map(|row| VulnRow {
-            agent_id: row.get(0),
-            hostname: row.get(1),
-            advisory_id: row.get(2),
-            severity: row.get(3),
-            title: row.get(4),
-            cves: row.get(5),
-            packages: row.get(6),
-            first_seen_at: row.get(7),
-            fixed_at: row.get(8),
-            reboot_needed: row.get(9),
-            exploited: row.get::<_, bool>(10) || row.get::<_, bool>(15),
-            kev: row.get(10),
-            euvd: row.get(15),
-            cvss: row.get(16),
-            url: row.get(17),
-            kev_due: row.get(11),
-            ransomware: row.get(12),
-            epss: row.get(13),
-            epss_percentile: row.get(14),
+        .map(|row| {
+            let packages: Value = row.get(6);
+            let source: String = row.get(18);
+            let mapping = confidence::mapping(&source, &packages);
+            VulnRow {
+                agent_id: row.get(0),
+                hostname: row.get(1),
+                advisory_id: row.get(2),
+                severity: row.get(3),
+                title: row.get(4),
+                cves: row.get(5),
+                packages,
+                first_seen_at: row.get(7),
+                fixed_at: row.get(8),
+                reboot_needed: row.get(9),
+                exploited: row.get::<_, bool>(10) || row.get::<_, bool>(15),
+                kev: row.get(10),
+                euvd: row.get(15),
+                cvss: row.get(16),
+                url: row.get(17),
+                kev_due: row.get(11),
+                ransomware: row.get(12),
+                epss: row.get(13),
+                epss_percentile: row.get(14),
+                source,
+                match_method: mapping.method.to_owned(),
+                confidence: mapping.confidence,
+                match_basis: mapping.basis,
+            }
+        })
+        .filter(|row| {
+            filter
+                .min_confidence
+                .is_none_or(|min| row.confidence >= min)
         })
         .collect())
 }
