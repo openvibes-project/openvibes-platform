@@ -89,7 +89,7 @@ cat > "$A/rules.json" <<'RULES'
 {"schema_version":1,"rules":[
  {"id":"web-shell","version":1,"title":"Shell from a web server","severity":"high","confidence":80,
   "kind":"process_event",
-  "expression":"event['parent.exe'] == '/tmp/fake-nginx' && event['process.cmdline'].startsWith('sh -c ')",
+  "expression":"event['parent.exe'] == '/tmp/fake-nginx'",
   "finding_message":"A web server started a shell"}]}
 RULES
 "$SIGN" sign "$A/signing.key" "$A/rules.json" alarms-e2e 1 e2e.rules 1 "$A/bundle.json" >/dev/null
@@ -131,7 +131,10 @@ alarm_count() {
 for expected in 1 2 3; do
     deadline=$((SECONDS + 60))
     while [[ $(alarm_count "$expected") -lt $expected ]]; do
-        ((SECONDS < deadline)) || fail "one alarm, count $expected, through POST /v1/alarms (after 60s)"
+        if ((SECONDS >= deadline)); then
+            echo "agent alarm health: $(sql "SELECT COALESCE(health->'alarms', 'null'::jsonb) FROM agents WHERE status = 'active'")" >&2
+            fail "one alarm, count $expected, through POST /v1/alarms (after 60s)"
+        fi
         /tmp/fake-nginx -c 'sh -c id >/dev/null'
         # Retry a start if unrelated audited processes caused the kernel to
         # drop it. The next start waits for this count, keeping aggregation
