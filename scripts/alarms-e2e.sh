@@ -46,6 +46,7 @@ cleanup() {
         echo "--- platform (tail)"; podman logs --tail 30 ov-alarms-e2e 2>&1 || true
         for log in "$W"/*.log; do [[ -f $log ]] && { echo "--- $(basename "$log") (tail)"; tail -n 20 "$log"; }; done
         echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -100
+        echo "--- agent fake-nginx starts"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | grep '/tmp/fake-nginx' | tail -20 || true
     fi
     podman rm -f ov-alarms-e2e >/dev/null 2>&1 || true
     exit "$status"
@@ -135,9 +136,9 @@ for expected in 1 2 3; do
         # Retry a start if unrelated audited processes caused the kernel to
         # drop it. The next start waits for this count, keeping aggregation
         # deterministic and preventing a burst from overflowing the buffer.
-        for _ in {1..80}; do
+        for _ in {1..10}; do
             [[ $(alarm_count "$expected") -ge $expected ]] && break
-            sleep 0.25
+            sleep 1
         done
     done
 done
