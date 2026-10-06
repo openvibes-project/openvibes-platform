@@ -1,6 +1,6 @@
 # CPE matching from NVD applicability data
 
-Status: proposed (step 3 of `2026-10-06-vulnerability-confidence-design.md`).
+Status: implemented (step 3 of `2026-10-06-vulnerability-confidence-design.md`).
 Requested 2026-10-06. Written from real NVD API 2.0 responses
 (CVE-2024-3094, CVE-2024-6387, CVE-2023-38545).
 
@@ -61,11 +61,29 @@ distributions explicitly (`o:fedoraproject:fedora:37`).
 7. **Scope of this change.** Fedora hosts only. Debian, Ubuntu, Rocky and
    Alma already track unfixed CVEs through OSV.
 
-## Open choices (recommended first)
+## As built
 
-- CPE findings count in "open vulnerabilities" totals: no, shown separately
-  and by filter, so the existing counts keep meaning "a distribution says so".
-- Notifications and cases: unchanged; a CPE finding can be added to a case.
+- Own tables (migration 0039): `cve_applicability` (ranges),
+  `cve_applicability_products` (the products kept) and `cpe_findings` (one row
+  per installed package version, release and CVE, so a fleet's shared package
+  versions are evaluated once). They are separate from `vulnerabilities` on
+  purpose: no existing count, host flag, case or assistant answer changes.
+- The crawl reads NVD by last-modified windows from 2010 with its own sync
+  point (`nvd-cpe`); a product that appears later restarts it. Findings are
+  recomputed after every feed check and every crawl (hourly by default).
+- The console shows them only when the list asks for a minimum confidence of
+  75 or less (the vulnerabilities view hides everything under 80 unless
+  "Lower confidence" is on), as `CPE:<CVE>:<product>` advisories marked
+  "Possible". They cannot be added to a case.
+- Not done: findings have no closed history (they disappear when no longer
+  true); `AND` configurations; exclusive range starts; other distributions.
+
+## Decided
+
+- CPE findings do not count in "open vulnerabilities" totals (the user,
+  2026-10-06): shown separately and by filter, so the existing counts keep
+  meaning "a distribution says so".
+- Notifications and cases: unchanged; CPE findings cannot be added to a case.
 - `AND` configurations: skipped now; revisit with real false-negative counts.
 
 ## Test plan

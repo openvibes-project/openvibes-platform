@@ -26,7 +26,7 @@ export function Vulnerabilities() {
           { label: "Known exploited", param: "exploited", value: "true" },
           { label: "Reboot needed", param: "reboot", value: "true" },
           { label: "No fix yet", param: "nofix", value: "true" },
-          { label: "Low confidence", param: "lowconf", value: "true" },
+          { label: "Lower confidence", param: "lowconf", value: "true" },
           ...(["critical", "important", "moderate", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s })),
         ]} />
       {list.data?.more_available && <p className="view-note"><Icon name="alert" size={14} /> Showing the first results only; narrow the filters to see the rest.</p>}
@@ -46,6 +46,7 @@ export function Vulnerabilities() {
                 <span className="row"><span className="truncate">{r.title}</span>
                   {r.exploited && <span className="badge badge--critical badge--plain" title="Known to be exploited"><Icon name="flame" size={12} /> Exploited</span>}
                   {r.noFix && <span className="badge badge--plain">No fix yet</span>}
+                  {r.id.startsWith("CPE:") && <span className="badge badge--plain" title="Matched from NVD's upstream version ranges, not a distribution advisory">Possible</span>}
                 </span>
                 <span className="mono subtle truncate">{r.id} · {r.cves.slice(0, 2).join(", ")}{r.cves.length > 2 ? ` +${r.cves.length - 2}` : ""}</span>
               </div>

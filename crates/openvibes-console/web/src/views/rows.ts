@@ -19,8 +19,8 @@ export type AdvisoryRow = {
   confidence: number;
 };
 
-/** Mappings below this are hidden unless "Low confidence" is switched on. */
-export const MIN_CONFIDENCE = 50;
+/** Mappings below this (NVD CPE ranges, at most 75) are hidden unless "Lower confidence" is switched on. */
+export const MIN_CONFIDENCE = 80;
 
 export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] {
   const rows = new Map<string, AdvisoryRow>();

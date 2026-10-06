@@ -28,6 +28,8 @@ pub mod console_inventory;
 pub mod console_read;
 /// Versioned analyst workflow state and history for current findings.
 pub mod console_triage;
+/// CPE matching: NVD applicability ranges and lower-confidence findings (schema 39).
+pub mod cpe;
 /// User dashboards: layouts, sharing by role, home (schema 26).
 pub mod dashboards;
 /// CVE enrichment: KEV and EPSS (vulnerability management).

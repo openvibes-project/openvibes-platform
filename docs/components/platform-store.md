@@ -272,6 +272,13 @@ Schema 9 adds `agents.running_kernel` (protocol P9) and
 is missing. The row stays unfixed (it closes after the reboot), but
 `summary` counts it as its own state, not as open.
 
+Schema 39 (CPE matching, `cpe` module) adds `cve_applicability` (NVD's affected
+upstream ranges per CVE and product, kept only for products in
+`cve_applicability_products`), and `cpe_findings` (an installed package version
+in a range, per release, with confidence and basis). They stay apart from
+`vulnerabilities`, so no count or host flag includes them; the
+`openvibes-vulns` role writes them and the console reads `cpe_findings`.
+
 Schema 10 (VM4) adds `cve_enrichment` (`cve_id`; KEV `kev_added`,
 `kev_due`, `kev_ransomware`; EPSS `epss`, `epss_percentile`,
 `epss_date`) and `feed_sources.etag`. `enrichment::{replace_kev,

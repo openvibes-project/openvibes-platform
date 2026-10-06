@@ -6,7 +6,7 @@
 use std::{path::Path, time::Duration};
 
 use chrono::{DateTime, Utc};
-use platform_store::{Client, enrichment, vulns};
+use platform_store::{Client, cpe as cpe_store, enrichment, vulns};
 use sha2::{Digest, Sha256};
 use tokio::{sync::Mutex, time::Instant};
 
@@ -182,6 +182,98 @@ pub async fn sync_nvd(
     };
     recorded.map_err(|e| e.to_string())?;
     result
+}
+
+/// Where the first read of NVD for applicability ranges starts (NVD's
+/// oldest records were modified well after this).
+fn applicability_start() -> DateTime<Utc> {
+    DateTime::from_timestamp(1_262_304_000, 0).unwrap_or_default() // 2010-01-01
+}
+
+/// What an applicability run did.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct ApplicabilityReport {
+    /// Whether NVD was read again from the start (a new product appeared).
+    pub restarted: bool,
+    /// CVE records read.
+    pub cves: u64,
+    /// Ranges kept.
+    pub ranges: u64,
+}
+
+/// Keeps NVD's affected ranges (CPE applicability) for the products
+/// installed packages could be (spec 2026-10-06-cpe-matching-design.md).
+/// Reads NVD by last-modified windows from a sync point of its own (`nvd-cpe`),
+/// each finished window saved, so an error resumes there; reads NVD from the
+/// start when a product appears that was not kept before. Records read
+/// also refresh the enrichment of CVEs advisories name.
+pub async fn sync_applicability(
+    client: &mut Client,
+    nvd: &NvdClient,
+    now: DateTime<Utc>,
+) -> Result<ApplicabilityReport, String> {
+    let store = |e: platform_store::StoreError| e.to_string();
+    let mut report = ApplicabilityReport::default();
+    let fresh = crate::cpe::ensure_products(client, "fedora")
+        .await
+        .map_err(store)?;
+    let cursor = vulns::feed_cursor(client, "nvd-cpe").await.map_err(store)?;
+    let mut from = match cursor {
+        Some(cursor) if !fresh => cursor,
+        _ => {
+            report.restarted = cursor.is_some();
+            applicability_start()
+        }
+    };
+    let result = async {
+        while from < now {
+            let to = (from + chrono::Duration::days(MAX_WINDOW_DAYS)).min(now);
+            let mut start = 0;
+            loop {
+                let page = nvd
+                    .page(format!(
+                        "lastModStartDate={}&lastModEndDate={}&resultsPerPage={PAGE}&startIndex={start}",
+                        nvd_time(from),
+                        nvd_time(to)
+                    ))
+                    .await?;
+                let ids: Vec<String> = page.entries.iter().map(|e| e.cve_id.clone()).collect();
+                report.cves += ids.len() as u64;
+                report.ranges += cpe_store::replace_applicability(client, &ids, &page.applicability)
+                    .await
+                    .map_err(store)?;
+                enrichment::upsert_nvd(client, &page.entries, now)
+                    .await
+                    .map_err(store)?;
+                start += page.count;
+                if page.count == 0 || start >= page.total {
+                    break;
+                }
+            }
+            vulns::set_feed_cursor(client, "nvd-cpe", to)
+                .await
+                .map_err(store)?;
+            from = to;
+        }
+        Ok::<(), String>(())
+    }
+    .await;
+    let key = ("nvd-cpe", "cve", "", "");
+    match &result {
+        Ok(()) => {
+            let digest: [u8; 32] = Sha256::digest(report.ranges.to_be_bytes()).into();
+            let count = i32::try_from(report.ranges).unwrap_or(i32::MAX);
+            vulns::record_feed(client, key, Ok((digest, count)), now)
+                .await
+                .map_err(store)?;
+        }
+        Err(error) => {
+            vulns::record_feed(client, key, Err(error), now)
+                .await
+                .map_err(store)?;
+        }
+    }
+    result.map(|()| report)
 }
 
 /// Reads EUVD's exploited list page by page (`page_size` per page) and
