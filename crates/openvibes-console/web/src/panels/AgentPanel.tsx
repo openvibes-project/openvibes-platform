@@ -107,10 +107,10 @@ export function AgentPanel({ id }: { id: string }) {
         <div><span className="subtle">Vulnerabilities</span><strong className="num">{vulns.loading ? "…" : vulnItems.length}</strong></div>
         <div><span className="subtle">Enrolled</span><strong>{date(data.enrolled_at)}</strong></div>
       </div>
-      {/* Same order as the left menu (#118): Compliance, Alarms, Vulnerabilities, Software, Ports, Services. */}
+      {/* Same order as the left menu (#118): Alarms, Compliance, Vulnerabilities, Software, Ports, Services. */}
       <Tabs tabs={[
-        { id: "findings", label: "Compliance", count: mine.length },
         ...(can("alarms.read") ? [{ id: "alarms", label: "Alarms", count: alarmItems.length }] as const : []),
+        { id: "findings", label: "Compliance", count: mine.length },
         { id: "vulns", label: "Vulnerabilities", count: vulnItems.length },
         { id: "software", label: "Software" },
         { id: "ports", label: "Ports" },

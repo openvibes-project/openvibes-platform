@@ -178,7 +178,7 @@ test("the Host page's tabs follow the left menu's order (#118)", async ({ page }
   const tabs = (await page.locator(".inspector").getByRole("tab").allTextContents()).map((t) => t.replace(/\d+$/, "").trim());
   const shared = tabs.filter((t) => menu.includes(t));
   expect(shared).toEqual(menu.filter((m) => shared.includes(m)));
-  expect(shared.slice(0, 3)).toEqual(["Findings", "Alarms", "Vulnerabilities"]);
+  expect(shared.slice(0, 3)).toEqual(["Alarms", "Compliance", "Vulnerabilities"]);
   expect(tabs.at(-1)).toBe("Details");
 });
 
@@ -201,7 +201,7 @@ test("a host exports the chosen sections to one CSV (#119)", async ({ page }) =>
   const inspector = page.locator(".inspector");
   await inspector.getByRole("button", { name: "Export" }).click();
   const picker = inspector.getByRole("group", { name: "Export this host" });
-  await picker.getByLabel("Findings").uncheck();
+  await picker.getByLabel("Compliance").uncheck();
   const [download] = await Promise.all([page.waitForEvent("download"), picker.getByRole("button", { name: "Download CSV" }).click()]);
   expect(download.suggestedFilename()).toMatch(/^openvibes-.*\.csv$/);
   const text = await (await download.createReadStream()).toArray().then((chunks) => Buffer.concat(chunks).toString());

@@ -14,7 +14,7 @@ test("the bottom bar is labeled; the rest sit under More (board #85)", async ({ 
   await page.goto("/");
   const bar = page.locator(".rail");
   // The Investigate views and More, each with a visible label, all on screen.
-  for (const [name, label] of [["Dashboards", "Home"], ["Compliance", "Compliance"], ["Alarms", "Alarms"], ["Vulnerabilities", "Vulns"], ["Hosts", "Hosts"], ["More", "More"]] as const) {
+  for (const [name, label] of [["Dashboards", "Home"], ["Compliance", "Comply"], ["Alarms", "Alarms"], ["Vulnerabilities", "Vulns"], ["Hosts", "Hosts"], ["More", "More"]] as const) {
     const item = bar.getByRole(name === "More" ? "button" : "link", { name, exact: true });
     await expect(item).toBeInViewport({ ratio: 1 });
     await expect(item).toContainText(label);
