@@ -138,6 +138,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
                 | P::TokensCreate
                 | P::TokensRevoke
                 | P::RulesUpload
+                | P::RulesWrite
                 | P::AlarmsRead
         ),
         BuiltInRole::Admin => true,
@@ -174,6 +175,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::TokensRevoke,
     Permission::RulesRead,
     Permission::RulesUpload,
+    Permission::RulesWrite,
     Permission::AuditRead,
     Permission::AuditExport,
     Permission::AuditRetentionManage,

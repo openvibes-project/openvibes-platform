@@ -3,7 +3,7 @@
 // contracts (types from the OpenAPI client) and the permission model, and
 // keeps mutations in memory for the life of the page.
 import type {
-  Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission,
+  Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
   Severity, TriageCounts, Vulnerability,
 } from "../api/types";
 import { createCaseStore, seedCases } from "./cases";
@@ -652,6 +652,53 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     data.bundles.set(e.set, [{ version: e.version, bytes: JSON.stringify(body).length, created_at_ms: Date.now(), published_at: iso(), published_by: actor, envelope_sha256: "demo".padEnd(64, "0"), expires_at_ms: e.expires, issuer_key_id: e.key }, ...(data.bundles.get(e.set) ?? [])]);
     audit("rule_bundle.publish", e.set, "rule_set");
     return new Response(null, { status: 201 });
+  });
+  // Draft site rules. The demo's check is shallow: it mirrors the real
+  // server's field names, not its CEL compiler.
+  const drafts = new Map<string, Map<string, RuleDraft>>([["site", new Map()], ["site-alarms", new Map()]]);
+  const draftProblems = (set: string, body: Record<string, unknown>) => {
+    const problems: { field: string; message: string }[] = [];
+    const expression = String(body.expression ?? "");
+    const depth = [...expression].reduce((d, c) => (d < 0 ? d : c === "(" || c === "[" ? d + 1 : c === ")" || c === "]" ? d - 1 : d), 0);
+    if (expression.trim() === "" || depth !== 0) problems.push({ field: "expression", message: "not a valid expression" });
+    if (!["info", "low", "medium", "high", "critical"].includes(String(body.severity))) problems.push({ field: "severity", message: "use info, low, medium, high or critical" });
+    const programs = Array.isArray(body.programs) ? body.programs.map(String) : null;
+    if (set === "site-alarms" && (programs === null || programs.length < 1 || programs.length > 8)) problems.push({ field: "programs", message: "name one to 8 distinct programs" });
+    if (set === "site" && programs !== null) problems.push({ field: "programs", message: "only alarm rules have a program prefilter" });
+    return problems;
+  };
+  route("GET", "/api/v1/rule-drafts/{set}", "rules.write", ({ set = "" }) => {
+    const store = drafts.get(set);
+    if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    return json({ items: [...store.values()].sort((a, b) => a.rule_id.localeCompare(b.rule_id)) });
+  });
+  route("POST", "/api/v1/rule-drafts/{set}/{id}/check", "rules.write", ({ set = "" }, __, body) => {
+    if (!drafts.has(set)) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    const problems = draftProblems(set, body);
+    return json({ ok: problems.length === 0, problems });
+  });
+  route("PUT", "/api/v1/rule-drafts/{set}/{id}", "rules.write", ({ set = "", id = "" }, __, body) => {
+    const store = drafts.get(set);
+    if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    const problems = draftProblems(set, body);
+    if (problems.length > 0) return json({ ok: false, problems }, 422);
+    const earlier = store.get(id);
+    const next: RuleDraft = {
+      rule_set_id: set, rule_id: id, title: String(body.title), severity: String(body.severity), confidence: Number(body.confidence), expression: String(body.expression),
+      finding_message: String(body.finding_message), programs: set === "site-alarms" ? (body.programs as string[]) : null, updated_by: actor, updated_at: iso(), version: 1,
+    };
+    if (earlier) {
+      const same = JSON.stringify({ ...earlier, version: 0, updated_at: "", updated_by: "" }) === JSON.stringify({ ...next, version: 0, updated_at: "", updated_by: "" });
+      next.version = same ? earlier.version : earlier.version + 1;
+    }
+    store.set(id, next);
+    audit("rule_draft.saved", `${set}/${id} v${next.version}`, "rule_draft");
+    return json(next);
+  });
+  route("DELETE", "/api/v1/rule-drafts/{set}/{id}", "rules.write", ({ set = "", id = "" }) => {
+    if (!drafts.get(set)?.delete(id)) return problem(404, "draft_not_found", "No such draft");
+    audit("rule_draft.deleted", `${set}/${id}`, "rule_draft");
+    return new Response(null, { status: 204 });
   });
   route("GET", "/api/v1/service-accounts", "service_accounts.read", () => json({ items: data.serviceAccounts }));
   route("GET", "/api/v1/service-accounts/{id}/tokens", "service_accounts.read", ({ id = "" }) => json({ items: data.serviceTokens.get(id) ?? [] }));

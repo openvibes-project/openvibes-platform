@@ -250,6 +250,26 @@ stay in the low thousands.
   (`alarm.suppression.created` / `.removed`).
 - Alarms are not offered to the assistant in P14.
 
+Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
+`site` findings set and the `site-alarms` alarm set only, else 404):
+
+- `GET /api/v1/rule-drafts/{set}`: the set's drafts, by rule id.
+- `POST /api/v1/rule-drafts/{set}/{rule_id}/check` (CSRF):
+  `{title, severity, confidence, expression, finding_message, programs?}`
+  returns `{ok, problems: [{field, message}]}`. The checks are the agent's
+  own: `RuleSet::validate`, `openvibes_rules::check_rule` (the loader's
+  static check of the CEL expression) and, for alarm rules, the restricted-set
+  caps (one to eight distinct programs per rule, 32 per set), the same
+  numbers the rule signer enforces.
+- `PUT /api/v1/rule-drafts/{set}/{rule_id}` (CSRF): saves a draft that
+  passes the checks (422 with the problems otherwise). A rule's `version`
+  is 1 when new, unchanged when the save changes nothing, and one more
+  otherwise. At most 512 drafts per set. Audited (`rule_draft.saved`).
+- `DELETE /api/v1/rule-drafts/{set}/{rule_id}` (CSRF): 204; audited
+  (`rule_draft.deleted`).
+
+A draft never reaches an agent: publishing a signed set comes later.
+
 ## Interfaces
 
 The production service has two HTTP surfaces:

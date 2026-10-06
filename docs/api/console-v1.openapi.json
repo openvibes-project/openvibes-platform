@@ -4736,6 +4736,211 @@
         }
       }
     },
+    "/api/v1/rule-drafts/{rule_set_id}": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "list_drafts",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The set's draft rules",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDraftList"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a site rule set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}": {
+      "put": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "save_draft",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDraftInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Saved",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleDraftView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a site rule set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The agent would refuse the rule",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleCheck"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "delete_draft",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Deleted"
+          },
+          "404": {
+            "description": "No such draft",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}/check": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "check_draft",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleDraftInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Whether the agent would accept the rule, and why not",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleCheck"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a site rule set",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-sets": {
       "get": {
         "tags": [
@@ -9269,6 +9474,7 @@
           "tokens.revoke",
           "rules.read",
           "rules.upload",
+          "rules.write",
           "audit.read",
           "audit.export",
           "audit.retention.manage",
@@ -9638,6 +9844,179 @@
             "type": "integer",
             "format": "int64",
             "description": "Monotonically increasing version."
+          }
+        }
+      },
+      "RuleCheck": {
+        "type": "object",
+        "description": "The result of checking a draft.",
+        "required": [
+          "ok",
+          "problems"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "description": "Whether the agent would accept it."
+          },
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleProblem"
+            },
+            "description": "Why not, when it would not."
+          }
+        }
+      },
+      "RuleDraftInput": {
+        "type": "object",
+        "description": "What the editor sends for one rule: everything but its id and version.",
+        "required": [
+          "title",
+          "severity",
+          "confidence",
+          "expression",
+          "finding_message"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Confidence in a match, 0 to 100.",
+            "minimum": 0
+          },
+          "expression": {
+            "type": "string",
+            "description": "CEL expression over `facts[...]` (findings) or `event[...]` (alarms)."
+          },
+          "finding_message": {
+            "type": "string",
+            "description": "Message on a match."
+          },
+          "programs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Alarm rules only: the programs (exe paths or basenames) an event must\nmatch before the expression runs; one to eight."
+          },
+          "severity": {
+            "type": "string",
+            "description": "`info`, `low`, `medium`, `high` or `critical`."
+          },
+          "title": {
+            "type": "string",
+            "description": "Short title shown on findings or alarms."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuleDraftList": {
+        "type": "object",
+        "description": "The drafts of one rule set.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleDraftView"
+            },
+            "description": "By rule id."
+          }
+        }
+      },
+      "RuleDraftView": {
+        "type": "object",
+        "description": "One saved draft rule.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "version",
+          "title",
+          "severity",
+          "confidence",
+          "expression",
+          "finding_message",
+          "updated_by",
+          "updated_at"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Confidence, 0 to 100.",
+            "minimum": 0
+          },
+          "expression": {
+            "type": "string",
+            "description": "CEL expression."
+          },
+          "finding_message": {
+            "type": "string",
+            "description": "Message on a match."
+          },
+          "programs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Alarm rules: the program prefilter."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "The rule's id within the set."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "`site` (findings) or `site-alarms` (alarms)."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Who last saved it."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The rule's version: raised each time a save changes it.",
+            "minimum": 0
+          }
+        }
+      },
+      "RuleProblem": {
+        "type": "object",
+        "description": "One thing wrong with a draft.",
+        "required": [
+          "field",
+          "message"
+        ],
+        "properties": {
+          "field": {
+            "type": "string",
+            "description": "The field it concerns: `id`, `title`, `severity`, `confidence`,\n`expression`, `finding_message`, `programs` or `rule`."
+          },
+          "message": {
+            "type": "string",
+            "description": "What is wrong."
           }
         }
       },

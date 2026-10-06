@@ -31,6 +31,7 @@ mod presence;
 mod problem;
 mod rbac;
 mod router;
+mod rule_drafts;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;

@@ -443,6 +443,9 @@ Code over these tables:
 - `alarm_suppressions` (console): `list`, `create` (derived from a visible
   alarm; `program`/`command` need global scope) and `remove` (kept as
   history), audited.
+- `rule_drafts` (schema 41): one row per draft rule of `site` or
+  `site-alarms`; `list`, `get`, `put` (upsert) and `delete`. The console
+  validates before `put`; the table holds only rules the agent would accept.
 
 ## Open ports and running services (`host_services::…`, schema 31, protocol P15)
 

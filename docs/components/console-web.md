@@ -114,6 +114,15 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   host. Choosing does nothing until the inline confirmation, which names
   what it quiets and asks why; confirming closes that alarm as a false
   positive (through investigating) and creates the suppression.
+
+**Site rules** (`/site-rules`, with `rules.write`) lists the site's own
+compliance rules and alarm rules (drafts) with New rule. A rule opens in
+the inspector as a form (id for a new rule, title, severity, confidence,
+for alarms the programs, expression, message). As you type, the server's
+check (the agent's own loader) shows what is wrong beside the field, and
+Save draft stays off until the rule passes. Delete asks first. Rules saved
+here are drafts; they reach hosts only once the set is signed and
+published, which is not on this screen yet.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
   process: program, masked command line, uid and euid when they differ,
   working directory, pid), rule and versions, first/last seen, count, and

@@ -151,6 +151,9 @@ pub enum Permission {
     /// Publish an already-signed rule bundle.
     #[serde(rename = "rules.upload")]
     RulesUpload,
+    /// Write, check and delete draft rules in the site's own rule sets.
+    #[serde(rename = "rules.write")]
+    RulesWrite,
     /// Read audit events.
     #[serde(rename = "audit.read")]
     AuditRead,

@@ -920,6 +920,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rule-drafts/{rule_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_drafts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["save_draft"];
+        post?: never;
+        delete: operations["delete_draft"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}/check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["check_draft"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-sets": {
         parameters: {
             query?: never;
@@ -2594,7 +2642,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "findings.read" | "vulnerabilities.read" | "findings.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -2751,6 +2799,80 @@ export interface components {
              * @description Monotonically increasing version.
              */
             version: number;
+        };
+        /** @description The result of checking a draft. */
+        RuleCheck: {
+            /** @description Whether the agent would accept it. */
+            ok: boolean;
+            /** @description Why not, when it would not. */
+            problems: components["schemas"]["RuleProblem"][];
+        };
+        /** @description What the editor sends for one rule: everything but its id and version. */
+        RuleDraftInput: {
+            /**
+             * Format: int32
+             * @description Confidence in a match, 0 to 100.
+             */
+            confidence: number;
+            /** @description CEL expression over `facts[...]` (findings) or `event[...]` (alarms). */
+            expression: string;
+            /** @description Message on a match. */
+            finding_message: string;
+            /**
+             * @description Alarm rules only: the programs (exe paths or basenames) an event must
+             *     match before the expression runs; one to eight.
+             */
+            programs?: string[] | null;
+            /** @description `info`, `low`, `medium`, `high` or `critical`. */
+            severity: string;
+            /** @description Short title shown on findings or alarms. */
+            title: string;
+        };
+        /** @description The drafts of one rule set. */
+        RuleDraftList: {
+            /** @description By rule id. */
+            items: components["schemas"]["RuleDraftView"][];
+        };
+        /** @description One saved draft rule. */
+        RuleDraftView: {
+            /**
+             * Format: int32
+             * @description Confidence, 0 to 100.
+             */
+            confidence: number;
+            /** @description CEL expression. */
+            expression: string;
+            /** @description Message on a match. */
+            finding_message: string;
+            /** @description Alarm rules: the program prefilter. */
+            programs?: string[] | null;
+            /** @description The rule's id within the set. */
+            rule_id: string;
+            /** @description `site` (findings) or `site-alarms` (alarms). */
+            rule_set_id: string;
+            /** @description Severity. */
+            severity: string;
+            /** @description Title. */
+            title: string;
+            /** @description When (RFC 3339). */
+            updated_at: string;
+            /** @description Who last saved it. */
+            updated_by: string;
+            /**
+             * Format: int64
+             * @description The rule's version: raised each time a save changes it.
+             */
+            version: number;
+        };
+        /** @description One thing wrong with a draft. */
+        RuleProblem: {
+            /**
+             * @description The field it concerns: `id`, `title`, `severity`, `confidence`,
+             *     `expression`, `finding_message`, `programs` or `rule`.
+             */
+            field: string;
+            /** @description What is wrong. */
+            message: string;
         };
         /** @description Published rule-set inventory. */
         RuleSetPage: {
@@ -6840,6 +6962,148 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_drafts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The set's draft rules */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDraftList"];
+                };
+            };
+            /** @description Not a site rule set */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    save_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Saved */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleDraftView"];
+                };
+            };
+            /** @description Not a site rule set */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The agent would refuse the rule */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleCheck"];
+                };
+            };
+        };
+    };
+    delete_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No such draft */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    check_draft: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleDraftInput"];
+            };
+        };
+        responses: {
+            /** @description Whether the agent would accept the rule, and why not */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleCheck"];
+                };
+            };
+            /** @description Not a site rule set */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

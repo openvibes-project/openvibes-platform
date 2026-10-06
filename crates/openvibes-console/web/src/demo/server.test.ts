@@ -192,6 +192,30 @@ describe("demo server", () => {
     expect((sets.items as { rule_set_id: string; current_version: number }[]).find((set) => set.rule_set_id === "baseline-linux")?.current_version).toBe(99);
   });
 
+  it("checks, saves, versions and deletes draft site rules", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const rule = { title: "Redis", severity: "high", confidence: 90, expression: "'6379' in facts['port.tcp.exposed']", finding_message: "Redis is exposed." };
+    const url = "/api/v1/rule-drafts/site/port.redis.exposed";
+    const bad = await json(await server.handle("POST", `${url}/check`, { ...rule, expression: "(((" }));
+    expect(bad.ok).toBe(false);
+    expect((await server.handle("PUT", url, { ...rule, expression: "(((" })).status).toBe(422);
+    expect((await json(await server.handle("PUT", url, rule))).version).toBe(1);
+    expect((await json(await server.handle("PUT", url, rule))).version).toBe(1);
+    expect((await json(await server.handle("PUT", url, { ...rule, confidence: 80 }))).version).toBe(2);
+    const alarm = { ...rule, expression: "event['process.name'] == 'sh'" };
+    expect((await server.handle("PUT", "/api/v1/rule-drafts/site-alarms/a1", alarm)).status).toBe(422);
+    expect((await server.handle("PUT", "/api/v1/rule-drafts/site-alarms/a1", { ...alarm, programs: ["nginx"] })).status).toBe(200);
+    expect(((await json(await server.handle("GET", "/api/v1/rule-drafts/site"))).items as unknown[]).length).toBe(1);
+    expect((await server.handle("DELETE", url)).status).toBe(204);
+    expect((await server.handle("DELETE", url)).status).toBe(404);
+    expect((await server.handle("GET", "/api/v1/rule-drafts/baseline")).status).toBe(404);
+  });
+
+  it("keeps draft site rules from a persona without rules.write", async () => {
+    const server = createDemoServer({ persona: "viewer" });
+    expect((await server.handle("GET", "/api/v1/rule-drafts/site")).status).toBe(403);
+  });
+
   it("answers finding history for a rule within since, like the real API", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/findings/history")).status).toBe(400);

@@ -14,6 +14,7 @@ import { AdvisoryPanel } from "../panels/AdvisoryPanel";
 import { AlarmPanel } from "../panels/AlarmPanel";
 import { CasePanel, NewCasePanel } from "../panels/CasePanel";
 import { AgentPanel } from "../panels/AgentPanel";
+import { SiteRulePanel } from "../panels/SiteRulePanel";
 import { PackagePanel, splitPackageId } from "../panels/PackagePanel";
 import { PortPanel, UnitPanel, splitPortId } from "../panels/PortPanel";
 import { FindingPanel, splitFindingId } from "../panels/FindingPanel";
@@ -21,6 +22,7 @@ import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPane
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/Cases";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
+import { SiteRules } from "../views/SiteRules";
 import { About } from "../views/About";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
@@ -58,6 +60,7 @@ export const views: readonly ViewDef[] = [
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
+  { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
   { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
   { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
@@ -93,6 +96,7 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   "service-account": { label: "Service account", icon: "service", title: (id) => id === "new" ? "New account" : id, render: (id) => <ServiceAccountPanel id={id} /> },
   "audit-event": { label: "Audit event", icon: "audit", title: (id) => `#${id}`, render: (id) => <AuditEventPanel id={id} /> },
   user: { label: "User", icon: "user", title: (id) => id === "new" ? "New user" : id, render: (id) => id === "new" ? <NewUser /> : <UserPanel id={id} /> },
+  "site-rule": { label: "Site rule", icon: "rules", title: (id) => { const name = id.slice(id.indexOf("/") + 1); return name === "new" ? "New rule" : name; }, render: (id) => <SiteRulePanel id={id} /> },
   "rule-bundle": { label: "Rule bundle", icon: "rules", title: () => "Publish bundle", render: () => <PublishBundle /> },
   "widget-gallery": { label: "Add widget", icon: "plus", title: () => "Add widget", render: () => <WidgetGalleryPanel /> },
   widget: { label: "Widget", icon: "filter", title: (id) => id, render: (id) => <WidgetSettingsPanel id={id} /> },
