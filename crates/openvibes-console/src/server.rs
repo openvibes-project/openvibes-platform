@@ -647,6 +647,7 @@ pub async fn serve(
                 })
                 .transpose()?
                 .flatten();
+            crate::about::mark_started();
             (
                 crate::router::authenticated_router_with_assistant(
                     pool.clone(),

@@ -1226,6 +1226,49 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** @description One CA certificate. */
+        AboutCertificate: {
+            /** @description End of validity. */
+            not_after: string;
+            /** @description `root` or `intermediate`. */
+            role: string;
+        };
+        /** @description One vulnerability feed. */
+        AboutFeed: {
+            /**
+             * Format: int32
+             * @description Advisories in the last good content.
+             */
+            advisories: number;
+            /** @description Whether the last check failed. */
+            failing: boolean;
+            /** @description Last time the content changed. */
+            last_changed_at?: string | null;
+            /** @description Last check. */
+            last_checked_at?: string | null;
+            /** @description Feed name, e.g. `fedora-44-x86_64`. */
+            source: string;
+        };
+        /** @description Agent counts for the About page. */
+        AboutFleet: {
+            /**
+             * Format: int64
+             * @description Active agents (enrolled and not revoked).
+             */
+            active: number;
+            /** @description Newest agent version any active agent reports. */
+            newest_agent_version?: string | null;
+            /**
+             * Format: int64
+             * @description Active agents that reported recently.
+             */
+            online: number;
+            /**
+             * Format: int64
+             * @description Revoked agents.
+             */
+            revoked: number;
+        };
         /** @description Versions of the running platform. */
         AboutResponse: {
             /**
@@ -1233,8 +1276,16 @@ export interface components {
              * @description Database schema version actually applied.
              */
             applied_schema_version?: number | null;
+            /** @description The CA certificates the platform issues under. */
+            certificates: components["schemas"]["AboutCertificate"][];
             /** @description PostgreSQL server version, when the database reports one. */
             database_version?: string | null;
+            /** @description Vulnerability feeds and when they last updated. */
+            feeds: components["schemas"]["AboutFeed"][];
+            /** @description Agents by state. */
+            fleet: components["schemas"]["AboutFleet"];
+            /** @description Operating system and CPU architecture the console runs on. */
+            platform: string;
             /** @description Platform release this console belongs to. */
             platform_version: string;
             /**
@@ -1242,6 +1293,8 @@ export interface components {
              * @description Database schema version the platform requires.
              */
             schema_version: number;
+            /** @description When this console process started. */
+            started_at: string;
             /** @description Whether this console serves its web UI from the same build. */
             web_ui_embedded: boolean;
         };

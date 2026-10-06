@@ -5866,13 +5866,107 @@
   },
   "components": {
     "schemas": {
+      "AboutCertificate": {
+        "type": "object",
+        "description": "One CA certificate.",
+        "required": [
+          "role",
+          "not_after"
+        ],
+        "properties": {
+          "not_after": {
+            "type": "string",
+            "description": "End of validity."
+          },
+          "role": {
+            "type": "string",
+            "description": "`root` or `intermediate`."
+          }
+        }
+      },
+      "AboutFeed": {
+        "type": "object",
+        "description": "One vulnerability feed.",
+        "required": [
+          "source",
+          "advisories",
+          "failing"
+        ],
+        "properties": {
+          "advisories": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Advisories in the last good content."
+          },
+          "failing": {
+            "type": "boolean",
+            "description": "Whether the last check failed."
+          },
+          "last_changed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last time the content changed."
+          },
+          "last_checked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Last check."
+          },
+          "source": {
+            "type": "string",
+            "description": "Feed name, e.g. `fedora-44-x86_64`."
+          }
+        }
+      },
+      "AboutFleet": {
+        "type": "object",
+        "description": "Agent counts for the About page.",
+        "required": [
+          "active",
+          "online",
+          "revoked"
+        ],
+        "properties": {
+          "active": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active agents (enrolled and not revoked)."
+          },
+          "newest_agent_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Newest agent version any active agent reports."
+          },
+          "online": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Active agents that reported recently."
+          },
+          "revoked": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Revoked agents."
+          }
+        }
+      },
       "AboutResponse": {
         "type": "object",
         "description": "Versions of the running platform.",
         "required": [
           "platform_version",
           "schema_version",
-          "web_ui_embedded"
+          "web_ui_embedded",
+          "platform",
+          "started_at",
+          "fleet",
+          "certificates",
+          "feeds"
         ],
         "properties": {
           "applied_schema_version": {
@@ -5883,12 +5977,34 @@
             "format": "int32",
             "description": "Database schema version actually applied."
           },
+          "certificates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AboutCertificate"
+            },
+            "description": "The CA certificates the platform issues under."
+          },
           "database_version": {
             "type": [
               "string",
               "null"
             ],
             "description": "PostgreSQL server version, when the database reports one."
+          },
+          "feeds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AboutFeed"
+            },
+            "description": "Vulnerability feeds and when they last updated."
+          },
+          "fleet": {
+            "$ref": "#/components/schemas/AboutFleet",
+            "description": "Agents by state."
+          },
+          "platform": {
+            "type": "string",
+            "description": "Operating system and CPU architecture the console runs on."
           },
           "platform_version": {
             "type": "string",
@@ -5898,6 +6014,10 @@
             "type": "integer",
             "format": "int32",
             "description": "Database schema version the platform requires."
+          },
+          "started_at": {
+            "type": "string",
+            "description": "When this console process started."
           },
           "web_ui_embedded": {
             "type": "boolean",

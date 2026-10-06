@@ -264,6 +264,9 @@ async fn about_is_for_any_signed_in_user_and_the_update_check_is_opt_out() {
             .as_str()
             .is_some_and(|v| !v.is_empty())
     );
+    assert!(body["fleet"]["active"].is_i64());
+    assert!(body["started_at"].as_str().is_some_and(|v| !v.is_empty()));
+    assert!(body["certificates"].is_array() && body["feeds"].is_array());
     // This router has no checker, the configuration's `update_check = false`.
     let (status, body, _) = call(
         &router,

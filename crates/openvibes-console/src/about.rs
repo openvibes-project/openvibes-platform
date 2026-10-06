@@ -7,7 +7,10 @@
 //! is reported as `unavailable`. It is a separate route so the page does not
 //! wait on the network.
 
-use std::time::{Duration, Instant};
+use std::{
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
 
 use axum::{
     Json,
@@ -15,6 +18,7 @@ use axum::{
     http::{HeaderMap, HeaderValue, header},
     response::{IntoResponse, Response},
 };
+use chrono::{DateTime, SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use tokio::sync::Mutex;
 use utoipa::ToSchema;
@@ -45,6 +49,93 @@ pub(crate) struct AboutResponse {
     pub database_version: Option<String>,
     /// Whether this console serves its web UI from the same build.
     pub web_ui_embedded: bool,
+    /// Operating system and CPU architecture the console runs on.
+    pub platform: String,
+    /// When this console process started.
+    pub started_at: String,
+    /// Agents by state.
+    pub fleet: AboutFleet,
+    /// The CA certificates the platform issues under.
+    pub certificates: Vec<AboutCertificate>,
+    /// Vulnerability feeds and when they last updated.
+    pub feeds: Vec<AboutFeed>,
+}
+
+/// Agent counts for the About page.
+#[derive(Clone, Debug, Default, Serialize, ToSchema)]
+pub(crate) struct AboutFleet {
+    /// Active agents (enrolled and not revoked).
+    pub active: i64,
+    /// Active agents that reported recently.
+    pub online: i64,
+    /// Revoked agents.
+    pub revoked: i64,
+    /// Newest agent version any active agent reports.
+    pub newest_agent_version: Option<String>,
+}
+
+/// One CA certificate.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub(crate) struct AboutCertificate {
+    /// `root` or `intermediate`.
+    pub role: String,
+    /// End of validity.
+    pub not_after: String,
+}
+
+/// One vulnerability feed.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub(crate) struct AboutFeed {
+    /// Feed name, e.g. `fedora-44-x86_64`.
+    pub source: String,
+    /// Advisories in the last good content.
+    pub advisories: i32,
+    /// Last check.
+    pub last_checked_at: Option<String>,
+    /// Last time the content changed.
+    pub last_changed_at: Option<String>,
+    /// Whether the last check failed.
+    pub failing: bool,
+}
+
+fn time(at: DateTime<Utc>) -> String {
+    at.to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+static STARTED_AT: OnceLock<DateTime<Utc>> = OnceLock::new();
+
+/// Records the process start; call once when the server is built.
+pub(crate) fn mark_started() {
+    STARTED_AT.get_or_init(Utc::now);
+}
+
+fn newest_version(versions: impl Iterator<Item = String>) -> Option<String> {
+    versions.max_by_key(|v| parse_version(v).unwrap_or([0; 3]))
+}
+
+async fn fleet(client: &platform_store::Client, now: DateTime<Utc>) -> AboutFleet {
+    let Ok(agents) =
+        platform_store::agents::list(client, platform_store::agents::Filter::All, now).await
+    else {
+        return AboutFleet::default();
+    };
+    let window = chrono::Duration::minutes(platform_store::OFFLINE_AFTER_MINUTES);
+    let active: Vec<_> = agents.iter().filter(|a| a.status == "active").collect();
+    AboutFleet {
+        active: i64::try_from(active.len()).unwrap_or(i64::MAX),
+        online: i64::try_from(
+            active
+                .iter()
+                .filter(|a| a.last_seen_at.is_some_and(|seen| seen >= now - window))
+                .count(),
+        )
+        .unwrap_or(i64::MAX),
+        revoked: i64::try_from(agents.iter().filter(|a| a.status == "revoked").count())
+            .unwrap_or(i64::MAX),
+        newest_agent_version: newest_version(
+            active.iter().filter_map(|a| a.scanner_version.clone()),
+        ),
+    }
 }
 
 /// Outcome of comparing against the latest published release.
@@ -242,12 +333,40 @@ pub(crate) async fn about(State(state): State<AuthHttpState>, headers: HeaderMap
         .await
         .ok()
         .and_then(|row| row.try_get::<_, String>(0).ok());
+    let now = Utc::now();
+    let fleet = fleet(&client, now).await;
+    let certificates = platform_store::ca::list(&client)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|c| AboutCertificate {
+            role: c.role,
+            not_after: time(c.not_after),
+        })
+        .collect();
+    let feeds = platform_store::vulns::feeds(&client)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|f| AboutFeed {
+            source: f.source,
+            advisories: f.advisories,
+            last_checked_at: f.last_checked_at.map(time),
+            last_changed_at: f.last_changed_at.map(time),
+            failing: f.last_error.is_some(),
+        })
+        .collect();
     no_store(Json(AboutResponse {
         platform_version: env!("CARGO_PKG_VERSION").to_owned(),
         schema_version: platform_store::SCHEMA_VERSION,
         applied_schema_version,
         database_version,
         web_ui_embedded: cfg!(feature = "embedded-ui"),
+        platform: format!("{} {}", std::env::consts::OS, std::env::consts::ARCH),
+        started_at: time(*STARTED_AT.get_or_init(Utc::now)),
+        fleet,
+        certificates,
+        feeds,
     }))
 }
 
@@ -290,6 +409,16 @@ mod tests {
             r#"{{"tag_name":"{tag}","html_url":"{RELEASE_PAGE_PREFIX}releases/tag/{tag}","draft":false,"prerelease":false,"assets":[]}}"#
         )
         .into_bytes()
+    }
+
+    #[test]
+    fn newest_version_compares_numerically() {
+        let versions = ["0.2.9", "0.2.10", "junk"].map(String::from);
+        assert_eq!(
+            newest_version(versions.into_iter()).as_deref(),
+            Some("0.2.10")
+        );
+        assert_eq!(newest_version(std::iter::empty()), None);
     }
 
     #[test]
