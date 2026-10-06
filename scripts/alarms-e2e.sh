@@ -88,7 +88,7 @@ cat > "$A/rules.json" <<'RULES'
 {"schema_version":1,"rules":[
  {"id":"web-shell","version":1,"title":"Shell from a web server","severity":"high","confidence":80,
   "kind":"process_event",
-  "expression":"event['parent.name'] == 'fake-nginx' && event['process.cmdline'].startsWith('sh -c ')",
+  "expression":"event['parent.exe'] == '/tmp/fake-nginx' && event['process.cmdline'].startsWith('sh -c ')",
   "finding_message":"A web server started a shell"}]}
 RULES
 "$SIGN" sign "$A/signing.key" "$A/rules.json" alarms-e2e 1 e2e.rules 1 "$A/bundle.json" >/dev/null
