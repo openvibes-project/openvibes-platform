@@ -280,6 +280,25 @@ Draft site rules (`rule_drafts.rs`; need `rules.write`, global scope; the
   no drafts or nothing changed, 422 over a limit, 429 locked out or hourly
   limit, 503 signer unreachable.
 
+- `POST /api/v1/rule-drafts/site/{rule_id}/test` (`rules.write`, CSRF; body
+  `{agent_id, rule}`): runs the typed rule, saved or not, on the facts the
+  platform can rebuild for the host (`package.names`, `package.count` and
+  the `port.{tcp,udp}.*` facts from its listeners) with the agent's own
+  evaluator. The rule is signed with a key made for the call and loaded
+  back through the agent's loader, so the evaluator sees what an agent
+  would. Result `match` (with the evidence keys), `no_match`, `unavailable`
+  (a fact the platform doesn't hold, such as `process.names`, or a host
+  that never reported its listeners) or `failed`. Alarm rules answer 422:
+  they run on process starts, which the platform doesn't hold.
+
+- `GET /api/v1/site-rules/fleet` (`rules.write`, global): for `site` and
+  `site-alarms`, how many hosts are current, behind, refused the bundle, or
+  don't list the set (from each host's last health report), the hosts that
+  are not current in either set (up to 200), how many hosts have sent no
+  report yet (in no count), and the two `[[rule_sets]]` blocks to paste into
+  an agent's `agent.toml` when the platform trusts a key for both sets.
+  Before the first publish a host that lists a set counts as current.
+
 A draft reaches an agent only once published this way.
 
 ## Interfaces

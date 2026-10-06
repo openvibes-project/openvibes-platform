@@ -226,6 +226,28 @@ describe("demo server", () => {
     expect((await json(await server.handle("POST", `${url}/publish`, { password: "pw" }))).version).toBe(2);
   });
 
+  it("tests a rule against a host", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const agent = ((await json(await server.handle("GET", "/api/v1/agents"))).items as { id: string }[])[0]?.id ?? "";
+    const url = "/api/v1/rule-drafts/site/r1/test";
+    const rule = { title: "Redis", severity: "high", confidence: 90, expression: "'443' in facts['port.tcp.exposed']", finding_message: "Exposed." };
+    expect((await json(await server.handle("POST", url, { agent_id: agent, rule }))).outcome).toBe("match");
+    expect((await json(await server.handle("POST", url, { agent_id: agent, rule: { ...rule, expression: "'6379' in facts['port.tcp.exposed']" } }))).outcome).toBe("no_match");
+    expect((await json(await server.handle("POST", url, { agent_id: agent, rule: { ...rule, expression: "'sshd' in facts['process.names']" } }))).outcome).toBe("unavailable");
+    expect((await server.handle("POST", url, { agent_id: "nobody", rule })).status).toBe(404);
+    expect((await server.handle("POST", "/api/v1/rule-drafts/site-alarms/a/test", { agent_id: agent, rule })).status).toBe(422);
+  });
+
+  it("reports the fleet's site rule sets", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const fleet = await json(await server.handle("GET", "/api/v1/site-rules/fleet"));
+    const sets = fleet.sets as { rule_set_id: string; missing: number; current: number }[];
+    expect(sets.map((set) => set.rule_set_id)).toEqual(["site", "site-alarms"]);
+    expect(sets[0]?.missing).toBeGreaterThan(0);
+    expect(String(fleet.paste)).toContain('id = "site-alarms"');
+    expect((await server.handle("GET", "/api/v1/site-rules/fleet")).status).toBe(200);
+  });
+
   it("keeps draft site rules from a persona without rules.write", async () => {
     const server = createDemoServer({ persona: "viewer" });
     expect((await server.handle("GET", "/api/v1/rule-drafts/site")).status).toBe(403);

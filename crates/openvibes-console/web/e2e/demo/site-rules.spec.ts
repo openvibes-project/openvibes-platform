@@ -65,3 +65,33 @@ test("publishing a set asks for the password and shows what changes", async ({ p
   await expect(section).toContainText("Version 1 is published");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("a rule is tested against a host", async ({ page }) => {
+  await page.goto("/site-rules");
+  await page.getByRole("button", { name: "New rule" }).first().click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByLabel("Rule id").fill("port.https.exposed");
+  await inspector.getByLabel("Title").fill("HTTPS is exposed");
+  await inspector.getByLabel("Expression").fill("'443' in facts['port.tcp.exposed']");
+  await inspector.getByLabel("Finding message").fill("HTTPS listens beyond loopback.");
+  await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
+  await inspector.getByRole("button", { name: "Save draft" }).click();
+  await expect(inspector.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
+  await inspector.getByLabel("Host").selectOption({ index: 1 });
+  await inspector.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(inspector.getByRole("status")).toContainText("Matches: the rule would raise a finding");
+  await inspector.getByLabel("Expression").fill("'sshd' in facts['process.names']");
+  await inspector.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(inspector.getByRole("status")).toContainText("Unavailable here");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});
+
+test("the fleet view lists hosts without the site rule sets and the lines to paste", async ({ page }) => {
+  await page.goto("/site-rules");
+  const hosts = page.locator(".view-section").filter({ hasText: "Not in agent.toml" }).last();
+  await expect(hosts.getByRole("heading", { name: "Hosts" })).toBeVisible();
+  await expect(hosts).toContainText("not set up");
+  await expect(hosts.getByText('id = "site-alarms"')).toBeVisible();
+  await expect(hosts.getByRole("button", { name: "Copy the agent.toml lines" })).toBeVisible();
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

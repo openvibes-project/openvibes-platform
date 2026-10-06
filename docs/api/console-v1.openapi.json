@@ -5168,6 +5168,74 @@
         }
       }
     },
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}/test": {
+      "post": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "test_rule",
+        "parameters": [
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleTestInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The rule's result on the host",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuleTestResult"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not a site rule set, or no such host",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The rule does not pass the agent's checks, or is an alarm rule",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/rule-sets": {
       "get": {
         "tags": [
@@ -5709,6 +5777,36 @@
             "description": "Too many wrong passwords for this account (shared with sign-in)",
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/site-rules/fleet": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "site_fleet",
+        "responses": {
+          "200": {
+            "description": "Which hosts run the site rule sets",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SiteFleet"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Needs rules.write and global access",
+            "content": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -10603,6 +10701,85 @@
           }
         }
       },
+      "RuleTestFacts": {
+        "type": "object",
+        "description": "What the platform held for the host when it tested.",
+        "required": [
+          "packages",
+          "listeners"
+        ],
+        "properties": {
+          "listeners": {
+            "type": "integer",
+            "description": "Listening sockets.",
+            "minimum": 0
+          },
+          "listeners_reported_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "When the host last reported its listeners; absent if it never did."
+          },
+          "packages": {
+            "type": "integer",
+            "description": "Distinct installed package names.",
+            "minimum": 0
+          }
+        }
+      },
+      "RuleTestInput": {
+        "type": "object",
+        "description": "The host and rule to test.",
+        "required": [
+          "agent_id",
+          "rule"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host to test against."
+          },
+          "rule": {
+            "$ref": "#/components/schemas/RuleDraftInput",
+            "description": "The rule as typed in the editor, saved or not."
+          }
+        },
+        "additionalProperties": false
+      },
+      "RuleTestResult": {
+        "type": "object",
+        "description": "The rule's result on one host.",
+        "required": [
+          "outcome",
+          "evidence",
+          "facts"
+        ],
+        "properties": {
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The fact keys behind a match."
+          },
+          "facts": {
+            "$ref": "#/components/schemas/RuleTestFacts",
+            "description": "The data the test ran on."
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why a rule failed, or why it is unavailable here."
+          },
+          "outcome": {
+            "type": "string",
+            "description": "`match`, `no_match`, `unavailable` or `failed`."
+          }
+        }
+      },
       "SaveAssetGroupRequest": {
         "type": "object",
         "description": "Request to create or replace an asset group's complete selector set.",
@@ -10974,6 +11151,129 @@
           }
         },
         "additionalProperties": false
+      },
+      "SiteFleet": {
+        "type": "object",
+        "description": "The fleet's site rule sets.",
+        "required": [
+          "sets",
+          "reporting",
+          "not_reporting",
+          "hosts",
+          "hosts_truncated"
+        ],
+        "properties": {
+          "hosts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteHostFleet"
+            },
+            "description": "Hosts not current in some set, up to 200."
+          },
+          "hosts_truncated": {
+            "type": "boolean",
+            "description": "More than 200 hosts are not current."
+          },
+          "not_reporting": {
+            "type": "integer",
+            "description": "Hosts that haven't sent one yet; they are in no count.",
+            "minimum": 0
+          },
+          "paste": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The two `[[rule_sets]]` blocks for `agent.toml`, when the platform\ntrusts a key for both sets."
+          },
+          "reporting": {
+            "type": "integer",
+            "description": "Hosts that have sent a health report (the counts cover these).",
+            "minimum": 0
+          },
+          "sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SiteSetFleet"
+            },
+            "description": "Both site sets."
+          }
+        }
+      },
+      "SiteHostFleet": {
+        "type": "object",
+        "description": "One host's state for each site set.",
+        "required": [
+          "agent_id",
+          "site",
+          "site_alarms"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "Agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Hostname, when known."
+          },
+          "site": {
+            "type": "string",
+            "description": "`current`, `behind`, `refused` or `missing` for `site`."
+          },
+          "site_alarms": {
+            "type": "string",
+            "description": "The same for `site-alarms`."
+          }
+        }
+      },
+      "SiteSetFleet": {
+        "type": "object",
+        "description": "One site set across the fleet.",
+        "required": [
+          "rule_set_id",
+          "current",
+          "behind",
+          "refused",
+          "missing"
+        ],
+        "properties": {
+          "behind": {
+            "type": "integer",
+            "description": "Hosts running an older version.",
+            "minimum": 0
+          },
+          "current": {
+            "type": "integer",
+            "description": "Hosts running the published version (or any, before a publish).",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "integer",
+            "description": "Hosts whose `agent.toml` doesn't list the set, or that haven't\naccepted a bundle yet.",
+            "minimum": 0
+          },
+          "published_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "The published version; absent before the first publish."
+          },
+          "refused": {
+            "type": "integer",
+            "description": "Hosts that refused the bundle the platform serves.",
+            "minimum": 0
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "`site` or `site-alarms`."
+          }
+        }
       },
       "SoftwareAdvisoryView": {
         "type": "object",

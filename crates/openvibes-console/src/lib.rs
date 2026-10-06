@@ -33,9 +33,11 @@ mod problem;
 mod rbac;
 mod router;
 mod rule_drafts;
+mod rule_test;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
+mod site_fleet;
 mod software;
 mod users;
 

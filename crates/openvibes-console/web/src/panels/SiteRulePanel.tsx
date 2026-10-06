@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { RuleCheck, RuleDraft, RuleDraftInput } from "../api/types";
+import type { Agent, RuleCheck, RuleDraft, RuleDraftInput, RuleTestResult } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
@@ -34,6 +34,61 @@ const fromDraft = (draft: RuleDraft): Form => ({
   finding_message: draft.finding_message,
   programs: (draft.programs ?? []).join(" "),
 });
+
+
+const OUTCOMES: Record<string, string> = {
+  match: "Matches: the rule would raise a finding on this host.",
+  no_match: "No match on this host.",
+  unavailable: "Unavailable here.",
+  failed: "The rule failed on this host.",
+};
+
+// Runs the typed rule over the facts the platform can rebuild for one host:
+// packages and listening ports.
+function RuleTest({ set, ruleId, input, enabled }: { set: string; ruleId: string; input: RuleDraftInput; enabled: boolean }) {
+  const hosts = useResource<{ items: Agent[] }>("/api/v1/agents?state=active&limit=100");
+  const [agent, setAgent] = useState("");
+  const [result, setResult] = useState<RuleTestResult>();
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const run = () => {
+    setBusy(true);
+    setError(undefined);
+    setResult(undefined);
+    request<RuleTestResult>("POST", `/api/v1/rule-drafts/${set}/${encodeURIComponent(ruleId)}/test`, { agent_id: agent, rule: input })
+      .then(setResult, (e: unknown) => setError(e instanceof ApiError ? e.message : "Could not test the rule"))
+      .finally(() => setBusy(false));
+  };
+  if (set !== "site") {
+    return <Section title="Test against a host"><p className="subtle">Alarm rules run on process starts, which the platform doesn't hold. They are checked as you type; test one on a host.</p></Section>;
+  }
+  return (
+    <Section title="Test against a host">
+      <p className="subtle">Runs the rule on what the platform holds for a host: its package names and listening ports. A rule over anything else shows as unavailable here; the agent evaluates it.</p>
+      <div className="row">
+        <label className="field grow">Host
+          <select className="select" value={agent} onChange={(e) => { setAgent(e.target.value); setResult(undefined); }}>
+            <option value="">Choose a host</option>
+            {(hosts.data?.items ?? []).map((host) => <option key={host.id} value={host.id}>{host.hostname ?? host.id}</option>)}
+          </select>
+        </label>
+        <button type="button" className="button" disabled={busy || agent === "" || !enabled} onClick={run}>Test</button>
+      </div>
+      {error && <p className="confirm__error" role="alert">{error}</p>}
+      {result && (
+        <div className="callout" role="status">
+          <span>
+            {OUTCOMES[result.outcome] ?? result.outcome}
+            {result.evidence.length > 0 && <> Evidence: <span className="mono">{result.evidence.join(", ")}</span>.</>}
+            {result.message && <> {result.message}</>}
+            {" "}Ran on {result.facts.packages} packages and {result.facts.listeners} listeners
+            {result.facts.listeners_reported_at ? "." : "; this host has not reported its listeners."}
+          </span>
+        </div>
+      )}
+    </Section>
+  );
+}
 
 export function SiteRulePanel({ id }: { id: string }) {
   const slash = id.indexOf("/");
@@ -125,8 +180,9 @@ export function SiteRulePanel({ id }: { id: string }) {
             nav.remove({ kind: "site-rule", id });
           })}>Delete</Confirm>
         )}
-        <Section title="Next">
-          <p className="subtle">Saved rules are drafts. Publish the set from the Site rules page. Testing a rule against a host is the next step.</p>
+        <RuleTest set={set} ruleId={effectiveId} input={toInput(current, alarm)} enabled={write && ready && check?.ok === true} />
+        <Section title="Publishing">
+          <p className="subtle">Saved rules are drafts. Publish the set from the Site rules page.</p>
         </Section>
       </div>
     </>

@@ -718,6 +718,22 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("rule_draft.deleted", `${set}/${id}`, "rule_draft");
     return new Response(null, { status: 204 });
   });
+  route("POST", "/api/v1/rule-drafts/{set}/{id}/test", "rules.write", ({ set = "" }, __, body) => {
+    if (!drafts.has(set)) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
+    if (set !== "site") return problem(422, "alarm_test_unsupported", "Alarm rules run on process starts, which the platform doesn't hold; test them on a host");
+    const agent = data.agents.find((candidate) => candidate.id === String(body.agent_id ?? ""));
+    if (!agent) return problem(404, "host_not_found", "No such host");
+    const rule = (body.rule ?? {}) as Record<string, unknown>;
+    if (draftProblems(set, rule).length > 0) return problem(422, "invalid_rule", "The rule does not pass the agent's checks yet");
+    const expression = String(rule.expression);
+    // The demo knows two hosts' ports: enough to show every outcome.
+    const exposed = ["22", "443"];
+    const facts = { packages: 312, listeners: 4, listeners_reported_at: iso() };
+    if (!/facts\['(port|package)\./.test(expression)) return json({ outcome: "unavailable", evidence: [], message: "The platform doesn't hold a fact this rule reads. The platform rebuilds only packages and listening ports; the agent evaluates the rest.", facts });
+    const port = /'(\d+)' in facts\['port\.tcp\.exposed'\]/.exec(expression)?.[1];
+    const matched = port === undefined ? expression.includes("package.names") : exposed.includes(port);
+    return json({ outcome: matched ? "match" : "no_match", evidence: matched ? [port === undefined ? "package.names" : "port.tcp.exposed"] : [], message: null, facts });
+  });
   // Publishing: the demo "signs" by remembering the drafts as the published set.
   const published = new Map<string, { version: number; rules: Map<string, string> }>();
   const draftChanges = (set: string, store: Map<string, RuleDraft>) => {
@@ -732,6 +748,23 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort((a, b) => a.localeCompare(b));
     return out;
   };
+  route("GET", "/api/v1/site-rules/fleet", "rules.write", () => {
+    const sets = ["site", "site-alarms"].map((id) => ({ rule_set_id: id, published_version: published.get(id)?.version ?? null, current: 0, behind: 0, refused: 0, missing: 0 }));
+    const hosts: { agent_id: string; hostname: string | null; site: string; site_alarms: string }[] = [];
+    const stateOf = (agent: Agent, set: (typeof sets)[number]) => {
+      const entry = agent.rule_sets.find((candidate) => candidate.id === set.rule_set_id);
+      if (!entry?.version) return "missing";
+      if (entry.refused) return "refused";
+      return set.published_version !== null && entry.version < set.published_version ? "behind" : "current";
+    };
+    for (const agent of data.agents.filter((candidate) => candidate.status === "active" || candidate.status === "stale")) {
+      const states = sets.map((set) => stateOf(agent, set));
+      sets.forEach((set, index) => { set[states[index] as "current" | "behind" | "refused" | "missing"] += 1; });
+      if (states.some((state) => state !== "current") && hosts.length < 200) hosts.push({ agent_id: agent.id, hostname: agent.hostname ?? null, site: states[0] ?? "missing", site_alarms: states[1] ?? "missing" });
+    }
+    const line = (id: string) => `[[rule_sets]]\nid = "${id}"\ntrusted_keys = [{ issuer_key_id = "site.key", public_key = "DEMO-PUBLIC-KEY-NOT-REAL" }]\n`;
+    return json({ sets, reporting: hosts.length, not_reporting: 0, hosts, hosts_truncated: false, paste: line("site") + line("site-alarms") });
+  });
   route("GET", "/api/v1/rule-drafts/{set}/changes", "rules.write", ({ set = "" }) => {
     const store = drafts.get(set);
     if (!store) return problem(404, "rule_set_not_found", "Only the site's own rule sets have drafts");
