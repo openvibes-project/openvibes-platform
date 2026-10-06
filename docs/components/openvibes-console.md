@@ -132,6 +132,12 @@ and stay in the Vulnerabilities view.
   and `running_kernel` from the last inventory, and `inventory_at` (the
   time the software list is "as of"). Each is null until an inventory
   arrives.
+- `AgentView.rule_sets` lists the rule sets the agent reported in its latest
+  health report (`id`, `version`, `expires_at_ms`, `refused`), and
+  `rule_sets_at` is when that report was written. Both are empty or null for
+  an agent that has not sent a health report. The Host page's Rule sets
+  section shows them, flags a set behind the published version (when the
+  user holds `rules.read`) and a refused bundle.
 - `GET /api/v1/agents/{agent_id}/packages`: the host's packages by name
   (manager, name, epoch, version, release, arch, `fixable_vulnerable`).
   `q` is a case-insensitive substring of the name (at most 128 bytes).

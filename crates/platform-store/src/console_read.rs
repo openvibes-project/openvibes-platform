@@ -143,6 +143,23 @@ pub struct Agent {
     pub running_kernel: Option<String>,
     /// When the last inventory (installed software) was received.
     pub inventory_at: Option<DateTime<Utc>>,
+    /// Rule sets in the agent's latest health report (empty before P12).
+    pub rule_sets: Vec<AgentRuleSet>,
+    /// When that report was written.
+    pub rule_sets_at: Option<DateTime<Utc>>,
+}
+
+/// One rule set an agent reported holding, from its heartbeat health.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct AgentRuleSet {
+    /// Rule set id.
+    pub id: String,
+    /// Bundle version in use; `None` before one was accepted.
+    pub version: Option<i64>,
+    /// When that bundle expires, in Unix milliseconds.
+    pub expires_at_ms: Option<i64>,
+    /// Why the last provisioned bundle was refused, if it was.
+    pub refused: Option<String>,
 }
 
 /// Cursor for agent order: last seen descending/nulls last, then id ascending.
@@ -608,7 +625,8 @@ pub async fn agents_in_scope(
                          WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1 THEN 'stale'
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
-                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at,
+                    a.health -> 'rule_sets', a.health_at
              FROM agents a
              WHERE ($2::text IS NULL OR
                     ($2 = 'active' AND a.status = 'active'
@@ -691,7 +709,8 @@ pub async fn agent_in_scope(
                          WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $2 THEN 'stale'
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
-                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at,
+                    a.health -> 'rule_sets', a.health_at
              FROM agents a WHERE a.agent_id = $1
                AND ($3::boolean OR EXISTS (
                     SELECT 1 FROM console_asset_group_selectors s
@@ -733,7 +752,8 @@ pub async fn agent_matches_in_scope(
                      WHEN agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $4 THEN 'stale'
                      ELSE 'active' END AS state,
                 a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
-                    a.os_id, a.os_version, a.running_kernel, a.inventory_at
+                    a.os_id, a.os_version, a.running_kernel, a.inventory_at,
+                    a.health -> 'rule_sets', a.health_at
          FROM agents a
          WHERE (a.agent_id::text = $1 OR lower(a.hostname) = lower($1))
            AND {visible}
@@ -1276,7 +1296,34 @@ fn agent_from_row(row: &Row) -> Agent {
         os_version: row.get(9),
         running_kernel: row.get(10),
         inventory_at: row.get(11),
+        rule_sets: row
+            .get::<_, Option<serde_json::Value>>(12)
+            .map_or_else(Vec::new, |value| agent_rule_sets(&value)),
+        rule_sets_at: row.get(13),
     }
+}
+
+/// The `rule_sets` of a stored health report. A report that does not parse
+/// counts as absent, like [`crate::agents`].
+fn agent_rule_sets(value: &serde_json::Value) -> Vec<AgentRuleSet> {
+    let Some(sets) = value.as_array() else {
+        return Vec::new();
+    };
+    sets.iter()
+        .filter_map(|set| {
+            Some(AgentRuleSet {
+                id: set.get("id")?.as_str()?.to_owned(),
+                version: set.get("version").and_then(serde_json::Value::as_i64),
+                expires_at_ms: set
+                    .get("expires_at_unix_ms")
+                    .and_then(serde_json::Value::as_i64),
+                refused: set
+                    .get("refused")
+                    .and_then(serde_json::Value::as_str)
+                    .map(str::to_owned),
+            })
+        })
+        .collect()
 }
 
 fn certificate_from_row(row: &Row) -> Certificate {

@@ -946,6 +946,24 @@ pub struct AgentView {
     pub running_kernel: Option<String>,
     /// RFC 3339 time the last inventory was received: software "as of".
     pub inventory_at: Option<String>,
+    /// Rule sets the agent reported holding in its latest health report;
+    /// empty for an agent that never reported one.
+    pub rule_sets: Vec<AgentRuleSetView>,
+    /// RFC 3339 time that report was written.
+    pub rule_sets_at: Option<String>,
+}
+
+/// One rule set an agent reports holding.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentRuleSetView {
+    /// Rule-set identifier.
+    pub id: String,
+    /// Bundle version in use; absent before the agent accepted one.
+    pub version: Option<i64>,
+    /// Signed expiry of that bundle, in Unix milliseconds.
+    pub expires_at_ms: Option<i64>,
+    /// Why the agent refused the last bundle it was given, when it did.
+    pub refused: Option<String>,
 }
 
 /// Certificate metadata exposed in an agent detail response.

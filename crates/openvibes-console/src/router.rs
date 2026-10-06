@@ -3455,6 +3455,19 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
         inventory_at: agent
             .inventory_at
             .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        rule_sets: agent
+            .rule_sets
+            .into_iter()
+            .map(|set| crate::AgentRuleSetView {
+                id: set.id,
+                version: set.version,
+                expires_at_ms: set.expires_at_ms,
+                refused: set.refused,
+            })
+            .collect(),
+        rule_sets_at: agent
+            .rule_sets_at
+            .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
     }
 }
 

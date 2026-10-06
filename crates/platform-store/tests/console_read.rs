@@ -148,6 +148,43 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
         agent.inventory_at.map(|at| at.timestamp()),
         Some(inventory_at.timestamp())
     );
+    // The Host page's Rule sets: read from the latest health report.
+    assert!(agent.rule_sets.is_empty() && agent.rule_sets_at.is_none());
+    client
+        .execute(
+            "UPDATE agents SET health_at = $2,
+                health = '{\"rule_sets\":[{\"id\":\"baseline\",\"version\":2,\"expires_at_unix_ms\":1853910427825},
+                    {\"id\":\"site\",\"refused\":\"signature\"}]}'::jsonb
+             WHERE agent_id = $1",
+            &[&RECENT, &inventory_at],
+        )
+        .await
+        .unwrap();
+    let agent = platform_store::console_read::agent(&client, RECENT, now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        agent.rule_sets,
+        vec![
+            platform_store::console_read::AgentRuleSet {
+                id: "baseline".to_owned(),
+                version: Some(2),
+                expires_at_ms: Some(1_853_910_427_825),
+                refused: None,
+            },
+            platform_store::console_read::AgentRuleSet {
+                id: "site".to_owned(),
+                version: None,
+                expires_at_ms: None,
+                refused: Some("signature".to_owned()),
+            },
+        ]
+    );
+    assert_eq!(
+        agent.rule_sets_at.map(|at| at.timestamp()),
+        Some(inventory_at.timestamp())
+    );
     let certificates = platform_store::console_read::certificates(
         &client,
         RECENT,
