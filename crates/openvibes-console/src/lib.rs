@@ -27,6 +27,7 @@ mod error;
 mod frontend_contract;
 mod openapi;
 mod ports;
+mod presence;
 mod problem;
 mod rbac;
 mod router;

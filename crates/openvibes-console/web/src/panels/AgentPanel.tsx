@@ -101,7 +101,7 @@ export function AgentPanel({ id }: { id: string }) {
         </>}
       />
       <div className="panel-glance">
-        <div><span className="subtle">Last saved heartbeat</span><strong><Ago value={data.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></strong></div>
+        <div><span className="subtle">Last heartbeat</span><strong><Ago value={data.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></strong></div>
         <div><span className="subtle">Compliance</span><strong className="num">{findings.loading ? "…" : mine.length}</strong></div>
         {can("alarms.read") && <div><span className="subtle">Active alarms</span><strong className="num">{alarms.loading ? "…" : alarmCount}</strong></div>}
         <div><span className="subtle">Vulnerabilities</span><strong className="num">{vulns.loading ? "…" : vulnItems.length}</strong></div>

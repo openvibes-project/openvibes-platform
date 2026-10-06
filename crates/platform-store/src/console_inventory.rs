@@ -577,7 +577,7 @@ pub async fn software_hosts(
         "SELECT a.agent_id, a.hostname,
             CASE WHEN pv.epoch <> 0 THEN pv.epoch || ':' ELSE '' END || pv.version
                 || CASE WHEN pv.release <> '' THEN '-' || pv.release ELSE '' END,
-            pv.arch, a.last_seen_at, {VULNERABLE}, pv.id
+            pv.arch, agent_seen_at(a.agent_id, a.last_seen_at), {VULNERABLE}, pv.id
          FROM package_versions pv
          JOIN host_packages hp ON hp.package_version_id = pv.id
          JOIN agents a ON a.agent_id = hp.agent_id

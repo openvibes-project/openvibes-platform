@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ApiError, configureDemo, onSignedOut, request, setCsrfToken } from "../api/client";
 import type { Permission, Session } from "../api/types";
 import { useLiveAlarms } from "../app/liveAlarms";
+import { useLivePresence } from "../app/livePresence";
 import { assistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { views } from "../app/registry";
@@ -64,6 +65,8 @@ export function App({ demo: startDemo, demoAllowed }: { demo: boolean; demoAllow
   // Signed in with alarms.read (and no forced password change): new alarms
   // appear without a reload.
   useLiveAlarms(auth === "ok" && !session?.password_must_change && can("alarms.read"));
+  // Likewise for hosts coming online or going offline.
+  useLivePresence(auth === "ok" && !session?.password_must_change && can("agents.read"));
 
   useEffect(() => {
     let pending = "";

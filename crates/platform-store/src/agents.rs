@@ -76,7 +76,7 @@ pub enum Revoke {
     Imported,
 }
 
-const SELECT: &str = "SELECT a.agent_id, a.status, a.enrolled_at, a.revoked_at, a.last_seen_at,
+const SELECT: &str = "SELECT a.agent_id, a.status, a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at),
         a.scanner_version,
         (SELECT count(*) FROM certificates c WHERE c.agent_id = a.agent_id),
         a.claimed_agent_id, a.health, a.health_previous, a.health_at
@@ -134,7 +134,7 @@ pub async fn list(
                 .query(
                     &format!(
                         "{SELECT} WHERE a.status = 'active'
-                         AND (a.last_seen_at IS NULL OR a.last_seen_at < $1) ORDER BY a.agent_id"
+                         AND (agent_seen_at(a.agent_id, a.last_seen_at) IS NULL OR agent_seen_at(a.agent_id, a.last_seen_at) < $1) ORDER BY a.agent_id"
                     ),
                     &[&offline_before],
                 )

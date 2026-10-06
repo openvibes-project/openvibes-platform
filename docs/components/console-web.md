@@ -92,7 +92,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   and editing is hidden, "Edit" and "Duplicate to edit" included (the
   dashboard menu says "Editing needs a wider screen"). Below 720px the rail is a bottom bar in which every
   destination fits (icons only, each link keeps its name for screen
-  readers); tables wrap long names, and Agents drops Last saved heartbeat below
+  readers); tables wrap long names, and Agents drops Last heartbeat below
   480px so host names fit.
 - **Menu:**
   - Duplicate, Rename and Delete;
@@ -194,10 +194,12 @@ triage on alarms and findings stays as it is.
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
   running kernel, "software as of", tags, certificates). The list, panel and
-  host export call `last_seen_at` **Last saved heartbeat**. Its hover text
-  explains that agents send one about every minute but ingest persists the
-  timestamp about every five minutes; a connected host can therefore show
-  several minutes ago.
+  host export call `last_seen_at` **Last heartbeat**. Its hover text
+  says agents send one about every minute and a host is online within three
+  minutes of the last. Online and offline changes show up without a reload:
+  `app/livePresence.ts` keeps `GET /api/v1/agents/events` open (a fetch marked
+  background, so it does not extend the session) and refetches the agent
+  views, at most every two seconds, when the server reports a change.
 - **Software** (`/software`, `g w`): packages across the caller's hosts with
   hosts, versions (highlighted when more than one is in use), open
   advisories (worst severity, count, no-fix count, an Exploited flag) and

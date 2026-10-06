@@ -7,6 +7,10 @@ use openvibes_core::{CollectorOutcome, Health};
 
 use crate::OFFLINE_AFTER_MINUTES;
 
+/// A health report older than this no longer counts as current. It is
+/// separate from the offline threshold: the report is saved on the throttled
+/// heartbeat write (every 5 minutes), not on every heartbeat.
+pub const HEALTH_REPORT_FRESH_MINUTES: i64 = 15;
 /// The oldest pending finding may wait this long before delivery counts as
 /// stalled.
 pub const DELIVERY_STALLED_S: u64 = 3_600;
@@ -67,7 +71,7 @@ pub fn health_status(
     let (Some(health), Some(at)) = (health, health_at) else {
         return (HealthStatus::Unknown, Vec::new());
     };
-    if at < now - window {
+    if at < now - Duration::minutes(HEALTH_REPORT_FRESH_MINUTES) {
         return (HealthStatus::Unknown, Vec::new());
     }
     let now_ms = now.timestamp_millis();
@@ -200,7 +204,7 @@ mod tests {
     }
 
     #[test]
-    fn offline_after_15_minutes() {
+    fn offline_after_the_threshold() {
         let seen = now() - Duration::minutes(16);
         let (status, _) = health_status(Some(seen), Some(seen), Some(&clean()), None, now());
         assert_eq!(status, HealthStatus::Offline);

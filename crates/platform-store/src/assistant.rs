@@ -286,7 +286,7 @@ pub async fn agent_summaries(
 ) -> Result<Page<AgentSummary>, StoreError> {
     let rows = client
         .query(
-            "SELECT a.agent_id, a.hostname, a.status, a.last_seen_at, a.scanner_version,
+            "SELECT a.agent_id, a.hostname, a.status, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version,
                     a.os_id, a.os_version, a.running_kernel, a.capabilities,
                     (SELECT count(*) FROM current_findings c
                      WHERE c.agent_id = a.agent_id AND c.last_observed_at >= $3),
@@ -519,9 +519,9 @@ pub async fn overview(
     let offline_before = now - chrono::Duration::minutes(crate::OFFLINE_AFTER_MINUTES);
     let agents = client
         .query_one(
-            "SELECT count(*) FILTER (WHERE status = 'active' AND last_seen_at >= $2),
-                    count(*) FILTER (WHERE status = 'active' AND last_seen_at < $2),
-                    count(*) FILTER (WHERE status = 'active' AND last_seen_at IS NULL),
+            "SELECT count(*) FILTER (WHERE status = 'active' AND agent_seen_at(agent_id, last_seen_at) >= $2),
+                    count(*) FILTER (WHERE status = 'active' AND agent_seen_at(agent_id, last_seen_at) < $2),
+                    count(*) FILTER (WHERE status = 'active' AND agent_seen_at(agent_id, last_seen_at) IS NULL),
                     count(*) FILTER (WHERE status = 'revoked'),
                     count(*) FILTER (WHERE status = 'imported')
              FROM agents WHERE ($1::text[] IS NULL OR agent_id = ANY($1))",

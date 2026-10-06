@@ -3,9 +3,10 @@ use deadpool_postgres::Client;
 
 use crate::{StoreError, maintenance::partition_days, schema_version};
 
-/// An agent with no heartbeat for this long is offline. It must stay well
-/// above the 5-minute `last_seen_at` write throttle.
-pub const OFFLINE_AFTER_MINUTES: i64 = 15;
+/// An agent with no heartbeat for this long is offline: three missed
+/// one-minute heartbeats. Every heartbeat is recorded in `agent_presence`,
+/// so this no longer depends on the 5-minute `agents.last_seen_at` throttle.
+pub const OFFLINE_AFTER_MINUTES: i64 = 3;
 
 /// A point-in-time summary for operators.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,7 +41,8 @@ pub async fn status(client: &Client, now: DateTime<Utc>) -> Result<Status, Store
         .query_one(
             "SELECT count(*) FILTER (WHERE status = 'active'),
                     count(*) FILTER (WHERE status = 'active'
-                                     AND (last_seen_at IS NULL OR last_seen_at < $1)),
+                                     AND (agent_seen_at(agent_id, last_seen_at) IS NULL
+                                          OR agent_seen_at(agent_id, last_seen_at) < $1)),
                     count(*) FILTER (WHERE status = 'revoked'),
                     count(*) FILTER (WHERE status = 'imported')
              FROM agents",
