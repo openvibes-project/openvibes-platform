@@ -11,6 +11,10 @@ dashboards with a role (schema 26).
 `alarms.read` (all four roles), `alarms.triage` and `alarms.suppress`
 (Analyst, Admin) are agent-scoped like their findings counterparts
 (schema 29); the routes that use them come with threat alarms (P14).
+`rules.write` (Operator, Admin; global; schema 41) lets a user check, save and
+delete draft rules in the site's own rule sets; publishing stays with
+`rules.upload`. `rules.read` stays Admin-only, so listing drafts needs
+`rules.write` too.
 `cases.read` (Analyst, Admin; schema 34) and `cases.manage` (Analyst, Admin;
 schema 35) are agent-scoped too: a scoped binding grants them for its asset
 groups, and cases show only the items those groups cover (see

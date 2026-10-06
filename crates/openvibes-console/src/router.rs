@@ -630,6 +630,19 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/alarm-suppressions/{suppression_id}",
             axum::routing::delete(crate::alarm_suppressions::remove_suppression),
         )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}",
+            get(crate::rule_drafts::list_drafts),
+        )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}/{rule_id}",
+            axum::routing::put(crate::rule_drafts::save_draft)
+                .delete(crate::rule_drafts::delete_draft),
+        )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}/{rule_id}/check",
+            axum::routing::post(crate::rule_drafts::check_draft),
+        )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }

@@ -45,6 +45,8 @@ pub mod ingest;
 pub mod inventory;
 mod maintenance;
 mod migrate;
+/// Draft rules for the site's own rule sets.
+pub mod rule_drafts;
 /// Rule sets, trust keys, and published bundles.
 pub mod rules;
 pub mod signer;

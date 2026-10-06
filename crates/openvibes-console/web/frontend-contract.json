@@ -12,6 +12,7 @@
     "/ports",
     "/services",
     "/enrollment",
+    "/site-rules",
     "/rule-sets",
     "/access",
     "/service-accounts",

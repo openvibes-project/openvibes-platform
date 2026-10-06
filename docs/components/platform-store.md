@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 41; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 42; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -443,6 +443,9 @@ Code over these tables:
 - `alarm_suppressions` (console): `list`, `create` (derived from a visible
   alarm; `program`/`command` need global scope) and `remove` (kept as
   history), audited.
+- `rule_drafts` (schema 42): one row per draft rule of `site` or
+  `site-alarms`; `list`, `get`, `put` (upsert) and `delete`. The console
+  validates before `put`; the table holds only rules the agent would accept.
 
 ## Open ports and running services (`host_services::…`, schema 31, protocol P15)
 
