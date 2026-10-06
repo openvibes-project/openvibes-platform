@@ -50,6 +50,11 @@ agent visibility in SQL for the supplied global or asset-group scope.
 - `finding_history` requires a lower time bound for partition pruning and
   supports bounded exact agent, rule-set, and rule filters. `finding_event`
   uses the event table's `(observed_day, finding_id)` primary key.
+- Finding detail returns its stored P17 detection explanation. Alarm and
+  finding rule links resolve the historical signed bundle identified by the
+  explanation's preimage hash; legacy rows without a hash are shown only when
+  retained history identifies one unambiguous rule. The HTTP layer checks the
+  same finding/alarm read permission and asset scope as the source record.
 - Every list requires `PageLimit`, which accepts 1–100 rows, and fetches at
   most one extra row to decide whether to return a continuation cursor. The
   console serializes cursors and binds them to filters and authorization.

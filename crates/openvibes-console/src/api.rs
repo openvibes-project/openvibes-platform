@@ -1003,6 +1003,10 @@ pub struct AgentSummary {
 /// Latest observation state for one agent, rule set, and rule.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct FindingView {
+    /// Original evaluation evidence; absent for legacy observations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<crate::detection::DetectionView>)]
+    pub detection: Option<serde_json::Value>,
     /// Stable latest-finding identifier.
     pub id: String,
     /// Agent associated with this observation.

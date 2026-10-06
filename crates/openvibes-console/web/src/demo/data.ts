@@ -121,7 +121,12 @@ export function buildDemoData(now = Date.now()) {
         severity: rule.severity,
         confidence: 70 + Math.floor(random() * 30),
         message: rule.message,
-        evidence: [rule.evidence],
+        evidence: rule.ruleId === "LNX-060" ? ["port.tcp.exposed"] : [rule.evidence],
+        ...(rule.ruleId === "LNX-060" ? { detection: {
+          observed_at_unix_ms: Math.floor(now - MINUTE), rule_set_version: 4, preimage_sha256: "a".repeat(64), truncated: false,
+          inputs: [{ key: "port.tcp.exposed", status: "summarized", value: null, item_count: 2 }],
+          steps: [{ expression: '"6379" in facts["port.tcp.exposed"]', result: true }],
+        } } : {}),
         scan_id: `scan-${agent.id}-${Math.floor(now / DAY)}`,
         authenticated: agent.status !== "imported",
         origin: agent.status === "imported" ? "import" : "online",
@@ -318,6 +323,12 @@ export function buildDemoData(now = Date.now()) {
       state: index === 2 ? "investigating" : "open", suppressed_by: null as string | null,
       rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
       received_at: iso(last + 2000),
+      detection: {
+        observed_at_unix_ms: Math.floor(last), rule_set_version: 4, preimage_sha256: "b".repeat(64), truncated: false,
+        inputs: [{ key: "process.exe", status: "complete", value: spec.process.exe, item_count: null },
+          { key: "parent.exe", status: "complete", value: spec.ancestors[0]?.exe ?? "", item_count: null }],
+        steps: [{ expression: `event["process.exe"] == ${JSON.stringify(spec.process.exe)} && event["parent.exe"] == ${JSON.stringify(spec.ancestors[0]?.exe ?? "")}`, result: true }],
+      },
       triage: { state: index === 2 ? "investigating" : "open", assigned_to: null as string | null, note: null as string | null,
         accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
     };

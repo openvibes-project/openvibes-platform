@@ -124,6 +124,7 @@ fn read_model_dtos_have_stable_wire_names() {
 
     let finding_page = FindingPage {
         items: vec![FindingView {
+            detection: None,
             id: "finding-1".to_owned(),
             agent_id: "agent-1".to_owned(),
             hostname: Some("host.example.test".to_owned()),

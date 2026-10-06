@@ -288,6 +288,7 @@ impl Default for SeededRepository {
             .map(|number| {
                 let agent_number = (number * 7 % 400) + 1;
                 FindingView {
+                    detection: None,
                     id: format!("finding-{number:05}"),
                     agent_id: format!("agent-{agent_number:05}"),
                     hostname: (agent_number % 11 != 0)
