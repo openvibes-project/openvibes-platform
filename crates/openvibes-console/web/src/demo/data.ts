@@ -194,6 +194,12 @@ export function buildDemoData(now = Date.now()) {
         packages: reboot ? advisory.packages.map((pkg) => ({ ...pkg, installed: pkg.fixed })) : advisory.packages,
         first_seen_at: iso(now - (1 + random() * 20) * DAY),
         fixed_at: null,
+        source: "fedora-44-x86_64",
+        match_method: advisory.packages[0]?.fixed == null ? "distribution-unfixed" : "distribution-advisory",
+        confidence: advisory.packages[0]?.fixed == null ? 90 : 98,
+        match_basis: advisory.packages[0]?.fixed == null
+          ? "The Fedora tracker lists this package version as affected and has no fix yet."
+          : "Fedora's own security advisory names this package; the installed version is older than the fixed one.",
       });
     }
   }

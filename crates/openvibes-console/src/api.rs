@@ -1185,6 +1185,14 @@ pub struct VulnerabilityView {
     pub epss_percentile: Option<f32>,
     /// Highest NVD CVSS base score among advisory CVEs.
     pub cvss: Option<f32>,
+    /// Feed the advisory came from, e.g. `fedora-44-x86_64`.
+    pub source: String,
+    /// How the host was matched to the advisory, e.g. `distribution-advisory`.
+    pub match_method: String,
+    /// Mapping confidence, 0 to 100.
+    pub confidence: u8,
+    /// A sentence saying how the host was matched.
+    pub match_basis: String,
 }
 
 /// Bounded prioritised vulnerability list for the current scope.

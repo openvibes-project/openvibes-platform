@@ -5566,6 +5566,16 @@
             "schema": {
               "type": "boolean"
             }
+          },
+          {
+            "name": "min_confidence",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
           }
         ],
         "responses": {
@@ -10649,7 +10659,11 @@
           "exploited",
           "kev",
           "euvd",
-          "ransomware"
+          "ransomware",
+          "source",
+          "match_method",
+          "confidence",
+          "match_basis"
         ],
         "properties": {
           "advisory_id": {
@@ -10659,6 +10673,12 @@
           "agent_id": {
             "type": "string",
             "description": "Agent or imported installation identifier."
+          },
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Mapping confidence, 0 to 100.",
+            "minimum": 0
           },
           "cves": {
             "type": "array",
@@ -10728,6 +10748,14 @@
             ],
             "description": "Earliest KEV due date."
           },
+          "match_basis": {
+            "type": "string",
+            "description": "A sentence saying how the host was matched."
+          },
+          "match_method": {
+            "type": "string",
+            "description": "How the host was matched to the advisory, e.g. `distribution-advisory`."
+          },
           "packages": {
             "description": "Affected package names and installed/fixed versions."
           },
@@ -10742,6 +10770,10 @@
           "severity": {
             "$ref": "#/components/schemas/VulnerabilitySeverity",
             "description": "Advisory severity."
+          },
+          "source": {
+            "type": "string",
+            "description": "Feed the advisory came from, e.g. `fedora-44-x86_64`."
           },
           "title": {
             "type": "string",

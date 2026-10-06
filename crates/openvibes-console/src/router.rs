@@ -117,6 +117,7 @@ pub(crate) struct VulnerabilityListParams {
     fixed: Option<bool>,
     exploited: Option<bool>,
     reboot_needed: Option<bool>,
+    min_confidence: Option<u8>,
 }
 
 #[derive(Deserialize)]
@@ -5000,7 +5001,7 @@ pub(crate) async fn authenticated_vulnerability_summary(
     .into_response()
 }
 
-#[utoipa::path(get, path="/api/v1/vulnerabilities", tag="vulnerabilities", params(("host"=Option<String>, Query), ("advisory"=Option<String>, Query), ("severity"=Option<String>, Query), ("cve"=Option<String>, Query), ("fixed"=Option<bool>, Query), ("exploited"=Option<bool>, Query), ("reboot_needed"=Option<bool>, Query)), responses((status=200, description="Prioritised, scope-filtered vulnerabilities", body=crate::VulnerabilityPage), (status=400, description="Invalid filters", body=crate::ProblemDetails)))]
+#[utoipa::path(get, path="/api/v1/vulnerabilities", tag="vulnerabilities", params(("host"=Option<String>, Query), ("advisory"=Option<String>, Query), ("severity"=Option<String>, Query), ("cve"=Option<String>, Query), ("fixed"=Option<bool>, Query), ("exploited"=Option<bool>, Query), ("reboot_needed"=Option<bool>, Query), ("min_confidence"=Option<u8>, Query)), responses((status=200, description="Prioritised, scope-filtered vulnerabilities", body=crate::VulnerabilityPage), (status=400, description="Invalid filters", body=crate::ProblemDetails)))]
 pub(crate) async fn authenticated_vulnerabilities(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -5071,6 +5072,7 @@ pub(crate) async fn authenticated_vulnerabilities(
             fixed: params.fixed.unwrap_or(false),
             exploited: params.exploited,
             reboot_needed: params.reboot_needed,
+            min_confidence: params.min_confidence,
         },
         &scope,
     )
@@ -5191,6 +5193,10 @@ fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::Vulnerabili
         epss: row.epss,
         epss_percentile: row.epss_percentile,
         cvss: row.cvss,
+        source: row.source,
+        match_method: row.match_method,
+        confidence: row.confidence,
+        match_basis: row.match_basis,
     }
 }
 

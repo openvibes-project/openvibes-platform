@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { useResource } from "../api/client";
 import type { VulnerabilityPage } from "../api/types";
 import { nav, useLocation } from "../app/nav";
-import { Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
+import { ConfidenceBar, Empty, ErrorBox, Loading, SeverityBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { pct, severityOrder } from "../ui/format";
 import { Icon } from "../ui/Icon";
@@ -26,6 +26,7 @@ export function Vulnerabilities() {
           { label: "Known exploited", param: "exploited", value: "true" },
           { label: "Reboot needed", param: "reboot", value: "true" },
           { label: "No fix yet", param: "nofix", value: "true" },
+          { label: "Low confidence", param: "lowconf", value: "true" },
           ...(["critical", "important", "moderate", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s })),
         ]} />
       {list.data?.more_available && <p className="view-note"><Icon name="alert" size={14} /> Showing the first results only; narrow the filters to see the rest.</p>}
@@ -51,6 +52,7 @@ export function Vulnerabilities() {
             ) },
             { key: "cvss", header: "CVSS", numeric: true, width: "70px", hideBelow: 700, sort: (r) => r.cvss, render: (r) => <span className="num">{r.cvss?.toFixed(1) ?? "—"}</span> },
             { key: "epss", header: "EPSS", numeric: true, width: "80px", hideBelow: 800, sort: (r) => r.epss, render: (r) => <span className="num subtle">{pct(r.epss)}</span> },
+            { key: "confidence", header: "Confidence", width: "130px", hideBelow: 900, sort: (r) => r.confidence, render: (r) => <ConfidenceBar value={r.confidence} /> },
             { key: "hosts", header: "Hosts", numeric: true, width: "70px", sort: (r) => r.hosts, render: (r) => <strong className="num">{r.hosts}</strong> },
             { key: "reboot", header: "Reboot", numeric: true, width: "80px", hideBelow: 950, sort: (r) => r.reboot, render: (r) => r.reboot > 0 ? <span className="num">{r.reboot}</span> : <span className="subtle">—</span> },
           ]} />

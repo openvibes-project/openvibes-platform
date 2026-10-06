@@ -3201,6 +3201,11 @@ export interface components {
             advisory_id: string;
             /** @description Agent or imported installation identifier. */
             agent_id: string;
+            /**
+             * Format: int32
+             * @description Mapping confidence, 0 to 100.
+             */
+            confidence: number;
             /** @description CVE identifiers named by the advisory. */
             cves: string[];
             /**
@@ -3232,6 +3237,10 @@ export interface components {
             kev: boolean;
             /** @description Earliest KEV due date. */
             kev_due?: string | null;
+            /** @description A sentence saying how the host was matched. */
+            match_basis: string;
+            /** @description How the host was matched to the advisory, e.g. `distribution-advisory`. */
+            match_method: string;
             /** @description Affected package names and installed/fixed versions. */
             packages: unknown;
             /** @description One CVE is known to be used by ransomware. */
@@ -3240,6 +3249,8 @@ export interface components {
             reboot_needed: boolean;
             /** @description Advisory severity. */
             severity: components["schemas"]["VulnerabilitySeverity"];
+            /** @description Feed the advisory came from, e.g. `fedora-44-x86_64`. */
+            source: string;
             /** @description Advisory title. */
             title: string;
             /** @description Advisory URL. */
@@ -7327,6 +7338,7 @@ export interface operations {
                 fixed?: boolean;
                 exploited?: boolean;
                 reboot_needed?: boolean;
+                min_confidence?: number;
             };
             header?: never;
             path?: never;

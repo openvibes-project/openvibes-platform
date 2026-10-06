@@ -1010,6 +1010,8 @@ fn demo_vulnerabilities(persona: Persona, mode: SeedMode) -> Vec<crate::Vulnerab
             first_seen_at: format!("2026-09-2{}T10:00:00Z", number % 7), fixed_at: None, reboot_needed: number % 9 == 0,
             exploited: number % 7 == 0, kev: number % 11 == 0, euvd: number % 13 == 0, kev_due: None,
             ransomware: number % 17 == 0, epss: Some((number % 100) as f32 / 100.0), epss_percentile: Some((number % 100) as f32 / 100.0), cvss: Some(5.0 + (number % 50) as f32 / 10.0),
+            source: "fedora-44-x86_64".into(), match_method: "distribution-advisory".into(), confidence: 98,
+            match_basis: "Fedora's own security advisory names this package; the installed version is older than the fixed one.".into(),
         }
     }).collect()
 }
@@ -1110,7 +1112,14 @@ async fn vulnerabilities(
     if params.keys().any(|key| {
         !matches!(
             key.as_str(),
-            "host" | "advisory" | "severity" | "cve" | "fixed" | "exploited" | "reboot_needed"
+            "host"
+                | "advisory"
+                | "severity"
+                | "cve"
+                | "fixed"
+                | "exploited"
+                | "reboot_needed"
+                | "min_confidence"
         )
     }) {
         return problem_response(ProblemDetails::new(
@@ -1155,6 +1164,12 @@ async fn vulnerabilities(
         .is_some_and(|value| value == "false")
     {
         items.retain(|item| !item.reboot_needed);
+    }
+    if let Some(min) = params
+        .get("min_confidence")
+        .and_then(|v| v.parse::<u8>().ok())
+    {
+        items.retain(|item| item.confidence >= min);
     }
     Json(crate::VulnerabilityPage {
         more_available: items.len() > 100,
