@@ -3,7 +3,7 @@ use deadpool_postgres::Client;
 use crate::StoreError;
 
 /// Schema version this build expects. Services refuse any other version.
-pub const SCHEMA_VERSION: i32 = 38;
+pub const SCHEMA_VERSION: i32 = 39;
 
 /// Every migration, in order, embedded at build time.
 const MIGRATIONS: &[(i32, &str)] = &[
@@ -137,6 +137,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
     (
         38,
         include_str!("../../../migrations/0038_console_standing_token_read.sql"),
+    ),
+    (
+        39,
+        include_str!("../../../migrations/0039_cpe_matching.sql"),
     ),
 ];
 

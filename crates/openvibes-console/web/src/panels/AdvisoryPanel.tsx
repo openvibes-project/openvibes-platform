@@ -115,7 +115,7 @@ export function AdvisoryPanel({ id }: { id: string }) {
                 const state = fixState(host);
                 return (
                   <tr key={host.agent_id}>
-                    <td><span className="row"><ObjectLink to={{ kind: "agent", id: host.agent_id }}>{host.hostname ?? host.agent_id}</ObjectLink>{can("cases.manage") && <AddToCase compact kind="vulnerability" id={vulnerabilityRef(host.agent_id, host.advisory_id)} label={`${host.title} on ${host.hostname ?? host.agent_id}`} />}</span></td>
+                    <td><span className="row"><ObjectLink to={{ kind: "agent", id: host.agent_id }}>{host.hostname ?? host.agent_id}</ObjectLink>{can("cases.manage") && !host.advisory_id.startsWith("CPE:") && <AddToCase compact kind="vulnerability" id={vulnerabilityRef(host.agent_id, host.advisory_id)} label={`${host.title} on ${host.hostname ?? host.agent_id}`} />}</span></td>
                     <td><span className={`badge badge--${state.tone} badge--plain`}>{state.label}</span></td>
                     <td className="subtle hide-narrow"><Ago value={host.first_seen_at} /></td>
                   </tr>

@@ -1,0 +1,1054 @@
+{
+ "resultsPerPage": 3,
+ "startIndex": 0,
+ "totalResults": 3,
+ "format": "NVD_CVE",
+ "version": "2.0",
+ "timestamp": "2026-10-06T00:00:00.000",
+ "vulnerabilities": [
+  {
+   "cve": {
+    "id": "CVE-2023-38545",
+    "sourceIdentifier": "support@hackerone.com",
+    "published": "2023-10-18T04:15:11.077",
+    "lastModified": "2026-06-17T06:10:41.627",
+    "vulnStatus": "Modified",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "This flaw makes curl overflow a heap based buffer in the SOCKS5 proxy\nhandshake.\n\nWhen curl is asked to pass along the host name to the SOCKS5 proxy to allow\nthat to resolve the address instead of it getting done by curl itself, the\nmaximum length that host name can be is 255 bytes.\n\nIf the host name is detected to be longer, curl switches to local name\nresolving and instead passes on the resolved address only. Due to this bug,\nthe local variable that means \"let the host resolve the name\" could get the\nwrong value during a slow SOCKS5 handshake, and contrary to the intention,\ncopy the too long host name to the target buffer instead of copying just the\nresolved address there.\n\nThe target buffer being a heap based buffer, and the host name coming from the\nURL that curl has been told to operate with."
+     }
+    ],
+    "affected": [
+     {
+      "source": "support@hackerone.com",
+      "affectedData": [
+       {
+        "vendor": "curl",
+        "product": "curl",
+        "versions": [
+         {
+          "version": "8.4.0",
+          "lessThan": "8.4.0",
+          "versionType": "semver",
+          "status": "affected"
+         },
+         {
+          "version": "7.69.0",
+          "lessThan": "7.69.0",
+          "versionType": "semver",
+          "status": "unaffected"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+      "affectedData": [
+       {
+        "vendor": "Siemens",
+        "product": "RUGGEDCOM APE1808",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "0",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIPLUS S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "baseScore": 9.8,
+        "baseSeverity": "CRITICAL",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 3.9,
+       "impactScore": 5.9
+      },
+      {
+       "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+       "type": "Secondary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:U/C:H/I:H/A:H",
+        "baseScore": 8.8,
+        "baseSeverity": "HIGH",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "REQUIRED",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 2.8,
+       "impactScore": 5.9
+      }
+     ],
+     "ssvcV203": [
+      {
+       "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+       "ssvcData": {
+        "timestamp": "2024-10-17T21:11:03.346985Z",
+        "id": "CVE-2023-38545",
+        "options": [
+         {
+          "exploitation": "poc"
+         },
+         {
+          "automatable": "no"
+         },
+         {
+          "technicalImpact": "total"
+         }
+        ],
+        "role": "CISA Coordinator",
+        "version": "2.0.3"
+       }
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "nvd@nist.gov",
+      "type": "Primary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-787"
+       }
+      ]
+     },
+     {
+      "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+      "type": "Secondary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-787"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:haxx:libcurl:*:*:*:*:*:*:*:*",
+          "versionStartIncluding": "7.69.0",
+          "versionEndExcluding": "8.4.0",
+          "matchCriteriaId": "CDB9B842-1D18-4026-B62C-EEBF6F97C908"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:fedoraproject:fedora:37:*:*:*:*:*:*:*",
+          "matchCriteriaId": "E30D0E6F-4AE8-4284-8716-991DFA48CC5D"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:netapp:active_iq_unified_manager:-:*:*:*:*:vmware_vsphere:*:*",
+          "matchCriteriaId": "3A756737-1CC4-42C2-A4DF-E1C893B4E2D5"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:netapp:active_iq_unified_manager:-:*:*:*:*:windows:*:*",
+          "matchCriteriaId": "B55E8D50-99B4-47EC-86F9-699B67D473CE"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:netapp:oncommand_insight:-:*:*:*:*:*:*:*",
+          "matchCriteriaId": "F1BE6C1F-2565-4E97-92AA-16563E5660A5"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:netapp:oncommand_workflow_automation:-:*:*:*:*:*:*:*",
+          "matchCriteriaId": "5735E553-9731-4AAC-BCFF-989377F817B3"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "http://seclists.org/fulldisclosure/2024/Jan/34",
+      "source": "support@hackerone.com",
+      "tags": [
+       "Mailing List",
+       "Third Party Advisory"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2024-3094",
+    "sourceIdentifier": "secalert@redhat.com",
+    "published": "2024-03-29T17:15:21.150",
+    "lastModified": "2026-06-17T07:43:17.830",
+    "vulnStatus": "Modified",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "Malicious code was discovered in the upstream tarballs of xz, starting with version 5.6.0. \r\nThrough a series of complex obfuscations, the liblzma build process extracts a prebuilt object file from a disguised test file existing in the source code, which is then used to modify specific functions in the liblzma code. This results in a modified liblzma library that can be used by any software linked against this library, intercepting and modifying the data interaction with this library."
+     }
+    ],
+    "affected": [
+     {
+      "source": "secalert@redhat.com",
+      "affectedData": [
+       {
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://github.com/tukaani-project/xz",
+        "packageName": "xz",
+        "versions": [
+         {
+          "version": "5.6.0",
+          "status": "affected"
+         },
+         {
+          "version": "5.6.1",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 10",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:10"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 6",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:6"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 7",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:7"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 8",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:8"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:9"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat JBoss Enterprise Application Platform 8",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/jbossnetwork/restricted/listSoftware.html",
+        "packageName": "xz",
+        "cpes": [
+         "cpe:/a:redhat:jboss_enterprise_application_platform:8"
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "secalert@redhat.com",
+       "type": "Secondary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+        "baseScore": 10.0,
+        "baseSeverity": "CRITICAL",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "CHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 3.9,
+       "impactScore": 6.0
+      },
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+        "baseScore": 10.0,
+        "baseSeverity": "CRITICAL",
+        "attackVector": "NETWORK",
+        "attackComplexity": "LOW",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "CHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 3.9,
+       "impactScore": 6.0
+      }
+     ],
+     "ssvcV203": [
+      {
+       "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+       "ssvcData": {
+        "timestamp": "2024-04-02T04:00:23.138684Z",
+        "id": "CVE-2024-3094",
+        "options": [
+         {
+          "exploitation": "none"
+         },
+         {
+          "automatable": "yes"
+         },
+         {
+          "technicalImpact": "total"
+         }
+        ],
+        "role": "CISA Coordinator",
+        "version": "2.0.3"
+       }
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "secalert@redhat.com",
+      "type": "Secondary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-506"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:tukaani:xz:5.6.0:*:*:*:*:*:*:*",
+          "matchCriteriaId": "73F1DAD7-F362-4C5B-B980-2E5313C369DA"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:tukaani:xz:5.6.1:*:*:*:*:*:*:*",
+          "matchCriteriaId": "55782A0B-B9C5-4536-A885-84CAB7029C09"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "https://access.redhat.com/security/cve/CVE-2024-3094",
+      "source": "secalert@redhat.com",
+      "tags": [
+       "Vendor Advisory"
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "cve": {
+    "id": "CVE-2024-6387",
+    "sourceIdentifier": "secalert@redhat.com",
+    "published": "2024-07-01T13:15:06.467",
+    "lastModified": "2026-09-01T12:17:13.423",
+    "vulnStatus": "Modified",
+    "descriptions": [
+     {
+      "lang": "en",
+      "value": "A security regression (CVE-2006-5051) was discovered in OpenSSH's server (sshd). There is a race condition which can lead sshd to handle some signals in an unsafe manner. An unauthenticated, remote attacker may be able to trigger it by failing to authenticate within a set time period."
+     }
+    ],
+    "affected": [
+     {
+      "source": "secalert@redhat.com",
+      "affectedData": [
+       {
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://www.openssh.com/",
+        "packageName": "OpenSSH",
+        "repo": "https://anongit.mindrot.org/openssh.git",
+        "versions": [
+         {
+          "version": "8.5p1",
+          "lessThanOrEqual": "9.7p1",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "defaultStatus": "affected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:enterprise_linux:9::appstream",
+         "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ],
+        "versions": [
+         {
+          "version": "0:8.7p1-38.el9_4.1",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9",
+        "defaultStatus": "affected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:enterprise_linux:9::appstream",
+         "cpe:/o:redhat:enterprise_linux:9::baseos"
+        ],
+        "versions": [
+         {
+          "version": "0:8.7p1-38.el9_4.1",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9.0 Update Services for SAP Solutions",
+        "defaultStatus": "affected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:rhel_e4s:9.0::appstream",
+         "cpe:/o:redhat:rhel_e4s:9.0::baseos"
+        ],
+        "versions": [
+         {
+          "version": "0:8.7p1-12.el9_0.1",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 9.2 Extended Update Support",
+        "defaultStatus": "affected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:rhel_eus:9.2::appstream",
+         "cpe:/o:redhat:rhel_eus:9.2::baseos"
+        ],
+        "versions": [
+         {
+          "version": "0:8.7p1-30.el9_2.4",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.13",
+        "defaultStatus": "affected",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "rhcos",
+        "cpes": [
+         "cpe:/a:redhat:openshift:4.13::el8",
+         "cpe:/a:redhat:openshift:4.13::el9"
+        ],
+        "versions": [
+         {
+          "version": "413.92.202407091321-0",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.14",
+        "defaultStatus": "affected",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "rhcos",
+        "cpes": [
+         "cpe:/a:redhat:openshift:4.14::el8",
+         "cpe:/a:redhat:openshift:4.14::el9"
+        ],
+        "versions": [
+         {
+          "version": "414.92.202407091253-0",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.15",
+        "defaultStatus": "affected",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "rhcos",
+        "cpes": [
+         "cpe:/a:redhat:openshift:4.15::el8",
+         "cpe:/a:redhat:openshift:4.15::el9"
+        ],
+        "versions": [
+         {
+          "version": "415.92.202407091355-0",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4.16",
+        "defaultStatus": "affected",
+        "collectionURL": "https://catalog.redhat.com/software/containers/",
+        "packageName": "rhcos",
+        "cpes": [
+         "cpe:/a:redhat:openshift:4.16::el9"
+        ],
+        "versions": [
+         {
+          "version": "416.94.202407081958-0",
+          "lessThan": "*",
+          "versionType": "rpm",
+          "status": "unaffected"
+         }
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 5",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:ceph_storage:5"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 6",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:ceph_storage:6"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Ceph Storage 7",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/a:redhat:ceph_storage:7"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 10",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:10"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 6",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:6"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 7",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:7"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat Enterprise Linux 8",
+        "defaultStatus": "unaffected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openssh",
+        "cpes": [
+         "cpe:/o:redhat:enterprise_linux:8"
+        ]
+       },
+       {
+        "vendor": "Red Hat",
+        "product": "Red Hat OpenShift Container Platform 4",
+        "defaultStatus": "affected",
+        "collectionURL": "https://access.redhat.com/downloads/content/package-browser/",
+        "packageName": "openshift/ose-rhel-coreos-8",
+        "cpes": [
+         "cpe:/a:redhat:openshift:4"
+        ]
+       }
+      ]
+     },
+     {
+      "source": "0b142b55-0307-4c5a-b3c9-f314f3fb7c5e",
+      "affectedData": [
+       {
+        "vendor": "Siemens",
+        "product": "Industrial Edge Management OS (IEM-OS)",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "0",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIMATIC S7-1500 CPU 1518F-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SINAMICS IIoT module",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "0",
+          "lessThan": "V1.0 HF1",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SINEMA Remote Connect Server",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "0",
+          "lessThan": "V3.2 SP2",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SINUMERIK ONE",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "0",
+          "lessThan": "V6.24",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       },
+       {
+        "vendor": "Siemens",
+        "product": "SIPLUS S7-1500 CPU 1518-4 PN/DP MFP",
+        "defaultStatus": "unknown",
+        "versions": [
+         {
+          "version": "V3.1.5",
+          "lessThan": "*",
+          "versionType": "custom",
+          "status": "affected"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "metrics": {
+     "cvssMetricV31": [
+      {
+       "source": "secalert@redhat.com",
+       "type": "Secondary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "baseScore": 8.1,
+        "baseSeverity": "HIGH",
+        "attackVector": "NETWORK",
+        "attackComplexity": "HIGH",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 2.2,
+       "impactScore": 5.9
+      },
+      {
+       "source": "nvd@nist.gov",
+       "type": "Primary",
+       "cvssData": {
+        "version": "3.1",
+        "vectorString": "CVSS:3.1/AV:N/AC:H/PR:N/UI:N/S:U/C:H/I:H/A:H",
+        "baseScore": 8.1,
+        "baseSeverity": "HIGH",
+        "attackVector": "NETWORK",
+        "attackComplexity": "HIGH",
+        "privilegesRequired": "NONE",
+        "userInteraction": "NONE",
+        "scope": "UNCHANGED",
+        "confidentialityImpact": "HIGH",
+        "integrityImpact": "HIGH",
+        "availabilityImpact": "HIGH"
+       },
+       "exploitabilityScore": 2.2,
+       "impactScore": 5.9
+      }
+     ],
+     "ssvcV203": [
+      {
+       "source": "134c704f-9b21-4f2e-91b3-4a467353bcc0",
+       "ssvcData": {
+        "timestamp": "2024-07-02T13:18:34.695298Z",
+        "id": "CVE-2024-6387",
+        "options": [
+         {
+          "exploitation": "poc"
+         },
+         {
+          "automatable": "no"
+         },
+         {
+          "technicalImpact": "total"
+         }
+        ],
+        "role": "CISA Coordinator",
+        "version": "2.0.3"
+       }
+      }
+     ]
+    },
+    "weaknesses": [
+     {
+      "source": "secalert@redhat.com",
+      "type": "Secondary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-364"
+       }
+      ]
+     },
+     {
+      "source": "nvd@nist.gov",
+      "type": "Primary",
+      "description": [
+       {
+        "lang": "en",
+        "value": "CWE-362"
+       }
+      ]
+     }
+    ],
+    "configurations": [
+     {
+      "operator": "AND",
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:o:sonicwall:sma_6200_firmware:-:*:*:*:*:*:*:*",
+          "matchCriteriaId": "92EF92CC-8175-4319-A529-AF979BAE5FCE"
+         }
+        ]
+       },
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": false,
+          "criteria": "cpe:2.3:h:sonicwall:sma_6200:-:*:*:*:*:*:*:*",
+          "matchCriteriaId": "17BDC1B0-BE6A-4680-A78E-5338AD709095"
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "nodes": [
+       {
+        "operator": "OR",
+        "negate": false,
+        "cpeMatch": [
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionEndExcluding": "4.4",
+          "matchCriteriaId": "1102FFF5-77B1-400E-93F8-AC6CFE2CC93C"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*",
+          "versionStartIncluding": "8.6",
+          "versionEndIncluding": "9.8",
+          "matchCriteriaId": "F45F69D6-7E32-4483-9EFC-63697CDDD22C"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:4.4:-:*:*:*:*:*:*",
+          "matchCriteriaId": "4C37CBBB-A4AA-40D0-9609-0620FDC12BA8"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:8.5:p1:*:*:*:*:*:*",
+          "matchCriteriaId": "7945F60B-460E-4CA6-9EB4-BEE663386D50"
+         },
+         {
+          "vulnerable": true,
+          "criteria": "cpe:2.3:a:openbsd:openssh:8.6:-:*:*:*:*:*:*",
+          "matchCriteriaId": "CB66ECE1-715A-4074-9355-E3512F7BCDBB"
+         }
+        ]
+       }
+      ]
+     }
+    ],
+    "references": [
+     {
+      "url": "https://access.redhat.com/errata/RHSA-2024:4312",
+      "source": "secalert@redhat.com",
+      "tags": [
+       "Third Party Advisory"
+      ]
+     }
+    ]
+   }
+  }
+ ]
+}

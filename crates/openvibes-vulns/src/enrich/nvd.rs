@@ -1,7 +1,10 @@
 //! NVD API 2.0 and EUVD search responses.
 
 use chrono::NaiveDateTime;
-pub use platform_store::enrichment::{Euvd, Nvd};
+pub use platform_store::{
+    cpe::Applicability,
+    enrichment::{Euvd, Nvd},
+};
 use serde::Deserialize;
 use serde_json::Value;
 
@@ -24,6 +27,8 @@ pub struct NvdPage {
     pub count: u64,
     /// The CVEs on this page.
     pub entries: Vec<Nvd>,
+    /// Affected application product ranges of every CVE on this page.
+    pub applicability: Vec<Applicability>,
 }
 
 #[derive(Deserialize)]
@@ -128,7 +133,96 @@ pub fn parse_nvd(content: &[u8]) -> Result<NvdPage, ParseError> {
             .iter()
             .filter_map(|item| record(&item.cve))
             .collect(),
+        applicability: response
+            .vulnerabilities
+            .iter()
+            .flat_map(|item| applicability(&item.cve))
+            .collect(),
     })
+}
+
+/// Version text of a `cpe:2.3:a:vendor:product:version:update:...` name:
+/// `None` for "any" (`*`) and "not applicable" (`-`) versions; an update
+/// such as `p1` joins the version (`8.5p1`).
+fn cpe_version(version: &str, update: &str) -> Option<String> {
+    if version == "*" || version == "-" || version.is_empty() {
+        return None;
+    }
+    Some(match update {
+        "*" | "-" | "" => version.to_owned(),
+        update => format!("{version}{update}"),
+    })
+}
+
+/// The affected application ranges of one NVD record: `vulnerable` matches
+/// of single `OR` nodes (`AND` configurations pair a product with a platform
+/// and are skipped), as ranges. A start that is exclusive is skipped (rare).
+/// Rejected records give none. Fedora releases NVD lists as affected ride
+/// along on every range of the CVE.
+fn applicability(cve: &Value) -> Vec<Applicability> {
+    let Some(cve_id) = cve["id"].as_str().filter(|id| is_cve(id)) else {
+        return Vec::new();
+    };
+    if cve["vulnStatus"] == "Rejected" {
+        return Vec::new();
+    }
+    let cvss = cvss(&cve["metrics"]).map(|s| s.0);
+    let mut fedora = Vec::new();
+    let mut rows = Vec::new();
+    for config in cve["configurations"].as_array().into_iter().flatten() {
+        let and = config["operator"] == "AND";
+        for node in config["nodes"].as_array().into_iter().flatten() {
+            for found in node["cpeMatch"].as_array().into_iter().flatten() {
+                let Some(criteria) = found["criteria"].as_str() else {
+                    continue;
+                };
+                let parts: Vec<&str> = criteria.split(':').collect();
+                if parts.len() < 7 || found["vulnerable"] != true {
+                    continue;
+                }
+                if parts[2] == "o" && parts[3] == "fedoraproject" && parts[4] == "fedora" {
+                    fedora.extend(cpe_version(parts[5], parts[6]));
+                    continue;
+                }
+                if parts[2] != "a" || and || node["operator"] != "OR" || node["negate"] == true {
+                    continue;
+                }
+                if found["versionStartExcluding"].is_string() {
+                    continue;
+                }
+                let text = |key: &str| found[key].as_str().map(|v| truncate(v, 64));
+                let (mut introduced, fixed, mut last) = (
+                    text("versionStartIncluding"),
+                    text("versionEndExcluding"),
+                    text("versionEndIncluding"),
+                );
+                if introduced.is_none() && fixed.is_none() && last.is_none() {
+                    // An exact version.
+                    let Some(version) = cpe_version(parts[5], parts[6]) else {
+                        continue;
+                    };
+                    introduced = Some(version.clone());
+                    last = Some(version);
+                }
+                rows.push(Applicability {
+                    cve_id: cve_id.to_owned(),
+                    vendor: truncate(&parts[3].to_ascii_lowercase(), 64),
+                    product: truncate(&parts[4].to_ascii_lowercase(), 64),
+                    introduced,
+                    fixed,
+                    last_affected: last,
+                    cvss,
+                    fedora: Vec::new(),
+                });
+            }
+        }
+    }
+    fedora.sort();
+    fedora.dedup();
+    for row in &mut rows {
+        row.fedora.clone_from(&fedora);
+    }
+    rows
 }
 
 /// One page of EUVD's exploited list.

@@ -132,6 +132,22 @@ the offline core used by `openvibes-admin feeds import` and the
   exploited list, page by page (live: 1,735 CVEs, 18 pages, 6 s); an
   unchanged list is not re-imported. Checked every interval with KEV and
   EPSS.
+- `cpe::{wanted_products, evaluate, refresh}` and
+  `sources::sync_applicability` (spec `docs/specs/2026-10-06-cpe-matching-design.md`):
+  NVD's affected upstream ranges (`cpeMatch` of application products in
+  single `OR` nodes; `AND` configurations skipped) are kept for the CPE
+  products installed Fedora packages could be (the package's or its source
+  package's name, subpackage base names, a short alias table), read by
+  last-modified windows from 2010 with a sync point of its own (`nvd-cpe`,
+  first read about 20 minutes unkeyed, restarted when a new product appears).
+  `refresh` compares each installed version's upstream version (RPM order)
+  with the ranges for CVEs no Fedora advisory of the release names, and
+  stores `cpe_findings`: confidence 60 for the package's own name, 55 for an
+  alias or subpackage base or an exact version, plus 15 when NVD lists the
+  release itself, at most 75. Kernels are skipped. Findings are recomputed
+  after each feed check and NVD crawl, kept apart from `vulnerabilities`
+  (no count, host flag or case changes), and shown by the console only when
+  lower confidence is asked for.
 - **Mapping confidence** (spec `docs/specs/2026-10-06-vulnerability-confidence-design.md`),
   derived when read by `platform_store::vulns::confidence` from the
   advisory's source: Fedora updateinfo 98, AlmaLinux 97, Debian, Ubuntu and

@@ -153,6 +153,7 @@ async fn check_all(pool: &Pool, fetcher: &Fetcher, arch: &str) {
             Err(error) => tracing::warn!(source = %source.name(), %error, "feed check failed"),
         }
     }
+    refresh_cpe(&mut client).await;
 }
 
 /// Syncs OSV at startup, every interval, and when the first inventory for a
@@ -223,6 +224,19 @@ async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
             tracing::warn!("database unavailable; nvd sync skipped");
             continue;
         };
+        // Applicability first: the first read is short next to the backfill.
+        match sources::sync_applicability(&mut client, &nvd, Utc::now()).await {
+            Ok(report) => {
+                tracing::info!(
+                    restarted = report.restarted,
+                    cves = report.cves,
+                    ranges = report.ranges,
+                    "nvd applicability synced"
+                );
+                refresh_cpe(&mut client).await;
+            }
+            Err(error) => tracing::warn!(%error, "nvd applicability sync failed"),
+        }
         match sources::sync_nvd(&mut client, &nvd, Utc::now()).await {
             Ok(report) => tracing::info!(
                 updated = report.updated,
@@ -231,6 +245,25 @@ async fn nvd_loop(pool: Pool, nvd: NvdClient, every: Duration) {
                 "nvd synced"
             ),
             Err(error) => tracing::warn!(%error, "nvd sync failed"),
+        }
+    }
+}
+
+/// Recomputes CPE findings of every Fedora release hosts report. They
+/// follow the stored NVD ranges and the Fedora advisories, so this runs
+/// after either changes.
+async fn refresh_cpe(client: &mut platform_store::Client) {
+    let releases = match vulns::fedora_releases(client).await {
+        Ok(releases) => releases,
+        Err(error) => {
+            tracing::warn!(%error, "cannot list releases");
+            return;
+        }
+    };
+    for release in releases {
+        match crate::cpe::refresh(client, "fedora", &release, Utc::now()).await {
+            Ok(findings) => tracing::info!(release, findings, "cpe findings refreshed"),
+            Err(error) => tracing::warn!(release, %error, "cpe refresh failed"),
         }
     }
 }
