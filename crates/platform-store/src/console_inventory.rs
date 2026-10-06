@@ -169,6 +169,27 @@ async fn visible(client: &Client, scope: &AgentScope, agent_id: &str) -> Result<
         .is_some())
 }
 
+/// The distinct package names of one host, sorted; `None` when the host is
+/// outside the scope or unknown. A rule test builds `package.names` from it.
+pub async fn host_package_names(
+    client: &Client,
+    scope: &AgentScope,
+    agent_id: &str,
+) -> Result<Option<Vec<String>>, StoreError> {
+    if !visible(client, scope, agent_id).await? {
+        return Ok(None);
+    }
+    let rows = client
+        .query(
+            "SELECT DISTINCT pv.name
+             FROM host_packages hp JOIN package_versions pv ON pv.id = hp.package_version_id
+             WHERE hp.agent_id = $1 ORDER BY pv.name",
+            &[&agent_id],
+        )
+        .await?;
+    Ok(Some(rows.iter().map(|row| row.get(0)).collect()))
+}
+
 /// A host's packages by name (then id), after `(name, id)`; `None` when the
 /// host is outside the scope or unknown.
 pub async fn host_packages(

@@ -638,3 +638,122 @@ async fn drafts_publish_through_the_signer_and_show_what_changed() {
     db.drop().await;
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn a_rule_is_tested_against_the_facts_the_platform_holds() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, hostname, last_seen_at)
+                VALUES ('agent.00000000-0000-4000-8000-000000000401', 'active', now(), 'web-01', now()),
+                       ('agent.00000000-0000-4000-8000-000000000402', 'active', now(), 'new-01', now());
+             INSERT INTO package_versions (id, manager, name, epoch, version, release, arch) VALUES
+                (1, 'rpm', 'redis', 0, '7.2', '1.fc44', 'x86_64'),
+                (2, 'rpm', 'bash', 0, '5.2', '1.fc44', 'x86_64');
+             INSERT INTO host_packages VALUES ('agent.00000000-0000-4000-8000-000000000401', 1), ('agent.00000000-0000-4000-8000-000000000401', 2);
+             UPDATE agents SET services_at = now(), services_owners = 'complete'
+                WHERE agent_id = 'agent.00000000-0000-4000-8000-000000000401';
+             INSERT INTO host_listeners VALUES
+                ('agent.00000000-0000-4000-8000-000000000401', 'tcp', '0.0.0.0', 6379, true, 'redis.service', 'redis'),
+                ('agent.00000000-0000-4000-8000-000000000401', 'tcp', '127.0.0.1', 5432, false, NULL, NULL);",
+        )
+        .await
+        .unwrap();
+    let (cookie, csrf) = login(&router, "olga").await;
+    let test = |agent: &str, rule: Value| json!({"agent_id": agent, "rule": rule});
+    let url = "/api/v1/rule-drafts/site/port.redis.exposed/test";
+    let post = |body: Value| {
+        let (router, cookie, csrf) = (router.clone(), cookie.clone(), csrf.clone());
+        async move { call(&router, "POST", url, &cookie, &csrf, Some(body), None).await }
+    };
+
+    let (status, hit, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("'6379' in facts['port.tcp.exposed']"),
+    ))
+    .await;
+    assert_eq!(status, StatusCode::OK, "{hit}");
+    assert_eq!(hit["outcome"], "match");
+    assert_eq!(hit["facts"]["packages"], 2);
+    assert_eq!(hit["facts"]["listeners"], 2);
+    assert_eq!(hit["evidence"], json!(["port.tcp.exposed"]));
+
+    let (_, miss, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("'22' in facts['port.tcp.exposed']"),
+    ))
+    .await;
+    assert_eq!(miss["outcome"], "no_match");
+    let (_, local, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("'5432' in facts['port.tcp.local']"),
+    ))
+    .await;
+    assert_eq!(local["outcome"], "match");
+    let (_, packages, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("'redis' in facts['package.names']"),
+    ))
+    .await;
+    assert_eq!(packages["outcome"], "match");
+
+    // Facts the platform doesn't rebuild, or a host that never reported
+    // its ports, are unavailable, not "no match".
+    let (_, unavailable, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("'sshd' in facts['process.names']"),
+    ))
+    .await;
+    assert_eq!(unavailable["outcome"], "unavailable");
+    let (_, silent, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000402",
+        rule("'6379' in facts['port.tcp.exposed']"),
+    ))
+    .await;
+    assert_eq!(silent["outcome"], "unavailable");
+
+    let (status, _, _) = post(test("nobody", rule("true"))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _, _) = post(test(
+        "agent.00000000-0000-4000-8000-000000000401",
+        rule("this is not cel (("),
+    ))
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    let (status, body, _) = call(
+        &router,
+        "POST",
+        "/api/v1/rule-drafts/site-alarms/a1/test",
+        &cookie,
+        &csrf,
+        Some(test(
+            "agent.00000000-0000-4000-8000-000000000401",
+            rule("true"),
+        )),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    let (viewer, viewer_csrf) = login(&router, "vera").await;
+    let (status, _, _) = call(
+        &router,
+        "POST",
+        url,
+        &viewer,
+        &viewer_csrf,
+        Some(test(
+            "agent.00000000-0000-4000-8000-000000000401",
+            rule("true"),
+        )),
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    db.drop().await;
+}

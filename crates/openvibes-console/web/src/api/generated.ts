@@ -1032,6 +1032,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rule-drafts/{rule_set_id}/{rule_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test_rule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-sets": {
         parameters: {
             query?: never;
@@ -3080,6 +3096,33 @@ export interface components {
              * @description Number of currently trusted public keys.
              */
             trusted_keys: number;
+        };
+        /** @description What the platform held for the host when it tested. */
+        RuleTestFacts: {
+            /** @description Listening sockets. */
+            listeners: number;
+            /** @description When the host last reported its listeners; absent if it never did. */
+            listeners_reported_at?: string | null;
+            /** @description Distinct installed package names. */
+            packages: number;
+        };
+        /** @description The host and rule to test. */
+        RuleTestInput: {
+            /** @description The host to test against. */
+            agent_id: string;
+            /** @description The rule as typed in the editor, saved or not. */
+            rule: components["schemas"]["RuleDraftInput"];
+        };
+        /** @description The rule's result on one host. */
+        RuleTestResult: {
+            /** @description The fact keys behind a match. */
+            evidence: string[];
+            /** @description The data the test ran on. */
+            facts: components["schemas"]["RuleTestFacts"];
+            /** @description Why a rule failed, or why it is unavailable here. */
+            message?: string | null;
+            /** @description `match`, `no_match`, `unavailable` or `failed`. */
+            outcome: string;
         };
         /** @description Request to create or replace an asset group's complete selector set. */
         SaveAssetGroupRequest: {
@@ -7459,6 +7502,51 @@ export interface operations {
             };
             /** @description Not a site rule set */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    test_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                rule_set_id: string;
+                rule_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RuleTestInput"];
+            };
+        };
+        responses: {
+            /** @description The rule's result on the host */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleTestResult"];
+                };
+            };
+            /** @description Not a site rule set, or no such host */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The rule does not pass the agent's checks, or is an alarm rule */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

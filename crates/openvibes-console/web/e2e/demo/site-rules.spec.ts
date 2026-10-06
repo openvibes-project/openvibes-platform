@@ -65,3 +65,23 @@ test("publishing a set asks for the password and shows what changes", async ({ p
   await expect(section).toContainText("Version 1 is published");
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("a rule is tested against a host", async ({ page }) => {
+  await page.goto("/site-rules");
+  await page.getByRole("button", { name: "New rule" }).first().click();
+  const inspector = page.locator(".inspector");
+  await inspector.getByLabel("Rule id").fill("port.https.exposed");
+  await inspector.getByLabel("Title").fill("HTTPS is exposed");
+  await inspector.getByLabel("Expression").fill("'443' in facts['port.tcp.exposed']");
+  await inspector.getByLabel("Finding message").fill("HTTPS listens beyond loopback.");
+  await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
+  await inspector.getByRole("button", { name: "Save draft" }).click();
+  await expect(inspector.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
+  await inspector.getByLabel("Host").selectOption({ index: 1 });
+  await inspector.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(inspector.getByRole("status")).toContainText("Matches: the rule would raise a finding");
+  await inspector.getByLabel("Expression").fill("'sshd' in facts['process.names']");
+  await inspector.getByRole("button", { name: "Test", exact: true }).click();
+  await expect(inspector.getByRole("status")).toContainText("Unavailable here");
+  expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+});

@@ -144,7 +144,12 @@ fn known_set(rule_set_id: &str) -> bool {
 }
 
 /// The rule as the agent's loader reads it.
-fn rule_json(rule_set_id: &str, rule_id: &str, version: u64, input: &RuleDraftInput) -> Value {
+pub(crate) fn rule_json(
+    rule_set_id: &str,
+    rule_id: &str,
+    version: u64,
+    input: &RuleDraftInput,
+) -> Value {
     let mut rule = json!({
         "id": rule_id,
         "version": version,

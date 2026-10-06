@@ -670,6 +670,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/check",
             axum::routing::post(crate::rule_drafts::check_draft),
         )
+        .route(
+            "/v1/rule-drafts/{rule_set_id}/{rule_id}/test",
+            axum::routing::post(crate::rule_test::test_rule),
+        )
         .method_not_allowed_fallback(api_method_not_allowed)
         .fallback(api_not_found)
 }
