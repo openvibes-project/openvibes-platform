@@ -6268,6 +6268,42 @@
           }
         }
       },
+      "AgentRuleSetView": {
+        "type": "object",
+        "description": "One rule set an agent reports holding.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "expires_at_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Signed expiry of that bundle, in Unix milliseconds."
+          },
+          "id": {
+            "type": "string",
+            "description": "Rule-set identifier."
+          },
+          "refused": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why the agent refused the last bundle it was given, when it did."
+          },
+          "version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Bundle version in use; absent before the agent accepted one."
+          }
+        }
+      },
       "AgentStatus": {
         "type": "string",
         "description": "Lifecycle state reported for an enrolled agent.",
@@ -6476,7 +6512,8 @@
           "id",
           "status",
           "enrolled_at",
-          "capabilities"
+          "capabilities",
+          "rule_sets"
         ],
         "properties": {
           "capabilities": {
@@ -6535,6 +6572,20 @@
               "null"
             ],
             "description": "RFC 3339 revocation time, if revoked."
+          },
+          "rule_sets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRuleSetView"
+            },
+            "description": "Rule sets the agent reported holding in its latest health report;\nempty for an agent that never reported one."
+          },
+          "rule_sets_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "RFC 3339 time that report was written."
           },
           "running_kernel": {
             "type": [

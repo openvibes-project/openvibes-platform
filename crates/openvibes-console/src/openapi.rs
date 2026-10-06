@@ -5,9 +5,9 @@ use utoipa::OpenApi;
 use crate::{
     api::{
         AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
-        AgentPage, AgentStatus, AgentSummary, AgentTagBindingImpact, AgentTagChangeRequest,
-        AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView,
-        ApplyAgentTagsRequest, AssetGroupSelectorInput, AuditEventPage, AuditEventView,
+        AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentTagBindingImpact,
+        AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse,
+        AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput, AuditEventPage, AuditEventView,
         AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, CertificatePage,
         CertificateView, CreateAccessBindingRequest, CreateEnrollmentTokenRequest,
         CreatedEnrollmentToken, CursorPagination, CveDetailView, EffectiveCapability,
@@ -192,6 +192,7 @@ use crate::{
         AgentStatus,
         AgentSummary,
         AgentView,
+        AgentRuleSetView,
         LoginRequest,
         crate::ChangePasswordRequest,
         crate::CreateUserRequest,

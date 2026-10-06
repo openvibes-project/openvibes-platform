@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { Agent, AlarmSummary, Certificate, Finding, HostPackage, Tag, TagPreview, VulnerabilityPage } from "../api/types";
+import type { Agent, AlarmSummary, Certificate, Finding, HostPackage, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
@@ -180,6 +180,7 @@ export function AgentPanel({ id }: { id: string }) {
                 <dt>Capabilities</dt><dd className="row row--wrap">{data.capabilities.length ? data.capabilities.map((c) => <span key={c} className="tag">{c}</span>) : "—"}</dd>
               </dl>
             </Section>
+            {data.status !== "imported" && <HostRuleSets agent={data} />}
             {can("asset_groups.manage", true) && <TagEditor id={id} />}
             <Section title="Certificates">
               <ul className="list list--plain">
@@ -197,6 +198,39 @@ export function AgentPanel({ id }: { id: string }) {
         )}
       </Tabs>
     </>
+  );
+}
+
+/** What an agent holds of each rule set, against what the platform has published. */
+function HostRuleSets({ agent }: { agent: Agent }) {
+  const { can } = useSession();
+  const published = useResource<{ items: RuleSet[] }>(can("rules.read") ? "/api/v1/rule-sets" : null);
+  const current = new Map((published.data?.items ?? []).map((set) => [set.rule_set_id, set.current_version ?? null]));
+  const sets = agent.rule_sets;
+  return (
+    <Section title="Rule sets">
+      {sets.length === 0 ? (
+        <p className="subtle">{agent.rule_sets_at ? "This agent reports no rule sets." : "This agent has not reported its rule sets yet. Agents report them in their health, which older versions do not send."}</p>
+      ) : (
+        <ul className="list list--plain" aria-label="Rule sets on this host">
+          {sets.map((set) => {
+            const latest = current.get(set.id);
+            const behind = set.version != null && latest != null && set.version < latest;
+            return (
+              <li key={set.id} className="list__row list__row--static">
+                <span className="mono">{set.id}</span>
+                <span className="grow" />
+                {set.version == null ? <span className="badge badge--warn badge--plain">no bundle yet</span> : <span className="mono subtle nowrap">v{set.version}</span>}
+                {behind && <span className="badge badge--warn badge--plain" title={`Published: v${latest}`}>behind v{latest}</span>}
+                {set.refused && <span className="badge badge--critical badge--plain" title="The agent refused the last bundle it was given">refused: {set.refused.replaceAll("_", " ")}</span>}
+                {set.expires_at_ms != null && <span className="subtle nowrap">expires {date(new Date(set.expires_at_ms).toISOString())}</span>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {agent.rule_sets_at && <p className="subtle">Reported <Ago value={agent.rule_sets_at} />.</p>}
+    </Section>
   );
 }
 

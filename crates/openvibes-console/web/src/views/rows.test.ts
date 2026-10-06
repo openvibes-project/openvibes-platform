@@ -24,7 +24,7 @@ describe("list selection matches the views", () => {
   });
 
   it("agents: status and text", () => {
-    const agent = (id: string, status: "active" | "stale") => ({ id, hostname: `${id}.example.test`, status, enrolled_at: "", capabilities: [] });
+    const agent = (id: string, status: "active" | "stale") => ({ id, hostname: `${id}.example.test`, status, enrolled_at: "", capabilities: [], rule_sets: [] });
     const all = [agent("web", "active"), agent("db", "stale")];
     expect(selectAgents(all, new URLSearchParams("status=stale")).map((a) => a.id)).toEqual(["db"]);
     expect(selectAgents(all, new URLSearchParams("q=web")).map((a) => a.id)).toEqual(["web"]);

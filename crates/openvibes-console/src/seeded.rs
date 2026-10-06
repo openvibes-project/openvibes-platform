@@ -17,9 +17,9 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
 
 use crate::{
-    AgentDetail, AgentPage, AgentStatus, AgentSummary, AgentView, BuiltInRole, CertificateView,
-    CursorPage, CursorPagination, FindingOrigin, FindingPage, FindingSummary, FindingView,
-    Permission, RoleBinding, Severity,
+    AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentView, BuiltInRole,
+    CertificateView, CursorPage, CursorPagination, FindingOrigin, FindingPage, FindingSummary,
+    FindingView, Permission, RoleBinding, Severity,
     problem::{ProblemDetails, problem_response},
     resolve_capabilities,
 };
@@ -278,6 +278,13 @@ impl Default for SeededRepository {
                         os_version: Some("44".to_owned()),
                         running_kernel: Some("6.17.4-300.fc44.x86_64".to_owned()),
                         inventory_at: last_seen_at.map(str::to_owned),
+                        rule_sets: vec![AgentRuleSetView {
+                            id: "baseline".to_owned(),
+                            version: Some(2),
+                            expires_at_ms: Some(1_853_910_427_825),
+                            refused: None,
+                        }],
+                        rule_sets_at: last_seen_at.map(str::to_owned),
                     },
                     certificates: vec![certificate],
                     scope_member: number % 5 == 0,

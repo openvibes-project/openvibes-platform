@@ -101,6 +101,8 @@ fn read_model_dtos_have_stable_wire_names() {
         os_version: Some("44".to_owned()),
         running_kernel: Some("6.17.4-300.fc44.x86_64".to_owned()),
         inventory_at: Some("2026-09-23T11:59:00Z".to_owned()),
+        rule_sets: Vec::new(),
+        rule_sets_at: None,
     };
     let agent_page = AgentPage {
         items: vec![agent],

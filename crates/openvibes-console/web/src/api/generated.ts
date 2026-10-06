@@ -1378,6 +1378,23 @@ export interface components {
             /** @description Opaque cursor for the next page, or `null` at the end. */
             next_cursor?: string | null;
         };
+        /** @description One rule set an agent reports holding. */
+        AgentRuleSetView: {
+            /**
+             * Format: int64
+             * @description Signed expiry of that bundle, in Unix milliseconds.
+             */
+            expires_at_ms?: number | null;
+            /** @description Rule-set identifier. */
+            id: string;
+            /** @description Why the agent refused the last bundle it was given, when it did. */
+            refused?: string | null;
+            /**
+             * Format: int64
+             * @description Bundle version in use; absent before the agent accepted one.
+             */
+            version?: number | null;
+        };
         /**
          * @description Lifecycle state reported for an enrolled agent.
          * @enum {string}
@@ -1483,6 +1500,13 @@ export interface components {
             os_version?: string | null;
             /** @description RFC 3339 revocation time, if revoked. */
             revoked_at?: string | null;
+            /**
+             * @description Rule sets the agent reported holding in its latest health report;
+             *     empty for an agent that never reported one.
+             */
+            rule_sets: components["schemas"]["AgentRuleSetView"][];
+            /** @description RFC 3339 time that report was written. */
+            rule_sets_at?: string | null;
             /** @description Running kernel from the last inventory (`uname -r`). */
             running_kernel?: string | null;
             /** @description Reported scanner version, if present. */

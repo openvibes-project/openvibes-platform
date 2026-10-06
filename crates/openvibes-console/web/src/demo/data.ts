@@ -95,6 +95,12 @@ export function buildDemoData(now = Date.now()) {
       revoked_at: status === "revoked" ? iso(now - 11 * DAY) : null,
       scanner_version: status === "imported" ? null : pick(["0.4.2", "0.4.2", "0.4.2", "0.4.1", "0.3.9"]),
       capabilities: status === "imported" ? [] : ["findings", "heartbeat", "inventory"],
+      // Deterministic (no random() call, so the rest of the fleet is unchanged): every 7th host is a version behind.
+      rule_sets: status === "imported" ? [] : [
+        { id: "baseline", version: n % 7 === 0 ? 1 : 2, expires_at_ms: now + 700 * DAY },
+        ...(n % 2 === 0 ? [{ id: "baseline-alarms", version: 1, expires_at_ms: now + 700 * DAY }] : []),
+      ],
+      rule_sets_at: status === "imported" ? null : iso(lastSeen),
     });
     tags.set(id, [{ key: "env", value: n % 3 === 0 ? "prod" : n % 3 === 1 ? "lab" : "office" }, { key: "role", value: role }]);
     const issued = now - Math.floor(random() * 60) * DAY;
