@@ -275,3 +275,27 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .about-card .kv dd { min-width: 0; }
 .about-links { gap: 20px; font-size: 13px; }
 @media (max-width: 600px) { .about-hero__version { justify-items: start; text-align: left; } }
+/* Compare two hosts */
+.compare-hosts { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 12px; align-items: stretch; }
+.compare-hosts__vs { align-self: center; color: var(--text-3); font-size: 18px; }
+.compare-host { display: grid; gap: 2px; min-width: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-2); background: var(--surface-2); }
+.compare-host__label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--text-3); }
+.compare-host a { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.compare-tools .search { flex: 1 1 180px; max-width: 280px; }
+.compare-table { table-layout: fixed; }
+.compare-table th:first-child { width: 44%; }
+.compare-table th:nth-child(n+2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.compare-table td { overflow-wrap: anywhere; }
+.compare-row td:first-child { padding-top: 6px; padding-bottom: 6px; }
+.compare-row td:first-child { box-shadow: inset 3px 0 0 var(--row-accent, transparent); }
+.compare-row--onlyA { --row-accent: var(--info); }
+.compare-row--onlyB { --row-accent: var(--accent); }
+.compare-row--changed { --row-accent: var(--warn); }
+.compare-row--changed td:nth-child(2) { background: var(--bad-soft); }
+.compare-row--changed td:nth-child(3) { background: var(--ok-soft); }
+.compare-table tbody tr { cursor: default; }
+.notice { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 12px; border-radius: var(--r-2); font-size: 13px; }
+.notice--ok { background: var(--ok-soft); color: var(--ok); }
+.notice--warn { background: var(--warn-soft); color: var(--warn); }
+@media (max-width: 560px) { .compare-hosts { grid-template-columns: 1fr; } .compare-hosts__vs { display: none; } }
