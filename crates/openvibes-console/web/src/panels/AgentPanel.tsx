@@ -102,14 +102,14 @@ export function AgentPanel({ id }: { id: string }) {
       />
       <div className="panel-glance">
         <div><span className="subtle">Last saved heartbeat</span><strong><Ago value={data.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></strong></div>
-        <div><span className="subtle">Findings</span><strong className="num">{findings.loading ? "…" : mine.length}</strong></div>
+        <div><span className="subtle">Compliance</span><strong className="num">{findings.loading ? "…" : mine.length}</strong></div>
         {can("alarms.read") && <div><span className="subtle">Active alarms</span><strong className="num">{alarms.loading ? "…" : alarmCount}</strong></div>}
         <div><span className="subtle">Vulnerabilities</span><strong className="num">{vulns.loading ? "…" : vulnItems.length}</strong></div>
         <div><span className="subtle">Enrolled</span><strong>{date(data.enrolled_at)}</strong></div>
       </div>
-      {/* Same order as the left menu (#118): Findings, Alarms, Vulnerabilities, Software, Ports, Services. */}
+      {/* Same order as the left menu (#118): Compliance, Alarms, Vulnerabilities, Software, Ports, Services. */}
       <Tabs tabs={[
-        { id: "findings", label: "Findings", count: mine.length },
+        { id: "findings", label: "Compliance", count: mine.length },
         ...(can("alarms.read") ? [{ id: "alarms", label: "Alarms", count: alarmItems.length }] as const : []),
         { id: "vulns", label: "Vulnerabilities", count: vulnItems.length },
         { id: "software", label: "Software" },

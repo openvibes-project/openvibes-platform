@@ -48,14 +48,14 @@ export type ViewDef = {
 
 export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
-  { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
-  { path: "/findings", label: "Findings", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
+  { path: "/findings", label: "Compliance", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
   { path: "/ports", label: "Ports", icon: "activity", group: "Investigate", phoneMore: true, keys: "g o", access: [{ permission: "agents.read" }], render: () => <Ports /> },
   { path: "/services", label: "Services", icon: "layers", group: "Investigate", phoneMore: true, keys: "g u", access: [{ permission: "agents.read" }], render: () => <Services /> },
+  { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
