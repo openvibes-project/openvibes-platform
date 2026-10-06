@@ -88,6 +88,10 @@ pub struct AlarmTriageView {
 /// One alarm with its process tree and triage.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct AlarmDetailView {
+    /// Original evaluation evidence; absent for legacy observations.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<crate::detection::DetectionView>)]
+    pub detection: Option<serde_json::Value>,
     /// The list fields.
     #[serde(flatten)]
     pub summary: AlarmSummaryView,
@@ -180,6 +184,7 @@ fn triage_view(triage: AlarmTriage) -> AlarmTriageView {
 
 fn detail_view(alarm: AlarmDetail) -> AlarmDetailView {
     AlarmDetailView {
+        detection: alarm.detection,
         summary: summary_view(alarm.summary),
         rule_set_version: alarm.rule_set_version,
         rule_version: alarm.rule_version,

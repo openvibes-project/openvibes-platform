@@ -45,7 +45,8 @@ cleanup() {
     if ((status != 0)); then
         echo "--- platform (tail)"; podman logs --tail 30 ov-alarms-e2e 2>&1 || true
         for log in "$W"/*.log; do [[ -f $log ]] && { echo "--- $(basename "$log") (tail)"; tail -n 20 "$log"; }; done
-        echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -20
+        echo "--- agent (tail)"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | tail -100
+        echo "--- agent fake-nginx starts"; sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager | grep '/tmp/fake-nginx' | tail -20 || true
     fi
     podman rm -f ov-alarms-e2e >/dev/null 2>&1 || true
     exit "$status"
@@ -81,13 +82,15 @@ echo "ok: signed in to the console API"
 # The agent: packaged binary, its exec audit rule, one signed alarm rule.
 A=$SHARED/agent
 sudo auditctl -R "$X/etc/audit/rules.d/openvibes-agent.rules" >/dev/null
+sudo auditctl -l | grep -q 'key=openvibes-exec' || fail "the packaged audit rule did not load"
 SIGN="$RPMS/sign_bundle"; chmod +x "$SIGN" 2>/dev/null || { cp "$SIGN" "$A/sign_bundle"; chmod +x "$A/sign_bundle"; SIGN=$A/sign_bundle; }
 KEY=$("$SIGN" keygen "$A/signing.key" | tail -1)
 cat > "$A/rules.json" <<'RULES'
 {"schema_version":1,"rules":[
  {"id":"web-shell","version":1,"title":"Shell from a web server","severity":"high","confidence":80,
   "kind":"process_event",
-  "expression":"event['parent.name'] == 'fake-nginx' && event['process.cmdline'].startsWith('sh -c ')",
+  "programs":["sh","dash"],
+  "expression":"event['parent.exe'] == '/tmp/fake-nginx'",
   "finding_message":"A web server started a shell"}]}
 RULES
 "$SIGN" sign "$A/signing.key" "$A/rules.json" alarms-e2e 1 e2e.rules 1 "$A/bundle.json" >/dev/null
@@ -108,7 +111,8 @@ trusted_keys = [{ issuer_key_id = "e2e.rules", public_key = "$KEY" }]
 EOF
 sudo systemd-run --quiet --collect --unit ov-alarms-e2e-agent --uid "$(id -u)" --gid "$(id -g)" \
     -p AmbientCapabilities=CAP_AUDIT_READ -p CapabilityBoundingSet=CAP_AUDIT_READ \
-    -p NoNewPrivileges=yes "$X/usr/bin/openvibes-agent" "$A/agent.toml"
+    -p NoNewPrivileges=yes -E OPENVIBES_TRACE_STARTS=1 \
+    "$X/usr/bin/openvibes-agent" "$A/agent.toml"
 agent_log() { sudo journalctl -u ov-alarms-e2e-agent -o cat --no-pager; }
 enrolled() { [[ "$(sql "SELECT count(*) FROM agents WHERE status = 'active'")" == 1 ]]; }
 wait_for "agent enrolled" 60 enrolled
@@ -118,13 +122,31 @@ scanned() { agent_log | grep -q 'scan matched'; }
 wait_for "agent took its rules" 60 scanned
 
 # A web server (a copy of bash named fake-nginx) starts a shell three times.
+# Run each start only after the previous one reached the platform. This host
+# also audits unrelated CI processes, so a burst can overflow the kernel's
+# multicast buffer and lose one of the three events under test.
 install -m 0755 /bin/bash /tmp/fake-nginx
-/tmp/fake-nginx -c 'for i in 1 2 3; do sh -c id >/dev/null; done'
-alarm_with_count() { # COUNT: the web-shell alarm at that count
-    api GET /api/v1/alarms | jq -e --argjson n "$1" \
-        '.items[] | select(.rule_id == "web-shell" and .count == $n)' >/dev/null
+alarm_count() {
+    api GET /api/v1/alarms | jq -e '[.items[] | select(.rule_id == "web-shell")][0].count // 0'
 }
-wait_for "one alarm, count 3, through POST /v1/alarms" 60 alarm_with_count 3
+for expected in 1 2 3; do
+    deadline=$((SECONDS + 60))
+    while [[ $(alarm_count "$expected") -lt $expected ]]; do
+        if ((SECONDS >= deadline)); then
+            echo "agent alarm health: $(sql "SELECT COALESCE(health->'alarms', 'null'::jsonb) FROM agents WHERE status = 'active'")" >&2
+            fail "one alarm, count $expected, through POST /v1/alarms (after 60s)"
+        fi
+        /tmp/fake-nginx -c 'sh -c id >/dev/null'
+        # Retry a start if unrelated audited processes caused the kernel to
+        # drop it. The next start waits for this count, keeping aggregation
+        # deterministic and preventing a burst from overflowing the buffer.
+        for _ in {1..10}; do
+            [[ $(alarm_count "$expected") -ge $expected ]] && break
+            sleep 1
+        done
+    done
+done
+[[ $(alarm_count 3) == 3 ]] || fail "expected three starts in one alarm"
 [[ "$(api GET /api/v1/alarms | jq '[.items[] | select(.rule_id == "web-shell")] | length')" == 1 ]] ||
     fail "the three starts did not collapse into one alarm"
 ID=$(api GET /api/v1/alarms | jq -r '.items[] | select(.rule_id == "web-shell") | .id')

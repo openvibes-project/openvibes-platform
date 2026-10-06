@@ -273,6 +273,17 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const items = findings().filter((f) => (severity === null || f.severity === severity) && (agent === null || f.agent_id === agent));
     return json({ ...page(items, query), generated_at: iso() });
   });
+  route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}", "findings.read", ({ agent, set, rule }) => {
+    const finding = findings().find((f) => f.agent_id === agent && f.rule_set_id === set && f.rule_id === rule);
+    return finding ? json(finding) : problem(404, "finding_not_found", "Finding not found");
+  });
+  route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}/rule/{finding}", "findings.read", ({ agent, set, rule, finding: id }) => {
+    const finding = findings().find((f) => f.agent_id === agent && f.rule_set_id === set && f.rule_id === rule && f.id === id);
+    if (!finding) return problem(404, "finding_not_found", "Finding not found");
+    return json({ status: finding.detection ? "exact" : "unavailable", rule_set_id: set, rule_set_version: finding.detection?.rule_set_version ?? null,
+      rule: finding.detection ? { id: rule, version: finding.rule_version, title: finding.message, expression: finding.detection.steps[0]?.expression,
+        finding_message: finding.message, severity: finding.severity, confidence: finding.confidence, kind: "snapshot", programs: null } : null });
+  });
   route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.read", ({ agent = "", set = "", rule = "" }) =>
     json(data.triage.get(triageKey(agent, set, rule)) ?? { state: "open", version: 0, rule_version: 3, note: null, assigned_to: null, accepted_until: null }));
   route("PUT", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.triage", ({ agent = "", set = "", rule = "" }, _, body) => {
@@ -300,6 +311,13 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         && (!severity || alarm.severity === severity))
       .sort((a, b) => b.last_seen.localeCompare(a.last_seen)).map(summary);
     return json(page(items, query));
+  });
+  route("GET", "/api/v1/alarms/{id}/rule", "alarms.read", ({ id }) => {
+    const alarm = alarmList().find((a) => a.id === id);
+    if (!alarm) return problem(404, "alarm_not_found", "Alarm not found");
+    return json({ status: "exact", rule_set_id: alarm.rule_set_id, rule_set_version: alarm.rule_set_version,
+      rule: { id: alarm.rule_id, version: alarm.rule_version, title: alarm.message, expression: alarm.detection.steps[0]?.expression,
+        finding_message: alarm.message, severity: alarm.severity, confidence: alarm.confidence, kind: "process_event", programs: [alarm.exe] } });
   });
   route("GET", "/api/v1/alarms/{id}", "alarms.read", ({ id = "" }) => {
     const alarm = alarmList().find((candidate) => candidate.id === id);

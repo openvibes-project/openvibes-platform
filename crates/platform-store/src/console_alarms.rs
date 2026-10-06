@@ -46,6 +46,8 @@ pub struct AlarmSummary {
 /// An alarm with its process tree and triage.
 #[derive(Clone, Debug, PartialEq)]
 pub struct AlarmDetail {
+    /// Original bounded detection evidence, absent for legacy observations.
+    pub detection: Option<serde_json::Value>,
     /// The list fields.
     pub summary: AlarmSummary,
     /// Rule set version.
@@ -186,7 +188,7 @@ pub async fn detail(
     let query = format!(
         "SELECT {SUMMARY}, al.rule_set_version, al.rule_version, al.confidence, al.process,
             al.ancestors, al.received_at, u.username, al.note, al.accepted_until,
-            al.triage_version, al.triage_updated_at, al.triage_updated_by
+            al.triage_version, al.triage_updated_at, al.triage_updated_by, al.detection
          FROM alarms al JOIN agents a ON a.agent_id = al.agent_id
          LEFT JOIN console_users u ON u.user_id = al.assigned_to
          WHERE al.id = $3 AND {visible}"
@@ -195,6 +197,7 @@ pub async fn detail(
     Ok(row.map(|row| {
         let summary = summary(&row);
         AlarmDetail {
+            detection: row.get(26),
             triage: AlarmTriage {
                 state: summary.state.clone(),
                 assigned_to_username: row.get(20),

@@ -243,6 +243,7 @@ fn tick(
                 confidence: Confidence::new(100).expect("valid confidence"),
                 message: "Load test finding: a synthetic observation of typical size".into(),
                 evidence: vec![id("process.names".into())],
+                detection: None,
             })
             .collect();
         let started = Instant::now();

@@ -460,6 +460,11 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route("/v1/findings/latest", get(authenticated_latest_findings))
         .route(
+            "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}",
+            get(crate::detection::finding_rule),
+        )
+        .route("/v1/alarms/{id}/rule", get(crate::detection::alarm_rule))
+        .route(
             "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}",
             get(authenticated_latest_finding),
         )
@@ -4413,6 +4418,7 @@ fn invalid_finding_query() -> Response {
 fn latest_finding_view(finding: platform_store::console_read::LatestFinding) -> crate::FindingView {
     use platform_store::console_read::Severity;
     crate::FindingView {
+        detection: finding.detection,
         id: finding.finding_id,
         agent_id: finding.agent_id,
         hostname: finding.hostname,

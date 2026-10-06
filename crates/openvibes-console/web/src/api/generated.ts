@@ -386,6 +386,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarms/{id}/rule": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["alarm_rule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant/messages": {
         parameters: {
             query?: never;
@@ -798,6 +814,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["authenticated_latest_finding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["finding_rule"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1523,6 +1555,7 @@ export interface components {
              * @description 0 to 100.
              */
             confidence: number;
+            detection?: null | components["schemas"]["DetectionView"];
             /** @description The process (masked args) as the agent sent it. */
             process: Record<string, never>;
             /** @description When ingest stored it (RFC 3339). */
@@ -2160,6 +2193,40 @@ export interface components {
              */
             version: number;
         };
+        /** @description Historical rule content for one authorized observation. */
+        DetectionRuleView: {
+            rule?: null | components["schemas"]["HistoricalRuleView"];
+            /** @description Rule set ID. */
+            rule_set_id: string;
+            /**
+             * Format: int64
+             * @description Known exact set version, absent for legacy ambiguous bundle identity.
+             */
+            rule_set_version?: number | null;
+            /** @description exact, legacy, or unavailable. Legacy means all examined definitions agree. */
+            status: string;
+        };
+        /** @description Original evaluation evidence; JSON scalars preserve their input types. */
+        DetectionView: {
+            /** @description Inputs actually read. */
+            inputs: components["schemas"]["InputView"][];
+            /**
+             * Format: int64
+             * @description Sample time in Unix milliseconds, not the last heartbeat.
+             */
+            observed_at_unix_ms: number;
+            /** @description SHA-256 of the signed bundle's preimage. */
+            preimage_sha256: string;
+            /**
+             * Format: int64
+             * @description Verified set version.
+             */
+            rule_set_version: number;
+            /** @description Original Boolean results; omitted branches were not evaluated. */
+            steps: components["schemas"]["StepView"][];
+            /** @description Some explanation detail could not be retained. */
+            truncated: boolean;
+        };
         /** @description One effective capability returned to the browser. */
         EffectiveCapability: {
             /** @description Permission granted to the current principal. */
@@ -2452,6 +2519,7 @@ export interface components {
              * @description Confidence as a percentage from 0 through 100.
              */
             confidence: number;
+            detection?: null | components["schemas"]["DetectionView"];
             /** @description Evidence key/value strings from the observation. */
             evidence: string[];
             /** @description RFC 3339 time of the first observation. */
@@ -2481,6 +2549,33 @@ export interface components {
             scan_id: string;
             /** @description Latest observed severity. */
             severity: components["schemas"]["Severity"];
+        };
+        /** @description Complete historical rule definition, read-only. */
+        HistoricalRuleView: {
+            /**
+             * Format: int32
+             * @description Confidence percentage.
+             */
+            confidence: number;
+            /** @description Complete original CEL source. */
+            expression: string;
+            /** @description Message emitted by this rule. */
+            finding_message: string;
+            /** @description ID within its rule set. */
+            id: string;
+            /** @description snapshot or process_event. */
+            kind: string;
+            /** @description Program prefilter, if present. */
+            programs?: string[] | null;
+            /** @description Severity name. */
+            severity: string;
+            /** @description Rule title. */
+            title: string;
+            /**
+             * Format: int64
+             * @description Rule version.
+             */
+            version: number;
         };
         /** @description The dashboard that opens first; `null` is the built-in Overview. */
         HomeDashboard: {
@@ -2539,6 +2634,17 @@ export interface components {
              *     incomplete.
              */
             truncated: boolean;
+        };
+        /** @description A recorded input, a scalar or a summarized list. */
+        InputView: {
+            /** @description Complete source list length, when summarized. */
+            item_count?: number | null;
+            /** @description Fact/event key. */
+            key: string;
+            /** @description complete, masked, summarized, or truncated. */
+            status: string;
+            /** @description Original scalar value; absent for lists or masked data. */
+            value?: unknown;
         };
         /** @description A case that holds an item. */
         ItemCaseView: {
@@ -3081,6 +3187,13 @@ export interface components {
              *     `low`, `unrated`); absent without advisories.
              */
             worst_severity?: string | null;
+        };
+        /** @description A condition evaluated at detection time. */
+        StepView: {
+            /** @description Canonical condition containing rule literals and keys. */
+            expression: string;
+            /** @description Original result. */
+            result: boolean;
         };
         /**
          * @description One service unit across the caller's hosts: a page of the hosts
@@ -4447,6 +4560,42 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
+            };
+        };
+    };
+    alarm_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical rule for the visible alarm */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionRuleView"];
+                };
+            };
+            /** @description Alarm not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -6405,6 +6554,45 @@ export interface operations {
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
+            };
+        };
+    };
+    finding_rule: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+                rule_set_id: string;
+                rule_id: string;
+                finding_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Historical rule for the visible observation */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DetectionRuleView"];
+                };
+            };
+            /** @description Observation no longer current or not visible */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

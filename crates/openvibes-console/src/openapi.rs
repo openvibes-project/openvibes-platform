@@ -30,6 +30,8 @@ use crate::{
         license(name = "MIT")
     ),
     paths(
+        crate::detection::finding_rule,
+        crate::detection::alarm_rule,
         crate::router::create_authenticated_asset_group,
         crate::router::update_authenticated_asset_group,
         crate::router::revoke_authenticated_agent,

@@ -58,6 +58,7 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
 
     let findings = [
         StoredFinding {
+            detection: None,
             finding_id: "finding-old".into(),
             scan_id: "scan-old".into(),
             rule_set_id: "base".into(),
@@ -70,6 +71,7 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
             evidence: vec!["pkg=old".into()],
         },
         StoredFinding {
+            detection: None,
             finding_id: "finding-new".into(),
             scan_id: "scan-new".into(),
             rule_set_id: "base".into(),
@@ -410,6 +412,7 @@ async fn agent_lists_and_lookups_apply_asset_group_conjunctions_in_sql() {
             &mut client,
             agent_id,
             &[StoredFinding {
+                detection: None,
                 finding_id: finding_id.into(),
                 scan_id: format!("scan-{finding_id}"),
                 rule_set_id: "base".into(),

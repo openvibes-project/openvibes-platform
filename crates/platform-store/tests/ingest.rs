@@ -243,6 +243,7 @@ async fn authentication_needs_serial_and_key_and_an_active_agent() {
 
 fn finding(id: &str, rule: &str, observed: DateTime<Utc>) -> StoredFinding {
     StoredFinding {
+        detection: None,
         finding_id: id.into(),
         scan_id: "scan.1".into(),
         rule_set_id: "baseline".into(),

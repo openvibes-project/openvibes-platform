@@ -1475,6 +1475,43 @@
         }
       }
     },
+    "/api/v1/alarms/{id}/rule": {
+      "get": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "alarm_rule",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical rule for the visible alarm",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionRuleView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Alarm not visible"
+          },
+          "503": {
+            "description": "Read unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/assistant/messages": {
       "post": {
         "tags": [
@@ -4141,6 +4178,66 @@
         }
       }
     },
+    "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}": {
+      "get": {
+        "tags": [
+          "findings"
+        ],
+        "operationId": "finding_rule",
+        "parameters": [
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "finding_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Historical rule for the visible observation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DetectionRuleView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Observation no longer current or not visible"
+          },
+          "503": {
+            "description": "Read unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage": {
       "get": {
         "tags": [
@@ -6637,6 +6734,17 @@
                 "format": "int32",
                 "description": "0 to 100."
               },
+              "detection": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DetectionView",
+                    "description": "Original evaluation evidence; absent for legacy observations."
+                  }
+                ]
+              },
               "process": {
                 "type": "object",
                 "description": "The process (masked args) as the agent sent it."
@@ -8269,6 +8377,90 @@
           }
         }
       },
+      "DetectionRuleView": {
+        "type": "object",
+        "description": "Historical rule content for one authorized observation.",
+        "required": [
+          "status",
+          "rule_set_id"
+        ],
+        "properties": {
+          "rule": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/HistoricalRuleView",
+                "description": "The rule; absent when original content cannot be resolved safely."
+              }
+            ]
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set ID."
+          },
+          "rule_set_version": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Known exact set version, absent for legacy ambiguous bundle identity."
+          },
+          "status": {
+            "type": "string",
+            "description": "exact, legacy, or unavailable. Legacy means all examined definitions agree."
+          }
+        }
+      },
+      "DetectionView": {
+        "type": "object",
+        "description": "Original evaluation evidence; JSON scalars preserve their input types.",
+        "required": [
+          "observed_at_unix_ms",
+          "rule_set_version",
+          "preimage_sha256",
+          "inputs",
+          "steps",
+          "truncated"
+        ],
+        "properties": {
+          "inputs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/InputView"
+            },
+            "description": "Inputs actually read."
+          },
+          "observed_at_unix_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sample time in Unix milliseconds, not the last heartbeat."
+          },
+          "preimage_sha256": {
+            "type": "string",
+            "description": "SHA-256 of the signed bundle's preimage."
+          },
+          "rule_set_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Verified set version.",
+            "minimum": 0
+          },
+          "steps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StepView"
+            },
+            "description": "Original Boolean results; omitted branches were not evaluated."
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "Some explanation detail could not be retained."
+          }
+        }
+      },
       "EffectiveCapability": {
         "type": "object",
         "description": "One effective capability returned to the browser.",
@@ -8930,6 +9122,17 @@
             "maximum": 100,
             "minimum": 0
           },
+          "detection": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DetectionView",
+                "description": "Original evaluation evidence; absent for legacy observations."
+              }
+            ]
+          },
           "evidence": {
             "type": "array",
             "items": {
@@ -8989,6 +9192,68 @@
           "severity": {
             "$ref": "#/components/schemas/Severity",
             "description": "Latest observed severity."
+          }
+        }
+      },
+      "HistoricalRuleView": {
+        "type": "object",
+        "description": "Complete historical rule definition, read-only.",
+        "required": [
+          "id",
+          "version",
+          "title",
+          "expression",
+          "finding_message",
+          "severity",
+          "confidence",
+          "kind"
+        ],
+        "properties": {
+          "confidence": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Confidence percentage.",
+            "minimum": 0
+          },
+          "expression": {
+            "type": "string",
+            "description": "Complete original CEL source."
+          },
+          "finding_message": {
+            "type": "string",
+            "description": "Message emitted by this rule."
+          },
+          "id": {
+            "type": "string",
+            "description": "ID within its rule set."
+          },
+          "kind": {
+            "type": "string",
+            "description": "snapshot or process_event."
+          },
+          "programs": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Program prefilter, if present."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity name."
+          },
+          "title": {
+            "type": "string",
+            "description": "Rule title."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Rule version.",
+            "minimum": 0
           }
         }
       },
@@ -9127,6 +9392,35 @@
           "truncated": {
             "type": "boolean",
             "description": "The agent cut a list to the protocol limits: the lists are\nincomplete."
+          }
+        }
+      },
+      "InputView": {
+        "type": "object",
+        "description": "A recorded input, a scalar or a summarized list.",
+        "required": [
+          "key",
+          "status"
+        ],
+        "properties": {
+          "item_count": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Complete source list length, when summarized.",
+            "minimum": 0
+          },
+          "key": {
+            "type": "string",
+            "description": "Fact/event key."
+          },
+          "status": {
+            "type": "string",
+            "description": "complete, masked, summarized, or truncated."
+          },
+          "value": {
+            "description": "Original scalar value; absent for lists or masked data."
           }
         }
       },
@@ -10369,6 +10663,24 @@
               "null"
             ],
             "description": "Worst severity among them (`critical`, `important`, `moderate`,\n`low`, `unrated`); absent without advisories."
+          }
+        }
+      },
+      "StepView": {
+        "type": "object",
+        "description": "A condition evaluated at detection time.",
+        "required": [
+          "expression",
+          "result"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Canonical condition containing rule literals and keys."
+          },
+          "result": {
+            "type": "boolean",
+            "description": "Original result."
           }
         }
       },

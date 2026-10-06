@@ -89,6 +89,8 @@ pub enum Origin {
 /// A finding to store, attributed to the authenticated agent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredFinding {
+    /// Original bounded detection evidence, absent for legacy observations.
+    pub detection: Option<serde_json::Value>,
     /// Stable, idempotent id.
     pub finding_id: String,
     /// Scan that produced it.
@@ -393,8 +395,8 @@ pub(crate) async fn store_findings_in(
             .execute(
                 "INSERT INTO findings (finding_id, observed_day, observed_at, agent_id, scan_id,
                      rule_id, rule_version, severity, confidence, message, evidence, received_at,
-                     origin, authenticated, rule_set_id)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $13)
+                     origin, authenticated, rule_set_id, detection)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $13, $16)
                  ON CONFLICT DO NOTHING",
                 &[
                     &finding.finding_id,
@@ -412,6 +414,7 @@ pub(crate) async fn store_findings_in(
                     &finding.rule_set_id,
                     &origin,
                     &authenticated,
+                    &finding.detection,
                 ],
             )
             .await?;
@@ -421,8 +424,8 @@ pub(crate) async fn store_findings_in(
                 "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
                      severity, first_observed_at, last_observed_at, rule_set_id,
                      last_observed_day, scan_id, confidence, message, evidence, received_at,
-                     origin, authenticated)
-                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+                     origin, authenticated, detection)
+                 VALUES ($1, $2, $3, $4, $5, $6, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
                  ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET
                      last_finding_id = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.last_finding_id ELSE current_findings.last_finding_id END,
@@ -440,6 +443,8 @@ pub(crate) async fn store_findings_in(
                          THEN EXCLUDED.message ELSE current_findings.message END,
                      evidence = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.evidence ELSE current_findings.evidence END,
+                     detection = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
+                         THEN EXCLUDED.detection ELSE current_findings.detection END,
                      received_at = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
                          THEN EXCLUDED.received_at ELSE current_findings.received_at END,
                      origin = CASE WHEN EXCLUDED.last_observed_at > current_findings.last_observed_at
@@ -464,6 +469,7 @@ pub(crate) async fn store_findings_in(
                     &now,
                     &origin,
                     &authenticated,
+                    &finding.detection,
                 ],
             )
             .await?;

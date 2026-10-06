@@ -22,6 +22,7 @@ mod auth_first;
 mod cases;
 mod config;
 mod dashboards;
+mod detection;
 mod error;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;

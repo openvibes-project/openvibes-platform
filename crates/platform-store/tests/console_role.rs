@@ -43,6 +43,7 @@ async fn console_store_writes_work_as_hyphenated_console_role() {
         &mut client,
         AGENT,
         &[StoredFinding {
+            detection: None,
             finding_id: "console-role-finding".into(),
             scan_id: "console-role-scan".into(),
             rule_set_id: "baseline".into(),

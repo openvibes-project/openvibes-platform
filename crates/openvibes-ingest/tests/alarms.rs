@@ -59,6 +59,7 @@ fn alarm(n: u32, first_seen_unix_ms: i64) -> Alarm {
         seeded: false,
     };
     Alarm {
+        detection: None,
         alarm_id: id(&format!("alarm.{n:032x}")),
         rule_set_id: id("baseline"),
         rule_set_version: 4,

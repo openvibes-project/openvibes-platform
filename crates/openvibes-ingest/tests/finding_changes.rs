@@ -50,6 +50,7 @@ fn client(world: &World, agent: &Agent) -> PlatformClient {
 
 fn finding(rule: &str, observed_at_unix_ms: i64) -> Finding {
     Finding {
+        detection: None,
         schema_version: SchemaVersion::V1,
         finding_id: id(&format!("finding.{rule}.{observed_at_unix_ms}")),
         scan_id: id("scan.1"),
