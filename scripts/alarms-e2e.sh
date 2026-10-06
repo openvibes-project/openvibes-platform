@@ -89,6 +89,7 @@ cat > "$A/rules.json" <<'RULES'
 {"schema_version":1,"rules":[
  {"id":"web-shell","version":1,"title":"Shell from a web server","severity":"high","confidence":80,
   "kind":"process_event",
+  "programs":["sh","dash"],
   "expression":"event['parent.exe'] == '/tmp/fake-nginx'",
   "finding_message":"A web server started a shell"}]}
 RULES
