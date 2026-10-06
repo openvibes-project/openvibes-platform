@@ -1,7 +1,7 @@
 // Compare two hosts (#120): only what differs, section by section (system,
 // open ports, services, software, findings). The panel id is "A B" (agent
 // ids never contain a space); with only "A", it asks for the second host.
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 
 import { useAllPages, useResource } from "../api/client";
 import type { Agent, Finding, HostPackage, HostServices } from "../api/types";
@@ -9,7 +9,8 @@ import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { PanelHeader, Section } from "../ui/panel";
-import { diff } from "./compare";
+import { Icon } from "../ui/Icon";
+import { filterRows, type Kind, rows } from "./compare";
 
 
 /** Lists longer than this are cut: a cut side can't be compared honestly. */
@@ -40,26 +41,69 @@ function useSide(id: string, withFindings: boolean): Side {
   }), [agent.data, agent.loading, agent.error, report.data, report.loading, report.error, packages.data, packages.loading, packages.error, findings, findingRows.loading, findingRows.error]);
 }
 
+const PAGE = 200;
+
 function Differences({ title, a, b, nameA, nameB, show, cut = false, missing }: { title: string; a: Map<string, string>; b: Map<string, string>; nameA: string; nameB: string; show: (key: string, value?: string) => string; cut?: boolean; missing?: string | undefined }) {
+  const [text, setText] = useState("");
+  const [kind, setKind] = useState<Kind>();
+  const [limit, setLimit] = useState(PAGE);
+  const all = useMemo(() => rows(a, b), [a, b]);
   // A host that never reported this has nothing to compare: say so.
-  if (missing) return <Section title={title}><p className="subtle">Can't compare: {missing}.</p></Section>;
+  if (missing) return <Section title={title}><p className="notice notice--warn">Can't compare: {missing}.</p></Section>;
   // A cut list would show false "only on one" rows: say so instead.
-  if (cut) return <Section title={title}><p className="subtle">Comparison incomplete: one host has more than can be compared here. Use Export to compare the full lists.</p></Section>;
-  const { onlyA, onlyB, changed } = diff(a, b);
-  const total = onlyA.length + onlyB.length + changed.length;
+  if (cut) return <Section title={title}><p className="notice notice--warn">Comparison incomplete: one host has more than can be compared here. Use Export to compare the full lists.</p></Section>;
+  if (all.length === 0) return <Section title={title}><p className="notice notice--ok"><Icon name="check" size={14} /> The same on both ({a.size.toLocaleString()})</p></Section>;
+  const count = (k: Kind) => all.filter((r) => r.kind === k).length;
+  const kinds = (["onlyA", "onlyB", "changed"] as const).filter((k) => count(k) > 0).length;
+  const shown = filterRows(all, text, kind);
+  const chip = (k: Kind, label: string) => (
+    <button key={k} type="button" className="chip" aria-pressed={kind === k} onClick={() => { setKind(kind === k ? undefined : k); setLimit(PAGE); }}>
+      {label} <span className="chip__count">{count(k).toLocaleString()}</span>
+    </button>
+  );
   return (
-    <Section title={`${title}${total ? ` · ${total} different` : ""}`}>
-      {total === 0 ? <p className="subtle">The same on both ({a.size}).</p> : (
-        <table className="table table--compact" aria-label={`${title} differences`}>
-          <thead><tr><th>{title}</th><th>{nameA}</th><th>{nameB}</th></tr></thead>
+    <Section title={`${title} · ${all.length.toLocaleString()} different`}>
+      <div className="compare-tools">
+        {all.length > 8 && (
+          <label className="search">
+            <Icon name="search" size={14} />
+            <input className="input" type="search" placeholder={`Filter ${title.toLowerCase()}`} aria-label={`Filter ${title.toLowerCase()}`} value={text} onChange={(e) => { setText(e.target.value); setLimit(PAGE); }} />
+          </label>
+        )}
+        {kinds > 1 && <div className="row row--wrap">
+          {count("onlyA") > 0 && chip("onlyA", "Only on A")}
+          {count("onlyB") > 0 && chip("onlyB", "Only on B")}
+          {count("changed") > 0 && chip("changed", "Changed")}
+        </div>}
+      </div>
+      {shown.length === 0 ? <p className="subtle">Nothing matches.</p> : (
+        <table className="table table--compact compare-table" aria-label={`${title} differences`}>
+          <thead><tr><th>{title}</th><th title={nameA}>A · {nameA}</th><th title={nameB}>B · {nameB}</th></tr></thead>
           <tbody>
-            {onlyA.map((k) => <tr key={`a${k}`}><td className="mono">{k}</td><td>{show(k, a.get(k))}</td><td className="subtle">—</td></tr>)}
-            {onlyB.map((k) => <tr key={`b${k}`}><td className="mono">{k}</td><td className="subtle">—</td><td>{show(k, b.get(k))}</td></tr>)}
-            {changed.map((k) => <tr key={`c${k}`}><td className="mono">{k}</td><td>{show(k, a.get(k))}</td><td>{show(k, b.get(k))}</td></tr>)}
+            {shown.slice(0, limit).map((r) => (
+              <tr key={`${r.kind}${r.key}`} className={`compare-row compare-row--${r.kind}`}>
+                <td><span className="mono">{r.key}</span> <span className={`badge badge--plain ${r.kind === "changed" ? "badge--warn" : "badge--info"}`}>{r.kind === "changed" ? "Changed" : `Only on ${r.kind === "onlyA" ? "A" : "B"}`}</span></td>
+                <td className={r.kind === "onlyB" ? "subtle" : undefined}>{r.kind === "onlyB" ? "—" : show(r.key, a.get(r.key))}</td>
+                <td className={r.kind === "onlyA" ? "subtle" : undefined}>{r.kind === "onlyA" ? "—" : show(r.key, b.get(r.key))}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       )}
+      {shown.length > limit && <button type="button" className="button button--small" onClick={() => setLimit(limit + PAGE)}>Show {Math.min(PAGE, shown.length - limit).toLocaleString()} more of {(shown.length - limit).toLocaleString()}</button>}
     </Section>
+  );
+}
+
+function HostCard({ side, id, label }: { side: Side; id: string; label: string }) {
+  const agent = side.agent;
+  const os = `${agent?.os_id ?? ""} ${agent?.os_version ?? ""}`.trim();
+  return (
+    <div className="compare-host">
+      <span className="compare-host__label">{label}</span>
+      <ObjectLink to={{ kind: "agent", id }}>{agent?.hostname ?? id}</ObjectLink>
+      <span className="subtle truncate">{os || "—"}{agent?.running_kernel ? ` · ${agent.running_kernel}` : ""}</span>
+    </div>
   );
 }
 
@@ -103,8 +147,9 @@ function Compare({ a, b }: { a: string; b: string }) {
   const system = (s: Side) => new Map([["system", `${s.agent?.os_id ?? ""} ${s.agent?.os_version ?? ""}`.trim()], ["running kernel", s.agent?.running_kernel ?? ""], ["agent version", s.agent?.scanner_version ?? ""]]);
   return (
     <>
-      <PanelHeader icon="agents" kind="Compare" title={`${nameA} ↔ ${nameB}`} subtitle={<span className="subtle">Only what differs · <ObjectLink to={{ kind: "agent", id: a }}>{nameA}</ObjectLink> · <ObjectLink to={{ kind: "agent", id: b }}>{nameB}</ObjectLink></span>} />
+      <PanelHeader icon="agents" kind="Compare" title={`${nameA} ↔ ${nameB}`} subtitle={<span className="subtle">Only what differs</span>} />
       <div className="panel-body stack">
+        <div className="compare-hosts"><HostCard side={left} id={a} label="A" /><span className="compare-hosts__vs" aria-hidden="true">↔</span><HostCard side={right} id={b} label="B" /></div>
         {(left.loading || right.loading) && <p className="subtle">Loading…</p>}
         <Differences title="System" a={system(left)} b={system(right)} nameA={nameA} nameB={nameB} show={(_, v) => v || "—"} />
         <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} missing={notReported} />
