@@ -6,12 +6,19 @@ The About page (`/about`) and its two read endpoints in `openvibes-console`.
 
 - `GET /api/v1/about`: platform version, the database schema version the
   build requires and the one applied, the PostgreSQL server version, and
-  whether the web UI is embedded in this build. No migration; every value is
-  already known to the process.
+  whether the web UI is embedded in this build, the host OS and architecture,
+  the process start time (for uptime), agent counts (active, reporting now,
+  revoked, newest agent version), the CA certificates with their expiry, and
+  each vulnerability feed's advisory count, last check and last change. No
+  migration; everything comes from tables the platform already keeps.
 - `GET /api/v1/about/update`: whether a newer release is published.
   `state` is `disabled`, `unavailable`, `up_to_date` or `available`, with
   `latest_version` and `release_url` when known. Network problems are never an
   error response; they are `unavailable`.
+
+The page shows a header card with the version and update status, then cards
+for platform, database, fleet and certificate authority, a feeds table and
+project links. Certificates expiring within 30 days are flagged.
 
 Both need a signed-in browser session and no particular permission. Bearer
 tokens are refused, as for dashboards.
