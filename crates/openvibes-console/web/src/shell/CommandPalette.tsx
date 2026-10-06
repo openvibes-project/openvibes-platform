@@ -74,7 +74,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
       if (seen.size >= 6) break;
     }
     for (const group of (groups.data ?? []).filter((g) => matches([g.latest_message, g.rule_id, g.rule_set_id], query)).slice(0, 6)) {
-      filtered.push({ id: `f${group.rule_set_id}/${group.rule_id}`, group: "Findings", icon: "findings", label: group.latest_message, hint: group.rule_id, run: openObject({ kind: "finding", id: `${group.rule_set_id}/${group.rule_id}` }) });
+      filtered.push({ id: `f${group.rule_set_id}/${group.rule_id}`, group: "Compliance", icon: "findings", label: group.latest_message, hint: group.rule_id, run: openObject({ kind: "finding", id: `${group.rule_set_id}/${group.rule_id}` }) });
     }
     return filtered;
   }, [query, agents.data, vulns.data, groups.data, dashboards.data, can, canView]);

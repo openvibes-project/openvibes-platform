@@ -19,7 +19,7 @@ import { setDensity, setTheme, useDensity, useTheme } from "./theme";
 const pinKey = "openvibes.v2.rail.pinned";
 
 
-/** Counts beside Findings, Alarms and Vulnerabilities, for what the user may see. */
+/** Counts beside Compliance, Alarms and Vulnerabilities, for what the user may see. */
 function useMenuCounts(): Partial<Record<string, string>> {
   const { can } = useSession();
   const alarms = useActiveAlarms();

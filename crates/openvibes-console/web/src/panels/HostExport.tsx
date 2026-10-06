@@ -14,7 +14,7 @@ type Section = "details" | "findings" | "alarms" | "vulnerabilities" | "software
 type Row = [Section, string, string, string, string, string];
 
 const LABELS: Record<Section, string> = {
-  details: "Details", findings: "Findings", alarms: "Alarms", vulnerabilities: "Vulnerabilities",
+  details: "Details", findings: "Compliance", alarms: "Alarms", vulnerabilities: "Vulnerabilities",
   software: "Software", ports: "Ports", services: "Services",
 };
 const PERMISSION: Partial<Record<Section, "findings.read" | "alarms.read" | "vulnerabilities.read">> = {

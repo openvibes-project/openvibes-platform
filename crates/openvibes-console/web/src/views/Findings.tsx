@@ -25,7 +25,7 @@ export function Findings() {
 
   return (
     <div className="view">
-      <ViewHeader title="Findings" count={rows.length} total={all.length} refresh="/api/v1/findings" placeholder="Filter by message, rule or rule set…"
+      <ViewHeader title="Compliance" count={rows.length} total={all.length} refresh="/api/v1/findings" placeholder="Filter by message, rule or rule set…"
         chips={[
           { label: "Include resolved", param: "state", value: "all", count: resolved },
           ...(["critical", "high", "medium", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s, count: bySeverity(s) })),
@@ -38,7 +38,7 @@ export function Findings() {
             : "Clear a filter to see more."}
         </Empty>
       ) : (
-        <DataTable label="Findings" rows={rows} rowKey={(g) => `${g.rule_set_id}/${g.rule_id}`}
+        <DataTable label="Compliance" rows={rows} rowKey={(g) => `${g.rule_set_id}/${g.rule_id}`}
           onOpen={(g) => nav.open({ kind: "finding", id: `${g.rule_set_id}/${g.rule_id}` }, true)}
           isOpen={(g) => top?.kind === "finding" && top.id === `${g.rule_set_id}/${g.rule_id}`}
           defaultSort={{ key: "severity", direction: "asc" }}

@@ -20,13 +20,16 @@
 .rail--pinned { width: var(--rail-open); }
 .rail__brand { display: flex; align-items: center; height: 36px; padding: 0 5px; margin-bottom: 8px; overflow: hidden; }
 .rail__mark { width: 28px; height: 28px; flex: none; }
-.rail__wordmark { height: 22px; margin-left: 10px; opacity: 0; transition: opacity var(--fast); }
-.rail:hover .rail__wordmark, .rail:has(:focus-visible) .rail__wordmark, .rail--pinned .rail__wordmark { opacity: 1; }
+.rail__wordmark { height: 22px; display: none; }
+/* Open rail: the full logotype alone, centered; the small mark is only for the collapsed rail. */
+.rail:hover .rail__brand, .rail:has(:focus-visible) .rail__brand, .rail--pinned .rail__brand { justify-content: center; }
+.rail:hover .rail__mark, .rail:has(:focus-visible) .rail__mark, .rail--pinned .rail__mark { display: none; }
 .rail__wordmark--dark { display: none; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail__wordmark--light { display: none; } :root:not([data-theme="light"]) .rail__wordmark--dark { display: block; } }
-:root[data-theme="dark"] .rail__wordmark--light { display: none; }
-:root[data-theme="dark"] .rail__wordmark--dark { display: block; }
-.rail:not(:hover):not(:has(:focus-visible)):not(.rail--pinned) .rail__wordmark { width: 0; margin: 0; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail:is(:hover, :has(:focus-visible), .rail--pinned) .rail__wordmark--dark { display: block; } }
+.rail:is(:hover, :has(:focus-visible), .rail--pinned) .rail__wordmark--light { display: block; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .rail .rail__wordmark--light { display: none; } }
+:root[data-theme="dark"] .rail .rail__wordmark--light { display: none; }
+:root[data-theme="dark"] .rail:is(:hover, :has(:focus-visible), .rail--pinned) .rail__wordmark--dark { display: block; }
 .rail__groups { flex: 1; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; overflow-x: hidden; }
 .rail__group { display: flex; flex-direction: column; gap: 2px; }
 .rail__heading {
