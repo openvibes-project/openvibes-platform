@@ -41,6 +41,7 @@ async fn setup() -> (TestDb, i64) {
         seeded: false,
     };
     let alarm = Alarm {
+        detection: None,
         alarm_id: Identifier::new(format!("alarm.{:032x}", 1)).unwrap(),
         rule_set_id: Identifier::new("baseline").unwrap(),
         rule_set_version: 1,
@@ -240,6 +241,7 @@ async fn a_command_suppression_closes_the_same_command_on_reingest() {
         "echo \"é\"\tdone".to_owned(),
     ];
     let alarm = |n: u32| Alarm {
+        detection: None,
         alarm_id: Identifier::new(format!("alarm.{n:032x}")).unwrap(),
         rule_set_id: Identifier::new("baseline").unwrap(),
         rule_set_version: 1,

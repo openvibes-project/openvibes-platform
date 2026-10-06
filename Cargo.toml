@@ -10,7 +10,7 @@ license = "MIT"
 
 [workspace.dependencies]
 platform-password = { path = "crates/platform-password" }
-openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "17b6baafd469a513140dc6a89d2930dd84874cb4" }
+openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "4b5b006" }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.145"
 toml = { version = "1.1.6", default-features = false, features = ["std", "serde", "parse"] }
@@ -32,8 +32,8 @@ rustls = { version = "0.23.45", default-features = false, features = ["ring", "s
 tower = { version = "0.5", default-features = false, features = ["util"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "std"] }
-openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "17b6baafd469a513140dc6a89d2930dd84874cb4" }
-openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "17b6baafd469a513140dc6a89d2930dd84874cb4" }
+openvibes-transport = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "4b5b006" }
+openvibes-rules = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "4b5b006" }
 ed25519-dalek = { version = "3.0.0", default-features = false, features = ["fast", "zeroize"] }
 sha2 = { version = "0.11", default-features = false }
 include_dir = { version = "0.7.4", default-features = false }

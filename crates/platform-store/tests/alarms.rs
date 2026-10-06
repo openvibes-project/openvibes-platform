@@ -76,6 +76,7 @@ fn process(exe: &str, args: &[&str]) -> AlarmProcess {
 
 fn alarm(id: &str, count: u32, first: DateTime<Utc>, last: DateTime<Utc>) -> Alarm {
     Alarm {
+        detection: None,
         alarm_id: Identifier::new(id).unwrap(),
         rule_set_id: Identifier::new("baseline").unwrap(),
         rule_set_version: 4,
@@ -154,7 +155,7 @@ async fn a_resend_raises_count_and_last_seen_and_never_lowers_them() {
         Stored::default()
     );
     // Five starts later, from another process: count and last seen rise,
-    // the stored process stays the first delivery's.
+    // the stored process and its evidence advance together.
     let t1 = t0 + Duration::seconds(30);
     let mut later = alarm("alarm.00000000000000000000000000000001", 5, t0, t1);
     later.process.exe = "/usr/bin/bash".into();
@@ -178,7 +179,7 @@ async fn a_resend_raises_count_and_last_seen_and_never_lowers_them() {
     let rows = stored(&client, &agent).await;
     assert_eq!(rows.len(), 1);
     assert_eq!((rows[0].0, rows[0].1), (5, t1));
-    assert_eq!(rows[0].4, "/usr/bin/sh");
+    assert_eq!(rows[0].4, "/usr/bin/bash");
     drop(client);
     db.drop().await;
 }

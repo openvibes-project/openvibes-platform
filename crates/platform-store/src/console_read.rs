@@ -247,6 +247,8 @@ fn parse_severity(value: String) -> Severity {
 /// Full latest observation snapshot retained independently of history partitions.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LatestFinding {
+    /// Original bounded detection evidence, absent for legacy observations.
+    pub detection: Option<serde_json::Value>,
     /// Finding identifier.
     pub finding_id: String,
     /// Agent id.
@@ -881,7 +883,7 @@ pub async fn latest_findings_in_scope(
                 "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
                     c.rule_version, c.severity, c.confidence, c.message, c.evidence,
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
-                    c.last_observed_at, c.received_at
+                    c.last_observed_at, c.received_at, c.detection
              FROM current_findings c JOIN agents a USING (agent_id)
              WHERE {visible_agent}
                AND ($1::text IS NULL OR c.severity = $1)
@@ -1145,7 +1147,7 @@ pub async fn latest_finding_in_scope(
                 "SELECT c.last_finding_id, c.agent_id, a.hostname, c.rule_set_id, c.rule_id,
                     c.rule_version, c.severity, c.confidence, c.message, c.evidence,
                     c.scan_id, c.authenticated, c.origin, c.first_observed_at,
-                    c.last_observed_at, c.received_at
+                    c.last_observed_at, c.received_at, c.detection
              FROM current_findings c JOIN agents a USING (agent_id)
              WHERE c.agent_id = $1 AND c.rule_set_id = $2 AND c.rule_id = $3
                AND {visible_agent}"
@@ -1290,6 +1292,7 @@ fn certificate_from_row(row: &Row) -> Certificate {
 
 fn latest_from_row(row: &Row) -> LatestFinding {
     LatestFinding {
+        detection: row.get(16),
         finding_id: row.get(0),
         agent_id: row.get(1),
         hostname: row.get(2),

@@ -60,6 +60,7 @@ fn digest_finding(
     evidence: &[String],
 ) -> Option<Finding> {
     Some(Finding {
+        detection: None,
         schema_version: SchemaVersion::V1,
         finding_id: Identifier::new("finding.stored").ok()?,
         scan_id: Identifier::new("scan.stored").ok()?,
@@ -224,7 +225,7 @@ async fn mark(
             "UPDATE current_findings SET source = 'changes', ended_at = $4,
                  end_approximate = $5, last_finding_id = $6, rule_version = $7,
                  severity = $8, confidence = $9, message = $10, evidence = $11,
-                 scan_id = $12, last_observed_at = $13, last_observed_day = $14
+                 scan_id = $12, last_observed_at = $13, last_observed_day = $14, detection = $15
              WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3",
             &[
                 &agent_id,
@@ -241,6 +242,7 @@ async fn mark(
                 &row.scan_id,
                 &seen,
                 &seen.date_naive(),
+                &row.detection,
             ],
         )
         .await?;
