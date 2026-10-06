@@ -729,7 +729,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       else if (old === JSON.stringify({ ...draft, version: 0, updated_at: "", updated_by: "" })) out.unchanged += 1;
       else out.changed.push(id);
     }
-    out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort();
+    out.removed = [...(before?.rules.keys() ?? [])].filter((id) => !store.has(id)).sort((a, b) => a.localeCompare(b));
     return out;
   };
   route("GET", "/api/v1/rule-drafts/{set}/changes", "rules.write", ({ set = "" }) => {
