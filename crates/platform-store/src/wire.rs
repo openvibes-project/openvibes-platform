@@ -49,6 +49,12 @@ pub fn finding(
         return Err("unstorable");
     }
     Ok(StoredFinding {
+        detection: finding
+            .detection
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|_| "out_of_range")?,
         finding_id: finding.finding_id.as_str().to_owned(),
         scan_id: finding.scan_id.as_str().to_owned(),
         rule_set_id: finding

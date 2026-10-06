@@ -27,6 +27,7 @@ fn alarm(n: u32, rule: &str, at: DateTime<Utc>) -> Alarm {
         seeded: false,
     };
     Alarm {
+        detection: None,
         alarm_id: Identifier::new(format!("alarm.{n:032x}")).unwrap(),
         rule_set_id: Identifier::new("baseline").unwrap(),
         rule_set_version: 1,

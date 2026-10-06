@@ -260,6 +260,7 @@ async fn setup() -> (TestDb, axum::Router, i64) {
         seeded: false,
     };
     let alarm = Alarm {
+        detection: None,
         alarm_id: Identifier::new(format!("alarm.{:032x}", 1)).unwrap(),
         rule_set_id: Identifier::new("baseline").unwrap(),
         rule_set_version: 1,
@@ -470,5 +471,152 @@ async fn suppressions_are_created_from_an_alarm_listed_and_removed() {
     assert_eq!(status, StatusCode::OK);
     let (status, _, _) = call(&router, "DELETE", &one, &cookie, &csrf, None, None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn observation_rules_are_historical_and_require_the_observation_scope() {
+    use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+    use ed25519_dalek::{Signer, SigningKey};
+    use openvibes_core::{ResourceLimits, SignedRuleEnvelope};
+    use sha2::{Digest, Sha256};
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router, alarm_id) = setup().await;
+    let mut client = db.pool.get().await.unwrap();
+    let key = SigningKey::from_bytes(&[21; 32]);
+    platform_store::rules::add_trust_key(
+        &mut client,
+        "baseline",
+        "test-key",
+        key.verifying_key().to_bytes(),
+    )
+    .await
+    .unwrap();
+    let now = Utc::now();
+    let mut original_hash = String::new();
+    for version in [1_u64, 2] {
+        let payload = json!({"schema_version":1,"rules":[{"id":"web-server-spawns-shell","version":1,"title":"Historical test rule","severity":"high","confidence":80,"expression":if version == 1 {"event['process.exe'] == '/usr/bin/sh'"} else {"event['process.exe'] == '/usr/bin/bash'"},"finding_message":"Historical match","kind":"process_event"}]}).to_string();
+        let payload_digest: [u8; 32] = Sha256::digest(payload.as_bytes()).into();
+        let payload_sha256_hex = openvibes_core::hex(&payload_digest);
+        let mut envelope: SignedRuleEnvelope = serde_json::from_value(json!({"schema_version":1,"rule_set_id":"baseline","rule_set_version":version,"issuer_key_id":"test-key","created_at_unix_ms":now.timestamp_millis()-172800000,"expires_at_unix_ms":now.timestamp_millis()-86400000,"payload_encoding":"json","payload_sha256_hex":payload_sha256_hex,"payload":payload,"signature_base64url":""})).unwrap();
+        let preimage = openvibes_rules::signing_preimage(&envelope, ResourceLimits::V1).unwrap();
+        let hash = {
+            let digest: [u8; 32] = Sha256::digest(&preimage).into();
+            openvibes_core::hex(&digest)
+        };
+        if version == 1 {
+            original_hash = hash;
+        }
+        envelope.signature_base64url = URL_SAFE_NO_PAD.encode(key.sign(&preimage).to_bytes());
+        let bytes = serde_json::to_vec(&envelope).unwrap();
+        platform_store::rules::publish(
+            &mut client,
+            &platform_store::rules::NewBundle {
+                rule_set_id: "baseline",
+                version: version as i64,
+                envelope: &bytes,
+                envelope_sha256: Sha256::digest(&bytes).into(),
+                issuer_key_id: "test-key",
+                created_at_ms: envelope.created_at_unix_ms,
+                expires_at_ms: envelope.expires_at_unix_ms,
+                published_by: "test",
+            },
+        )
+        .await
+        .unwrap();
+    }
+    // Retirement and removal of today's trust do not erase historical content.
+    platform_store::rules::retire(&client, "baseline")
+        .await
+        .unwrap();
+    platform_store::rules::remove_trust_key(&client, "baseline", "test-key")
+        .await
+        .unwrap();
+    let detail = json!({"observed_at_unix_ms":now.timestamp_millis(),"rule_set_version":1,"preimage_sha256":original_hash,"inputs":[],"steps":[],"truncated":false});
+    platform_store::ingest::store_findings(
+        &mut client,
+        AGENT,
+        &[platform_store::ingest::StoredFinding {
+            detection: Some(detail.clone()),
+            finding_id: "finding.explanation".into(),
+            scan_id: "scan.explanation".into(),
+            rule_set_id: "baseline".into(),
+            rule_id: "web-server-spawns-shell".into(),
+            rule_version: 1,
+            observed_at: now,
+            severity: "high".into(),
+            confidence: 80,
+            message: "Historical match".into(),
+            evidence: vec![],
+        }],
+        platform_store::ingest::Origin::Online,
+        now,
+    )
+    .await
+    .unwrap();
+    client
+        .execute(
+            "UPDATE alarms SET detection=$2 WHERE id=$1",
+            &[&alarm_id, &detail],
+        )
+        .await
+        .unwrap();
+    let finding_path = format!("/api/v1/findings/latest/{AGENT}/baseline/web-server-spawns-shell");
+    let rule_path = format!("{finding_path}/rule/finding.explanation");
+    let alarm_path = format!("/api/v1/alarms/{alarm_id}/rule");
+    let (cookie, csrf) = login(&router, "vera").await;
+    // Viewer has findings/alarms read, but not general rules.read.
+    for path in [&rule_path, &alarm_path] {
+        let (status, body, _) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert_eq!(body["status"], "exact");
+        assert_eq!(
+            body["rule"]["expression"],
+            "event['process.exe'] == '/usr/bin/sh'"
+        );
+    }
+    let (status, finding, _) =
+        call(&router, "GET", &finding_path, &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(finding["detection"], detail);
+    let (status, _, _) = call(
+        &router,
+        "GET",
+        &format!("{finding_path}/rule/wrong-observation"),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // A legacy finding cannot choose between different definitions sharing v1.
+    client
+        .execute(
+            "UPDATE current_findings SET detection=NULL WHERE agent_id=$1",
+            &[&AGENT],
+        )
+        .await
+        .unwrap();
+    let (_, body, _) = call(&router, "GET", &rule_path, &cookie, &csrf, None, None).await;
+    assert_eq!(body["status"], "unavailable");
+    // The evidence remains in immutable history after latest has changed.
+    let history: Value = client
+        .query_one(
+            "SELECT detection FROM findings WHERE finding_id='finding.explanation'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(history, detail);
+    client.batch_execute("INSERT INTO console_asset_groups (asset_group_id,name,created_at,created_by) VALUES ('31111111-1111-4111-8111-111111111111','outside',now(),'test'); INSERT INTO console_asset_group_selectors (asset_group_id,tag_key,tag_value,created_at) VALUES ('31111111-1111-4111-8111-111111111111','scope','outside',now()); UPDATE console_role_bindings SET asset_group_id='31111111-1111-4111-8111-111111111111' WHERE user_id='11111111-1111-4111-8111-111111111112'").await.unwrap();
+    for path in [&rule_path, &alarm_path] {
+        let (status, _, _) = call(&router, "GET", path, &cookie, &csrf, None, None).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
+    drop(client);
     db.drop().await;
 }

@@ -8,7 +8,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `platform-config` | library | built (PM0) | [platform-config.md](platform-config.md) |
 | `platform-pki` | library | CA hierarchy, CSR checks, client certificates (PM2) | [platform-pki.md](platform-pki.md) |
 | `platform-password` | library | console password rules, Argon2id hashing and verification, shared by the console and the signer (#107) | [platform-password.md](platform-password.md) |
-| `platform-store` | library | schema 33, imported hosts, OSV packages, vulnerability data/enrichment and persistent matcher retry state, rule distribution, console identity/sessions, triage, assistant and vulnerability permissions, console role grants, partitions, status, tokens, agents, CA certificates (PM1, PM2, VM0–VM5, OSV D2–D5, C2–C4) | [platform-store.md](platform-store.md) |
+| `platform-store` | library | schema 42, imported hosts, OSV packages, vulnerability data/enrichment and persistent matcher retry state, rule distribution, finding/alarm detection evidence, console identity/sessions, triage, assistant and vulnerability permissions, console role grants, partitions, status, tokens, agents, CA certificates (PM1, PM2, VM0–VM5, OSV D2–D5, C2–C4, P17) | [platform-store.md](platform-store.md) |
 | `platform_store::console_auth` | module | local identity/session store, access inventory, asset-group/tag changes, enrollment tokens, and service-account bearer tokens (C3) | [console-auth-store.md](console-auth-store.md) |
 | `platform_store::console_read` | module | bounded, cursor-paginated console read models and SQL-enforced scoped agent reads (C2/C3) | [console-read.md](console-read.md) |
 | `platform_store::audit` | module | audit event reads/writes, versioned retention policy, and bounded expiry cleanup (C3) | [console-audit.md](console-audit.md) |
@@ -27,6 +27,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-auth` | console module | opaque session secrets, secure cookie formatting, and browser-origin validation | [console-auth.md](console-auth.md) |
 | `console-auth-http` | console module | pre-auth, local login/logout, scoped reads, token/service-account/rule APIs, bearer-read auth, and per-request capabilities (C3) | [console-auth-http.md](console-auth-http.md) |
 | `console-triage` | console module | latest-finding analyst workflow, stale-write protection, audit/history, and observation-triggered reopen (C3) | [console-triage.md](console-triage.md) |
+| `console-detection` | console module and web panel | original evaluation evidence and observation-scoped historical rule detail (P17) | [console-detection.md](console-detection.md) |
 | `console-assistant` | console module and web page | opt-in local model chat with permission-scoped agent and finding lookups, safe citations, and in-tab-only history | [console-assistant.md](console-assistant.md) |
 | `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards; demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |

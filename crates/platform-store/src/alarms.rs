@@ -20,6 +20,8 @@ const INGEST: &str = "ingest";
 /// One alarm, checked and ready to store.
 #[derive(Clone, Debug)]
 pub struct StoredAlarm {
+    /// Original bounded detection evidence, absent for legacy observations.
+    pub detection: Option<serde_json::Value>,
     /// The agent's id, unique per agent.
     pub alarm_id: String,
     /// Rule set that raised it.
@@ -88,6 +90,12 @@ pub fn row(
         return Err("unstorable");
     }
     Ok(StoredAlarm {
+        detection: alarm
+            .detection
+            .as_ref()
+            .map(serde_json::to_value)
+            .transpose()
+            .map_err(|_| "out_of_range")?,
         alarm_id: alarm.alarm_id.as_str().to_owned(),
         rule_set_id: alarm.rule_set_id.as_str().to_owned(),
         rule_set_version: i64::try_from(alarm.rule_set_version).map_err(|_| "out_of_range")?,
@@ -195,7 +203,7 @@ pub async fn insert_batch(
         let known = transaction
             .query_opt(
                 "SELECT id, first_seen_day, count, last_seen, state,
-                    state = 'accepted_risk' AND accepted_until <= $3 FROM alarms
+                    state = 'accepted_risk' AND accepted_until <= $3, rule_set_id, rule_set_version, rule_id, rule_version FROM alarms
                  WHERE agent_id = $1 AND alarm_id = $2 LIMIT 1",
                 &[&agent_id, &alarm.alarm_id, &now],
             )
@@ -205,15 +213,33 @@ pub async fn insert_batch(
             let (count, last_seen, state): (i64, DateTime<Utc>, String) =
                 (known.get(2), known.get(3), known.get(4));
             let risk_expired: bool = known.get(5);
+            if known.get::<_, String>(6) != alarm.rule_set_id
+                || known.get::<_, i64>(7) != alarm.rule_set_version
+                || known.get::<_, String>(8) != alarm.rule_id
+                || known.get::<_, i64>(9) != alarm.rule_version
+            {
+                continue;
+            }
             if alarm.count <= count && alarm.last_seen <= last_seen {
                 continue;
             }
             transaction
                 .execute(
                     "UPDATE alarms SET count = GREATEST(count, $3),
+                        process = CASE WHEN $4 > last_seen THEN $5 ELSE process END,
+                        ancestors = CASE WHEN $4 > last_seen THEN $6 ELSE ancestors END,
+                        detection = CASE WHEN $4 > last_seen THEN $7 ELSE detection END,
                         last_seen = GREATEST(last_seen, $4)
                      WHERE id = $1 AND first_seen_day = $2",
-                    &[&id, &day, &alarm.count, &alarm.last_seen],
+                    &[
+                        &id,
+                        &day,
+                        &alarm.count,
+                        &alarm.last_seen,
+                        &alarm.process,
+                        &alarm.ancestors,
+                        &alarm.detection,
+                    ],
                 )
                 .await?;
             // Recurrence reopens a mitigated alarm, or one whose accepted
@@ -260,9 +286,9 @@ pub async fn insert_batch(
                 "INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id,
                     rule_set_version, rule_id, rule_version, severity, confidence, message,
                     first_seen, last_seen, count, process, ancestors, received_at,
-                    suppressed_by, state, note, triage_updated_at, triage_updated_by)
+                    suppressed_by, state, note, triage_updated_at, triage_updated_by, detection)
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                    $15, $16, $17, $18, $19, $20, $21)
+                    $15, $16, $17, $18, $19, $20, $21, $22)
                  RETURNING id",
                 &[
                     &alarm.first_seen.date_naive(),
@@ -286,6 +312,7 @@ pub async fn insert_batch(
                     &note,
                     &triage_at,
                     &triage_by,
+                    &alarm.detection,
                 ],
             )
             .await?

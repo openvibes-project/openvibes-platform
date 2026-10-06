@@ -13,6 +13,7 @@ const AGENT: &str = "agent.00000000-0000-4000-8000-000000000099";
 
 fn observation(id: &str, observed_at: chrono::DateTime<Utc>) -> StoredFinding {
     StoredFinding {
+        detection: None,
         finding_id: id.into(),
         scan_id: format!("scan-{id}"),
         rule_set_id: "base".into(),

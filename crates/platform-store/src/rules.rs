@@ -9,6 +9,27 @@ use crate::{Client, StoreError};
 /// Advisory lock namespace for per-set publishing ("ovru").
 const PUBLISH_LOCK: i32 = 0x6f76_7275;
 
+/// Stored historical envelopes for an already-authorized observation. Exact
+/// versions read one row. Legacy lookups return at most nine; the caller must
+/// refuse resolution when nine are returned (history was not fully examined).
+/// This does not apply retirement or expiry filters.
+pub async fn observation_bundles(
+    client: &Client,
+    set: &str,
+    version: Option<i64>,
+) -> Result<Vec<Vec<u8>>, StoreError> {
+    Ok(client
+        .query(
+            "SELECT envelope FROM rule_bundles WHERE rule_set_id = $1
+         AND ($2::bigint IS NULL OR version = $2) ORDER BY version DESC LIMIT 9",
+            &[&set, &version],
+        )
+        .await?
+        .into_iter()
+        .map(|row| row.get(0))
+        .collect())
+}
+
 /// A trusted Ed25519 key for one rule set.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TrustKey {

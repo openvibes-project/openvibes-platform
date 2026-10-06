@@ -72,6 +72,7 @@ async fn as_ingest(db: &TestDb) -> Client {
 
 fn finding(rule: &str, version: u64, at: DateTime<Utc>) -> Finding {
     Finding {
+        detection: None,
         schema_version: SchemaVersion::V1,
         finding_id: id(&format!(
             "finding.{rule}.{version}.{}",

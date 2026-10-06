@@ -41,6 +41,7 @@ fn host<'a>(
 
 fn finding(id: &str) -> StoredFinding {
     StoredFinding {
+        detection: None,
         finding_id: id.into(),
         scan_id: "scan.1".into(),
         rule_set_id: "baseline".into(),

@@ -131,7 +131,7 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
   return (
     <header className="topbar">
       <div className="topbar__title">{title}</div>
-      <button type="button" className="topbar__search" onClick={onPalette}>
+      <button type="button" className="topbar__search" aria-label="Search or jump to" onClick={onPalette}>
         <Icon name="search" size={15} />
         <span className="grow">Search or jump to…</span>
         <span className="kbd">Ctrl</span><span className="kbd">K</span>

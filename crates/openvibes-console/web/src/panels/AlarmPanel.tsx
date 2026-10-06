@@ -10,6 +10,7 @@ import { Ago, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, triageLabel } from "../ui/format";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
+import { DetectionEvidence } from "./DetectionEvidence";
 import { quiet, quietScopes } from "../views/Alarms";
 import { AddToCase } from "./AddToCase";
 import { allowedStates, noteRequired, triageBody } from "./triage";
@@ -80,7 +81,9 @@ export function AlarmPanel({ id }: { id: string }) {
         actions={can("cases.manage") && <AddToCase kind="alarm" id={a.id} label={a.message} />}
       />
       <div className="panel-body stack">
+        <DetectionEvidence key={a.id} detection={a.detection} ruleId={a.rule_id} ruleUrl={`/api/v1/alarms/${encodeURIComponent(id)}/rule`} />
         <Section title="Process tree">
+          <p className="subtle">{a.detection ? "Process sample from the recorded evidence time. " : "Recorded process sample; its individual timestamp was not retained. "}Repeated starts are counted; every occurrence is not retained. Command-line secrets may be masked.</p>
           <ol className="process-tree" aria-label="Process tree, oldest ancestor first">
             {tree.map((process, index) => <Process key={`${index}-${process.pid}`} process={process} current={false} />)}
             <Process process={a.process as unknown as AlarmProcess} current />

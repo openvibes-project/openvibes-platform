@@ -316,6 +316,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             &mut client,
             &agent_id,
             &[StoredFinding {
+                detection: None,
                 finding_id: format!("finding-{index}"),
                 scan_id: format!("scan-{index}"),
                 rule_set_id: "base".into(),

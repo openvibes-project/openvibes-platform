@@ -48,7 +48,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .list__row--static { padding: 6px 0; min-height: 34px; }
 .list--plain .list__row + .list__row { border-top: 1px solid var(--line); }
 .object-link { color: var(--text); font-weight: 500; }
-.object-link:hover { color: var(--accent); }
+.object-link:hover { color: var(--text); text-decoration: underline; }
 .triage-bar { display: flex; height: 8px; gap: 2px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 80px; }
 .triage-bar span { display: block; height: 100%; }
 .bulk-bar {
@@ -217,7 +217,6 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .process--current { background: var(--surface-3); }
 .process--current::before { border-left-color: var(--bad); }
 .process__args { white-space: pre-wrap; }
-
 /* Cases */
 .case-items { list-style: none; margin: 0; padding: 0; }
 .case-item { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }
@@ -306,3 +305,19 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .pick-host__row { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: 12px; width: 100%; min-height: 48px; padding: 6px 14px; cursor: pointer; color: var(--text); transition: background var(--fast); }
 .pick-host__row:hover { background: var(--surface-2); }
 .pick-host__row:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+
+.detection-code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+  padding: 12px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.detection-inputs .detection-input { display: contents; }
+.detection-inputs dt, .detection-inputs dd { overflow-wrap: anywhere; min-width: 0; }
+.detection-steps { padding-left: 20px; }
+.detection-steps li { margin-block: 8px; overflow-wrap: anywhere; }
+.detection-steps .badge { margin-left: 8px; }
+.detection-rule { border-left: 2px solid var(--border); padding-left: 12px; }

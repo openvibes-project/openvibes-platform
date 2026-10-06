@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { FindingGroup, GroupEndpoint } from "../api/types";
+import type { Finding, FindingGroup, GroupEndpoint } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
@@ -13,6 +13,7 @@ import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
 import { AddToCase } from "./AddToCase";
 import { findingRef } from "./cases";
+import { DetectionEvidence } from "./DetectionEvidence";
 import { allowedStates, noteRequired, triageBody } from "./triage";
 
 export const triageStates = ["open", "investigating", "mitigated", "accepted_risk", "false_positive"] as const;
@@ -47,6 +48,11 @@ export function FindingPanel({ id }: { id: string }) {
   const history = useAllPages<{ agent_id: string; observed_day: string }>(
     `/api/v1/findings/history?since=${encodeURIComponent(since)}&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`, 3000);
   const trend = useMemo(() => dailyHosts(history.data ?? [], 14), [history.data]);
+  const [evidenceHost, setEvidenceHost] = useState("");
+  const host = endpoints.data?.some((item) => item.agent_id === evidenceHost) ? evidenceHost
+    : endpoints.data?.length === 1 ? (endpoints.data[0]?.agent_id ?? "") : "";
+  const evidencePath = host ? `/api/v1/findings/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
+  const observation = useResource<Finding>(evidencePath);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, setState] = useState<string>("investigating");
   const [note, setNote] = useState("");
@@ -112,6 +118,20 @@ export function FindingPanel({ id }: { id: string }) {
         askAbout={{ ref: { kind: "finding", id }, label: `${ruleId} ${group.latest_message}` }}
       />
       <div className="panel-body stack">
+        <Section title="Detection details">
+          <label className="stack">Host
+            <select className="select" value={host} onChange={(event) => setEvidenceHost(event.target.value)}>
+              <option value="">Choose a host to inspect its evidence</option>
+              {(endpoints.data ?? []).map((item) => <option key={item.agent_id} value={item.agent_id}>{item.hostname ?? item.agent_id}</option>)}
+            </select>
+          </label>
+        </Section>
+        {host && (observation.error ? <ErrorBox error={observation.error} /> : !observation.data ? <Loading rows={3} /> : <>
+          <p>{observation.data.message}</p>
+          <p className="subtle">Rule version {observation.data.rule_version} · {observation.data.origin === "import" ? "Imported observation" : "Agent observation"}</p>
+          <DetectionEvidence key={observation.data.id} detection={observation.data.detection} references={observation.data.evidence}
+            ruleId={ruleId} ruleUrl={`${evidencePath}/rule/${encodeURIComponent(observation.data.id)}`} />
+        </>)}
         <Section title="Triage">
           <TriageBar counts={group.triage_counts} />
           <div className="row row--wrap" role="group" aria-label="Show hosts by triage state">
@@ -160,7 +180,7 @@ export function FindingPanel({ id }: { id: string }) {
               <tr>
                 {canTriage && <th className="check"><input type="checkbox" aria-label="Select all hosts" checked={items.length > 0 && items.every((item) => selected.has(item.agent_id))}
                   onChange={(event) => setSelected(event.target.checked ? new Set(items.map((item) => item.agent_id)) : new Set())} /></th>}
-                <th>Host</th><th>State</th><th className="hide-narrow">Assignee</th><th>Last seen</th>
+                <th>Host</th><th>Evidence</th><th>State</th><th className="hide-narrow">Assignee</th><th>Last seen</th>
               </tr>
             </thead>
             <tbody>
@@ -169,6 +189,7 @@ export function FindingPanel({ id }: { id: string }) {
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
                   <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
+                  <td><button type="button" className="object-link" onClick={() => setEvidenceHost(item.agent_id)}>View evidence</button></td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
                     ? <span className="badge badge--bad badge--plain" style={{ marginLeft: 6 }}>expired {date(item.accepted_until)}</span>
                     : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}

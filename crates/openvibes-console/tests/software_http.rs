@@ -617,6 +617,7 @@ async fn latest_findings_by_host_stay_inside_the_callers_scope() {
             &mut client,
             agent,
             &[platform_store::ingest::StoredFinding {
+                detection: None,
                 finding_id: format!("f-{agent}"),
                 scan_id: format!("s-{agent}"),
                 rule_set_id: "base".into(),

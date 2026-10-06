@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 41: draft rules for the console's own
+-- OpenVIBES platform schema version 42: draft rules for the console's own
 -- rule sets (board #19 / #107, own rules). A draft is one rule of the
 -- site's findings set (`site`) or alarm set (`site-alarms`), saved but not
 -- yet published. Publishing signs the set through the rule signer and is a

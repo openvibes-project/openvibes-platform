@@ -12,7 +12,7 @@ functions, so schema knowledge and SQL live in one place.
   bounded to 5 s; every statement to 10 s (`statement_timeout`). `url` is a libpq URL or key/value string; Unix
   sockets work (`postgresql:///openvibes?host=/run/postgresql&user=...`).
   Connections open lazily.
-- `SCHEMA_VERSION` (currently 33; a compile-time check ties it to the last
+- `SCHEMA_VERSION` (currently 42; a compile-time check ties it to the last
   migration), `schema_version(&client)` (`None` on an
   empty database), `migrate(&mut client)`.
 - `StoreError`: `Unavailable` (connection or pool), `NewerSchema(v)`,
@@ -443,7 +443,7 @@ Code over these tables:
 - `alarm_suppressions` (console): `list`, `create` (derived from a visible
   alarm; `program`/`command` need global scope) and `remove` (kept as
   history), audited.
-- `rule_drafts` (schema 41): one row per draft rule of `site` or
+- `rule_drafts` (schema 42): one row per draft rule of `site` or
   `site-alarms`; `list`, `get`, `put` (upsert) and `delete`. The console
   validates before `put`; the table holds only rules the agent would accept.
 
@@ -688,3 +688,17 @@ Migration 33 adds a pending-match version to `agents`, indexed for the
 vulnerability service. Inventory changes reset it to zero. The matcher
 records its version only after a successful host or release match; failed
 queries therefore remain eligible for retry after the service restarts.
+
+## Detection explanations (schema 41)
+
+Migration 41 stores the optional P17 `Detection` JSON on finding events,
+current finding snapshots, and alarms. Ingest validates evidence before it
+persists it. Repeated alarm observations update the latest process sample and
+explanation in the same transaction. Finding history retains the explanation
+from each observation.
+
+`observation_bundles` and `trust_keys` expose bounded historical signed
+bundle lookup to the console, including expired or retired bundles, so a
+finding or alarm can show the exact rule that produced its evidence. Bundle
+signature verification still uses the original signed bytes and recorded
+issuer key.
