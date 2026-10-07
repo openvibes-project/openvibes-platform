@@ -7,6 +7,7 @@ import { Trend, dailyHosts } from "../ui/trend";
 import { LIST_VIEWS } from "../views/rows";
 import { ATTENTION_KINDS } from "./attention";
 import { int, list, noteLines, noteParts, str, toInt } from "./config";
+import { TREND_DAYS, trendDays } from "./metrics";
 import { METRICS, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
 
@@ -43,9 +44,20 @@ const field = (label: string, control: ReactElement<{ "aria-label"?: string }>) 
 
 export function NumberSettings({ widget, onChange }: SettingsProps) {
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
-  return field("Count", <select className="select" value={metric} onChange={(e) => onChange({ ...widget.config, metric: e.target.value })}>
-    {METRIC_KEYS.map((key) => <option key={key} value={key}>{METRICS[key].label}</option>)}
-  </select>);
+  const trend = trendDays(widget.config.trend);
+  return (
+    <div className="stack">
+      {field("Count", <select className="select" value={metric} onChange={(e) => onChange({ ...widget.config, metric: e.target.value })}>
+        {METRIC_KEYS.map((key) => <option key={key} value={key}>{METRICS[key].label}</option>)}
+      </select>)}
+      {field("Trend", <select className="select" value={trend} onChange={(e) => onChange({ ...widget.config, trend: Number(e.target.value) })}>
+        {TREND_DAYS.map((d) => <option key={d} value={d}>{d === 0 ? "Off" : `${d} days`}</option>)}
+      </select>)}
+      {trend > 0 && field("Line", <select className="select" value={widget.config.line === "stepped" ? "stepped" : "smooth"} onChange={(e) => onChange({ ...widget.config, line: e.target.value })}>
+        <option value="smooth">Smooth</option><option value="stepped">Stepped</option>
+      </select>)}
+    </div>
+  );
 }
 
 export function BreakdownSettings({ widget, onChange }: SettingsProps) {

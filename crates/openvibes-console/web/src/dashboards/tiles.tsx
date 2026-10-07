@@ -6,11 +6,12 @@ import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
+import { LineChart } from "../ui/LineChart";
 import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
-import { METRICS, METRIC_KEYS, partText, type Metric } from "./metrics";
+import { METRICS, METRIC_KEYS, delta, partText, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
 export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
@@ -20,14 +21,14 @@ export function Unavailable() {
 }
 
 // A count's number is the last point of its history: the API's live "today" value.
-function useCount(metric: string | null) {
-  const { data } = useHistory(metric, 7);
-  return data?.at(-1)?.value;
+function useCount(metric: string | null, days = 7) {
+  const { data } = useHistory(metric, days);
+  return data;
 }
 
 function Part({ kind, id }: { kind: string; id: string }) {
-  const value = useCount(id);
-  const [path, params] = METRICS[id as Metric].view ?? ["/", {}];
+  const value = useCount(id)?.at(-1)?.value;
+  const [path, params] = METRICS[id as Metric].view as [string, Record<string, string>]; // catalogue.test.ts: every part has a view
   return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{value === undefined ? "…" : partText(kind, value)}</button>;
 }
 
@@ -35,8 +36,13 @@ export function NumberTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
   const def = METRICS[metric];
-  const allowed = def.permissions.every((p) => can(p as Permission));
-  const value = useCount(allowed ? metric : null);
+  const allowed = permitted(metric, (p) => can(p as Permission));
+  const trend = trendDays(widget.config.trend);
+  // trend <= 7 reuses the 7-day history the number needs anyway.
+  const history = useCount(allowed ? metric : null, Math.max(7, trend));
+  const value = history?.at(-1)?.value;
+  const points = trend > 0 ? history?.slice(-trend) ?? [] : [];
+  const change = delta(points);
   // No vulnerability feed yet: a 0 would claim nothing was found.
   const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
   if (!allowed) return <Unavailable />;
@@ -49,14 +55,19 @@ export function NumberTile({ widget }: WidgetProps) {
     <>
       <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : shown === undefined ? "…" : count(shown)}</span>
       {unset && <span className="subtle">Not set up</span>}
+      {!unset && change && <span className="delta">{change}</span>}
     </>
   );
   const view = def.view;
-  if (!view) {
-    return <div className="stack"><div className="tile-number tile-number--plain">{body}</div><div className="tile-parts">{def.parts?.map(([kind, id], i) => <Fragment key={id}>{i > 0 && " · "}<Part kind={kind} id={id} /></Fragment>)}</div></div>;
-  }
+  const chart = trend > 0 && !unset && history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />;
+  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && " · "}<Part kind={kind} id={id} /></Fragment>)}</div>;
   return (
-    <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
+    <div className="stack">
+      {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
+        : <div className="tile-number tile-number--plain">{body}</div>}
+      {chart}
+      {parts}
+    </div>
   );
 }
 

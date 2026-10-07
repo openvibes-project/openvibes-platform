@@ -35,10 +35,11 @@ describe("catalogue", () => {
     const text = ([["alarm", 0], ["vulnerability", 1], ["compliance", 0]] as const).map(([k, n]) => partText(k, n)).join(" · ");
     expect(text).toBe("0 alarms · 1 vulnerability · 0 compliance");
     expect(partText("alarm", 1)).toBe("1 alarm");
+    expect(partText("alarm", 1234)).toBe(`${(1234).toLocaleString()} alarms`);
     expect(partText("vulnerability", 2)).toBe("2 vulnerabilities");
   });
   it("every part is itself a catalogue entry", () => {
-    for (const m of Object.values(METRICS)) for (const [, id] of "parts" in m ? m.parts : []) expect(METRICS).toHaveProperty(id);
+    for (const m of Object.values(METRICS)) for (const [, id] of "parts" in m ? m.parts : []) { expect(METRICS).toHaveProperty(id); expect(METRICS[id as keyof typeof METRICS].view).toBeDefined(); }
   });
   it("keeps every id older dashboards used, including through the findings rename", () => {
     const old = ["alarms.active", "agents.active", "agents.stale", "agents.revoked", "compliance.open.critical", "compliance.open.high", "compliance.open.medium", "compliance.open.low", "vulns.exploited", "vulns.reboot_hosts", "vulns.no_fix"];

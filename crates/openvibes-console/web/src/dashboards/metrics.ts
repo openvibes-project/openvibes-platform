@@ -1,3 +1,4 @@
+import { count } from "../ui/format";
 // The count catalogue; ids and permissions must equal the server's CATALOGUE
 // (crates/openvibes-console/src/metrics.rs), which catalogue.test.ts enforces.
 // No DOM imports here so tests can read it.
@@ -35,5 +36,21 @@ export const METRIC_KEYS = Object.keys(defs) as Metric[];
 /** Fine print for one part of a cross-kind count: "1 vulnerability", "0 alarms". */
 export function partText(kind: string, n: number): string {
   const word = kind === "vulnerability" ? (n === 1 ? "vulnerability" : "vulnerabilities") : kind === "alarm" && n !== 1 ? "alarms" : kind;
-  return `${n} ${word}`;
+  return `${count(n)} ${word}`;
 }
+
+/** Change between the first and last point of the shown period; null under two points. */
+export function delta(points: { day: string; value: number }[]): string | null {
+  const first = points[0];
+  const last = points.at(-1);
+  if (!first || !last || points.length < 2) return null;
+  const d = last.value - first.value;
+  return d === 0 ? "no change" : `${d < 0 ? "−" : "+"}${count(Math.abs(d))}`;
+}
+
+/** A count needs every permission of its kinds. */
+export const permitted = (id: Metric, can: (permission: string) => boolean) => METRICS[id].permissions.every(can);
+
+export const TREND_DAYS = [0, 7, 30, 90] as const;
+/** The trend period a tile asks for; anything unknown means off. */
+export const trendDays = (v: unknown): (typeof TREND_DAYS)[number] => TREND_DAYS.find((d) => d === v) ?? 0;

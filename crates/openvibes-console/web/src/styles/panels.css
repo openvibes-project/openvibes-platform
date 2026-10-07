@@ -177,6 +177,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile-number { all: unset; cursor: pointer; display: block; }
 .tile-number:focus-visible { outline: 2px solid var(--focus); border-radius: var(--r-1); }
 .tile-number--plain { cursor: default; }
+.tile-number .delta { margin-left: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); }
 .tile-number .subtle { margin-left: 8px; font-size: 13px; }
 .tile-list { display: grid; gap: 6px; }
 .tile-more { justify-self: start; font-size: 13px; }

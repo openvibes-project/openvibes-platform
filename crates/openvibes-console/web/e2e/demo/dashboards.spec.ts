@@ -170,7 +170,7 @@ test("the editing note is for phones only", async ({ page }) => {
 
 test("a Critical tile is plain text with per-kind links beneath it", async ({ page }) => {
   await page.evaluate(() => {
-    const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 4, h: 2, config: { metric: "all.open.critical" } }] };
+    const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 4, h: 2, config: { metric: "all.open.critical", trend: 30 } }] };
     const now = new Date().toISOString();
     localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
       { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
@@ -178,6 +178,8 @@ test("a Critical tile is plain text with per-kind links beneath it", async ({ pa
   });
   await page.goto("/");
   const tile = page.locator(".tile", { hasText: "alarm" });
-  await expect(tile).toHaveText(/\d+ alarms? · \d+ vulnerabilit(y|ies) · \d+ compliance/);
+  await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 74 vulnerabilities · 9 compliance");
+  await expect(tile.locator(".tile-number .delta")).toBeVisible();
+  await expect(tile.locator(".linechart svg")).toBeVisible();
   await expect(tile.getByRole("button")).toHaveCount(3);
 });
