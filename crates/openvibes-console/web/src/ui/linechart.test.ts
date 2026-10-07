@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ariaLabel, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
+import { ariaLabel, clampIndex, emptyNote, spansYears, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
 
 const ys = (d: string) => [...d.matchAll(/[ -]?\d+(?:\.\d+)?,(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
 
@@ -107,5 +107,22 @@ describe("chart layout helpers", () => {
   it("spreadLabels keeps end labels apart and in order", () => {
     expect(spreadLabels([50, 52, 100], 12)).toEqual([45, 57, 100]);
     expect(spreadLabels([10], 12)).toEqual([10]);
+  });
+  it("dayLabel adds the year on request, and spansYears detects a year boundary", () => {
+    expect(dayLabel("2025-10-09", "2026-10-07", true)).toBe("9 Oct 2025");
+    expect(spansYears(["2025-10-09", "2026-10-07"])).toBe(true);
+    expect(spansYears(["2026-01-09", "2026-10-07"])).toBe(false);
+  });
+  it("emptyNote: no data, collecting with one point, nothing once a line exists", () => {
+    expect(emptyNote([])).toBe("No data yet");
+    expect(emptyNote([{ label: "X", points: [] }])).toBe("No data yet");
+    expect(emptyNote([{ label: "X", points: [{ day: "2026-10-07", value: 1 }] }])).toBe("Collecting since 7 Oct");
+    expect(emptyNote([a])).toBeNull();
+  });
+  it("clampIndex follows a shrinking series", () => {
+    expect(clampIndex(29, 10)).toBe(9);
+    expect(clampIndex(3, 10)).toBe(3);
+    expect(clampIndex(3, 0)).toBeNull();
+    expect(clampIndex(null, 10)).toBeNull();
   });
 });

@@ -103,8 +103,20 @@ export function axisDays(series: Series[]): string[] {
   return Array.from({ length: Math.round((hi - lo) / DAY) + 1 }, (_, i) => new Date(lo + i * DAY).toISOString().slice(0, 10));
 }
 
-export const fmtDay = (day: string) => new Date(Date.parse(day)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
-export const dayLabel = (day: string, today: string) => (day === today ? "Today" : fmtDay(day));
+export const fmtDay = (day: string, year = false) => new Date(Date.parse(day)).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year && { year: "numeric" }), timeZone: "UTC" });
+export const dayLabel = (day: string, today: string, year = false) => (day === today ? "Today" : fmtDay(day, year));
+/** True when the axis crosses a year boundary, so labels need the year. */
+export const spansYears = (days: string[]) => days.length > 1 && days[0]?.slice(0, 4) !== days.at(-1)?.slice(0, 4);
+/** What to show instead of a chart when there is not yet a line to draw, else null. */
+export function emptyNote(series: Series[]): string | null {
+  const days = axisDays(series);
+  const [first] = days;
+  if (first === undefined) return "No data yet";
+  const counts = series.map((s) => s.points.length);
+  return Math.max(...counts) < 2 ? `Collecting since ${fmtDay(first)}` : null;
+}
+/** A hover index that still points at a day after the series shrank. */
+export const clampIndex = (i: number | null, n: number) => (i === null || n === 0 ? null : Math.min(i, n - 1));
 
 export function ariaLabel(series: Series[]): string {
   const days = axisDays(series);

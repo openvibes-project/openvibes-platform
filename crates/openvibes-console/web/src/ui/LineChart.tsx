@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
+import { axisDays, clampIndex, dayLabel, emptyNote, indexAt, spansYears, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
 
 export type { Series };
 
@@ -11,9 +11,11 @@ export function LineChart({ series, variant, smooth }: Props) {
   const box = useRef<HTMLDivElement>(null);
   const tip = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [hover, setHover] = useState<number | null>(null);
+  const [hoverRaw, setHover] = useState<number | null>(null);
   const [table, setTable] = useState(false);
 
+  const note = emptyNote(series);
+  const empty = note !== null;
   useLayoutEffect(() => {
     const el = box.current;
     if (!el) return;
@@ -21,10 +23,12 @@ export function LineChart({ series, variant, smooth }: Props) {
     const observer = new ResizeObserver(([entry]) => setWidth(entry?.contentRect.width ?? el.clientWidth));
     observer.observe(el);
     return () => observer.disconnect();
-  }, [table]);
+  }, [table, empty]);
 
   const days = axisDays(series);
   const n = days.length;
+  const hover = clampIndex(hoverRaw, n);
+  const year = spansYears(days);
   const today = new Date().toISOString().slice(0, 10);
   const full = variant === "full";
   const multi = series.length > 1;
@@ -44,10 +48,10 @@ export function LineChart({ series, variant, smooth }: Props) {
   }, [hover, n, variant, multi]);
 
   const label = ariaLabel(series);
-  if (n === 0) return <div className="linechart linechart--empty subtle">No data yet</div>;
+  if (note !== null) return <div className="linechart linechart--empty subtle" ref={box}>{note}</div>;
   if (table) {
     return (
-      <div className="linechart">
+      <div className="linechart" ref={box}>
         <div className="linechart__table">
           <table>
             <thead><tr><th scope="col">Day</th>{series.map((s) => <th key={s.label} scope="col">{s.label}</th>)}</tr></thead>
@@ -72,7 +76,7 @@ export function LineChart({ series, variant, smooth }: Props) {
             </g>
           )) : <line className="linechart__grid" x1={l.padL} x2={width - l.padR} y1={yAt(0, max, l) + 0.5} y2={yAt(0, max, l) + 0.5} />}
           {xLabels.map((i) => (
-            <text key={i} className="linechart__ax" x={xAt(i, n, l)} y={l.H - 5} textAnchor={i === 0 && n > 1 ? "start" : i === n - 1 ? "end" : "middle"}>{dayLabel(days[i] ?? "", today)}</text>
+            <text key={i} className="linechart__ax" x={xAt(i, n, l)} y={l.H - 5} textAnchor={i === 0 && n > 1 ? "start" : i === n - 1 ? "end" : "middle"}>{dayLabel(days[i] ?? "", today, year && i === 0)}</text>
           ))}
           {series.map((s, si) => (
             <g key={s.label} data-s={si}>
@@ -112,7 +116,7 @@ export function LineChart({ series, variant, smooth }: Props) {
       )}
       {hover !== null && hoverDay && (
         <div className="linechart__tip" ref={tip}>
-          {dayLabel(hoverDay, today)}{!multi && " · "}
+          {dayLabel(hoverDay, today, year)}{!multi && " · "}
           {series.map((s, si) => {
             const v = s.points.find((p) => p.day === hoverDay)?.value ?? "–";
             return multi
