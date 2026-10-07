@@ -47,6 +47,10 @@ test("number tiles sit two to a row", async ({ page }) => {
   const [a, b] = [await box(tiles.nth(0)), await box(tiles.nth(1))];
   expect(Math.abs(a.y - b.y)).toBeLessThan(2);
   expect(a.height).toBeLessThan(120);
+  // The clamp, not the font, is what keeps it so: a title takes two lines at most.
+  for (const title of await page.locator(".tile[data-type=number] .tile__title").all()) {
+    expect(await title.evaluate((e) => e.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(e).lineHeight) + 1)).toBe(true);
+  }
 });
 
 test("an agent's host name wraps instead of being cut", async ({ page }) => {
