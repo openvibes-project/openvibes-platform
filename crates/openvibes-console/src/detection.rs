@@ -193,7 +193,7 @@ pub(crate) async fn finding_rule(
     Path((agent, set, rule, finding_id)): Path<(String, String, String, String)>,
 ) -> Response {
     let (scope, _) =
-        match authenticated_permission(&state, &headers, Permission::FindingsRead, false).await {
+        match authenticated_permission(&state, &headers, Permission::ComplianceRead, false).await {
             Ok(v) => v,
             Err(r) => return r,
         };

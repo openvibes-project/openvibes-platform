@@ -703,7 +703,7 @@ async fn finding_summary(
     State(repository): State<Arc<dyn ConsoleRepository>>,
     headers: HeaderMap,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+    let (persona, mode) = match context(&headers, Permission::ComplianceRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
@@ -718,7 +718,7 @@ async fn findings(
     headers: HeaderMap,
     query: Result<Query<RawFindingFilters>, QueryRejection>,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+    let (persona, mode) = match context(&headers, Permission::ComplianceRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
@@ -736,7 +736,7 @@ async fn finding_groups(
     State(repository): State<Arc<dyn ConsoleRepository>>,
     headers: HeaderMap,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+    let (persona, mode) = match context(&headers, Permission::ComplianceRead) {
         Ok(v) => v,
         Err(r) => return *r,
     };
@@ -805,7 +805,7 @@ async fn finding_group_endpoints(
     headers: HeaderMap,
     Path((rule_set, rule)): Path<(String, String)>,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+    let (persona, mode) = match context(&headers, Permission::ComplianceRead) {
         Ok(v) => v,
         Err(r) => return *r,
     };
@@ -856,7 +856,7 @@ async fn finding(
     headers: HeaderMap,
     Path((agent, rule_set, rule)): Path<(String, String, String)>,
 ) -> Response {
-    let (persona, mode) = match context(&headers, Permission::FindingsRead) {
+    let (persona, mode) = match context(&headers, Permission::ComplianceRead) {
         Ok(context) => context,
         Err(response) => return *response,
     };
@@ -1251,10 +1251,10 @@ mod tests {
         assert!(Persona::Admin.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Viewer.permits(Permission::AssistantUse, SeedMode::Mixed));
         assert!(!Persona::Operator.permits(Permission::AssistantUse, SeedMode::Mixed));
-        assert!(!Persona::Operator.permits(Permission::FindingsTriage, SeedMode::Mixed));
+        assert!(!Persona::Operator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
         assert!(Persona::ScopedOperator.permits(Permission::AgentsRevoke, SeedMode::Mixed));
         assert!(!Persona::ScopedOperator.permits(Permission::TokensCreate, SeedMode::Mixed));
-        assert!(!Persona::ScopedOperator.permits(Permission::FindingsTriage, SeedMode::Mixed));
+        assert!(!Persona::ScopedOperator.permits(Permission::ComplianceTriage, SeedMode::Mixed));
         assert!(Persona::Admin.permits(Permission::AuditRetentionManage, SeedMode::Mixed));
     }
 }

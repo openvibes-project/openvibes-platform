@@ -2917,7 +2917,7 @@ pub(crate) async fn authenticated_assistant_message(
         Err(response) => return response,
     };
     let (finding_scope, finding_actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsRead, false)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceRead, false)
             .await
         {
             Ok(value) => value,
@@ -3575,7 +3575,7 @@ pub(crate) async fn authenticated_finding_summary(
     headers: HeaderMap,
 ) -> Response {
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -4358,7 +4358,7 @@ pub(crate) async fn authenticated_latest_findings(
     };
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -4527,7 +4527,7 @@ pub(crate) async fn authenticated_latest_finding(
     Path((agent_id, rule_set_id, rule_id)): Path<(String, String, String)>,
 ) -> Response {
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -4588,7 +4588,7 @@ pub(crate) async fn authenticated_finding_triage(
     Path((agent_id, rule_set_id, rule_id)): Path<(String, String, String)>,
 ) -> Response {
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -4641,7 +4641,7 @@ pub(crate) async fn update_authenticated_finding_triage(
     >,
 ) -> Response {
     let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsTriage, true)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceTriage, true)
             .await
         {
             Ok(context) => context,
@@ -4804,7 +4804,7 @@ pub(crate) async fn authenticated_finding_history(
     };
 
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -4948,7 +4948,7 @@ pub(crate) async fn authenticated_finding_event(
     Path((observed_day, finding_id)): Path<(String, String)>,
 ) -> Response {
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(scope) => scope,
             Err(response) => return response,
         };
@@ -5436,7 +5436,7 @@ pub(crate) async fn authenticated_finding_groups(
         FindingGroupCursor, FindingGroupQuery, finding_groups_in_scope,
     };
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(v) => v,
             Err(r) => return r,
         };
@@ -5585,7 +5585,7 @@ pub(crate) async fn authenticated_finding_group_endpoints(
         FindingGroupEndpointCursor, FindingGroupEndpointQuery, finding_group_endpoints_in_scope,
     };
     let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
+        match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead).await {
             Ok(v) => v,
             Err(r) => return r,
         };
@@ -5741,7 +5741,7 @@ pub(crate) async fn update_authenticated_finding_group_triage(
     payload: Result<Json<crate::BulkFindingTriageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
     let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsTriage, true)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceTriage, true)
             .await
         {
             Ok(v) => v,
