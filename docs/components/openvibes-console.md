@@ -658,3 +658,9 @@ Console: rule results are now "compliance findings". API paths moved from
 saved dashboards are migrated; update scripts). Migration 43 changes stored
 data: run Update, which takes a backup. The agent wire protocol and the ingest
 API (`/v1/findings`) keep the name "findings".
+
+Also renamed: the cases API's item kind `finding` is now `compliance_finding`
+(stored items are migrated; sending `finding` is refused with 422
+`invalid_kind`); the problem code `finding_not_found` is now
+`compliance_finding_not_found`; the page `/findings` is now `/compliance`
+(old links and saved views carry over).
