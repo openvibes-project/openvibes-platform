@@ -246,6 +246,7 @@ fn common_scope(scopes: Vec<AgentScope>) -> Option<AgentScope> {
     params(HistoryParams),
     responses(
         (status = 200, description = "Daily values of one count, ending with today's live value", body = MetricHistory),
+        (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Missing permission, or the metric spans kinds with different scopes", body = ProblemDetails),
         (status = 422, description = "Unknown metric or unsupported window", body = ProblemDetails)
     )
@@ -307,7 +308,7 @@ pub(crate) async fn history(
     };
     let mut points: Vec<MetricPoint> = stored
         .into_iter()
-        .filter(|(day, _)| *day != today)
+        .filter(|(day, _)| *day < today)
         .map(|(day, value)| MetricPoint {
             day: day.to_string(),
             value: value.max(0) as u64,
@@ -342,7 +343,11 @@ mod tests {
             match &m.expr {
                 Expr::Sum(cols) => {
                     for c in *cols {
-                        assert!(history::COLUMNS[..15].contains(c), "{c}");
+                        assert!(
+                            history::COLUMNS[..10].contains(c)
+                                || history::COLUMNS[11..15].contains(c),
+                            "{c}"
+                        );
                     }
                 }
                 Expr::HostsWhere(c) => assert!(conditions.contains(c), "{c}"),

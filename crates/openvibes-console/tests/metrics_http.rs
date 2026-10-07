@@ -10,7 +10,7 @@ use axum::{
     extract::ConnectInfo,
     http::{Request, StatusCode, header},
 };
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
 use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
@@ -229,13 +229,27 @@ async fn setup() -> (TestDb, axum::Router) {
          INSERT INTO console_asset_group_selectors VALUES ('{GROUP_A}', 'env', 'a', now());
          INSERT INTO console_agent_tags VALUES ('{A}', 'env', 'a', now(), 'test');"
     );
-    for day in ["2026-10-05", "2026-10-06"] {
+    for day in [
+        "(now() AT TIME ZONE 'UTC')::date - 2",
+        "(now() AT TIME ZONE 'UTC')::date - 1",
+    ] {
         for (agent, critical) in [(A, 1), (B, 5)] {
             sql.push_str(&format!(
-                "INSERT INTO host_daily_counts VALUES ('{day}', '{agent}', 'active',
+                "INSERT INTO host_daily_counts VALUES ({day}, '{agent}', 'active',
                     0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
             ));
         }
+    }
+    // A stored row for today (replaced by the live value) and one dated
+    // tomorrow (clock skew, restored backup; never served).
+    for (day, critical) in [
+        ("(now() AT TIME ZONE 'UTC')::date", 99),
+        ("(now() AT TIME ZONE 'UTC')::date + 1", 77),
+    ] {
+        sql.push_str(&format!(
+            "INSERT INTO host_daily_counts VALUES ({day}, '{B}', 'active',
+                0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
+        ));
     }
     client.batch_execute(&sql).await.unwrap();
     user(
@@ -278,19 +292,25 @@ async fn history_sums_visible_hosts_and_appends_today() {
         return;
     }
     let (db, router) = setup().await;
-    let uri = "/api/v1/metrics/history?metric=vulns.open.critical&days=365";
+    let uri = "/api/v1/metrics/history?metric=vulns.open.critical&days=7";
     let (vera, _) = login(&router, "vera").await;
     let (status, global) = get(&router, &vera, uri).await;
     assert_eq!(status, StatusCode::OK);
+    let today = Utc::now().date_naive();
+    let day = |n: i64| (today - Duration::days(n)).to_string();
+    // Stored today (99) and tomorrow (77) rows are not served: the last
+    // point is today's live value, once.
     assert_eq!(
-        global["points"][0],
-        serde_json::json!({"day": "2026-10-05", "value": 6})
+        global["points"],
+        serde_json::json!([
+            {"day": day(2), "value": 6},
+            {"day": day(1), "value": 6},
+            {"day": day(0), "value": 0},
+        ])
     );
     let (sam, _) = login(&router, "sam").await;
     let (_, scoped) = get(&router, &sam, uri).await;
     assert_eq!(scoped["points"][0]["value"], 1);
-    let last = global["points"].as_array().unwrap().last().unwrap();
-    assert_eq!(last["day"], Utc::now().date_naive().to_string());
     db.drop().await;
 }
 

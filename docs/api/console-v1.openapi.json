@@ -4613,6 +4613,16 @@
               }
             }
           },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "403": {
             "description": "Missing permission, or the metric spans kinds with different scopes",
             "content": {

@@ -7201,6 +7201,15 @@ export interface operations {
                     "application/json": components["schemas"]["MetricHistory"];
                 };
             };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Missing permission, or the metric spans kinds with different scopes */
             403: {
                 headers: {
