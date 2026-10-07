@@ -35,13 +35,15 @@ pub mod dashboards;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
 pub mod finding_changes;
-/// Host package inventories (vulnerability management).
 pub mod health;
+/// Daily per-host problem counts for history graphs.
+pub mod history;
 /// Open ports and running services per host (P15, Assets v2).
 pub mod host_services;
 /// Queries the ingest service runs.
 pub mod imports;
 pub mod ingest;
+/// Host package inventories (vulnerability management).
 pub mod inventory;
 mod maintenance;
 mod migrate;
