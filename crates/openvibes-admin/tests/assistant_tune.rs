@@ -353,3 +353,22 @@ fn another_backend_only_try_restarts_and_skips_the_health_wait() {
     assert!(!stderr.contains("systemctl restart"), "{stderr}");
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_second_run_fails_fast_while_one_is_running() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = tree("locked", port, 60);
+    let lock = fs::File::create(root.join("var/lib/openvibes-llm/tune.lock")).unwrap();
+    lock.lock().unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("another assistant-tune is running"),
+        "{stderr}"
+    );
+    assert!(!root.join(TUNING).exists());
+    drop(lock);
+    assert_eq!(tune(&root, &[]).status.code(), Some(0));
+    fs::remove_dir_all(&root).unwrap();
+}

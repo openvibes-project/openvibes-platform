@@ -163,6 +163,32 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     result.map_err(err)
 }
 
+/// Holds `tune.lock` in the data directory for the whole run; a second
+/// run is refused. The directory is the admin account's: no symlink is
+/// followed, a FIFO cannot block, and nothing is ever written to the file.
+fn lock(data: &Path) -> Result<fs::File, String> {
+    let path = data.join("tune.lock");
+    let err = |e: std::io::Error| format!("{}: {e}", path.display());
+    let file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(&path)
+        .map_err(err)?;
+    if !file.metadata().map_err(err)?.is_file() {
+        return Err(format!("{}: not a plain file", path.display()));
+    }
+    match file.try_lock() {
+        Ok(()) => Ok(file),
+        Err(fs::TryLockError::WouldBlock) => {
+            Err("another assistant-tune is running; wait for it to finish".into())
+        }
+        Err(fs::TryLockError::Error(e)) => Err(err(e)),
+    }
+}
+
 /// Seconds to wait for `/health`; debug builds can shorten it for tests.
 fn health_seconds() -> u32 {
     #[cfg(debug_assertions)]
@@ -282,6 +308,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     timed.deadline = Duration::from_secs(limit);
     let client = BackendClient::new(&timed).map_err(|e| e.to_string())?;
 
+    let _lock = lock(&data)?;
     let (lists, logical) = cpus(root);
     let threads = tune::threads_for(tune::physical_cores(&lists, logical));
     let plan = tune::plan(&env, threads);

@@ -391,6 +391,7 @@ fi
 %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm/models
 %ghost %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/tuning.conf
 %ghost %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/tune.json
+%ghost %attr(0600, root, root) %{_sharedstatedir}/openvibes-llm/tune.lock
 
 %if %{with model}
 %files -n openvibes-llm-model-part1
