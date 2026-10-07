@@ -71,3 +71,50 @@ impl TestDb {
             .unwrap();
     }
 }
+
+/// A database with migrations 1..=VERSION applied from the files.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn at_version(db: &TestDb, version: i32) -> deadpool_postgres::Client {
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute("CREATE TABLE schema_version (version integer NOT NULL)")
+        .await
+        .unwrap();
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../migrations");
+    let mut files: Vec<_> = std::fs::read_dir(dir)
+        .unwrap()
+        .map(|entry| entry.unwrap().path())
+        .collect();
+    files.sort();
+    for file in files.iter().take(version as usize) {
+        client
+            .batch_execute(&std::fs::read_to_string(file).unwrap())
+            .await
+            .unwrap();
+    }
+    client
+        .execute("INSERT INTO schema_version VALUES ($1)", &[&version])
+        .await
+        .unwrap();
+    client
+}
+
+/// One case with one item of `kind`, owned by user ...0001 (which must exist).
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn insert_case_with_item(
+    client: &deadpool_postgres::Client,
+    kind: &str,
+    reference: &str,
+) {
+    client
+        .batch_execute(&format!(
+            "INSERT INTO cases (case_id, title, status, severity, opened_by_user_id, created_at, updated_at)
+             VALUES ('00000000-0000-0000-0000-0000000000c1', 'T', 'open', 'high',
+                     '00000000-0000-0000-0000-000000000001', now(), now());
+             INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, added_by_user_id, added_at)
+             VALUES ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000c1',
+                     '{kind}', '{reference}', 'agent-1', '00000000-0000-0000-0000-000000000001', now());"
+        ))
+        .await
+        .unwrap();
+}
