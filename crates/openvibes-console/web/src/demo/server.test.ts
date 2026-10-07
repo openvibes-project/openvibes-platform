@@ -361,3 +361,33 @@ describe("demo alarms (P14)", () => {
     expect(refused.status).toBe(403);
   });
 });
+
+describe("demo metrics history", () => {
+  const history = async (query: string) =>
+    createDemoServer({ persona: "admin" }).handle("GET", `/api/v1/metrics/history?${query}`);
+
+  it("returns at most `days` points ending today, deterministically", async () => {
+    const body = await json(await history("metric=alarms.active&days=30"));
+    const points = body.points as { day: string; value: number }[];
+    expect(points).toHaveLength(30);
+    expect(points.at(-1)?.day).toBe(new Date().toISOString().slice(0, 10));
+    expect(points.every((p) => Number.isInteger(p.value) && p.value >= 0)).toBe(true);
+    expect(((await json(await history("metric=alarms.active&days=30"))).points)).toEqual(points);
+    expect(((await json(await history("metric=alarms.active&days=7"))).points as unknown[]).length).toBe(7);
+  });
+
+  it("ends on the same count the summaries show", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const last = async (metric: string) => ((await json(await server.handle("GET", `/api/v1/metrics/history?metric=${metric}&days=7`))).points as { value: number }[]).at(-1)?.value;
+    const agents = await json(await server.handle("GET", "/api/v1/agents/summary"));
+    const findings = await json(await server.handle("GET", "/api/v1/compliance/summary"));
+    const vulns = await json(await server.handle("GET", "/api/v1/vulnerabilities/summary"));
+    expect(await last("agents.stale")).toBe(agents.stale);
+    expect(await last("compliance.open.critical")).toBe(findings.critical);
+    expect(await last("vulns.exploited")).toBe(vulns.exploited);
+  });
+
+  it("refuses unknown metrics", async () => {
+    expect((await history("metric=nope")).status).toBe(422);
+  });
+});

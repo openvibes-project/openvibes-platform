@@ -75,3 +75,73 @@ export function niceMax(max: number): number {
   return [1, 2, 4, 6, 8, 10].map((k) => k * mag).find((s) => s >= max) ?? 20 * mag;
 }
 export const ticks = (max: number) => [0, max / 2, max];
+
+// ---- layout and text helpers for LineChart.tsx ----
+export type Series = { label: string; points: { day: string; value: number }[] };
+export type Layout = { W: number; H: number; padL: number; padR: number; padT: number; padB: number };
+
+/** Pixel layout; `labels` leaves room on the right for end-of-line labels. */
+export function layout(variant: "spark" | "full", W: number, labels = false): Layout {
+  return variant === "full"
+    ? { W, H: 150, padL: 26, padR: labels ? 32 : 10, padT: 10, padB: 20 }
+    : { W, H: 36, padL: 2, padR: 6, padT: 4, padB: 3 };
+}
+export const xAt = (i: number, n: number, l: Layout) =>
+  n < 2 ? l.W - l.padR : l.padL + ((l.W - l.padL - l.padR) * i) / (n - 1);
+export const yAt = (v: number, max: number, l: Layout) => l.padT + (l.H - l.padT - l.padB) * (1 - v / max);
+export const indexAt = (px: number, n: number, l: Layout) =>
+  n < 2 ? 0 : Math.max(0, Math.min(n - 1, Math.round(((px - l.padL) / (l.W - l.padL - l.padR)) * (n - 1))));
+/** Tooltip left edge within its tile: right of the cursor, never past either edge. */
+export const tipLeft = (x: number, tipW: number, tileW: number) => Math.max(0, Math.min(x + 8, tileW - tipW - 6));
+
+/** Every day from the earliest to the latest point of any series. */
+export function axisDays(series: Series[]): string[] {
+  const all = series.flatMap((s) => s.points.map((p) => Date.parse(p.day)));
+  if (all.length === 0) return [];
+  const lo = Math.min(...all);
+  const hi = Math.max(...all);
+  return Array.from({ length: Math.round((hi - lo) / DAY) + 1 }, (_, i) => new Date(lo + i * DAY).toISOString().slice(0, 10));
+}
+
+export const fmtDay = (day: string) => new Date(Date.parse(day)).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+export const dayLabel = (day: string, today: string) => (day === today ? "Today" : fmtDay(day));
+
+export function ariaLabel(series: Series[]): string {
+  const days = axisDays(series);
+  const first = days[0];
+  const last = days.at(-1);
+  if (first === undefined || last === undefined) return `${series.map((s) => s.label).join(", ")}: no data`;
+  const range = `${fmtDay(first)} to ${fmtDay(last)}`;
+  const latest = (s: Series) => s.points.at(-1)?.value ?? "none";
+  const [only] = series;
+  return series.length === 1 && only ? `${only.label}: ${range}, now ${latest(only)}` : `${series.map((s) => `${s.label} ${latest(s)}`).join(", ")}: ${range}`;
+}
+
+/** Rows of day then one value per series ("–" for a missing day). */
+export function tableRows(series: Series[]): string[][] {
+  const by = series.map((s) => new Map(s.points.map((p) => [p.day, p.value])));
+  return axisDays(series).map((day) => [day, ...by.map((m) => String(m.get(day) ?? "–"))]);
+}
+
+/** Moves end labels apart so they are at least `gap` pixels from each other, keeping their order. */
+export function spreadLabels(ys: number[], gap: number): number[] {
+  const order = ys.map((_, i) => i).sort((a, b) => (ys[a] ?? 0) - (ys[b] ?? 0));
+  let groups = order.map((i) => ({ ids: [i], mid: ys[i] ?? 0 }));
+  for (let merged = true; merged; ) {
+    merged = false;
+    const next: typeof groups = [];
+    for (const g of groups) {
+      const prev = next.at(-1);
+      if (prev && g.mid - gap * (g.ids.length - 1) / 2 < prev.mid + gap * (prev.ids.length - 1) / 2 + gap) {
+        const ids = [...prev.ids, ...g.ids];
+        const sum = ids.reduce((t, i) => t + (ys[i] ?? 0), 0);
+        next[next.length - 1] = { ids, mid: sum / ids.length };
+        merged = true;
+      } else next.push(g);
+    }
+    groups = next;
+  }
+  const out = [...ys];
+  for (const g of groups) g.ids.forEach((id, j) => { out[id] = g.mid + (j - (g.ids.length - 1) / 2) * gap; });
+  return out;
+}

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { monotonePath, niceMax, segments, steppedPath, ticks } from "./linechart";
+import { ariaLabel, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
 
 const ys = (d: string) => [...d.matchAll(/[ -]?\d+(?:\.\d+)?,(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
 
@@ -55,5 +55,57 @@ describe("linechart", () => {
     for (const x of [100, 101, 1000, 1001, 4500]) {
       for (const t of ticks(niceMax(x))) expect(Number.isInteger(t)).toBe(true);
     }
+  });
+});
+
+describe("chart layout helpers", () => {
+  const day = (n: number) => new Date(Date.UTC(2026, 9, n)).toISOString().slice(0, 10);
+  const a = { label: "Alarms", points: [1, 2, 4].map((v, i) => ({ day: day(5 + i), value: v })) };
+  const b = { label: "High", points: [{ day: day(5), value: 9 }, { day: day(7), value: 3 }] };
+
+  it("axisDays spans the earliest to the latest day of all series", () => {
+    expect(axisDays([a, b])).toEqual([day(5), day(6), day(7)]);
+    expect(axisDays([])).toEqual([]);
+  });
+  it("x and y scales hit the padded edges", () => {
+    const l = layout("full", 300);
+    expect(xAt(0, 3, l)).toBe(l.padL);
+    expect(xAt(2, 3, l)).toBe(300 - l.padR);
+    expect(xAt(0, 1, l)).toBe(300 - l.padR);
+    expect(yAt(0, 4, l)).toBe(l.H - l.padB);
+    expect(yAt(4, 4, l)).toBe(l.padT);
+  });
+  it("indexAt snaps to the nearest day and clamps outside the plot", () => {
+    const l = layout("full", 300);
+    expect(indexAt(-50, 31, l)).toBe(0);
+    expect(indexAt(999, 31, l)).toBe(30);
+    expect(indexAt(xAt(12, 31, l) + 1, 31, l)).toBe(12);
+    expect(indexAt(10, 1, l)).toBe(0);
+  });
+  it("tipLeft keeps the tooltip inside the tile", () => {
+    expect(tipLeft(290, 80, 300)).toBe(300 - 80 - 6);
+    expect(tipLeft(10, 80, 300)).toBe(18);
+    expect(tipLeft(0, 400, 300)).toBe(0);
+  });
+  it("ariaLabel names the range and the latest value", () => {
+    expect(ariaLabel([a])).toBe("Alarms: 5 Oct to 7 Oct, now 4");
+    expect(ariaLabel([a])).not.toContain("Today");
+    expect(ariaLabel([a, b])).toBe("Alarms 4, High 3: 5 Oct to 7 Oct");
+    expect(ariaLabel([{ label: "X", points: [] }])).toBe("X: no data");
+  });
+  it("dayLabel says Today for today", () => {
+    expect(dayLabel("2026-10-07", "2026-10-07")).toBe("Today");
+    expect(dayLabel("2026-10-06", "2026-10-07")).toBe("6 Oct");
+  });
+  it("tableRows has one row per day with a dash for gaps", () => {
+    expect(tableRows([a, b])).toEqual([
+      ["2026-10-05", "1", "9"],
+      ["2026-10-06", "2", "–"],
+      ["2026-10-07", "4", "3"],
+    ]);
+  });
+  it("spreadLabels keeps end labels apart and in order", () => {
+    expect(spreadLabels([50, 52, 100], 12)).toEqual([45, 57, 100]);
+    expect(spreadLabels([10], 12)).toEqual([10]);
   });
 });

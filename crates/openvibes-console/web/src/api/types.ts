@@ -25,6 +25,7 @@ export type UnitDetail = S["UnitDetail"];
 export type Software = S["SoftwareView"];
 export type SoftwareDetail = S["SoftwareDetail"];
 export type AlarmPage = S["AlarmPage"];
+export type MetricHistory = S["MetricHistory"];
 export type AlarmDetail = S["AlarmDetailView"];
 export type AlarmTriage = S["AlarmTriageView"];
 export type AlarmSuppression = S["AlarmSuppressionView"];
