@@ -300,6 +300,19 @@ async fn automatic_migration_stops_before_a_data_changing_one() {
     db.drop().await;
 }
 
+/// Migration 43 rewrites stored IDs, so it waits for Update's backup.
+#[tokio::test]
+async fn automatic_migration_stops_before_compliance_names() {
+    let db = TestDb::create().await;
+    let mut client = at_version(&db, 42).await;
+    assert!(matches!(
+        platform_store::migrate_additive(&mut client).await,
+        Err(platform_store::StoreError::NeedsBackup(43))
+    ));
+    drop(client);
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn automatic_migration_applies_additive_ones() {
     let db = TestDb::create().await;
