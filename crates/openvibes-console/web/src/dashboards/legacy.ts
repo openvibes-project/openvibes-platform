@@ -1,5 +1,6 @@
 // Dashboards saved before the compliance rename (schema migration 43) can
-// still arrive from a browser draft; map their IDs like the migration does.
+// still arrive from a browser draft, a demo store, or a layout saved through
+// the API; map their IDs like the migration does. Idempotent.
 import type { Layout } from "./layout";
 
 export function upgradeLayout(layout: Layout): Layout {

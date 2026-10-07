@@ -48,7 +48,7 @@ export const editor = {
   state: () => state,
   begin(dashboard: Dashboard): boolean {
     if (!dashboard.mine) return false;
-    set({ ...empty, dashboard, name: dashboard.name, draft: dashboard.layout as unknown as Layout });
+    set({ ...empty, dashboard, name: dashboard.name, draft: upgradeLayout(dashboard.layout as unknown as Layout) });
     return true;
   },
   /** Ends editing and forgets the draft (the user chose to leave or cancel). */
