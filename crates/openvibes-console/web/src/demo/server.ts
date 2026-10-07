@@ -555,17 +555,17 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   };
   const metricPermissions = (metric: string): Permission[] =>
     metric.startsWith("all.") ? ["alarms.read", "vulnerabilities.read", "compliance.read"] : [metric.startsWith("vulns.") ? "vulnerabilities.read" : metric.startsWith("alarms.") ? "alarms.read" : metric.startsWith("compliance.") ? "compliance.read" : "agents.read"];
-  const invalidDays = () => new Response(JSON.stringify({
+  const invalidQuery = (field: string, code: string, message: string) => new Response(JSON.stringify({
     status: 422, code: "invalid_metric_query", title: "The metric query is invalid", request_id: `demo-${Date.now().toString(36)}`,
-    field_errors: [{ field: "days", code: "invalid_days", message: "days must be 7, 30, 90 or 365" }],
+    field_errors: [{ field, code, message }],
   }), { status: 422, headers: { "content-type": "application/problem+json" } });
   route("GET", "/api/v1/metrics/history", null, (_, query) => {
     const metric = query.get("metric") ?? "";
     const current = liveValue(metric);
-    if (current === undefined) return problem(422, "unknown_metric", "Unknown metric");
-    if (metricPermissions(metric).some((p) => !capabilities.some((c) => c.permission === p))) return problem(403, "permission_denied", "You do not have access to that");
+    if (current === undefined) return invalidQuery("metric", "unknown_metric", "Unknown metric");
     const days = { "7": 7, "30": 30, "90": 90, "365": 365 }[query.get("days") ?? "30"];
-    if (days === undefined) return invalidDays();
+    if (days === undefined) return invalidQuery("days", "invalid_days", "days must be 7, 30, 90 or 365");
+    if (metricPermissions(metric).some((p) => !capabilities.some((c) => c.permission === p))) return problem(403, "permission_denied", "You do not have access to that");
     return json({ metric, points: demoHistory(metric, days, current, now) });
   });
   route("GET", "/api/v1/vulnerabilities/summary", "vulnerabilities.read", () => {

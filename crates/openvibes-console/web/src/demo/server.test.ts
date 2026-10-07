@@ -385,6 +385,14 @@ describe("demo metrics history", () => {
     expect(((await json(await history("metric=alarms.active"))).points as unknown[]).length).toBe(30);
   });
 
+  it("rejects an unknown metric like the real API, before days and permission", async () => {
+    const response = await history("metric=nope&days=5");
+    expect(response.status).toBe(422);
+    const body = await json(response);
+    expect(body).toMatchObject({ code: "invalid_metric_query", title: "The metric query is invalid", field_errors: [{ field: "metric", code: "unknown_metric", message: "Unknown metric" }] });
+    expect(((await json(await history("metric=alarms.active&days=5"))).field_errors as { code: string }[])[0]?.code).toBe("invalid_days");
+  });
+
   it("ends on the same count the summaries show", async () => {
     const server = createDemoServer({ persona: "admin" });
     const last = async (metric: string) => ((await json(await server.handle("GET", `/api/v1/metrics/history?metric=${metric}&days=7`))).points as { value: number }[]).at(-1)?.value;

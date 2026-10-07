@@ -1,5 +1,5 @@
 import { useResource } from "../api/client";
-import type { AgentSummary, AlarmPage, FindingSummary, VulnerabilitySummary } from "../api/types";
+import type { AgentSummary, FindingSummary, Permission, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
@@ -8,60 +8,47 @@ import { Icon } from "../ui/Icon";
 import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
+import { useHistory } from "./history";
+import { METRICS, METRIC_KEYS, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
-export const METRICS = {
-  "alarms.active": { label: "Active alarms", permission: "alarms.read", view: ["/alarms", {}] },
-  "agents.active": { label: "Hosts online", permission: "agents.read", view: ["/agents", { status: "active" }] },
-  "agents.stale": { label: "Stale hosts", permission: "agents.read", view: ["/agents", { status: "stale" }] },
-  "agents.revoked": { label: "Revoked hosts", permission: "agents.read", view: ["/agents", { status: "revoked" }] },
-  "compliance.open.critical": { label: "Open critical compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "critical" }] },
-  "compliance.open.high": { label: "Open high compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "high" }] },
-  "compliance.open.medium": { label: "Open medium compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "medium" }] },
-  "compliance.open.low": { label: "Open low compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "low" }] },
-  "vulns.exploited": { label: "Exploited", permission: "vulnerabilities.read", view: ["/vulnerabilities", { exploited: "true" }] },
-  "vulns.reboot_hosts": { label: "Hosts needing a reboot", permission: "vulnerabilities.read", view: ["/vulnerabilities", { reboot: "true" }] },
-  "vulns.no_fix": { label: "No fix yet", permission: "vulnerabilities.read", view: ["/vulnerabilities", { nofix: "true" }] },
-} as const;
-export type Metric = keyof typeof METRICS;
-export const METRIC_KEYS = Object.keys(METRICS) as Metric[];
+export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
 
 export function Unavailable() {
   return <div className="tile-empty"><Icon name="ban" size={18} /> Not available with your role</div>;
+}
+
+// A count's number is the last point of its history: the API's live "today" value.
+function useCount(metric: string | null) {
+  const { data } = useHistory(metric, 7);
+  return data?.at(-1)?.value;
+}
+
+function Part({ kind, id }: { kind: string; id: string }) {
+  const value = useCount(id);
+  const [path, params] = METRICS[id as Metric].view;
+  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{value === undefined ? "…" : count(value)} {kind}</button>;
 }
 
 export function NumberTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
   const def = METRICS[metric];
-  const allowed = can(def.permission);
-  const agents = useResource<AgentSummary>(allowed && metric.startsWith("agents.") ? "/api/v1/agents/summary" : null);
-  const findings = useResource<FindingSummary>(allowed && metric.startsWith("compliance.") ? "/api/v1/compliance/summary" : null);
-  const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
-  // Active alarms: one page of at most 100 (shown as "100+" beyond). Alarms
-  // closed by a suppression are hidden unless suppressed=true.
-  const alarms = useResource<AlarmPage>(allowed && metric === "alarms.active" ? "/api/v1/alarms?state=active&limit=100" : null);
-  if (!allowed) return <Unavailable />;
-  if (metric === "alarms.active") {
-    const n = alarms.data?.items.length;
-    return (
-      <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-        <span className={`stat__value num${n ? " stat__value--crit" : ""}`}>{n === undefined ? "…" : alarms.data?.next_cursor ? "100+" : count(n)}</span>
-      </button>
-    );
-  }
-  const value = metric === "agents.active" ? agents.data?.active : metric === "agents.stale" ? agents.data?.stale : metric === "agents.revoked" ? agents.data?.revoked
-    : metric.startsWith("compliance.open.") ? findings.data?.[metric.slice(16) as "critical" | "high" | "medium" | "low"]
-      : metric === "vulns.exploited" ? vulns.data?.exploited : metric === "vulns.reboot_hosts" ? vulns.data?.reboot_hosts : vulns.data?.no_fix;
-  const tone = value && (metric === "compliance.open.critical" || metric === "vulns.exploited") ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
+  const allowed = def.permissions.every((p) => can(p as Permission));
+  const value = useCount(allowed ? metric : null);
   // No vulnerability feed yet: a 0 would claim nothing was found.
+  const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
+  if (!allowed) return <Unavailable />;
+  const tone = value && ["compliance.open.critical", "all.open.critical", "vulns.exploited"].includes(metric) ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
   const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
-  return (
+  const number = (
     <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
       <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : value === undefined ? "…" : count(value)}</span>
       {unset && <span className="subtle">Not set up</span>}
     </button>
   );
+  if (!def.parts) return number;
+  return <div className="stack">{number}<div className="tile-parts">{def.parts.map(([kind, id]) => <Part key={id} kind={kind} id={id} />)}</div></div>;
 }
 
 export function BreakdownTile({ widget }: WidgetProps) {
