@@ -272,7 +272,9 @@ impl From<&Segment> for AssistantSegment {
                         let id = format!("{rule_set}/{rule}");
                         ("finding", id, "/compliance".to_owned())
                     }
-                    Citation::Advisory(id) => ("advisory", id.clone(), "/compliance".to_owned()),
+                    Citation::Advisory(id) => {
+                        ("advisory", id.clone(), "/vulnerabilities".to_owned())
+                    }
                 };
                 Self::Citation {
                     target_kind: kind.into(),
