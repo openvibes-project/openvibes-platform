@@ -66,7 +66,10 @@ wait_for_ci() {
 [[ $(git rev-parse --abbrev-ref HEAD) == "$branch" ]] || die "run this from the $branch branch"
 [[ -z $(git status --porcelain) ]] || die "working tree is not clean"
 
-git fetch --quiet --tags "$remote" "$branch"
+# --quiet hides git's own "[rejected] ... would clobber existing tag" line,
+# so a failed fetch must say why itself.
+git fetch --quiet --tags "$remote" "$branch" ||
+  die "could not fetch $branch and its tags from $remote; if a local tag differs from $remote's, replace it with: git fetch --tags --force $remote"
 [[ $(git rev-parse HEAD) == "$(git rev-parse "$remote/$branch")" ]] \
   || die "$branch is not in sync with $remote/$branch (pull or push first)"
 
