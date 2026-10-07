@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useResource } from "../api/client";
 import type { AgentSummary, FindingSummary, Permission, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
@@ -9,7 +10,7 @@ import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
-import { METRICS, METRIC_KEYS, type Metric } from "./metrics";
+import { METRICS, METRIC_KEYS, partText, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
 export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
@@ -26,8 +27,8 @@ function useCount(metric: string | null) {
 
 function Part({ kind, id }: { kind: string; id: string }) {
   const value = useCount(id);
-  const [path, params] = METRICS[id as Metric].view;
-  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{value === undefined ? "…" : count(value)} {kind}</button>;
+  const [path, params] = METRICS[id as Metric].view ?? ["/", {}];
+  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{value === undefined ? "…" : partText(kind, value)}</button>;
 }
 
 export function NumberTile({ widget }: WidgetProps) {
@@ -41,14 +42,22 @@ export function NumberTile({ widget }: WidgetProps) {
   if (!allowed) return <Unavailable />;
   const tone = value && ["compliance.open.critical", "all.open.critical", "vulns.exploited"].includes(metric) ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
   const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
-  const number = (
-    <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : value === undefined ? "…" : count(value)}</span>
+  // A vulnerability count waits for the summary, so no number turns into a dash.
+  if (vulns.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {vulns.error.message}</div>;
+  const shown = metric.startsWith("vulns.") && vulns.data === undefined ? undefined : value;
+  const body = (
+    <>
+      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : shown === undefined ? "…" : count(shown)}</span>
       {unset && <span className="subtle">Not set up</span>}
-    </button>
+    </>
   );
-  if (!def.parts) return number;
-  return <div className="stack">{number}<div className="tile-parts">{def.parts.map(([kind, id]) => <Part key={id} kind={kind} id={id} />)}</div></div>;
+  const view = def.view;
+  if (!view) {
+    return <div className="stack"><div className="tile-number tile-number--plain">{body}</div><div className="tile-parts">{def.parts?.map(([kind, id], i) => <Fragment key={id}>{i > 0 && " · "}<Part kind={kind} id={id} /></Fragment>)}</div></div>;
+  }
+  return (
+    <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
+  );
 }
 
 export function BreakdownTile({ widget }: WidgetProps) {

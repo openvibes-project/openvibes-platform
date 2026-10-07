@@ -167,3 +167,17 @@ test("the editing note is for phones only", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
   await expect(page.getByText("Editing needs a wider screen")).toBeHidden();
 });
+
+test("a Critical tile is plain text with per-kind links beneath it", async ({ page }) => {
+  await page.evaluate(() => {
+    const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 4, h: 2, config: { metric: "all.open.critical" } }] };
+    const now = new Date().toISOString();
+    localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
+      { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+    ], homes: [["u-admin", "d-crit"]] }));
+  });
+  await page.goto("/");
+  const tile = page.locator(".tile", { hasText: "alarm" });
+  await expect(tile).toHaveText(/\d+ alarms? · \d+ vulnerabilit(y|ies) · \d+ compliance/);
+  await expect(tile.getByRole("button")).toHaveCount(3);
+});

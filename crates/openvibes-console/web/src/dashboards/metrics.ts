@@ -1,13 +1,13 @@
 // The count catalogue; ids and permissions must equal the server's CATALOGUE
 // (crates/openvibes-console/src/metrics.rs), which catalogue.test.ts enforces.
 // No DOM imports here so tests can read it.
-// A cross-kind entry's click goes to its first part's list; each part links itself.
+// A cross-kind entry has no view of its own: only its parts navigate.
 type Entry = {
-  label: string; permissions: string[]; view: [string, Record<string, string>]; parts?: [string, string][];
+  label: string; permissions: string[]; view?: [string, Record<string, string>]; parts?: [string, string][];
 };
 const defs = {
-  "all.open.critical": { label: "Critical", permissions: ["alarms.read","vulnerabilities.read","compliance.read"], view: ["/alarms", { severity: "critical" }], parts: [["alarm", "alarms.active.critical"], ["vulnerability", "vulns.open.critical"], ["compliance", "compliance.open.critical"]] },
-  "all.open.high": { label: "High", permissions: ["alarms.read","vulnerabilities.read","compliance.read"], view: ["/alarms", { severity: "high" }], parts: [["alarm", "alarms.active.high"], ["vulnerability", "vulns.open.high"], ["compliance", "compliance.open.high"]] },
+  "all.open.critical": { label: "Critical", permissions: ["alarms.read","vulnerabilities.read","compliance.read"], parts: [["alarm", "alarms.active.critical"], ["vulnerability", "vulns.open.critical"], ["compliance", "compliance.open.critical"]] },
+  "all.open.high": { label: "High", permissions: ["alarms.read","vulnerabilities.read","compliance.read"], parts: [["alarm", "alarms.active.high"], ["vulnerability", "vulns.open.high"], ["compliance", "compliance.open.high"]] },
   "alarms.active": { label: "Active alarms", permissions: ["alarms.read"], view: ["/alarms", {}] },
   "alarms.active.critical": { label: "Active critical alarms", permissions: ["alarms.read"], view: ["/alarms", { severity: "critical" }] },
   "alarms.active.high": { label: "Active high alarms", permissions: ["alarms.read"], view: ["/alarms", { severity: "high" }] },
@@ -31,3 +31,9 @@ const defs = {
 export const METRICS: Record<keyof typeof defs, Entry> = defs;
 export type Metric = keyof typeof defs;
 export const METRIC_KEYS = Object.keys(defs) as Metric[];
+
+/** Fine print for one part of a cross-kind count: "1 vulnerability", "0 alarms". */
+export function partText(kind: string, n: number): string {
+  const word = kind === "vulnerability" ? (n === 1 ? "vulnerability" : "vulnerabilities") : kind === "alarm" && n !== 1 ? "alarms" : kind;
+  return `${n} ${word}`;
+}
