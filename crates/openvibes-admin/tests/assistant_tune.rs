@@ -336,3 +336,20 @@ fn keys_left_alone_are_named() {
     );
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn another_backend_only_try_restarts_and_skips_the_health_wait() {
+    let port = server_with(None, "503 Service Unavailable", "200 OK");
+    let root = tree("other-down", port, 60);
+    fs::write(root.join(CONSOLE), console(port + 1, 60)).unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("systemctl try-restart openvibes-llm"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("systemctl restart"), "{stderr}");
+    fs::remove_dir_all(&root).unwrap();
+}

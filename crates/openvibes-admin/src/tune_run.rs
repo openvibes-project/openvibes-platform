@@ -69,7 +69,8 @@ pub struct NoRestart;
 
 #[cfg(debug_assertions)]
 impl Restarter for NoRestart {
-    fn systemctl(&self, _: &[&str]) -> Result<(), String> {
+    fn systemctl(&self, args: &[&str]) -> Result<(), String> {
+        eprintln!("--root: not run: systemctl {}", args.join(" "));
         Ok(())
     }
 }
@@ -288,13 +289,16 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let tuning = data.join("tuning.conf");
     let old = read_regular(&tuning);
     write_atomic(&tuning, &tune::tuning_conf(&plan))?;
+    // Another backend: only a running server picks up the tuning; a
+    // stopped or broken one is not started, waited for, or measured.
+    let verb = if local { "restart" } else { "try-restart" };
     let measured = restarter
-        .systemctl(&["restart", "openvibes-llm"])
-        .and_then(|()| wait_health(port))
+        .systemctl(&[verb, "openvibes-llm"])
         .and_then(|()| {
             if !local {
                 return Ok(None);
             }
+            wait_health(port)?;
             let t = time_call(&client, limit)?;
             if t.is_finite() {
                 Ok(Some(t))
@@ -313,7 +317,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             if let Err(why) = restored {
                 eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
-            let _ = restarter.systemctl(&["restart", "openvibes-llm"]);
+            let _ = restarter.systemctl(&[verb, "openvibes-llm"]);
             return Err(error);
         }
     };
