@@ -440,5 +440,27 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
 fn is_local(base_url: &str, port: &str) -> bool {
     let rest = base_url.strip_prefix("http://").unwrap_or("");
     let authority = rest.split('/').next().unwrap_or("");
-    [format!("127.0.0.1:{port}"), format!("localhost:{port}")].contains(&authority.to_owned())
+    [
+        format!("127.0.0.1:{port}"),
+        format!("localhost:{port}"),
+        format!("[::1]:{port}"),
+    ]
+    .contains(&authority.to_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn local_means_loopback_on_the_server_port() {
+        for url in [
+            "http://127.0.0.1:18430/v1",
+            "http://localhost:18430/v1",
+            "http://[::1]:18430/v1",
+        ] {
+            assert!(super::is_local(url, "18430"), "{url}");
+        }
+        for url in ["http://127.0.0.1:18431/v1", "https://127.0.0.1:18430/v1"] {
+            assert!(!super::is_local(url, "18430"), "{url}");
+        }
+    }
 }

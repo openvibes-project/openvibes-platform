@@ -6,7 +6,7 @@ pub const DEFAULT_GPU_LAYERS: u32 = 0;
 const THREADS_KEY: &str = "OPENVIBES_LLM_THREADS";
 const GPU_KEY: &str = "OPENVIBES_LLM_GPU_LAYERS";
 
-/// Physical cores from the sysfs `thread_siblings_list` strings (one per
+/// Physical cores from the sysfs `topology/core_cpus_list` strings (one per
 /// logical CPU); without them, assume two hardware threads per core.
 pub fn physical_cores(core_lists: &[String], logical: usize) -> u32 {
     if core_lists.is_empty() {
