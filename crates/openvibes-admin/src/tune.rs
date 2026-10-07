@@ -1,4 +1,4 @@
-//! Pure decisions for `openvibes-admin assistant tune`: no IO.
+//! Pure decisions for `openvibes-admin helper assistant-tune`: no IO.
 use std::collections::{BTreeMap, BTreeSet};
 
 pub const DEFAULT_THREADS: u32 = 4;
@@ -60,8 +60,9 @@ pub fn plan(llm_conf: &BTreeMap<String, String>, threads: u32) -> Plan {
 }
 
 pub fn tuning_conf(plan: &Plan) -> String {
-    let mut out =
-        String::from("# Written by `openvibes-admin assistant tune`; rerun it to refresh.\n");
+    let mut out = String::from(
+        "# Written by `sudo openvibes-admin helper assistant-tune`; rerun it to refresh.\n",
+    );
     for (key, v) in [(THREADS_KEY, plan.threads), (GPU_KEY, plan.gpu_layers)] {
         if let Some(v) = v {
             out.push_str(&format!("{key}={v}\n"));
@@ -145,7 +146,7 @@ mod tests {
             gpu_layers: None,
             left_alone: vec![],
         });
-        assert!(c.starts_with('#') && c.contains("openvibes-admin assistant tune"));
+        assert!(c.starts_with('#') && c.contains("sudo openvibes-admin helper assistant-tune"));
         assert!(c.contains("OPENVIBES_LLM_THREADS=10\n") && !c.contains("GPU_LAYERS"));
     }
     #[test]
