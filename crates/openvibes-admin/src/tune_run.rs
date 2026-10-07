@@ -306,6 +306,11 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let limit = u64::from(current).max(MEASURE_LIMIT);
     let mut timed = backend.clone();
     timed.deadline = Duration::from_secs(limit);
+    if local {
+        // The server listens on 127.0.0.1 only; `localhost` may resolve to
+        // ::1 first, where another user could listen and take the key.
+        timed.base_url = format!("http://127.0.0.1:{port}{}", url_path(&backend.base_url));
+    }
     let client = BackendClient::new(&timed).map_err(|e| e.to_string())?;
 
     let _lock = lock(&data)?;
@@ -403,7 +408,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     };
     let json = serde_json::json!({
         "mode": "cpu",
-        "threads": shown.parse::<u32>().map_or_else(|_| serde_json::json!(shown), |n| serde_json::json!(n)),
+        "threads": shown.parse::<u32>().unwrap_or(threads),
         "model": alias,
         "seconds_per_call": t,
         "deadline_seconds": raised.unwrap_or(current),
@@ -436,31 +441,36 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     Ok(format!("{text}\n"))
 }
 
-/// The console's backend is the local `openvibes-llm` on its port.
+/// The path after `http://host:port`, e.g. `/v1`.
+fn url_path(base_url: &str) -> &str {
+    let rest = base_url.strip_prefix("http://").unwrap_or(base_url);
+    rest.find('/').map_or("", |i| &rest[i..])
+}
+
+/// The console's backend is the local `openvibes-llm` on its port. Not
+/// `[::1]`: the server listens on 127.0.0.1 only, so whoever holds the
+/// IPv6 port is someone else.
 fn is_local(base_url: &str, port: &str) -> bool {
     let rest = base_url.strip_prefix("http://").unwrap_or("");
     let authority = rest.split('/').next().unwrap_or("");
-    [
-        format!("127.0.0.1:{port}"),
-        format!("localhost:{port}"),
-        format!("[::1]:{port}"),
-    ]
-    .contains(&authority.to_owned())
+    [format!("127.0.0.1:{port}"), format!("localhost:{port}")].contains(&authority.to_owned())
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
     fn local_means_loopback_on_the_server_port() {
-        for url in [
-            "http://127.0.0.1:18430/v1",
-            "http://localhost:18430/v1",
-            "http://[::1]:18430/v1",
-        ] {
+        for url in ["http://127.0.0.1:18430/v1", "http://localhost:18430/v1"] {
             assert!(super::is_local(url, "18430"), "{url}");
         }
-        for url in ["http://127.0.0.1:18431/v1", "https://127.0.0.1:18430/v1"] {
+        for url in [
+            "http://127.0.0.1:18431/v1",
+            "https://127.0.0.1:18430/v1",
+            "http://[::1]:18430/v1",
+        ] {
             assert!(!super::is_local(url, "18430"), "{url}");
         }
+        assert_eq!(super::url_path("http://localhost:18430/v1"), "/v1");
+        assert_eq!(super::url_path("http://localhost:18430"), "");
     }
 }

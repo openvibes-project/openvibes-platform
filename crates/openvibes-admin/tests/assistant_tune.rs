@@ -406,3 +406,51 @@ fn operator_values_tune_cannot_parse_are_shown_as_written() {
     assert!(!read(&root, TUNING).contains("OPENVIBES_LLM"));
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn localhost_is_timed_on_127_0_0_1_never_on_ipv6() {
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    // Another user's listener on [::1] at the same port, where `localhost`
+    // may resolve first; skipped where IPv6 loopback is unavailable.
+    let v6 = TcpListener::bind(("::1", port)).ok().map(|listener| {
+        let got = Arc::new(Mutex::new(false));
+        let flag = got.clone();
+        thread::spawn(move || {
+            for _ in listener.incoming().flatten() {
+                *flag.lock().unwrap() = true;
+            }
+        });
+        got
+    });
+    let root = tree("localhost", port, 60);
+    fs::write(
+        root.join(CONSOLE),
+        console(port, 60).replace("127.0.0.1", "localhost"),
+    )
+    .unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let seen = seen.lock().unwrap().to_lowercase();
+    assert!(seen.contains("bearer server-key"), "{seen}");
+    if let Some(got) = v6 {
+        assert!(!*got.lock().unwrap(), "a request reached [::1]");
+    }
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn an_ipv6_loopback_url_is_not_measured_and_gets_no_key() {
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("v6", port, 60);
+    fs::write(
+        root.join(CONSOLE),
+        console(port, 60).replace("127.0.0.1", "[::1]"),
+    )
+    .unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
+    let seen = seen.lock().unwrap().to_lowercase();
+    assert!(!seen.contains("authorization"), "{seen}");
+    fs::remove_dir_all(&root).unwrap();
+}
