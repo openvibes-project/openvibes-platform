@@ -10,15 +10,15 @@ import { downloadCsv } from "../ui/csv";
 import { Icon } from "../ui/Icon";
 import { toast } from "../ui/toast";
 
-type Section = "details" | "findings" | "alarms" | "vulnerabilities" | "software" | "ports" | "services";
+type Section = "details" | "compliance" | "alarms" | "vulnerabilities" | "software" | "ports" | "services";
 type Row = [Section, string, string, string, string, string];
 
 const LABELS: Record<Section, string> = {
-  details: "Details", findings: "Compliance", alarms: "Alarms", vulnerabilities: "Vulnerabilities",
+  details: "Details", compliance: "Compliance", alarms: "Alarms", vulnerabilities: "Vulnerabilities",
   software: "Software", ports: "Ports", services: "Services",
 };
 const PERMISSION: Partial<Record<Section, "compliance.read" | "alarms.read" | "vulnerabilities.read">> = {
-  findings: "compliance.read", alarms: "alarms.read", vulnerabilities: "vulnerabilities.read",
+  compliance: "compliance.read", alarms: "alarms.read", vulnerabilities: "vulnerabilities.read",
 };
 /** At most this many rows per section: a runaway list never freezes the tab. */
 const CAP = 50_000;
@@ -50,9 +50,9 @@ async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> 
         ["system", [agent.os_id, agent.os_version].filter(Boolean).join(" ")], ["running kernel", agent.running_kernel], ["enrolled", agent.enrolled_at], ["last saved heartbeat", agent.last_seen_at]] as const) {
         out.push(["details", key, String(value ?? ""), "", "", ""]);
       }
-    } else if (section === "findings") {
-      for (const f of await all<Finding>(`/api/v1/compliance/latest?agent_id=${id}`, "findings")) {
-        out.push(["findings", f.message, `${f.rule_set_id}/${f.rule_id}`, "", f.severity, f.last_observed_at]);
+    } else if (section === "compliance") {
+      for (const f of await all<Finding>(`/api/v1/compliance/latest?agent_id=${id}`, "compliance")) {
+        out.push(["compliance", f.message, `${f.rule_set_id}/${f.rule_id}`, "", f.severity, f.last_observed_at]);
       }
     } else if (section === "alarms") {
       for (const a of await all<AlarmSummary>(`/api/v1/alarms?agent_id=${id}&state=all&suppressed=true`, "alarms")) {

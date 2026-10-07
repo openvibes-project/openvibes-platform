@@ -172,7 +172,7 @@ function Compare({ a, b }: { a: string; b: string }) {
         <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} missing={notReported} />
         <Differences title="Services" a={left.services} b={right.services} nameA={nameA} nameB={nameB} show={(_, v) => v || "running"} missing={notReported} />
         <Differences title="Software" a={left.software} b={right.software} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.software || right.cut.software} />
-        {can("compliance.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
+        {can("compliance.read") && <Differences title="Compliance findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
       </div>
     </>
   );
