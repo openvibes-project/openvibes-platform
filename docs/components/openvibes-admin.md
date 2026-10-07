@@ -374,9 +374,10 @@ characters), so the log keeps where unsigned data came from.
 
 `check` and `eval` read the `[assistant]` section of the console's configuration
 (`--file`, default `/etc/openvibes/console.toml`; other sections are
-ignored), so run them as a user that can read it and its key files. They
-are audited with the configured model as the target; `model install` with
-the installed file name.
+ignored), so run them as a user that can read it and its key files:
+`sudo -u openvibes-console openvibes-admin assistant check`. They need
+neither `admin.toml` nor the database, so they are not audited;
+`model install` is, with the installed file name as the target.
 
 | Command | Result |
 |---|---|

@@ -296,6 +296,23 @@ async fn main() -> ExitCode {
             }
         };
     }
+    // Backend check and evaluation read only the console's configuration and
+    // its owner-only API key, so they run as `openvibes-console` (or root):
+    // no admin config, no database, no audit row.
+    if let Command::Assistant { command } = command
+        && command.is_offline()
+    {
+        return match assistant::run(command).await.0 {
+            Ok(output) => {
+                print!("{output}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("openvibes-admin: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
     let loaded = platform_config::load::<configs::AdminConfig>(&cli.config);
     // Board #79: as the operator or root, start again as the service account.
     #[cfg(unix)]

@@ -44,6 +44,11 @@ pub enum AssistantCommand {
 }
 
 impl AssistantCommand {
+    /// Check and evaluation need neither `admin.toml` nor the database.
+    pub fn is_offline(&self) -> bool {
+        !matches!(self, Self::Model { .. })
+    }
+
     pub fn name(&self) -> &'static str {
         match self {
             Self::Check { .. } => "assistant check",

@@ -146,7 +146,7 @@ pub fn run(force: bool) -> Result<String, String> {
         }
     }
     Ok(format!(
-        "the assistant now uses the bundled model ({})\nnext: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\ncheck: sudo -u openvibes-admin openvibes-admin assistant check\n",
+        "the assistant now uses the bundled model ({})\nnext: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\ncheck: sudo -u openvibes-console openvibes-admin assistant check\n",
         env.get("OPENVIBES_LLM_ALIAS")
             .map_or(DEFAULT_ALIAS, String::as_str)
     ))

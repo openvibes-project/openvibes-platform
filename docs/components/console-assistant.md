@@ -76,7 +76,7 @@ browser wait; an already-running blocking model call can continue until its
 ## How to operate and verify
 
 Run `openvibes-admin assistant check` and `openvibes-admin assistant eval`
-against the configured local endpoint before enabling the section. Verify
+(as `openvibes-console`, which reads the configuration and key) against the configured local endpoint before enabling the section. Verify
 that an Analyst can open the dock, a user without `assistant.use` cannot, and
 scoped users only receive citations to records in their asset groups. Review
 the Console API specification and browser behavior with a local mock model.
