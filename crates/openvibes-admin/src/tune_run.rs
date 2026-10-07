@@ -367,6 +367,12 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             t.round() as u64
         ));
     }
+    if !plan.left_alone.is_empty() {
+        text.push_str(&format!(
+            "\nleft alone (set in llm.conf): {}",
+            plan.left_alone.join(" ")
+        ));
+    }
     Ok(format!("{text}\n"))
 }
 

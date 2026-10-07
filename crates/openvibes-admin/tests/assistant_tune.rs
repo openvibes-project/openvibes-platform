@@ -316,3 +316,23 @@ fn the_local_server_gets_its_own_key_never_the_configured_file() {
     assert!(seen.contains("bearer server-key"), "{seen}");
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn keys_left_alone_are_named() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = tree("alone", port, 60);
+    fs::write(
+        root.join("etc/openvibes/llm.conf"),
+        format!("OPENVIBES_LLM_THREADS=6\nOPENVIBES_LLM_PORT={port}\n"),
+    )
+    .unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("CPU (6 threads)"), "{text}");
+    assert!(
+        text.contains("left alone (set in llm.conf): OPENVIBES_LLM_THREADS"),
+        "{text}"
+    );
+    fs::remove_dir_all(&root).unwrap();
+}
