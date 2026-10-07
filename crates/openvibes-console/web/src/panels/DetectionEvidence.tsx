@@ -48,7 +48,7 @@ export function DetectionEvidence({ detection, references = [], ruleId, ruleUrl 
           <span className="mono">{ruleId}</span>
           {rule.data && <> · {rule.data.rule_set_id}{definition && <> · rule v{definition.version}</>}{rule.data.rule_set_version != null && ` · set v${rule.data.rule_set_version}`}{definition && <> · {definition.kind === "process_event" ? "Process event" : "Snapshot"} · {definition.severity}, {definition.confidence}% confidence</>}</>}
         </span>
-        <button className="object-link" type="button" aria-expanded={showRule} onClick={() => setShowRule(!showRule)}>
+        <button className="link-button" type="button" aria-expanded={showRule} onClick={() => setShowRule(!showRule)}>
           {showRule ? "Hide rule" : "Show rule"}
         </button>
       </div>

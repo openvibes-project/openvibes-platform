@@ -188,12 +188,12 @@ export function FindingPanel({ id }: { id: string }) {
                 <tr key={item.agent_id} aria-selected={selected.has(item.agent_id) || undefined}>
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
-                  <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain" style={{ marginLeft: 6 }}>imported</span>}</td>
-                  <td><button type="button" className="object-link" onClick={() => setEvidenceHost(item.agent_id)}>View evidence</button></td>
+                  <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain gap-start">imported</span>}</td>
+                  <td><button type="button" className="link-button" onClick={() => setEvidenceHost(item.agent_id)}>View evidence</button></td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
-                    ? <span className="badge badge--bad badge--plain" style={{ marginLeft: 6 }}>expired {date(item.accepted_until)}</span>
-                    : <span className="subtle" style={{ marginLeft: 6 }}>until {date(item.accepted_until)}</span>)}
-                    {item.ended_at && <span className="badge badge--ok badge--plain" style={{ marginLeft: 6 }}
+                    ? <span className="badge badge--bad badge--plain gap-start">expired {date(item.accepted_until)}</span>
+                    : <span className="subtle gap-start">until {date(item.accepted_until)}</span>)}
+                    {item.ended_at && <span className="badge badge--ok badge--plain gap-start"
                       title="The agent reported this match ended">fixed {item.end_approximate ? "about " : ""}{date(item.ended_at)}</span>}</td>
                   <td className={item.assigned_to ? "hide-narrow" : "subtle hide-narrow"}>{item.assigned_to ?? "—"}</td>
                   <td className="subtle"><Ago value={item.last_observed_at} /></td>

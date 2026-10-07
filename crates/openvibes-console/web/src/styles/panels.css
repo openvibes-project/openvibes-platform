@@ -38,6 +38,8 @@
 .panel-section + .panel-section { margin-top: 8px; }
 .panel-section--flush { padding: 8px 0 0; }
 .panel-section--flush > .panel-section__head { padding: 0 20px; }
+/* A flush section runs edge to edge. Inside a padded .panel-body it cancels the body padding, so it lines up the same either way. */
+.panel-body .panel-section--flush { margin-inline: -20px; }
 .panel-section__head { display: flex; align-items: center; justify-content: space-between; }
 .panel-section--flush .table th:first-child, .panel-section--flush .table td:first-child { padding-left: 20px; }
 .tabs__count { font-size: 11.5px; color: var(--text-3); background: var(--surface-2); border-radius: 999px; padding: 1px 7px; }
@@ -49,6 +51,11 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .list--plain .list__row + .list__row { border-top: 1px solid var(--line); }
 .object-link { color: var(--text); font-weight: 500; }
 .object-link:hover { color: var(--text); text-decoration: underline; }
+/* An action that reads as a link: a <button> with the link look, never the browser default. */
+.link-button { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--text); font-weight: 500; text-align: left; cursor: pointer; white-space: nowrap; }
+.link-button:hover { text-decoration: underline; }
+.link-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.gap-start { margin-inline-start: 6px; }
 .triage-bar { display: flex; height: 8px; gap: 2px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 80px; }
 .triage-bar span { display: block; height: 100%; }
 .bulk-bar {

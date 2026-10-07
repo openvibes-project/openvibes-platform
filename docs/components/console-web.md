@@ -330,3 +330,18 @@ detail, state, severity, extra`. The browser fetches each section through
 the same scoped API as the Host page (at most 50,000 rows per section, above what Compare can handle, so its "use Export" advice holds).
 Cells are quoted, and a leading `= + - @` is prefixed with `'` so a
 spreadsheet never runs it as a formula (`ui/csv.ts`, unit-tested).
+
+## Side panel anatomy
+
+Every side panel is built from the same parts (`ui/panel.tsx`, styles in
+`styles/panels.css`), so new panels look like the rest without new CSS:
+
+- `PanelHeader` first: kind, title, badges and actions.
+- A padded `<div className="panel-body stack">` for text, key-value lists and
+  controls, built from `Section`.
+- `Section flush` for full-width tables and lists. It lines up the same
+  inside a `panel-body` or beside one (it cancels the body padding), so there
+  is no need to place it outside.
+- An action that looks like a link is `<button className="link-button">`
+  (`object-link` is for `<a>` only). Spacing comes from shared classes such
+  as `gap-start`, not inline styles.
