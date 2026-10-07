@@ -119,13 +119,15 @@ pub async fn insert_case_with_item(
         .unwrap();
 }
 
-/// A migrated database with alarm partitions for today.
+/// A migrated database with alarm partitions from yesterday to tomorrow, so
+/// a test spanning UTC midnight still finds today's partition.
 #[allow(dead_code, reason = "used by some test binaries only")]
 pub async fn migrated() -> (TestDb, deadpool_postgres::Client) {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
-    platform_store::ensure_partitions(&client, chrono::Utc::now().date_naive(), 1)
+    let yesterday = chrono::Utc::now().date_naive() - chrono::Duration::days(1);
+    platform_store::ensure_partitions(&client, yesterday, 2)
         .await
         .unwrap();
     (db, client)
