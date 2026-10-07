@@ -65,7 +65,8 @@ export function Picker({ options, value, onChange, placeholder, label }: {
             {shown.map((option, index) => (
               <li key={option.value} id={`${listId}-${index}`} data-index={index} role="option" aria-selected={option.value === value}
                 className={index === active ? "picker__option picker__option--active" : "picker__option"}
-                onPointerEnter={() => setActive(index)} onClick={() => choose(option.value)}>
+                tabIndex={-1} onPointerEnter={() => setActive(index)} onClick={() => choose(option.value)}
+                onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(option.value); } }}>
                 <span>{option.label}</span>
                 {option.value === value && <Icon name="check" size={14} />}
               </li>
