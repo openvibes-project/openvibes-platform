@@ -21,7 +21,16 @@ every host with `history::record` (deleting and re-inserting that day's rows in 
 transaction, so a rerun is safe and a failed run leaves the day's previous
 rows intact) and then deletes days older than `--history-days` (default 400, range
 30 to 3650; see [openvibes-admin.md](openvibes-admin.md)). It prints
-`recorded history for N hosts, deleted M old rows`. Days are UTC.
+`recorded history for N hosts, deleted M old rows`.
+
+The day is the UTC date at the moment the run starts. The timer fires daily
+in local time with up to an hour's random delay, so near UTC midnight one
+run can land on the same UTC day as the previous one (it replaces that day)
+and the next day is then missing: a harmless one-day gap.
+
+Size: measured 76 MB per 1,000 hosts per year in a freshly filled table
+(52 MB rows, 24 MB primary key) and about 95 MB with day-to-day churn, so
+plan on about 1 GB at 10,000 hosts with the 400-day default.
 
 ## Reader: `GET /api/v1/metrics/history`
 

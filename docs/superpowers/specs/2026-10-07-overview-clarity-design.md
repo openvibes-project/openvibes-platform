@@ -130,7 +130,8 @@ counts as they are when it runs, under that run's date; re-running the same
 day replaces that day's rows. A missed day stays a gap (past states cannot be
 recomputed). It
 deletes rows older than `--history-days` (default 400, range 30–3650).
-Size: about 40 MB per 1,000 hosts per year.
+Size: about 80–100 MB per 1,000 hosts per year (measured), so about 1 GB
+at 10,000 hosts and the 400-day default.
 
 ### 5.3 Reading
 
