@@ -337,7 +337,7 @@ jobs:
       - name: Check the bundled model packages
         run: |
           . packaging/llm/model.pin
-          rpms=target/rpm/RPMS/x86_64
+          rpms=$PWD/target/rpm/RPMS/x86_64
           meta=$(ls $rpms/openvibes-llm-model-[0-9]*.rpm)
           p1=$(ls $rpms/openvibes-llm-model-part1-*.rpm)
           p2=$(ls $rpms/openvibes-llm-model-part2-*.rpm)
