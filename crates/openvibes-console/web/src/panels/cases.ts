@@ -15,7 +15,7 @@ export const isCaseKind = (value: string): value is CaseKind => (CASE_KINDS as r
 export const EXCLUSIVE_KINDS: ReadonlySet<string> = new Set(["alarm", "compliance_finding", "vulnerability"]);
 
 export const kindLabel: Record<CaseKind | "finding", string> = { alarm: "Alarm", compliance_finding: "Compliance finding", vulnerability: "Vulnerability", host: "Host", software: "Software", finding: "Compliance finding" };
-export const kindIcon: Record<CaseKind, IconName> = { alarm: "alarm", compliance_finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package" };
+export const kindIcon: Record<CaseKind | "finding", IconName> = { alarm: "alarm", compliance_finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package", finding: "findings" };
 /** What to paste to add an item by id, per kind. */
 export const refHint: Record<CaseKind, string> = {
   alarm: "Alarm id, e.g. 9001",

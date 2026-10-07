@@ -157,11 +157,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       const agent = agentById(context);
       const open = findings().filter((finding) => finding.agent_id === context).sort((a, b) => (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9));
       const vulns = vulnerabilities().filter((item) => item.agent_id === context);
-      return [text("For "), cite("agent", context), text(` (${agent?.status ?? "unknown"}): ${open.length} findings and ${vulns.length} open vulnerabilities. `),
-        ...(open[0] ? [text("The most serious finding is "), cite("finding", `${open[0].rule_set_id}/${open[0].rule_id}`), text(` — ${open[0].message.toLowerCase()}.`)] : [text("No findings right now.")])];
+      return [text("For "), cite("agent", context), text(` (${agent?.status ?? "unknown"}): ${open.length} compliance findings and ${vulns.length} open vulnerabilities. `),
+        ...(open[0] ? [text("The most serious compliance finding is "), cite("finding", `${open[0].rule_set_id}/${open[0].rule_id}`), text(` — ${open[0].message.toLowerCase()}.`)] : [text("No compliance findings right now.")])];
     }
     const top = groups()[0];
-    return [text("Start with the most severe open finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(` (${top.latest_message.toLowerCase()}, ${top.triage_counts.open} hosts open).`)] : []),
+    return [text("Start with the most severe open compliance finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(` (${top.latest_message.toLowerCase()}, ${top.triage_counts.open} hosts open).`)] : []),
       text(" This is the demo assistant; it answers from synthetic data only.")];
   };
 

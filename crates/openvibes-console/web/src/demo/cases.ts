@@ -36,7 +36,8 @@ type StoredItem = {
   outcome: string | null; outcome_note: string | null; added_by_user_id: string; added_at: string;
 };
 type StoredEvent = { event_id: number; case_id: string; at: string; actor_user_id: string | null; kind: string; body: string | null; detail: Body };
-export type CaseState = { v: 1; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
+// v 2: item kind `finding` became `compliance_finding`; older stores reseed.
+export type CaseState = { v: 2; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
 export type CasePersistence = { load: () => unknown; save: (state: CaseState) => void };
 
 const MAX_ITEMS = 500;
@@ -99,7 +100,7 @@ const defaultSeverity = (severities: (string | null)[]) =>
 
 export function createCaseStore(world: CaseWorld, seed: () => CaseState, persistence?: CasePersistence) {
   const saved = persistence?.load() as Partial<CaseState> | undefined;
-  const state: CaseState = saved?.v === 1 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
+  const state: CaseState = saved?.v === 2 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
     && typeof saved.next_number === "number" && typeof saved.next_event === "number" ? (saved as CaseState) : seed();
   const persist = () => persistence?.save(state);
   const now = () => new Date().toISOString();
@@ -430,7 +431,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
 /** Cases the demo starts with, over objects that exist in the demo data. */
 export function seedCases(data: DemoData): CaseState {
   const minutes = (ago: number) => new Date(data.now - ago * 60_000).toISOString();
-  const state: CaseState = { v: 1, next_number: 101, next_event: 1, cases: [], items: [], events: [] };
+  const state: CaseState = { v: 2, next_number: 101, next_event: 1, cases: [], items: [], events: [] };
   const host = (id: string) => data.agents.find((a) => a.id === id);
   const short = (id: string) => (host(id)?.hostname ?? id).split(".")[0] ?? id;
   const findingOf = (f: { agent_id: string; rule_set_id: string; rule_id: string }) => `${f.agent_id}/${f.rule_set_id}/${f.rule_id}`;

@@ -342,7 +342,7 @@ describe("demo cases: scope", () => {
   /** A store whose viewer sees only the hosts in `visible`. */
   function scoped(visible: string[], persisted?: { value: unknown }) {
     const me = { user_id: "u-ola", username: "ola", display_name: "Ola" };
-    const state: CaseState = { v: 1, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
+    const state: CaseState = { v: 2, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
     const world: CaseWorld = {
       me, people: [me, { user_id: "u-sam", username: "sam", display_name: "Sam" }], assignable: ["u-ola", "u-sam"],
       canSee: (id) => visible.includes(id), hostname: (id) => id,
