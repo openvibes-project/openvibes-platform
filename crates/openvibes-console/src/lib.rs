@@ -26,6 +26,7 @@ mod detection;
 mod error;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
+mod metrics;
 mod openapi;
 mod ports;
 mod presence;

@@ -886,6 +886,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ports": {
         parameters: {
             query?: never;
@@ -2823,6 +2839,23 @@ export interface components {
         LoginResponse: {
             /** @description Always true for the successful response; the session cookie is set separately. */
             authenticated: boolean;
+        };
+        /** @description A metric's daily values, oldest first; days with no data are absent. */
+        MetricHistory: {
+            /** @description The requested catalogue id. */
+            metric: string;
+            /** @description Stored days, then today's live value. */
+            points: components["schemas"]["MetricPoint"][];
+        };
+        /** @description One day's value. */
+        MetricPoint: {
+            /** @description UTC day, `YYYY-MM-DD`. */
+            day: string;
+            /**
+             * Format: int64
+             * @description The count that day.
+             */
+            value: number;
         };
         /**
          * @description Stable console permission identifiers.
@@ -7141,6 +7174,49 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Catalogue id, for example `vulns.open.critical`. */
+                metric: string | null;
+                /** @description Window in days: 7, 30, 90 or 365 (default 30). */
+                days: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Daily values of one count, ending with today's live value */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MetricHistory"];
+                };
+            };
+            /** @description Missing permission, or the metric spans kinds with different scopes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unknown metric or unsupported window */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

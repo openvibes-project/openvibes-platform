@@ -94,6 +94,7 @@ use crate::{
         crate::dashboards::share_dashboard,
         crate::dashboards::get_home,
         crate::dashboards::set_home,
+        crate::metrics::history,
         crate::software::list_host_packages,
         crate::software::list_software,
         crate::software::get_software,
@@ -128,6 +129,8 @@ use crate::{
         crate::cases::set_item_outcome
     ),
     components(schemas(
+        crate::metrics::MetricHistory,
+        crate::metrics::MetricPoint,
         crate::software::HostPackageView,
         crate::software::HostPackagePage,
         crate::software::SoftwareView,
@@ -279,6 +282,7 @@ use crate::{
         (name = "agents", description = "Scope-filtered agent reads"),
         (name = "alarms", description = "Scope-filtered threat alarms and their triage"),
         (name = "cases", description = "Investigations: items, notes, assignment and closing, scope-filtered"),
+        (name = "metrics", description = "Daily history of problem counts, scope-filtered"),
         (name = "software", description = "Installed software per host and across the caller's hosts"),
         (name = "assets", description = "Open ports and running services per host and across the caller's hosts"),
         (name = "compliance", description = "Scope-filtered compliance finding reads"),
