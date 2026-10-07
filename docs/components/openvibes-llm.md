@@ -139,9 +139,8 @@ api_key_file = "/etc/openvibes/llm-api-key"
 
 `llm-api-key` is owned by `openvibes-console` (mode 0400) after setup;
 `openvibes-llm.service` still receives it as a systemd credential, which
-root loads. To run `assistant check` or `assistant eval` as
-`openvibes-admin`, give it a private copy
-(`install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key …`).
+root loads. Run `assistant check` and `assistant eval` as that account:
+`sudo -u openvibes-console openvibes-admin assistant check`.
 
 Replacing the model is another `model install` and a restart. A model
 file changed after installation fails the digest check, and the service
