@@ -115,6 +115,13 @@ test("an Audit filter with no matches explains the empty list", async ({ page })
   await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
 });
 
+test("an old /findings link lands on /compliance with its filters", async ({ page }) => {
+  await signIn(page, "alex");
+  await page.goto("/findings?severity=high");
+  await expect(page).toHaveURL(/\/compliance\?severity=high$/);
+  await expect(page.locator(".view")).toBeVisible();
+});
+
 test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
   await signIn(page, "alex");
   await page.goto("/compliance");

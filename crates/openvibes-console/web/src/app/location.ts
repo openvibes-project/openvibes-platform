@@ -15,6 +15,8 @@ export function parseLocation(pathname: string, search: string, base: string): A
   const root = base.endsWith("/") ? base.slice(0, -1) : base;
   let view = pathname.startsWith(root) ? pathname.slice(root.length) : pathname;
   if (view === "" || view === "/index.html") view = "/";
+  // Links from before the compliance rename (2026-10) keep working.
+  if (view === "/findings") view = "/compliance";
   const params = new URLSearchParams(search);
   const panels = params.getAll("open").flatMap((value) => {
     const split = value.indexOf(":");

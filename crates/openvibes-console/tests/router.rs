@@ -576,6 +576,7 @@ async fn known_browser_routes_serve_the_no_store_spa_entry() {
     for path in [
         "/",
         "/compliance",
+        "/findings",
         "/agents",
         "/enrollment",
         "/rule-sets",

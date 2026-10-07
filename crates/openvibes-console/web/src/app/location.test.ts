@@ -15,6 +15,11 @@ describe("location", () => {
     expect(formatLocation(loc, "/")).toBe("/compliance?sev=high&open=finding-group%3Abaseline%2FOV-1");
   });
 
+  it("reads the old /findings page as /compliance, keeping its filters", () => {
+    const loc = parseLocation("/console/findings", "?severity=high&open=finding%3Ab%2FR-1", "/console/");
+    expect(formatLocation(loc, "/console/")).toBe("/console/compliance?severity=high&open=finding%3Ab%2FR-1");
+  });
+
   it("ignores malformed panel references", () => {
     expect(parseLocation("/", "?open=nokind&open=%3Aid&open=agent%3A", "/").panels).toEqual([]);
   });
