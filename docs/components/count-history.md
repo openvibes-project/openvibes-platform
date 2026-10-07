@@ -17,15 +17,17 @@ the 4 alarm, 6 vulnerability (critical/high/medium/low, exploited, no fix),
 ## Writer and retention
 
 `openvibes-admin maintenance` (the systemd timer) records today's counts for
-every host with `history::record` (replacing that day's rows, so a rerun is
-safe) and then deletes days older than `--history-days` (default 400, range
+every host with `history::record` (deleting and re-inserting that day's rows in one
+transaction, so a rerun is safe and a failed run leaves the day's previous
+rows intact) and then deletes days older than `--history-days` (default 400, range
 30 to 3650; see [openvibes-admin.md](openvibes-admin.md)). It prints
 `recorded history for N hosts, deleted M old rows`. Days are UTC.
 
 ## Reader: `GET /api/v1/metrics/history`
 
 Query: `metric` (catalogue id) and `days` (7, 30, 90 or 365; default 30).
-Response: `{metric, points: [{day, value}]}`, oldest first.
+Response: `{metric, points: [{day, value}]}`, oldest first. The window is
+`days` days including today, so at most `days` points.
 
 - Stored days in the window come from `host_daily_counts`; the last point is
   today, computed live. Stored rows dated today or later are not served.
@@ -55,7 +57,7 @@ Response: `{metric, points: [{day, value}]}`, oldest first.
 ## Failure behaviour
 
 A missed maintenance day leaves a gap; history is not backfilled, because the
-past state cannot be recomputed. A failed run keeps earlier days. Database
+past state cannot be recomputed. A failed run keeps earlier days and the same day's previous rows. Database
 errors on the endpoint answer 503 without partial data. Metrics are a fixed
 catalogue; request input never reaches SQL.
 

@@ -360,7 +360,8 @@ the caller may see. Each metric needs the read permissions listed in
 [count-history.md](count-history.md); a missing one is 403, and so is a metric
 spanning kinds (alarms, vulnerabilities, compliance) when the caller's scopes
 for them differ. An unknown `metric` or other `days` is 422 (`unknown_metric`,
-`invalid_days`). Today is always the live value; stored rows dated today or
+`invalid_days`); both are validated before authentication, so bad input gets
+422 even unauthenticated. Today is always the live value; stored rows dated today or
 later are not served, and days without a stored row are absent, not zero.
 
 The implemented production UI covers sign-in, overview, agents, findings,

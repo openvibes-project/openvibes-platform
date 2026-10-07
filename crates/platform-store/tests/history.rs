@@ -9,7 +9,7 @@ const A2: &str = "agent.00000000-0000-0000-0000-000000000002";
 
 #[tokio::test]
 async fn record_counts_each_host_and_replaces_the_same_day() {
-    let (db, client) = common::migrated().await;
+    let (db, mut client) = common::migrated().await;
     common::seed_agent(&client, A1).await;
     common::seed_agent(&client, A2).await;
     common::seed_alarm(&client, A1, "critical", "open").await;
@@ -19,9 +19,9 @@ async fn record_counts_each_host_and_replaces_the_same_day() {
     common::seed_current_finding(&client, A1, "critical").await;
     let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
     let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
-    assert_eq!(history::record(&client, day, now).await.unwrap(), 2);
+    assert_eq!(history::record(&mut client, day, now).await.unwrap(), 2);
     assert_eq!(
-        history::record(&client, day, now).await.unwrap(),
+        history::record(&mut client, day, now).await.unwrap(),
         2,
         "same day replaced"
     );
@@ -73,13 +73,17 @@ async fn record_counts_each_host_and_replaces_the_same_day() {
 
 #[tokio::test]
 async fn retention_deletes_only_older_days() {
-    let (db, client) = common::migrated().await;
+    let (db, mut client) = common::migrated().await;
     common::seed_agent(&client, A1).await;
     let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
     for d in [1, 5, 7] {
-        history::record(&client, NaiveDate::from_ymd_opt(2026, 10, d).unwrap(), now)
-            .await
-            .unwrap();
+        history::record(
+            &mut client,
+            NaiveDate::from_ymd_opt(2026, 10, d).unwrap(),
+            now,
+        )
+        .await
+        .unwrap();
     }
     let deleted = history::delete_before(&client, NaiveDate::from_ymd_opt(2026, 10, 5).unwrap())
         .await
@@ -124,5 +128,28 @@ async fn exploited_counts_open_non_reboot_vulnerabilities_on_kev() {
             .unwrap(),
         1
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn failed_record_keeps_the_days_previous_rows() {
+    let (db, mut client) = common::migrated().await;
+    common::seed_agent(&client, A1).await;
+    let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
+    assert_eq!(history::record(&mut client, day, now).await.unwrap(), 1);
+    // Existing rows satisfy this; the next run's insert will not.
+    client
+        .batch_execute("ALTER TABLE host_daily_counts ADD CONSTRAINT t CHECK (alarms_critical = 0)")
+        .await
+        .unwrap();
+    common::seed_alarm(&client, A1, "critical", "open").await;
+    history::record(&mut client, day, now).await.unwrap_err();
+    let rows: i64 = client
+        .query_one("SELECT count(*) FROM host_daily_counts", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(rows, 1, "delete rolled back with the failed insert");
     db.drop().await;
 }

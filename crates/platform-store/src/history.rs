@@ -85,17 +85,18 @@ fn threshold(now: DateTime<Utc>) -> DateTime<Utc> {
     now - Duration::minutes(OFFLINE_AFTER_MINUTES)
 }
 
-/// Stores every host's current counts under `day`, replacing that day.
+/// Stores every host's current counts under `day`, replacing that day. The
+/// replace is one transaction: a failure leaves the previous rows intact.
 pub async fn record(
-    client: &Client,
+    client: &mut Client,
     day: NaiveDate,
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
-    client
-        .execute("DELETE FROM host_daily_counts WHERE day = $1", &[&day])
+    let tx = client.transaction().await?;
+    tx.execute("DELETE FROM host_daily_counts WHERE day = $1", &[&day])
         .await?;
     let cols = COLUMNS[..15].join(", ");
-    Ok(client
+    let n = tx
         .execute(
             &format!(
                 "INSERT INTO host_daily_counts (day, agent_id, status, {cols})
@@ -103,7 +104,9 @@ pub async fn record(
             ),
             &[&threshold(now), &day],
         )
-        .await?)
+        .await?;
+    tx.commit().await?;
+    Ok(n)
 }
 
 /// Removes every stored day before `cutoff`.
