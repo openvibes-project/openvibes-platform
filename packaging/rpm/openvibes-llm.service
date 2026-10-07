@@ -14,6 +14,9 @@ Type=exec
 User=openvibes-llm
 Group=openvibes-llm
 EnvironmentFile=/etc/openvibes/llm.conf
+# Written by `openvibes-admin assistant tune` (threads, GPU layers); tune leaves
+# alone any llm.conf value you changed from the packaged default.
+EnvironmentFile=-/var/lib/openvibes-llm/tuning.conf
 # Optional so that, before the first model install, the check says what to do.
 EnvironmentFile=-/var/lib/openvibes-llm/model.conf
 # No crash backtrace: ggml would start gdb for it.

@@ -17,6 +17,10 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install (64 hex characters); given to the service as a systemd credential |
 | `/var/lib/openvibes-llm/models/` | 0775 root:openvibes-admin; models installed read-only (0444) |
 | `/var/lib/openvibes-llm/model.conf` | The model in use and its SHA-256, written by `openvibes-admin assistant model install`; read after `llm.conf` |
+| `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `openvibes-admin assistant tune`; read after `llm.conf`, before `model.conf` |
+| `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `assistant tune` measured and wrote, so it can tell its own values from yours |
+
+Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. A value in `llm.conf` is operator-set when it differs from the packaged default; `assistant tune` never overrides such a value.
 
 ## The pinned build
 
