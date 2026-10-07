@@ -1,5 +1,6 @@
 //! `openvibes-admin assistant check|eval` against a minimal model backend:
-//! reports what the backend supports, applies the gate, and audits both.
+//! reports what the backend supports and applies the gate, without the
+//! admin configuration or the database (run as `openvibes-console`).
 // The tests start the CLI binary they verify; this is not shipped code.
 #![allow(clippy::disallowed_types)]
 
@@ -77,7 +78,20 @@ async fn check_reports_what_the_backend_supports() {
     let fixture = Fixture::create().await;
     stdout(&fixture.run(&["migrate"]));
     let file = console_config(&fixture, "good", &assistant_toml(&plain_backend()));
-    let out = stdout(&fixture.run(&["assistant", "check", "--file", file.to_str().unwrap()]));
+    // No admin.toml: the console's account cannot read it.
+    let out = stdout(
+        &std::process::Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+            .args([
+                "--config",
+                "/nonexistent/admin.toml",
+                "assistant",
+                "check",
+                "--file",
+            ])
+            .arg(&file)
+            .output()
+            .unwrap(),
+    );
     for line in [
         "model test-model",
         "models listed 1 (configured model listed)",
@@ -94,7 +108,8 @@ async fn check_reports_what_the_backend_supports() {
     assert!(out.contains("not yet measured on OpenVIBES"));
     assert_eq!(
         fixture.audit().await,
-        [row("migrate", "ok"), row("assistant check", "ok")]
+        [row("migrate", "ok")],
+        "not audited: no database"
     );
     fixture.drop().await;
 }
@@ -120,13 +135,14 @@ async fn eval_applies_the_gate_and_fails_a_backend_that_cannot_look_up() {
     }
     assert_eq!(
         fixture.audit().await,
-        [row("migrate", "ok"), row("assistant eval", "error")]
+        [row("migrate", "ok")],
+        "not audited: no database"
     );
     fixture.drop().await;
 }
 
 #[tokio::test]
-async fn configuration_problems_are_reported_and_audited() {
+async fn configuration_problems_are_reported() {
     let fixture = Fixture::create().await;
     stdout(&fixture.run(&["migrate"]));
     let unreachable = {
@@ -160,13 +176,7 @@ async fn configuration_problems_are_reported_and_audited() {
         let error = String::from_utf8_lossy(&output.stderr);
         assert!(error.contains(expected), "{name}: {error}");
     }
-    let audit = fixture.audit().await;
-    assert_eq!(audit.len(), 4);
-    assert!(
-        audit[1..]
-            .iter()
-            .all(|entry| *entry == row("assistant check", "error"))
-    );
+    assert_eq!(fixture.audit().await, [row("migrate", "ok")]);
     fixture.drop().await;
 }
 
