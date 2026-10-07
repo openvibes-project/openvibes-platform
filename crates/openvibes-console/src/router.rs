@@ -34,7 +34,9 @@ use crate::{
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
 const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
-const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(30);
+// The orchestrator bounds each question by the configured backend deadline
+// (at most 15 minutes) and answers 504 itself; this is only a backstop.
+const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(960);
 static AUDIT_EXPORT_SPOOL_ID: AtomicU64 = AtomicU64::new(1);
 // ponytail: one shared router cap; split API and asset budgets if one starves the other.
 
@@ -417,8 +419,10 @@ async fn request_limits(
     };
     match timeout(deadline, next.run(request)).await {
         Ok(response) => response,
+        // Not 408: browsers silently resend a request answered 408, which
+        // then hits the per-user assistant lock and hides this error.
         Err(_) => problem_response(ProblemDetails::new(
-            StatusCode::REQUEST_TIMEOUT,
+            StatusCode::GATEWAY_TIMEOUT,
             "request_timed_out",
             "The request exceeded its time limit",
         )),
@@ -6746,5 +6750,40 @@ mod login_throttle_tests {
         assert_eq!(alice.0, alice_elsewhere.0);
         assert_ne!(alice.1, alice_elsewhere.1);
         assert_eq!(login_throttle_buckets(Some("alice"), None).1, None);
+    }
+}
+
+#[cfg(test)]
+mod request_deadline_tests {
+    use axum::{Router, body::Body, http::Request, routing::get};
+    use tower::ServiceExt;
+
+    use super::{StatusCode, with_request_limits};
+
+    async fn status_after(path: &'static str, wait: u64) -> StatusCode {
+        let app = with_request_limits(Router::new().route(
+            path,
+            get(move || async move {
+                tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+            }),
+        ));
+        let request = Request::get(path).body(Body::empty()).unwrap();
+        app.oneshot(request).await.unwrap().status()
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn a_timed_out_request_is_504_not_408_which_browsers_resend() {
+        assert_eq!(
+            status_after("/api/v1/slow", 16).await,
+            StatusCode::GATEWAY_TIMEOUT
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn an_assistant_answer_may_take_longer_than_30_seconds() {
+        assert_eq!(
+            status_after("/api/v1/assistant/messages", 120).await,
+            StatusCode::OK
+        );
     }
 }

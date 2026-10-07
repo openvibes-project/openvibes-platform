@@ -28,14 +28,11 @@ impl AssistantRuntime {
             return Ok(None);
         }
         assistant.max_lookups = assistant.max_lookups.min(6);
-        let mut backend = assistant
+        let backend = assistant
             .backend
             .clone()
             .filter(|backend| backend.location != Location::External)
             .ok_or(ConsoleError::Config)?;
-        // The HTTP turn is capped at 30 seconds. Keep any blocking backend
-        // call within the same bound after the request future is cancelled.
-        backend.deadline = backend.deadline.min(Duration::from_secs(30));
         let backend = Arc::new(BackendClient::new(&backend).map_err(|_| ConsoleError::Config)?);
         let capacity = assistant
             .backend
@@ -72,6 +69,14 @@ impl AssistantRuntime {
                     *available.write().await = ready;
                     if ready {
                         return;
+                    }
+                    // Not listening yet (the model server is still loading,
+                    // as after `assistant-setup`): look again soon. A
+                    // backend that answers but fails the probe is costly to
+                    // probe, so it waits longer.
+                    if report.models.is_err() {
+                        tokio::time::sleep(Duration::from_secs(10)).await;
+                        continue;
                     }
                 } else {
                     *available.write().await = false;
