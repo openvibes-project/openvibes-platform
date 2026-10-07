@@ -6,9 +6,9 @@ immutable evidence; triage notes and state are separate metadata.
 
 ## Interfaces
 
-- `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage`
+- `GET /api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage`
   returns default `open` state or the saved state and an ETag version.
-- `PUT` on the same route requires `findings.triage`, browser origin and CSRF
+- `PUT` on the same route requires `compliance.triage`, browser origin and CSRF
   validation, and `If-Match`. Stale writes return 412.
 - `update_many` applies one transition to 1–100 endpoints in a single
   transaction. It locks current findings in ID order, verifies each version

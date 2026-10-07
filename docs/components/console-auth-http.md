@@ -126,12 +126,12 @@ list, detail, and certificate queries. Agent and certificate cursors are
 bounded and rejected when their filters or scope differ from the current
 request. Detail responses include up to 100 certificate metadata rows; the
 separate certificate route provides full cursor pagination. Finding and
-latest-summary routes require `findings.read` and use the same active SQL
+latest-summary routes require `compliance.read` and use the same active SQL
 scope; latest-finding list/detail and history list/event routes use that scope
 in SQL. Their bounded cursors are tied to the active filters and scope, and
 history requires a lower time bound for partition pruning. Latest-finding
 triage reads and writes use the same finding scope; writes require
-`findings.triage`, CSRF, exact Origin, same-origin Fetch Metadata, and a
+`compliance.triage`, CSRF, exact Origin, same-origin Fetch Metadata, and a
 matching ETag `If-Match`. State, assignment, note, history, and audit are
 committed atomically. Audit retention
 reads require `audit.read`; updates require global `audit.retention.manage`,

@@ -348,7 +348,11 @@ async fn a_case_has_a_number_a_default_severity_and_a_timeline() {
     assert_eq!(second.summary.severity, "medium", "no item severity");
     let kinds: Vec<_> = created.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["created", "item_added", "item_added", "item_added"]);
-    let finding_item = created.items.iter().find(|i| i.kind == "compliance_finding").unwrap();
+    let finding_item = created
+        .items
+        .iter()
+        .find(|i| i.kind == "compliance_finding")
+        .unwrap();
     assert_eq!(finding_item.title.as_deref(), Some("Root login over SSH"));
     assert_eq!(finding_item.hostname.as_deref(), Some("web-01"));
     assert!(!finding_item.evidence_gone);
@@ -837,7 +841,11 @@ async fn closing_needs_a_resolution_a_note_a_date_for_accepted_risk_and_every_ou
         &global(),
         ALICE,
         "To close",
-        &[("host", WEB), ("alarm", &alarm), ("compliance_finding", &web_finding)],
+        &[
+            ("host", WEB),
+            ("alarm", &alarm),
+            ("compliance_finding", &web_finding),
+        ],
     )
     .await;
     let invalid = |refusal: Refusal, field: &'static str, code: &'static str| {
@@ -1337,7 +1345,10 @@ async fn resolved_needs_the_evidence_to_be_gone() {
         .unwrap();
     let fresh = fetch(&fx, &global(), ALICE, &case).await.unwrap();
     for item in &fresh.items {
-        let expected = matches!(item.kind.as_str(), "alarm" | "compliance_finding" | "vulnerability");
+        let expected = matches!(
+            item.kind.as_str(),
+            "alarm" | "compliance_finding" | "vulnerability"
+        );
         assert_eq!(item.evidence_gone, expected, "{}", item.kind);
     }
     for item in [&alarm_item, &finding_item, &vuln_item] {
@@ -2574,7 +2585,10 @@ async fn false_positive_and_accepted_risk_do_not_reopen_on_evidence() {
         &[("alarm", &alarm), ("compliance_finding", &web_finding)],
     )
     .await;
-    for (kind, decision) in [("alarm", "false_positive"), ("compliance_finding", "accepted_risk")] {
+    for (kind, decision) in [
+        ("alarm", "false_positive"),
+        ("compliance_finding", "accepted_risk"),
+    ] {
         outcome(
             &mut fx,
             &global(),

@@ -10,7 +10,7 @@ persisted-history, and streaming choices for this first console release.
 
 - Opt-in local or private-network OpenAI-compatible model; no vendor cloud.
 - `assistant.use`, plus the caller's matching `agents.read` and
-  `findings.read` scopes on each question.
+  `compliance.read` scopes on each question.
 - Agent and finding lookups only. Do not expose the assistant library's
   vulnerability or rule lookups until the console has corresponding read
   models and permissions.

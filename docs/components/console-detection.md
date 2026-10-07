@@ -11,7 +11,7 @@ true, and the exact historical rule definition.
 - Finding and alarm detail responses carry their optional stored `Detection`
   explanation. The web panel labels incomplete, masked, summarized, and
   truncated values and shows the recorded evaluation time.
-- `GET /api/v1/findings/{id}/rule` and
+- `GET /api/v1/compliance/{id}/rule` and
   `GET /api/v1/alarms/{id}/rule` resolve the original rule from the signed
   bundle identified by the observation's set version and preimage hash.
 - Historical resolution verifies the recorded signature, including for

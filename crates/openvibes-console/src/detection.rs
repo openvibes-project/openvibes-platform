@@ -210,7 +210,7 @@ pub(crate) async fn finding_rule(
         Ok(_) => {
             return problem_response(ProblemDetails::not_found(
                 "compliance_finding_not_found",
-                "Finding not found or observation changed; reopen it",
+                "Compliance finding not found or observation changed; reopen it",
             ));
         }
         Err(_) => return unavailable_auth(),

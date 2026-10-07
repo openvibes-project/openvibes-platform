@@ -123,7 +123,7 @@ Typed initial tools:
 2. `search_findings`: bounded severity, triage state, time window, and text
    filters; returns at most 10 scoped finding summaries.
 3. `get_agent`: one agent by stable ID, subject to `agents.read` and scope.
-4. `get_finding`: one finding by stable ID, subject to `findings.read` and
+4. `get_finding`: one finding by stable ID, subject to `compliance.read` and
    scope.
 
 The exact arguments reuse existing read DTO semantics and are finalized
