@@ -245,3 +245,38 @@ fn a_symlinked_tuning_conf_is_never_read_into_the_rollback() {
     assert_eq!(fs::read_to_string(&secret).unwrap(), "TOP-SECRET");
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_fifo_at_tuning_conf_does_not_block_and_counts_as_absent() {
+    let port = server_with(None, "503 Service Unavailable", "200 OK");
+    let root = tree("fifo", port, 60);
+    assert!(
+        Command::new("mkfifo")
+            .arg(root.join(TUNING))
+            .status()
+            .unwrap()
+            .success()
+    );
+    let started = std::time::Instant::now();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(started.elapsed() < Duration::from_secs(20));
+    assert!(!root.join(TUNING).exists());
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_hard_linked_tuning_conf_is_ignored() {
+    let port = server_with(None, "503 Service Unavailable", "200 OK");
+    let root = tree("hardlink", port, 60);
+    let secret = root.join("secret");
+    fs::write(&secret, "TOP-SECRET").unwrap();
+    fs::hard_link(&secret, root.join(TUNING)).unwrap();
+    assert_eq!(tune(&root, &[]).status.code(), Some(1));
+    assert!(
+        !fs::read_to_string(root.join(TUNING))
+            .unwrap_or_default()
+            .contains("TOP-SECRET")
+    );
+    fs::remove_dir_all(&root).unwrap();
+}

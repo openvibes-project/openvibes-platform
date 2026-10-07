@@ -7,7 +7,7 @@ use std::{
     fs,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
-    os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt},
     path::Path,
     time::{Duration, Instant},
 };
@@ -106,11 +106,6 @@ fn cpus(root: &Path) -> (Vec<String>, usize) {
     (lists, logical)
 }
 
-#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
-const O_NOFOLLOW: i32 = 0o100000;
-#[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
-const O_NOFOLLOW: i32 = 0o400000;
-
 /// Largest file root reads from the data directory.
 const MAX_READ: u64 = 64 * 1024;
 
@@ -118,18 +113,26 @@ const MAX_READ: u64 = 64 * 1024;
 /// kind of file, or one over 64 KiB (the directory is writable by the
 /// admin account, so root never follows what is planted there).
 fn read_regular(path: &Path) -> Option<String> {
-    let file = fs::OpenOptions::new()
+    let ignore = |why: &str| {
+        eprintln!("openvibes-admin helper: ignoring {}: {why}", path.display());
+        None
+    };
+    // O_NOFOLLOW refuses a symlink; O_NONBLOCK keeps a FIFO from blocking.
+    let file = match fs::OpenOptions::new()
         .read(true)
-        .custom_flags(O_NOFOLLOW)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
-        .ok()?;
+    {
+        Ok(file) => file,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return None,
+        Err(_) => return ignore("not a plain file"),
+    };
     let meta = file.metadata().ok()?;
-    if !meta.is_file() || meta.len() > MAX_READ {
-        eprintln!(
-            "openvibes-admin helper: {}: not a plain file, ignored",
-            path.display()
-        );
-        return None;
+    if !meta.is_file() || meta.nlink() != 1 {
+        return ignore("not a plain file");
+    }
+    if meta.len() > MAX_READ {
+        return ignore("larger than 64 KiB");
     }
     let mut text = String::new();
     file.take(MAX_READ).read_to_string(&mut text).ok()?;
