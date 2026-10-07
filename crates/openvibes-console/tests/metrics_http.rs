@@ -236,7 +236,7 @@ async fn setup() -> (TestDb, axum::Router) {
         for (agent, critical) in [(A, 1), (B, 5)] {
             sql.push_str(&format!(
                 "INSERT INTO host_daily_counts VALUES ({day}, '{agent}', 'active',
-                    0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
+                    0,0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
             ));
         }
     }
@@ -248,7 +248,7 @@ async fn setup() -> (TestDb, axum::Router) {
     ] {
         sql.push_str(&format!(
             "INSERT INTO host_daily_counts VALUES ({day}, '{B}', 'active',
-                0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
+                0,0,0,0,0, {critical},0,0,0,0,0, false, 0,0,0,0);"
         ));
     }
     client.batch_execute(&sql).await.unwrap();
@@ -367,5 +367,151 @@ async fn a_fresh_install_has_only_todays_point() {
     )
     .await;
     assert_eq!(body["points"].as_array().unwrap().len(), 1);
+    db.drop().await;
+}
+
+/// Every catalogue metric's live value equals the count the console's
+/// summaries and lists show for the same data (global scope).
+#[tokio::test]
+async fn live_values_match_the_summaries_and_lists() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let client = db.pool.get().await.unwrap();
+    let today = Utc::now().date_naive();
+    platform_store::ensure_partitions(&client, today - Duration::days(1), 2)
+        .await
+        .unwrap();
+    let mut sql = format!(
+        "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at) VALUES
+            ('agent.00000000-0000-4000-8000-000000000503', 'revoked', now(), now()),
+            ('agent.00000000-0000-4000-8000-000000000504', 'active', now(), now() - interval '1 day');
+         INSERT INTO host_vulnerability_counts
+             (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
+         VALUES ('{A}', 2, 1, 2, 3, 4, 5, 1, now()), ('{B}', 1, 6, 0, 1, 0, 2, 0, now());
+         INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title, url)
+             VALUES ('ADV-1', 's', 'debian', '12', 'critical', 't', 'u');
+         INSERT INTO advisory_cves VALUES ('ADV-1', 'CVE-1');
+         INSERT INTO cve_enrichment (cve_id, kev_added) VALUES ('CVE-1', '2026-01-01');
+         INSERT INTO vulnerabilities (agent_id, advisory_id, packages, first_seen_at, last_evaluated_at)
+             VALUES ('{B}', 'ADV-1', '[]', now(), now());"
+    );
+    // Every severity (info included) in every state, on both hosts.
+    sql.push_str(&format!(
+        "INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version,
+             rule_id, rule_version, severity, confidence, message, first_seen, last_seen, count,
+             process, ancestors, received_at, state, note)
+         SELECT (now() AT TIME ZONE 'UTC')::date, g, md5(g || s || t), 'rs', 1, 'r', 1, s, 50,
+             'm', now(), now(), 1, '{{}}', '[]', now(), t, 'n'
+         FROM unnest(ARRAY['{A}', '{B}']) g,
+              unnest(ARRAY['critical', 'high', 'medium', 'low', 'info']) s,
+              unnest(ARRAY['open', 'investigating', 'mitigated', 'false_positive']) t;"
+    ));
+    for (i, (agent, severity)) in [
+        (A, "critical"),
+        (A, "high"),
+        (B, "medium"),
+        (B, "low"),
+        (B, "high"),
+    ]
+    .iter()
+    .enumerate()
+    {
+        sql.push_str(&format!(
+            "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
+                 severity, first_observed_at, last_observed_at, last_observed_day, scan_id,
+                 confidence, message, evidence, received_at, origin, authenticated)
+             VALUES ('{agent}', 'rule-{i}', 'f-{i}', 1, '{severity}', now(), now(),
+                 (now() AT TIME ZONE 'UTC')::date, 's', 50, 'm', '{{}}', now(), 'online', false);"
+        ));
+    }
+    client.batch_execute(&sql).await.unwrap();
+
+    let vulns = platform_store::vulns::summary(&client).await.unwrap();
+    let vuln = |s: &str| {
+        vulns
+            .by_severity
+            .iter()
+            .find(|(k, _)| k == s)
+            .map_or(0, |(_, n)| *n)
+    };
+    let compliance = platform_store::console_read::finding_summary(&client)
+        .await
+        .unwrap();
+    let agents = platform_store::console_read::agent_summary(&client, Utc::now())
+        .await
+        .unwrap();
+    let row = client
+        .query_one(
+            "SELECT count(*), count(*) FILTER (WHERE l.severity = 'critical'),
+                    count(*) FILTER (WHERE l.severity = 'high'),
+                    count(*) FILTER (WHERE l.severity = 'medium'),
+                    count(*) FILTER (WHERE l.severity = 'low')
+             FROM alarms l JOIN agents a USING (agent_id)
+             WHERE l.state IN ('open', 'investigating')",
+            &[],
+        )
+        .await
+        .unwrap();
+    let alarms = |severity: &str| -> i64 {
+        let i = ["", "critical", "high", "medium", "low"]
+            .iter()
+            .position(|s| *s == severity)
+            .unwrap();
+        row.get(i)
+    };
+    let expected = [
+        (
+            "all.open.critical",
+            alarms("critical") + vuln("critical") + compliance.critical,
+        ),
+        (
+            "all.open.high",
+            alarms("high") + vuln("important") + compliance.high,
+        ),
+        ("alarms.active", alarms("")),
+        ("alarms.active.critical", alarms("critical")),
+        ("alarms.active.high", alarms("high")),
+        ("alarms.active.medium", alarms("medium")),
+        ("alarms.active.low", alarms("low")),
+        ("vulns.open.critical", vuln("critical")),
+        ("vulns.open.high", vuln("important")),
+        ("vulns.open.medium", vuln("moderate")),
+        ("vulns.open.low", vuln("low")),
+        ("vulns.exploited", vulns.exploited),
+        ("vulns.no_fix", vulns.no_fix),
+        ("vulns.reboot_hosts", vulns.reboot_hosts),
+        ("compliance.open.critical", compliance.critical),
+        ("compliance.open.high", compliance.high),
+        ("compliance.open.medium", compliance.medium),
+        ("compliance.open.low", compliance.low),
+        ("agents.active", agents.active),
+        ("agents.stale", agents.stale),
+        ("agents.revoked", agents.revoked),
+    ];
+    assert_eq!(
+        alarms(""),
+        20,
+        "seed: 2 hosts x 5 severities x 2 active states"
+    );
+    let (vera, _) = login(&router, "vera").await;
+    let mut mismatches = Vec::new();
+    for (metric, want) in expected {
+        let (status, body) = get(
+            &router,
+            &vera,
+            &format!("/api/v1/metrics/history?metric={metric}&days=7"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{metric}");
+        let got = body["points"].as_array().unwrap().last().unwrap()["value"]
+            .as_i64()
+            .unwrap();
+        if got != want {
+            mismatches.push(format!("{metric}: history {got}, summary {want}"));
+        }
+    }
+    assert!(mismatches.is_empty(), "{mismatches:#?}");
     db.drop().await;
 }

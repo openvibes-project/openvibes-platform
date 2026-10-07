@@ -71,7 +71,8 @@ pub static CATALOGUE: [Metric; 21] = [
             "alarms_critical",
             "alarms_high",
             "alarms_medium",
-            "alarms_low"
+            "alarms_low",
+            "alarms_info"
         ])
     ),
     m!(
@@ -345,8 +346,7 @@ mod tests {
                 Expr::Sum(cols) => {
                     for c in *cols {
                         assert!(
-                            history::COLUMNS[..10].contains(c)
-                                || history::COLUMNS[11..15].contains(c),
+                            history::COLUMNS[..16].contains(c) && *c != "needs_reboot",
                             "{c}"
                         );
                     }

@@ -14,7 +14,7 @@ async fn record_counts_each_host_and_replaces_the_same_day() {
     common::seed_agent(&client, A2).await;
     common::seed_alarm(&client, A1, "critical", "open").await;
     common::seed_alarm(&client, A1, "high", "mitigated").await; // not active
-    common::seed_alarm(&client, A1, "info", "open").await; // info is in no count
+    common::seed_alarm(&client, A1, "info", "open").await; // own column
     common::seed_host_vuln_counts(&client, A1, 2, 1, 0, 0).await;
     common::seed_current_finding(&client, A1, "critical").await;
     let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
@@ -33,6 +33,11 @@ async fn record_counts_each_host_and_replaces_the_same_day() {
     assert_eq!(rows, 2);
     let series = history::series(&client, &CRIT, day, None).await.unwrap();
     assert_eq!(series, [(day, 4)]);
+    let info = Expr::Sum(&["alarms_info"]);
+    assert_eq!(
+        history::series(&client, &info, day, None).await.unwrap(),
+        [(day, 1)]
+    );
     let high = Expr::Sum(&["alarms_high", "vulns_high", "compliance_high"]);
     assert_eq!(
         history::series(&client, &high, day, None).await.unwrap(),

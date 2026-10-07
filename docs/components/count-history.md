@@ -11,7 +11,7 @@ number moved. Code: `platform_store::history` and
 
 `host_daily_counts` (migration 0044): one row per host per UTC day, primary
 key `(day, agent_id)`: `status` (`active`, `stale`, `revoked`, `imported`),
-the 4 alarm, 6 vulnerability (critical/high/medium/low, exploited, no fix),
+the 5 alarm (critical/high/medium/low/info), 6 vulnerability (critical/high/medium/low, exploited, no fix),
 `needs_reboot` and 4 compliance counts. The console role has `SELECT` only.
 
 ## Writer and retention
@@ -45,7 +45,7 @@ Response: `{metric, points: [{day, value}]}`, oldest first. The window is
 |---|---|---|
 | `all.open.critical` | alarms + vulnerabilities + compliance, critical | alarms.read, vulnerabilities.read, compliance.read |
 | `all.open.high` | the same, high | alarms.read, vulnerabilities.read, compliance.read |
-| `alarms.active` | open or investigating alarms, all severities | alarms.read |
+| `alarms.active` | open or investigating alarms, all severities (info included, as in the alarm list) | alarms.read |
 | `alarms.active.critical` / `.high` / `.medium` / `.low` | active alarms by severity | alarms.read |
 | `vulns.open.critical` / `.high` / `.medium` / `.low` | open vulnerabilities by severity (important counts as high, moderate as medium) | vulnerabilities.read |
 | `vulns.exploited` | open vulnerabilities known exploited | vulnerabilities.read |

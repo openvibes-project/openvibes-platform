@@ -7,6 +7,7 @@ CREATE TABLE host_daily_counts (
     status text NOT NULL CHECK (status IN ('active', 'stale', 'revoked', 'imported')),
     alarms_critical integer NOT NULL, alarms_high integer NOT NULL,
     alarms_medium integer NOT NULL, alarms_low integer NOT NULL,
+    alarms_info integer NOT NULL,
     vulns_critical integer NOT NULL, vulns_high integer NOT NULL,
     vulns_medium integer NOT NULL, vulns_low integer NOT NULL,
     vulns_exploited integer NOT NULL, vulns_no_fix integer NOT NULL,

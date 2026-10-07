@@ -7,12 +7,13 @@ use tokio_postgres::Client;
 
 use crate::{StoreError, status::OFFLINE_AFTER_MINUTES};
 
-/// The 15 count columns in table order, then `status` and `agent_id`.
-pub const COLUMNS: [&str; 17] = [
+/// The 16 count columns in table order, then `status` and `agent_id`.
+pub const COLUMNS: [&str; 18] = [
     "alarms_critical",
     "alarms_high",
     "alarms_medium",
     "alarms_low",
+    "alarms_info",
     "vulns_critical",
     "vulns_high",
     "vulns_medium",
@@ -29,10 +30,11 @@ pub const COLUMNS: [&str; 17] = [
 ];
 
 /// Current counts per host; `$1` is the "seen since" threshold. Definitions
-/// match the console summaries: active alarms are open or investigating
-/// (severity `info` is in no count), vulnerabilities map important to high
-/// and moderate to medium (unrated is in no count), exploited is live. Each kind is one grouped scan joined on `agent_id`:
-/// a per-agent lateral probes every daily alarm partition once per host.
+/// match the console summaries and lists: active alarms are open or
+/// investigating, of every severity (`info` has its own column), vulnerabilities
+/// map important to high and moderate to medium (unrated is in no count),
+/// exploited is live. Each kind is one grouped scan joined on `agent_id`: a
+/// per-agent lateral probes every daily alarm partition once per host.
 // ponytail: still a live count over every host per request; if it gets slow,
 // let current() compute only the kinds the requested metric needs.
 const HOST_COUNTS_SQL: &str = "
@@ -42,6 +44,7 @@ SELECT a.agent_id,
             ELSE 'stale' END AS status,
        COALESCE(al.c, 0)::int AS alarms_critical, COALESCE(al.h, 0)::int AS alarms_high,
        COALESCE(al.m, 0)::int AS alarms_medium, COALESCE(al.l, 0)::int AS alarms_low,
+       COALESCE(al.i, 0)::int AS alarms_info,
        COALESCE(v.critical, 0)::int AS vulns_critical, COALESCE(v.important, 0)::int AS vulns_high,
        COALESCE(v.moderate, 0)::int AS vulns_medium, COALESCE(v.low, 0)::int AS vulns_low,
        COALESCE(x.n, 0)::int AS vulns_exploited, COALESCE(v.no_fix, 0)::int AS vulns_no_fix,
@@ -52,7 +55,8 @@ FROM agents a
 LEFT JOIN (
     SELECT agent_id,
            count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
-           count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l
+           count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l,
+           count(*) FILTER (WHERE severity = 'info') i
     FROM alarms WHERE state IN ('open', 'investigating') GROUP BY agent_id) al ON al.agent_id = a.agent_id
 LEFT JOIN host_vulnerability_counts v ON v.agent_id = a.agent_id
 LEFT JOIN (
@@ -101,7 +105,7 @@ pub async fn record(
     let tx = client.transaction().await?;
     tx.execute("DELETE FROM host_daily_counts WHERE day = $1", &[&day])
         .await?;
-    let cols = COLUMNS[..15].join(", ");
+    let cols = COLUMNS[..16].join(", ");
     let n = tx
         .execute(
             &format!(
