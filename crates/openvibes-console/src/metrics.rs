@@ -247,8 +247,9 @@ fn common_scope(scopes: Vec<AgentScope>) -> Option<AgentScope> {
     responses(
         (status = 200, description = "Daily values of one count, ending with today's live value", body = MetricHistory),
         (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 403, description = "Missing permission, or the metric spans kinds with different scopes", body = ProblemDetails),
-        (status = 422, description = "Unknown metric or unsupported window", body = ProblemDetails)
+        (status = 403, description = "Missing permission, or the metric spans kinds with different scopes", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, description = "Unknown metric or unsupported window", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub(crate) async fn history(

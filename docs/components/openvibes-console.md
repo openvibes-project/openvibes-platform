@@ -354,6 +354,15 @@ browser-session only like dashboards; service-account bearer tokens get 403.
 A case the caller cannot see answers 404. See
 [console-cases.md](console-cases.md).
 
+Count history (`GET /api/v1/metrics/history?metric=<id>&days=7|30|90|365`,
+default 30) returns one catalogued count per UTC day, summed over the hosts
+the caller may see. Each metric needs the read permissions listed in
+[count-history.md](count-history.md); a missing one is 403, and so is a metric
+spanning kinds (alarms, vulnerabilities, compliance) when the caller's scopes
+for them differ. An unknown `metric` or other `days` is 422 (`unknown_metric`,
+`invalid_days`). Today is always the live value; stored rows dated today or
+later are not served, and days without a stored row are absent, not zero.
+
 The implemented production UI covers sign-in, overview, agents, findings,
 enrollment, service accounts, rule sets, access control, audit, and
 latest-finding analyst triage with version-checked updates. Fedora 44 RPM
