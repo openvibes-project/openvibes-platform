@@ -5999,7 +5999,7 @@ export interface operations {
                     "application/json": components["schemas"]["FindingGroupEndpointPage"];
                 };
             };
-            /** @description Finding group not found */
+            /** @description Compliance finding group not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6174,7 +6174,7 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description Finding event not found */
+            /** @description Compliance finding event not found */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6464,7 +6464,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Scope-filtered latest finding counts */
+            /** @description Scope-filtered latest compliance finding counts */
             200: {
                 headers: {
                     [name: string]: unknown;

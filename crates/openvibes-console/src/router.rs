@@ -3564,7 +3564,7 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
     path = "/api/v1/compliance/summary",
     tag = "compliance",
     responses(
-        (status = 200, description = "Scope-filtered latest finding counts", body = crate::FindingSummary),
+        (status = 200, description = "Scope-filtered latest compliance finding counts", body = crate::FindingSummary),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
@@ -4946,7 +4946,7 @@ pub(crate) async fn authenticated_finding_history(
         (status = 400, description = "Invalid partition date", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "Finding event not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "Compliance finding event not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
     )
 )]
@@ -5583,7 +5583,7 @@ pub(crate) async fn authenticated_finding_groups(
     .into_response()
 }
 
-#[utoipa::path(get, path="/api/v1/compliance/groups/{rule_set_id}/{rule_id}/endpoints", tag = "compliance", params(("rule_set_id"=String,Path),("rule_id"=String,Path),("since"=Option<String>,Query),("include_older"=Option<bool>,Query),("cursor"=Option<String>,Query),("limit"=Option<u16>,Query)), responses((status=200,description="Scoped endpoints reporting one recent rule group",body=crate::FindingGroupEndpointPage),(status=404,description="Finding group not found",body=crate::ProblemDetails)))]
+#[utoipa::path(get, path="/api/v1/compliance/groups/{rule_set_id}/{rule_id}/endpoints", tag = "compliance", params(("rule_set_id"=String,Path),("rule_id"=String,Path),("since"=Option<String>,Query),("include_older"=Option<bool>,Query),("cursor"=Option<String>,Query),("limit"=Option<u16>,Query)), responses((status=200,description="Scoped endpoints reporting one recent rule group",body=crate::FindingGroupEndpointPage),(status=404,description="Compliance finding group not found",body=crate::ProblemDetails)))]
 pub(crate) async fn authenticated_finding_group_endpoints(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -5685,7 +5685,7 @@ pub(crate) async fn authenticated_finding_group_endpoints(
         Ok(None) => {
             return problem_response(ProblemDetails::not_found(
                 "compliance_finding_not_found",
-                "Finding group not found",
+                "Compliance finding group not found",
             ));
         }
         Err(_) => return unavailable_auth(),
@@ -5866,7 +5866,7 @@ pub(crate) async fn update_authenticated_finding_group_triage(
         Ok(platform_store::console_triage::BulkTriageUpdate::NotFound) => {
             problem_response(ProblemDetails::not_found(
                 "compliance_finding_not_found",
-                "Finding group or endpoint not found",
+                "Compliance finding group or endpoint not found",
             ))
         }
         Ok(platform_store::console_triage::BulkTriageUpdate::InvalidTransition) => {

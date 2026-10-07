@@ -3059,7 +3059,7 @@
             }
           },
           "404": {
-            "description": "Finding group not found",
+            "description": "Compliance finding group not found",
             "content": {
               "application/json": {
                 "schema": {
@@ -3325,7 +3325,7 @@
             }
           },
           "404": {
-            "description": "Finding event not found",
+            "description": "Compliance finding event not found",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -3768,7 +3768,7 @@
         "operationId": "authenticated_finding_summary",
         "responses": {
           "200": {
-            "description": "Scope-filtered latest finding counts",
+            "description": "Scope-filtered latest compliance finding counts",
             "content": {
               "application/json": {
                 "schema": {

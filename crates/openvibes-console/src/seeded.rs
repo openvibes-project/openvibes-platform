@@ -820,7 +820,7 @@ async fn finding_group_endpoints(
     if rows.is_empty() {
         return problem_response(ProblemDetails::not_found(
             "compliance_finding_not_found",
-            "Finding group not found",
+            "Compliance finding group not found",
         ));
     }
     let items = rows
