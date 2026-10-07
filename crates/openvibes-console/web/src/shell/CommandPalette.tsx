@@ -37,7 +37,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
   const agents = useAllPages<Agent>(can("agents.read") ? "/api/v1/agents" : null);
   const vulns = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities" : null);
   const dashboards = useResource<DashboardPage>("/api/v1/dashboards");
-  const groups = useAllPages<FindingGroup>(can("findings.read") ? "/api/v1/findings/groups" : null);
+  const groups = useAllPages<FindingGroup>(can("compliance.read") ? "/api/v1/compliance/groups" : null);
 
 
   const items = useMemo(() => {
@@ -94,7 +94,7 @@ export function CommandPalette({ onClose, canView }: { onClose: () => void; canV
         }}>
         <div className="palette__input">
           <Icon name="search" size={18} />
-          <input ref={input} autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} placeholder="Search hosts, CVEs, findings, or type a command…"
+          <input ref={input} autoFocus value={query} onChange={(event) => { setQuery(event.target.value); setActive(0); }} placeholder="Search hosts, CVEs, compliance findings, or type a command…"
             aria-label="Search" aria-controls="palette-results" aria-activedescendant={items[active] ? `pi-${active}` : undefined} role="combobox" aria-expanded="true" />
           <span className="kbd">Esc</span>
         </div>

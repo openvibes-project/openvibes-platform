@@ -2,7 +2,7 @@
   "browserRoutes": [
     "/",
     "/login",
-    "/findings",
+    "/compliance",
     "/cases",
     "/alarms",
     "/alarm-suppressions",

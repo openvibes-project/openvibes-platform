@@ -79,7 +79,7 @@ export function NewCasePanel() {
   };
   return (
     <>
-      <PanelHeader icon="cases" kind="Case" title="New case" subtitle="Add what belongs to it afterwards, or use Add to case on an alarm, finding, vulnerability, host or software." />
+      <PanelHeader icon="cases" kind="Case" title="New case" subtitle="Add what belongs to it afterwards, or use Add to case on an alarm, compliance finding, vulnerability, host or software." />
       <form className="panel-body stack" onSubmit={submit}>
         <label className="field">Title<input className="input" required maxLength={120} autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Suspicious shell on web-02" /></label>
         <label className="field">Severity
@@ -343,7 +343,7 @@ function AddItem({ c }: { c: CaseDetail }) {
 function ItemsSection({ c, manage }: { c: CaseDetail; manage: boolean }) {
   return (
     <Section title={`Items (${c.items.length})`}>
-      {c.items.length === 0 ? <p className="subtle">No items yet. Hosts, alarms, findings, vulnerabilities and software can all be added.</p> : (
+      {c.items.length === 0 ? <p className="subtle">No items yet. Hosts, alarms, vulnerabilities, compliance findings and software can all be added.</p> : (
         <ul className="case-items" aria-label="Items">
           {c.items.map((item) => <ItemRow key={item.item_id} c={c} item={item} manage={manage} />)}
         </ul>

@@ -50,7 +50,7 @@ export function Cases() {
         <Empty icon="cases" title={filtered ? "Nothing matches these filters" : "No open cases"}>
           {filtered
             ? "Closed cases are hidden unless Include closed is on; clear a filter to see more."
-            : `A case gathers what belongs to one investigation: hosts, alarms, findings and vulnerabilities, with notes and a timeline.${can("cases.manage") ? " Start one with New case, or use Add to case on an alarm, finding or host." : ""}`}
+            : `A case gathers what belongs to one investigation: hosts, alarms, vulnerabilities and compliance findings, with notes and a timeline.${can("cases.manage") ? " Start one with New case, or use Add to case on an alarm, compliance finding or host." : ""}`}
         </Empty>
       ) : (
         <DataTable label="Cases" rows={rows} rowKey={(c) => c.case_id}
@@ -66,7 +66,7 @@ export function Cases() {
             { key: "items", header: "Items", width: "170px", hideBelow: 560, sort: (c) => c.item_count, render: (c) => (
               <span className="row">
                 <span className="num">{c.item_count}</span>
-                {c.pending_item_count > 0 && c.status !== "closed" && <span className="badge badge--warn badge--plain" title="Alarms, findings and vulnerabilities without an outcome">{c.pending_item_count} unresolved</span>}
+                {c.pending_item_count > 0 && c.status !== "closed" && <span className="badge badge--warn badge--plain" title="Alarms, vulnerabilities and compliance findings without an outcome">{c.pending_item_count} unresolved</span>}
               </span>
             ) },
             { key: "updated", header: "Updated", width: "120px", hideBelow: 940, sort: (c) => c.updated_at, render: (c) => <span className="subtle"><Ago value={c.updated_at} /></span> },

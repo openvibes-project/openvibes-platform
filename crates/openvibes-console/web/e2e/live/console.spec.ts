@@ -41,7 +41,7 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
   await expect(page.getByText("Demo data")).toHaveCount(0);
   await signIn(page, "alex");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
-  for (const view of ["/findings", "/vulnerabilities", "/agents", "/enrollment", "/rule-sets", "/access", "/service-accounts", "/audit"]) {
+  for (const view of ["/compliance", "/vulnerabilities", "/agents", "/enrollment", "/rule-sets", "/access", "/service-accounts", "/audit"]) {
     await page.goto(view);
     await expect(page.locator(".view")).toBeVisible();
     await expect(page.locator(".error-box")).toHaveCount(0);
@@ -117,11 +117,11 @@ test("an Audit filter with no matches explains the empty list", async ({ page })
 
 test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
   await signIn(page, "alex");
-  await page.goto("/findings");
+  await page.goto("/compliance");
   const row = page.locator(".view tbody tr").first();
   const message = await row.locator(".truncate").first().innerText();
   await row.locator("td").nth(1).click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   // Hosts that can all move to investigating: the open ones, else those already there.
   await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
   await page.getByRole("checkbox", { name: "Select all hosts" }).check();
@@ -130,15 +130,15 @@ test("imported findings are triaged in bulk from the panel", async ({ page }, in
   await page.locator(".bulk-bar button[type=submit]").click();
   await expect(page.locator(".toast")).toContainText("set to investigating");
   // Investigating is active work: the default list still shows it (#83).
-  await page.goto("/findings");
+  await page.goto("/compliance");
   await expect(page.locator(".view tbody tr").filter({ hasText: message })).toBeVisible();
 });
 
 test("one host's risk is accepted until a date with an assignee, and the form shows it again", async ({ page }) => {
   await signIn(page, "alex");
-  await page.goto("/findings");
+  await page.goto("/compliance");
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
   const label = await page.locator(".inspector tbody input[type=checkbox]").first().getAttribute("aria-label");
   await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^All \d/ }).click();
@@ -176,7 +176,7 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await page.getByRole("button", { name: "Dashboards" }).click();
   await page.getByRole("menuitem", { name: "New dashboard" }).click();
   await page.getByRole("button", { name: /^Number/ }).click();
-  await page.getByLabel("Count", { exact: true }).selectOption("findings.open.critical");
+  await page.getByLabel("Count", { exact: true }).selectOption("compliance.open.critical");
   await page.getByLabel("Dashboard name").fill(name);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
@@ -201,7 +201,7 @@ for (const scheme of ["light", "dark"] as const) {
   test(`no accessibility violations when signed in (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await signIn(page, "alex");
-    for (const path of ["/", "/findings", "/audit"]) {
+    for (const path of ["/", "/compliance", "/audit"]) {
       await page.goto(path);
       await expect(page.locator(".view")).toBeVisible();
       await page.waitForTimeout(500);

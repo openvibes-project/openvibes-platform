@@ -8,7 +8,7 @@ describe("widget configs", () => {
     expect(str({ metric: "nope" }, "metric", "agents.active", ["agents.active", "agents.stale"])).toBe("agents.active");
     expect(int({ limit: "8" }, "limit", 5, 1, 20)).toBe(5);
     expect(int({ limit: 99 }, "limit", 5, 1, 20)).toBe(20);
-    expect(list({ include: ["stale", "evil"] }, "include", ["exploited", "findings", "stale"])).toEqual(["stale"]);
+    expect(list({ include: ["stale", "evil"] }, "include", ["exploited", "compliance", "stale"])).toEqual(["stale"]);
     expect(list({ include: "stale" }, "include", ["stale"])).toEqual([]);
   });
 
@@ -19,8 +19,8 @@ describe("widget configs", () => {
   });
 
   it("parseListConfig accepts only known views and keeps the query", () => {
-    expect(parseListConfig({ view: "/findings", query: "severity=critical", limit: 3 })).toMatchObject({ view: "/findings", limit: 3 });
-    expect(parseListConfig({ view: "/findings", query: "severity=critical", limit: 3 })?.params.get("severity")).toBe("critical");
+    expect(parseListConfig({ view: "/compliance", query: "severity=critical", limit: 3 })).toMatchObject({ view: "/compliance", limit: 3 });
+    expect(parseListConfig({ view: "/compliance", query: "severity=critical", limit: 3 })?.params.get("severity")).toBe("critical");
     expect(parseListConfig({ view: "/etc/passwd" })).toBeUndefined();
     expect(parseListConfig({ view: "/agents", query: "%%%" })?.params.toString()).toBe("");
   });

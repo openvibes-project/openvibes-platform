@@ -15,10 +15,10 @@ export const METRICS = {
   "agents.active": { label: "Hosts online", permission: "agents.read", view: ["/agents", { status: "active" }] },
   "agents.stale": { label: "Stale hosts", permission: "agents.read", view: ["/agents", { status: "stale" }] },
   "agents.revoked": { label: "Revoked hosts", permission: "agents.read", view: ["/agents", { status: "revoked" }] },
-  "findings.open.critical": { label: "Open critical findings", permission: "findings.read", view: ["/findings", { severity: "critical" }] },
-  "findings.open.high": { label: "Open high findings", permission: "findings.read", view: ["/findings", { severity: "high" }] },
-  "findings.open.medium": { label: "Open medium findings", permission: "findings.read", view: ["/findings", { severity: "medium" }] },
-  "findings.open.low": { label: "Open low findings", permission: "findings.read", view: ["/findings", { severity: "low" }] },
+  "compliance.open.critical": { label: "Open critical compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "critical" }] },
+  "compliance.open.high": { label: "Open high compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "high" }] },
+  "compliance.open.medium": { label: "Open medium compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "medium" }] },
+  "compliance.open.low": { label: "Open low compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "low" }] },
   "vulns.exploited": { label: "Exploited", permission: "vulnerabilities.read", view: ["/vulnerabilities", { exploited: "true" }] },
   "vulns.reboot_hosts": { label: "Hosts needing a reboot", permission: "vulnerabilities.read", view: ["/vulnerabilities", { reboot: "true" }] },
   "vulns.no_fix": { label: "No fix yet", permission: "vulnerabilities.read", view: ["/vulnerabilities", { nofix: "true" }] },
@@ -36,7 +36,7 @@ export function NumberTile({ widget }: WidgetProps) {
   const def = METRICS[metric];
   const allowed = can(def.permission);
   const agents = useResource<AgentSummary>(allowed && metric.startsWith("agents.") ? "/api/v1/agents/summary" : null);
-  const findings = useResource<FindingSummary>(allowed && metric.startsWith("findings.") ? "/api/v1/findings/summary" : null);
+  const findings = useResource<FindingSummary>(allowed && metric.startsWith("compliance.") ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
   // Active alarms: one page of at most 100 (shown as "100+" beyond). Alarms
   // closed by a suppression are hidden unless suppressed=true.
@@ -51,9 +51,9 @@ export function NumberTile({ widget }: WidgetProps) {
     );
   }
   const value = metric === "agents.active" ? agents.data?.active : metric === "agents.stale" ? agents.data?.stale : metric === "agents.revoked" ? agents.data?.revoked
-    : metric.startsWith("findings.open.") ? findings.data?.[metric.slice(14) as "critical" | "high" | "medium" | "low"]
+    : metric.startsWith("compliance.open.") ? findings.data?.[metric.slice(16) as "critical" | "high" | "medium" | "low"]
       : metric === "vulns.exploited" ? vulns.data?.exploited : metric === "vulns.reboot_hosts" ? vulns.data?.reboot_hosts : vulns.data?.no_fix;
-  const tone = value && (metric === "findings.open.critical" || metric === "vulns.exploited") ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
+  const tone = value && (metric === "compliance.open.critical" || metric === "vulns.exploited") ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
   // No vulnerability feed yet: a 0 would claim nothing was found.
   const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
   return (
@@ -66,16 +66,16 @@ export function NumberTile({ widget }: WidgetProps) {
 
 export function BreakdownTile({ widget }: WidgetProps) {
   const { can } = useSession();
-  const source = str(widget.config, "source", "findings", ["findings", "vulnerabilities", "agents"] as const);
-  const permission = source === "findings" ? "findings.read" : source === "agents" ? "agents.read" : "vulnerabilities.read";
+  const source = str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const);
+  const permission = source === "compliance" ? "compliance.read" : source === "agents" ? "agents.read" : "vulnerabilities.read";
   const allowed = can(permission);
-  const findings = useResource<FindingSummary>(allowed && source === "findings" ? "/api/v1/findings/summary" : null);
+  const findings = useResource<FindingSummary>(allowed && source === "compliance" ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && source === "vulnerabilities" ? "/api/v1/vulnerabilities/summary" : null);
   const agents = useResource<AgentSummary>(allowed && source === "agents" ? "/api/v1/agents/summary" : null);
   if (!allowed) return <Unavailable />;
   if (vulns.data && !vulns.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const parts: { key: string; label: string; value: number; tone: string; go: () => void }[] =
-    source === "findings" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/findings", { severity: s }) }))
+    source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/agents", { status: s }) }));
   return (
@@ -118,7 +118,7 @@ export function ListTile({ widget }: WidgetProps) {
 
 function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof parseListConfig>>) {
   const { can } = useSession();
-  const permission = { "/findings": "findings.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "agents.read", "/audit": "audit.read" }[view] as "findings.read";
+  const permission = { "/compliance": "compliance.read", "/vulnerabilities": "vulnerabilities.read", "/agents": "agents.read", "/audit": "audit.read" }[view] as "compliance.read";
   // Nothing is requested for a list the viewer's role cannot read.
   const allowed = can(permission, view === "/audit");
   const { rows, total, loading, error } = useListRows(allowed ? view : null, params);

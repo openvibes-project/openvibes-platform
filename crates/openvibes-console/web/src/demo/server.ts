@@ -224,16 +224,16 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return json({ tags: data.tags.get(id) });
   });
 
-  route("GET", "/api/v1/findings/summary", "findings.read", () => {
+  route("GET", "/api/v1/compliance/summary", "compliance.read", () => {
     const open = findings().filter((f) => (data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open");
     const count = (severity: Severity) => open.filter((f) => f.severity === severity).length;
     return json({ total: open.length, impacted_agents: new Set(open.map((f) => f.agent_id)).size, critical: count("critical"), high: count("high"), medium: count("medium"), low: count("low") });
   });
-  route("GET", "/api/v1/findings/groups", "findings.read", (_, query) =>
+  route("GET", "/api/v1/compliance/groups", "compliance.read", (_, query) =>
     json({ ...page(groups(), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
-  route("GET", "/api/v1/findings/groups/{set}/{rule}/endpoints", "findings.read", ({ set = "", rule = "" }, query) =>
+  route("GET", "/api/v1/compliance/groups/{set}/{rule}/endpoints", "compliance.read", ({ set = "", rule = "" }, query) =>
     json({ ...page(endpoints(set, rule), query), generated_at: iso(), since: iso(Date.now() - 30 * 86_400_000) }));
-  route("POST", "/api/v1/findings/groups/{set}/{rule}/triage", "findings.triage", ({ set = "", rule = "" }, _, body) => {
+  route("POST", "/api/v1/compliance/groups/{set}/{rule}/triage", "compliance.triage", ({ set = "", rule = "" }, _, body) => {
     const changes = (body.changes ?? []) as { agent_id: string; version: number }[];
     // The server's order: fields, then versions, then the workflow.
     const invalid = triageProblem(body) ?? (noteRequired.has(String(body.state)) && typeof body.note !== "string"
@@ -249,7 +249,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("finding.triage", `${set}/${rule}`, "finding");
     return json({ updated });
   });
-  route("GET", "/api/v1/findings/history", "findings.read", (_, query) => {
+  route("GET", "/api/v1/compliance/history", "compliance.read", (_, query) => {
     const since = Date.parse(query.get("since") ?? "");
     if (Number.isNaN(since)) return problem(400, "invalid_query", "since is required");
     const day = 86_400_000;
@@ -267,26 +267,26 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       }).sort((a, b) => b.observed_at.localeCompare(a.observed_at));
     return json({ ...page(items, query), generated_at: iso() });
   });
-  route("GET", "/api/v1/findings/latest", "findings.read", (_, query) => {
+  route("GET", "/api/v1/compliance/latest", "compliance.read", (_, query) => {
     const severity = query.get("severity");
     const agent = query.get("agent_id");
     const items = findings().filter((f) => (severity === null || f.severity === severity) && (agent === null || f.agent_id === agent));
     return json({ ...page(items, query), generated_at: iso() });
   });
-  route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}", "findings.read", ({ agent, set, rule }) => {
+  route("GET", "/api/v1/compliance/latest/{agent}/{set}/{rule}", "compliance.read", ({ agent, set, rule }) => {
     const finding = findings().find((f) => f.agent_id === agent && f.rule_set_id === set && f.rule_id === rule);
-    return finding ? json(finding) : problem(404, "finding_not_found", "Finding not found");
+    return finding ? json(finding) : problem(404, "compliance_finding_not_found", "Compliance finding not found");
   });
-  route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}/rule/{finding}", "findings.read", ({ agent, set, rule, finding: id }) => {
+  route("GET", "/api/v1/compliance/latest/{agent}/{set}/{rule}/rule/{finding}", "compliance.read", ({ agent, set, rule, finding: id }) => {
     const finding = findings().find((f) => f.agent_id === agent && f.rule_set_id === set && f.rule_id === rule && f.id === id);
-    if (!finding) return problem(404, "finding_not_found", "Finding not found");
+    if (!finding) return problem(404, "compliance_finding_not_found", "Compliance finding not found");
     return json({ status: finding.detection ? "exact" : "unavailable", rule_set_id: set, rule_set_version: finding.detection?.rule_set_version ?? null,
       rule: finding.detection ? { id: rule, version: finding.rule_version, title: finding.message, expression: finding.detection.steps[0]?.expression,
         finding_message: finding.message, severity: finding.severity, confidence: finding.confidence, kind: "snapshot", programs: null } : null });
   });
-  route("GET", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.read", ({ agent = "", set = "", rule = "" }) =>
+  route("GET", "/api/v1/compliance/latest/{agent}/{set}/{rule}/triage", "compliance.read", ({ agent = "", set = "", rule = "" }) =>
     json(data.triage.get(triageKey(agent, set, rule)) ?? { state: "open", version: 0, rule_version: 3, note: null, assigned_to: null, accepted_until: null }));
-  route("PUT", "/api/v1/findings/latest/{agent}/{set}/{rule}/triage", "findings.triage", ({ agent = "", set = "", rule = "" }, _, body) => {
+  route("PUT", "/api/v1/compliance/latest/{agent}/{set}/{rule}/triage", "compliance.triage", ({ agent = "", set = "", rule = "" }, _, body) => {
     const invalid = triageProblem(body);
     if (invalid) return invalid;
     audit("finding.triage", `${set}/${rule}`, "finding");
@@ -866,7 +866,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         const alarm = alarmList().find((a) => a.id === ref);
         return alarm && { agent_id: alarm.agent_id, title: alarm.message, severity: alarm.severity, gone: mitigated(alarm.state) };
       }
-      if (kind === "finding") {
+      if (kind === "compliance_finding") {
         const [set, rule] = splitRef(rest);
         const finding = findings().find((f) => f.agent_id === first && f.rule_set_id === set && f.rule_id === rule);
         return finding && { agent_id: first, title: finding.message, severity: finding.severity, gone: mitigated(data.triage.get(triageKey(first, set, rule))?.state) };

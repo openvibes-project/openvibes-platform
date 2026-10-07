@@ -575,7 +575,7 @@ async fn readiness_is_independent_from_liveness() {
 async fn known_browser_routes_serve_the_no_store_spa_entry() {
     for path in [
         "/",
-        "/findings",
+        "/compliance",
         "/agents",
         "/enrollment",
         "/rule-sets",

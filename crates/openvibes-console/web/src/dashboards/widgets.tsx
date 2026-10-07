@@ -22,7 +22,7 @@ export const widgetDefs: Readonly<Record<WidgetType, WidgetDef>> = {
   breakdown: { type: "breakdown", label: "Breakdown", description: "A severity or status bar", icon: "filter", size: WIDGET_DEFAULTS["breakdown"].size, defaults: WIDGET_DEFAULTS["breakdown"].config, View: BreakdownTile, Settings: BreakdownSettings },
   attention: { type: "attention", label: "Needs attention", description: "Exploited, serious and silent, in one list", icon: "alert", size: WIDGET_DEFAULTS["attention"].size, defaults: WIDGET_DEFAULTS["attention"].config, View: AttentionTile, Settings: AttentionSettings },
   list: { type: "list", label: "List", description: "The first rows of any list, with its filters", icon: "findings", size: WIDGET_DEFAULTS["list"].size, defaults: WIDGET_DEFAULTS["list"].config, View: ListTile, Settings: ListSettings },
-  trend: { type: "trend", label: "Trend", description: "Hosts reporting a finding per day", icon: "activity", size: WIDGET_DEFAULTS["trend"].size, defaults: WIDGET_DEFAULTS["trend"].config, View: TrendTile, Settings: TrendSettings },
+  trend: { type: "trend", label: "Trend", description: "Hosts reporting a compliance finding per day", icon: "activity", size: WIDGET_DEFAULTS["trend"].size, defaults: WIDGET_DEFAULTS["trend"].config, View: TrendTile, Settings: TrendSettings },
   "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious vulnerabilities", icon: "agents", size: WIDGET_DEFAULTS["top-hosts"].size, defaults: WIDGET_DEFAULTS["top-hosts"].config, View: TopHostsTile, Settings: TopHostsSettings },
   note: { type: "note", label: "Note", description: "Plain text for your team", icon: "help", size: WIDGET_DEFAULTS["note"].size, defaults: WIDGET_DEFAULTS["note"].config, View: NoteTile, Settings: NoteSettings },
 };
@@ -32,7 +32,7 @@ export function widgetTitle(widget: Widget): string {
   if (typeof custom === "string" && custom.trim()) return custom.trim();
   if (widget.type === "number") return METRICS[str(widget.config, "metric", "agents.active", METRIC_KEYS)].label;
   if (widget.type === "breakdown") {
-    return { findings: "Open findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "findings", ["findings", "vulnerabilities", "agents"] as const)];
+    return { compliance: "Compliance findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const)];
   }
   return (widgetDefs as Partial<Record<string, WidgetDef>>)[widget.type]?.label ?? "Unsupported widget";
 }

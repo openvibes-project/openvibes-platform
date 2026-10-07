@@ -68,7 +68,7 @@ export function AssistantDock() {
       <div className="assistant__log" ref={log} aria-live="polite">
         {state.turns.length === 0 && (
           <div className="assistant__intro">
-            <p>Ask about your hosts, findings and vulnerabilities. Answers use only what your role can see, and never leave your platform.</p>
+            <p>Ask about your hosts, alarms, vulnerabilities and compliance findings. Answers use only what your role can see, and never leave your platform.</p>
             <div className="stack">
               {suggestions.map((text) => (
                 <button key={text} type="button" className="suggestion" onClick={() => void assistant.ask(text)}>{text}</button>

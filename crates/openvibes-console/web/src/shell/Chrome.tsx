@@ -23,12 +23,12 @@ const pinKey = "openvibes.v2.rail.pinned";
 function useMenuCounts(): Partial<Record<string, string>> {
   const { can } = useSession();
   const alarms = useActiveAlarms();
-  const findings = useResource<FindingSummary>(can("findings.read") ? "/api/v1/findings/summary" : null);
+  const findings = useResource<FindingSummary>(can("compliance.read") ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
   const f = findings.data;
   return {
     "/alarms": can("alarms.read") ? menuCount(alarms?.count, alarms?.more) : undefined,
-    "/findings": f ? menuCount(f.critical + f.high + f.medium + f.low) : undefined,
+    "/compliance": f ? menuCount(f.critical + f.high + f.medium + f.low) : undefined,
     "/vulnerabilities": menuCount(vulns.data?.by_severity.reduce((sum, row) => sum + row.count, 0)),
   };
 }

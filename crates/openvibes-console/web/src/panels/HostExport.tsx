@@ -17,8 +17,8 @@ const LABELS: Record<Section, string> = {
   details: "Details", findings: "Compliance", alarms: "Alarms", vulnerabilities: "Vulnerabilities",
   software: "Software", ports: "Ports", services: "Services",
 };
-const PERMISSION: Partial<Record<Section, "findings.read" | "alarms.read" | "vulnerabilities.read">> = {
-  findings: "findings.read", alarms: "alarms.read", vulnerabilities: "vulnerabilities.read",
+const PERMISSION: Partial<Record<Section, "compliance.read" | "alarms.read" | "vulnerabilities.read">> = {
+  findings: "compliance.read", alarms: "alarms.read", vulnerabilities: "vulnerabilities.read",
 };
 /** At most this many rows per section: a runaway list never freezes the tab. */
 const CAP = 50_000;
@@ -51,7 +51,7 @@ async function rows(agent: Agent, sections: readonly Section[]): Promise<Row[]> 
         out.push(["details", key, String(value ?? ""), "", "", ""]);
       }
     } else if (section === "findings") {
-      for (const f of await all<Finding>(`/api/v1/findings/latest?agent_id=${id}`, "findings")) {
+      for (const f of await all<Finding>(`/api/v1/compliance/latest?agent_id=${id}`, "findings")) {
         out.push(["findings", f.message, `${f.rule_set_id}/${f.rule_id}`, "", f.severity, f.last_observed_at]);
       }
     } else if (section === "alarms") {

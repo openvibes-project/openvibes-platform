@@ -24,7 +24,7 @@ function useSide(id: string, withFindings: boolean): Side {
   const agent = useResource<Agent>(path);
   const report = useResource<HostServices>(`${path}/services`);
   const packages = useAllPages<HostPackage>(`${path}/packages`, MAX_SOFTWARE);
-  const findingRows = useAllPages<Finding>(withFindings ? `/api/v1/findings/latest?agent_id=${encodeURIComponent(id)}` : null, MAX_FINDINGS);
+  const findingRows = useAllPages<Finding>(withFindings ? `/api/v1/compliance/latest?agent_id=${encodeURIComponent(id)}` : null, MAX_FINDINGS);
   const findings = findingRows.data;
   return useMemo(() => ({
     agent: agent.data,
@@ -152,8 +152,8 @@ export function ComparePanel({ id }: { id: string }) {
 
 function Compare({ a, b }: { a: string; b: string }) {
   const { can } = useSession();
-  const left = useSide(a, can("findings.read"));
-  const right = useSide(b, can("findings.read"));
+  const left = useSide(a, can("compliance.read"));
+  const right = useSide(b, can("compliance.read"));
   const nameA = left.agent?.hostname ?? a;
   const nameB = right.agent?.hostname ?? b;
   if (left.error || right.error) return <div className="panel-body"><ErrorBox error={(left.error ?? right.error) as never} /></div>;
@@ -172,7 +172,7 @@ function Compare({ a, b }: { a: string; b: string }) {
         <Differences title="Open ports" a={left.ports} b={right.ports} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} missing={notReported} />
         <Differences title="Services" a={left.services} b={right.services} nameA={nameA} nameB={nameB} show={(_, v) => v || "running"} missing={notReported} />
         <Differences title="Software" a={left.software} b={right.software} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.software || right.cut.software} />
-        {can("findings.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
+        {can("compliance.read") && <Differences title="Findings" a={left.findings} b={right.findings} nameA={nameA} nameB={nameB} show={(_, v) => v ?? ""} cut={left.cut.findings || right.cut.findings} />}
       </div>
     </>
   );

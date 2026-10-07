@@ -11,8 +11,8 @@ describe("location", () => {
   });
 
   it("round-trips through formatLocation", () => {
-    const loc = parseLocation("/findings", "?open=finding-group%3Abaseline%2FOV-1&sev=high", "/");
-    expect(formatLocation(loc, "/")).toBe("/findings?sev=high&open=finding-group%3Abaseline%2FOV-1");
+    const loc = parseLocation("/compliance", "?open=finding-group%3Abaseline%2FOV-1&sev=high", "/");
+    expect(formatLocation(loc, "/")).toBe("/compliance?sev=high&open=finding-group%3Abaseline%2FOV-1");
   });
 
   it("ignores malformed panel references", () => {

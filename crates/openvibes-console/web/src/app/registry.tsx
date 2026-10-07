@@ -51,7 +51,7 @@ export type ViewDef = {
 export const views: readonly ViewDef[] = [
   { path: "/", prefix: "/dashboards/", label: "Dashboards", short: "Home", icon: "overview", group: "Investigate", keys: "g d", access: [], render: () => <DashboardsView /> },
   { path: "/alarms", label: "Alarms", icon: "alarm", group: "Investigate", keys: "g m", access: [{ permission: "alarms.read" }], render: () => <Alarms /> },
-  { path: "/findings", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "findings.read" }], render: () => <Findings /> },
+  { path: "/compliance", label: "Compliance", short: "Comply", icon: "findings", group: "Investigate", keys: "g f", access: [{ permission: "compliance.read" }], render: () => <Findings /> },
   { path: "/vulnerabilities", label: "Vulnerabilities", short: "Vulns", icon: "vulnerabilities", group: "Investigate", keys: "g v", access: [{ permission: "vulnerabilities.read" }], render: () => <Vulnerabilities /> },
   { path: "/agents", label: "Hosts", icon: "agents", group: "Investigate", keys: "g a", access: [{ permission: "agents.read" }], render: () => <Agents /> },
   { path: "/software", label: "Software", icon: "package", group: "Investigate", phoneMore: true, keys: "g w", access: [{ permission: "agents.read" }], render: () => <Software /> },
@@ -85,7 +85,7 @@ export const panels: Readonly<Record<string, PanelDef>> = {
   agent: { label: "Host", icon: "agents", title: (id) => id, render: (id) => <AgentPanel id={id} /> },
   alarm: { label: "Alarm", icon: "alarm", title: (id) => `#${id}`, render: (id) => <AlarmPanel id={id} /> },
   case: { label: "Case", icon: "cases", title: (id) => id === "new" ? "New case" : "Case", render: (id) => id === "new" ? <NewCasePanel /> : <CasePanel id={id} /> },
-  finding: { label: "Finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
+  finding: { label: "Compliance finding", icon: "findings", title: (id) => splitFindingId(id)[1], render: (id) => <FindingPanel id={id} /> },
   package: { label: "Software", icon: "package", title: (id) => splitPackageId(id)[1], render: (id) => <PackagePanel id={id} /> },
   port: { label: "Port", icon: "activity", title: (id) => { const [protocol, port] = splitPortId(id); return `${port}/${protocol}`; }, render: (id) => <PortPanel id={id} /> },
   compare: { label: "Compare", icon: "agents", title: (id) => id.includes(" ") ? "Compare hosts" : "Compare with…", render: (id) => <ComparePanel id={id} /> },

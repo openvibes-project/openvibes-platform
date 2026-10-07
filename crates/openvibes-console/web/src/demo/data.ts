@@ -221,10 +221,10 @@ export function buildDemoData(now = Date.now()) {
   ] as const;
   const access: AccessInventory = {
     roles: [
-      { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "findings.read", "vulnerabilities.read", "alarms.read"] },
-      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "findings.read", "cases.read", "cases.manage", "vulnerabilities.read", "findings.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
-      { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "rules.write", "alarms.read"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "findings.read", "vulnerabilities.read", "findings.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
+      { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"] },
+      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
+      { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "rules.write", "alarms.read"] },
+      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
     ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
@@ -350,12 +350,12 @@ export function buildDemoData(now = Date.now()) {
         layout: { schema: 1 as const, widgets: [
           { id: "exploited", type: "number" as const, x: 0, y: 0, w: 3, h: 2, config: { metric: "vulns.exploited" } },
           { id: "stale", type: "number" as const, x: 3, y: 0, w: 3, h: 2, config: { metric: "agents.stale" } },
-          { id: "attention", type: "attention" as const, x: 0, y: 2, w: 8, h: 6, config: { include: ["exploited", "findings"], limit: 8 } },
+          { id: "attention", type: "attention" as const, x: 0, y: 2, w: 8, h: 6, config: { include: ["exploited", "compliance"], limit: 8 } },
           { id: "note", type: "note" as const, x: 8, y: 2, w: 4, h: 3, config: { text: ["Patch window: Thursday 20:00", "https://wiki.example.test/patching"] } },
         ] } },
       { dashboard_id: "d-ola-triage", owner: "u-ola", name: "Analyst triage", shared_role_id: "analyst" as string | null,
         layout: { schema: 1 as const, widgets: [
-          { id: "critical", type: "list" as const, x: 0, y: 0, w: 8, h: 6, config: { view: "/findings", query: "severity=critical", limit: 10 } },
+          { id: "critical", type: "list" as const, x: 0, y: 0, w: 8, h: 6, config: { view: "/compliance", query: "severity=critical", limit: 10 } },
           { id: "trend", type: "trend" as const, x: 8, y: 0, w: 4, h: 3, config: { finding: "hardening-ssh/SSH-002", days: 14 } },
         ] } },
     ],

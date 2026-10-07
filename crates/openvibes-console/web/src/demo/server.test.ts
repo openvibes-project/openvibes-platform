@@ -11,7 +11,7 @@ describe("demo server", () => {
     const server = createDemoServer({ persona: "viewer" });
     const session = await json(await server.handle("GET", "/api/v1/session"));
     const permissions = (session.capabilities as { permission: string }[]).map((c) => c.permission);
-    expect(permissions).toEqual(["agents.read", "findings.read", "vulnerabilities.read", "alarms.read"]);
+    expect(permissions).toEqual(["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"]);
   });
 
   it("refuses what the persona may not do, with problem details", async () => {
@@ -33,15 +33,15 @@ describe("demo server", () => {
 
   it("applies bulk triage to a finding group and records it in the audit log", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
+    const groups = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=100"));
     const group = (groups.items as { rule_set_id: string; rule_id: string; triage_counts: { open: number } }[]).find((g) => g.triage_counts.open > 0);
     if (group === undefined) throw new Error("no groups");
-    const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
+    const endpoints = await json(await server.handle("GET", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
     const open = (endpoints.items as { agent_id: string; triage_state: string; triage_version: number }[]).filter((e) => e.triage_state === "open");
     const changes = open.map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
-    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "investigating", changes });
+    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "investigating", changes });
     expect(response.status).toBe(200);
-    const after = await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"));
+    const after = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=100"));
     const updated = (after.items as { rule_id: string; triage_counts: { open: number } }[]).find((g) => g.rule_id === group.rule_id);
     expect(changes.length).toBeGreaterThan(0);
     expect(updated?.triage_counts.open).toBe(0);
@@ -51,21 +51,21 @@ describe("demo server", () => {
 
   it("rejects a stale triage version with 412", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=1"));
+    const groups = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=1"));
     const group = (groups.items as { rule_set_id: string; rule_id: string }[])[0];
     if (group === undefined) throw new Error("no groups");
-    const endpoints = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=1`));
+    const endpoints = await json(await server.handle("GET", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=1`));
     const endpoint = (endpoints.items as { agent_id: string }[])[0];
-    const response = await server.handle("POST", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", note: "patched", changes: [{ agent_id: endpoint?.agent_id, version: 99 }] });
+    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", note: "patched", changes: [{ agent_id: endpoint?.agent_id, version: 99 }] });
     expect(response.status).toBe(412);
   });
 
   it("applies the server's triage field rules: expiry only for accepted risk, known assignees", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const groups = await json(await server.handle("GET", "/api/v1/findings/groups?limit=1"));
+    const groups = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=1"));
     const group = (groups.items as { rule_set_id: string; rule_id: string }[])[0];
     if (group === undefined) throw new Error("no groups");
-    const base = `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}`;
+    const base = `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}`;
     const endpoint = ((await json(await server.handle("GET", `${base}/endpoints?limit=100`))).items as { agent_id: string; triage_state: string; triage_version: number }[])
       .find((item) => item.triage_state === "open");
     if (endpoint === undefined) throw new Error("no endpoints");
@@ -85,7 +85,7 @@ describe("demo server", () => {
     changes[0] = { agent_id: endpoint.agent_id, version: endpoint.triage_version + 1 };
     expect((await post({ state: "accepted_risk", accepted_until: future })).status).toBe(400);
     expect((await post({ state: "accepted_risk", accepted_until: future, assigned_to: "sam", note: "vendor fix due" })).status).toBe(200);
-    const saved = await json(await server.handle("GET", `/api/v1/findings/latest/${endpoint.agent_id}/${group.rule_set_id}/${group.rule_id}/triage`));
+    const saved = await json(await server.handle("GET", `/api/v1/compliance/latest/${endpoint.agent_id}/${group.rule_set_id}/${group.rule_id}/triage`));
     expect(saved).toMatchObject({ state: "accepted_risk", assigned_to: "sam", accepted_until: future });
     const listed = ((await json(await server.handle("GET", `${base}/endpoints?limit=100`))).items as { agent_id: string }[])
       .find((item) => item.agent_id === endpoint.agent_id);
@@ -94,10 +94,10 @@ describe("demo server", () => {
 
   it("lists a mitigated host's match as ended (P13), and open ones without an end", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const groups = (await json(await server.handle("GET", "/api/v1/findings/groups?limit=100"))).items as { rule_set_id: string; rule_id: string }[];
+    const groups = (await json(await server.handle("GET", "/api/v1/compliance/groups?limit=100"))).items as { rule_set_id: string; rule_id: string }[];
     const all: { triage_state: string; ended_at: string | null; end_approximate: boolean }[] = [];
     for (const group of groups) {
-      const page = await json(await server.handle("GET", `/api/v1/findings/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
+      const page = await json(await server.handle("GET", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
       all.push(...(page.items as typeof all));
     }
     const mitigated = all.filter((e) => e.triage_state === "mitigated");
@@ -135,7 +135,7 @@ describe("demo server", () => {
   it("rejects page sizes above the real API's maximum of 100", async () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/agents?limit=101")).status).toBe(400);
-    expect((await server.handle("GET", "/api/v1/findings/groups?limit=250")).status).toBe(400);
+    expect((await server.handle("GET", "/api/v1/compliance/groups?limit=250")).status).toBe(400);
     expect((await server.handle("GET", "/api/v1/agents?limit=100")).status).toBe(200);
   });
 
@@ -255,9 +255,9 @@ describe("demo server", () => {
 
   it("answers finding history for a rule within since, like the real API", async () => {
     const server = createDemoServer({ persona: "admin" });
-    expect((await server.handle("GET", "/api/v1/findings/history")).status).toBe(400);
+    expect((await server.handle("GET", "/api/v1/compliance/history")).status).toBe(400);
     const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
-    const page = await json(await server.handle("GET", `/api/v1/findings/history?since=${since}&rule_set_id=hardening-ssh&rule_id=SSH-002&limit=100`));
+    const page = await json(await server.handle("GET", `/api/v1/compliance/history?since=${since}&rule_set_id=hardening-ssh&rule_id=SSH-002&limit=100`));
     const items = page.items as { rule_id: string; observed_at: string; observed_day: string }[];
     expect(items.length).toBeGreaterThan(0);
     expect(items.every((item) => item.rule_id === "SSH-002" && Date.parse(item.observed_at) >= Date.parse(since))).toBe(true);

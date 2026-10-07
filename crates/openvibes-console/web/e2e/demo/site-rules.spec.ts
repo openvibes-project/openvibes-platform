@@ -19,7 +19,7 @@ test("a compliance rule is checked as you type, saved, changed and deleted", asy
   await expect(inspector.getByRole("alert")).toContainText("not a valid expression");
   await expect(inspector.getByRole("button", { name: "Save draft" })).toBeDisabled();
   await inspector.getByLabel("Expression").fill("'6379' in facts['port.tcp.exposed']");
-  await inspector.getByLabel("Finding message").fill("Redis listens beyond loopback.");
+  await inspector.getByLabel("Compliance finding message").fill("Redis listens beyond loopback.");
   await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
   await inspector.getByRole("button", { name: "Save draft" }).click();
   const row = page.locator(".view tbody tr").filter({ hasText: "port.redis.exposed" });
@@ -55,7 +55,7 @@ test("publishing a set asks for the password and shows what changes", async ({ p
   await inspector.getByLabel("Rule id").fill("port.redis.exposed");
   await inspector.getByLabel("Title").fill("Redis is exposed");
   await inspector.getByLabel("Expression").fill("'6379' in facts['port.tcp.exposed']");
-  await inspector.getByLabel("Finding message").fill("Redis listens beyond loopback.");
+  await inspector.getByLabel("Compliance finding message").fill("Redis listens beyond loopback.");
   await inspector.getByRole("button", { name: "Save draft" }).click();
   const section = page.locator(".view-section").filter({ hasText: "Publish compliance rules" });
   await expect(section).toContainText("Added: port.redis.exposed");
@@ -73,13 +73,13 @@ test("a rule is tested against a host", async ({ page }) => {
   await inspector.getByLabel("Rule id").fill("port.https.exposed");
   await inspector.getByLabel("Title").fill("HTTPS is exposed");
   await inspector.getByLabel("Expression").fill("'443' in facts['port.tcp.exposed']");
-  await inspector.getByLabel("Finding message").fill("HTTPS listens beyond loopback.");
+  await inspector.getByLabel("Compliance finding message").fill("HTTPS listens beyond loopback.");
   await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
   await inspector.getByRole("button", { name: "Save draft" }).click();
   await expect(inspector.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
   await inspector.getByLabel("Host").selectOption({ index: 1 });
   await inspector.getByRole("button", { name: "Test", exact: true }).click();
-  await expect(inspector.getByRole("status")).toContainText("Matches: the rule would raise a finding");
+  await expect(inspector.getByRole("status")).toContainText("Matches: the rule would raise a compliance finding");
   await inspector.getByLabel("Expression").fill("'sshd' in facts['process.names']");
   await inspector.getByRole("button", { name: "Test", exact: true }).click();
   await expect(inspector.getByRole("status")).toContainText("Unavailable here");
