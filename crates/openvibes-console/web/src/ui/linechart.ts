@@ -72,6 +72,6 @@ export function niceMax(max: number): number {
   const step = STEPS.find((s) => s >= max);
   if (step) return step;
   const mag = 10 ** Math.floor(Math.log10(max));
-  return [2, 4, 6, 8, 10].map((k) => k * mag).find((s) => s >= max) ?? 20 * mag;
+  return [1, 2, 4, 6, 8, 10].map((k) => k * mag).find((s) => s >= max) ?? 20 * mag;
 }
 export const ticks = (max: number) => [0, max / 2, max];
