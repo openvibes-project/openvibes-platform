@@ -1,6 +1,6 @@
 // A finding: one rule (in one rule set) and every host that matches it,
 // with triage for one host or many at once.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { Finding, FindingGroup, GroupEndpoint } from "../api/types";
@@ -9,6 +9,7 @@ import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, daysAgo, isPast, triageLabel } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
+import { Picker } from "../ui/Picker";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
 import { AddToCase } from "./AddToCase";
@@ -49,6 +50,12 @@ export function FindingPanel({ id }: { id: string }) {
     `/api/v1/findings/history?since=${encodeURIComponent(since)}&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`, 3000);
   const trend = useMemo(() => dailyHosts(history.data ?? [], 14), [history.data]);
   const [evidenceHost, setEvidenceHost] = useState("");
+  const detailsTop = useRef<HTMLDivElement>(null);
+  // The evidence opens above the host list, so bring it into view.
+  const showEvidence = (agentId: string) => {
+    setEvidenceHost(agentId);
+    detailsTop.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  };
   const host = endpoints.data?.some((item) => item.agent_id === evidenceHost) ? evidenceHost
     : endpoints.data?.length === 1 ? (endpoints.data[0]?.agent_id ?? "") : "";
   const evidencePath = host ? `/api/v1/findings/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
@@ -118,14 +125,12 @@ export function FindingPanel({ id }: { id: string }) {
         askAbout={{ ref: { kind: "finding", id }, label: `${ruleId} ${group.latest_message}` }}
       />
       <div className="panel-body stack">
-        <Section title="Detection details">
-          <label className="stack">Host
-            <select className="select" value={host} onChange={(event) => setEvidenceHost(event.target.value)}>
-              <option value="">Choose a host to inspect its evidence</option>
-              {(endpoints.data ?? []).map((item) => <option key={item.agent_id} value={item.agent_id}>{item.hostname ?? item.agent_id}</option>)}
-            </select>
-          </label>
-        </Section>
+        <div ref={detailsTop}><Section title="Detection details">
+          <div className="field">Host
+            <Picker label="Host" placeholder="Choose a host to inspect its evidence" value={host} onChange={setEvidenceHost}
+              options={(endpoints.data ?? []).map((item) => ({ value: item.agent_id, label: item.hostname ?? item.agent_id }))} />
+          </div>
+        </Section></div>
         {host && (observation.error ? <ErrorBox error={observation.error} /> : !observation.data ? <Loading rows={3} /> : <>
           <p>{observation.data.message}</p>
           <p className="subtle">Rule version {observation.data.rule_version} · {observation.data.origin === "import" ? "Imported observation" : "Agent observation"}</p>
@@ -189,7 +194,7 @@ export function FindingPanel({ id }: { id: string }) {
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
                   <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain gap-start">imported</span>}</td>
-                  <td><button type="button" className="link-button" onClick={() => setEvidenceHost(item.agent_id)}>View evidence</button></td>
+                  <td><button type="button" className="link-button" onClick={() => showEvidence(item.agent_id)}>View evidence</button></td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
                     ? <span className="badge badge--bad badge--plain gap-start">expired {date(item.accepted_until)}</span>
                     : <span className="subtle gap-start">until {date(item.accepted_until)}</span>)}

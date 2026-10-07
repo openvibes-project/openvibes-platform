@@ -159,3 +159,17 @@
 :root[data-density="compact"] .table td { height: 34px; }
 :root[data-density="compact"] .table .cell-two > :last-child { display: none; }
 :root[data-density="compact"] .list__row { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
+
+/* Picker: a themed, searchable replacement for long native selects */
+.picker { position: relative; }
+.picker__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.picker__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.picker__popup {
+  position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 4px); display: grid; gap: 6px; padding: 6px;
+  background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-2); box-shadow: var(--shadow-2);
+}
+.picker__list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.picker__option, .picker__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
+.picker__option--active { background: var(--accent-soft); }
+.picker__option[aria-selected="true"] { font-weight: 600; }
+.picker__empty { cursor: default; }

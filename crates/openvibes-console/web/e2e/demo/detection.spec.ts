@@ -27,3 +27,16 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
 });
+
+test("the host picker filters, picks a host and its evidence opens", async ({ page }) => {
+  await page.goto("/findings");
+  await page.locator(".view tbody tr").filter({ hasText: "Host firewall is disabled" }).locator("td").nth(1).click();
+  const panel = page.locator(".inspector");
+  await panel.getByRole("button", { name: "Host", exact: true }).click();
+  await panel.getByRole("combobox", { name: "Filter Host" }).fill("db-01");
+  await expect(panel.getByRole("option")).toHaveCount(1);
+  expect((await new AxeBuilder({ page }).include(".inspector").analyze()).violations).toEqual([]);
+  await panel.getByRole("option").click();
+  await expect(panel.getByRole("button", { name: "Host", exact: true })).toContainText("db-01");
+  await expect(panel.getByText("Why it triggered")).toBeVisible();
+});
