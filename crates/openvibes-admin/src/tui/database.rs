@@ -175,7 +175,7 @@ pub fn tune_check(model_installed: bool, tune_json: Option<String>) -> Option<Ch
                 return Some(check(false, line.to_owned()));
             }
             let line = crate::tune::summary(
-                v["threads"].as_u64()? as u32,
+                &format!("CPU ({} threads)", v["threads"].as_u64()?),
                 v["model"].as_str()?,
                 v["seconds_per_call"].as_f64()?,
                 None,

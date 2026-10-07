@@ -379,26 +379,31 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     };
 
     let alias = &backend.model;
-    let used = plan
-        .threads
-        .or_else(|| {
-            env.get("OPENVIBES_LLM_THREADS")
-                .and_then(|v| tune::unquote(v).parse().ok())
-        })
-        .unwrap_or(threads);
+    // An operator's value is shown as written, even one tune cannot parse.
+    let shown = match plan.threads {
+        Some(n) => n.to_string(),
+        None => env
+            .get("OPENVIBES_LLM_THREADS")
+            .map_or_else(|| threads.to_string(), |v| tune::unquote(v).to_owned()),
+    };
+    let mode = if plan.gpu_layers.is_some() {
+        "CPU"
+    } else {
+        "GPU layers set in llm.conf"
+    };
+    let hardware = format!("{mode} ({shown} threads)");
+    let timed_out = t.is_some_and(|t| t >= limit as f64);
     let mut text = match t {
-        Some(t) if t >= limit as f64 => tune::summary(used, alias, t, raised).replace(
+        Some(t) if timed_out => tune::summary(&hardware, alias, t, raised).replace(
             &format!("~{limit} s per call"),
             &format!("more than {limit} s per call"),
         ),
-        Some(t) => tune::summary(used, alias, t, raised),
-        None => format!(
-            "assistant: CPU ({used} threads) · console uses another backend; speed not measured"
-        ),
+        Some(t) => tune::summary(&hardware, alias, t, raised),
+        None => format!("assistant: {hardware} · console uses another backend; speed not measured"),
     };
     let json = serde_json::json!({
         "mode": "cpu",
-        "threads": used,
+        "threads": shown.parse::<u32>().map_or_else(|_| serde_json::json!(shown), |n| serde_json::json!(n)),
         "model": alias,
         "seconds_per_call": t,
         "deadline_seconds": raised.unwrap_or(current),
@@ -412,7 +417,11 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     if opts.json {
         return Ok(format!("{json}\n"));
     }
-    if let (Some(t), Some(_)) = (t, raised) {
+    if timed_out {
+        text.push_str(&format!(
+            "\nthis host answers slowly (more than {limit} s per question): the assistant will time out on this host"
+        ));
+    } else if let (Some(t), Some(_)) = (t, raised) {
         text.push_str(&format!(
             "\nthis host answers slowly (about {} s per question)",
             t.round() as u64

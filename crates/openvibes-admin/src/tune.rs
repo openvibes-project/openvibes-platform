@@ -95,13 +95,14 @@ pub fn deadline(seconds_per_call: f64, current: u32) -> Deadline {
     }
 }
 
-pub fn summary(threads: u32, alias: &str, t: f64, raised: Option<u32>) -> String {
+/// `hardware` is e.g. `CPU (10 threads)`.
+pub fn summary(hardware: &str, alias: &str, t: f64, raised: Option<u32>) -> String {
     let secs = if t < 1.0 {
         "<1".to_string()
     } else {
         format!("{}", t.round() as u64)
     };
-    let mut s = format!("assistant: CPU ({threads} threads) · model {alias} · ~{secs} s per call");
+    let mut s = format!("assistant: {hardware} · model {alias} · ~{secs} s per call");
     if let Some(d) = raised {
         s.push_str(&format!(" · deadline raised to {d} s"));
     }
@@ -177,13 +178,13 @@ mod tests {
     #[test]
     fn summary_line() {
         assert_eq!(
-            summary(10, "qwen3-4b", 8.4, None),
+            summary("CPU (10 threads)", "qwen3-4b", 8.4, None),
             "assistant: CPU (10 threads) · model qwen3-4b · ~8 s per call"
         );
         assert_eq!(
-            summary(2, "qwen3-4b", 40.2, Some(81)),
+            summary("CPU (2 threads)", "qwen3-4b", 40.2, Some(81)),
             "assistant: CPU (2 threads) · model qwen3-4b · ~40 s per call · deadline raised to 81 s"
         );
-        assert!(summary(2, "m", 0.3, None).contains("~<1 s"));
+        assert!(summary("CPU (2 threads)", "m", 0.3, None).contains("~<1 s"));
     }
 }

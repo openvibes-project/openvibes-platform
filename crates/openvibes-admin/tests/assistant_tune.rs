@@ -384,3 +384,25 @@ fn an_unsaved_summary_is_a_warning_once_tuned() {
     assert!(read(&root, TUNING).contains("THREADS=2"));
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn operator_values_tune_cannot_parse_are_shown_as_written() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = tree("raw", port, 60);
+    fs::write(
+        root.join("etc/openvibes/llm.conf"),
+        format!(
+            "OPENVIBES_LLM_THREADS=auto\nOPENVIBES_LLM_GPU_LAYERS=20\nOPENVIBES_LLM_PORT={port}\n"
+        ),
+    )
+    .unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.starts_with("assistant: GPU layers set in llm.conf (auto threads)"),
+        "{text}"
+    );
+    assert!(!read(&root, TUNING).contains("OPENVIBES_LLM"));
+    fs::remove_dir_all(&root).unwrap();
+}
