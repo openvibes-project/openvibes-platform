@@ -349,13 +349,31 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         }
     };
 
+    // From here the tuning is in place: a failure is a warning, not exit 1.
+    let warn = |what: &str| eprintln!("openvibes-admin helper: warning: {what}");
     let raised = match t.map(|t| tune::deadline(t, current)) {
         Some(Deadline::Raise(seconds)) => {
-            let mut doc: DocumentMut = console.parse().map_err(|e| format!("console.toml: {e}"))?;
-            doc["assistant"]["backend"]["deadline_seconds"] = value(i64::from(seconds));
-            config_file::replace(&etc, Service::Console, &doc.to_string())?;
-            restarter.systemctl(&["try-restart", "openvibes-console"])?;
-            Some(seconds)
+            let written = console
+                .parse::<DocumentMut>()
+                .map_err(|e| format!("console.toml: {e}"))
+                .and_then(|mut doc| {
+                    doc["assistant"]["backend"]["deadline_seconds"] = value(i64::from(seconds));
+                    config_file::replace(&etc, Service::Console, &doc.to_string())
+                });
+            match written {
+                Ok(()) => {
+                    if let Err(e) = restarter.systemctl(&["try-restart", "openvibes-console"]) {
+                        warn(&format!(
+                            "{e}; restart openvibes-console to use the new deadline"
+                        ));
+                    }
+                    Some(seconds)
+                }
+                Err(e) => {
+                    warn(&format!("the deadline was not raised: {e}"));
+                    None
+                }
+            }
         }
         _ => None,
     };
@@ -388,7 +406,9 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         "summary": text,
         "at": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
     });
-    write_atomic(&data.join("tune.json"), &format!("{json}\n"))?;
+    if let Err(e) = write_atomic(&data.join("tune.json"), &format!("{json}\n")) {
+        warn(&format!("the summary was not saved: {e}"));
+    }
     if opts.json {
         return Ok(format!("{json}\n"));
     }

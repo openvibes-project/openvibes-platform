@@ -372,3 +372,15 @@ fn a_second_run_fails_fast_while_one_is_running() {
     assert_eq!(tune(&root, &[]).status.code(), Some(0));
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn an_unsaved_summary_is_a_warning_once_tuned() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = tree("unsaved", port, 60);
+    fs::create_dir_all(root.join(TUNE_JSON).join("x")).unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("warning: the summary was not saved"));
+    assert!(read(&root, TUNING).contains("THREADS=2"));
+    fs::remove_dir_all(&root).unwrap();
+}
