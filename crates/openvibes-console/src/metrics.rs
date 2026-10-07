@@ -305,7 +305,8 @@ pub(crate) async fn history(
         ids.as_deref(),
     );
     let live = history::current(&client, &metric.expr, now, ids.as_deref());
-    let (Ok(stored), Ok(live)) = (stored.await, live.await) else {
+    // One client: polled together, tokio-postgres pipelines the two queries.
+    let (Ok(stored), Ok(live)) = tokio::join!(stored, live) else {
         return unavailable_auth();
     };
     let mut points: Vec<MetricPoint> = stored
