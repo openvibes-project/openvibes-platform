@@ -5,7 +5,9 @@
 **openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
 (the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
 `OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**;
-`OV_LLM_MODEL=0` skips **openvibes-llm-model**, the 2.5 GB bundled model that
+`OV_LLM_MODEL=0` skips **openvibes-llm-model**, the 2.5 GB bundled model (delivered as
+**openvibes-llm-model-part1** and **-part2**, each under GitHub's 2 GiB release-asset limit, joined
+and verified by the package's `%posttrans`, `join-model`) that
 `scripts/fetch-llm-model.sh` downloads and verifies against
 `packaging/llm/model.pin`; `openvibes-llm` recommends it).
 `scripts/build-rpm.sh` compiles the release binaries (with
@@ -64,7 +66,8 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
-| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf`, `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, made by `join-model`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+| `/usr/share/openvibes-llm/model/*.part{0,1}` | 0644 root; removed once joined | llm-model-part1, -part2 |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |
 | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
 | `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |

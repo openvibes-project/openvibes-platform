@@ -106,7 +106,10 @@ restarts `openvibes-llm`, and restarts the console. It is safe to repeat and
 refuses to replace a backend you configured yourself unless you pass
 `--force`. Users still need the `assistant.use` permission.
 
-The bundled model is Qwen3-4B Q4_K_M (Apache 2.0, about 2.5 GB), selected by
+The bundled model is Qwen3-4B Q4_K_M (Apache 2.0, about 2.5 GB, delivered as two
+packages under 2 GiB each that `openvibes-llm-model` joins and verifies on
+install; if that fails, run `/usr/libexec/openvibes-llm/join-model`; during the
+join the host briefly needs about 5 GB free), selected by
 the package's `/var/lib/openvibes-llm/model.conf` and pinned by SHA-256 in
 `packaging/llm/model.pin`. Without the model package, or to use another
 model, install one yourself (the platform never downloads models while

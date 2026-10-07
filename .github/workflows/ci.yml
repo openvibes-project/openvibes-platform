@@ -331,20 +331,36 @@ jobs:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
-      # The 2.5 GB model package is built (the pinned download is verified
-      # and the spec exercised) and inspected here, not uploaded.
-      - name: Check the bundled model package
+      # The 2.5 GB model is built as two packages of under 2 GiB each (the
+      # release asset limit), checked here by really joining them, and not
+      # uploaded.
+      - name: Check the bundled model packages
         run: |
-          rpm=$(ls target/rpm/RPMS/x86_64/openvibes-llm-model-*.rpm)
           . packaging/llm/model.pin
-          rpm -qlp "$rpm" | grep -qx "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
-          rpm -qlp "$rpm" | grep -qx /var/lib/openvibes-llm/model.conf
-          rpm -qp --requires "$rpm" | grep -q '^openvibes-llm = '
-          rpm -qp --recommends target/rpm/RPMS/x86_64/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = '
-          rpm2cpio "$rpm" | cpio -i --to-stdout "./var/lib/openvibes-llm/model.conf" 2>/dev/null \
-            | grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256"
-          rpm2cpio "$rpm" | cpio -i --to-stdout "./var/lib/openvibes-llm/models/$LLM_MODEL_FILE" 2>/dev/null \
-            | sha256sum | grep -q "^$LLM_MODEL_SHA256 "
+          rpms=target/rpm/RPMS/x86_64
+          meta=$(ls $rpms/openvibes-llm-model-[0-9]*.rpm)
+          p1=$(ls $rpms/openvibes-llm-model-part1-*.rpm)
+          p2=$(ls $rpms/openvibes-llm-model-part2-*.rpm)
+          for f in "$p1" "$p2" "$meta"; do
+            [ "$(stat -c %s "$f")" -lt 2147483648 ] || { echo "$f exceeds 2 GiB"; exit 1; }
+          done
+          rpm -qp --requires "$meta" | grep -q '^openvibes-llm-model-part1 = '
+          rpm -qp --requires "$meta" | grep -q '^openvibes-llm-model-part2 = '
+          rpm -qp --requires "$meta" | grep -q '^openvibes-llm = '
+          rpm -qlp "$meta" | grep -qx "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
+          rpm -qlp "$meta" | grep -qx /usr/libexec/openvibes-llm/join-model
+          rpm -qp --recommends $rpms/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = '
+          rpm -qp --scripts "$meta" | grep -q join-model
+          # Join the parts the way the package does and compare to the pin.
+          work=$(mktemp -d)
+          for f in "$p1" "$p2" "$meta"; do (cd "$work" && rpm2cpio "$f" | cpio -idm --quiet); done
+          mkdir "$work/models"
+          OV_LLM_SHARE="$work/usr/share/openvibes-llm/model" OV_LLM_MODELS="$work/models" \
+            sh "$work/usr/libexec/openvibes-llm/join-model"
+          echo "$LLM_MODEL_SHA256  $work/models/$LLM_MODEL_FILE" | sha256sum --check --quiet
+          [ -z "$(ls "$work"/usr/share/openvibes-llm/model/*.part* 2>/dev/null)" ]
+          grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256" "$work/var/lib/openvibes-llm/model.conf"
+          rm -rf "$work"
 
       - name: Build offline console RPM
         env:
