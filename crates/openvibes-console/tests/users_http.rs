@@ -278,7 +278,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     assert_eq!(session["password_must_change"], true);
     assert_eq!(session["capabilities"], serde_json::json!([]));
     for uri in [
-        "/api/v1/findings/groups",
+        "/api/v1/compliance/groups",
         "/api/v1/agents",
         "/api/v1/dashboards",
         "/api/v1/me/home",
@@ -342,7 +342,7 @@ async fn a_new_user_must_set_their_own_password_before_anything_else() {
     let session = body(get(&router, "/api/v1/session", &bob.0).await).await;
     assert_eq!(session["password_must_change"], false);
     assert_eq!(
-        get(&router, "/api/v1/findings/groups", &bob.0)
+        get(&router, "/api/v1/compliance/groups", &bob.0)
             .await
             .status(),
         StatusCode::OK

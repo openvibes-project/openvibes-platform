@@ -183,7 +183,7 @@ async fn resolve(
     Ok(response)
 }
 
-#[utoipa::path(get, path="/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}", tag="findings",
+#[utoipa::path(get, path="/api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}", tag = "compliance",
     params(("agent_id"=String,Path),("rule_set_id"=String,Path),("rule_id"=String,Path),("finding_id"=String,Path)),
     responses((status=200,description="Historical rule for the visible observation",body=DetectionRuleView),
         (status=404,description="Observation no longer current or not visible"),(status=503,description="Read unavailable")))]
@@ -209,7 +209,7 @@ pub(crate) async fn finding_rule(
         Ok(Some(finding)) if finding.finding_id == finding_id => finding,
         Ok(_) => {
             return problem_response(ProblemDetails::not_found(
-                "finding_not_found",
+                "compliance_finding_not_found",
                 "Finding not found or observation changed; reopen it",
             ));
         }

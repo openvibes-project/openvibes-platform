@@ -563,7 +563,8 @@ async fn observation_rules_are_historical_and_require_the_observation_scope() {
         )
         .await
         .unwrap();
-    let finding_path = format!("/api/v1/findings/latest/{AGENT}/baseline/web-server-spawns-shell");
+    let finding_path =
+        format!("/api/v1/compliance/latest/{AGENT}/baseline/web-server-spawns-shell");
     let rule_path = format!("{finding_path}/rule/finding.explanation");
     let alarm_path = format!("/api/v1/alarms/{alarm_id}/rule");
     let (cookie, csrf) = login(&router, "vera").await;

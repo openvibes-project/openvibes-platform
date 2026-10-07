@@ -819,7 +819,7 @@ async fn finding_group_endpoints(
         .collect::<Vec<_>>();
     if rows.is_empty() {
         return problem_response(ProblemDetails::not_found(
-            "finding_not_found",
+            "compliance_finding_not_found",
             "Finding group not found",
         ));
     }
@@ -968,14 +968,14 @@ pub(crate) fn router() -> Router {
         .route("/api/v1/agents/summary", get(agent_summary))
         .route("/api/v1/agents", get(agents))
         .route("/api/v1/agents/{id}", get(agent))
-        .route("/api/v1/findings/summary", get(finding_summary))
+        .route("/api/v1/compliance/summary", get(finding_summary))
         .route("/api/v1/audit-events", get(audit_events))
         .route("/api/v1/audit-export.csv", get(audit_export))
         .route("/api/v1/access-control", get(access_inventory))
-        .route("/api/v1/findings/latest", get(findings))
-        .route("/api/v1/findings/groups", get(finding_groups))
+        .route("/api/v1/compliance/latest", get(findings))
+        .route("/api/v1/compliance/groups", get(finding_groups))
         .route(
-            "/api/v1/findings/groups/{rule_set}/{rule}/endpoints",
+            "/api/v1/compliance/groups/{rule_set}/{rule}/endpoints",
             get(finding_group_endpoints),
         )
         .route(
@@ -988,7 +988,7 @@ pub(crate) fn router() -> Router {
             get(vulnerability_advisory),
         )
         .route(
-            "/api/v1/findings/latest/{agent}/{rule_set}/{rule}",
+            "/api/v1/compliance/latest/{agent}/{rule_set}/{rule}",
             get(finding),
         )
         .with_state(repository)

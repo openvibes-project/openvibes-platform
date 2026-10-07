@@ -1417,7 +1417,10 @@ async fn resolved_needs_the_evidence_to_be_gone() {
     ))
     .await;
     let (_, now_gone) = fx.get(&alice, &uri).await;
-    assert_eq!(item_of(&now_gone, "compliance_finding")["evidence_gone"], true);
+    assert_eq!(
+        item_of(&now_gone, "compliance_finding")["evidence_gone"],
+        true
+    );
     let (status, set, _) = fx
         .send(
             &alice,
@@ -1849,7 +1852,9 @@ async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() 
         .await;
     let uri = case_uri(&case);
     fx.sql("UPDATE current_findings SET ended_at = now()").await;
-    let item = item_of(&case, "compliance_finding")["item_id"].as_str().unwrap();
+    let item = item_of(&case, "compliance_finding")["item_id"]
+        .as_str()
+        .unwrap();
     let (status, set, _) = fx
         .send(
             &alice,

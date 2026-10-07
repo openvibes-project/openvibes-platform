@@ -281,7 +281,7 @@ use crate::{
         (name = "cases", description = "Investigations: items, notes, assignment and closing, scope-filtered"),
         (name = "software", description = "Installed software per host and across the caller's hosts"),
         (name = "assets", description = "Open ports and running services per host and across the caller's hosts"),
-        (name = "findings", description = "Scope-filtered observation reads"),
+        (name = "compliance", description = "Scope-filtered compliance finding reads"),
         (name = "vulnerabilities", description = "Scope-filtered vulnerability review"),
         (name = "assistant", description = "Read-only local assistant"),
         (name = "audit", description = "Audit policy and event access")

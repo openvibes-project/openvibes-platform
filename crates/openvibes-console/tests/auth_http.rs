@@ -1154,11 +1154,27 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .await
         .unwrap();
     assert_eq!(wrong_agent_cursor.status(), StatusCode::BAD_REQUEST);
-    let findings_summary = router
+    let old_summary = router
         .clone()
         .oneshot(
             Request::builder()
                 .uri("/api/v1/findings/summary")
+                .header(header::COOKIE, session_cookie.clone())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(old_summary.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        old_summary.headers()[header::CONTENT_TYPE],
+        "application/problem+json"
+    );
+    let findings_summary = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/api/v1/compliance/summary")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1175,7 +1191,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/groups?limit=10")
+                .uri("/api/v1/compliance/groups?limit=10")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1191,7 +1207,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=1")
+                .uri("/api/v1/compliance/groups/base/credential/endpoints?limit=1")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1206,7 +1222,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     let endpoint_cursor = group_endpoints["next_cursor"].as_str().unwrap();
     assert!(group_endpoints["since"].as_str().is_some());
     let second_group_endpoint = router.clone().oneshot(Request::builder()
-        .uri(format!("/api/v1/findings/groups/base/credential/endpoints?limit=1&cursor={endpoint_cursor}"))
+        .uri(format!("/api/v1/compliance/groups/base/credential/endpoints?limit=1&cursor={endpoint_cursor}"))
         .header(header::COOKIE, session_cookie.clone()).body(Body::empty()).unwrap()).await.unwrap();
     assert_eq!(second_group_endpoint.status(), StatusCode::OK);
     let second_group_endpoint: Value = serde_json::from_slice(
@@ -1217,7 +1233,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
     .unwrap();
     assert_eq!(second_group_endpoint["items"].as_array().unwrap().len(), 1);
     let bulk = router.clone().oneshot(Request::builder().method("POST")
-        .uri("/api/v1/findings/groups/base/credential/triage")
+        .uri("/api/v1/compliance/groups/base/credential/triage")
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
@@ -1244,7 +1260,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .get(0);
     assert_eq!(bulk_audit_count, 2);
     let stale_bulk = router.clone().oneshot(Request::builder().method("POST")
-        .uri("/api/v1/findings/groups/base/credential/triage")
+        .uri("/api/v1/compliance/groups/base/credential/triage")
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
@@ -1254,7 +1270,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .uri("/api/v1/compliance/groups/base/credential/endpoints?limit=10")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1274,7 +1290,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 && item["accepted_until"].is_null())
     );
     let accept = router.clone().oneshot(Request::builder().method("POST")
-        .uri("/api/v1/findings/groups/base/credential/triage")
+        .uri("/api/v1/compliance/groups/base/credential/triage")
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
@@ -1284,7 +1300,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .uri("/api/v1/compliance/groups/base/credential/endpoints?limit=10")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1321,7 +1337,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/groups/base/credential/endpoints?limit=10")
+                .uri("/api/v1/compliance/groups/base/credential/endpoints?limit=10")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1366,7 +1382,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/latest?limit=1")
+                .uri("/api/v1/compliance/latest?limit=1")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1383,7 +1399,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/findings/latest?limit=1&cursor={findings_cursor}"
+                    "/api/v1/compliance/latest?limit=1&cursor={findings_cursor}"
                 ))
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
@@ -1401,7 +1417,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/findings/latest?severity=critical&cursor={findings_cursor}"
+                    "/api/v1/compliance/latest?severity=critical&cursor={findings_cursor}"
                 ))
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
@@ -1415,7 +1431,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .oneshot(
             Request::builder()
                 .uri(
-                    "/api/v1/findings/latest/agent.00000000-0000-4000-8000-000000000101/base/credential",
+                    "/api/v1/compliance/latest/agent.00000000-0000-4000-8000-000000000101/base/credential",
                 )
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
@@ -1433,7 +1449,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri(format!("/api/v1/findings/history?since={since}&limit=1"))
+                .uri(format!("/api/v1/compliance/history?since={since}&limit=1"))
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
@@ -1450,7 +1466,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/findings/history?since={since}&limit=1&cursor={history_cursor}"
+                    "/api/v1/compliance/history?since={since}&limit=1&cursor={history_cursor}"
                 ))
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
@@ -1468,7 +1484,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .oneshot(
             Request::builder()
                 .uri(format!(
-                    "/api/v1/findings/history/{first_event_day}/finding-101"
+                    "/api/v1/compliance/history/{first_event_day}/finding-101"
                 ))
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
@@ -1481,7 +1497,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .clone()
         .oneshot(
             Request::builder()
-                .uri("/api/v1/findings/history")
+                .uri("/api/v1/compliance/history")
                 .header(header::COOKIE, session_cookie.clone())
                 .body(Body::empty())
                 .unwrap(),
