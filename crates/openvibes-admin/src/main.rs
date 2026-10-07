@@ -590,7 +590,9 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             let recorded = platform_store::history::record(client, today, Utc::now())
                 .await
                 .map_err(fail)?;
-            let history_cutoff = today - Duration::days(i64::from(*history_days));
+            let history_cutoff = today
+                .checked_sub_signed(Duration::days(i64::from(*history_days)))
+                .ok_or("history window out of range")?;
             let pruned = platform_store::history::delete_before(client, history_cutoff)
                 .await
                 .map_err(fail)?;

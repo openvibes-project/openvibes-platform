@@ -16,6 +16,9 @@ async fn maintenance_records_todays_counts_and_reports_them() {
         "{out}"
     );
     let bad = fixture.run(&["maintenance", "--history-days", "10"]);
-    assert!(!bad.status.success(), "below 30 is refused before any change");
+    assert!(
+        !bad.status.success(),
+        "below 30 is refused before any change"
+    );
     fixture.drop().await;
 }
