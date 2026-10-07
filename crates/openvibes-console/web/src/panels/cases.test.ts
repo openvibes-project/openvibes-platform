@@ -105,7 +105,8 @@ describe("timeline and errors", () => {
     expect(eventText(event("severity", { from: "high", to: "critical" }))).toBe("changed the severity from high to critical");
     expect(eventText(event("item_added", { item_id: "i1", item_kind: "alarm", item_ref: "9" }), titles)).toBe("added alarm nginx → sh");
     expect(eventText(event("item_removed", { item_id: "gone", item_kind: "alarm", item_ref: "9" }), titles)).toBe("removed alarm #9");
-    expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "finding", item_ref: "a//R", to: "false_positive" }), titles)).toBe("marked finding nginx → sh as false positive");
+    expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "finding", item_ref: "a//R", to: "false_positive" }), titles)).toBe("marked compliance finding nginx → sh as false positive");
+    expect(eventText(event("item_added", { item_id: "gone", item_kind: "compliance_finding", item_ref: "a/base/R-1" }), titles)).toBe("added compliance finding R-1 on a");
     expect(eventText(event("item_outcome", { item_id: "i1", item_kind: "alarm", item_ref: "9", to: null }), titles)).toBe("cleared the outcome of alarm nginx → sh");
     expect(eventText(event("resolved", { resolution: "false_positive", accepted_until: null }))).toBe("closed the case as false positive");
     expect(eventText(event("resolved", { resolution: "accepted_risk", accepted_until: "2031-01-15T12:00:00Z" }))).toMatch(/^closed the case as accepted risk until .*2031/);

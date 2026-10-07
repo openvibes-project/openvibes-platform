@@ -154,7 +154,7 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
   const item = () => {
     const kind = text(d.item_kind) ?? "item";
     const label = titleOf(text(d.item_id) ?? "") ?? refLabel(kind, text(d.item_ref) ?? "");
-    return `${kind} ${label}`;
+    return `${kindLabel[kind as CaseKind]?.toLowerCase() ?? kind} ${label}`;
   };
   switch (event.kind) {
     case "created": return "opened the case";
