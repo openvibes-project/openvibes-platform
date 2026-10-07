@@ -106,7 +106,9 @@ sudo openvibes-admin helper assistant-setup
 (owner-only, as the console requires), writes `[assistant]` into
 `console.toml` (an enabled assistant on the `small` profile whose backend is
 `http://127.0.0.1:18430/v1`; other keys and comments stay), enables and
-restarts `openvibes-llm`, and restarts the console. It is safe to repeat and
+restarts `openvibes-llm`, restarts the console, and then tunes the server for
+this host (`helper assistant-tune`: CPU threads, and a longer request
+deadline when the model is slow here; your own `llm.conf` values stay). It is safe to repeat and
 refuses to replace a backend you configured yourself unless you pass
 `--force`. Users still need the `assistant.use` permission.
 

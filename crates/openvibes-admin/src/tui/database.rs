@@ -2,6 +2,8 @@
 //! Database work runs the admin CLI as `openvibes-admin` through the host,
 //! so it keeps its peer login, schema checks and audit log.
 
+use std::path::Path;
+
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
@@ -161,6 +163,30 @@ pub fn checks(
     // Stable: within problems and within the rest, the order above stays.
     checks.sort_by_key(|check| !check.problem);
     checks
+}
+
+/// Health's line about the assistant's tuning (`tune.json`), when a bundled
+/// model is installed.
+pub fn tune_check(model_installed: bool, tune_json: Option<String>) -> Option<Check> {
+    match tune_json {
+        Some(text) => {
+            let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+            let line = crate::tune::summary(
+                v["threads"].as_u64()? as u32,
+                v["model"].as_str()?,
+                v["seconds_per_call"].as_f64()?,
+                None,
+            );
+            Some(check(false, line))
+        }
+        None => model_installed.then(|| {
+            check(
+                false,
+                "assistant: not tuned for this host: run `sudo openvibes-admin helper assistant-tune`"
+                    .into(),
+            )
+        }),
+    }
 }
 
 /// Health's line for [`audit_off`](crate::setup::audit_off), when it applies.
@@ -360,6 +386,10 @@ impl<H: Host> App<H> {
         if let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES) {
             self.database.health.extend(audit_check(&rules));
         }
+        self.database.health.extend(tune_check(
+            Path::new("/var/lib/openvibes-llm/model.conf").exists(),
+            std::fs::read_to_string("/var/lib/openvibes-llm/tune.json").ok(),
+        ));
         self.database.health.sort_by_key(|check| !check.problem);
     }
 
