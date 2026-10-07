@@ -158,3 +158,22 @@ async fn failed_record_keeps_the_days_previous_rows() {
     assert_eq!(rows, 1, "delete rolled back with the failed insert");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn overlapping_records_of_the_same_day_both_succeed() {
+    let (db, mut first) = common::migrated().await;
+    let mut second = db.pool.get().await.unwrap();
+    for n in 0..50 {
+        common::seed_agent(&first, &format!("agent.00000000-0000-0000-0000-{n:012}")).await;
+    }
+    let day = NaiveDate::from_ymd_opt(2026, 10, 7).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
+    for _ in 0..10 {
+        let (a, b) = tokio::join!(
+            history::record(&mut first, day, now),
+            history::record(&mut second, day, now)
+        );
+        assert_eq!((a.unwrap(), b.unwrap()), (50, 50));
+    }
+    db.drop().await;
+}

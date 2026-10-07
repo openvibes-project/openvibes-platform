@@ -103,6 +103,10 @@ pub async fn record(
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
     let tx = client.transaction().await?;
+    // Overlapping runs queue here; under READ COMMITTED the second would
+    // otherwise miss the first's new rows and hit the primary key.
+    tx.batch_execute("LOCK TABLE host_daily_counts IN SHARE ROW EXCLUSIVE MODE")
+        .await?;
     tx.execute("DELETE FROM host_daily_counts WHERE day = $1", &[&day])
         .await?;
     let cols = COLUMNS[..16].join(", ");
