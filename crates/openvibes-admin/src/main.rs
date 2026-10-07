@@ -63,6 +63,9 @@ enum Command {
         /// Keep findings for this many days (1 to 36500).
         #[arg(long, default_value_t = 90, value_parser = clap::value_parser!(u32).range(1..=36500))]
         retention_days: u32,
+        /// Keep daily count history for this many days (30 to 3650).
+        #[arg(long, default_value_t = 400, value_parser = clap::value_parser!(u32).range(30..=3650))]
+        history_days: u32,
     },
     /// Built-in CA: root, intermediate, server certificates.
     Ca {
@@ -561,7 +564,10 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
                 status.database_bytes / (1024 * 1024),
             ))
         }
-        Command::Maintenance { retention_days } => {
+        Command::Maintenance {
+            retention_days,
+            history_days,
+        } => {
             let today = Utc::now().date_naive();
             let cutoff = today
                 .checked_sub_signed(Duration::days(i64::from(*retention_days)))
@@ -581,8 +587,16 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
             let audit_deleted = platform_store::audit::cleanup_expired_events(client, Utc::now())
                 .await
                 .map_err(fail)?;
+            let recorded = platform_store::history::record(client, today, Utc::now())
+                .await
+                .map_err(fail)?;
+            let history_cutoff = today - Duration::days(i64::from(*history_days));
+            let pruned = platform_store::history::delete_before(client, history_cutoff)
+                .await
+                .map_err(fail)?;
             Ok(format!(
-                "created {created} partitions, dropped {dropped}, deleted {audit_deleted} expired audit events\n"
+                "created {created} partitions, dropped {dropped}, deleted {audit_deleted} expired audit events\n\
+                 recorded history for {recorded} hosts, deleted {pruned} old rows\n"
             ))
         }
     }
