@@ -202,7 +202,7 @@ bypass scope checks:
 | Path | Permission |
 |---|---|
 | `GET /api/v1/agents/summary` | `agents.read` |
-| `GET /api/v1/findings/summary` | `findings.read` |
+| `GET /api/v1/compliance/summary` | `compliance.read` |
 
 Service-health state remains outside the public console API until an
 authoritative persisted health contract exists. Process `/health` and
@@ -228,14 +228,14 @@ boundaries.
 
 | Method and path | Permission |
 |---|---|
-| `GET /api/v1/findings/latest` | `findings.read` |
-| `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}` | `findings.read` |
-| `GET /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.read` |
-| `PUT /api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `findings.triage` |
-| `GET /api/v1/findings/groups` | `findings.read` |
-| `GET /api/v1/findings/groups/{rule_set_id}/{rule_id}` | `findings.read` |
-| `GET /api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints` | `findings.read` |
-| `POST /api/v1/findings/groups/{rule_set_id}/{rule_id}/triage` | `findings.triage` |
+| `GET /api/v1/compliance/latest` | `compliance.read` |
+| `GET /api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}` | `compliance.read` |
+| `GET /api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `compliance.read` |
+| `PUT /api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage` | `compliance.triage` |
+| `GET /api/v1/compliance/groups` | `compliance.read` |
+| `GET /api/v1/compliance/groups/{rule_set_id}/{rule_id}` | `compliance.read` |
+| `GET /api/v1/compliance/groups/{rule_set_id}/{rule_id}/endpoints` | `compliance.read` |
+| `POST /api/v1/compliance/groups/{rule_set_id}/{rule_id}/triage` | `compliance.triage` |
 
 A latest finding is identified by agent, rule set, and rule (migration 5,
 protocol P6): rule IDs are unique only within a rule set. Findings stored
@@ -243,8 +243,8 @@ before P6 carry an empty rule set; their path segment is the reserved
 `~unknown` (`~` is not an identifier character, so it cannot collide). When
 an agent upgrades, its old `''` row stays beside the new one; the UI labels
 it "rule set unknown (earlier agent)", and it ages out with retention.
-| `GET /api/v1/findings/history` | `findings.read` |
-| `GET /api/v1/findings/history/{observed_day}/{finding_id}` | `findings.read` |
+| `GET /api/v1/compliance/history` | `compliance.read` |
+| `GET /api/v1/compliance/history/{observed_day}/{finding_id}` | `compliance.read` |
 
 **Fleet grouping (product section 15, approved 2026-09-25).** The findings
 list reads `groups`: one row per (`rule_set_id`, `rule_id`) over
@@ -268,7 +268,7 @@ latest snapshot. The composite history URL matches the current partitioned
 primary key. A response subject is a tagged union: an enrolled `agent`, or an
 unauthenticated imported `installation` with `install_id` and optional
 hostname. Imported installations have no agent link and require global
-`findings.read` until a later association contract exists.
+`compliance.read` until a later association contract exists.
 
 First-release triage is a versioned human workflow record attached to the
 latest subject/rule pair. `PUT` requires `If-Match`, an allowed transition,
@@ -445,7 +445,7 @@ Permissions:
 
 ```text
 agents.read             agents.revoke
-findings.read           findings.triage
+compliance.read           compliance.triage
 tokens.read             tokens.create            tokens.revoke
 rules.read              rules.upload
 audit.read              audit.export             audit.retention.manage
@@ -461,8 +461,8 @@ Reserved for later/web-excluded: `findings.export`, `rules.trust.manage`,
 Every permission has a server-defined scope class: agent-bound or global.
 Built-ins:
 
-- Viewer: `agents.read`, `findings.read`;
-- Analyst: Viewer plus `findings.triage`;
+- Viewer: `agents.read`, `compliance.read`;
+- Analyst: Viewer plus `compliance.triage`;
 - Operator: Viewer plus agent revocation, token management, and rule upload;
 - Admin: every console permission, except CLI-only CA operations.
 

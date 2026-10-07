@@ -111,14 +111,14 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
     match role {
         BuiltInRole::Viewer => matches!(
             permission,
-            P::AgentsRead | P::FindingsRead | P::VulnerabilitiesRead | P::AlarmsRead
+            P::AgentsRead | P::ComplianceRead | P::VulnerabilitiesRead | P::AlarmsRead
         ),
         BuiltInRole::Analyst => {
             matches!(
                 permission,
                 P::AgentsRead
-                    | P::FindingsRead
-                    | P::FindingsTriage
+                    | P::ComplianceRead
+                    | P::ComplianceTriage
                     | P::VulnerabilitiesRead
                     | P::AssistantUse
                     | P::AlarmsRead
@@ -132,7 +132,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
             permission,
             P::AgentsRead
                 | P::AgentsRevoke
-                | P::FindingsRead
+                | P::ComplianceRead
                 | P::VulnerabilitiesRead
                 | P::TokensRead
                 | P::TokensCreate
@@ -150,9 +150,9 @@ fn is_agent_bound(permission: Permission) -> bool {
         permission,
         Permission::AgentsRead
             | Permission::AgentsRevoke
-            | Permission::FindingsRead
+            | Permission::ComplianceRead
             | Permission::VulnerabilitiesRead
-            | Permission::FindingsTriage
+            | Permission::ComplianceTriage
             | Permission::AlarmsRead
             | Permission::AlarmsTriage
             | Permission::AlarmsSuppress
@@ -164,9 +164,9 @@ fn is_agent_bound(permission: Permission) -> bool {
 const ALL_PERMISSIONS: &[Permission] = &[
     Permission::AgentsRead,
     Permission::AgentsRevoke,
-    Permission::FindingsRead,
+    Permission::ComplianceRead,
     Permission::VulnerabilitiesRead,
-    Permission::FindingsTriage,
+    Permission::ComplianceTriage,
     Permission::AlarmsRead,
     Permission::AlarmsTriage,
     Permission::AlarmsSuppress,
@@ -213,7 +213,7 @@ mod tests {
             [
                 (Permission::AgentsRead, vec!["group-a", "group-b"]),
                 (Permission::AgentsRevoke, vec!["group-a", "group-b"]),
-                (Permission::FindingsRead, vec!["group-a", "group-b"]),
+                (Permission::ComplianceRead, vec!["group-a", "group-b"]),
                 (Permission::VulnerabilitiesRead, vec!["group-a", "group-b"]),
                 (Permission::AlarmsRead, vec!["group-a", "group-b"]),
             ]

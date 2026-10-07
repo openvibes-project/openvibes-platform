@@ -656,7 +656,7 @@ async fn latest_findings_by_host_stay_inside_the_callers_scope() {
     let (status, outside) = get(
         &router,
         &scoped,
-        &format!("/api/v1/findings/latest?agent_id={other}"),
+        &format!("/api/v1/compliance/latest?agent_id={other}"),
     )
     .await;
     assert_eq!(status, StatusCode::OK);
@@ -664,7 +664,7 @@ async fn latest_findings_by_host_stay_inside_the_callers_scope() {
     let (_, own) = get(
         &router,
         &scoped,
-        &format!("/api/v1/findings/latest?agent_id={AGENT}"),
+        &format!("/api/v1/compliance/latest?agent_id={AGENT}"),
     )
     .await;
     let items = own["items"].as_array().unwrap();
@@ -675,7 +675,7 @@ async fn latest_findings_by_host_stay_inside_the_callers_scope() {
     let (_, narrowed) = get(
         &router,
         &global,
-        &format!("/api/v1/findings/latest?agent_id={other}"),
+        &format!("/api/v1/compliance/latest?agent_id={other}"),
     )
     .await;
     assert_eq!(narrowed["items"].as_array().unwrap().len(), 1);

@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
 test("a finding explains one host and opens its original rule", async ({ page }) => {
-  await page.goto("/findings");
+  await page.goto("/compliance");
   const row = page.locator(".view tbody tr").filter({ hasText: "Listening service bound to all interfaces" });
   await row.locator("td").nth(1).click();
   const panel = page.locator(".inspector");
@@ -29,7 +29,7 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
 });
 
 test("the host picker filters, picks a host and its evidence opens", async ({ page }) => {
-  await page.goto("/findings");
+  await page.goto("/compliance");
   await page.locator(".view tbody tr").filter({ hasText: "Host firewall is disabled" }).locator("td").nth(1).click();
   const panel = page.locator(".inspector");
   await panel.getByRole("button", { name: "Host", exact: true }).click();

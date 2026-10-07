@@ -21,7 +21,7 @@ async function freeObjects(server: Server) {
   const held = new Set((await Promise.all((await list(server)).map((c) => get(server, c.case_id)))).flatMap((c) => c.items.map((i) => `${i.kind}:${i.ref}`)));
   const alarms = (await call<{ items: { id: string; agent_id: string; severity: string }[] }>(server, "GET", "/api/v1/alarms")).body.items;
   const alarm = alarms.find((a) => !held.has(`alarm:${a.id}`));
-  const findings = (await call<{ items: { agent_id: string; rule_set_id: string; rule_id: string; severity: string }[] }>(server, "GET", "/api/v1/findings/latest?limit=100")).body.items;
+  const findings = (await call<{ items: { agent_id: string; rule_set_id: string; rule_id: string; severity: string }[] }>(server, "GET", "/api/v1/compliance/latest?limit=100")).body.items;
   const finding = findings.find((f) => !held.has(`finding:${f.agent_id}/${f.rule_set_id}/${f.rule_id}`));
   if (!alarm || !finding) throw new Error("demo data has no free alarm and finding");
   return { alarm, finding, findingRef: `${finding.agent_id}/${finding.rule_set_id}/${finding.rule_id}` };
@@ -69,7 +69,7 @@ describe("demo cases: permissions and the seed", () => {
     const ssh = (await list(server)).find((c) => /SSH/.test(c.title));
     if (!ssh) throw new Error("no SSH case");
     const detail = await get(server, ssh.case_id);
-    expect(detail.items.map((i) => i.kind).sort()).toEqual(["alarm", "finding", "host"]);
+    expect(detail.items.map((i) => i.kind).sort()).toEqual(["alarm", "compliance_finding", "host"]);
     expect(detail.pending_item_count).toBe(2);
     expect(detail.events.map((e) => e.kind)).toContain("note");
   });
@@ -120,7 +120,7 @@ describe("demo cases: creating and changing", () => {
     const server = createDemoServer({ persona: "analyst" });
     const { alarm, finding, findingRef } = await freeObjects(server);
     const response = await call<CaseDetail>(server, "POST", "/api/v1/cases", {
-      title: "  Investigate  ", items: [{ kind: "alarm", ref: alarm.id }, { kind: "finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
+      title: "  Investigate  ", items: [{ kind: "alarm", ref: alarm.id }, { kind: "compliance_finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
     });
     expect(response.status).toBe(201);
     expect(response.etag).toBe('"1"');
@@ -128,7 +128,7 @@ describe("demo cases: creating and changing", () => {
     const expected = [alarm.severity, finding.severity].sort((a, b) => rank.indexOf(b) - rank.indexOf(a))[0];
     expect(response.body).toMatchObject({ title: "Investigate", status: "open", severity: expected, version: 1, item_count: 3, pending_item_count: 2, opened_by: { username: "sam" } });
     expect(response.body.events.map((e) => e.kind)).toEqual(["created", "item_added", "item_added", "item_added"]);
-    expect((await get(server, response.body.case_id)).items.map((i) => i.kind)).toEqual(["alarm", "finding", "host"]);
+    expect((await get(server, response.body.case_id)).items.map((i) => i.kind)).toEqual(["alarm", "compliance_finding", "host"]);
   });
 
   it("validates the create body with field errors", async () => {
@@ -224,7 +224,7 @@ describe("demo cases: outcomes and closing", () => {
     const server = createDemoServer({ persona: "analyst" });
     const { alarm, finding, findingRef } = await freeObjects(server);
     const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", {
-      title: "Outcomes", items: [{ kind: "alarm", ref: alarm.id }, { kind: "finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
+      title: "Outcomes", items: [{ kind: "alarm", ref: alarm.id }, { kind: "compliance_finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
     })).body;
     const [alarmItem, , hostItem] = made.items as [CaseItem, CaseItem, CaseItem];
     const outcome = (item: CaseItem, body: unknown) => call<CaseItem & { field_errors?: { field: string; code: string }[] }>(server, "PUT", `/api/v1/cases/${made.case_id}/items/${item.item_id}/outcome`, body);
@@ -254,7 +254,7 @@ describe("demo cases: outcomes and closing", () => {
     const server = createDemoServer({ persona: "analyst" });
     const { alarm, finding, findingRef } = await freeObjects(server);
     const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", {
-      title: "Close me", items: [{ kind: "alarm", ref: alarm.id }, { kind: "finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
+      title: "Close me", items: [{ kind: "alarm", ref: alarm.id }, { kind: "compliance_finding", ref: findingRef }, { kind: "host", ref: finding.agent_id }],
     })).body;
     const url = `/api/v1/cases/${made.case_id}`;
     const base = { title: "Close me", severity: made.severity, status: "closed", assignee_user_id: null };
@@ -342,7 +342,7 @@ describe("demo cases: scope", () => {
   /** A store whose viewer sees only the hosts in `visible`. */
   function scoped(visible: string[], persisted?: { value: unknown }) {
     const me = { user_id: "u-ola", username: "ola", display_name: "Ola" };
-    const state: CaseState = { v: 1, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
+    const state: CaseState = { v: 2, next_number: 1, next_event: 1, cases: [], items: [], events: [] };
     const world: CaseWorld = {
       me, people: [me, { user_id: "u-sam", username: "sam", display_name: "Sam" }], assignable: ["u-ola", "u-sam"],
       canSee: (id) => visible.includes(id), hostname: (id) => id,

@@ -8,18 +8,18 @@ import { date, plural } from "../ui/format";
 import type { IconName } from "../ui/Icon";
 import { matches } from "../ui/table";
 
-export const CASE_KINDS = ["alarm", "finding", "vulnerability", "host", "software"] as const;
+export const CASE_KINDS = ["alarm", "compliance_finding", "vulnerability", "host", "software"] as const;
 export type CaseKind = (typeof CASE_KINDS)[number];
 export const isCaseKind = (value: string): value is CaseKind => (CASE_KINDS as readonly string[]).includes(value);
 /** Kinds that can be in one open case only, and that need an outcome to close. */
-export const EXCLUSIVE_KINDS: ReadonlySet<string> = new Set(["alarm", "finding", "vulnerability"]);
+export const EXCLUSIVE_KINDS: ReadonlySet<string> = new Set(["alarm", "compliance_finding", "vulnerability"]);
 
-export const kindLabel: Record<CaseKind, string> = { alarm: "Alarm", finding: "Finding", vulnerability: "Vulnerability", host: "Host", software: "Software" };
-export const kindIcon: Record<CaseKind, IconName> = { alarm: "alarm", finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package" };
+export const kindLabel: Record<CaseKind | "finding", string> = { alarm: "Alarm", compliance_finding: "Compliance finding", vulnerability: "Vulnerability", host: "Host", software: "Software", finding: "Compliance finding" };
+export const kindIcon: Record<CaseKind | "finding", IconName> = { alarm: "alarm", compliance_finding: "findings", vulnerability: "vulnerabilities", host: "agents", software: "package", finding: "findings" };
 /** What to paste to add an item by id, per kind. */
 export const refHint: Record<CaseKind, string> = {
   alarm: "Alarm id, e.g. 9001",
-  finding: "agent-id/rule-set/rule-id",
+  compliance_finding: "agent-id/rule-set/rule-id",
   vulnerability: "agent-id/advisory-id",
   host: "Agent id, e.g. agent-00008",
   software: "manager/name, e.g. rpm/openssh",
@@ -45,6 +45,7 @@ export const vulnerabilityRef = (agentId: string, advisoryId: string) => `${agen
 export function itemPanel(kind: string, ref: string): PanelRef | undefined {
   switch (kind) {
     case "alarm": return { kind: "alarm", id: ref };
+    case "compliance_finding":
     case "finding": return { kind: "finding", id: splitRef(ref)[1] };
     case "vulnerability": return { kind: "advisory", id: splitRef(ref)[1] };
     case "host": return { kind: "agent", id: ref };
@@ -57,6 +58,7 @@ export function itemPanel(kind: string, ref: string): PanelRef | undefined {
 export function refLabel(kind: string, ref: string): string {
   switch (kind) {
     case "alarm": return `#${ref}`;
+    case "compliance_finding":
     case "finding": { const [agent, rest] = splitRef(ref); return `${splitRef(rest)[1]} on ${agent}`; }
     case "vulnerability": { const [agent, advisory] = splitRef(ref); return `${advisory} on ${agent}`; }
     case "software": return splitRef(ref)[1] || ref;
@@ -152,7 +154,7 @@ export function eventText(event: CaseEvent, titleOf: (itemId: string) => string 
   const item = () => {
     const kind = text(d.item_kind) ?? "item";
     const label = titleOf(text(d.item_id) ?? "") ?? refLabel(kind, text(d.item_ref) ?? "");
-    return `${kind} ${label}`;
+    return `${kindLabel[kind as CaseKind]?.toLowerCase() ?? kind} ${label}`;
   };
   switch (event.kind) {
     case "created": return "opened the case";

@@ -415,7 +415,7 @@ fn invalid_message(code: &str) -> &'static str {
         "invalid_title" => "Use 1 to 120 characters, without control characters",
         "invalid_severity" => "Use critical, high, medium or low",
         "invalid_status" => "Use open, investigating or closed",
-        "invalid_kind" => "Use alarm, finding, vulnerability, host or software",
+        "invalid_kind" => "Use alarm, compliance_finding, vulnerability, host or software",
         "invalid_ref" => "The id does not have the shape of this kind of item",
         "too_many_items" => "A case is created with at most 50 items",
         "resolution_required" => "A resolution is required to close a case",

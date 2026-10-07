@@ -40,14 +40,14 @@ export function TriageBar({ counts }: { counts: FindingGroup["triage_counts"] })
 export function FindingPanel({ id }: { id: string }) {
   const [ruleSetId, ruleId] = splitFindingId(id);
   const { can } = useSession();
-  const groups = useAllPages<FindingGroup>("/api/v1/findings/groups");
-  const endpoints = useAllPages<GroupEndpoint>(`/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/endpoints`);
+  const groups = useAllPages<FindingGroup>("/api/v1/compliance/groups");
+  const endpoints = useAllPages<GroupEndpoint>(`/api/v1/compliance/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/endpoints`);
   const group = groups.data?.find((candidate) => candidate.rule_set_id === ruleSetId && candidate.rule_id === ruleId);
   // ponytail: the chart pages raw history (at most 3,000 rows); a
   // per-day count endpoint would scale it to large fleets.
   const since = daysAgo(13);
   const history = useAllPages<{ agent_id: string; observed_day: string }>(
-    `/api/v1/findings/history?since=${encodeURIComponent(since)}&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`, 3000);
+    `/api/v1/compliance/history?since=${encodeURIComponent(since)}&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`, 3000);
   const trend = useMemo(() => dailyHosts(history.data ?? [], 14), [history.data]);
   const [evidenceHost, setEvidenceHost] = useState("");
   const detailsTop = useRef<HTMLDivElement>(null);
@@ -58,7 +58,7 @@ export function FindingPanel({ id }: { id: string }) {
   };
   const host = endpoints.data?.some((item) => item.agent_id === evidenceHost) ? evidenceHost
     : endpoints.data?.length === 1 ? (endpoints.data[0]?.agent_id ?? "") : "";
-  const evidencePath = host ? `/api/v1/findings/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
+  const evidencePath = host ? `/api/v1/compliance/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
   const observation = useResource<Finding>(evidencePath);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [state, setState] = useState<string>("investigating");
@@ -69,7 +69,7 @@ export function FindingPanel({ id }: { id: string }) {
   // One host selected: its saved triage fills the form, as a per-host editor.
   const single = selected.size === 1 ? [...selected][0] : undefined;
   const current = useResource<{ state: string; assigned_to: string | null; note: string | null; accepted_until: string | null; version: number }>(single === undefined ? null
-    : `/api/v1/findings/latest/${encodeURIComponent(single)}/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`);
+    : `/api/v1/compliance/latest/${encodeURIComponent(single)}/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`);
   const [filledFrom, setFilledFrom] = useState<unknown>(undefined);
   // Until that host's triage is in, the fields stay disabled so a late load can't overwrite an edit.
   const filling = single !== undefined && current.data === undefined && current.error === undefined;
@@ -91,35 +91,35 @@ export function FindingPanel({ id }: { id: string }) {
   useProvideTitle({ kind: "finding", id }, group?.latest_message);
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
   if (!group && groups.loading) return <Loading />;
-  if (!group) return <div className="panel-body"><Empty icon="findings" title="Finding not found">It may have been resolved, or it is outside your access.</Empty></div>;
+  if (!group) return <div className="panel-body"><Empty icon="findings" title="Compliance finding not found">It may have been resolved, or it is outside your access.</Empty></div>;
 
   const apply = async (agentIds: string[]) => {
     const all = endpoints.data ?? [];
     const changes = all.filter((item) => agentIds.includes(item.agent_id)).map((item) => ({ agent_id: item.agent_id, version: item.triage_version }));
     setBusy(true);
     try {
-      await request("POST", `/api/v1/findings/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`, { ...triageBody({ state: choice, assignee, note, acceptedUntil }), changes });
+      await request("POST", `/api/v1/compliance/groups/${encodeURIComponent(ruleSetId)}/${encodeURIComponent(ruleId)}/triage`, { ...triageBody({ state: choice, assignee, note, acceptedUntil }), changes });
       toast(`${changes.length === 1 ? "1 host" : `${changes.length} hosts`} set to ${triageLabel[choice]?.toLowerCase()}`);
       setSelected(new Set());
       setNote("");
       setAssignee("");
       setAcceptedUntil("");
       setFilledFrom(undefined);
-      invalidate("/api/v1/findings");
+      invalidate("/api/v1/compliance");
     } catch (error) {
       toast(error instanceof ApiError ? error.message : "Triage failed", true);
-      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) invalidate("/api/v1/findings");
+      if (error instanceof ApiError && (error.status === 409 || error.status === 412)) invalidate("/api/v1/compliance");
     } finally {
       setBusy(false);
     }
   };
 
-  const canTriage = can("findings.triage");
+  const canTriage = can("compliance.triage");
   const canCase = can("cases.manage");
   return (
     <>
       <PanelHeader
-        icon="findings" kind={`Finding · ${ruleSetId}`} title={group.latest_message}
+        icon="findings" kind={`Compliance finding · ${ruleSetId}`} title={group.latest_message}
         subtitle={<span className="mono subtle">{ruleId} · rule version {group.rule_versions.join(", ")}</span>}
         badges={<><SeverityBadge severity={group.severity} /><span className="badge badge--plain">{group.endpoint_count} hosts</span></>}
         askAbout={{ ref: { kind: "finding", id }, label: `${ruleId} ${group.latest_message}` }}
@@ -193,7 +193,7 @@ export function FindingPanel({ id }: { id: string }) {
                 <tr key={item.agent_id} aria-selected={selected.has(item.agent_id) || undefined}>
                   {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
-                  <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain gap-start">imported</span>}</td>
+                  <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="compliance_finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain gap-start">imported</span>}</td>
                   <td><button type="button" className="link-button" onClick={() => showEvidence(item.agent_id)}>View evidence</button></td>
                   <td><TriageBadge state={item.triage_state} />{item.accepted_until && (isPast(item.accepted_until)
                     ? <span className="badge badge--bad badge--plain gap-start">expired {date(item.accepted_until)}</span>

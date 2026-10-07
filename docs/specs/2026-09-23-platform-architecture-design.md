@@ -119,7 +119,7 @@ first release.
   use hashed, expiring API tokens bound to a role.
 - Authorisation: deny by default. Fine-grained permissions (for example
   `agents.read`, `agents.revoke`, `tokens.create`, `rules.upload`,
-  `findings.read`, `packages.create`, `ca.manage`, `rbac.manage`); roles are
+  `compliance.read`, `packages.create`, `ca.manage`, `rbac.manage`); roles are
   permission sets (built-in Viewer, Analyst, Operator, Admin, plus custom);
   bindings attach a role to a user or an identity-provider group, scoped to
   the whole platform or to an asset group of hosts selected by tag. One

@@ -16,6 +16,7 @@ import { BUILTIN_ID, BUILTIN_LAYOUT, BUILTIN_NAME } from "./builtin";
 import { editor, useEditor } from "./editor";
 import { Grid } from "./Grid";
 import type { Layout } from "./layout";
+import { upgradeLayout } from "./legacy";
 
 const ROLES = ["viewer", "analyst", "operator", "admin"] as const;
 
@@ -61,7 +62,8 @@ function DashboardById({ id }: { id: string }) {
     );
   }
   if (!builtin && !stored.data) return <Loading />;
-  const dashboard = stored.data;
+  // A layout saved with pre-rename IDs (API, or a tab open across the upgrade).
+  const dashboard = stored.data && { ...stored.data, layout: upgradeLayout(stored.data.layout as unknown as Layout) as unknown as Dashboard["layout"] };
   const editing = state.draft !== null && state.dashboard?.dashboard_id === dashboard?.dashboard_id;
   const layout: Layout = editing && state.draft ? state.draft : builtin ? BUILTIN_LAYOUT : (dashboard?.layout as unknown as Layout);
   return (

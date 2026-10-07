@@ -1,4 +1,5 @@
 import { type Layout, validateLayout, validateName } from "../dashboards/layout";
+import { upgradeLayout } from "../dashboards/legacy";
 
 export type DemoDashboard = { dashboard_id: string; owner: string; name: string; shared_role_id: string | null; layout: Layout };
 type Stored = DemoDashboard & { version: number; created_at: string; updated_at: string };
@@ -13,7 +14,7 @@ export type DashboardPersistence = { load: () => unknown; save: (state: { rows: 
 export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: string) => string[], nameOf: (userId: string) => string, persistence?: DashboardPersistence) {
   const now = () => new Date().toISOString();
   const saved = persistence?.load() as { rows?: Stored[]; homes?: [string, string][] } | undefined;
-  const rows: Stored[] = Array.isArray(saved?.rows) ? saved.rows : seed.map((d) => ({ ...d, version: 1, created_at: now(), updated_at: now() }));
+  const rows: Stored[] = Array.isArray(saved?.rows) ? saved.rows.map((row) => ({ ...row, layout: upgradeLayout(row.layout) })) : seed.map((d) => ({ ...d, version: 1, created_at: now(), updated_at: now() }));
   const homes = new Map<string, string>(Array.isArray(saved?.homes) ? saved.homes : []);
   const persist = () => persistence?.save({ rows, homes: [...homes] });
   const visible = (userId: string, row: Stored) => row.owner === userId || (row.shared_role_id !== null && rolesOf(userId).includes(row.shared_role_id));

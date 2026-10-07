@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::TestDb;
+use common::{TestDb, at_version};
 
 #[tokio::test]
 async fn migration_applies_once_and_is_idempotent() {
@@ -280,32 +280,6 @@ async fn roles_are_hyphenated() {
     db.drop().await;
 }
 
-/// A database with migrations 1..=VERSION applied from the files.
-async fn at_version(db: &TestDb, version: i32) -> deadpool_postgres::Client {
-    let client = db.pool.get().await.unwrap();
-    client
-        .batch_execute("CREATE TABLE schema_version (version integer NOT NULL)")
-        .await
-        .unwrap();
-    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../migrations");
-    let mut files: Vec<_> = std::fs::read_dir(dir)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect();
-    files.sort();
-    for file in files.iter().take(version as usize) {
-        client
-            .batch_execute(&std::fs::read_to_string(file).unwrap())
-            .await
-            .unwrap();
-    }
-    client
-        .execute("INSERT INTO schema_version VALUES ($1)", &[&version])
-        .await
-        .unwrap();
-    client
-}
-
 /// Board #77: after a plain `dnf upgrade` the services' migrate unit
 /// applies only additive migrations; one that changes stored data waits for
 /// Update, which backs up first.
@@ -326,10 +300,23 @@ async fn automatic_migration_stops_before_a_data_changing_one() {
     db.drop().await;
 }
 
+/// Migration 43 rewrites stored IDs, so it waits for Update's backup.
+#[tokio::test]
+async fn automatic_migration_stops_before_compliance_names() {
+    let db = TestDb::create().await;
+    let mut client = at_version(&db, 42).await;
+    assert!(matches!(
+        platform_store::migrate_additive(&mut client).await,
+        Err(platform_store::StoreError::NeedsBackup(43))
+    ));
+    drop(client);
+    db.drop().await;
+}
+
 #[tokio::test]
 async fn automatic_migration_applies_additive_ones() {
     let db = TestDb::create().await;
-    let mut client = at_version(&db, 24).await;
+    let mut client = at_version(&db, 43).await;
     assert_eq!(
         platform_store::migrate_additive(&mut client).await.unwrap(),
         platform_store::SCHEMA_VERSION

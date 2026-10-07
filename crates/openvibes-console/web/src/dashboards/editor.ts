@@ -7,6 +7,7 @@ import { ApiError, invalidate, prime, request } from "../api/client";
 import type { Dashboard } from "../api/types";
 import { type FieldProblem, type Layout, type Widget, type WidgetType, addWidget, moveWidget, removeWidget, validateLayout, validateName } from "./layout";
 import { WIDGET_DEFAULTS } from "./defaults";
+import { upgradeLayout } from "./legacy";
 
 export type EditorState = {
   dashboard: Dashboard | null; name: string; draft: Layout | null; dirty: boolean;
@@ -47,7 +48,7 @@ export const editor = {
   state: () => state,
   begin(dashboard: Dashboard): boolean {
     if (!dashboard.mine) return false;
-    set({ ...empty, dashboard, name: dashboard.name, draft: dashboard.layout as unknown as Layout });
+    set({ ...empty, dashboard, name: dashboard.name, draft: upgradeLayout(dashboard.layout as unknown as Layout) });
     return true;
   },
   /** Ends editing and forgets the draft (the user chose to leave or cancel). */
@@ -58,7 +59,8 @@ export const editor = {
   recoverable(id: string): StoredDraft | null {
     try {
       const parsed = JSON.parse(sessionStorage.getItem(draftKey(id)) ?? "null") as StoredDraft | null;
-      return parsed && typeof parsed.name === "string" && typeof parsed.draft === "object" ? parsed : null;
+      if (!parsed || typeof parsed.name !== "string" || typeof parsed.draft !== "object" || !Array.isArray(parsed.draft?.widgets)) return null;
+      return { ...parsed, draft: upgradeLayout(parsed.draft) };
     } catch {
       return null;
     }

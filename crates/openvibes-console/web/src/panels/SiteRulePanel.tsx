@@ -37,7 +37,7 @@ const fromDraft = (draft: RuleDraft): Form => ({
 
 
 const OUTCOMES: Record<string, string> = {
-  match: "Matches: the rule would raise a finding on this host.",
+  match: "Matches: the rule would raise a compliance finding on this host.",
   no_match: "No match on this host.",
   unavailable: "Unavailable here.",
   failed: "The rule failed on this host.",
@@ -163,7 +163,7 @@ export function SiteRulePanel({ id }: { id: string }) {
           {field("expression", "Expression", <textarea className="textarea mono" rows={4} required value={current.expression} onChange={(e) => update({ expression: e.target.value })} disabled={!write} spellCheck={false}
             placeholder={alarm ? "event['process.name'] in ['sh', 'bash']" : "'6379' in facts['port.tcp.exposed']"} />)}
           <p className="subtle">{alarm ? `Keys: ${EVENT_KEYS}.` : `Facts: ${FACTS}.`}</p>
-          {field("finding_message", alarm ? "Alarm message" : "Finding message", <textarea className="textarea" rows={3} required value={current.finding_message} onChange={(e) => update({ finding_message: e.target.value })} disabled={!write} />)}
+          {field("finding_message", alarm ? "Alarm message" : "Compliance finding message", <textarea className="textarea" rows={3} required value={current.finding_message} onChange={(e) => update({ finding_message: e.target.value })} disabled={!write} />)}
           {problem("rule") && <p className="confirm__error" role="alert">{problem("rule")}</p>}
           {check?.ok && <p className="subtle">Hosts would accept this rule.</p>}
           {error && <p className="confirm__error" role="alert">{error}</p>}

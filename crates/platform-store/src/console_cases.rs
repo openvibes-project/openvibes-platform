@@ -58,7 +58,7 @@ impl ItemKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Alarm => "alarm",
-            Self::Finding => "finding",
+            Self::Finding => "compliance_finding",
             Self::Vulnerability => "vulnerability",
             Self::Host => "host",
             Self::Software => "software",
@@ -69,7 +69,7 @@ impl ItemKind {
     pub fn parse(text: &str) -> Option<Self> {
         Some(match text {
             "alarm" => Self::Alarm,
-            "finding" => Self::Finding,
+            "compliance_finding" => Self::Finding,
             "vulnerability" => Self::Vulnerability,
             "host" => Self::Host,
             "software" => Self::Software,
@@ -343,7 +343,7 @@ fn case_counts() -> String {
     format!(
         "(SELECT count(*) FROM case_items ci WHERE ci.case_id = c.case_id AND {visible}),
          (SELECT count(*) FROM case_items ci WHERE ci.case_id = c.case_id
-            AND ci.kind IN ('alarm', 'finding', 'vulnerability') AND ci.outcome IS NULL
+            AND ci.kind IN ('alarm', 'compliance_finding', 'vulnerability') AND ci.outcome IS NULL
             AND {visible})"
     )
 }
@@ -359,7 +359,7 @@ fn item_title() -> String {
     format!(
         "CASE i.kind
             WHEN 'alarm' THEN (SELECT al.message FROM alarms al WHERE al.id = i.ref::bigint)
-            WHEN 'finding' THEN (SELECT f.message FROM current_findings f
+            WHEN 'compliance_finding' THEN (SELECT f.message FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3})
             WHEN 'vulnerability' THEN (SELECT ad.title FROM advisories ad
@@ -375,7 +375,7 @@ fn item_severity() -> String {
     format!(
         "CASE i.kind
             WHEN 'alarm' THEN (SELECT al.severity FROM alarms al WHERE al.id = i.ref::bigint)
-            WHEN 'finding' THEN (SELECT f.severity FROM current_findings f
+            WHEN 'compliance_finding' THEN (SELECT f.severity FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3})
             WHEN 'vulnerability' THEN (SELECT ad.severity FROM advisories ad
@@ -390,7 +390,7 @@ fn item_gone() -> String {
         "CASE i.kind
             WHEN 'alarm' THEN NOT EXISTS (SELECT 1 FROM alarms al
                 WHERE al.id = i.ref::bigint AND al.state <> 'mitigated')
-            WHEN 'finding' THEN NOT EXISTS (SELECT 1 FROM current_findings f
+            WHEN 'compliance_finding' THEN NOT EXISTS (SELECT 1 FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3} AND f.ended_at IS NULL)
             WHEN 'vulnerability' THEN
@@ -1298,7 +1298,7 @@ async fn blocking_items(
                 "SELECT s.seen, count(*) FROM (
                     SELECT {visible} AS seen FROM case_items i
                     WHERE i.case_id = $4::text::uuid AND $3::text IS NOT NULL
-                      AND i.kind IN ('alarm', 'finding', 'vulnerability')
+                      AND i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
                       AND (i.outcome IS NULL OR (i.outcome = 'resolved' AND NOT ({gone}))))
                  s GROUP BY s.seen"
             ),
@@ -1333,7 +1333,7 @@ async fn reopen_conflict(
                       AND o.case_id <> mine.case_id
                  JOIN cases oc ON oc.case_id = o.case_id
                  WHERE mine.case_id = $4::text::uuid
-                   AND mine.kind IN ('alarm', 'finding', 'vulnerability')
+                   AND mine.kind IN ('alarm', 'compliance_finding', 'vulnerability')
                  ORDER BY oc.number LIMIT 1"
             ),
             viewer_params!(viewer, &case_id),
@@ -1885,7 +1885,7 @@ pub async fn reopen_evidence_returned(
     let since = now - chrono::Duration::days(EVIDENCE_WATCH_DAYS);
     let gone = item_gone();
     let returned = format!(
-        "i.outcome = 'resolved' AND i.kind IN ('alarm', 'finding', 'vulnerability')
+        "i.outcome = 'resolved' AND i.kind IN ('alarm', 'compliance_finding', 'vulnerability')
          AND NOT ({gone})"
     );
     let due = client
@@ -1937,7 +1937,7 @@ pub async fn reopen_evidence_returned(
                  JOIN case_items o ON o.kind = mine.kind AND o.ref = mine.ref AND o.active
                       AND o.case_id <> mine.case_id
                  WHERE mine.case_id = $1::text::uuid
-                   AND mine.kind IN ('alarm', 'finding', 'vulnerability')
+                   AND mine.kind IN ('alarm', 'compliance_finding', 'vulnerability')
                  LIMIT 1",
                 &[&case_id],
             )
@@ -2067,7 +2067,7 @@ pub async fn reopen_expired(client: &mut Client, now: DateTime<Utc>) -> Result<u
                  JOIN case_items o ON o.kind = mine.kind AND o.ref = mine.ref AND o.active
                       AND o.case_id <> mine.case_id
                  WHERE mine.case_id = $1::text::uuid
-                   AND mine.kind IN ('alarm', 'finding', 'vulnerability')
+                   AND mine.kind IN ('alarm', 'compliance_finding', 'vulnerability')
                  LIMIT 1",
                 &[&case_id],
             )
@@ -2178,7 +2178,7 @@ mod tests {
     fn only_alarms_findings_and_vulnerabilities_are_exclusive() {
         for (name, exclusive) in [
             ("alarm", true),
-            ("finding", true),
+            ("compliance_finding", true),
             ("vulnerability", true),
             ("host", false),
             ("software", false),

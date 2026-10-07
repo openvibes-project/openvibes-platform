@@ -329,7 +329,7 @@ async fn a_case_has_a_number_a_default_severity_and_a_timeline() {
         "SSH on web-01",
         &[
             ("host", WEB),
-            ("finding", &web_finding),
+            ("compliance_finding", &web_finding),
             ("software", "rpm/openssl"),
         ],
     )
@@ -348,7 +348,11 @@ async fn a_case_has_a_number_a_default_severity_and_a_timeline() {
     assert_eq!(second.summary.severity, "medium", "no item severity");
     let kinds: Vec<_> = created.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["created", "item_added", "item_added", "item_added"]);
-    let finding_item = created.items.iter().find(|i| i.kind == "finding").unwrap();
+    let finding_item = created
+        .items
+        .iter()
+        .find(|i| i.kind == "compliance_finding")
+        .unwrap();
     assert_eq!(finding_item.title.as_deref(), Some("Root login over SSH"));
     assert_eq!(finding_item.hostname.as_deref(), Some("web-01"));
     assert!(!finding_item.evidence_gone);
@@ -518,7 +522,7 @@ async fn an_item_out_of_scope_cannot_be_added_and_does_not_say_whether_it_exists
     let hidden_and_missing: [(&str, &str); 7] = [
         ("host", DB),
         ("alarm", &db_alarm),
-        ("finding", &db_finding),
+        ("compliance_finding", &db_finding),
         ("vulnerability", &db_vuln),
         ("software", "rpm/bash"),
         ("host", &missing),
@@ -598,7 +602,7 @@ async fn malformed_items_are_invalid_not_missing() {
         ("port", "tcp/22", "kind"),
         ("alarm", "042", "ref"),
         ("alarm", "abc", "ref"),
-        ("finding", WEB, "ref"),
+        ("compliance_finding", WEB, "ref"),
         ("vulnerability", WEB, "ref"),
         ("host", "web 01", "ref"),
         ("software", "rpm", "ref"),
@@ -631,7 +635,7 @@ async fn an_alarm_finding_or_vulnerability_is_in_one_open_case_and_is_freed_on_c
     let web_vuln = vuln(WEB);
     let exclusive: [(&str, &str); 3] = [
         ("alarm", &alarm),
-        ("finding", &web_finding),
+        ("compliance_finding", &web_finding),
         ("vulnerability", &web_vuln),
     ];
     let first = open_case(&mut fx.console, &global(), ALICE, "First", &exclusive).await;
@@ -837,7 +841,11 @@ async fn closing_needs_a_resolution_a_note_a_date_for_accepted_risk_and_every_ou
         &global(),
         ALICE,
         "To close",
-        &[("host", WEB), ("alarm", &alarm), ("finding", &web_finding)],
+        &[
+            ("host", WEB),
+            ("alarm", &alarm),
+            ("compliance_finding", &web_finding),
+        ],
     )
     .await;
     let invalid = |refusal: Refusal, field: &'static str, code: &'static str| {
@@ -933,7 +941,7 @@ async fn closing_needs_a_resolution_a_note_a_date_for_accepted_risk_and_every_ou
     .await;
     assert_eq!(refused.unwrap_err(), Refusal::ItemsUnresolved(2));
     let alarm_item = item_id(&case, "alarm").to_owned();
-    let finding_item = item_id(&case, "finding").to_owned();
+    let finding_item = item_id(&case, "compliance_finding").to_owned();
     outcome(
         &mut fx,
         &global(),
@@ -1255,7 +1263,7 @@ async fn resolved_needs_the_evidence_to_be_gone() {
         "Evidence",
         &[
             ("alarm", &alarm),
-            ("finding", &web_finding),
+            ("compliance_finding", &web_finding),
             ("vulnerability", &web_vuln),
             ("host", WEB),
             ("software", "rpm/openssl"),
@@ -1269,7 +1277,7 @@ async fn resolved_needs_the_evidence_to_be_gone() {
         })
     };
     let alarm_item = item_id(&case, "alarm").to_owned();
-    let finding_item = item_id(&case, "finding").to_owned();
+    let finding_item = item_id(&case, "compliance_finding").to_owned();
     let vuln_item = item_id(&case, "vulnerability").to_owned();
     // Everything is still there: nothing can be resolved.
     for item in [&alarm_item, &finding_item, &vuln_item] {
@@ -1337,7 +1345,10 @@ async fn resolved_needs_the_evidence_to_be_gone() {
         .unwrap();
     let fresh = fetch(&fx, &global(), ALICE, &case).await.unwrap();
     for item in &fresh.items {
-        let expected = matches!(item.kind.as_str(), "alarm" | "finding" | "vulnerability");
+        let expected = matches!(
+            item.kind.as_str(),
+            "alarm" | "compliance_finding" | "vulnerability"
+        );
         assert_eq!(item.evidence_gone, expected, "{}", item.kind);
     }
     for item in [&alarm_item, &finding_item, &vuln_item] {
@@ -2434,8 +2445,8 @@ async fn closed_on_resolved_findings(fx: &mut Fx, title: &str) -> CaseDetail {
         title,
         &[
             ("host", WEB),
-            ("finding", &web_finding),
-            ("finding", &db_finding),
+            ("compliance_finding", &web_finding),
+            ("compliance_finding", &db_finding),
         ],
     )
     .await;
@@ -2443,7 +2454,7 @@ async fn closed_on_resolved_findings(fx: &mut Fx, title: &str) -> CaseDetail {
         .batch_execute("UPDATE current_findings SET ended_at = now()")
         .await
         .unwrap();
-    for item in case.items.iter().filter(|i| i.kind == "finding") {
+    for item in case.items.iter().filter(|i| i.kind == "compliance_finding") {
         outcome(
             fx,
             &global(),
@@ -2571,10 +2582,13 @@ async fn false_positive_and_accepted_risk_do_not_reopen_on_evidence() {
         &global(),
         ALICE,
         "Decisions",
-        &[("alarm", &alarm), ("finding", &web_finding)],
+        &[("alarm", &alarm), ("compliance_finding", &web_finding)],
     )
     .await;
-    for (kind, decision) in [("alarm", "false_positive"), ("finding", "accepted_risk")] {
+    for (kind, decision) in [
+        ("alarm", "false_positive"),
+        ("compliance_finding", "accepted_risk"),
+    ] {
         outcome(
             &mut fx,
             &global(),
@@ -2664,7 +2678,7 @@ async fn a_case_stays_closed_when_a_returning_item_joined_another_open_case() {
         &global(),
         DAVE,
         "Other",
-        &[("finding", &web_finding)],
+        &[("compliance_finding", &web_finding)],
     )
     .await;
     fx.admin

@@ -132,7 +132,7 @@ Add these to `../decisions.md` locally.
 
 - **X-M7:** a finding reported by several agents is shown once, and its
   detail lists every endpoint that reported it (console decision 18,
-  `/api/v1/findings/groups`).
+  `/api/v1/compliance/groups`).
 - **Assistant priorities:** local LLM first; an external provider is
   supported but priority 2 (AS7).
 - **Conversations:** kept for 30 days.

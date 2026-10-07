@@ -9,7 +9,7 @@ import { plural } from "../ui/format";
 import type { IconName } from "../ui/Icon";
 
 /** What "Needs attention" can include, in the settings' order. */
-export const ATTENTION_KINDS = ["alarms", "exploited", "findings", "stale"] as const;
+export const ATTENTION_KINDS = ["alarms", "exploited", "compliance", "stale"] as const;
 
 export type AttentionItem = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
 
@@ -19,12 +19,12 @@ export function greeting(now = new Date()) {
 }
 
 /** The "Needs attention" list: active threat alarms, exploited
- *  vulnerabilities, open critical and high findings, and hosts that stopped
+ *  vulnerabilities, open critical and high compliance findings, and hosts that stopped
  *  reporting, most urgent first. */
 export function useAttention(include: readonly string[], limit: number): { items: AttentionItem[]; loading: boolean } {
   const { can } = useSession();
   const want = (kind: string) => include.includes(kind);
-  const groups = useAllPages<FindingGroup>(want("findings") && can("findings.read") ? "/api/v1/findings/groups" : null);
+  const groups = useAllPages<FindingGroup>(want("compliance") && can("compliance.read") ? "/api/v1/compliance/groups" : null);
   const exploited = useResource<VulnerabilityPage>(want("exploited") && can("vulnerabilities.read") ? "/api/v1/vulnerabilities?exploited=true" : null);
   const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
   // Newest first by last_seen: repeating medium alarms could push an older

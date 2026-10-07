@@ -14,7 +14,7 @@ The C2 store has SQL-scoped
 agent and finding read
 variants; the authenticated router now serves scope-filtered agent summary,
 list, detail, and certificate routes behind `agents.read`, and finding summary
-latest/detail/history routes behind `findings.read`. The embedded login page,
+latest/detail/history routes behind `compliance.read`. The embedded login page,
 session gate, sign-out action, and production Overview/Agents/Findings data
 views are implemented against the authenticated routes. The Access control
 inventory and Audit pages use authenticated APIs; bounded CSV export is

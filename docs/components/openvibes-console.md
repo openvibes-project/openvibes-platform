@@ -102,7 +102,7 @@ with their visible IDs; an agent ID selects one exact host. Advisory details
 return CVE enrichment only if at least one affected host is visible to the
 caller.
 
-`GET /api/v1/findings/groups` shows each rule set and rule once in the recent
+`GET /api/v1/compliance/groups` shows each rule set and rule once in the recent
 window, after scope filtering. Its endpoint route pages visible current
 reporters with a cursor-bound window (the response's `since` is reused for
 subsequent pages) and can include older matches on request. Triage counts are
@@ -649,3 +649,18 @@ then against PostgreSQL. Security coverage expands from the current route
 fall-through, cache-header, and CSP checks to session/CSRF handling, object
 scope, audit atomicity, trusted proxies, secret redaction, and bounded CSV
 export.
+
+## Upgrade notes
+
+Console: rule results are now "compliance findings". API paths moved from
+`/api/v1/findings/*` to `/api/v1/compliance/*`; permissions `findings.read` /
+`findings.triage` are now `compliance.read` / `compliance.triage` (roles and
+saved dashboards are migrated; update scripts). Migration 43 changes stored
+data: run Update, which takes a backup. The agent wire protocol and the ingest
+API (`/v1/findings`) keep the name "findings".
+
+Also renamed: the cases API's item kind `finding` is now `compliance_finding`
+(stored items are migrated; sending `finding` is refused with 422
+`invalid_kind`); the problem code `finding_not_found` is now
+`compliance_finding_not_found`; the page `/findings` is now `/compliance`
+(old links and saved views carry over).

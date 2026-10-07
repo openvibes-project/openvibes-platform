@@ -83,9 +83,9 @@ A copied view therefore shares the query, not a caller-specific position.
 |---|---|---|
 | Sign in and password change | Local username/password first; OIDC, SAML, and MFA are later adapters | Public/session |
 | Overview | Permission-aware fleet and observation summary | Each panel is independently gated |
-| Findings list | One row per rule set and rule, however many endpoints report it (section 15); bounded history; filter by triage state and assignee | `findings.read` |
-| Finding detail | The rule's latest observation and every endpoint reporting it, each with its own observation and triage (section 15) | `findings.read`; triage uses `findings.triage` |
-| Endpoint observation | Exact observation for one endpoint, provenance, and first-release analyst triage | `findings.read`; triage uses `findings.triage` |
+| Findings list | One row per rule set and rule, however many endpoints report it (section 15); bounded history; filter by triage state and assignee | `compliance.read` |
+| Finding detail | The rule's latest observation and every endpoint reporting it, each with its own observation and triage (section 15) | `compliance.read`; triage uses `compliance.triage` |
+| Endpoint observation | Exact observation for one endpoint, provenance, and first-release analyst triage | `compliance.read`; triage uses `compliance.triage` |
 | Agents list | Browse Seen recently, Offline, Never seen, and Revoked agents | `agents.read` |
 | Agent detail | Identity, contact, versions, certificate metadata, latest observed matches | `agents.read`; revoke uses `agents.revoke` |
 | Enrollment tokens | List safe metadata; create and revoke tokens | `tokens.read`, `tokens.create`, `tokens.revoke` |

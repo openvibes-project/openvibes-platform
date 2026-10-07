@@ -20,23 +20,23 @@ test("overview lists what needs attention and opens it beside the page", async (
 test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
   await page.getByRole("link", { name: "Compliance" }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
-  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   await page.locator(".inspector tbody a").first().click();
   await expect(page.locator(".panel-header__kind")).toContainText("Host");
   await expect(page.locator(".crumbs__item")).toHaveCount(2);
   await page.keyboard.press("Escape");
-  await expect(page.locator(".panel-header__kind")).toContainText("Finding");
+  await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
 });
 
 test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
-  await page.goto("/findings?open=finding%3Ahardening-ssh%2FSSH-002");
+  await page.goto("/compliance?open=finding%3Ahardening-ssh%2FSSH-002");
   const hosts = page.locator(".inspector tbody tr");
   await expect(hosts.filter({ hasText: "mail-04.lab.example.test" })).toContainText("analyst");
   await expect(hosts.filter({ hasText: "api-01.lab.example.test" })).toContainText(/until /);
 });
 
 test("a host whose match ended shows when it was fixed", async ({ page }) => {
-  await page.goto("/findings?open=finding%3Abaseline-linux%2FLNX-033");
+  await page.goto("/compliance?open=finding%3Abaseline-linux%2FLNX-033");
   await expect(page.locator(".inspector tbody tr").filter({ hasText: "web-03.prod.example.test" })).toContainText(/fixed /);
 });
 
@@ -49,7 +49,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
 });
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
-  await page.goto("/findings");
+  await page.goto("/compliance");
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
   await page.getByRole("button", { name: "Open in a window" }).click();
   await expect(page.locator(".window")).toBeVisible();
@@ -78,7 +78,7 @@ test("a viewer does not see administration", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "admin" }).click();
 });
 
-for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/findings?open=finding%3Ahardening-ssh%2FSSH-002", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/agents?open=agent%3Aagent-00005", "/audit"]) {
+for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Ahardening-ssh%2FSSH-002", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/agents?open=agent%3Aagent-00005", "/audit"]) {
   test(`no accessibility violations on ${path} (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(path);
@@ -135,7 +135,7 @@ test("an asset group is created from the access view", async ({ page }) => {
 });
 
 test("a finding set to Investigating stays in the default Findings list (board #83)", async ({ page }) => {
-  await page.goto("/findings?open=finding%3Abaseline-linux%2FLNX-010");
+  await page.goto("/compliance?open=finding%3Abaseline-linux%2FLNX-010");
   const inspector = page.locator(".inspector");
   await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ }).click();
   await inspector.getByRole("checkbox", { name: "Select all hosts" }).check();

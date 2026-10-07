@@ -15,11 +15,11 @@ export function TrendTile({ widget }: WidgetProps) {
   const finding = str(widget.config, "finding", "", undefined);
   const days = [7, 14, 30].includes(int(widget.config, "days", 14, 7, 30)) ? int(widget.config, "days", 14, 7, 30) : 14;
   const [set = "", rule = ""] = finding.split("/");
-  const history = useAllPages<{ agent_id: string; observed_day: string }>(can("findings.read") && set && rule
-    ? `/api/v1/findings/history?since=${encodeURIComponent(daysAgo(days - 1))}&rule_set_id=${encodeURIComponent(set)}&rule_id=${encodeURIComponent(rule)}` : null, 3000);
+  const history = useAllPages<{ agent_id: string; observed_day: string }>(can("compliance.read") && set && rule
+    ? `/api/v1/compliance/history?since=${encodeURIComponent(daysAgo(days - 1))}&rule_set_id=${encodeURIComponent(set)}&rule_id=${encodeURIComponent(rule)}` : null, 3000);
   const counts = useMemo(() => dailyHosts(history.data ?? [], days), [history.data, days]);
-  if (!can("findings.read")) return <Unavailable />;
-  if (!set || !rule) return <div className="tile-empty">Choose a finding in this tile's settings</div>;
+  if (!can("compliance.read")) return <Unavailable />;
+  if (!set || !rule) return <div className="tile-empty">Choose a compliance rule in this tile's settings</div>;
   return <Trend counts={counts} label={`hosts reporting ${rule}`} />;
 }
 
@@ -49,9 +49,9 @@ export function NumberSettings({ widget, onChange }: SettingsProps) {
 }
 
 export function BreakdownSettings({ widget, onChange }: SettingsProps) {
-  return field("Break down", <select className="select" value={str(widget.config, "source", "findings", ["findings", "vulnerabilities", "agents"] as const)}
+  return field("Break down", <select className="select" value={str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const)}
     onChange={(e) => onChange({ ...widget.config, source: e.target.value })}>
-    <option value="findings">Open findings by severity</option><option value="vulnerabilities">Vulnerabilities by severity</option><option value="agents">Hosts by status</option>
+    <option value="compliance">Compliance findings by severity</option><option value="vulnerabilities">Vulnerabilities by severity</option><option value="agents">Hosts by status</option>
   </select>);
 }
 
@@ -62,7 +62,7 @@ export function AttentionSettings({ widget, onChange }: SettingsProps) {
     <div className="stack">
       {ATTENTION_KINDS.map((value) => (
         <label key={value} className="row"><input type="checkbox" checked={include.length === 0 || include.includes(value)} onChange={() => toggle(value)} />
-          {{ alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", findings: "Open critical and high findings", stale: "Hosts that stopped reporting" }[value]}</label>
+          {{ alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", compliance: "Open critical and high compliance findings", stale: "Hosts that stopped reporting" }[value]}</label>
       ))}
       {field("Show at most", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 20, 8) })} />)}
     </div>
@@ -72,7 +72,7 @@ export function AttentionSettings({ widget, onChange }: SettingsProps) {
 export function ListSettings({ widget, onChange }: SettingsProps) {
   return (
     <div className="stack">
-      {field("List", <select className="select" value={str(widget.config, "view", "/findings", LIST_VIEWS)} onChange={(e) => onChange({ ...widget.config, view: e.target.value })}>
+      {field("List", <select className="select" value={str(widget.config, "view", "/compliance", LIST_VIEWS)} onChange={(e) => onChange({ ...widget.config, view: e.target.value })}>
         {LIST_VIEWS.map((v) => <option key={v} value={v}>{v.slice(1)}</option>)}
       </select>)}
       {field("Filters (as in the list's address, e.g. severity=critical)", <input className="input mono" value={str(widget.config, "query", "")} onChange={(e) => onChange({ ...widget.config, query: e.target.value })} />)}
@@ -84,7 +84,7 @@ export function ListSettings({ widget, onChange }: SettingsProps) {
 export function TrendSettings({ widget, onChange }: SettingsProps) {
   return (
     <div className="stack">
-      {field("Finding (rule set/rule, e.g. hardening-ssh/SSH-002)", <input className="input mono" value={str(widget.config, "finding", "")} onChange={(e) => onChange({ ...widget.config, finding: e.target.value })} />)}
+      {field("Compliance rule (rule set/rule, e.g. hardening-ssh/SSH-002)", <input className="input mono" value={str(widget.config, "finding", "")} onChange={(e) => onChange({ ...widget.config, finding: e.target.value })} />)}
       {field("Days", <select className="select" value={int(widget.config, "days", 14, 7, 30)} onChange={(e) => onChange({ ...widget.config, days: toInt(e.target.value, 7, 30, 14) })}>
         <option value={7}>7</option><option value={14}>14</option><option value={30}>30</option></select>)}
     </div>

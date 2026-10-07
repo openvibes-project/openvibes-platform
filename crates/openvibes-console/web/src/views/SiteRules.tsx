@@ -18,7 +18,7 @@ function useTop() {
 }
 
 export const SITE_SETS = [
-  { id: "site", title: "Compliance rules", what: "Checked on every scan; a match is a finding under Compliance." },
+  { id: "site", title: "Compliance rules", what: "Checked on every scan; a match is a compliance finding." },
   { id: "site-alarms", title: "Alarm rules", what: "Checked on every process start of the programs a rule names; a match raises an alarm." },
 ] as const;
 

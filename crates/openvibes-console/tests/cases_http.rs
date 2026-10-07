@@ -689,7 +689,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
                 "assignee_user_id": DAVE.to_uppercase(),
                 "items": [
                     {"kind": "host", "ref": WEB},
-                    {"kind": "finding", "ref": finding},
+                    {"kind": "compliance_finding", "ref": finding},
                     {"kind": "alarm", "ref": fx.web_alarm},
                 ]
             })),
@@ -717,7 +717,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
     assert_eq!(host["hostname"], "web-01");
     assert_eq!(host["title"], "web-01");
     assert_eq!(host["active"], true);
-    let finding_item = item_of(&created, "finding");
+    let finding_item = item_of(&created, "compliance_finding");
     assert_eq!(finding_item["title"], "Root login over SSH");
     assert_eq!(finding_item["evidence_gone"], false);
     assert_eq!(created["events"][0]["kind"], "created");
@@ -804,7 +804,7 @@ async fn a_case_is_opened_read_changed_noted_and_closed_with_versions_and_audit(
         (status, problem["code"].clone()),
         (StatusCode::CONFLICT, json!("items_unresolved"))
     );
-    for kind in ["finding", "alarm"] {
+    for kind in ["compliance_finding", "alarm"] {
         let item = item_of(&saved, kind)["item_id"].as_str().unwrap();
         let (status, set, _) = fx
             .send(
@@ -1046,7 +1046,7 @@ async fn an_item_cannot_be_in_two_open_cases() {
     let vuln = format!("{WEB}/FEDORA-1");
     let items = json!([
         {"kind": "alarm", "ref": fx.web_alarm},
-        {"kind": "finding", "ref": finding},
+        {"kind": "compliance_finding", "ref": finding},
         {"kind": "vulnerability", "ref": vuln},
     ]);
     let first = fx.open(&alice, "First", items.clone()).await;
@@ -1143,7 +1143,7 @@ async fn an_item_cannot_be_in_two_open_cases() {
         .await;
     assert_eq!(found["items"].as_array().unwrap().len(), 2);
     // Closing the first frees its alarm.
-    for kind in ["alarm", "finding", "vulnerability"] {
+    for kind in ["alarm", "compliance_finding", "vulnerability"] {
         let item = item_of(&first, kind)["item_id"].as_str().unwrap();
         let (status, set, _) = fx
             .send(
@@ -1205,7 +1205,7 @@ async fn a_scoped_user_sees_and_adds_only_what_is_in_scope() {
         )
         .await;
     let only_db = fx
-        .open(&alice, "Only db-01", json!([{"kind": "host", "ref": DB}, {"kind": "finding", "ref": format!("{DB}/baseline/ssh-root")}]))
+        .open(&alice, "Only db-01", json!([{"kind": "host", "ref": DB}, {"kind": "compliance_finding", "ref": format!("{DB}/baseline/ssh-root")}]))
         .await;
     // Bob sees the mixed case without the db-01 items, in counts too.
     let (status, seen) = fx.get(&bob, &case_uri(&mixed)).await;
@@ -1295,7 +1295,7 @@ async fn a_scoped_user_sees_and_adds_only_what_is_in_scope() {
     for (kind, reference) in [
         ("host", DB),
         ("alarm", fx.db_alarm.as_str()),
-        ("finding", &format!("{DB}/baseline/ssh-root")),
+        ("compliance_finding", &format!("{DB}/baseline/ssh-root")),
         ("vulnerability", &format!("{DB}/FEDORA-1")),
         ("software", "rpm/bash"),
         ("host", &missing_host),
@@ -1389,11 +1389,11 @@ async fn resolved_needs_the_evidence_to_be_gone() {
         .open(
             &alice,
             "Evidence",
-            json!([{"kind": "finding", "ref": finding}, {"kind": "host", "ref": WEB}]),
+            json!([{"kind": "compliance_finding", "ref": finding}, {"kind": "host", "ref": WEB}]),
         )
         .await;
     let uri = case_uri(&case);
-    let item = item_of(&case, "finding")["item_id"]
+    let item = item_of(&case, "compliance_finding")["item_id"]
         .as_str()
         .unwrap()
         .to_owned();
@@ -1417,7 +1417,10 @@ async fn resolved_needs_the_evidence_to_be_gone() {
     ))
     .await;
     let (_, now_gone) = fx.get(&alice, &uri).await;
-    assert_eq!(item_of(&now_gone, "finding")["evidence_gone"], true);
+    assert_eq!(
+        item_of(&now_gone, "compliance_finding")["evidence_gone"],
+        true
+    );
     let (status, set, _) = fx
         .send(
             &alice,
@@ -1844,12 +1847,14 @@ async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() 
         .open(
             &alice,
             "Resolved",
-            json!([{"kind": "finding", "ref": finding}, {"kind": "host", "ref": WEB}]),
+            json!([{"kind": "compliance_finding", "ref": finding}, {"kind": "host", "ref": WEB}]),
         )
         .await;
     let uri = case_uri(&case);
     fx.sql("UPDATE current_findings SET ended_at = now()").await;
-    let item = item_of(&case, "finding")["item_id"].as_str().unwrap();
+    let item = item_of(&case, "compliance_finding")["item_id"]
+        .as_str()
+        .unwrap();
     let (status, set, _) = fx
         .send(
             &alice,
@@ -1891,7 +1896,7 @@ async fn resolved_evidence_that_returns_reopens_the_case_when_it_is_next_read() 
         ),
         (Value::Null, Value::Null)
     );
-    let item = item_of(&reopened, "finding");
+    let item = item_of(&reopened, "compliance_finding");
     assert_eq!(
         (item["outcome"].clone(), item["active"].clone()),
         (Value::Null, json!(true))

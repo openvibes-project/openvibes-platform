@@ -61,7 +61,7 @@ function SoftwareTab({ id }: { id: string }) {
 export function AgentPanel({ id }: { id: string }) {
   const { can } = useSession();
   const agent = useResource<Detail>(`/api/v1/agents/${encodeURIComponent(id)}`);
-  const findings = useAllPages<Finding>(can("findings.read") ? "/api/v1/findings/latest" : null);
+  const findings = useAllPages<Finding>(can("compliance.read") ? "/api/v1/compliance/latest" : null);
   const vulns = useResource<VulnerabilityPage>(can("vulnerabilities.read") ? `/api/v1/vulnerabilities?host=${encodeURIComponent(id)}` : null);
   const alarms = useAllPages<AlarmSummary>(can("alarms.read") ? `/api/v1/alarms?agent_id=${encodeURIComponent(id)}&state=active` : null, ALARMS_SHOWN);
   const alarmItems = alarms.data ?? [];
@@ -118,7 +118,7 @@ export function AgentPanel({ id }: { id: string }) {
         { id: "details", label: "Details" },
       ]}>
         {(tab) => tab === "findings" ? (
-          mine.length === 0 ? <Empty title={findings.loading ? "Loading…" : "No findings"}>{findings.loading ? null : "This host matches no rule right now."}</Empty> : (
+          mine.length === 0 ? <Empty title={findings.loading ? "Loading…" : "No compliance findings"}>{findings.loading ? null : "This host matches no rule right now."}</Empty> : (
             <ul className="list">
               {mine.map((finding) => (
                 <li key={finding.id}>

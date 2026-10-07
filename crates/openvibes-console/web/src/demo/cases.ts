@@ -36,7 +36,8 @@ type StoredItem = {
   outcome: string | null; outcome_note: string | null; added_by_user_id: string; added_at: string;
 };
 type StoredEvent = { event_id: number; case_id: string; at: string; actor_user_id: string | null; kind: string; body: string | null; detail: Body };
-export type CaseState = { v: 1; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
+// v 2: item kind `finding` became `compliance_finding`; older stores reseed.
+export type CaseState = { v: 2; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
 export type CasePersistence = { load: () => unknown; save: (state: CaseState) => void };
 
 const MAX_ITEMS = 500;
@@ -46,7 +47,7 @@ const messages: Record<string, string> = {
   invalid_title: "Use 1 to 120 characters, without control characters",
   invalid_severity: "Use critical, high, medium or low",
   invalid_status: "Use open, investigating or closed",
-  invalid_kind: "Use alarm, finding, vulnerability, host or software",
+  invalid_kind: "Use alarm, compliance_finding, vulnerability, host or software",
   invalid_ref: "The id does not have the shape of this kind of item",
   too_many_items: "A case is created with at most 50 items",
   resolution_required: "A resolution is required to close a case",
@@ -84,7 +85,7 @@ function refOk(kind: CaseKind, ref: string): boolean {
   const [head = "", ...rest] = ref.split("/");
   switch (kind) {
     case "alarm": return /^[1-9]\d{0,17}$/.test(ref);
-    case "finding": return rest.length === 2 && identifier.test(head) && (rest[0] === "" || identifier.test(rest[0] ?? "")) && identifier.test(rest[1] ?? "");
+    case "compliance_finding": return rest.length === 2 && identifier.test(head) && (rest[0] === "" || identifier.test(rest[0] ?? "")) && identifier.test(rest[1] ?? "");
     case "vulnerability": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
     case "host": return identifier.test(ref);
     case "software": return rest.length >= 1 && identifier.test(head) && freeText(rest.join("/"));
@@ -99,7 +100,7 @@ const defaultSeverity = (severities: (string | null)[]) =>
 
 export function createCaseStore(world: CaseWorld, seed: () => CaseState, persistence?: CasePersistence) {
   const saved = persistence?.load() as Partial<CaseState> | undefined;
-  const state: CaseState = saved?.v === 1 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
+  const state: CaseState = saved?.v === 2 && Array.isArray(saved.cases) && Array.isArray(saved.items) && Array.isArray(saved.events)
     && typeof saved.next_number === "number" && typeof saved.next_event === "number" ? (saved as CaseState) : seed();
   const persist = () => persistence?.save(state);
   const now = () => new Date().toISOString();
@@ -307,7 +308,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
       if (!wasClosed && willClose) {
         const mine = itemsOf(c).filter((i) => EXCLUSIVE_KINDS.has(i.kind));
         const standing = (i: StoredItem) => i.outcome === null || (i.outcome === "resolved" && !(factsOf(i)?.gone ?? true));
-        if (mine.some((i) => seesItem(i) && standing(i))) return problem(409, "items_unresolved", "Every alarm, finding and vulnerability needs an outcome before the case closes");
+        if (mine.some((i) => seesItem(i) && standing(i))) return problem(409, "items_unresolved", "Every alarm, compliance finding and vulnerability needs an outcome before the case closes");
         if (mine.some((i) => !seesItem(i) && i.outcome === null)) return problem(409, "hidden_items_unresolved", "Items you cannot see still need an outcome; ask someone with access to them");
       }
       if (wasClosed && !willClose) {
@@ -430,7 +431,7 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
 /** Cases the demo starts with, over objects that exist in the demo data. */
 export function seedCases(data: DemoData): CaseState {
   const minutes = (ago: number) => new Date(data.now - ago * 60_000).toISOString();
-  const state: CaseState = { v: 1, next_number: 101, next_event: 1, cases: [], items: [], events: [] };
+  const state: CaseState = { v: 2, next_number: 101, next_event: 1, cases: [], items: [], events: [] };
   const host = (id: string) => data.agents.find((a) => a.id === id);
   const short = (id: string) => (host(id)?.hostname ?? id).split(".")[0] ?? id;
   const findingOf = (f: { agent_id: string; rule_set_id: string; rule_id: string }) => `${f.agent_id}/${f.rule_set_id}/${f.rule_id}`;
@@ -482,8 +483,8 @@ export function seedCases(data: DemoData): CaseState {
       title: `Clean up: ${fixed.message.toLowerCase()} on ${short(fixed.agent_id)}`, severity: "medium", status: "closed", assignee: "u-sam", openedBy: "u-sam", openedAgo: 9 * 1440,
       items: [
         { kind: "host", ref: fixed.agent_id, agent_id: fixed.agent_id, by: "u-sam", ago: 9 * 1440 - 5 },
-        { kind: "finding", ref: findingOf(fixed), agent_id: fixed.agent_id, by: "u-sam", ago: 9 * 1440 - 6, outcome: "resolved" },
-        ...(sibling ? [{ kind: "finding" as const, ref: findingOf(sibling), agent_id: sibling.agent_id, by: "u-sam", ago: 9 * 1440 - 7, outcome: "false_positive", note: "Expected on this image; the owner confirmed." }] : []),
+        { kind: "compliance_finding", ref: findingOf(fixed), agent_id: fixed.agent_id, by: "u-sam", ago: 9 * 1440 - 6, outcome: "resolved" },
+        ...(sibling ? [{ kind: "compliance_finding" as const, ref: findingOf(sibling), agent_id: sibling.agent_id, by: "u-sam", ago: 9 * 1440 - 7, outcome: "false_positive", note: "Expected on this image; the owner confirmed." }] : []),
       ],
       timeline: [
         { ago: 8 * 1440, actor: "u-sam", kind: "note", body: "The config management change is merged and rolled out; waiting for the next scan to confirm." },
@@ -530,7 +531,7 @@ export function seedCases(data: DemoData): CaseState {
       items: [
         { kind: "host", ref: sshAlarm.agent_id, agent_id: sshAlarm.agent_id, by: "u-sam", ago: 175 },
         { kind: "alarm", ref: sshAlarm.id, agent_id: sshAlarm.agent_id, by: "u-sam", ago: 170 },
-        { kind: "finding", ref: findingOf(sshFinding), agent_id: sshFinding.agent_id, by: "u-sam", ago: 160 },
+        { kind: "compliance_finding", ref: findingOf(sshFinding), agent_id: sshFinding.agent_id, by: "u-sam", ago: 160 },
       ],
       timeline: [
         { ago: 150, actor: "u-sam", kind: "status", detail: { from: "open", to: "investigating" } },

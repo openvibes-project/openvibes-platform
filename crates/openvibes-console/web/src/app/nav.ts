@@ -8,6 +8,11 @@ const base = import.meta.env.BASE_URL;
 const listeners = new Set<() => void>();
 let snapshot: AppLocation = read();
 let snapshotKey = window.location.pathname + window.location.search;
+// An old /findings link: show the URL of the page it now opens.
+if (window.location.pathname.endsWith("/findings")) {
+  snapshotKey = formatLocation(snapshot, base);
+  window.history.replaceState(null, "", snapshotKey);
+}
 
 function read(): AppLocation {
   return parseLocation(window.location.pathname, window.location.search, base);

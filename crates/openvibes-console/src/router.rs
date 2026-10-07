@@ -471,31 +471,31 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/agents/{agent_id}/certificates",
             get(authenticated_agent_certificates),
         )
-        .route("/v1/findings/summary", get(authenticated_finding_summary))
-        .route("/v1/findings/groups", get(authenticated_finding_groups))
+        .route("/v1/compliance/summary", get(authenticated_finding_summary))
+        .route("/v1/compliance/groups", get(authenticated_finding_groups))
         .route(
-            "/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints",
+            "/v1/compliance/groups/{rule_set_id}/{rule_id}/endpoints",
             get(authenticated_finding_group_endpoints),
         )
         .route(
-            "/v1/findings/groups/{rule_set_id}/{rule_id}/triage",
+            "/v1/compliance/groups/{rule_set_id}/{rule_id}/triage",
             axum::routing::post(update_authenticated_finding_group_triage),
         )
-        .route("/v1/findings/latest", get(authenticated_latest_findings))
+        .route("/v1/compliance/latest", get(authenticated_latest_findings))
         .route(
-            "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}",
+            "/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/rule/{finding_id}",
             get(crate::detection::finding_rule),
         )
         .route("/v1/alarms/{id}/rule", get(crate::detection::alarm_rule))
         .route(
-            "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}",
+            "/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}",
             get(authenticated_latest_finding),
         )
         .route(
-            "/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage",
+            "/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage",
             get(authenticated_finding_triage).put(update_authenticated_finding_triage),
         )
-        .route("/v1/findings/history", get(authenticated_finding_history))
+        .route("/v1/compliance/history", get(authenticated_finding_history))
         .route(
             "/v1/vulnerabilities/summary",
             get(authenticated_vulnerability_summary),
@@ -506,7 +506,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(authenticated_vulnerability_advisory),
         )
         .route(
-            "/v1/findings/history/{observed_day}/{finding_id}",
+            "/v1/compliance/history/{observed_day}/{finding_id}",
             get(authenticated_finding_event),
         )
         .route(
@@ -2921,7 +2921,7 @@ pub(crate) async fn authenticated_assistant_message(
         Err(response) => return response,
     };
     let (finding_scope, finding_actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsRead, false)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceRead, false)
             .await
         {
             Ok(value) => value,
@@ -3565,10 +3565,10 @@ fn decode_hex(value: &str) -> Option<Vec<u8>> {
 
 #[utoipa::path(
     get,
-    path = "/api/v1/findings/summary",
-    tag = "findings",
+    path = "/api/v1/compliance/summary",
+    tag = "compliance",
     responses(
-        (status = 200, description = "Scope-filtered latest finding counts", body = crate::FindingSummary),
+        (status = 200, description = "Scope-filtered latest compliance finding counts", body = crate::FindingSummary),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
@@ -3578,11 +3578,12 @@ pub(crate) async fn authenticated_finding_summary(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
 ) -> Response {
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let client = match state.pool.get().await {
         Ok(client) => client,
         Err(_) => return unavailable_auth(),
@@ -4335,8 +4336,8 @@ fn retention_policy_response(policy: platform_store::audit::RetentionPolicy) -> 
 
 #[utoipa::path(
     get,
-    path = "/api/v1/findings/latest",
-    tag = "findings",
+    path = "/api/v1/compliance/latest",
+    tag = "compliance",
     params(
         ("severity" = Option<String>, Query, description = "critical, high, medium, or low"),
         ("agent_id" = Option<String>, Query, description = "One host's findings only"),
@@ -4361,11 +4362,12 @@ pub(crate) async fn authenticated_latest_findings(
         LatestCursor, LatestQuery, PageLimit, Severity, latest_findings_in_scope,
     };
 
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let Query(params) = match query {
         Ok(query) => query,
         Err(_) => return invalid_finding_query(),
@@ -4510,8 +4512,8 @@ fn latest_finding_view(finding: platform_store::console_read::LatestFinding) -> 
 
 #[utoipa::path(
     get,
-    path = "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}",
-    tag = "findings",
+    path = "/api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}",
+    tag = "compliance",
     params(
         ("agent_id" = String, Path, description = "Stable agent identifier"),
         ("rule_set_id" = String, Path, description = "Rule set id or reserved ~unknown"),
@@ -4521,7 +4523,7 @@ fn latest_finding_view(finding: platform_store::console_read::LatestFinding) -> 
         (status = 200, description = "Visible latest observation", body = crate::FindingView),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "Finding not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "Compliance finding not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
     )
 )]
@@ -4530,11 +4532,12 @@ pub(crate) async fn authenticated_latest_finding(
     headers: HeaderMap,
     Path((agent_id, rule_set_id, rule_id)): Path<(String, String, String)>,
 ) -> Response {
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let client = match state.pool.get().await {
         Ok(client) => client,
         Err(_) => return unavailable_auth(),
@@ -4555,8 +4558,8 @@ pub(crate) async fn authenticated_latest_finding(
     {
         Ok(Some(finding)) => axum::Json(latest_finding_view(finding)).into_response(),
         Ok(None) => problem_response(ProblemDetails::not_found(
-            "finding_not_found",
-            "Finding not found",
+            "compliance_finding_not_found",
+            "Compliance finding not found",
         )),
         Err(_) => unavailable_auth(),
     }
@@ -4585,17 +4588,18 @@ fn triage_response(record: platform_store::console_triage::TriageRecord) -> Resp
     response
 }
 
-#[utoipa::path(get, path = "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage", tag = "findings", params(("agent_id" = String, Path), ("rule_set_id" = String, Path), ("rule_id" = String, Path)), responses((status = 200, description = "Current finding triage", body = crate::FindingTriageView, headers(("ETag" = String, description = "Triage version"))), (status = 404, description = "Finding not found", body = crate::ProblemDetails), (status = 403, description = "Permission denied", body = crate::ProblemDetails)))]
+#[utoipa::path(get, path = "/api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage", tag = "compliance", params(("agent_id" = String, Path), ("rule_set_id" = String, Path), ("rule_id" = String, Path)), responses((status = 200, description = "Current finding triage", body = crate::FindingTriageView, headers(("ETag" = String, description = "Triage version"))), (status = 404, description = "Compliance finding not found", body = crate::ProblemDetails), (status = 403, description = "Permission denied", body = crate::ProblemDetails)))]
 pub(crate) async fn authenticated_finding_triage(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
     Path((agent_id, rule_set_id, rule_id)): Path<(String, String, String)>,
 ) -> Response {
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let client = match state.pool.get().await {
         Ok(client) => client,
         Err(_) => return unavailable_auth(),
@@ -4620,21 +4624,21 @@ pub(crate) async fn authenticated_finding_triage(
             {
                 Ok(Some(record)) => triage_response(record),
                 Ok(None) => problem_response(ProblemDetails::not_found(
-                    "finding_not_found",
-                    "Finding not found",
+                    "compliance_finding_not_found",
+                    "Compliance finding not found",
                 )),
                 Err(_) => unavailable_auth(),
             }
         }
         Ok(None) => problem_response(ProblemDetails::not_found(
-            "finding_not_found",
-            "Finding not found",
+            "compliance_finding_not_found",
+            "Compliance finding not found",
         )),
         Err(_) => unavailable_auth(),
     }
 }
 
-#[utoipa::path(put, path = "/api/v1/findings/latest/{agent_id}/{rule_set_id}/{rule_id}/triage", tag = "findings", params(("agent_id" = String, Path), ("rule_set_id" = String, Path), ("rule_id" = String, Path), ("If-Match" = String, Header)), request_body = crate::UpdateFindingTriageRequest, responses((status = 200, description = "Updated finding triage", body = crate::FindingTriageView, headers(("ETag" = String, description = "New triage version"))), (status = 412, description = "Stale triage version", body = crate::ProblemDetails), (status = 428, description = "If-Match is required", body = crate::ProblemDetails)))]
+#[utoipa::path(put, path = "/api/v1/compliance/latest/{agent_id}/{rule_set_id}/{rule_id}/triage", tag = "compliance", params(("agent_id" = String, Path), ("rule_set_id" = String, Path), ("rule_id" = String, Path), ("If-Match" = String, Header)), request_body = crate::UpdateFindingTriageRequest, responses((status = 200, description = "Updated finding triage", body = crate::FindingTriageView, headers(("ETag" = String, description = "New triage version"))), (status = 412, description = "Stale triage version", body = crate::ProblemDetails), (status = 428, description = "If-Match is required", body = crate::ProblemDetails)))]
 pub(crate) async fn update_authenticated_finding_triage(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -4645,7 +4649,7 @@ pub(crate) async fn update_authenticated_finding_triage(
     >,
 ) -> Response {
     let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsTriage, true)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceTriage, true)
             .await
         {
             Ok(context) => context,
@@ -4714,8 +4718,8 @@ pub(crate) async fn update_authenticated_finding_triage(
         Ok(Some(_)) => {}
         Ok(None) => {
             return problem_response(ProblemDetails::not_found(
-                "finding_not_found",
-                "Finding not found",
+                "compliance_finding_not_found",
+                "Compliance finding not found",
             ));
         }
         Err(_) => return unavailable_auth(),
@@ -4770,17 +4774,20 @@ pub(crate) async fn update_authenticated_finding_triage(
                 "Assignee must be an enabled analyst or admin",
             ))
         }
-        Ok(platform_store::console_triage::TriageUpdate::NotFound) => problem_response(
-            ProblemDetails::not_found("finding_not_found", "Finding not found"),
-        ),
+        Ok(platform_store::console_triage::TriageUpdate::NotFound) => {
+            problem_response(ProblemDetails::not_found(
+                "compliance_finding_not_found",
+                "Compliance finding not found",
+            ))
+        }
         Err(_) => unavailable_auth(),
     }
 }
 
 #[utoipa::path(
     get,
-    path = "/api/v1/findings/history",
-    tag = "findings",
+    path = "/api/v1/compliance/history",
+    tag = "compliance",
     params(
         ("since" = String, Query, description = "Required RFC 3339 lower bound for partition pruning"),
         ("agent_id" = Option<String>, Query, description = "Exact agent filter"),
@@ -4807,11 +4814,12 @@ pub(crate) async fn authenticated_finding_history(
         HistoryCursor, HistoryQuery, PageLimit, finding_history_in_scope,
     };
 
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let Query(params) = match query {
         Ok(query) => query,
         Err(_) => return invalid_finding_query(),
@@ -4931,8 +4939,8 @@ pub(crate) async fn authenticated_finding_history(
 
 #[utoipa::path(
     get,
-    path = "/api/v1/findings/history/{observed_day}/{finding_id}",
-    tag = "findings",
+    path = "/api/v1/compliance/history/{observed_day}/{finding_id}",
+    tag = "compliance",
     params(
         ("observed_day" = String, Path, description = "UTC partition date"),
         ("finding_id" = String, Path, description = "Stable finding identifier")
@@ -4942,7 +4950,7 @@ pub(crate) async fn authenticated_finding_history(
         (status = 400, description = "Invalid partition date", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "Finding event not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "Compliance finding event not found", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 503, description = "Read unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
     )
 )]
@@ -4951,11 +4959,12 @@ pub(crate) async fn authenticated_finding_event(
     headers: HeaderMap,
     Path((observed_day, finding_id)): Path<(String, String)>,
 ) -> Response {
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(scope) => scope,
-            Err(response) => return response,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
     let observed_day = match chrono::NaiveDate::parse_from_str(&observed_day, "%F") {
         Ok(value) => value,
         Err(_) => return invalid_finding_query(),
@@ -4974,8 +4983,8 @@ pub(crate) async fn authenticated_finding_event(
     {
         Ok(Some(event)) => axum::Json(history_event_view(event)).into_response(),
         Ok(None) => problem_response(ProblemDetails::not_found(
-            "finding_not_found",
-            "Finding not found",
+            "compliance_finding_not_found",
+            "Compliance finding not found",
         )),
         Err(_) => unavailable_auth(),
     }
@@ -5429,7 +5438,7 @@ fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::Vulnerabili
     }
 }
 
-#[utoipa::path(get, path="/api/v1/findings/groups", tag="findings", params(("since"=Option<String>, Query), ("cursor"=Option<String>, Query), ("limit"=Option<u16>, Query)), responses((status=200, description="Recent scope-filtered findings grouped by rule", body=crate::FindingGroupPage)))]
+#[utoipa::path(get, path="/api/v1/compliance/groups", tag = "compliance", params(("since"=Option<String>, Query), ("cursor"=Option<String>, Query), ("limit"=Option<u16>, Query)), responses((status=200, description="Recent scope-filtered findings grouped by rule", body=crate::FindingGroupPage)))]
 pub(crate) async fn authenticated_finding_groups(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -5439,11 +5448,12 @@ pub(crate) async fn authenticated_finding_groups(
     use platform_store::console_read::{
         FindingGroupCursor, FindingGroupQuery, finding_groups_in_scope,
     };
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(v) => v,
-            Err(r) => return r,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
     let Query(params) = match query {
         Ok(v) => v,
         Err(_) => return invalid_finding_query(),
@@ -5577,7 +5587,7 @@ pub(crate) async fn authenticated_finding_groups(
     .into_response()
 }
 
-#[utoipa::path(get, path="/api/v1/findings/groups/{rule_set_id}/{rule_id}/endpoints", tag="findings", params(("rule_set_id"=String,Path),("rule_id"=String,Path),("since"=Option<String>,Query),("include_older"=Option<bool>,Query),("cursor"=Option<String>,Query),("limit"=Option<u16>,Query)), responses((status=200,description="Scoped endpoints reporting one recent rule group",body=crate::FindingGroupEndpointPage),(status=404,description="Finding group not found",body=crate::ProblemDetails)))]
+#[utoipa::path(get, path="/api/v1/compliance/groups/{rule_set_id}/{rule_id}/endpoints", tag = "compliance", params(("rule_set_id"=String,Path),("rule_id"=String,Path),("since"=Option<String>,Query),("include_older"=Option<bool>,Query),("cursor"=Option<String>,Query),("limit"=Option<u16>,Query)), responses((status=200,description="Scoped endpoints reporting one recent rule group",body=crate::FindingGroupEndpointPage),(status=404,description="Compliance finding group not found",body=crate::ProblemDetails)))]
 pub(crate) async fn authenticated_finding_group_endpoints(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -5588,11 +5598,12 @@ pub(crate) async fn authenticated_finding_group_endpoints(
     use platform_store::console_read::{
         FindingGroupEndpointCursor, FindingGroupEndpointQuery, finding_group_endpoints_in_scope,
     };
-    let scope =
-        match authenticated_agent_scope(&state, &headers, crate::Permission::FindingsRead).await {
-            Ok(v) => v,
-            Err(r) => return r,
-        };
+    let scope = match authenticated_agent_scope(&state, &headers, crate::Permission::ComplianceRead)
+        .await
+    {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
     let Query(params) = match query {
         Ok(v) => v,
         Err(_) => return invalid_finding_query(),
@@ -5677,8 +5688,8 @@ pub(crate) async fn authenticated_finding_group_endpoints(
         Ok(Some(v)) => v,
         Ok(None) => {
             return problem_response(ProblemDetails::not_found(
-                "finding_not_found",
-                "Finding group not found",
+                "compliance_finding_not_found",
+                "Compliance finding group not found",
             ));
         }
         Err(_) => return unavailable_auth(),
@@ -5737,7 +5748,7 @@ pub(crate) async fn authenticated_finding_group_endpoints(
     .into_response()
 }
 
-#[utoipa::path(post,path="/api/v1/findings/groups/{rule_set_id}/{rule_id}/triage",tag="findings",params(("rule_set_id"=String,Path),("rule_id"=String,Path)),request_body=crate::BulkFindingTriageRequest,responses((status=200,description="Atomic endpoint triage update",body=crate::BulkFindingTriageResponse),(status=412,description="At least one triage version is stale",body=crate::ProblemDetails),(status=404,description="Group or endpoint is not visible",body=crate::ProblemDetails)))]
+#[utoipa::path(post,path="/api/v1/compliance/groups/{rule_set_id}/{rule_id}/triage",tag = "compliance",params(("rule_set_id"=String,Path),("rule_id"=String,Path)),request_body=crate::BulkFindingTriageRequest,responses((status=200,description="Atomic endpoint triage update",body=crate::BulkFindingTriageResponse),(status=412,description="At least one triage version is stale",body=crate::ProblemDetails),(status=404,description="Group or endpoint is not visible",body=crate::ProblemDetails)))]
 pub(crate) async fn update_authenticated_finding_group_triage(
     State(state): State<AuthHttpState>,
     headers: HeaderMap,
@@ -5745,7 +5756,7 @@ pub(crate) async fn update_authenticated_finding_group_triage(
     payload: Result<Json<crate::BulkFindingTriageRequest>, axum::extract::rejection::JsonRejection>,
 ) -> Response {
     let (scope, user_id) =
-        match authenticated_permission(&state, &headers, crate::Permission::FindingsTriage, true)
+        match authenticated_permission(&state, &headers, crate::Permission::ComplianceTriage, true)
             .await
         {
             Ok(v) => v,
@@ -5856,9 +5867,12 @@ pub(crate) async fn update_authenticated_finding_group_triage(
             );
             problem_response(p)
         }
-        Ok(platform_store::console_triage::BulkTriageUpdate::NotFound) => problem_response(
-            ProblemDetails::not_found("finding_not_found", "Finding group or endpoint not found"),
-        ),
+        Ok(platform_store::console_triage::BulkTriageUpdate::NotFound) => {
+            problem_response(ProblemDetails::not_found(
+                "compliance_finding_not_found",
+                "Compliance finding group or endpoint not found",
+            ))
+        }
         Ok(platform_store::console_triage::BulkTriageUpdate::InvalidTransition) => {
             problem_response(ProblemDetails::new(
                 StatusCode::CONFLICT,

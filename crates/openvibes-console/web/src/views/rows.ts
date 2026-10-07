@@ -8,7 +8,7 @@ import type { PanelRef } from "../app/location";
 import { auditSince, severityOrder } from "../ui/format";
 import { matches } from "../ui/table";
 
-export const LIST_VIEWS = ["/findings", "/vulnerabilities", "/agents", "/audit"] as const;
+export const LIST_VIEWS = ["/compliance", "/vulnerabilities", "/agents", "/audit"] as const;
 export type ListView = (typeof LIST_VIEWS)[number];
 export type ListRow = { key: string; open: PanelRef; title: string; meta: string; badge: { label: string; tone: string } };
 
@@ -107,14 +107,14 @@ const sev = (s: string) => severityOrder[s] ?? 9;
 
 /** The first rows of a list view for a query, ready for a compact list. */
 export function useListRows(view: ListView | null, params: URLSearchParams): { rows: ListRow[]; total: number; loading: boolean; error: ApiError | undefined } {
-  const groups = useAllPages<FindingGroup>(view === "/findings" ? "/api/v1/findings/groups" : null);
+  const groups = useAllPages<FindingGroup>(view === "/compliance" ? "/api/v1/compliance/groups" : null);
   const agents = useAllPages<Agent>(view === "/agents" ? "/api/v1/agents" : null);
   const vulns = useResource<VulnerabilityPage>(view === "/vulnerabilities" ? vulnerabilityQuery(params) : null);
   const audit = useAllPages<AuditEvent>(view === "/audit" ? `/api/v1/audit-events?since=${encodeURIComponent(auditSince(params))}` : null, 1000);
   return useMemo(() => {
-    const status = view === "/findings" ? groups : view === "/agents" ? agents : view === "/audit" ? audit : vulns;
+    const status = view === "/compliance" ? groups : view === "/agents" ? agents : view === "/audit" ? audit : vulns;
     let rows: ListRow[];
-    if (view === "/findings") {
+    if (view === "/compliance") {
       rows = selectFindings(groups.data ?? [], params).sort((a, b) => sev(a.severity) - sev(b.severity) || activeCount(b) - activeCount(a))
         .map((g) => ({ key: `${g.rule_set_id}/${g.rule_id}`, open: { kind: "finding", id: `${g.rule_set_id}/${g.rule_id}` }, title: g.latest_message,
           meta: `${g.rule_id} · ${activeCount(g)} active`, badge: { label: g.severity, tone: g.severity } }));

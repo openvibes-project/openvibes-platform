@@ -11,7 +11,7 @@ test("home falls back to the built-in", async ({ page }) => {
   await expect(page.locator(".tile")).toHaveCount(10);
   // Most important first (#116): alarms, then critical findings, top left.
   const titles = await page.locator(".tile .tile__title").allTextContents();
-  expect(titles.join("|")).toMatch(/Active alarms.*Open critical findings/);
+  expect(titles.join("|")).toMatch(/Active alarms.*Open critical compliance findings/);
   await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
 });
 

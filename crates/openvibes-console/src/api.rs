@@ -112,15 +112,15 @@ pub enum Permission {
     /// Revoke an enrolled agent.
     #[serde(rename = "agents.revoke")]
     AgentsRevoke,
-    /// Read observed findings.
-    #[serde(rename = "findings.read")]
-    FindingsRead,
+    /// Read observed compliance findings.
+    #[serde(rename = "compliance.read")]
+    ComplianceRead,
     /// Read vulnerability exposure for hosts in the bound asset scope.
     #[serde(rename = "vulnerabilities.read")]
     VulnerabilitiesRead,
-    /// Change human triage state for findings.
-    #[serde(rename = "findings.triage")]
-    FindingsTriage,
+    /// Change human triage state for compliance findings.
+    #[serde(rename = "compliance.triage")]
+    ComplianceTriage,
     /// Read threat alarms.
     #[serde(rename = "alarms.read")]
     AlarmsRead,

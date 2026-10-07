@@ -83,7 +83,7 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
           <section key={widget.id} className="tile" data-type={widget.type} style={style} aria-label={title} data-selected={canEdit && selected === widget.id || undefined}
             tabIndex={canEdit ? 0 : undefined} aria-describedby={canEdit ? "grid-keys" : undefined} onKeyDown={(event) => onKey(event, widget)} onFocus={() => canEdit && editor.select(widget.id)}>
             <header className="tile__head" onPointerDown={(event) => drag(event, widget, "move")}>
-              <h2 className="tile__title truncate">{title}</h2>
+              <h2 className="tile__title truncate" title={title}>{title}</h2>
               {canEdit && (
                 <span className="row">
                   <button type="button" className="icon-button" aria-label={`Settings for ${title}`} onClick={() => nav.open({ kind: "widget", id: widget.id }, true)}><Icon name="filter" size={14} /></button>

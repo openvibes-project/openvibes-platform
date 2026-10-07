@@ -1,9 +1,9 @@
 # Console assistant
 
 The opt-in assistant dock (Ctrl+J, from any view of the web console) lets an authorized analyst ask questions about
-agents and observed findings using an operator-hosted OpenAI-compatible model.
+agents and observed compliance findings using an operator-hosted OpenAI-compatible model.
 The console authenticates every request, applies the caller's existing
-`agents.read` and `findings.read` scopes to SQL lookups, and returns only
+`agents.read` and `compliance.read` scopes to SQL lookups, and returns only
 sanitized answer text, verified citations, and a short lookup summary. The
 model cannot run SQL, commands, arbitrary URLs, or mutations. Vulnerability
 lookups are refused until they have console read pages and permissions.
@@ -15,7 +15,7 @@ lookups are refused until they have console read pages and permissions.
 - `POST /api/v1/assistant/messages` accepts one question plus bounded recent
   turns from the current browser tab. It requires an authenticated session,
   `assistant.use`, and the same effective scope for `agents.read` and
-  `findings.read`.
+  `compliance.read`.
 - The dock is offered only to a principal with `assistant.use`. It renders
   plain text, and its citations open the cited objects in the inspector.
   (The first interface's `/assistant` page was retired on 2026-09-28.)
