@@ -8,6 +8,7 @@ use std::{
     net::TcpListener,
     path::{Path, PathBuf},
     process::{Command, Output},
+    sync::{Arc, Mutex},
     thread,
     time::Duration,
 };
@@ -20,10 +21,22 @@ fn server(delay: Option<Duration>) -> u16 {
 
 /// Like [`server`] with chosen status lines for `/health` and chat.
 fn server_with(delay: Option<Duration>, health: &'static str, chat: &'static str) -> u16 {
+    recording(delay, health, chat).0
+}
+
+/// Like [`server_with`], also keeping every request header line it saw.
+fn recording(
+    delay: Option<Duration>,
+    health: &'static str,
+    chat: &'static str,
+) -> (u16, Arc<Mutex<String>>) {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
+    let seen = Arc::new(Mutex::new(String::new()));
+    let headers = seen.clone();
     thread::spawn(move || {
         for stream in listener.incoming().flatten() {
+            let seen = seen.clone();
             thread::spawn(move || {
                 let mut reader = BufReader::new(stream);
                 let mut line = String::new();
@@ -37,6 +50,7 @@ fn server_with(delay: Option<Duration>, health: &'static str, chat: &'static str
                     if reader.read_line(&mut header).is_err() || header.trim().is_empty() {
                         break;
                     }
+                    seen.lock().unwrap().push_str(&header);
                     if let Some(v) = header.to_lowercase().strip_prefix("content-length:") {
                         length = v.trim().parse().unwrap_or(0);
                     }
@@ -63,7 +77,7 @@ fn server_with(delay: Option<Duration>, health: &'static str, chat: &'static str
             });
         }
     });
-    port
+    (port, headers)
 }
 
 fn console(port: u16, deadline: u32) -> String {
@@ -88,6 +102,7 @@ fn tree(name: &str, port: u16, deadline: u32) -> PathBuf {
         format!("OPENVIBES_LLM_THREADS=4\nOPENVIBES_LLM_PORT={port}\n"),
     )
     .unwrap();
+    fs::write(root.join("etc/openvibes/llm-api-key"), "server-key\n").unwrap();
     fs::write(
         root.join("etc/openvibes/console.toml"),
         console(port, deadline),
@@ -278,5 +293,26 @@ fn a_hard_linked_tuning_conf_is_ignored() {
             .unwrap_or_default()
             .contains("TOP-SECRET")
     );
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn the_local_server_gets_its_own_key_never_the_configured_file() {
+    use std::os::unix::fs::PermissionsExt;
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("key", port, 60);
+    let foreign = root.join("foreign");
+    fs::write(&foreign, "FOREIGN-SECRET\n").unwrap();
+    fs::set_permissions(&foreign, fs::Permissions::from_mode(0o600)).unwrap();
+    let console = console(port, 60).replace(
+        "model = ",
+        &format!("api_key_file = \"{}\"\nmodel = ", foreign.display()),
+    );
+    fs::write(root.join(CONSOLE), console).unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let seen = seen.lock().unwrap().to_lowercase();
+    assert!(!seen.contains("foreign-secret"), "{seen}");
+    assert!(seen.contains("bearer server-key"), "{seen}");
     fs::remove_dir_all(&root).unwrap();
 }

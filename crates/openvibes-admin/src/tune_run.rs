@@ -244,14 +244,35 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
 
     let console = config_file::read(&etc, Service::Console)?;
     let file: ConsoleFile = toml::from_str(&console).map_err(|e| format!("console.toml: {e}"))?;
-    let backend = file
+    let mut config = file
         .assistant
-        .ok_or("no [assistant] section in console.toml: run assistant-setup first")?
+        .ok_or("no [assistant] section in console.toml: run assistant-setup first")?;
+    let local = config
+        .backend
+        .as_ref()
+        .is_some_and(|b| is_local(&b.url, port));
+    // Root sends the local server only its own key: console.toml's
+    // api_key_file is operator-chosen (any root-readable secret), and
+    // another local user may hold the port while openvibes-llm restarts.
+    let server_key = if let (true, Some(b)) = (local, config.backend.as_mut()) {
+        b.api_key_file = None;
+        let key = read_regular(&etc.join("llm-api-key")).unwrap_or_default();
+        let key = key.trim();
+        if key.is_empty() {
+            return Err("cannot read the model server's key /etc/openvibes/llm-api-key".into());
+        }
+        Some(key.to_owned())
+    } else {
+        None
+    };
+    let mut backend = config
         .validate()
         .map_err(|e| e.to_string())?
         .backend
         .ok_or("[assistant.backend] is not configured")?;
-    let local = is_local(&backend.base_url, port);
+    if local {
+        backend.set_api_key(server_key);
+    }
     // The timed call may outlast the configured deadline: that is what the
     // raise is for.
     let current = u32::try_from(backend.deadline.as_secs()).unwrap_or(u32::MAX);
