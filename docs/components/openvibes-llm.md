@@ -20,7 +20,7 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `openvibes-admin assistant tune`; read after `llm.conf`, before `model.conf` |
 | `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `assistant tune` measured and wrote, so it can tell its own values from yours |
 
-Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. A value in `llm.conf` is operator-set when it differs from the packaged default; `assistant tune` never overrides such a value.
+Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `assistant tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and restart `openvibes-llm`; or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
 
 ## The pinned build
 
