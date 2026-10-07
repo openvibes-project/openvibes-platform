@@ -31,7 +31,10 @@ pub const COLUMNS: [&str; 17] = [
 /// Current counts per host; `$1` is the "seen since" threshold. Definitions
 /// match the console summaries: active alarms are open or investigating
 /// (severity `info` is in no count), vulnerabilities map important to high
-/// and moderate to medium (unrated is in no count), exploited is live.
+/// and moderate to medium (unrated is in no count), exploited is live. Each kind is one grouped scan joined on `agent_id`:
+/// a per-agent lateral probes every daily alarm partition once per host.
+// ponytail: still a live count over every host per request; if it gets slow,
+// let current() compute only the kinds the requested metric needs.
 const HOST_COUNTS_SQL: &str = "
 SELECT a.agent_id,
        CASE WHEN a.status IN ('revoked', 'imported') THEN a.status
@@ -46,22 +49,25 @@ SELECT a.agent_id,
        COALESCE(f.c, 0)::int AS compliance_critical, COALESCE(f.h, 0)::int AS compliance_high,
        COALESCE(f.m, 0)::int AS compliance_medium, COALESCE(f.l, 0)::int AS compliance_low
 FROM agents a
-LEFT JOIN LATERAL (
-    SELECT count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
+LEFT JOIN (
+    SELECT agent_id,
+           count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
            count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l
-    FROM alarms WHERE agent_id = a.agent_id AND state IN ('open', 'investigating')) al ON true
+    FROM alarms WHERE state IN ('open', 'investigating') GROUP BY agent_id) al ON al.agent_id = a.agent_id
 LEFT JOIN host_vulnerability_counts v ON v.agent_id = a.agent_id
-LEFT JOIN LATERAL (
-    SELECT count(*) n FROM vulnerabilities vv
-    WHERE vv.agent_id = a.agent_id AND vv.fixed_at IS NULL AND NOT vv.reboot_needed
-      AND vv.advisory_id = ANY(ARRAY(
+LEFT JOIN (
+    SELECT agent_id, count(*) n FROM vulnerabilities
+    WHERE fixed_at IS NULL AND NOT reboot_needed
+      AND advisory_id = ANY(ARRAY(
           SELECT DISTINCT c.advisory_id FROM advisory_cves c
           JOIN cve_enrichment e ON e.cve_id = c.cve_id
-          WHERE e.kev_added IS NOT NULL OR e.euvd_exploited))) x ON true
-LEFT JOIN LATERAL (
-    SELECT count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
+          WHERE e.kev_added IS NOT NULL OR e.euvd_exploited))
+    GROUP BY agent_id) x ON x.agent_id = a.agent_id
+LEFT JOIN (
+    SELECT agent_id,
+           count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
            count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l
-    FROM current_findings WHERE agent_id = a.agent_id) f ON true";
+    FROM current_findings GROUP BY agent_id) f ON f.agent_id = a.agent_id";
 
 /// How a metric is computed from one day's rows.
 pub enum Expr {
