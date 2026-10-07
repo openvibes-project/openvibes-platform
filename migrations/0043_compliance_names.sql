@@ -34,3 +34,6 @@ ALTER TABLE case_items DROP CONSTRAINT case_items_kind_check;
 UPDATE case_items SET kind = 'compliance_finding' WHERE kind = 'finding';
 ALTER TABLE case_items ADD CONSTRAINT case_items_kind_check
     CHECK (kind IN ('alarm', 'compliance_finding', 'vulnerability', 'host', 'software'));
+DROP INDEX case_items_exclusive_idx;
+CREATE UNIQUE INDEX case_items_exclusive_idx ON case_items (kind, ref)
+    WHERE active AND kind IN ('alarm', 'compliance_finding', 'vulnerability');

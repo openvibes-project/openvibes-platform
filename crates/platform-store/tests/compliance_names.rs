@@ -79,6 +79,24 @@ async fn migration_43_renames_permissions_dashboards_and_case_items() {
         .unwrap()
         .get(0);
     assert_eq!(kind, "compliance_finding");
+
+    // A compliance finding is in at most one open case.
+    let err = client
+        .batch_execute(
+            "INSERT INTO cases (case_id, title, status, severity, opened_by_user_id, created_at, updated_at)
+             VALUES ('00000000-0000-0000-0000-0000000000c2', 'T2', 'open', 'high',
+                     '00000000-0000-0000-0000-000000000001', now(), now());
+             INSERT INTO case_items (item_id, case_id, kind, ref, agent_id, added_by_user_id, added_at)
+             VALUES ('00000000-0000-0000-0000-0000000000e2', '00000000-0000-0000-0000-0000000000c2',
+                     'compliance_finding', 'agent-1/site/R-1', 'agent-1',
+                     '00000000-0000-0000-0000-000000000001', now());",
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(
+        err.code(),
+        Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION)
+    );
     drop(client);
     db.drop().await;
 }
