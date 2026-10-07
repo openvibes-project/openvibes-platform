@@ -310,11 +310,8 @@ impl<R: Runner> Host for Native<R> {
             })
             .collect();
         packages.sort_by(|a, b| a.name.cmp(&b.name));
-        // ponytail: dnf as the user reads the system's metadata cache, which
-        // Update (as root) refreshes; refreshing here as the user would need
-        // the repository key in the user's own cache (a prompt). Offline or
-        // failing, the list simply shows no newer versions.
-        let upgrades = self.run(Dnf, &["-q", "list", "--upgrades", "openvibes-*"])?;
+        // Offline or failing, the list simply shows no newer versions.
+        let upgrades = self.run(Dnf, &upgrades_args(effective_root()))?;
         if upgrades.status == 0 {
             for line in upgrades.stdout.lines() {
                 let fields: Vec<&str> = line.split_whitespace().collect();
@@ -453,6 +450,18 @@ fn operator(out: crate::runner::Output) -> Result<crate::runner::Output, HostErr
     }
 }
 
+/// `dnf list --upgrades`; as root, our index refreshed first like Update, or
+/// a release from today reads as "up to date" (dnf caches it up to 48 h).
+// ponytail: a user reads the system's cache; refreshing would need the key.
+fn upgrades_args(root: bool) -> Vec<&'static str> {
+    let mut args = vec!["-q", "list", "--upgrades"];
+    if root {
+        args.push(crate::REFRESH_OURS);
+    }
+    args.push("openvibes-*");
+    args
+}
+
 /// Whether this process runs as root: the effective uid, the second field
 /// of `Uid:` in `/proc/self/status` (no `unsafe` libc call). Unreadable
 /// means not root, so the prompt is shown.
@@ -467,4 +476,15 @@ fn effective_root() -> bool {
                 .map(|euid| euid == "0")
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_package_list_refreshes_our_index_only_as_root() {
+        let refresh = super::upgrades_args(true);
+        assert_eq!(refresh[3], crate::REFRESH_OURS);
+        assert_eq!(refresh.len(), 5);
+        assert!(!super::upgrades_args(false).contains(&crate::REFRESH_OURS));
+    }
 }
