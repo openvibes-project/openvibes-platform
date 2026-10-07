@@ -14,10 +14,13 @@ Type=exec
 User=openvibes-llm
 Group=openvibes-llm
 EnvironmentFile=/etc/openvibes/llm.conf
-# Written by `openvibes-admin assistant tune`; overrides llm.conf for
-# OPENVIBES_LLM_THREADS and OPENVIBES_LLM_GPU_LAYERS. After changing either in
-# llm.conf, run `sudo openvibes-admin helper assistant-tune` (it keeps your
-# value and drops it from here) and restart; or delete tuning.conf.
+# Written by `sudo openvibes-admin helper assistant-tune`; overrides llm.conf
+# for OPENVIBES_LLM_THREADS and OPENVIBES_LLM_GPU_LAYERS. After changing either
+# in llm.conf, rerun it (it keeps your value and drops it from here) and
+# restart; or delete tuning.conf. To keep a value equal to the packaged
+# default (THREADS=4), pin it: `systemctl edit openvibes-llm`, add
+# `EnvironmentFile=/etc/openvibes/llm-pin.conf`; a drop-in's file is read
+# after these, so it wins.
 EnvironmentFile=-/var/lib/openvibes-llm/tuning.conf
 # Optional so that, before the first model install, the check says what to do.
 EnvironmentFile=-/var/lib/openvibes-llm/model.conf

@@ -17,10 +17,31 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install (64 hex characters); given to the service as a systemd credential |
 | `/var/lib/openvibes-llm/models/` | 0775 root:openvibes-admin; models installed read-only (0444) |
 | `/var/lib/openvibes-llm/model.conf` | The model in use and its SHA-256, written by `openvibes-admin assistant model install`; read after `llm.conf` |
-| `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `openvibes-admin assistant tune`; read after `llm.conf`, before `model.conf` |
-| `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `assistant tune` measured and wrote, so it can tell its own values from yours |
+| `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `sudo openvibes-admin helper assistant-tune`; read after `llm.conf`, before `model.conf` |
+| `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `helper assistant-tune` measured and wrote, so it can tell its own values from yours |
 
-Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `assistant tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and restart `openvibes-llm`; or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
+Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `helper assistant-tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and restart `openvibes-llm`; or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
+
+A value equal to the packaged default (`OPENVIBES_LLM_THREADS=4`,
+`OPENVIBES_LLM_GPU_LAYERS=0`) counts as unset, so the next tune replaces
+it. To keep it, pin it in a file of your own that the unit reads last:
+
+```sh
+printf 'OPENVIBES_LLM_THREADS=4\n' | sudo tee /etc/openvibes/llm-pin.conf
+sudo systemctl edit openvibes-llm     # add the two lines below
+#   [Service]
+#   EnvironmentFile=/etc/openvibes/llm-pin.conf
+sudo systemctl restart openvibes-llm
+```
+
+`EnvironmentFile=` lines accumulate, and systemd reads a unit's drop-ins
+after the unit file itself, so the drop-in's file comes after `llm.conf`,
+`tuning.conf` and `model.conf`; for a variable set in several files the
+last one read wins (`systemd.exec(5)`, `EnvironmentFile=`; checked with
+systemd 259: `systemctl show -p EnvironmentFiles` lists the drop-in's file
+last and its value is the one the service sees). Put only the keys you pin
+in that file: anything else in it would override `model.conf` too. Tune
+still writes and reports its own thread count; the pin wins at start.
 
 ## The pinned build
 
