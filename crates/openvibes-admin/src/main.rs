@@ -22,6 +22,8 @@ mod rules_site;
 mod run_as;
 mod setup;
 mod token;
+#[allow(dead_code)] // unused until the runner lands (assistant tune, Task 3)
+mod tune;
 mod tui;
 mod user;
 mod vulns;
