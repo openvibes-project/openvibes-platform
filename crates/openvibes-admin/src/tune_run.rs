@@ -106,6 +106,36 @@ fn cpus(root: &Path) -> (Vec<String>, usize) {
     (lists, logical)
 }
 
+#[cfg(any(target_arch = "aarch64", target_arch = "arm"))]
+const O_NOFOLLOW: i32 = 0o100000;
+#[cfg(not(any(target_arch = "aarch64", target_arch = "arm")))]
+const O_NOFOLLOW: i32 = 0o400000;
+
+/// Largest file root reads from the data directory.
+const MAX_READ: u64 = 64 * 1024;
+
+/// A regular file's text; `None` for a missing file, a symlink, another
+/// kind of file, or one over 64 KiB (the directory is writable by the
+/// admin account, so root never follows what is planted there).
+fn read_regular(path: &Path) -> Option<String> {
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(O_NOFOLLOW)
+        .open(path)
+        .ok()?;
+    let meta = file.metadata().ok()?;
+    if !meta.is_file() || meta.len() > MAX_READ {
+        eprintln!(
+            "openvibes-admin helper: {}: not a plain file, ignored",
+            path.display()
+        );
+        return None;
+    }
+    let mut text = String::new();
+    file.take(MAX_READ).read_to_string(&mut text).ok()?;
+    Some(text)
+}
+
 /// Writes `text` next to `path`, then renames it over (mode 0644). The
 /// temp file is made with `create_new`, which refuses a planted symlink.
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
@@ -165,7 +195,10 @@ fn wait_health(port: &str) -> Result<(), String> {
             return Ok(());
         }
     }
-    Err("the model server did not become healthy within 120 s".into())
+    Err(format!(
+        "the model server did not become healthy within {} s",
+        health_seconds()
+    ))
 }
 
 /// Longest a timed call may take; a slower host counts as this (the
@@ -229,7 +262,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let plan = tune::plan(&env, threads);
 
     let tuning = data.join("tuning.conf");
-    let old = fs::read_to_string(&tuning).ok();
+    let old = read_regular(&tuning);
     write_atomic(&tuning, &tune::tuning_conf(&plan))?;
     let measured = restarter
         .systemctl(&["restart", "openvibes-llm"])
@@ -281,6 +314,10 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         })
         .unwrap_or(threads);
     let mut text = match t {
+        Some(t) if t >= limit as f64 => tune::summary(used, alias, t, raised).replace(
+            &format!("~{limit} s per call"),
+            &format!("more than {limit} s per call"),
+        ),
         Some(t) => tune::summary(used, alias, t, raised),
         None => format!(
             "assistant: CPU ({used} threads) · console uses another backend; speed not measured"

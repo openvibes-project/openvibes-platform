@@ -227,3 +227,21 @@ fn repeating_gives_identical_files() {
     assert_eq!(tune(&root, &[]).status.code(), Some(0));
     assert_eq!((a, b), (read(&root, TUNING), read(&root, CONSOLE)));
 }
+
+#[test]
+fn a_symlinked_tuning_conf_is_never_read_into_the_rollback() {
+    let port = server_with(None, "503 Service Unavailable", "200 OK");
+    let root = tree("secret", port, 60);
+    let secret = root.join("secret");
+    fs::write(&secret, "TOP-SECRET").unwrap();
+    std::os::unix::fs::symlink(&secret, root.join(TUNING)).unwrap();
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(
+        !fs::read_to_string(root.join(TUNING))
+            .unwrap_or_default()
+            .contains("TOP-SECRET")
+    );
+    assert_eq!(fs::read_to_string(&secret).unwrap(), "TOP-SECRET");
+    fs::remove_dir_all(&root).unwrap();
+}
