@@ -221,7 +221,9 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     };
     // Debug builds only: a test tree stands in for `/`, no root needed.
     let test_root = match &verb {
-        Verb::AssistantTune(_, Some(root)) if cfg!(debug_assertions) => Some(root.clone()),
+        Verb::AssistantTune(_, Some(root)) if cfg!(debug_assertions) && root != Path::new("/") => {
+            Some(root.clone())
+        }
         _ => None,
     };
     if test_root.is_none() && effective_uid().as_deref() != Some("0") {

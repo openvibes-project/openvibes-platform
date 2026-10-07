@@ -7,14 +7,14 @@ use std::{
     fs,
     io::{Read, Write},
     net::{Ipv4Addr, SocketAddr, TcpStream},
-    os::unix::fs::PermissionsExt,
+    os::unix::fs::{OpenOptionsExt, PermissionsExt},
     path::Path,
     time::{Duration, Instant},
 };
 
 use chrono::{SecondsFormat, Utc};
 use platform_assistant::{
-    AssistantConfig, BackendClient,
+    AssistantConfig, BackendClient, BackendError,
     client::{ChatRequest, Message},
 };
 use platform_host::{
@@ -106,16 +106,39 @@ fn cpus(root: &Path) -> (Vec<String>, usize) {
     (lists, logical)
 }
 
-/// Writes `text` next to `path`, then renames it over (mode 0644).
+/// Writes `text` next to `path`, then renames it over (mode 0644). The
+/// temp file is made with `create_new`, which refuses a planted symlink.
 fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     let err = |e: std::io::Error| format!("{}: {e}", path.display());
     let temp = path.with_extension("new");
-    let mut file = fs::File::create(&temp).map_err(err)?;
-    file.write_all(text.as_bytes()).map_err(err)?;
-    file.set_permissions(fs::Permissions::from_mode(0o644))
+    let _ = fs::remove_file(&temp);
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o644)
+        .open(&temp)
         .map_err(err)?;
-    file.sync_all().map_err(err)?;
-    fs::rename(&temp, path).map_err(err)
+    let result = file
+        .write_all(text.as_bytes())
+        .and_then(|()| file.set_permissions(fs::Permissions::from_mode(0o644)))
+        .and_then(|()| file.sync_all())
+        .and_then(|()| fs::rename(&temp, path));
+    if result.is_err() {
+        let _ = fs::remove_file(&temp);
+    }
+    result.map_err(err)
+}
+
+/// Seconds to wait for `/health`; debug builds can shorten it for tests.
+fn health_seconds() -> u32 {
+    #[cfg(debug_assertions)]
+    if let Some(n) = std::env::var("OPENVIBES_TUNE_HEALTH_SECS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+    {
+        return n;
+    }
+    120
 }
 
 /// Polls `/health` once a second for up to two minutes.
@@ -124,7 +147,7 @@ fn wait_health(port: &str) -> Result<(), String> {
         .parse()
         .map_err(|_| "OPENVIBES_LLM_PORT is not a port")?;
     let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
-    for attempt in 0..120 {
+    for attempt in 0..health_seconds() {
         if attempt > 0 {
             std::thread::sleep(Duration::from_secs(1));
         }
@@ -145,8 +168,12 @@ fn wait_health(port: &str) -> Result<(), String> {
     Err("the model server did not become healthy within 120 s".into())
 }
 
-/// Wall-clock seconds of one chat call.
-fn time_call(client: &BackendClient) -> Result<f64, String> {
+/// Longest a timed call may take; a slower host counts as this (the
+/// deadline raise is capped at 180 s anyway).
+const MEASURE_LIMIT: u64 = 180;
+
+/// Wall-clock seconds of one chat call; a timeout counts as the limit.
+fn time_call(client: &BackendClient, limit: u64) -> Result<f64, String> {
     let request = ChatRequest {
         messages: vec![
             Message::System("You are a concise assistant.".into()),
@@ -161,10 +188,11 @@ fn time_call(client: &BackendClient) -> Result<f64, String> {
         temperature: 0.0,
     };
     let started = Instant::now();
-    client
-        .chat(&request, |_| {})
-        .map_err(|error| format!("timed call failed: {error}"))?;
-    Ok(started.elapsed().as_secs_f64())
+    match client.chat(&request, |_| {}) {
+        Ok(_) => Ok(started.elapsed().as_secs_f64()),
+        Err(BackendError::Timeout) => Ok(limit as f64),
+        Err(error) => Err(format!("timed call failed: {error}")),
+    }
 }
 
 pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result<String, String> {
@@ -187,7 +215,14 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         .map_err(|e| e.to_string())?
         .backend
         .ok_or("[assistant.backend] is not configured")?;
-    let client = BackendClient::new(&backend).map_err(|e| e.to_string())?;
+    let local = is_local(&backend.base_url, port);
+    // The timed call may outlast the configured deadline: that is what the
+    // raise is for.
+    let current = u32::try_from(backend.deadline.as_secs()).unwrap_or(u32::MAX);
+    let limit = u64::from(current).max(MEASURE_LIMIT);
+    let mut timed = backend.clone();
+    timed.deadline = Duration::from_secs(limit);
+    let client = BackendClient::new(&timed).map_err(|e| e.to_string())?;
 
     let (lists, logical) = cpus(root);
     let threads = tune::threads_for(tune::physical_cores(&lists, logical));
@@ -199,10 +234,13 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let measured = restarter
         .systemctl(&["restart", "openvibes-llm"])
         .and_then(|()| wait_health(port))
-        .and_then(|()| time_call(&client))
-        .and_then(|t| {
+        .and_then(|()| {
+            if !local {
+                return Ok(None);
+            }
+            let t = time_call(&client, limit)?;
             if t.is_finite() {
-                Ok(t)
+                Ok(Some(t))
             } else {
                 Err("the timed call gave no usable time".into())
             }
@@ -211,34 +249,43 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         Ok(t) => t,
         Err(error) => {
             // Nothing changed: put the old tuning back and restart on it.
-            match old {
-                Some(old) => write_atomic(&tuning, &old)?,
-                None => {
-                    let _ = fs::remove_file(&tuning);
-                }
+            let restored = match old {
+                Some(old) => write_atomic(&tuning, &old),
+                None => fs::remove_file(&tuning).map_err(|e| format!("{}: {e}", tuning.display())),
+            };
+            if let Err(why) = restored {
+                eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
             let _ = restarter.systemctl(&["restart", "openvibes-llm"]);
             return Err(error);
         }
     };
 
-    let current = u32::try_from(backend.deadline.as_secs()).unwrap_or(u32::MAX);
-    let raised = match tune::deadline(t, current) {
-        Deadline::Keep => None,
-        Deadline::Raise(seconds) => {
+    let raised = match t.map(|t| tune::deadline(t, current)) {
+        Some(Deadline::Raise(seconds)) => {
             let mut doc: DocumentMut = console.parse().map_err(|e| format!("console.toml: {e}"))?;
             doc["assistant"]["backend"]["deadline_seconds"] = value(i64::from(seconds));
             config_file::replace(&etc, Service::Console, &doc.to_string())?;
             restarter.systemctl(&["try-restart", "openvibes-console"])?;
             Some(seconds)
         }
+        _ => None,
     };
 
     let alias = &backend.model;
     let used = plan
         .threads
-        .or_else(|| env.get("OPENVIBES_LLM_THREADS")?.trim().parse().ok())
+        .or_else(|| {
+            env.get("OPENVIBES_LLM_THREADS")
+                .and_then(|v| tune::unquote(v).parse().ok())
+        })
         .unwrap_or(threads);
+    let mut text = match t {
+        Some(t) => tune::summary(used, alias, t, raised),
+        None => format!(
+            "assistant: CPU ({used} threads) · console uses another backend; speed not measured"
+        ),
+    };
     let json = serde_json::json!({
         "mode": "cpu",
         "threads": used,
@@ -246,11 +293,25 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         "seconds_per_call": t,
         "deadline_seconds": raised.unwrap_or(current),
         "left_alone": plan.left_alone,
+        "summary": text,
         "at": Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
     });
     write_atomic(&data.join("tune.json"), &format!("{json}\n"))?;
     if opts.json {
         return Ok(format!("{json}\n"));
     }
-    Ok(format!("{}\n", tune::summary(used, alias, t, raised)))
+    if let (Some(t), Some(_)) = (t, raised) {
+        text.push_str(&format!(
+            "\nthis host answers slowly (about {} s per question)",
+            t.round() as u64
+        ));
+    }
+    Ok(format!("{text}\n"))
+}
+
+/// The console's backend is the local `openvibes-llm` on its port.
+fn is_local(base_url: &str, port: &str) -> bool {
+    let rest = base_url.strip_prefix("http://").unwrap_or("");
+    let authority = rest.split('/').next().unwrap_or("");
+    [format!("127.0.0.1:{port}"), format!("localhost:{port}")].contains(&authority.to_owned())
 }

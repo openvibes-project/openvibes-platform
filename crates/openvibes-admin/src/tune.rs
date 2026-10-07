@@ -27,7 +27,7 @@ pub struct Plan {
 }
 
 /// The value without surrounding whitespace and one layer of matching quotes.
-fn unquote(value: &str) -> &str {
+pub fn unquote(value: &str) -> &str {
     let v = value.trim();
     for q in ['"', '\''] {
         if let Some(inner) = v.strip_prefix(q).and_then(|r| r.strip_suffix(q)) {

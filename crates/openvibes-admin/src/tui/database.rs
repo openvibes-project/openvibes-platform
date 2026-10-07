@@ -171,6 +171,9 @@ pub fn tune_check(model_installed: bool, tune_json: Option<String>) -> Option<Ch
     match tune_json {
         Some(text) => {
             let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+            if let Some(line) = v["summary"].as_str() {
+                return Some(check(false, line.to_owned()));
+            }
             let line = crate::tune::summary(
                 v["threads"].as_u64()? as u32,
                 v["model"].as_str()?,

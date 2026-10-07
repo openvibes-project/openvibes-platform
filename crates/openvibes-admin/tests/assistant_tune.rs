@@ -15,6 +15,11 @@ use std::{
 /// A model server on a free port: `/health` at once, chat after `delay`
 /// (`None`: never answers).
 fn server(delay: Option<Duration>) -> u16 {
+    server_with(delay, "200 OK", "200 OK")
+}
+
+/// Like [`server`] with chosen status lines for `/health` and chat.
+fn server_with(delay: Option<Duration>, health: &'static str, chat: &'static str) -> u16 {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     thread::spawn(move || {
@@ -38,6 +43,7 @@ fn server(delay: Option<Duration>) -> u16 {
                 }
                 let mut body = vec![0; length];
                 let _ = reader.read_exact(&mut body);
+                let status = if get { health } else { chat };
                 let reply = if get {
                     r#"{"status":"ok"}"#
                 } else {
@@ -49,7 +55,7 @@ fn server(delay: Option<Duration>) -> u16 {
                 };
                 let _ = reader.get_mut().write_all(
                     format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
+                        "HTTP/1.1 {status}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
                         reply.len()
                     )
                     .as_bytes(),
@@ -92,6 +98,7 @@ fn tree(name: &str, port: u16, deadline: u32) -> PathBuf {
 
 fn tune(root: &Path, extra: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
         .args(["helper", "assistant-tune", "--root"])
         .arg(root)
         .args(extra)
@@ -104,6 +111,7 @@ fn read(root: &Path, file: &str) -> String {
 }
 
 const TUNING: &str = "var/lib/openvibes-llm/tuning.conf";
+const TUNE_JSON: &str = "var/lib/openvibes-llm/tune.json";
 const CONSOLE: &str = "etc/openvibes/console.toml";
 
 #[test]
@@ -120,8 +128,7 @@ fn fast_server_sets_threads_and_leaves_console_alone() {
     );
     assert!(read(&root, TUNING).contains("OPENVIBES_LLM_THREADS=2\n"));
     assert_eq!(read(&root, CONSOLE), before);
-    let json: serde_json::Value =
-        serde_json::from_str(&read(&root, "var/lib/openvibes-llm/tune.json")).unwrap();
+    let json: serde_json::Value = serde_json::from_str(&read(&root, TUNE_JSON)).unwrap();
     assert_eq!(json["mode"], "cpu");
     assert_eq!(json["threads"], 2);
     assert_eq!(json["deadline_seconds"], 60);
@@ -140,15 +147,75 @@ fn slow_server_raises_the_deadline() {
 }
 
 #[test]
-fn silent_server_fails_and_changes_nothing() {
-    let port = server(None);
-    let root = tree("silent", port, 2);
+fn failing_chat_fails_and_changes_nothing() {
+    let port = server_with(Some(Duration::ZERO), "200 OK", "500 Internal Server Error");
+    let root = tree("failing", port, 60);
     let before = read(&root, CONSOLE);
     let out = tune(&root, &[]);
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     assert_eq!(read(&root, CONSOLE), before);
     assert!(!root.join(TUNING).exists());
-    assert!(!root.join("var/lib/openvibes-llm/tune.json").exists());
+    assert!(!root.join(TUNE_JSON).exists());
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn never_healthy_fails_and_restores_the_previous_tuning() {
+    let port = server_with(None, "503 Service Unavailable", "200 OK");
+    let root = tree("unhealthy", port, 60);
+    fs::write(root.join(TUNING), "OPENVIBES_LLM_THREADS=3\n").unwrap();
+    let before = read(&root, CONSOLE);
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert_eq!(read(&root, TUNING), "OPENVIBES_LLM_THREADS=3\n");
+    assert_eq!(read(&root, CONSOLE), before);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_call_slower_than_the_deadline_raises_it() {
+    let port = server(Some(Duration::from_millis(2500)));
+    let root = tree("overdue", port, 2);
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(read(&root, CONSOLE).contains("deadline_seconds = 6"));
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        text.contains("this host answers slowly (about 3 s per question)"),
+        "{text}"
+    );
+    assert!(read(&root, TUNE_JSON).contains("deadline raised to 6 s"));
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn another_backend_is_not_measured() {
+    let port = server(None);
+    let root = tree("other", port, 60);
+    fs::write(root.join(CONSOLE), console(port + 1, 60)).unwrap();
+    let before = read(&root, CONSOLE);
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
+    assert!(read(&root, TUNING).contains("THREADS=2"));
+    assert_eq!(read(&root, CONSOLE), before);
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_planted_symlink_at_the_temp_path_is_not_followed() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = tree("symlink", port, 60);
+    let victim = root.join("victim");
+    fs::write(&victim, "precious").unwrap();
+    for temp in ["tuning.new", "tune.new"] {
+        std::os::unix::fs::symlink(&victim, root.join("var/lib/openvibes-llm").join(temp)).unwrap();
+    }
+    let out = tune(&root, &[]);
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    assert_eq!(fs::read_to_string(&victim).unwrap(), "precious");
+    assert!(read(&root, TUNING).contains("THREADS=2"));
+    fs::remove_dir_all(&root).unwrap();
 }
 
 #[test]
