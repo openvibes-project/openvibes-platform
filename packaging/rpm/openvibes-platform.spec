@@ -125,16 +125,38 @@ web UI), run on loopback as its own sandboxed user with a model file whose
 SHA-256 is pinned. Optional: the platform works without it.
 
 %if %{with model}
+# The model ships as two byte ranges of one file (a release asset may not
+# exceed 2 GiB); openvibes-llm-model joins and verifies them when installed.
+%package -n openvibes-llm-model-part1
+Summary:        First half of the bundled OpenVIBES model (installed with openvibes-llm-model)
+License:        Apache-2.0
+
+%description -n openvibes-llm-model-part1
+Bytes of the bundled model; installed by openvibes-llm-model, which joins it
+with part 2.
+
+%package -n openvibes-llm-model-part2
+Summary:        Second half of the bundled OpenVIBES model (installed with openvibes-llm-model)
+License:        Apache-2.0
+
+%description -n openvibes-llm-model-part2
+Bytes of the bundled model; installed by openvibes-llm-model, which joins it
+with part 1.
+
 %package -n openvibes-llm-model
 Summary:        Bundled model for the OpenVIBES local model server
 # The model's licence is Apache 2.0 (Qwen3-4B, packaging/llm/model.pin).
 License:        Apache-2.0
 Requires:       openvibes-llm = %{version}-%{release}
+Requires:       openvibes-llm-model-part1 = %{version}-%{release}
+Requires:       openvibes-llm-model-part2 = %{version}-%{release}
 
 %description -n openvibes-llm-model
 A 4B-parameter quantised model (Qwen3-4B Q4_K_M) pinned by SHA-256, installed
 read-only and selected for openvibes-llm, so the console's assistant works
-after `sudo openvibes-admin helper assistant-setup` with no download.
+after `sudo openvibes-admin helper assistant-setup` with no download. The
+two parts it is delivered in are joined and verified, then removed, when it
+is installed.
 %endif
 
 %if %{with vulkan}
@@ -198,14 +220,22 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
 install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
 %if %{with model}
 . $S/packaging/llm/model.pin
-install -D -m 0444 $S/target/llm-model/$LLM_MODEL_FILE %{buildroot}%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
+share=%{buildroot}%{_datadir}/openvibes-llm/model
+install -d -m 0755 $share
+split -n 2 -d -a 1 $S/target/llm-model/$LLM_MODEL_FILE $share/$LLM_MODEL_FILE.part
+chmod 0644 $share/*
+cat > $share/model.env <<EOF
+LLM_MODEL_FILE=$LLM_MODEL_FILE
+LLM_MODEL_SHA256=$LLM_MODEL_SHA256
+EOF
+install -D -m 0755 $S/packaging/llm/join-model.sh %{buildroot}%{_libexecdir}/openvibes-llm/join-model
 install -D -m 0644 $S/target/llm-model/LICENSE.model %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE.model
 cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
 OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
 OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
 OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
 EOF
-echo "%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
+echo "%ghost %attr(0444, root, root) %{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
 %endif
 %if %{with vulkan}
 install -D -m 0755 $S/target/llama/vulkan/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server-vulkan
@@ -361,9 +391,28 @@ fi
 %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm/models
 
 %if %{with model}
+%files -n openvibes-llm-model-part1
+%dir %{_datadir}/openvibes-llm
+%dir %{_datadir}/openvibes-llm/model
+%{_datadir}/openvibes-llm/model/*.part0
+
+%files -n openvibes-llm-model-part2
+%dir %{_datadir}/openvibes-llm
+%dir %{_datadir}/openvibes-llm/model
+%{_datadir}/openvibes-llm/model/*.part1
+
 %files -n openvibes-llm-model -f model-files.list
 %license %{_licensedir}/openvibes-llm-model/LICENSE.model
+%dir %{_datadir}/openvibes-llm
+%dir %{_datadir}/openvibes-llm/model
+%{_datadir}/openvibes-llm/model/model.env
+%{_libexecdir}/openvibes-llm/join-model
 %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
+
+%posttrans -n openvibes-llm-model
+# Joins the parts into the model file; a failure leaves the parts in place so
+# it can be run again: /usr/libexec/openvibes-llm/join-model
+%{_libexecdir}/openvibes-llm/join-model || echo "openvibes-llm-model: could not join the model; run %{_libexecdir}/openvibes-llm/join-model" >&2
 %endif
 
 %if %{with vulkan}
