@@ -187,7 +187,9 @@ members of `openvibes-operators` may do it without a password (polkit, or
 `FlushPending=yes` keeps it listening when the server cannot start (no
 model, a changed model file, out of memory): the waiting question is
 dropped instead of re-triggering the start until systemd gives up on the
-socket. The server does not restart itself (`Restart=no`): the next
+socket. It also flushes when the proxy exits after the idle time: a
+question arriving in those few milliseconds gets a backend error and should
+be retried (the next one starts the server). The server does not restart itself (`Restart=no`): the next
 question starts it.
 
 `OPENVIBES_LLM_PORT` stays the public port, the one the console calls,

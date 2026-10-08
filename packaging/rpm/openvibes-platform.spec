@@ -333,7 +333,10 @@ fi
 %preun -n openvibes-llm
 %systemd_preun openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 %postun -n openvibes-llm
-# The socket is not restarted: the running proxy still holds its port.
+# Not the socket: a running proxy holds its fd. Restarting the proxy and the
+# server (try-restart: only if running) reloads the model on the new files;
+# the socket keeps 18430 throughout. `systemctl restart openvibes-llm.socket`
+# would restart all three (PartOf=).
 %systemd_postun openvibes-llm.socket
 %systemd_postun_with_restart openvibes-llm-proxy.service openvibes-llm.service
 %endif

@@ -68,11 +68,17 @@ systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
     /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
 # Idle unloading stops the process; llama-server's own idle sleep has a
 # use-after-free (CVE-2026-43631).
-# The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart.
-# Comments name it (to say it is never passed): look at the settings only.
-grep -rhsv '^[[:space:]]*#' /usr/lib/systemd/system/openvibes-llm.service \
-    /usr/lib/systemd/system/openvibes-llm.service.d | grep -q -- --sleep-idle-seconds &&
+# The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart; without
+# it the directory is absent, so only files that exist are listed. Comments
+# name the flag (to say it is never passed): only other lines count. One
+# grep, no pipeline, so set -e/pipefail cannot hide a match.
+llm_units=(/usr/lib/systemd/system/openvibes-llm.service)
+for f in /usr/lib/systemd/system/openvibes-llm.service.d/*.conf; do
+    [[ -f "$f" ]] && llm_units+=("$f")
+done
+if grep -qE '^[[:space:]]*[^[:space:]#].*--sleep-idle-seconds' "${llm_units[@]}"; then
     fail "llm unit passes --sleep-idle-seconds"
+fi
 grep -qx 'FlushPending=yes' /usr/lib/systemd/system/openvibes-llm.socket ||
     fail "llm socket lacks FlushPending=yes"
 for line in 'IPAddressDeny=any' 'PrivateNetwork=yes' 'RestrictAddressFamilies=AF_UNIX' \

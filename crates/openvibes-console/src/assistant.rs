@@ -70,11 +70,11 @@ impl AssistantRuntime {
                     if ready {
                         return;
                     }
-                    let unreachable = matches!(report.models, Err(BackendError::Connect));
-                    tokio::time::sleep(probe_retry(unreachable, attempt)).await;
+                    let error = report.models.as_ref().err().copied();
+                    tokio::time::sleep(probe_retry(error, attempt)).await;
                 } else {
                     *available.write().await = false;
-                    tokio::time::sleep(probe_retry(false, attempt)).await;
+                    tokio::time::sleep(probe_retry(None, attempt)).await;
                 }
             }
         });
@@ -89,13 +89,18 @@ impl AssistantRuntime {
     }
 }
 
-/// When to probe again. Not reachable (still starting, as after
-/// `assistant-setup`): every 10 s for the first minute. Otherwise, and
+/// When to probe again. Not reachable or timed out (still starting or
+/// loading its model, as after `assistant-setup`): every 10 s for the
+/// first minute. Otherwise, and
 /// after that: a probe is costly and, through openvibes-llm's socket, loads
 /// the model (or retries a model that cannot start), so wait longer than
 /// its idle time (5 min by default): the probe alone never keeps it loaded.
-fn probe_retry(unreachable: bool, attempt: u32) -> Duration {
-    if unreachable && attempt < 6 {
+fn probe_retry(models_error: Option<BackendError>, attempt: u32) -> Duration {
+    let starting = matches!(
+        models_error,
+        Some(BackendError::Connect | BackendError::Timeout)
+    );
+    if starting && attempt < 6 {
         Duration::from_secs(10)
     } else {
         Duration::from_secs(15 * 60)
@@ -114,11 +119,19 @@ mod tests {
     fn a_failed_probe_waits_longer_than_the_model_servers_idle_time() {
         // openvibes-llm unloads after 5 min idle by default: retrying a
         // probe that reaches the model sooner would keep it loaded.
+        use platform_assistant::BackendError as E;
         let idle = std::time::Duration::from_secs(300);
-        assert!(probe_retry(false, 0) > idle, "answered but failed");
-        assert_eq!(probe_retry(true, 0), std::time::Duration::from_secs(10));
-        assert_eq!(probe_retry(true, 5), std::time::Duration::from_secs(10));
-        assert!(probe_retry(true, 6) > idle, "unreachable for a minute");
+        let fast = std::time::Duration::from_secs(10);
+        // Unreachable, or timed out during a long cold load: fast for a minute.
+        for error in [E::Connect, E::Timeout] {
+            assert_eq!(probe_retry(Some(error), 0), fast, "{error:?}");
+            assert_eq!(probe_retry(Some(error), 5), fast, "{error:?}");
+            assert!(probe_retry(Some(error), 6) > idle, "{error:?}");
+        }
+        // Answered but failed (models listed, or another error): slow.
+        for error in [None, Some(E::Unauthorized), Some(E::Unavailable)] {
+            assert!(probe_retry(error, 0) > idle, "{error:?}");
+        }
     }
 
     #[test]
