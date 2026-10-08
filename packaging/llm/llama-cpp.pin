@@ -1,12 +1,22 @@
 # The llama.cpp source openvibes-llm builds llama-server from (assistant
 # spec §6, §10). Read by scripts/build-llama-server.sh.
 #
-# The source is the llama.cpp tree vendored in the llama-cpp-python sdist on
-# PyPI, which pins upstream commit ggml-org/llama.cpp@4df29be4f4c3 (see its
-# CHANGELOG.md). PyPI serves immutable files, so the SHA-256 below pins the
-# exact bytes. To update: pick a newer release, check its CHANGELOG for the
-# llama.cpp commit and upstream security advisories, update all three
-# values, rebuild, and run `openvibes-admin assistant eval`.
-LLAMA_CPP_COMMIT=4df29be4f4c3673f428170fda944a5b19f743bb8
-LLAMA_SOURCE_URL=https://files.pythonhosted.org/packages/source/l/llama_cpp_python/llama_cpp_python-0.3.35.tar.gz
-LLAMA_SOURCE_SHA256=1139dbb54509074b70893fab8554e3b079aa9f4d312058ce4018ef0019e3de12
+# The source is the upstream release ggml-org/llama.cpp v0.6.0 (tag object
+# 69ecae922d2b, commit below). The release publishes no source tarball asset,
+# so this is GitHub's archive of the tag. GitHub generates archives on demand;
+# their bytes have been stable but are not guaranteed. If the SHA-256 check
+# ever fails, re-verify before re-pinning: download the archive into an empty
+# directory, check `gzip -dc <tarball> | git get-tar-commit-id` prints
+# LLAMA_CPP_COMMIT, and check the tag still resolves to it
+# (`gh api /repos/ggml-org/llama.cpp/git/tags/<tag object> --jq .object.sha`).
+#
+# To update: pick a newer release tag, resolve its commit as above, check the
+# upstream security advisories (github.com/ggml-org/llama.cpp/security and the
+# GitHub Advisory Database) for fixes and open issues, in particular
+# GHSA-6hc7-9rph-cm99 / CVE-2026-43631 (use-after-free when the server sleeps;
+# keep --sleep-idle-seconds off until an advisory names a fixed release),
+# update all three values, rebuild, check every CMake option the build script
+# passes still exists, and run `openvibes-admin assistant eval`.
+LLAMA_CPP_COMMIT=d81235049384534c167caea52b85a694f6103d14
+LLAMA_SOURCE_URL=https://github.com/ggml-org/llama.cpp/archive/refs/tags/v0.6.0.tar.gz
+LLAMA_SOURCE_SHA256=09b36dba235fcac180efff18514da7038e65d8e5b9e4aefa59238468abfdec12
