@@ -7,10 +7,12 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 use openvibes_llm::{
-    CheckError, check_environment, check_model, running_as_root, settings, sha256_hex,
+    CheckError, check_environment, check_model, idle_seconds, proxy_settings, running_as_root,
+    settings, sha256_hex, wait_ready,
 };
 
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -214,4 +216,177 @@ fn binary_refuses_llama_variables_before_anything_else() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("LLAMA_ARG_TOOLS is set"));
+}
+
+#[test]
+fn idle_and_internal_port_default_for_upgraded_settings_files() {
+    let models = Path::new("/var/lib/openvibes-llm/models");
+    let checked = settings(&env(models, "m.gguf", EMPTY_SHA256), models).unwrap();
+    assert_eq!(checked.idle_seconds, Some(300));
+    assert_eq!(checked.internal_port, 18431);
+    let mut vars = env(models, "m.gguf", EMPTY_SHA256);
+    vars.insert("OPENVIBES_LLM_IDLE".into(), "infinity".into());
+    vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "18500".into());
+    let checked = settings(&vars, models).unwrap();
+    assert_eq!(checked.idle_seconds, None);
+    assert_eq!(checked.internal_port, 18500);
+}
+
+#[test]
+fn idle_accepts_seconds_minutes_hours_within_30s_to_24h() {
+    for (text, seconds) in [
+        ("30", 30),
+        ("30s", 30),
+        ("5min", 300),
+        (" 90s ", 90),
+        ("2h", 7200),
+        ("24h", 86_400),
+        ("1440min", 86_400),
+    ] {
+        assert_eq!(idle_seconds(text), Ok(Some(seconds)), "{text}");
+    }
+    assert_eq!(idle_seconds("infinity"), Ok(None));
+    for text in [
+        "",
+        "29s",
+        "29",
+        "0",
+        "25h",
+        "86401",
+        "5m",
+        "5 min",
+        "-5min",
+        "+5min",
+        "1.5h",
+        "min",
+        "5min30s",
+        "Infinity",
+        "99999999999999999999h",
+    ] {
+        assert_eq!(
+            idle_seconds(text),
+            Err(CheckError::Invalid("OPENVIBES_LLM_IDLE")),
+            "{text}"
+        );
+    }
+}
+
+#[test]
+fn proxy_settings_check_idle_and_ports_without_a_model() {
+    let mut vars: BTreeMap<String, String> = BTreeMap::new();
+    let proxy = proxy_settings(&vars).unwrap();
+    assert_eq!(
+        (proxy.port, proxy.internal_port, proxy.idle_seconds),
+        (18430, 18431, Some(300))
+    );
+    vars.insert("OPENVIBES_LLM_IDLE".into(), "1s".into());
+    assert_eq!(
+        proxy_settings(&vars),
+        Err(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
+    );
+    vars.remove("OPENVIBES_LLM_IDLE");
+    for bad in ["80", "70000", "x"] {
+        vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), bad.into());
+        assert_eq!(
+            proxy_settings(&vars),
+            Err(CheckError::Invalid("OPENVIBES_LLM_INTERNAL_PORT")),
+            "{bad}"
+        );
+    }
+    vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "18430".into());
+    assert_eq!(proxy_settings(&vars), Err(CheckError::SamePort));
+    vars.insert("OPENVIBES_LLM_PORT".into(), "18500".into());
+    assert_eq!(proxy_settings(&vars).unwrap().port, 18500);
+    // The full check refuses the same.
+    let models = Path::new("/var/lib/openvibes-llm/models");
+    let mut full = env(models, "m.gguf", EMPTY_SHA256);
+    full.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "8091".into());
+    assert_eq!(settings(&full, models), Err(CheckError::SamePort));
+    assert!(
+        CheckError::SamePort
+            .to_string()
+            .contains("systemctl edit openvibes-llm.socket")
+    );
+}
+
+/// A server on 127.0.0.1 answering `/health` with each status in turn.
+fn health_server(statuses: &'static [&'static str]) -> u16 {
+    use std::io::{Read, Write};
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for (status, stream) in statuses.iter().cycle().zip(listener.incoming()) {
+            let mut stream = stream.unwrap();
+            let mut request = [0; 256];
+            let read = stream.read(&mut request).unwrap();
+            assert!(request[..read].starts_with(b"GET /health HTTP/1."));
+            let _ = write!(stream, "HTTP/1.1 {status}\r\ncontent-length: 0\r\n\r\n");
+        }
+    });
+    port
+}
+
+#[test]
+fn wait_ready_polls_until_health_answers_200() {
+    let port = health_server(&[
+        "503 Service Unavailable",
+        "503 Service Unavailable",
+        "200 OK",
+    ]);
+    let started = std::time::Instant::now();
+    assert_eq!(
+        wait_ready(port, Duration::from_millis(50), Duration::from_secs(5)),
+        Ok(())
+    );
+    assert!(started.elapsed() >= Duration::from_millis(100));
+}
+
+#[test]
+fn wait_ready_gives_up_after_the_timeout() {
+    let port = health_server(&["503 Service Unavailable"]);
+    assert_eq!(
+        wait_ready(port, Duration::from_millis(50), Duration::from_millis(300)),
+        Err(CheckError::NotReady(port))
+    );
+    // Nobody listening at all.
+    let closed = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    assert_eq!(
+        wait_ready(
+            closed,
+            Duration::from_millis(50),
+            Duration::from_millis(200)
+        ),
+        Err(CheckError::NotReady(closed))
+    );
+}
+
+#[test]
+fn binary_idle_only_checks_no_model() {
+    if running_as_root() {
+        return;
+    }
+    let run = |idle: &str| {
+        Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+            .env_clear()
+            .env("OPENVIBES_LLM_IDLE", idle)
+            .arg("--idle-only")
+            .output()
+            .unwrap()
+    };
+    let ok = run("30s");
+    assert!(ok.status.success(), "{ok:?}");
+    let bad = run("5m");
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("OPENVIBES_LLM_IDLE is invalid"));
+    let unknown = Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+        .env_clear()
+        .arg("--bogus")
+        .output()
+        .unwrap();
+    assert!(!unknown.status.success());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("usage"));
 }
