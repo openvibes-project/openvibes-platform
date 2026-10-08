@@ -12,7 +12,8 @@ pub enum Unit {
     Vulns,
     /// `openvibes-console.service`.
     Console,
-    /// `openvibes-llm.service`.
+    /// `openvibes-llm.socket`: what is enabled; it starts the model server
+    /// on the first request, which stops again when idle.
     Llm,
     /// `openvibes-maintenance.timer`.
     Maintenance,
@@ -40,7 +41,7 @@ impl Unit {
             Unit::Distribution => "openvibes-distribution.service",
             Unit::Vulns => "openvibes-vulns.service",
             Unit::Console => "openvibes-console.service",
-            Unit::Llm => "openvibes-llm.service",
+            Unit::Llm => "openvibes-llm.socket",
             Unit::Maintenance => "openvibes-maintenance.timer",
             Unit::Signer => "openvibes-signer.service",
         }
@@ -60,7 +61,8 @@ impl Unit {
         }
     }
 
-    /// The loopback readiness endpoint at the packaged default port.
+    /// The loopback readiness endpoint at the packaged default port. None
+    /// for the llm socket: a probe through it would load the model.
     #[must_use]
     pub fn ready_url(self) -> Option<&'static str> {
         match self {
@@ -68,8 +70,7 @@ impl Unit {
             Unit::Distribution => Some("http://127.0.0.1:18481/ready"),
             Unit::Vulns => Some("http://127.0.0.1:18483/ready"),
             Unit::Console => Some("http://127.0.0.1:18482/ready"),
-            Unit::Llm => Some("http://127.0.0.1:18430/health"),
-            Unit::Maintenance | Unit::Signer => None,
+            Unit::Llm | Unit::Maintenance | Unit::Signer => None,
         }
     }
 

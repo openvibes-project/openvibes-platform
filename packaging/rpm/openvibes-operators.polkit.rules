@@ -9,8 +9,7 @@ polkit.addRule(function (action, subject) {
     }
     var units = ["openvibes-ingest.service", "openvibes-distribution.service",
                  "openvibes-vulns.service", "openvibes-console.service",
-                 "openvibes-llm.socket", "openvibes-llm.service",
-                 "openvibes-llm-proxy.service", "openvibes-signer.service",
+                 "openvibes-llm.socket", "openvibes-signer.service",
                  "openvibes-maintenance.timer"];
     var verbs = ["start", "stop", "restart"];
     if (units.indexOf(action.lookup("unit")) >= 0 &&

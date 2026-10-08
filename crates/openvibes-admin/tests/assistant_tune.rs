@@ -143,6 +143,14 @@ fn fast_server_sets_threads_and_leaves_console_alone() {
     );
     assert!(read(&root, TUNING).contains("OPENVIBES_LLM_THREADS=2\n"));
     assert_eq!(read(&root, CONSOLE), before);
+    // Stopped, not restarted: the health wait through the socket starts it
+    // with the new tuning.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("systemctl stop openvibes-llm-proxy.service openvibes-llm.service"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("restart openvibes-llm"), "{stderr}");
     let json: serde_json::Value = serde_json::from_str(&read(&root, TUNE_JSON)).unwrap();
     assert_eq!(json["mode"], "cpu");
     assert_eq!(json["threads"], 2);
@@ -338,7 +346,7 @@ fn keys_left_alone_are_named() {
 }
 
 #[test]
-fn another_backend_only_try_restarts_and_skips_the_health_wait() {
+fn another_backend_only_stops_the_server_and_skips_the_health_wait() {
     let port = server_with(None, "503 Service Unavailable", "200 OK");
     let root = tree("other-down", port, 60);
     fs::write(root.join(CONSOLE), console(port + 1, 60)).unwrap();
@@ -347,10 +355,10 @@ fn another_backend_only_try_restarts_and_skips_the_health_wait() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("systemctl try-restart openvibes-llm"),
+        stderr.contains("systemctl stop openvibes-llm-proxy.service openvibes-llm.service"),
         "{stderr}"
     );
-    assert!(!stderr.contains("systemctl restart"), "{stderr}");
+    assert!(!stderr.contains("restart openvibes-llm"), "{stderr}");
     fs::remove_dir_all(&root).unwrap();
 }
 

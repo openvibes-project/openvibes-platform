@@ -67,7 +67,7 @@ fn services_parse_systemctl_show() {
     let show = "Id=openvibes-ingest.service\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\nActiveEnterTimestamp=Sun 2026-09-27 10:00:00 UTC\n\n\
                 Id=openvibes-distribution.service\nLoadState=not-found\nActiveState=inactive\nUnitFileState=\nActiveEnterTimestamp=\n\n\
                 Id=openvibes-vulns.service\nLoadState=loaded\nActiveState=failed\nUnitFileState=enabled\nActiveEnterTimestamp=\n\n\
-                Id=openvibes-llm.service\nLoadState=loaded\nActiveState=inactive\nUnitFileState=disabled\nActiveEnterTimestamp=\n\n\
+                Id=openvibes-llm.socket\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\nActiveEnterTimestamp=Sun 2026-09-27 09:00:00 UTC\n\n\
                 Id=openvibes-maintenance.timer\nLoadState=loaded\nActiveState=active\nUnitFileState=enabled\nActiveEnterTimestamp=Sun 2026-09-27 09:00:00 UTC\n";
     let host = fake(vec![
         (vec!["/usr/bin/systemctl", "show"], out(0, show, "")),
@@ -101,6 +101,15 @@ fn services_parse_systemctl_show() {
     assert!(!services[1].installed, "not-found means not installed");
     assert_eq!(services[2].active, "failed");
     assert_eq!(services[2].ready, None, "not active: not probed");
+    assert_eq!(
+        (
+            services[3].unit,
+            services[3].active.as_str(),
+            services[3].ready
+        ),
+        (Unit::Llm, "active", None),
+        "the llm socket is listening; /health through it would load the model"
+    );
     assert_eq!(services[4].ready, None, "the timer has no endpoint");
     assert_eq!(
         services[4].since.as_deref(),
@@ -398,7 +407,9 @@ fn the_polkit_rule_lists_exactly_the_units() {
             unit.name()
         );
     }
-    let listed = rule.matches(".service\"").count() + rule.matches(".timer\"").count();
+    let listed = rule.matches(".service\"").count()
+        + rule.matches(".timer\"").count()
+        + rule.matches(".socket\"").count();
     assert_eq!(listed, Unit::ALL.len());
 }
 

@@ -320,8 +320,19 @@ fn stdin_text() -> Result<String, String> {
 // journalctl argument vector for an allow-listed unit.
 #[allow(clippy::disallowed_types)]
 fn logs(unit: Unit, lines: u16) -> ExitCode {
-    let status = std::process::Command::new("/usr/bin/journalctl")
-        .args(["-u", unit.name(), "-n", &lines.to_string()])
+    let mut journalctl = std::process::Command::new("/usr/bin/journalctl");
+    journalctl.args(["-u", unit.name()]);
+    if unit == Unit::Llm {
+        // The socket says little; the model server and its proxy say why.
+        journalctl.args([
+            "-u",
+            "openvibes-llm.service",
+            "-u",
+            "openvibes-llm-proxy.service",
+        ]);
+    }
+    let status = journalctl
+        .args(["-n", &lines.to_string()])
         .args(["-o", "short-iso", "--no-pager"])
         .status();
     match status {

@@ -39,6 +39,14 @@ pub struct TuneOptions {
     pub json: bool,
 }
 
+/// Stops the model server; the next request through its socket starts it
+/// with the new tuning (a stopped one stays stopped).
+const STOP_LLM: [&str; 3] = [
+    "stop",
+    "openvibes-llm-proxy.service",
+    "openvibes-llm.service",
+];
+
 /// The side effects that change the host's services.
 pub trait Restarter {
     fn systemctl(&self, args: &[&str]) -> Result<(), String>;
@@ -280,7 +288,8 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         .is_some_and(|b| is_local(&b.url, port));
     // Root sends the local server only its own key: console.toml's
     // api_key_file is operator-chosen (any root-readable secret), and
-    // another local user may hold the port while openvibes-llm restarts.
+    // another local user may hold the port while openvibes-llm.socket is
+    // stopped.
     let server_key = if let (true, Some(b)) = (local, config.backend.as_mut()) {
         b.api_key_file = None;
         let key = read_regular(&etc.join("llm-api-key")).unwrap_or_default();
@@ -321,23 +330,21 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let tuning = data.join("tuning.conf");
     let old = read_regular(&tuning);
     write_atomic(&tuning, &tune::tuning_conf(&plan))?;
-    // Another backend: only a running server picks up the tuning; a
-    // stopped or broken one is not started, waited for, or measured.
-    let verb = if local { "restart" } else { "try-restart" };
-    let measured = restarter
-        .systemctl(&[verb, "openvibes-llm"])
-        .and_then(|()| {
-            if !local {
-                return Ok(None);
-            }
-            wait_health(port)?;
-            let t = time_call(&client, limit)?;
-            if t.is_finite() {
-                Ok(Some(t))
-            } else {
-                Err("the timed call gave no usable time".into())
-            }
-        });
+    // Stopped either way. Local: the health wait goes through the socket,
+    // which starts the server on the new tuning. Another backend: nothing
+    // starts it, waits for it, or measures it.
+    let measured = restarter.systemctl(&STOP_LLM).and_then(|()| {
+        if !local {
+            return Ok(None);
+        }
+        wait_health(port)?;
+        let t = time_call(&client, limit)?;
+        if t.is_finite() {
+            Ok(Some(t))
+        } else {
+            Err("the timed call gave no usable time".into())
+        }
+    });
     let t = match measured {
         Ok(t) => t,
         Err(error) => {
@@ -349,7 +356,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             if let Err(why) = restored {
                 eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
-            let _ = restarter.systemctl(&[verb, "openvibes-llm"]);
+            let _ = restarter.systemctl(&STOP_LLM);
             return Err(error);
         }
     };

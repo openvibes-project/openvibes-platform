@@ -24,7 +24,8 @@ const MAX_CONFIG_BYTES: u64 = 64 * 1024;
 #[derive(Subcommand)]
 pub enum ModelCommand {
     /// Verify a GGUF file against its published SHA-256, install it
-    /// read-only, and select it for openvibes-llm; then restart it.
+    /// read-only, and select it for openvibes-llm; then stop it (the next
+    /// question loads the new model).
     Install {
         /// The downloaded model file.
         file: PathBuf,
@@ -143,7 +144,7 @@ fn install(
     let updated = update_config(&config, &destination, &expected, alias);
     write_replacing(model_config, &updated, 0o644)?;
     Ok(format!(
-        "installed {} ({} MiB, sha256 {expected})\nupdated {}\nnext: systemctl restart openvibes-llm\n",
+        "installed {} ({} MiB, sha256 {expected})\nupdated {}\nnext: systemctl stop openvibes-llm-proxy openvibes-llm (the next question loads the new model)\n",
         destination.display(),
         size >> 20,
         model_config.display(),
