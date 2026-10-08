@@ -433,6 +433,11 @@ the admin TUI work (`openvibes-admin`, `openvibes-ingest`,
   ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";
   ```
 
+  On a fresh install PostgreSQL is not on the host yet (Setup installs it)
+  and the config points at the local socket: there is no role to rename,
+  so nothing is printed (install walkthrough, 2026-10-08, where the message
+  alarmed a new user).
+
 `%post` only changes the config and the role once the OS account was
 renamed, and warns when the roles are not as expected (neither name, or
 both). Every step checks first, so reinstalling changes nothing. In SQL the new

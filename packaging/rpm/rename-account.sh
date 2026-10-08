@@ -19,6 +19,13 @@ fi
 sql="ALTER ROLE ${old} RENAME TO \"${new}\";"
 if ! has=$(runuser -u postgres -- psql -AtqX -c \
     "SELECT rolname FROM pg_roles WHERE rolname IN ('$old','$new') ORDER BY 1" 2>/dev/null); then
+    # A fresh install: PostgreSQL is not on this host yet (Setup installs it)
+    # and the config points here, so there is no database and no role to
+    # rename. A database on another server still gets the statement.
+    if ! getent passwd postgres >/dev/null &&
+        { [[ -z $config || ! -f $config ]] || grep -q 'host=/' "$config"; }; then
+        exit 0
+    fi
     echo "openvibes: PostgreSQL not reachable here; on the database server run as postgres: $sql" >&2
     exit 0
 fi

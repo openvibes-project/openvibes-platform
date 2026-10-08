@@ -24,7 +24,7 @@ cat > "$T/bin/getent" <<'FAKE'
 grep -qx "$2" "$STATE/users" 2>/dev/null
 FAKE
 chmod +x "$T/bin/getent"
-printf '%s\n' openvibes-ingest openvibes-vulns openvibes-llm > "$T/users"
+printf '%s\n' openvibes-ingest openvibes-vulns openvibes-llm openvibes-admin > "$T/users"
 export PATH=$T/bin:$PATH STATE=$T
 run() { : > "$T/log"; bash "$SCRIPT" "$@" 2> "$T/err" || { cat "$T/err" >&2; return 1; }; }
 
@@ -45,9 +45,24 @@ cmp -s "$cfg" "$T/before" || fail "second run changed the config"
 grep -q ALTER "$T/log" && fail "renamed a role that is already renamed"
 
 # PostgreSQL unreachable: success, and the statement is printed.
+echo postgres >> "$T/users"
 touch "$T/down"
 run post vulns || fail "failed the transaction"
 grep -q 'ALTER ROLE openvibes_vulns RENAME TO "openvibes-vulns";' "$T/err" || fail "statement not printed"
+sed -i '/^postgres$/d' "$T/users"
+
+# A fresh install (install walkthrough, 2026-10-08): PostgreSQL is not on
+# this host yet (Setup installs it) and the config points here: no database,
+# nothing to rename, nothing to say.
+local_cfg=$T/admin.toml
+echo 'database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-admin"' > "$local_cfg"
+run post admin "$local_cfg" || fail "failed the transaction"
+[[ ! -s $T/err ]] || fail "a fresh install printed: $(cat "$T/err")"
+# The database on another server: still say what to run there.
+remote_cfg=$T/remote.toml
+echo 'database_url = "postgresql://db.example/openvibes?user=openvibes_admin"' > "$remote_cfg"
+run post admin "$remote_cfg" || fail "failed the transaction"
+grep -q 'ALTER ROLE openvibes_admin RENAME TO "openvibes-admin";' "$T/err" || fail "remote database: statement not printed"
 rm "$T/down"
 
 # The OS rename did not happen (old user still there): change nothing, say so.
