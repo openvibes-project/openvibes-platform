@@ -18,7 +18,7 @@ test("overview lists what needs attention and opens it beside the page", async (
 });
 
 test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
-  await page.getByRole("link", { name: "Compliance" }).click();
+  await page.getByRole("link", { name: "Compliance", exact: true }).click();
   await page.locator(".view tbody tr").first().locator("td").nth(1).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   await page.locator(".inspector tbody a").first().click();
@@ -144,7 +144,7 @@ test("a finding set to Investigating stays in the default Findings list (board #
   await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);
   // Not page.goto: the demo keeps its data in memory and a reload resets it.
   await page.keyboard.press("Escape");
-  await page.getByRole("link", { name: "Compliance" }).click();
+  await page.getByRole("link", { name: "Compliance", exact: true }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "World-writable file in /etc" })).toBeVisible();
 });
 

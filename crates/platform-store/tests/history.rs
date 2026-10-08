@@ -177,3 +177,65 @@ async fn overlapping_records_of_the_same_day_both_succeed() {
     }
     db.drop().await;
 }
+
+#[tokio::test]
+async fn top_hosts_rank_by_critical_and_high_across_kinds_then_total() {
+    let (db, client) = common::migrated().await;
+    let (a3, a4) = (
+        "agent.00000000-0000-0000-0000-000000000003",
+        "agent.00000000-0000-0000-0000-000000000004",
+    );
+    for id in [A1, A2, a3, a4] {
+        common::seed_agent(&client, id).await;
+    }
+    // A1: one high vulnerability. A2: two critical compliance findings.
+    // A3: one high vulnerability plus many mediums (same serious as A1, more open).
+    // A4: nothing, never listed.
+    common::seed_host_vuln_counts(&client, A1, 0, 1, 0, 0).await;
+    common::seed_host_vuln_counts(&client, a3, 0, 1, 5, 0).await;
+    for rule in ["r1", "r2"] {
+        client
+            .execute(
+                "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
+                     severity, first_observed_at, last_observed_at, last_observed_day, scan_id,
+                     confidence, message, evidence, received_at, origin, authenticated)
+                 VALUES ($1, $2, 'f', 1, 'critical', now(), now(), (now() AT TIME ZONE 'UTC')::date,
+                     's', 50, 'm', '{}', now(), 'online', false)",
+                &[&A2, &rule],
+            )
+            .await
+            .unwrap();
+    }
+    let now = Utc.with_ymd_and_hms(2026, 10, 7, 3, 0, 0).unwrap();
+    let rank = |hosts: Vec<history::TopHost>| {
+        hosts
+            .into_iter()
+            .map(|h| (h.agent_id, h.serious, h.open))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        rank(history::top_hosts(&client, now, 10, None).await.unwrap()),
+        [
+            (A2.to_owned(), 2, 2),
+            (a3.to_owned(), 1, 6),
+            (A1.to_owned(), 1, 1)
+        ]
+    );
+    assert_eq!(
+        history::top_hosts(&client, now, 1, None)
+            .await
+            .unwrap()
+            .len(),
+        1
+    );
+    let scope = [A1.to_owned(), a3.to_owned()];
+    assert_eq!(
+        rank(
+            history::top_hosts(&client, now, 10, Some(&scope))
+                .await
+                .unwrap()
+        ),
+        [(a3.to_owned(), 1, 6), (A1.to_owned(), 1, 1)]
+    );
+    db.drop().await;
+}

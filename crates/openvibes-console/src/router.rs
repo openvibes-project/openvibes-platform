@@ -620,6 +620,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             get(crate::software::list_host_packages),
         )
         .route("/v1/metrics/history", get(crate::metrics::history))
+        .route("/v1/metrics/top-hosts", get(crate::metrics::top_hosts))
         .route("/v1/software", get(crate::software::list_software))
         .route(
             "/v1/software/{manager}/{name}",

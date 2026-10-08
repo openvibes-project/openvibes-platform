@@ -922,6 +922,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/metrics/top-hosts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["top_hosts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ports": {
         parameters: {
             query?: never;
@@ -3574,6 +3590,28 @@ export interface components {
             expression: string;
             /** @description Original result. */
             result: boolean;
+        };
+        /** @description One host in the ranking. */
+        TopHostItem: {
+            /** @description The host's agent id. */
+            agent_id: string;
+            /** @description Its reported hostname. */
+            hostname?: string | null;
+            /**
+             * Format: int64
+             * @description All open problems, all kinds.
+             */
+            open: number;
+            /**
+             * Format: int64
+             * @description Critical plus high problems, all kinds.
+             */
+            serious: number;
+        };
+        /** @description Hosts with the most serious open problems across alarms, vulnerabilities and compliance. */
+        TopHosts: {
+            /** @description Most exposed first. */
+            items: components["schemas"]["TopHostItem"][];
         };
         /**
          * @description One service unit across the caller's hosts: a page of the hosts
@@ -7295,6 +7333,65 @@ export interface operations {
                 };
             };
             /** @description Unknown metric or unsupported window */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    top_hosts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description How many hosts, 1 to 10 (default 6). */
+                limit: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Hosts ranked by critical and high problems across kinds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TopHosts"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Missing permission, or the kinds have different scopes */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Invalid limit */
             422: {
                 headers: {
                     [name: string]: unknown;

@@ -8,12 +8,46 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("home falls back to the built-in", async ({ page }) => {
-  await expect(page.locator(".tile")).toHaveCount(10);
-  // Most important first (#116): alarms, then critical findings, top left.
+  await expect(page.locator(".tile")).toHaveCount(11);
+  // Most important first (#116): alarms, then every critical issue, top left.
   const titles = await page.locator(".tile .tile__title").allTextContents();
-  expect(titles.join("|")).toMatch(/Active alarms.*Open critical compliance findings/);
+  expect(titles.join("|")).toMatch(/Active alarms.*Critical/);
   await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
 });
+
+test("the Overview's Critical tile adds up, links to its part, and speaks of issues", async ({ page }) => {
+  const tile = page.locator(".tile", { has: page.locator(".tile__title", { hasText: /^Critical$/ }) });
+  const total = Number((await tile.locator(".stat__value").textContent())?.replace(/\D/g, ""));
+  const parts = (await tile.locator(".tile-parts").textContent()) ?? "";
+  const sum = [...parts.matchAll(/(\d[\d,]*) (?:alarm|vulnerabilit|compliance)/g)].reduce((n, m) => n + Number((m[1] ?? "").replace(/,/g, "")), 0);
+  expect(total).toBeGreaterThan(0);
+  expect(sum).toBe(total);
+  await expect(page.locator(".tile", { hasText: "Needs attention" }).getByText(/^Vulnerability/).first()).toBeVisible();
+  // "finding" is the compliance word only.
+  const text = await page.locator("#main").innerText();
+  expect(text.replace(/compliance findings?/gi, "")).not.toMatch(/\bfindings?\b/i);
+  await tile.getByRole("button", { name: /vulnerabilit/ }).click();
+  await expect(page).toHaveURL(/\/vulnerabilities\?severity=critical/);
+});
+
+for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
+  test(`the Overview lays out without overflow (${name})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".tile")).toHaveCount(11);
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // The lists scroll inside their tile by design; the number tiles must show everything.
+    // Trend tiles: no tolerance. The Fleet h: 2 tiles overflow by 2px, which predates the trend tiles.
+    for (const tile of await page.locator(".tile", { has: page.locator(".tile-number") }).all()) {
+      const slack = (await tile.locator(".tile-parts").count()) || (await tile.locator(".linechart").count()) ? 0 : 2;
+      expect(await tile.locator(".tile__body").evaluate((el, s) => el.scrollHeight <= el.clientHeight + s, slack), await tile.innerText()).toBe(true);
+    }
+    // Dots between the parts when there is room for them, none when the parts wrap.
+    const seps = page.locator(".tile-parts__sep");
+    expect(await seps.first().evaluate((el) => getComputedStyle(el).display !== "none")).toBe(width > 400);
+  });
+}
 
 test("a new dashboard gets a widget, is saved, and survives a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Dashboards" }).click();
@@ -48,7 +82,7 @@ test("asks before leaving unsaved edits", async ({ page }) => {
   await page.getByLabel("Dashboard name").fill("Changed");
   let asked = false;
   page.once("dialog", (dialog) => { asked = true; void dialog.dismiss(); });
-  await page.getByRole("link", { name: "Compliance" }).click();
+  await page.getByRole("link", { name: "Compliance", exact: true }).click();
   expect(asked).toBe(true);
   await expect(page.getByLabel("Dashboard name")).toHaveValue("Changed");
 });
@@ -99,7 +133,7 @@ test("New dashboard while editing keeps the draft when you choose to stay", asyn
 });
 
 test("Back with unsaved edits asks first", async ({ page }) => {
-  await page.getByRole("link", { name: "Compliance" }).click();
+  await page.getByRole("link", { name: "Compliance", exact: true }).click();
   await page.getByRole("link", { name: "Dashboards" }).click();
   await page.getByRole("button", { name: "Duplicate to edit" }).click();
   await page.getByLabel("Dashboard name").fill("Changed");
@@ -125,7 +159,7 @@ test("a dashboard with a widget type this console does not know still renders", 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("From a newer console");
   await expect(page.locator(".tile", { hasText: "Unsupported widget" })).toBeVisible();
   await expect(page.locator(".tile", { hasText: "Stale hosts" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Compliance" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Compliance", exact: true })).toBeVisible();
 });
 
 test("a tile deleted from the keyboard comes back with Undo", async ({ page }) => {
@@ -167,3 +201,27 @@ test("the editing note is for phones only", async ({ page }) => {
   await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
   await expect(page.getByText("Editing needs a wider screen")).toBeHidden();
 });
+
+for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
+  test(`a Critical tile at the Overview size keeps its fine print inside (${name})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => {
+      const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 4, config: { metric: "all.open.critical", trend: 30 } }] };
+      const now = new Date().toISOString();
+      localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
+        { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+      ], homes: [["u-admin", "d-crit"]] }));
+    });
+    await page.goto("/");
+    const tile = page.locator(".tile", { hasText: "alarm" });
+    await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 74 vulnerabilities · 9 compliance");
+    await expect(tile.locator(".tile-number .delta")).toBeVisible();
+    await expect(tile.locator(".linechart svg")).toBeVisible();
+    await expect(tile.getByRole("button")).toHaveCount(3);
+    const box = (await tile.boundingBox()) ?? { y: 0, height: 0 };
+    const parts = (await tile.locator(".tile-parts").boundingBox()) ?? { y: Infinity, height: 0 };
+    expect(parts.y).toBeGreaterThanOrEqual(box.y);
+    expect(parts.y + parts.height).toBeLessThanOrEqual(box.y + box.height);
+    expect(await tile.locator(".tile__body").evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
+  });
+}

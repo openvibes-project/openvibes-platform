@@ -42,6 +42,7 @@ Response: `{metric, points: [{day, value}]}`, oldest first. The window is
   today, computed live. Stored rows dated today or later are not served.
 - A day with no stored row (missed maintenance run, or no visible host) is
   absent from `points`: a gap, not a zero.
+- Demo divergence: the console demo counts compliance findings whose triage state is open, while the real platform counts every current finding.
 - Sums cover only the hosts in the caller's scope, filtered in SQL.
 - Permissions: every permission listed for the metric is required (403
   otherwise). If a metric needs several permissions and the caller's scopes
@@ -49,6 +50,17 @@ Response: `{metric, points: [{day, value}]}`, oldest first. The window is
   the answer is 403, since no single host set is correct.
 - 401 without a session or token; 422 `invalid_metric_query` with field code
   `unknown_metric` or `invalid_days`; 503 when the database is unavailable.
+
+## Reader: `GET /api/v1/metrics/top-hosts`
+
+Query: `limit` (1 to 10, default 6; else 422 `invalid_metric_query` with field
+code `invalid_limit`). Response: `{items: [{agent_id, hostname, serious, open}]}`
+from the same per-host query (`history::top_hosts`): `serious` is critical plus
+high of alarms, vulnerabilities and compliance; `open` adds medium and low
+(info alarms excluded). Ordered by `serious`, then `open`, then agent id; hosts
+with nothing open are left out. Unrated vulnerabilities are in no count here (the vulnerabilities-only mode of the Most exposed hosts tile does list them). Same permission rule and scoping as the
+cross-kind metrics (403 unless alarms, vulnerabilities and compliance reads
+share one scope).
 
 | Metric id | Meaning | Permissions |
 |---|---|---|

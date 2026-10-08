@@ -77,12 +77,68 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   or a confirmed leave clears them.
 - **Undo:** removing a tile (button or Delete) shows an Undo bar. In edit
   mode, a screen-reader hint on each tile describes its keys.
-- **Widgets:** Number, Breakdown, Needs attention, List (any list view with
-  its filters), Trend, Most exposed hosts, and Note (plain text; only
-  whole `https://` words become links).
+- **Widgets:** eight types: Number, Breakdown, Needs attention, List (any
+  list view with its filters), Trend, Most exposed hosts, Graph, and Note
+  (plain text; only whole `https://` words become links).
   - Each tile loads data with the viewer's own permissions.
   - A tile the viewer's role can't read says so.
   - A tile that fails to render doesn't take the dashboard down.
+- **Number tile:** one count from the catalogue
+  ([count-history.md](count-history.md)). Settings: Count, Trend (Off, 7, 30
+  or 90 days) and, with a trend, Line (smooth or stepped).
+  - With a trend it shows a sparkline and the change over the period
+    ("+3", "−2", "no change"). When the history starts later than the
+    period asks, the change adds "vs N d ago".
+  - A count that spans kinds (Critical, High: alarms, vulnerabilities and
+    compliance) has no tile link, because it has no single list. Fine
+    print under the number shows each part ("2 alarms · 1 vulnerability ·
+    0 compliance"), and each part links to its own list.
+  - A vulnerability count reads "Not set up" until the first vulnerability
+    feed import.
+- **Graph widget:** 1 to 4 counts as lines (Count 1 to 4, no repeats; add
+  and remove in settings), over 7, 30, 90 or 365 days (default 30), smooth
+  or stepped. Colours come from a four-colour palette (`--series-1` to
+  `--series-4`, tuned for light and dark). "Show as table" swaps the chart
+  for a day-by-count table, and "Show as chart" swaps back. The role rule:
+  the viewer needs the read permission of every chosen count, otherwise the
+  tile says "Not available with your role". With fewer than two days of
+  history the tile says "Collecting since <day>" instead of a line ("No
+  data yet" when there is none).
+- **Breakdown sources:** a bar and a legend, each segment linking to its
+  list.
+  - Active alarms by severity: critical, high, medium, low, and an
+    info segment computed as the Active alarms count minus the four
+    severities.
+  - Vulnerabilities by severity.
+  - Compliance findings by severity.
+  - Hosts by status.
+  - Vulnerabilities say "Vulnerability scanning is not set up" before
+    the first feed import.
+- **Needs attention** shows at most 1 to 20 items, most urgent first.
+  Kinds (each can be switched off):
+  - active threat alarms, medium and above;
+  - exploited vulnerabilities, grouped by advisory;
+  - serious: open critical and high vulnerabilities that are not
+    exploited (`exploited=false`), grouped by advisory, the 20 advisories
+    on most hosts kept. When the server cut the list short, the host count
+    reads "N+ hosts";
+  - open critical and high compliance findings;
+  - hosts that stopped reporting.
+- **Most exposed hosts:** settings Count (All kinds or Vulnerabilities only) and Hosts (1 to 10, default 6).
+  - All kinds ranks hosts by critical and high problems across alarms,
+    vulnerabilities and compliance findings, from
+    `GET /api/v1/metrics/top-hosts`. It needs the three read permissions
+    and one shared scope; otherwise the tile says "Not available with your
+    role — choose Vulnerabilities only".
+  - Vulnerabilities only ranks hosts by open vulnerabilities.
+- **The built-in Overview** (read-only; "Duplicate to edit" makes a copy):
+  - top row, four Number tiles with a 30-day trend: Active alarms,
+    Critical (all kinds), High (all kinds), Exploited vulnerabilities;
+  - middle: Needs attention (alarms, exploited, serious, compliance,
+    stale; 14 items) beside Vulnerabilities by severity, Compliance
+    findings by severity and Most exposed hosts (7, all kinds);
+  - bottom row, three Number tiles: Fleet · online, Fleet · stale,
+    Fleet · need a reboot.
 - **The rail** is icons until hovered or focused, then opens over the page
   (its width and negative margin animate together, so the page never moves
   while it opens; e2e "opening the rail over the page never moves the

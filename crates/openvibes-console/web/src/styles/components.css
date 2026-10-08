@@ -173,3 +173,31 @@
 .picker__option--active { background: var(--accent-soft); }
 .picker__option[aria-selected="true"] { font-weight: 600; }
 .picker__empty { cursor: default; }
+
+/* Line chart (ui/LineChart.tsx): drawn at pixel size; text never takes a series colour. */
+.linechart { position: relative; width: 100%; --c: var(--accent); }
+.linechart svg { display: block; width: 100%; touch-action: pan-y; }
+/* Several lines take the fixed categorical order (tokens.css --series-*, validated in both modes); never severity colours. One line is the accent. */
+.linechart--multi [data-s="0"] { --c: var(--series-1); }
+.linechart--multi [data-s="1"] { --c: var(--series-2); }
+.linechart--multi [data-s="2"] { --c: var(--series-3); }
+.linechart--multi [data-s="3"] { --c: var(--series-4); }
+.linechart__grid { stroke: var(--line); stroke-width: 1; }
+.linechart__ax { fill: var(--text-3); font-size: 10px; }
+.linechart__end { fill: var(--text-2); font-size: 10px; font-weight: 600; }
+.linechart__area { fill: var(--accent-soft); stroke: none; }
+.linechart__line { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.linechart__line-dot { fill: var(--c); }
+.linechart__dot { fill: var(--c); stroke: var(--surface); stroke-width: 2; }
+.linechart__cross { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.linechart__tip { position: absolute; top: 0; pointer-events: none; z-index: 2; white-space: nowrap; font-size: 11px; color: var(--text); background: var(--surface-3); border: 1px solid var(--line-strong); border-radius: 6px; padding: 4px 7px; }
+.linechart__tip b { font-weight: 600; }
+.linechart__tip-row { display: block; }
+.linechart__swatch { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 5px; background: var(--c); }
+.linechart__legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 6px 0 0; padding: 0; list-style: none; font-size: 11px; color: var(--text-2); }
+.linechart__toggle { margin-top: 6px; padding: 0; border: 0; background: none; color: var(--text-2); font-size: 11px; text-decoration: underline; cursor: pointer; }
+.linechart__table { max-height: 150px; overflow: auto; font-size: 11px; }
+.linechart__table table { width: 100%; border-collapse: collapse; }
+.linechart__table th, .linechart__table td { padding: 2px 8px 2px 0; text-align: left; font-weight: 400; color: var(--text-2); }
+.linechart__table thead th { position: sticky; top: 0; background: var(--surface); color: var(--text-3); }
+.linechart--empty { font-size: 11px; }

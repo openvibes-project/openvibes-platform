@@ -515,3 +515,52 @@ async fn live_values_match_the_summaries_and_lists() {
     assert!(mismatches.is_empty(), "{mismatches:#?}");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn top_hosts_rank_across_kinds_within_the_callers_scope() {
+    if std::env::var_os("OPENVIBES_TEST_DATABASE_URL").is_none() {
+        return;
+    }
+    let (db, router) = setup().await;
+    let client = db.pool.get().await.unwrap();
+    client
+        .batch_execute(&format!(
+            "INSERT INTO host_vulnerability_counts
+                 (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
+             VALUES ('{A}', 0, 0, 1, 0, 0, 0, 0, now()), ('{B}', 0, 2, 0, 0, 0, 0, 0, now());"
+        ))
+        .await
+        .unwrap();
+    drop(client);
+    let (vera, _) = login(&router, "vera").await;
+    let (status, body) = get(&router, &vera, "/api/v1/metrics/top-hosts?limit=5").await;
+    assert_eq!(status, StatusCode::OK);
+    let ids: Vec<_> = body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["agent_id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, [B, A]);
+    assert_eq!(body["items"][0]["serious"], 2);
+    assert_eq!(body["items"][0]["hostname"], "host-b");
+    let (sam, _) = login(&router, "sam").await;
+    let (_, scoped) = get(&router, &sam, "/api/v1/metrics/top-hosts").await;
+    assert_eq!(scoped["items"].as_array().unwrap().len(), 1);
+    assert_eq!(scoped["items"][0]["agent_id"], A);
+    for bad in ["0", "11", "x"] {
+        let (status, body) = get(
+            &router,
+            &vera,
+            &format!("/api/v1/metrics/top-hosts?limit={bad}"),
+        )
+        .await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{bad}");
+        assert_eq!(body["field_errors"][0]["code"], "invalid_limit");
+    }
+    let (status, _) = get(&router, "", "/api/v1/metrics/top-hosts").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    // The 403 for kinds with different scopes is covered by `scopes_must_agree`;
+    // every built-in role holds all three read permissions.
+    db.drop().await;
+}

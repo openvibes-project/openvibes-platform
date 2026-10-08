@@ -30,7 +30,7 @@ use Permission::{
 /// One countable thing: who may read it and how to compute it.
 pub struct Metric {
     pub id: &'static str,
-    // ponytail: read by the metric picker (a later task); API ignores it.
+    // Equal to the web catalogue's label (catalogue.test.ts); the API does not serve it.
     #[allow(dead_code)]
     pub label: &'static str,
     pub permissions: &'static [Permission],
@@ -53,13 +53,13 @@ macro_rules! m {
 pub static CATALOGUE: [Metric; 21] = [
     m!(
         "all.open.critical",
-        "Critical problems",
+        "Critical",
         &[AL, VU, CO],
         Expr::Sum(&["alarms_critical", "vulns_critical", "compliance_critical"])
     ),
     m!(
         "all.open.high",
-        "High problems",
+        "High",
         &[AL, VU, CO],
         Expr::Sum(&["alarms_high", "vulns_high", "compliance_high"])
     ),
@@ -77,49 +77,49 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "alarms.active.critical",
-        "Critical alarms",
+        "Active critical alarms",
         &[AL],
         Expr::Sum(&["alarms_critical"])
     ),
     m!(
         "alarms.active.high",
-        "High alarms",
+        "Active high alarms",
         &[AL],
         Expr::Sum(&["alarms_high"])
     ),
     m!(
         "alarms.active.medium",
-        "Medium alarms",
+        "Active medium alarms",
         &[AL],
         Expr::Sum(&["alarms_medium"])
     ),
     m!(
         "alarms.active.low",
-        "Low alarms",
+        "Active low alarms",
         &[AL],
         Expr::Sum(&["alarms_low"])
     ),
     m!(
         "vulns.open.critical",
-        "Critical vulnerabilities",
+        "Open critical vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_critical"])
     ),
     m!(
         "vulns.open.high",
-        "High vulnerabilities",
+        "Open high vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_high"])
     ),
     m!(
         "vulns.open.medium",
-        "Medium vulnerabilities",
+        "Open medium vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_medium"])
     ),
     m!(
         "vulns.open.low",
-        "Low vulnerabilities",
+        "Open low vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_low"])
     ),
@@ -131,7 +131,7 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "vulns.no_fix",
-        "Vulnerabilities without a fix",
+        "No fix yet",
         &[VU],
         Expr::Sum(&["vulns_no_fix"])
     ),
@@ -143,43 +143,43 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "compliance.open.critical",
-        "Critical compliance findings",
+        "Open critical compliance findings",
         &[CO],
         Expr::Sum(&["compliance_critical"])
     ),
     m!(
         "compliance.open.high",
-        "High compliance findings",
+        "Open high compliance findings",
         &[CO],
         Expr::Sum(&["compliance_high"])
     ),
     m!(
         "compliance.open.medium",
-        "Medium compliance findings",
+        "Open medium compliance findings",
         &[CO],
         Expr::Sum(&["compliance_medium"])
     ),
     m!(
         "compliance.open.low",
-        "Low compliance findings",
+        "Open low compliance findings",
         &[CO],
         Expr::Sum(&["compliance_low"])
     ),
     m!(
         "agents.active",
-        "Active agents",
+        "Hosts online",
         &[AG],
         Expr::HostsWhere("status = 'active'")
     ),
     m!(
         "agents.stale",
-        "Stale agents",
+        "Stale hosts",
         &[AG],
         Expr::HostsWhere("status = 'stale'")
     ),
     m!(
         "agents.revoked",
-        "Revoked agents",
+        "Revoked hosts",
         &[AG],
         Expr::HostsWhere("status = 'revoked'")
     ),
@@ -240,6 +240,106 @@ fn common_scope(scopes: Vec<AgentScope>) -> Option<AgentScope> {
     scopes.all(|s| s == first).then_some(first)
 }
 
+/// The caller's one scope over all of `permissions`; 403 when they differ.
+async fn common_read_scope(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    permissions: &[Permission],
+) -> Result<AgentScope, Response> {
+    let mut scopes = Vec::new();
+    for permission in permissions {
+        scopes.push(authenticated_agent_scope(state, headers, *permission).await?);
+    }
+    common_scope(scopes).ok_or_else(|| {
+        problem_response(ProblemDetails::new(
+            StatusCode::FORBIDDEN,
+            "permission_denied",
+            "Counts across kinds need the same scope for alarms, vulnerabilities and compliance",
+        ))
+    })
+}
+
+/// Query of `GET /api/v1/metrics/top-hosts`.
+#[derive(Debug, Deserialize, IntoParams)]
+pub struct TopHostsParams {
+    /// How many hosts, 1 to 10 (default 6).
+    limit: Option<String>,
+}
+
+/// One host in the ranking.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct TopHostItem {
+    /// The host's agent id.
+    pub agent_id: String,
+    /// Its reported hostname.
+    pub hostname: Option<String>,
+    /// Critical plus high problems, all kinds.
+    pub serious: u64,
+    /// All open problems, all kinds.
+    pub open: u64,
+}
+
+/// Hosts with the most serious open problems across alarms, vulnerabilities and compliance.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct TopHosts {
+    /// Most exposed first.
+    pub items: Vec<TopHostItem>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/metrics/top-hosts",
+    tag = "metrics",
+    params(TopHostsParams),
+    responses(
+        (status = 200, description = "Hosts ranked by critical and high problems across kinds", body = TopHosts),
+        (status = 401, description = "Authentication required", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Missing permission, or the kinds have different scopes", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, description = "Invalid limit", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Unavailable", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn top_hosts(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    Query(params): Query<TopHostsParams>,
+) -> Response {
+    let limit: i64 = match params.limit.as_deref().unwrap_or("6").parse() {
+        Ok(n @ 1..=10) => n,
+        _ => return invalid("limit", "invalid_limit", "limit must be 1 to 10"),
+    };
+    let scope = match common_read_scope(&state, &headers, &[AL, VU, CO]).await {
+        Ok(scope) => scope,
+        Err(response) => return response,
+    };
+    let client = match state.pool.get().await {
+        Ok(client) => client,
+        Err(_) => return unavailable_auth(),
+    };
+    let ids = match &scope {
+        AgentScope::Global => None,
+        scoped => match agent_ids_in_scope(&client, scoped).await {
+            Ok(ids) => Some(ids),
+            Err(_) => return unavailable_auth(),
+        },
+    };
+    match history::top_hosts(&client, Utc::now(), limit, ids.as_deref()).await {
+        Ok(hosts) => Json(TopHosts {
+            items: hosts
+                .into_iter()
+                .map(|h| TopHostItem {
+                    agent_id: h.agent_id,
+                    hostname: h.hostname,
+                    serious: h.serious.max(0) as u64,
+                    open: h.open.max(0) as u64,
+                })
+                .collect(),
+        })
+        .into_response(),
+        Err(_) => unavailable_auth(),
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/api/v1/metrics/history",
@@ -271,19 +371,9 @@ pub(crate) async fn history(
         "365" => 365,
         _ => return invalid("days", "invalid_days", "days must be 7, 30, 90 or 365"),
     };
-    let mut scopes = Vec::new();
-    for permission in metric.permissions {
-        match authenticated_agent_scope(&state, &headers, *permission).await {
-            Ok(scope) => scopes.push(scope),
-            Err(response) => return response,
-        }
-    }
-    let Some(scope) = common_scope(scopes) else {
-        return problem_response(ProblemDetails::new(
-            StatusCode::FORBIDDEN,
-            "permission_denied",
-            "Counts across kinds need the same scope for alarms, vulnerabilities and compliance",
-        ));
+    let scope = match common_read_scope(&state, &headers, metric.permissions).await {
+        Ok(scope) => scope,
+        Err(response) => return response,
     };
     let client = match state.pool.get().await {
         Ok(client) => client,

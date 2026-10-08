@@ -1,81 +1,106 @@
+import { Fragment } from "react";
 import { useResource } from "../api/client";
-import type { AgentSummary, AlarmPage, FindingSummary, VulnerabilitySummary } from "../api/types";
+import type { AgentSummary, FindingSummary, Permission, TopHosts, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
+import { CountError, Unavailable } from "./CountError";
+import { LineChart } from "../ui/LineChart";
 import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
+import { useHistory } from "./history";
+import { METRICS, METRIC_KEYS, delta, deltaSince, partText, scanNotSetUp, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
-export const METRICS = {
-  "alarms.active": { label: "Active alarms", permission: "alarms.read", view: ["/alarms", {}] },
-  "agents.active": { label: "Hosts online", permission: "agents.read", view: ["/agents", { status: "active" }] },
-  "agents.stale": { label: "Stale hosts", permission: "agents.read", view: ["/agents", { status: "stale" }] },
-  "agents.revoked": { label: "Revoked hosts", permission: "agents.read", view: ["/agents", { status: "revoked" }] },
-  "compliance.open.critical": { label: "Open critical compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "critical" }] },
-  "compliance.open.high": { label: "Open high compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "high" }] },
-  "compliance.open.medium": { label: "Open medium compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "medium" }] },
-  "compliance.open.low": { label: "Open low compliance findings", permission: "compliance.read", view: ["/compliance", { severity: "low" }] },
-  "vulns.exploited": { label: "Exploited", permission: "vulnerabilities.read", view: ["/vulnerabilities", { exploited: "true" }] },
-  "vulns.reboot_hosts": { label: "Hosts needing a reboot", permission: "vulnerabilities.read", view: ["/vulnerabilities", { reboot: "true" }] },
-  "vulns.no_fix": { label: "No fix yet", permission: "vulnerabilities.read", view: ["/vulnerabilities", { nofix: "true" }] },
-} as const;
-export type Metric = keyof typeof METRICS;
-export const METRIC_KEYS = Object.keys(METRICS) as Metric[];
+export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
 
-export function Unavailable() {
-  return <div className="tile-empty"><Icon name="ban" size={18} /> Not available with your role</div>;
+export { Unavailable };
+
+// A count's number is the last point of its history: the API's live "today" value.
+function useCount(metric: string | null, days = 7) {
+  const { data, error } = useHistory(metric, days);
+  return { data, error };
+}
+
+function Part({ kind, id, unset }: { kind: string; id: string; unset: boolean }) {
+  const { data, error } = useCount(id);
+  const value = data?.at(-1)?.value;
+  // No vulnerability feed yet: a 0 would claim nothing was found.
+  if (kind === "vulnerability" && unset) return <span>vulnerabilities not set up</span>;
+  const [path, params] = METRICS[id as Metric].view as [string, Record<string, string>]; // catalogue.test.ts: every part has a view
+  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{error ? "—" : value === undefined ? "…" : partText(kind, value)}</button>;
 }
 
 export function NumberTile({ widget }: WidgetProps) {
   const { can } = useSession();
   const metric = str(widget.config, "metric", "agents.active", METRIC_KEYS);
   const def = METRICS[metric];
-  const allowed = can(def.permission);
-  const agents = useResource<AgentSummary>(allowed && metric.startsWith("agents.") ? "/api/v1/agents/summary" : null);
-  const findings = useResource<FindingSummary>(allowed && metric.startsWith("compliance.") ? "/api/v1/compliance/summary" : null);
-  const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
-  // Active alarms: one page of at most 100 (shown as "100+" beyond). Alarms
-  // closed by a suppression are hidden unless suppressed=true.
-  const alarms = useResource<AlarmPage>(allowed && metric === "alarms.active" ? "/api/v1/alarms?state=active&limit=100" : null);
-  if (!allowed) return <Unavailable />;
-  if (metric === "alarms.active") {
-    const n = alarms.data?.items.length;
-    return (
-      <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-        <span className={`stat__value num${n ? " stat__value--crit" : ""}`}>{n === undefined ? "…" : alarms.data?.next_cursor ? "100+" : count(n)}</span>
-      </button>
-    );
-  }
-  const value = metric === "agents.active" ? agents.data?.active : metric === "agents.stale" ? agents.data?.stale : metric === "agents.revoked" ? agents.data?.revoked
-    : metric.startsWith("compliance.open.") ? findings.data?.[metric.slice(16) as "critical" | "high" | "medium" | "low"]
-      : metric === "vulns.exploited" ? vulns.data?.exploited : metric === "vulns.reboot_hosts" ? vulns.data?.reboot_hosts : vulns.data?.no_fix;
-  const tone = value && (metric === "compliance.open.critical" || metric === "vulns.exploited") ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
+  const allowed = permitted(metric, (p) => can(p as Permission));
+  const trend = trendDays(widget.config.trend);
+  // trend <= 7 reuses the 7-day history the number needs anyway.
+  const { data: history, error: historyError } = useCount(allowed ? metric : null, Math.max(7, trend));
+  const value = history?.at(-1)?.value;
+  const points = trend > 0 ? history?.slice(-trend) ?? [] : [];
+  const change = delta(points);
+  const since = deltaSince(points, trend);
   // No vulnerability feed yet: a 0 would claim nothing was found.
-  const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
-  return (
-    <button type="button" className="tile-number" onClick={() => nav.view(def.view[0], def.view[1])}>
-      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : value === undefined ? "…" : count(value)}</span>
+  const vulns = useResource<VulnerabilitySummary>(allowed && (metric.startsWith("vulns.") || def.parts) ? "/api/v1/vulnerabilities/summary" : null);
+  if (!allowed) return <Unavailable />;
+  const tone = value && ["compliance.open.critical", "all.open.critical", "vulns.exploited"].includes(metric) ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
+  const noFeed = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
+  const unset = noFeed && metric.startsWith("vulns.");
+  // A vulnerability count waits for the summary, so no number turns into a dash.
+  if (historyError) return <CountError error={historyError} />;
+  if (vulns.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {vulns.error.message}</div>;
+  const shown = metric.startsWith("vulns.") && vulns.data === undefined ? undefined : value;
+  const body = (
+    <>
+      <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : shown === undefined ? "…" : count(shown)}</span>
       {unset && <span className="subtle">Not set up</span>}
-    </button>
+      {!unset && change && <span className="delta" title={`since ${points[0]?.day}`}>{change}{since && ` ${since}`}</span>}
+    </>
+  );
+  const view = def.view;
+  // Reserve the chart's height while history loads so the fine print does not jump.
+  const chart = trend > 0 && !unset && <div style={{ minHeight: 36 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
+  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} unset={noFeed} /></Fragment>)}</div>;
+  return (
+    <div className="stack">
+      {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
+        : <div className="tile-number tile-number--plain">{body}</div>}
+      {chart}
+      {parts}
+    </div>
   );
 }
 
+export const BREAKDOWN_SOURCES = ["alarms", "vulnerabilities", "compliance", "agents"] as const;
+export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerabilities by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
+const ALARM_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+
 export function BreakdownTile({ widget }: WidgetProps) {
   const { can } = useSession();
-  const source = str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const);
-  const permission = source === "compliance" ? "compliance.read" : source === "agents" ? "agents.read" : "vulnerabilities.read";
+  const source = str(widget.config, "source", "compliance", BREAKDOWN_SOURCES);
+  const permission = { alarms: "alarms.read", compliance: "compliance.read", agents: "agents.read", vulnerabilities: "vulnerabilities.read" }[source] as Permission;
   const allowed = can(permission);
+  // The tiles' own numbers: the history API's live value (last point) of each alarm severity and of all.
+  const alarmHistory = [...ALARM_SEVERITIES.map((s) => `alarms.active.${s}`), "alarms.active"].map((id) => useHistory(allowed && source === "alarms" ? id : null, 7)); // eslint-disable-line react-hooks/rules-of-hooks
+  const alarmCounts = alarmHistory.map((h) => h.data?.at(-1)?.value);
+  const alarmError = alarmHistory.find((h) => h.error)?.error;
   const findings = useResource<FindingSummary>(allowed && source === "compliance" ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && source === "vulnerabilities" ? "/api/v1/vulnerabilities/summary" : null);
   const agents = useResource<AgentSummary>(allowed && source === "agents" ? "/api/v1/agents/summary" : null);
   if (!allowed) return <Unavailable />;
+  if (alarmError) return <div className="tile-empty"><Icon name="alert" size={18} /> {alarmError.message}</div>;
   if (vulns.data && !vulns.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const parts: { key: string; label: string; value: number; tone: string; go: () => void }[] =
-    source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
+    source === "alarms" ? [...ALARM_SEVERITIES.map((s, i) => ({ key: s, label: s, value: alarmCounts[i] ?? 0, tone: s, go: () => nav.view("/alarms", { severity: s }) })),
+      // Info is what the Active alarms tile counts beyond the four severities.
+      { key: "info", label: "info", value: Math.max(0, (alarmCounts[4] ?? 0) - alarmCounts.slice(0, 4).reduce<number>((n, v) => n + (v ?? 0), 0)), tone: "unrated", go: () => nav.view("/alarms", { severity: "info" }) }]
+      : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/agents", { status: s }) }));
   return (
@@ -144,21 +169,33 @@ function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof par
 
 export function TopHostsTile({ widget }: WidgetProps) {
   const { can } = useSession();
-  const summary = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
-  if (!can("vulnerabilities.read")) return <Unavailable />;
-  if (summary.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {summary.error.message}</div>;
-  if (!summary.data) return <div className="skeleton" />;
+  const all = widget.config.kinds !== "vulnerabilities";
+  const limit = int(widget.config, "limit", 6, 1, 10);
+  const allowedAll = can("alarms.read") && can("vulnerabilities.read") && can("compliance.read");
+  const ranking = useResource<TopHosts>(all && allowedAll ? `/api/v1/metrics/top-hosts?limit=${limit}` : null);
+  const summary = useResource<VulnerabilitySummary>(!all && can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
+  const unavailable = (text: string) => <div className="tile-empty"><Icon name="ban" size={18} /> {text}</div>;
+  if (all ? !allowedAll : !can("vulnerabilities.read")) return all ? unavailable("Not available with your role — choose Vulnerabilities only") : <Unavailable />;
+  const failed = all ? ranking.error : summary.error;
+  // 403: the three kinds are readable with different scopes.
+  if (all && ranking.error?.status === 403) return unavailable("Not available with your role — choose Vulnerabilities only");
+  if (failed) return <div className="tile-empty"><Icon name="alert" size={18} /> {failed.message}</div>;
   // No feed ever imported: zero hosts would claim a scan that never ran.
-  if (!summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
-  if (summary.data.top_hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> No host has an open vulnerability</div>;
+  if (scanNotSetUp(all, summary.data)) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
+  const hosts = all ? ranking.data?.items : summary.data?.top_hosts.slice(0, limit);
+  if (!hosts) return <div className="skeleton" />;
+  if (hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> {all ? "No host has an open problem" : "No host has an open vulnerability"}</div>;
   return (
-    <ul className="list list--plain">
-      {summary.data.top_hosts.slice(0, int(widget.config, "limit", 6, 1, 10)).map((host) => (
-        <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
-          <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
-          {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.open} open</span>
-        </ObjectLink></li>
-      ))}
-    </ul>
+    <div className="stack">
+      <ul className="list list--plain">
+        {hosts.map((host) => (
+          <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
+            <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
+            {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.serious > 0 && "· "}{host.open} open</span>
+          </ObjectLink></li>
+        ))}
+      </ul>
+      {all && <div className="subtle">all kinds; unrated vulnerabilities not counted</div>}
+    </div>
   );
 }
