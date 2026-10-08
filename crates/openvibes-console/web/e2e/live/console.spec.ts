@@ -72,13 +72,13 @@ test("with no alarm at all, the Alarms view says how to turn alarms on", async (
   await expect(page.getByText(/"process_events" is in their collectors/)).toBeVisible();
 });
 
-test("Most exposed hosts says scanning is not set up before any feed imported", async ({ page }) => {
-  // This platform never imported a vulnerability feed: "no vulnerable host"
-  // would claim a scan that never ran (board #47).
+test("Most exposed hosts ranks hosts across all kinds even before any feed imported", async ({ page }) => {
+  // No vulnerability feed here, but compliance findings exist: the Overview's
+  // all-kinds ranking lists those hosts and claims no vulnerability scan (board #47).
   await signIn(page, "alex");
   const tile = page.locator(".tile", { hasText: "Most exposed hosts" });
-  await expect(tile.getByText("Vulnerability scanning is not set up")).toBeVisible();
-  await expect(tile.getByText("No host has an open vulnerability")).toHaveCount(0);
+  await expect(tile.locator(".list__row").first()).toContainText(/\d+ open$/);
+  await expect(tile.getByText("No host has an open")).toHaveCount(0);
 });
 
 test("vulnerability number tiles show no zero before any feed imported", async ({ page }) => {

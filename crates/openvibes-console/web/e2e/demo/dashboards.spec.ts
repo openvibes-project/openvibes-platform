@@ -8,12 +8,41 @@ test.beforeEach(async ({ page }) => {
 });
 
 test("home falls back to the built-in", async ({ page }) => {
-  await expect(page.locator(".tile")).toHaveCount(10);
-  // Most important first (#116): alarms, then critical findings, top left.
+  await expect(page.locator(".tile")).toHaveCount(11);
+  // Most important first (#116): alarms, then every critical issue, top left.
   const titles = await page.locator(".tile .tile__title").allTextContents();
-  expect(titles.join("|")).toMatch(/Active alarms.*Open critical compliance findings/);
+  expect(titles.join("|")).toMatch(/Active alarms.*Critical/);
   await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
 });
+
+test("the Overview's Critical tile adds up, links to its part, and speaks of issues", async ({ page }) => {
+  const tile = page.locator(".tile", { has: page.locator(".tile__title", { hasText: /^Critical$/ }) });
+  const total = Number((await tile.locator(".stat__value").textContent())?.replace(/\D/g, ""));
+  const parts = (await tile.locator(".tile-parts").textContent()) ?? "";
+  const sum = [...parts.matchAll(/(\d[\d,]*) (?:alarm|vulnerabilit|compliance)/g)].reduce((n, m) => n + Number((m[1] ?? "").replace(/,/g, "")), 0);
+  expect(total).toBeGreaterThan(0);
+  expect(sum).toBe(total);
+  await expect(page.locator(".tile", { hasText: "Needs attention" }).getByText(/^Vulnerability/).first()).toBeVisible();
+  // "finding" is the compliance word only.
+  const text = await page.locator("#main").innerText();
+  expect(text.replace(/compliance findings?/gi, "")).not.toMatch(/\bfindings?\b/i);
+  await tile.getByRole("button", { name: /vulnerabilit/ }).click();
+  await expect(page).toHaveURL(/\/vulnerabilities\?severity=critical/);
+});
+
+for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
+  test(`the Overview lays out without overflow (${name})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.locator(".tile")).toHaveCount(11);
+    await page.waitForTimeout(500);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // The lists scroll inside their tile by design; the number tiles must show everything.
+    for (const tile of await page.locator(".tile", { has: page.locator(".tile-number") }).all()) {
+      expect(await tile.locator(".tile__body").evaluate((el) => el.scrollHeight <= el.clientHeight + 2), await tile.innerText()).toBe(true);
+    }
+  });
+}
 
 test("a new dashboard gets a widget, is saved, and survives a reload", async ({ page }) => {
   await page.getByRole("button", { name: "Dashboards" }).click();

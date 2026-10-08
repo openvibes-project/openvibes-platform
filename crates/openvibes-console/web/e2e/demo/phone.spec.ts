@@ -46,7 +46,7 @@ test("number tiles sit two to a row", async ({ page }) => {
   await expect(tiles.first()).toBeVisible();
   const [a, b] = [await box(tiles.nth(0)), await box(tiles.nth(1))];
   expect(Math.abs(a.y - b.y)).toBeLessThan(2);
-  expect(a.height).toBeLessThan(120);
+  expect(a.height).toBeLessThan(240); // the Overview's trend tiles (h: 4) are the tallest
   // The clamp, not the font, is what keeps it so: a title takes two lines at most.
   for (const title of await page.locator(".tile[data-type=number] .tile__title").all()) {
     expect(await title.evaluate((e) => e.getBoundingClientRect().height <= 2 * parseFloat(getComputedStyle(e).lineHeight) + 1)).toBe(true);
