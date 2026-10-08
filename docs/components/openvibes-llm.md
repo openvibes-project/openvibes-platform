@@ -48,9 +48,9 @@ still writes and reports its own thread count; the pin wins at start.
 ## The pinned build
 
 `scripts/build-llama-server.sh [cpu|vulkan]` builds from
-`packaging/llm/llama-cpp.pin`: the llama.cpp tree vendored in a
-llama-cpp-python sdist on PyPI (currently upstream commit `4df29be4f4c3`),
-checked against its SHA-256. It turns off everything the service does not
+`packaging/llm/llama-cpp.pin`: the upstream llama.cpp release v0.6.0
+(commit `d81235049384`), GitHub's source archive of the tag, checked
+against its SHA-256. It turns off everything the service does not
 use, so none of it is there to be misused:
 
 - `LLAMA_SUBPROCESS=OFF`: removes the server's built-in agent tools
@@ -62,20 +62,27 @@ use, so none of it is there to be misused:
 - `LLAMA_BUILD_UI=OFF`: no web UI;
 - static libraries, no dynamic backends (`GGML_BACKEND_DL=OFF`).
 
-The script then fails if the binary imports `execve`, `posix_spawn`,
-`popen`, or `system`, or links a TLS library. It still imports `execlp`
+The script then fails if the binary imports an `exec*` function other
+than `execlp`, `posix_spawn`, `posix_spawnp`, `popen`, or `system`, or
+links a TLS library. It still imports `execlp`
 for ggml's crash backtrace (it would run `gdb`). The unit turns that off
 (`GGML_NO_BACKTRACE=1`) and makes it impossible anyway
-(`NoExecPaths=/`). This build has llama-server's idle sleep
-(`--sleep-idle-seconds`), which has a use-after-free (CVE-2026-43631, no
-confirmed fix). The unit never passes it, and `check-rpm.sh` fails if it
-does: idle unloading stops the whole process instead (below).
+(`NoExecPaths=/`). `--rpc` is still listed by `--help` but refuses to
+run ("RPC not supported in this build").
 
-To update: pick a newer sdist, check the llama.cpp commit in its
-CHANGELOG and upstream security advisories, update the pin's three values,
-rebuild, and run `openvibes-admin assistant eval` against the result.
-A direct upstream tarball can replace the PyPI source later; only the pin
-file and the extraction path change.
+Idle sleep (`--sleep-idle-seconds`) has a use-after-free (CVE-2026-43631,
+GHSA-6hc7-9rph-cm99). It is off by default, the unit never passes it,
+`check-rpm.sh` fails if it does, and `openvibes-llm-check` refuses
+`LLAMA_ARG_*`, so it cannot be switched on through the environment either.
+v0.6.0 contains upstream #29309, which may fix it; idle sleep stays unused
+until an advisory confirms. Idle unloading stops the whole process instead
+(below).
+
+To update: pick a newer release tag, resolve its commit, check the
+upstream security advisories, update the pin's three values (the pin file
+says how to verify them), rebuild, check that every CMake option the
+script passes still exists, and run `openvibes-admin assistant eval`
+against the result.
 
 ## Unit
 
