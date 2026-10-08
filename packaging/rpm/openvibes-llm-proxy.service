@@ -1,0 +1,52 @@
+# Passes connections from openvibes-llm.socket to llama-server on
+# OPENVIBES_LLM_INTERNAL_PORT and exits after OPENVIBES_LLM_IDLE without one;
+# openvibes-llm.service (StopWhenUnneeded=yes) then stops and the model is
+# unloaded. Not llama-server's --sleep-idle-seconds: CVE-2026-43631.
+[Unit]
+Description=OpenVIBES local model server proxy (assistant)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+Requires=openvibes-llm.service
+After=openvibes-llm.service
+
+[Service]
+Type=exec
+# Defaults for an llm.conf from before idle unloading; llm.conf overrides.
+Environment=OPENVIBES_LLM_IDLE=5min
+Environment=OPENVIBES_LLM_INTERNAL_PORT=18431
+EnvironmentFile=/etc/openvibes/llm.conf
+# Refuses a malformed idle time or an internal port equal to the public one.
+ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check --idle-only
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd \
+    --exit-idle-time=${OPENVIBES_LLM_IDLE} 127.0.0.1:${OPENVIBES_LLM_INTERNAL_PORT}
+DynamicUser=yes
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectProc=invisible
+ProcSubset=pid
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# Loopback only, in and out.
+IPAddressDeny=any
+IPAddressAllow=localhost
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+SystemCallErrorNumber=EPERM
+CapabilityBoundingSet=
+AmbientCapabilities=
+PrivateUsers=yes
+TasksMax=64

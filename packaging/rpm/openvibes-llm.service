@@ -4,15 +4,22 @@
 # Settings: /etc/openvibes/llm.conf; the model: /var/lib/openvibes-llm/
 # model.conf, written by `openvibes-admin assistant model install`. Memory and
 # CPU share: `systemctl edit openvibes-llm` (MemoryMax=, CPUWeight=).
+# Started on demand: openvibes-llm.socket (the public port) starts
+# openvibes-llm-proxy.service, which requires this; when the proxy exits
+# after OPENVIBES_LLM_IDLE without a request, this stops too (the model's
+# memory is freed). Enable the socket, not this unit.
 [Unit]
 Description=OpenVIBES local model server (assistant)
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=network.target
+StopWhenUnneeded=yes
 
 [Service]
 Type=exec
 User=openvibes-llm
 Group=openvibes-llm
+# Behind the socket proxy; llm.conf overrides (an older llm.conf has none).
+Environment=OPENVIBES_LLM_INTERNAL_PORT=18431
 EnvironmentFile=/etc/openvibes/llm.conf
 # Written by `sudo openvibes-admin helper assistant-tune`; overrides llm.conf
 # for OPENVIBES_LLM_THREADS and OPENVIBES_LLM_GPU_LAYERS. After changing either
@@ -37,11 +44,17 @@ ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check
 # web UI, props changes, metrics, tools/MCP, media paths, model downloads.
 ExecStart=/usr/libexec/openvibes-llm/llama-server \
     --model ${OPENVIBES_LLM_MODEL} --alias ${OPENVIBES_LLM_ALIAS} \
-    --host 127.0.0.1 --port ${OPENVIBES_LLM_PORT} \
+    --host 127.0.0.1 --port ${OPENVIBES_LLM_INTERNAL_PORT} \
     --ctx-size ${OPENVIBES_LLM_CONTEXT} --threads ${OPENVIBES_LLM_THREADS} \
     --n-gpu-layers ${OPENVIBES_LLM_GPU_LAYERS} --parallel ${OPENVIBES_LLM_PARALLEL} \
     --api-key-file %d/api-key \
     --no-webui --no-slots --offline --jinja --timeout 300 --log-colors off
+# Active only once the model is loaded: the proxy (After= this) then passes
+# the waiting connection on. Never --sleep-idle-seconds (CVE-2026-43631):
+# idle unloading stops the whole process instead.
+ExecStartPost=/usr/libexec/openvibes-llm/openvibes-llm-check --wait-ready
+# The check hashes the model, then --wait-ready allows 180 s for loading.
+TimeoutStartSec=300
 Restart=on-failure
 RestartSec=10s
 # Resource shares: the model must never starve ingest or PostgreSQL.
@@ -82,6 +95,3 @@ SystemCallFilter=~@privileged @resources
 SystemCallErrorNumber=EPERM
 CapabilityBoundingSet=
 AmbientCapabilities=
-
-[Install]
-WantedBy=multi-user.target
