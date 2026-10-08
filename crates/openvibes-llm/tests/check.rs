@@ -11,8 +11,8 @@ use std::{
 };
 
 use openvibes_llm::{
-    CheckError, check_environment, check_model, idle_seconds, proxy_settings, running_as_root,
-    settings, sha256_hex, wait_ready,
+    CheckError, LLAMA_SOCKET, check_environment, check_model, idle_seconds, idle_setting,
+    running_as_root, settings, sha256_hex, wait_ready,
 };
 
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -219,17 +219,19 @@ fn binary_refuses_llama_variables_before_anything_else() {
 }
 
 #[test]
-fn idle_and_internal_port_default_for_upgraded_settings_files() {
+fn idle_defaults_for_upgraded_settings_files() {
     let models = Path::new("/var/lib/openvibes-llm/models");
     let checked = settings(&env(models, "m.gguf", EMPTY_SHA256), models).unwrap();
     assert_eq!(checked.idle_seconds, Some(300));
-    assert_eq!(checked.internal_port, 18431);
     let mut vars = env(models, "m.gguf", EMPTY_SHA256);
     vars.insert("OPENVIBES_LLM_IDLE".into(), "infinity".into());
-    vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "18500".into());
-    let checked = settings(&vars, models).unwrap();
-    assert_eq!(checked.idle_seconds, None);
-    assert_eq!(checked.internal_port, 18500);
+    assert_eq!(settings(&vars, models).unwrap().idle_seconds, None);
+    vars.insert("OPENVIBES_LLM_IDLE".into(), "1s".into());
+    assert_eq!(
+        settings(&vars, models),
+        Err(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
+    );
+    assert_eq!(idle_setting(&BTreeMap::new()), Ok(Some(300)));
 }
 
 #[test]
@@ -271,49 +273,12 @@ fn idle_accepts_seconds_minutes_hours_within_30s_to_24h() {
     }
 }
 
-#[test]
-fn proxy_settings_check_idle_and_ports_without_a_model() {
-    let mut vars: BTreeMap<String, String> = BTreeMap::new();
-    let proxy = proxy_settings(&vars).unwrap();
-    assert_eq!(
-        (proxy.port, proxy.internal_port, proxy.idle_seconds),
-        (18430, 18431, Some(300))
-    );
-    vars.insert("OPENVIBES_LLM_IDLE".into(), "1s".into());
-    assert_eq!(
-        proxy_settings(&vars),
-        Err(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
-    );
-    vars.remove("OPENVIBES_LLM_IDLE");
-    for bad in ["80", "70000", "x"] {
-        vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), bad.into());
-        assert_eq!(
-            proxy_settings(&vars),
-            Err(CheckError::Invalid("OPENVIBES_LLM_INTERNAL_PORT")),
-            "{bad}"
-        );
-    }
-    vars.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "18430".into());
-    assert_eq!(proxy_settings(&vars), Err(CheckError::SamePort));
-    vars.insert("OPENVIBES_LLM_PORT".into(), "18500".into());
-    assert_eq!(proxy_settings(&vars).unwrap().port, 18500);
-    // The full check refuses the same.
-    let models = Path::new("/var/lib/openvibes-llm/models");
-    let mut full = env(models, "m.gguf", EMPTY_SHA256);
-    full.insert("OPENVIBES_LLM_INTERNAL_PORT".into(), "8091".into());
-    assert_eq!(settings(&full, models), Err(CheckError::SamePort));
-    assert!(
-        CheckError::SamePort
-            .to_string()
-            .contains("systemctl edit openvibes-llm.socket")
-    );
-}
-
-/// A server on 127.0.0.1 answering `/health` with each status in turn.
-fn health_server(statuses: &'static [&'static str]) -> u16 {
+/// A server on a Unix socket answering `/health` with each status in turn.
+#[cfg(unix)]
+fn health_server(name: &str, statuses: &'static [&'static str]) -> PathBuf {
     use std::io::{Read, Write};
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
+    let path = scratch(name).join("llama.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
     std::thread::spawn(move || {
         for (status, stream) in statuses.iter().cycle().zip(listener.incoming()) {
             let mut stream = stream.unwrap();
@@ -323,45 +288,47 @@ fn health_server(statuses: &'static [&'static str]) -> u16 {
             let _ = write!(stream, "HTTP/1.1 {status}\r\ncontent-length: 0\r\n\r\n");
         }
     });
-    port
+    path
 }
 
+#[cfg(unix)]
 #[test]
-fn wait_ready_polls_until_health_answers_200() {
-    let port = health_server(&[
-        "503 Service Unavailable",
-        "503 Service Unavailable",
-        "200 OK",
-    ]);
+fn wait_ready_polls_the_unix_socket_until_health_answers_200() {
+    let path = health_server(
+        "ready",
+        &[
+            "503 Service Unavailable",
+            "503 Service Unavailable",
+            "200 OK",
+        ],
+    );
     let started = std::time::Instant::now();
     assert_eq!(
-        wait_ready(port, Duration::from_millis(50), Duration::from_secs(5)),
+        wait_ready(&path, Duration::from_millis(50), Duration::from_secs(5)),
         Ok(())
     );
     assert!(started.elapsed() >= Duration::from_millis(100));
 }
 
+#[cfg(unix)]
 #[test]
 fn wait_ready_gives_up_after_the_timeout() {
-    let port = health_server(&["503 Service Unavailable"]);
+    let path = health_server("busy", &["503 Service Unavailable"]);
     assert_eq!(
-        wait_ready(port, Duration::from_millis(50), Duration::from_millis(300)),
-        Err(CheckError::NotReady(port))
+        wait_ready(&path, Duration::from_millis(50), Duration::from_millis(300)),
+        Err(CheckError::NotReady)
     );
-    // Nobody listening at all.
-    let closed = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    // No socket yet: llama-server has not bound it.
+    let absent = scratch("absent").join("llama.sock");
     assert_eq!(
         wait_ready(
-            closed,
+            &absent,
             Duration::from_millis(50),
             Duration::from_millis(200)
         ),
-        Err(CheckError::NotReady(closed))
+        Err(CheckError::NotReady)
     );
+    assert!(CheckError::NotReady.to_string().contains(LLAMA_SOCKET));
 }
 
 #[test]

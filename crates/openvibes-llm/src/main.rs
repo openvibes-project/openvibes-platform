@@ -1,15 +1,15 @@
 #![forbid(unsafe_code)]
 
 //! `openvibes-llm-check`: `ExecStartPre=` of `openvibes-llm.service` (the
-//! full check), `--idle-only` for `openvibes-llm-proxy.service` (idle time
-//! and ports, no model), `--wait-ready` as `openvibes-llm.service`'s
+//! full check), `--idle-only` for `openvibes-llm-proxy.service` (the idle
+//! time, no model), `--wait-ready` as `openvibes-llm.service`'s
 //! `ExecStartPost=` (until the model answers).
 
 use std::{collections::BTreeMap, path::Path, process::ExitCode, time::Duration};
 
 use openvibes_llm::{
-    CheckError, MODELS_DIR, check_environment, check_model, proxy_settings, running_as_root,
-    settings, wait_ready,
+    CheckError, LLAMA_SOCKET, MODELS_DIR, check_environment, check_model, idle_setting,
+    running_as_root, settings, wait_ready,
 };
 
 fn main() -> ExitCode {
@@ -39,27 +39,26 @@ fn main() -> ExitCode {
             .collect();
         match mode.as_deref() {
             Some("--idle-only") => {
-                let proxy = proxy_settings(&env)?;
+                let idle = idle_setting(&env)?;
                 return Ok(format!(
-                    "openvibes-llm-check: 127.0.0.1:{} -> 127.0.0.1:{}, idle {}",
-                    proxy.port,
-                    proxy.internal_port,
-                    proxy
-                        .idle_seconds
-                        .map_or_else(|| "infinity".into(), |s| format!("{s} s"))
+                    "openvibes-llm-check: idle {}",
+                    idle.map_or_else(|| "infinity".into(), |s| format!("{s} s"))
                 ));
             }
             Some(_) => {
-                let port = proxy_settings(&env)?.internal_port;
-                wait_ready(port, Duration::from_millis(500), Duration::from_secs(180))?;
-                return Ok(format!("openvibes-llm-check: ready on 127.0.0.1:{port}"));
+                wait_ready(
+                    Path::new(LLAMA_SOCKET),
+                    Duration::from_millis(500),
+                    Duration::from_secs(180),
+                )?;
+                return Ok(format!("openvibes-llm-check: ready on {LLAMA_SOCKET}"));
             }
             None => {}
         }
         let settings = settings(&env, Path::new(MODELS_DIR))?;
         let size = check_model(&settings)?;
         Ok(format!(
-            "openvibes-llm-check: model {} ({} MiB) verified; serving as {} on 127.0.0.1:{}",
+            "openvibes-llm-check: model {} ({} MiB) verified; serving as {} on 127.0.0.1:{} (socket)",
             settings.model.display(),
             size >> 20,
             settings.alias,

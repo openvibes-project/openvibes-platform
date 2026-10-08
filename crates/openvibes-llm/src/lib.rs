@@ -18,7 +18,7 @@ use std::{
     fmt,
     fs::{File, OpenOptions},
     io::{self, Read, Write},
-    net::{Ipv4Addr, SocketAddr, TcpStream},
+    os::unix::net::UnixStream,
     path::{Component, Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -50,10 +50,8 @@ pub enum CheckError {
     ForeignVariable(String),
     /// Running as root: the service must run as its own user.
     Root,
-    /// `OPENVIBES_LLM_INTERNAL_PORT` equals the public port.
-    SamePort,
-    /// `llama-server` did not answer `/health` with 200 on this port in time.
-    NotReady(u16),
+    /// `llama-server` did not answer `/health` with 200 on its socket in time.
+    NotReady,
 }
 
 impl fmt::Display for CheckError {
@@ -80,12 +78,9 @@ impl fmt::Display for CheckError {
                 "{name} is set; llama-server options come only from the unit and OPENVIBES_LLM_* settings"
             ),
             Self::Root => f.write_str("openvibes-llm must not run as root"),
-            Self::SamePort => f.write_str(
-                "OPENVIBES_LLM_INTERNAL_PORT must differ from OPENVIBES_LLM_PORT, the public port the socket listens on (to change that port: systemctl edit openvibes-llm.socket)",
-            ),
-            Self::NotReady(port) => write!(
+            Self::NotReady => write!(
                 f,
-                "llama-server did not become healthy on 127.0.0.1:{port} in time"
+                "llama-server did not become healthy on {LLAMA_SOCKET} in time"
             ),
         }
     }
@@ -102,10 +97,8 @@ pub struct Settings {
     pub model_sha256: String,
     /// Name the server reports for the model.
     pub alias: String,
-    /// Public loopback port (the socket's).
+    /// Public loopback port (the socket unit's).
     pub port: u16,
-    /// Loopback port `llama-server` listens on behind the socket proxy.
-    pub internal_port: u16,
     /// Seconds without a request before the model is unloaded; `None`
     /// keeps it loaded.
     pub idle_seconds: Option<u64>,
@@ -217,15 +210,12 @@ pub fn settings(env: &BTreeMap<String, String>, models_dir: &Path) -> Result<Set
     if !alias_ok {
         return Err(CheckError::Invalid("OPENVIBES_LLM_ALIAS"));
     }
-    number::<u16>(env, "OPENVIBES_LLM_PORT", 1024..=65535)?;
-    let proxy = proxy_settings(env)?;
     Ok(Settings {
         model,
         model_sha256: digest,
         alias,
-        port: proxy.port,
-        internal_port: proxy.internal_port,
-        idle_seconds: proxy.idle_seconds,
+        port: number(env, "OPENVIBES_LLM_PORT", 1024..=65535)?,
+        idle_seconds: idle_setting(env)?,
         context: number(env, "OPENVIBES_LLM_CONTEXT", 512..=131_072)?,
         threads: number(env, "OPENVIBES_LLM_THREADS", 1..=256)?,
         gpu_layers: number(env, "OPENVIBES_LLM_GPU_LAYERS", 0..=999)?,
@@ -233,10 +223,10 @@ pub fn settings(env: &BTreeMap<String, String>, models_dir: &Path) -> Result<Set
     })
 }
 
-/// The packaged public port, the socket's `ListenStream=`.
-pub const DEFAULT_PORT: u16 = 18430;
-/// The packaged port `llama-server` listens on behind the proxy.
-pub const DEFAULT_INTERNAL_PORT: u16 = 18431;
+/// Where `llama-server` listens: a Unix socket in the service's
+/// `RuntimeDirectory=` (0750, its own account), never a TCP port another
+/// local user could bind while the server is stopped.
+pub const LLAMA_SOCKET: &str = "/run/openvibes-llm/llama.sock";
 /// The packaged idle time, `5min`.
 pub const DEFAULT_IDLE_SECONDS: u64 = 300;
 
@@ -266,61 +256,34 @@ pub fn idle_seconds(text: &str) -> Result<Option<u64>, CheckError> {
         .ok_or(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
 }
 
-/// What `openvibes-llm-proxy.service` uses: the public and internal ports
-/// and the idle time.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Proxy {
-    /// Public loopback port.
-    pub port: u16,
-    /// `llama-server`'s loopback port.
-    pub internal_port: u16,
-    /// Idle time in seconds; `None` is `infinity`.
-    pub idle_seconds: Option<u64>,
+/// `OPENVIBES_LLM_IDLE`, or the packaged `5min` when absent (an `llm.conf`
+/// from before idle unloading).
+pub fn idle_setting(env: &BTreeMap<String, String>) -> Result<Option<u64>, CheckError> {
+    env.get("OPENVIBES_LLM_IDLE")
+        .map_or(Ok(Some(DEFAULT_IDLE_SECONDS)), |v| idle_seconds(v))
 }
 
-/// Reads the proxy's settings; absent ones take the packaged defaults, so
-/// an `llm.conf` from before idle unloading still works.
-pub fn proxy_settings(env: &BTreeMap<String, String>) -> Result<Proxy, CheckError> {
-    let port = |name, default| match env.get(name) {
-        None => Ok(default),
-        Some(_) => number(env, name, 1024..=65535),
-    };
-    let proxy = Proxy {
-        port: port("OPENVIBES_LLM_PORT", DEFAULT_PORT)?,
-        internal_port: port("OPENVIBES_LLM_INTERNAL_PORT", DEFAULT_INTERNAL_PORT)?,
-        idle_seconds: env
-            .get("OPENVIBES_LLM_IDLE")
-            .map_or(Ok(Some(DEFAULT_IDLE_SECONDS)), |v| idle_seconds(v))?,
-    };
-    if proxy.port == proxy.internal_port {
-        return Err(CheckError::SamePort);
-    }
-    Ok(proxy)
-}
-
-/// Polls `http://127.0.0.1:PORT/health` every `interval` until it answers
-/// 200 (`llama-server` has loaded the model) or `timeout` has passed.
-pub fn wait_ready(port: u16, interval: Duration, timeout: Duration) -> Result<(), CheckError> {
-    let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+/// Polls `/health` on the Unix socket `path` every `interval` until it
+/// answers 200 (`llama-server` has loaded the model) or `timeout` has passed.
+pub fn wait_ready(path: &Path, interval: Duration, timeout: Duration) -> Result<(), CheckError> {
     let started = Instant::now();
     loop {
-        let healthy =
-            TcpStream::connect_timeout(&addr, Duration::from_secs(1)).is_ok_and(|mut stream| {
-                let mut head = [0; 12];
-                stream
-                    .set_read_timeout(Some(Duration::from_secs(2)))
+        let healthy = UnixStream::connect(path).is_ok_and(|mut stream| {
+            let mut head = [0; 12];
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .is_ok()
+                && stream
+                    .write_all(b"GET /health HTTP/1.0\r\nhost: localhost\r\n\r\n")
                     .is_ok()
-                    && stream
-                        .write_all(b"GET /health HTTP/1.0\r\nhost: localhost\r\n\r\n")
-                        .is_ok()
-                    && stream.read_exact(&mut head).is_ok()
-                    && head.ends_with(b" 200")
-            });
+                && stream.read_exact(&mut head).is_ok()
+                && head.ends_with(b" 200")
+        });
         if healthy {
             return Ok(());
         }
         if started.elapsed() + interval > timeout {
-            return Err(CheckError::NotReady(port));
+            return Err(CheckError::NotReady);
         }
         std::thread::sleep(interval);
     }
