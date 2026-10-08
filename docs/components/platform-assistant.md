@@ -31,7 +31,10 @@ asking user's scope.
 - `answer(backend, &runner, Settings, history, question, events)` →
   `Answer` (`segments`, `lookups` for audit, `usage`, `requests`,
   `hit_lookup_limit`) or a fixed `AnswerError` (`EmptyQuestion`,
-  `QuestionTooLong`, `Backend`, `Deadline`, `NoAnswer`). `Settings::new`
+  `QuestionTooLong`, `Backend`, `Deadline`, `NoAnswer`, `Truncated`: finish reason `length` with no
+  text and no lookup, i.e. a thinking model that spent its whole output
+  limit reasoning). The probe sets `ProbeReport::speed_truncated` for the
+  same case on the speed prompt. `Settings::new`
   takes the mode from the probe, the profile budget, `max_lookups`, and a
   whole-question deadline of one backend deadline per possible request (at
   most 15 minutes). `ChatBackend` is implemented by `BackendClient`; it is

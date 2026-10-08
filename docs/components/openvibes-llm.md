@@ -89,8 +89,17 @@ against the result.
 `openvibes-llm.service` fixes every `llama-server` option itself. It
 passes `--host /run/openvibes-llm/llama.sock` (a Unix socket; such paths
 are limited to 108 bytes), `--api-key-file` (the credential), `--no-webui`,
-`--no-slots`, `--offline`, `--jinja`, and `--timeout 300`. Props changes,
-metrics, tools, MCP, and media paths stay at their default (off).
+`--no-slots`, `--offline`, `--jinja`, `--reasoning off`, and
+`--timeout 300`.
+
+`--reasoning off` matters for the bundled Qwen3-4B, a hybrid thinking
+model: llama-server's default (`auto`) turns thinking on, the reasoning
+uses the whole output limit (96 tokens in the probe, 300 for the small
+profile), and most questions return no answer. The client may not send
+per-request fields (assistant spec §10), so the switch lives here; the
+Vulkan drop-in has it too.
+
+Props changes, metrics, tools, MCP, and media paths stay at their default (off).
 `llama-server` also reads `LLAMA_ARG_*` variables, so `openvibes-llm-check`
 refuses any `LLAMA_*`, `GGML_*` (except `GGML_NO_BACKTRACE`), `HF_*`, or
 `HUGGING*` variable. Without that, `LLAMA_ARG_TOOLS=all` in `llm.conf`

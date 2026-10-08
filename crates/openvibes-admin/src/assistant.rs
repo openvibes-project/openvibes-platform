@@ -202,6 +202,14 @@ pub async fn run(command: &AssistantCommand) -> (Result<String, String>, Option<
     let described = describe(&loaded, &report);
     // The speed probe is a plain question: if it failed, the backend cannot
     // answer at all.
+    if report.speed_truncated {
+        return (
+            Err(format!(
+                "{described}the model spent its whole budget before answering (thinking model? use --reasoning off)"
+            )),
+            target,
+        );
+    }
     if report.first_token.is_none() {
         return (
             Err(format!(

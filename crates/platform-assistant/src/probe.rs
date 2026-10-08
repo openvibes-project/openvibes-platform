@@ -7,7 +7,9 @@ use std::time::Duration;
 use serde_json::{Value, json};
 
 use crate::{
-    client::{BackendClient, BackendError, ChatRequest, JsonSchemaFormat, Message, ToolSpec},
+    client::{
+        BackendClient, BackendError, ChatRequest, FinishReason, JsonSchemaFormat, Message, ToolSpec,
+    },
     config::LookupMode,
 };
 
@@ -34,6 +36,9 @@ pub struct ProbeReport {
     /// Streamed text pieces per second after the first (about one token
     /// each on most runtimes).
     pub chunks_per_second: Option<f64>,
+    /// Whether the speed prompt hit the output limit with no text at all
+    /// (a thinking model spending its budget on reasoning).
+    pub speed_truncated: bool,
     /// Tokens per second after the first, when the backend reports usage.
     pub tokens_per_second: Option<f64>,
     /// Whether native tool calls worked; an error means the probe could not
@@ -101,6 +106,9 @@ pub fn probe(client: &BackendClient, configured: LookupMode) -> ProbeReport {
         },
         |_| {},
     );
+    let speed_truncated = matches!(&speed, Ok(r) if r.finish == FinishReason::Length
+        && r.content.trim().is_empty()
+        && r.tool_calls.is_empty());
     let (first_token, chunks_per_second, tokens_per_second) = match &speed {
         Ok(response) => {
             let writing = response
@@ -188,6 +196,7 @@ pub fn probe(client: &BackendClient, configured: LookupMode) -> ProbeReport {
         model_listed,
         first_token,
         chunks_per_second,
+        speed_truncated,
         tokens_per_second,
         native,
         json_schema,

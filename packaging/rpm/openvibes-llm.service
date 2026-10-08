@@ -47,7 +47,7 @@ ExecStart=/usr/libexec/openvibes-llm/llama-server \
     --ctx-size ${OPENVIBES_LLM_CONTEXT} --threads ${OPENVIBES_LLM_THREADS} \
     --n-gpu-layers ${OPENVIBES_LLM_GPU_LAYERS} --parallel ${OPENVIBES_LLM_PARALLEL} \
     --api-key-file %d/api-key \
-    --no-webui --no-slots --offline --jinja --timeout 300 --log-colors off
+    --no-webui --no-slots --offline --jinja --reasoning off --timeout 300 --log-colors off
 # Behind the proxy on a Unix socket, not a TCP port: a port is free while
 # the server is stopped and any local user could bind it. The directory is
 # 0750 openvibes-llm (the proxy runs as this account too), the socket 0700

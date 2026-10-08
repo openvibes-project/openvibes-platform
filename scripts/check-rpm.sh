@@ -79,6 +79,10 @@ done
 if grep -qE '^[[:space:]]*[^[:space:]#].*--sleep-idle-seconds' "${llm_units[@]}"; then
     fail "llm unit passes --sleep-idle-seconds"
 fi
+# Qwen3 thinks by default and reasoning eats the whole output budget.
+for f in "${llm_units[@]}"; do
+    grep -qE '^[[:space:]]*[^[:space:]#].*--jinja --reasoning off' "$f" || fail "$f lacks --reasoning off"
+done
 grep -qx 'FlushPending=yes' /usr/lib/systemd/system/openvibes-llm.socket ||
     fail "llm socket lacks FlushPending=yes"
 for line in 'IPAddressDeny=any' 'PrivateNetwork=yes' 'RestrictAddressFamilies=AF_UNIX' \
