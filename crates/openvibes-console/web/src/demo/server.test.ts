@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { buildDemoData } from "./data";
 import { createDemoServer } from "./server";
 
 async function json(response: Response) {
@@ -7,6 +8,23 @@ async function json(response: Response) {
 }
 
 describe("demo server", () => {
+  it("shows only compliance rules OpenVIBES ships (the baseline), so its screenshots stay honest", async () => {
+    // openvibes-rules baseline/rules.json: the demo must not invent checks
+    // the product does not have (website screenshots come from the demo).
+    const shipped = new Set([
+      "port.docker_api.exposed", "port.telnet.exposed", "port.rsh.exposed", "port.vnc.exposed", "port.redis.exposed",
+      "port.mongodb.exposed", "port.elasticsearch.exposed", "port.memcached.exposed", "port.ftp.exposed", "port.smb.exposed",
+      "port.snmp.exposed", "port.postgresql.exposed", "port.mysql.exposed", "port.ssh.exposed",
+      "package.telnet_server.installed", "package.rsh_server.installed",
+    ]);
+    const data = buildDemoData();
+    expect(data.findings.length).toBeGreaterThan(0);
+    for (const finding of data.findings) {
+      expect(finding.rule_set_id).toBe("baseline");
+      expect(shipped.has(finding.rule_id), finding.rule_id).toBe(true);
+    }
+  });
+
   it("answers the session with the persona's capabilities", async () => {
     const server = createDemoServer({ persona: "viewer" });
     const session = await json(await server.handle("GET", "/api/v1/session"));
@@ -182,14 +200,14 @@ describe("demo server", () => {
 
   it("previews a signed bundle and publishes it with the preview token", async () => {
     const server = createDemoServer({ persona: "admin" });
-    const envelope = { rule_set_id: "baseline-linux", rule_set_version: 99, issuer_key_id: "ops-2026", expires_at_unix_ms: Date.now() + 86_400_000 };
+    const envelope = { rule_set_id: "site", rule_set_version: 99, issuer_key_id: "ops-2026", expires_at_unix_ms: Date.now() + 86_400_000 };
     const preview = await json(await server.handle("POST", "/api/v1/rule-bundles/preview", envelope));
     expect(preview.version).toBe(99);
     expect((await server.handle("POST", "/api/v1/rule-bundles/publish", envelope)).status).toBe(428);
     const published = await server.handle("POST", "/api/v1/rule-bundles/publish", envelope, { "x-rule-preview-token": String(preview.preview_token) });
     expect(published.status).toBe(201);
     const sets = await json(await server.handle("GET", "/api/v1/rule-sets"));
-    expect((sets.items as { rule_set_id: string; current_version: number }[]).find((set) => set.rule_set_id === "baseline-linux")?.current_version).toBe(99);
+    expect((sets.items as { rule_set_id: string; current_version: number }[]).find((set) => set.rule_set_id === "site")?.current_version).toBe(99);
   });
 
   it("checks, saves, versions and deletes draft site rules", async () => {
@@ -257,10 +275,10 @@ describe("demo server", () => {
     const server = createDemoServer({ persona: "admin" });
     expect((await server.handle("GET", "/api/v1/compliance/history")).status).toBe(400);
     const since = new Date(Date.now() - 14 * 86_400_000).toISOString();
-    const page = await json(await server.handle("GET", `/api/v1/compliance/history?since=${since}&rule_set_id=hardening-ssh&rule_id=SSH-002&limit=100`));
+    const page = await json(await server.handle("GET", `/api/v1/compliance/history?since=${since}&rule_set_id=baseline&rule_id=port.ssh.exposed&limit=100`));
     const items = page.items as { rule_id: string; observed_at: string; observed_day: string }[];
     expect(items.length).toBeGreaterThan(0);
-    expect(items.every((item) => item.rule_id === "SSH-002" && Date.parse(item.observed_at) >= Date.parse(since))).toBe(true);
+    expect(items.every((item) => item.rule_id === "port.ssh.exposed" && Date.parse(item.observed_at) >= Date.parse(since))).toBe(true);
   });
 
   it("creates and edits asset groups", async () => {

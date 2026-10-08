@@ -214,7 +214,7 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
     });
     await page.goto("/");
     const tile = page.locator(".tile", { hasText: "alarm" });
-    await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 74 vulnerabilities · 9 compliance");
+    await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 79 vulnerabilities · 4 compliance");
     await expect(tile.locator(".tile-number .delta")).toBeVisible();
     await expect(tile.locator(".linechart svg")).toBeVisible();
     await expect(tile.getByRole("button")).toHaveCount(3);

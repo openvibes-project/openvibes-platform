@@ -29,15 +29,15 @@ test("a finding opens in the inspector, links stack, and Esc goes back", async (
 });
 
 test("a finding's hosts show their assignee and accepted-risk expiry", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Ahardening-ssh%2FSSH-002");
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const hosts = page.locator(".inspector tbody tr");
-  await expect(hosts.filter({ hasText: "mail-04.lab.example.test" })).toContainText("analyst");
-  await expect(hosts.filter({ hasText: "api-01.lab.example.test" })).toContainText(/until /);
+  await expect(hosts.filter({ hasText: "cache-04.prod.example.test" })).toContainText("analyst");
+  await expect(hosts.filter({ hasText: "backup-02.lab.example.test" })).toContainText(/until /);
 });
 
 test("a host whose match ended shows when it was fixed", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline-linux%2FLNX-033");
-  await expect(page.locator(".inspector tbody tr").filter({ hasText: "web-03.prod.example.test" })).toContainText(/fixed /);
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.smb.exposed");
+  await expect(page.locator(".inspector tbody tr").filter({ hasText: "files-03.office.example.test" })).toContainText(/fixed /);
 });
 
 test("the palette finds a host and opens it", async ({ page }) => {
@@ -78,7 +78,7 @@ test("a viewer does not see administration", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "admin" }).click();
 });
 
-for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Ahardening-ssh%2FSSH-002", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/agents?open=agent%3Aagent-00005", "/audit"]) {
+for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/compliance?open=finding%3Abaseline%2Fport.ssh.exposed", "/vulnerabilities?open=advisory%3AFEDORA-2026-3a214d1f", "/agents?open=agent%3Aagent-00005", "/audit"]) {
   test(`no accessibility violations on ${path} (${scheme})`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(path);
@@ -135,7 +135,7 @@ test("an asset group is created from the access view", async ({ page }) => {
 });
 
 test("a finding set to Investigating stays in the default Findings list (board #83)", async ({ page }) => {
-  await page.goto("/compliance?open=finding%3Abaseline-linux%2FLNX-010");
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.docker_api.exposed");
   const inspector = page.locator(".inspector");
   await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ }).click();
   await inspector.getByRole("checkbox", { name: "Select all hosts" }).check();
@@ -145,7 +145,7 @@ test("a finding set to Investigating stays in the default Findings list (board #
   // Not page.goto: the demo keeps its data in memory and a reload resets it.
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "World-writable file in /etc" })).toBeVisible();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "The unencrypted Docker API" })).toBeVisible();
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {

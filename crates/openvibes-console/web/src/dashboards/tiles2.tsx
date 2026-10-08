@@ -143,7 +143,7 @@ export function ListSettings({ widget, onChange }: SettingsProps) {
 export function TrendSettings({ widget, onChange }: SettingsProps) {
   return (
     <div className="stack">
-      {field("Compliance rule (rule set/rule, e.g. hardening-ssh/SSH-002)", <input className="input mono" value={str(widget.config, "finding", "")} onChange={(e) => onChange({ ...widget.config, finding: e.target.value })} />)}
+      {field("Compliance rule (rule set/rule, e.g. baseline/port.ssh.exposed)", <input className="input mono" value={str(widget.config, "finding", "")} onChange={(e) => onChange({ ...widget.config, finding: e.target.value })} />)}
       {field("Days", <select className="select" value={int(widget.config, "days", 14, 7, 30)} onChange={(e) => onChange({ ...widget.config, days: toInt(e.target.value, 7, 30, 14) })}>
         <option value={7}>7</option><option value={14}>14</option><option value={30}>30</option></select>)}
     </div>
