@@ -249,17 +249,85 @@ fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         }
         return lines;
     }
-    let mut lines = vec![Line::raw(
-        "Setup finished. Keep what follows: the password is shown only now.",
-    )];
-    for (index, step) in Step::ALL.iter().enumerate() {
-        if matches!(
-            step,
-            Step::Ca | Step::Console | Step::Operators | Step::Ready
-        ) && let Some(Some(state)) = setup.states.get(index)
-        {
-            lines.push(Line::raw(format!("{}: {}", step.title(), state.detail())));
+    install_finished(&setup.states)
+}
+
+/// The step's detail when it finished done.
+fn done(states: &[Option<StepState>], step: Step) -> Option<&str> {
+    let index = Step::ALL.iter().position(|s| *s == step)?;
+    match states.get(index)? {
+        Some(StepState::Done(detail)) => Some(detail),
+        _ => None,
+    }
+}
+
+/// `text` between `start` and `end` (to its end when `end` is absent).
+fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<&'a str> {
+    let rest = &text[text.find(start)? + start.len()..];
+    Some(rest.find(end).map_or(rest, |at| &rest[..at]))
+}
+
+/// The end of an install run: what to keep, labelled, and what to do next
+/// (install walkthrough, 2026-10-08). Values are taken from the step details
+/// the helper sends (`setup/console.rs`, `setup/pki.rs`, `setup/base.rs`); a
+/// detail in another wording is shown as it is, never dropped.
+fn install_finished(states: &[Option<StepState>]) -> Vec<Line<'static>> {
+    let dim = Style::default().add_modifier(Modifier::DIM);
+    let row = |label: &str, value: Line<'static>| {
+        let mut spans = vec![ratatui::text::Span::styled(format!("{label:<10}"), dim)];
+        spans.extend(value.spans);
+        Line::from(spans)
+    };
+    let console = done(states, Step::Console);
+    let url = console.and_then(|d| d.split(" · ").next().filter(|u| u.starts_with("https://")));
+    let password = console.and_then(|d| between(d, "password ", " ("));
+    let mut lines = vec![Line::raw(if password.is_some() {
+        "Setup finished. Write the password down: it is shown only now."
+    } else {
+        "Setup finished."
+    })];
+    lines.push(Line::raw(""));
+    if let Some(url) = url {
+        lines.push(row("Console", Line::raw(url.to_owned())));
+    }
+    if let Some(password) = password {
+        lines.push(row(
+            "Sign in",
+            Line::from(vec![
+                ratatui::text::Span::raw("admin / "),
+                ratatui::text::Span::styled(
+                    password.to_owned(),
+                    Style::default().add_modifier(Modifier::BOLD),
+                ),
+            ]),
+        ));
+    }
+    if let Some(detail) = done(states, Step::Ca) {
+        if let Some(path) = between(detail, "root key saved to ", ": keep it offline") {
+            lines.push(row("Root key", Line::raw(path.to_owned())));
+            lines.push(row(
+                "",
+                Line::raw("The only copy. Move it to offline storage, then delete it here."),
+            ));
+        } else {
+            lines.push(row("Root CA", Line::raw(detail.to_owned())));
         }
+    }
+    lines.push(Line::raw(""));
+    if url.is_some() {
+        lines.push(Line::raw(if password.is_some() {
+            "Next: sign in, change the password, then add hosts under Enrollment."
+        } else {
+            "Next: sign in, then add hosts under Enrollment."
+        }));
+    }
+    if let Some(user) =
+        done(states, Step::Operators).and_then(|d| d.split_once(" added to ").map(|(user, _)| user))
+    {
+        lines.push(Line::styled(
+            format!("{user} can run openvibes-admin without sudo after logging in again."),
+            dim,
+        ));
     }
     lines
 }

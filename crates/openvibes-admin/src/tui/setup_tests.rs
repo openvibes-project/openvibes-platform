@@ -767,3 +767,77 @@ fn the_step_list_never_shows_the_admin_password() {
         "{text}"
     );
 }
+
+/// An install run that finished, each step answering `answer(step)`.
+fn finished_with(answer: impl Fn(Step) -> String) -> App<SetupHost> {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    answers.extend(Step::ALL.into_iter().map(|step| Ok(answer(step))));
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    app
+}
+
+fn walkthrough_answers(step: Step) -> String {
+    match step {
+        Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+        Step::Ca => "done\troot key saved to /home/alice/openvibes-root-ca.key: keep it offline; root certificate /etc/openvibes/pki/root.crt, SHA-256 AA:BB\n".into(),
+        Step::Operators => "done\talice added to openvibes-operators; log in again for it to take effect\n".into(),
+        Step::Ready => "done\tready: openvibes-ingest.service openvibes-console.service\n".into(),
+        _ => "done\tok\n".into(),
+    }
+}
+
+/// The walkthrough (2026-10-08): the final screen was "a confusing mess of
+/// text" and the agent line could not be found. Now: what to keep, labelled,
+/// and what to do next; hosts are added from the console.
+#[test]
+fn the_finished_screen_lists_what_to_keep_and_what_next() {
+    let text = screen(&finished_with(walkthrough_answers));
+    for want in [
+        "Setup finished",
+        "Console   https://platform.example.com",
+        "Sign in   admin / Abc123",
+        "Root key  /home/alice/openvibes-root-ca.key",
+        "Next: sign in, change the password, then add hosts under Enrollment",
+        "alice can run openvibes-admin without sudo after logging in again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(
+        !text.contains("curl") && !text.contains("SHA-256"),
+        "{text}"
+    );
+    assert!(!text.contains('…'), "nothing cut at 80x24:\n{text}");
+}
+
+#[test]
+fn without_the_console_the_finished_screen_promises_no_login() {
+    let text = screen(&finished_with(|step| match step {
+        Step::Console => "skipped\tconsole not chosen\n".into(),
+        _ => walkthrough_answers(step),
+    }));
+    assert!(text.contains("Setup finished"), "{text}");
+    assert!(
+        !text.contains("Sign in") && !text.contains("Enrollment"),
+        "{text}"
+    );
+}
+
+/// A detail worded in a way the screen does not know is shown as it is,
+/// never dropped.
+#[test]
+fn an_unknown_detail_is_shown_as_it_is() {
+    let text = screen(&finished_with(|step| match step {
+        Step::Ca => "done\troot certificate kept from the careful CA\n".into(),
+        _ => walkthrough_answers(step),
+    }));
+    assert!(
+        text.contains("root certificate kept from the careful CA"),
+        "{text}"
+    );
+}
