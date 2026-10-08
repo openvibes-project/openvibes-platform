@@ -64,7 +64,12 @@ expect_stat /etc/openvibes/llm-api-key 600 root:root
 expect_stat /var/lib/openvibes-llm 775 root:openvibes-admin
 expect_stat /var/lib/openvibes-llm/models 775 root:openvibes-admin
 rpm -qc openvibes-llm | grep -qx /etc/openvibes/llm.conf || fail "llm.conf not %config"
-systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.service || fail "llm unit verification"
+systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
+    /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
+# Idle unloading stops the process; llama-server's own idle sleep has a
+# use-after-free (CVE-2026-43631).
+grep -q -- --sleep-idle-seconds /usr/lib/systemd/system/openvibes-llm.service &&
+    fail "llm unit passes --sleep-idle-seconds"
 for line in 'IPAddressDeny=any' 'IPAddressAllow=localhost' 'CapabilityBoundingSet=' 'NoExecPaths=/' \
     'LoadCredential=api-key:/etc/openvibes/llm-api-key' 'ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check'; do
     grep -qx "$line" /usr/lib/systemd/system/openvibes-llm.service || fail "llm unit lacks $line"
