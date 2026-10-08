@@ -64,7 +64,10 @@ needs tens of seconds just to read the prompt). A timed-out question returns
 504 `assistant_timeout`, never 408, which browsers silently resend. One question
 may run per user at a time, with a global backend concurrency limit. If the
 browser stops waiting, an in-flight call may continue until its deadline, and
-keeps its per-user and global capacity permits until it finishes.
+keeps its per-user and global capacity permits until it finishes. A reply cut
+off by the output limit before any text (a thinking model spending its budget
+reasoning) returns 502 `assistant_truncated`: run the model with
+`--reasoning off` (the packaged unit does).
 
 ## Failure behavior
 

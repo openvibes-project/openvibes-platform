@@ -3055,6 +3055,7 @@ pub(crate) async fn authenticated_assistant_message(
         Err(platform_assistant::AnswerError::Backend(_)) => "backend_error",
         Err(platform_assistant::AnswerError::Deadline) => "deadline",
         Err(platform_assistant::AnswerError::NoAnswer) => "no_answer",
+        Err(platform_assistant::AnswerError::Truncated) => "truncated",
     };
     let elapsed_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let location = match runtime
@@ -3124,6 +3125,11 @@ pub(crate) async fn authenticated_assistant_message(
                     StatusCode::BAD_GATEWAY,
                     "assistant_no_answer",
                     "The local model returned no usable answer",
+                ),
+                platform_assistant::AnswerError::Truncated => (
+                    StatusCode::BAD_GATEWAY,
+                    "assistant_truncated",
+                    "The local model ran out of answer space before replying; if it is a thinking model, run it with --reasoning off",
                 ),
             };
             let mut problem = ProblemDetails::new(status, code, message);

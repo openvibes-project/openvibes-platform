@@ -562,6 +562,22 @@ async fn failures_are_fixed_categories() {
 }
 
 #[tokio::test]
+async fn a_reply_cut_off_before_any_text_is_truncated_not_no_answer() {
+    // A thinking model spends the whole budget on reasoning: length, no text.
+    for mode in [ResolvedMode::Native, ResolvedMode::Prompted] {
+        let mut cut = text("");
+        cut.finish = FinishReason::Length;
+        let script = Script::new(vec![cut]);
+        assert_eq!(
+            ask(&script, &Fake::default(), settings(mode), "hi")
+                .await
+                .unwrap_err(),
+            AnswerError::Truncated
+        );
+    }
+}
+
+#[tokio::test]
 async fn native_mode_streams_and_resets_around_lookups() {
     let script = Arc::new(Script {
         replies: Mutex::new(

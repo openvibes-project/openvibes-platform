@@ -18,6 +18,20 @@ use common::{Fixture, row, stdout};
 /// A backend that lists one model and answers every question with plain
 /// text: it supports neither tool calls nor JSON-schema output.
 fn plain_backend() -> String {
+    backend(
+        r#"{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"I do not know. 1 2 3"}}]}"#,
+    )
+}
+
+/// A backend whose every reply is cut off by `max_tokens` before any text,
+/// as a thinking model's is.
+fn thinking_backend() -> String {
+    backend(
+        r#"{"choices":[{"index":0,"finish_reason":"length","message":{"role":"assistant","content":"","reasoning_content":"hmm"}}]}"#,
+    )
+}
+
+fn backend(answer: &'static str) -> String {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/v1", listener.local_addr().unwrap());
     thread::spawn(move || {
@@ -45,7 +59,7 @@ fn plain_backend() -> String {
                 let reply = if get {
                     r#"{"data":[{"id":"test-model"}]}"#.to_owned()
                 } else {
-                    r#"{"choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"I do not know. 1 2 3"}}]}"#.to_owned()
+                    answer.to_owned()
                 };
                 let _ = reader.get_mut().write_all(
                     format!(
@@ -163,6 +177,11 @@ async fn configuration_problems_are_reported() {
             "remote",
             assistant_toml("http://gpu.example:8000/v1"),
             "must use https unless it is a loopback address",
+        ),
+        (
+            "thinking",
+            assistant_toml(&thinking_backend()),
+            "spent its whole budget before answering (thinking model? use --reasoning off)",
         ),
         (
             "down",

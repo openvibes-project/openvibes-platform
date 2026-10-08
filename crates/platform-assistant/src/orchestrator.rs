@@ -16,8 +16,8 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::{
     answer::{Citation, Segment, plain_text, sanitize},
     client::{
-        BackendClient, BackendError, ChatRequest, ChatResponse, JsonSchemaFormat, Message,
-        ToolCall, ToolSpec, Usage,
+        BackendClient, BackendError, ChatRequest, ChatResponse, FinishReason, JsonSchemaFormat,
+        Message, ToolCall, ToolSpec, Usage,
     },
     config::{Assistant, Backend, Budget},
     lookups::{Lookup, LookupError, LookupRunner, NAMES, specs},
@@ -155,6 +155,9 @@ pub enum AnswerError {
     Deadline,
     /// The model gave no usable answer.
     NoAnswer,
+    /// The reply was cut off by the output limit before any text or lookup:
+    /// typically a thinking model that spent the whole budget reasoning.
+    Truncated,
 }
 
 impl std::fmt::Display for AnswerError {
@@ -165,6 +168,9 @@ impl std::fmt::Display for AnswerError {
             Self::Backend(error) => error.fmt(f),
             Self::Deadline => f.write_str("the assistant took too long to answer"),
             Self::NoAnswer => f.write_str("the assistant gave no answer"),
+            Self::Truncated => f.write_str(
+                "the model ran out of answer space before replying (a thinking model? run it with --reasoning off)",
+            ),
         }
     }
 }
@@ -397,6 +403,12 @@ impl<R: LookupRunner> Run<'_, R> {
         .map_err(|_| AnswerError::Backend(BackendError::InvalidResponse))?
         .map_err(AnswerError::Backend)?;
         self.requests += 1;
+        if response.finish == FinishReason::Length
+            && response.tool_calls.is_empty()
+            && response.content.trim().is_empty()
+        {
+            return Err(AnswerError::Truncated);
+        }
         if let Some(usage) = response.usage {
             self.usage.prompt_tokens += usage.prompt_tokens;
             self.usage.completion_tokens += usage.completion_tokens;
