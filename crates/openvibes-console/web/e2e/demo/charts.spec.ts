@@ -26,3 +26,23 @@ test("graph hover shows the edge days and stays inside its tile", async ({ page 
   expect(tip.x + tip.width).toBeLessThanOrEqual(tile.x + tile.width);
   expect(tip.x).toBeGreaterThanOrEqual(tile.x);
 });
+
+test("a two-line graph names both counts in its hover tooltip, and a count cannot be chosen twice", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await page.getByRole("menuitem", { name: "New dashboard" }).click();
+  await page.getByRole("button", { name: /^Graph/ }).click();
+  await page.getByRole("button", { name: "+ Add count" }).click();
+  const first = page.getByLabel("Count 1", { exact: true });
+  const second = page.getByLabel("Count 2", { exact: true });
+  await expect(second.locator("option:disabled")).toHaveCount(1);
+  await first.selectOption("all.open.critical");
+  await expect(second.locator("option:disabled")).toHaveCount(1);
+  await expect(first.locator("option", { hasText: "Critical (all kinds)" })).toHaveCount(1);
+  const chart = page.locator(".linechart svg").first();
+  const box = await boxOf(chart);
+  await page.mouse.move(box.x + box.width - 1, box.y + box.height / 2);
+  const tip = page.locator(".linechart__tip");
+  await expect(tip).toContainText("Critical (all kinds)");
+  await expect(tip).toContainText("Active critical alarms");
+});

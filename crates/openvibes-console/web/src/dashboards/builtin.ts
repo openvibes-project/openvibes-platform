@@ -13,7 +13,7 @@ export const BUILTIN_LAYOUT: Layout = {
     { id: "critical", type: "number", x: 3, y: 0, w: 3, h: 2, config: { metric: "compliance.open.critical" } },
     { id: "exploited", type: "number", x: 6, y: 0, w: 3, h: 2, config: { metric: "vulns.exploited" } },
     { id: "high", type: "number", x: 9, y: 0, w: 3, h: 2, config: { metric: "compliance.open.high" } },
-    { id: "attention", type: "attention", x: 0, y: 2, w: 7, h: 9, config: { include: ["alarms", "exploited", "compliance", "stale"], limit: 14 } },
+    { id: "attention", type: "attention", x: 0, y: 2, w: 7, h: 9, config: { include: ["alarms", "exploited", "serious", "compliance", "stale"], limit: 14 } },
     { id: "findings", type: "breakdown", x: 7, y: 2, w: 5, h: 2, config: { source: "compliance" } },
     { id: "hosts", type: "top-hosts", x: 7, y: 4, w: 5, h: 7, config: { limit: 7 } },
     { id: "online", type: "number", x: 0, y: 11, w: 4, h: 2, config: { metric: "agents.active", title: "Fleet · online" } },

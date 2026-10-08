@@ -408,3 +408,23 @@ describe("demo metrics history", () => {
     expect((await history("metric=nope")).status).toBe(422);
   });
 });
+
+describe("demo top hosts", () => {
+  const top = (query = "") => createDemoServer({ persona: "admin" }).handle("GET", `/api/v1/metrics/top-hosts${query}`);
+
+  it("ranks hosts across kinds, serious first, at most `limit`", async () => {
+    const items = (await json(await top("?limit=5"))).items as { serious: number; open: number }[];
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.length).toBeLessThanOrEqual(5);
+    for (const [i, a] of items.entries()) {
+      const b = items[i + 1];
+      if (b) expect(a.serious > b.serious || (a.serious === b.serious && a.open >= b.open)).toBe(true);
+    }
+  });
+
+  it("refuses a bad limit like the real API", async () => {
+    const response = await top("?limit=11");
+    expect(response.status).toBe(422);
+    expect(await json(response)).toMatchObject({ code: "invalid_metric_query", field_errors: [{ field: "limit", code: "invalid_limit" }] });
+  });
+});

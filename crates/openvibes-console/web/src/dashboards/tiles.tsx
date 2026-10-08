@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { useResource } from "../api/client";
-import type { AgentSummary, FindingSummary, Permission, VulnerabilitySummary } from "../api/types";
+import type { AgentSummary, FindingSummary, Permission, TopHosts, VulnerabilitySummary } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
@@ -73,18 +73,25 @@ export function NumberTile({ widget }: WidgetProps) {
   );
 }
 
+export const BREAKDOWN_SOURCES = ["alarms", "vulnerabilities", "compliance", "agents"] as const;
+export const BREAKDOWN_TITLES = { alarms: "Active alarms by severity", vulnerabilities: "Vulnerabilities by severity", compliance: "Compliance findings by severity", agents: "Hosts by status" };
+const ALARM_SEVERITIES = ["critical", "high", "medium", "low"] as const;
+
 export function BreakdownTile({ widget }: WidgetProps) {
   const { can } = useSession();
-  const source = str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const);
-  const permission = source === "compliance" ? "compliance.read" : source === "agents" ? "agents.read" : "vulnerabilities.read";
+  const source = str(widget.config, "source", "compliance", BREAKDOWN_SOURCES);
+  const permission = { alarms: "alarms.read", compliance: "compliance.read", agents: "agents.read", vulnerabilities: "vulnerabilities.read" }[source] as Permission;
   const allowed = can(permission);
+  // The tiles' own numbers: the history API's live value (last point) of each alarm severity.
+  const alarmCounts = ALARM_SEVERITIES.map((s) => useHistory(allowed && source === "alarms" ? `alarms.active.${s}` : null, 7).data?.at(-1)?.value); // eslint-disable-line react-hooks/rules-of-hooks
   const findings = useResource<FindingSummary>(allowed && source === "compliance" ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && source === "vulnerabilities" ? "/api/v1/vulnerabilities/summary" : null);
   const agents = useResource<AgentSummary>(allowed && source === "agents" ? "/api/v1/agents/summary" : null);
   if (!allowed) return <Unavailable />;
   if (vulns.data && !vulns.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const parts: { key: string; label: string; value: number; tone: string; go: () => void }[] =
-    source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
+    source === "alarms" ? ALARM_SEVERITIES.map((s, i) => ({ key: s, label: s, value: alarmCounts[i] ?? 0, tone: s, go: () => nav.view("/alarms", { severity: s }) }))
+      : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/agents", { status: s }) }));
   return (
@@ -153,21 +160,31 @@ function ListTileBody({ view, params, limit }: NonNullable<ReturnType<typeof par
 
 export function TopHostsTile({ widget }: WidgetProps) {
   const { can } = useSession();
-  const summary = useResource<VulnerabilitySummary>(can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
-  if (!can("vulnerabilities.read")) return <Unavailable />;
-  if (summary.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {summary.error.message}</div>;
-  if (!summary.data) return <div className="skeleton" />;
+  const all = widget.config.kinds !== "vulnerabilities";
+  const limit = int(widget.config, "limit", 6, 1, 10);
+  const allowedAll = can("alarms.read") && can("vulnerabilities.read") && can("compliance.read");
+  const ranking = useResource<TopHosts>(all && allowedAll ? `/api/v1/metrics/top-hosts?limit=${limit}` : null);
+  const summary = useResource<VulnerabilitySummary>(!all && can("vulnerabilities.read") ? "/api/v1/vulnerabilities/summary" : null);
+  const unavailable = (text: string) => <div className="tile-empty"><Icon name="ban" size={18} /> {text}</div>;
+  if (all ? !allowedAll : !can("vulnerabilities.read")) return all ? unavailable("Not available with your role — choose Vulnerabilities only") : <Unavailable />;
+  const failed = all ? ranking.error : summary.error;
+  if (failed) return <div className="tile-empty"><Icon name="alert" size={18} /> {failed.message}</div>;
   // No feed ever imported: zero hosts would claim a scan that never ran.
-  if (!summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
-  if (summary.data.top_hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> No host has an open vulnerability</div>;
+  if (!all && summary.data && !summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
+  const hosts = all ? ranking.data?.items : summary.data?.top_hosts.slice(0, limit);
+  if (!hosts) return <div className="skeleton" />;
+  if (hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> {all ? "No host has an open problem" : "No host has an open vulnerability"}</div>;
   return (
-    <ul className="list list--plain">
-      {summary.data.top_hosts.slice(0, int(widget.config, "limit", 6, 1, 10)).map((host) => (
-        <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
-          <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
-          {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.open} open</span>
-        </ObjectLink></li>
-      ))}
-    </ul>
+    <div className="stack">
+      <ul className="list list--plain">
+        {hosts.map((host) => (
+          <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
+            <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
+            {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.open} open</span>
+          </ObjectLink></li>
+        ))}
+      </ul>
+      {all && <div className="subtle">all kinds</div>}
+    </div>
   );
 }

@@ -568,6 +568,25 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (metricPermissions(metric).some((p) => !capabilities.some((c) => c.permission === p))) return problem(403, "permission_denied", "You do not have access to that");
     return json({ metric, points: demoHistory(metric, days, current, now) });
   });
+  // Hosts ranked by critical + high of all three kinds, then by all open problems.
+  route("GET", "/api/v1/metrics/top-hosts", null, (_, query) => {
+    const limit = Number(query.get("limit") ?? "6");
+    if (!Number.isInteger(limit) || limit < 1 || limit > 10) return invalidQuery("limit", "invalid_limit", "limit must be 1 to 10");
+    if (metricPermissions("all.open.critical").some((p) => !capabilities.some((c) => c.permission === p))) return problem(403, "permission_denied", "You do not have access to that");
+    const hosts = new Map<string, { agent_id: string; hostname: string | null; serious: number; open: number }>();
+    const add = (agent_id: string, severity: string) => {
+      if (!["critical", "high", "important", "medium", "moderate", "low"].includes(severity)) return;
+      const host = hosts.get(agent_id) ?? { agent_id, hostname: data.agents.find((a) => a.id === agent_id)?.hostname ?? null, serious: 0, open: 0 };
+      host.open += 1;
+      if (severity === "critical" || severity === "high" || severity === "important") host.serious += 1;
+      hosts.set(agent_id, host);
+    };
+    for (const a of alarmList()) if (!a.suppressed_by && ["open", "investigating"].includes(a.state)) add(a.agent_id, a.severity);
+    for (const v of vulnerabilities()) add(v.agent_id, v.severity);
+    for (const f of findings()) if ((data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open") add(f.agent_id, f.severity);
+    const items = [...hosts.values()].filter((h) => visible(h.agent_id)).sort((a, b) => b.serious - a.serious || b.open - a.open || a.agent_id.localeCompare(b.agent_id));
+    return json({ items: items.slice(0, limit) });
+  });
   route("GET", "/api/v1/vulnerabilities/summary", "vulnerabilities.read", () => {
     const items = vulnerabilities();
     const hosts = new Map<string, { agent_id: string; hostname: string | null; open: number; serious: number }>();

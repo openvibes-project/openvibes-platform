@@ -10,8 +10,9 @@ import { int, list, noteLines, noteParts, str, toInt } from "./config";
 import { LineChart } from "../ui/LineChart";
 import { useHistory } from "./history";
 import type { Permission } from "../api/types";
-import { GRAPH_MAX_LINES, TREND_DAYS, graphMetrics, permitted, trendDays } from "./metrics";
-import { METRICS, METRIC_KEYS, Unavailable } from "./tiles";
+import { GRAPH_MAX_LINES, TREND_DAYS, graphLabel, graphMetrics, permitted, trendDays } from "./metrics";
+import type { Metric } from "./metrics";
+import { BREAKDOWN_SOURCES, BREAKDOWN_TITLES, METRICS, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
 
 export function TrendTile({ widget }: WidgetProps) {
@@ -42,7 +43,7 @@ export function GraphTile({ widget }: WidgetProps) {
   const failed = h.find((r) => r.error);
   if (failed?.error) return <div className="tile-empty">{failed.error.message}</div>;
   if (metrics.some((_, i) => !h[i]?.data)) return <div className="skeleton" />;
-  const series = metrics.map((m, i) => ({ label: METRICS[m].label, points: h[i]?.data ?? [] }));
+  const series = metrics.map((m, i) => ({ label: graphLabel(m), points: h[i]?.data ?? [] }));
   return <LineChart series={series} variant="full" smooth={widget.config.line !== "stepped"} />;
 }
 
@@ -53,8 +54,8 @@ export function GraphSettings({ widget, onChange }: SettingsProps) {
     <div className="stack">
       {metrics.map((m, i) => (
         <div key={i} className="row">
-          {field(`Count ${i + 1}`, <select className="select" value={m} onChange={(e) => set(metrics.map((x, j) => j === i ? e.target.value : x))}>
-            {METRIC_KEYS.map((key) => <option key={key} value={key}>{METRICS[key].label}</option>)}
+          {field(`Count ${i + 1}`, <select className="select" value={m} onChange={(e) => metrics.includes(e.target.value as Metric) || set(metrics.map((x, j) => j === i ? e.target.value : x))}>
+            {METRIC_KEYS.map((key) => <option key={key} value={key} disabled={key !== m && metrics.includes(key)}>{graphLabel(key)}</option>)}
           </select>)}
           {metrics.length > 1 && <button type="button" className="button" aria-label={`Remove count ${i + 1}`} onClick={() => set(metrics.filter((_, j) => j !== i))}>Remove</button>}
         </div>
@@ -107,9 +108,9 @@ export function NumberSettings({ widget, onChange }: SettingsProps) {
 }
 
 export function BreakdownSettings({ widget, onChange }: SettingsProps) {
-  return field("Break down", <select className="select" value={str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const)}
+  return field("Break down", <select className="select" value={str(widget.config, "source", "compliance", BREAKDOWN_SOURCES)}
     onChange={(e) => onChange({ ...widget.config, source: e.target.value })}>
-    <option value="compliance">Compliance findings by severity</option><option value="vulnerabilities">Vulnerabilities by severity</option><option value="agents">Hosts by status</option>
+    {BREAKDOWN_SOURCES.map((source) => <option key={source} value={source}>{BREAKDOWN_TITLES[source]}</option>)}
   </select>);
 }
 
@@ -120,7 +121,7 @@ export function AttentionSettings({ widget, onChange }: SettingsProps) {
     <div className="stack">
       {ATTENTION_KINDS.map((value) => (
         <label key={value} className="row"><input type="checkbox" checked={include.length === 0 || include.includes(value)} onChange={() => toggle(value)} />
-          {{ alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", compliance: "Open critical and high compliance findings", stale: "Hosts that stopped reporting" }[value]}</label>
+          {{ alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", serious: "Open critical and high vulnerabilities", compliance: "Open critical and high compliance findings", stale: "Hosts that stopped reporting" }[value]}</label>
       ))}
       {field("Show at most", <input className="input" type="number" min={1} max={20} value={int(widget.config, "limit", 8, 1, 20)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 20, 8) })} />)}
     </div>
@@ -150,7 +151,14 @@ export function TrendSettings({ widget, onChange }: SettingsProps) {
 }
 
 export function TopHostsSettings({ widget, onChange }: SettingsProps) {
-  return field("Hosts", <input className="input" type="number" min={1} max={10} value={int(widget.config, "limit", 6, 1, 10)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 10, 6) })} />);
+  return (
+    <div className="stack">
+      {field("Count", <select className="select" value={widget.config.kinds === "vulnerabilities" ? "vulnerabilities" : "all"} onChange={(e) => onChange({ ...widget.config, kinds: e.target.value })}>
+        <option value="all">All kinds (alarms, vulnerabilities, compliance)</option><option value="vulnerabilities">Vulnerabilities only</option>
+      </select>)}
+      {field("Hosts", <input className="input" type="number" min={1} max={10} value={int(widget.config, "limit", 6, 1, 10)} onChange={(e) => onChange({ ...widget.config, limit: toInt(e.target.value, 1, 10, 6) })} />)}
+    </div>
+  );
 }
 
 export function NoteSettings({ widget, onChange }: SettingsProps) {

@@ -29,6 +29,8 @@ const defs = {
   "agents.stale": { label: "Stale hosts", permissions: ["agents.read"], view: ["/agents", { status: "stale" }] },
   "agents.revoked": { label: "Revoked hosts", permissions: ["agents.read"], view: ["/agents", { status: "revoked" }] },
 } satisfies Record<string, Entry>;
+/** Name in graphs and their picker, where "Critical" alone would not say it spans kinds. */
+export const graphLabel = (id: Metric) => id.startsWith("all.") ? `${METRICS[id].label} (all kinds)` : METRICS[id].label;
 export const METRICS: Record<keyof typeof defs, Entry> = defs;
 export type Metric = keyof typeof defs;
 export const METRIC_KEYS = Object.keys(defs) as Metric[];

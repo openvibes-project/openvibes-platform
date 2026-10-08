@@ -50,6 +50,17 @@ Response: `{metric, points: [{day, value}]}`, oldest first. The window is
 - 401 without a session or token; 422 `invalid_metric_query` with field code
   `unknown_metric` or `invalid_days`; 503 when the database is unavailable.
 
+## Reader: `GET /api/v1/metrics/top-hosts`
+
+Query: `limit` (1 to 10, default 6; else 422 `invalid_metric_query` with field
+code `invalid_limit`). Response: `{items: [{agent_id, hostname, serious, open}]}`
+from the same per-host query (`history::top_hosts`): `serious` is critical plus
+high of alarms, vulnerabilities and compliance; `open` adds medium and low
+(info alarms excluded). Ordered by `serious`, then `open`, then agent id; hosts
+with nothing open are left out. Same permission rule and scoping as the
+cross-kind metrics (403 unless alarms, vulnerabilities and compliance reads
+share one scope).
+
 | Metric id | Meaning | Permissions |
 |---|---|---|
 | `all.open.critical` | alarms + vulnerabilities + compliance, critical | alarms.read, vulnerabilities.read, compliance.read |

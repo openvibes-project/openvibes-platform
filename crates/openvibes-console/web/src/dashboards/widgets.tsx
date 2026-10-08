@@ -5,10 +5,10 @@ import type { ReactNode } from "react";
 
 import type { IconName } from "../ui/Icon";
 import { str } from "./config";
-import { graphMetrics } from "./metrics";
+import { graphLabel, graphMetrics } from "./metrics";
 import { WIDGET_DEFAULTS } from "./defaults";
 import type { Widget, WidgetType } from "./layout";
-import { AttentionTile, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
+import { AttentionTile, BREAKDOWN_SOURCES, BREAKDOWN_TITLES, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
 import { AttentionSettings, BreakdownSettings, GraphSettings, GraphTile, ListSettings, NoteSettings, NoteTile, NumberSettings, TopHostsSettings, TrendSettings, TrendTile } from "./tiles2";
 
 export type WidgetProps = { widget: Widget };
@@ -24,7 +24,7 @@ export const widgetDefs: Readonly<Record<WidgetType, WidgetDef>> = {
   attention: { type: "attention", label: "Needs attention", description: "Exploited, serious and silent, in one list", icon: "alert", size: WIDGET_DEFAULTS["attention"].size, defaults: WIDGET_DEFAULTS["attention"].config, View: AttentionTile, Settings: AttentionSettings },
   list: { type: "list", label: "List", description: "The first rows of any list, with its filters", icon: "findings", size: WIDGET_DEFAULTS["list"].size, defaults: WIDGET_DEFAULTS["list"].config, View: ListTile, Settings: ListSettings },
   trend: { type: "trend", label: "Trend", description: "Hosts reporting a compliance finding per day", icon: "activity", size: WIDGET_DEFAULTS["trend"].size, defaults: WIDGET_DEFAULTS["trend"].config, View: TrendTile, Settings: TrendSettings },
-  "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious vulnerabilities", icon: "agents", size: WIDGET_DEFAULTS["top-hosts"].size, defaults: WIDGET_DEFAULTS["top-hosts"].config, View: TopHostsTile, Settings: TopHostsSettings },
+  "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious problems", icon: "agents", size: WIDGET_DEFAULTS["top-hosts"].size, defaults: WIDGET_DEFAULTS["top-hosts"].config, View: TopHostsTile, Settings: TopHostsSettings },
   graph: { type: "graph", label: "Graph", description: "Counts over time", icon: "activity", size: WIDGET_DEFAULTS["graph"].size, defaults: WIDGET_DEFAULTS["graph"].config, View: GraphTile, Settings: GraphSettings },
   note: { type: "note", label: "Note", description: "Plain text for your team", icon: "help", size: WIDGET_DEFAULTS["note"].size, defaults: WIDGET_DEFAULTS["note"].config, View: NoteTile, Settings: NoteSettings },
 };
@@ -34,8 +34,8 @@ export function widgetTitle(widget: Widget): string {
   if (typeof custom === "string" && custom.trim()) return custom.trim();
   if (widget.type === "number") return METRICS[str(widget.config, "metric", "agents.active", METRIC_KEYS)].label;
   if (widget.type === "breakdown") {
-    return { compliance: "Compliance findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const)];
+    return BREAKDOWN_TITLES[str(widget.config, "source", "compliance", BREAKDOWN_SOURCES)];
   }
-  if (widget.type === "graph" && graphMetrics(widget.config).length === 1) return METRICS[graphMetrics(widget.config)[0] ?? "alarms.active"].label;
+  if (widget.type === "graph" && graphMetrics(widget.config).length === 1) return graphLabel(graphMetrics(widget.config)[0] ?? "alarms.active");
   return (widgetDefs as Partial<Record<string, WidgetDef>>)[widget.type]?.label ?? "Unsupported widget";
 }
