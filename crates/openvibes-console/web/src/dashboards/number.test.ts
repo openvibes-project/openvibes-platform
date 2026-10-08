@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { delta, deltaSince, partText, permitted } from "./metrics";
+import { delta, deltaSince, partText, permitted, scanNotSetUp } from "./metrics";
 
 describe("number tile", () => {
   it("describes the change over the period", () => {
@@ -23,5 +23,14 @@ describe("number tile", () => {
   });
   it("formats part counts with separators", () => {
     expect(partText("alarm", 1200)).toBe(`${(1200).toLocaleString()} alarms`);
+  });
+});
+
+describe("Most exposed hosts, vulnerabilities only", () => {
+  it("says scanning is not set up until a feed was imported, and never for all kinds", () => {
+    expect(scanNotSetUp(false, { feed_last_imported_at: null })).toBe(true);
+    expect(scanNotSetUp(false, { feed_last_imported_at: "2026-10-01T00:00:00Z" })).toBe(false);
+    expect(scanNotSetUp(false, undefined)).toBe(false);
+    expect(scanNotSetUp(true, { feed_last_imported_at: null })).toBe(false);
   });
 });

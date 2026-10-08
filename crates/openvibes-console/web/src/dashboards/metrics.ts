@@ -72,3 +72,8 @@ export function graphMetrics(config: Record<string, unknown>): Metric[] {
   const ids = [...new Set(raw.filter((m): m is Metric => typeof m === "string" && m in METRICS))].slice(0, GRAPH_MAX_LINES);
   return ids.length ? ids : ["alarms.active"];
 }
+
+/** Vulnerabilities-only Most exposed hosts before any feed was imported: zero hosts would claim a scan that never ran. */
+export function scanNotSetUp(allKinds: boolean, summary?: { feed_last_imported_at?: string | null }): boolean {
+  return !allKinds && !!summary && !summary.feed_last_imported_at;
+}

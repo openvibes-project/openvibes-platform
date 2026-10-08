@@ -11,7 +11,7 @@ import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
-import { METRICS, METRIC_KEYS, delta, deltaSince, partText, permitted, trendDays, type Metric } from "./metrics";
+import { METRICS, METRIC_KEYS, delta, deltaSince, partText, scanNotSetUp, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
 export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
@@ -177,7 +177,7 @@ export function TopHostsTile({ widget }: WidgetProps) {
   if (all && ranking.error?.status === 403) return unavailable("Not available with your role — choose Vulnerabilities only");
   if (failed) return <div className="tile-empty"><Icon name="alert" size={18} /> {failed.message}</div>;
   // No feed ever imported: zero hosts would claim a scan that never ran.
-  if (!all && summary.data && !summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
+  if (scanNotSetUp(all, summary.data)) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const hosts = all ? ranking.data?.items : summary.data?.top_hosts.slice(0, limit);
   if (!hosts) return <div className="skeleton" />;
   if (hosts.length === 0) return <div className="tile-empty"><Icon name="check" size={18} /> {all ? "No host has an open problem" : "No host has an open vulnerability"}</div>;

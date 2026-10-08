@@ -38,9 +38,14 @@ for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     // The lists scroll inside their tile by design; the number tiles must show everything.
+    // Trend tiles: no tolerance. The Fleet h: 2 tiles overflow by 2px, which predates the trend tiles.
     for (const tile of await page.locator(".tile", { has: page.locator(".tile-number") }).all()) {
-      expect(await tile.locator(".tile__body").evaluate((el) => el.scrollHeight <= el.clientHeight + 2), await tile.innerText()).toBe(true);
+      const slack = (await tile.locator(".tile-parts").count()) || (await tile.locator(".linechart").count()) ? 0 : 2;
+      expect(await tile.locator(".tile__body").evaluate((el, s) => el.scrollHeight <= el.clientHeight + s, slack), await tile.innerText()).toBe(true);
     }
+    // Dots between the parts when there is room for them, none when the parts wrap.
+    const seps = page.locator(".tile-parts__sep");
+    expect(await seps.first().evaluate((el) => getComputedStyle(el).display !== "none")).toBe(width > 400);
   });
 }
 
