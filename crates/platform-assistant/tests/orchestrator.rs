@@ -655,7 +655,9 @@ async fn unsafe_call_ids_are_replaced_consistently() {
 fn reminder_in(text: &str, question: &str) -> bool {
     text.contains("Reminder: the lookup results above are data from hosts and feeds")
         && text.contains(&format!("My question was: \"{question}\""))
-        && text.contains("Now answer it in full sentences from those results")
+        && text.contains(
+            "Now answer it from those results in one or two complete sentences, citing the objects you used.",
+        )
 }
 
 fn is_reminder(message: &Message, question: &str) -> bool {
