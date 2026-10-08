@@ -897,3 +897,72 @@ fn the_form_explains_the_selected_row() {
         );
     }
 }
+
+/// Review (setup-ux): a step after the console's failing must not hide the
+/// password generated before it; the stopped screen shows it.
+#[test]
+fn a_run_stopped_after_the_console_still_shows_the_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Services => "failed\topenvibes-ingest.service is not ready\n".into(),
+            _ => walkthrough_answers(step),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert!(
+        matches!(app.setup.phase, Phase::Stopped(_)),
+        "{:?}",
+        app.setup.phase
+    );
+    let text = screen(&app);
+    assert!(text.contains("Sign in   admin / Abc123"), "{text}");
+}
+
+/// Review (setup-ux): only a detail that carries a password is masked; a
+/// check or repair shows the console row as it is.
+#[test]
+fn the_console_row_is_masked_only_when_it_carries_a_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => {
+                "done\thttps://platform.example.com · console admin: admin · rule signer ready\n"
+                    .into()
+            }
+            Step::Services => "failed\tstop here\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    let text = screen(&app);
+    assert!(text.contains("https://platform.example.com"), "{text}");
+    assert!(!text.contains("password at the end"), "{text}");
+}
+
+/// Review (setup-ux): what the CA step adds after the key path (e.g. that
+/// the file is still owned by root) stays on the final screen.
+#[test]
+fn the_root_key_note_stays_on_the_finished_screen() {
+    let text = screen(&finished_with(|step| {
+        match step {
+        Step::Ca => "done\troot key saved to /root/k.key: keep it offline (still owned by root: move it with sudo); root certificate /etc/openvibes/pki/root.crt, SHA-256 AA\n".into(),
+        _ => walkthrough_answers(step),
+    }
+    }));
+    assert!(text.contains("Root key  /root/k.key"), "{text}");
+    assert!(
+        text.contains("still owned by root: move it with sudo"),
+        "{text}"
+    );
+}

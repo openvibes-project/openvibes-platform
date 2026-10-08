@@ -217,10 +217,11 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
                 (_, Phase::Running(next)) if next == index => {
                     ("running…".to_owned(), String::new())
                 }
-                // The generated password waits for the last screen.
-                (Some(StepState::Done(_)), _)
-                    if matches!(app.setup.job, Job::Install | Job::Repair)
-                        && Step::ALL.get(index) == Some(&Step::Console) =>
+                // A generated password waits for the last screen (or the
+                // stopped screen, below); other console details show as is.
+                (Some(StepState::Done(detail)), _)
+                    if Step::ALL.get(index) == Some(&Step::Console)
+                        && admin_password(detail).is_some() =>
                 {
                     (
                         "done".to_owned(),
@@ -248,6 +249,11 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
     {
         lines.push(Line::raw(""));
         lines.push(Line::raw(state.detail().to_owned()));
+        // The password made before the stop is shown now: the run may never
+        // reach its last screen.
+        if let Some(password) = done(&app.setup.states, Step::Console).and_then(admin_password) {
+            lines.push(Line::raw(format!("{:<10}admin / {password}", "Sign in")));
+        }
     }
     lines
 }
@@ -293,6 +299,12 @@ fn done(states: &[Option<StepState>], step: Step) -> Option<&str> {
     }
 }
 
+/// The admin password a console detail carries (only when Setup generated
+/// one: `setup/console.rs`).
+fn admin_password(detail: &str) -> Option<&str> {
+    between(detail, ", password ", " (")
+}
+
 /// `text` between `start` and `end` (to its end when `end` is absent).
 fn between<'a>(text: &'a str, start: &str, end: &str) -> Option<&'a str> {
     let rest = &text[text.find(start)? + start.len()..];
@@ -312,7 +324,7 @@ fn install_finished(states: &[Option<StepState>]) -> Vec<Line<'static>> {
     };
     let console = done(states, Step::Console);
     let url = console.and_then(|d| d.split(" · ").next().filter(|u| u.starts_with("https://")));
-    let password = console.and_then(|d| between(d, "password ", " ("));
+    let password = console.and_then(admin_password);
     let mut lines = vec![Line::raw(if password.is_some() {
         "Setup finished. Write the password down: it is shown only now."
     } else {
@@ -341,6 +353,18 @@ fn install_finished(states: &[Option<StepState>]) -> Vec<Line<'static>> {
                 "",
                 Line::raw("The only copy. Move it to offline storage, then delete it here."),
             ));
+            // What the write added after the path, e.g. that the file is
+            // still owned by root (setup/system.rs `write_new`).
+            if let Some(note) = between(detail, ": keep it offline", "; root certificate")
+                .map(|n| {
+                    n.trim()
+                        .trim_start_matches(['(', ' '])
+                        .trim_end_matches(')')
+                })
+                .filter(|n| !n.is_empty())
+            {
+                lines.push(row("", Line::raw(note.to_owned())));
+            }
         } else {
             lines.push(row("Root CA", Line::raw(detail.to_owned())));
         }
