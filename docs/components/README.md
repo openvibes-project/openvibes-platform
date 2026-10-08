@@ -29,7 +29,7 @@ behaviour, and how to test. Updated in the same change as the component.
 | `console-triage` | console module | latest-finding analyst workflow, stale-write protection, audit/history, and observation-triggered reopen (C3) | [console-triage.md](console-triage.md) |
 | `console-detection` | console module and web panel | original evaluation evidence and observation-scoped historical rule detail (P17) | [console-detection.md](console-detection.md) |
 | `console-assistant` | console module and web page | opt-in local model chat with permission-scoped agent and finding lookups, safe citations, and in-tab-only history | [console-assistant.md](console-assistant.md) |
-| `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards; demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
+| `console-web` | web application | the embedded console interface: sign-in, inspector panel stack, floating windows, assistant dock, command palette, saved views, dashboards (Number, Graph and more widgets); demo build for the GitHub Pages preview | [console-web.md](console-web.md) |
 | `console-dashboards` | console module | user dashboards: layouts, sharing by role, home (schema 26) | [console-dashboards.md](console-dashboards.md) |
 | `console-cases` | console module | investigations: items, notes, assignment, closing with evidence; scope-aware visibility (schema 35) | [console-cases.md](console-cases.md) |
 | `count-history` | store module and console endpoint | daily per-host problem counts (schema 44) written by maintenance, served as count history graphs by `/api/v1/metrics/history` | [count-history.md](count-history.md) |

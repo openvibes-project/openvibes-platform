@@ -67,7 +67,7 @@ None.
 | database unavailable | 503 |
 | home dashboard deleted or no longer visible | `GET /me/home` answers `null` |
 | a tile with more than fits (e.g. Needs attention's 14 items) | the body scrolls, and a shade at the top or bottom edge shows that more lies past it |
-| a tile with nothing to show (no findings, no vulnerable host) | the tile says so ("All clear", "No host has an open vulnerability"), never a blank box; a failed read shows its error |
+| a tile with nothing to show (no open problems, no vulnerable host) | the tile says so ("All clear", "No host has an open vulnerability"), never a blank box; a failed read shows its error |
 | no vulnerability feed ever imported (vulns not installed, or its first download failed) | no vulnerability tile claims "nothing found": Most exposed hosts and a vulnerabilities breakdown say "Vulnerability scanning is not set up", and vulnerability number tiles show "— Not set up" instead of 0 (summary's `feed_last_imported_at` is null) |
 
 ## How to test
