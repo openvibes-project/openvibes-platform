@@ -77,8 +77,27 @@ test("Most exposed hosts ranks hosts across all kinds even before any feed impor
   // all-kinds ranking lists those hosts and claims no vulnerability scan (board #47).
   await signIn(page, "alex");
   const tile = page.locator(".tile", { hasText: "Most exposed hosts" });
-  await expect(tile.locator(".list__row").first()).toContainText(/\d+ open$/);
+  const row = tile.locator(".list__row").first();
+  await expect(row).toContainText(/\d+ open$/);
+  await expect(row).toHaveAttribute("href", /agent/);
   await expect(tile.getByText("No host has an open")).toHaveCount(0);
+});
+
+test("the Overview's Active alarms tile says it is collecting, and the Critical tile adds up and links", async ({ page }) => {
+  await signIn(page, "alex");
+  const tileOf = (title: RegExp) => page.locator(".tile", { has: page.locator(".tile__title", { hasText: title }) });
+  // One history point so far: no line to draw, and it says since when.
+  await expect(tileOf(/^Active alarms$/).getByText(/^Collecting since/)).toBeVisible();
+  const tile = tileOf(/^Critical$/);
+  // Every number loaded before they are added up.
+  await expect(tile.locator(".stat__value")).toHaveText(/^\d[\d,]*$/);
+  await expect(tile.locator(".tile-parts")).not.toContainText("…");
+  const total = Number((await tile.locator(".stat__value").textContent())?.replace(/\D/g, ""));
+  const parts = (await tile.locator(".tile-parts").textContent()) ?? "";
+  const sum = [...parts.matchAll(/(\d[\d,]*) (?:alarm|vulnerabilit|compliance)/g)].reduce((n, m) => n + Number((m[1] ?? "").replace(/,/g, "")), 0);
+  expect(sum).toBe(total);
+  await tile.getByRole("button", { name: /alarm/ }).click();
+  await expect(page).toHaveURL(/severity=critical/);
 });
 
 test("vulnerability number tiles show no zero before any feed imported", async ({ page }) => {

@@ -124,7 +124,7 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
     reads "N+ hosts";
   - open critical and high compliance findings;
   - hosts that stopped reporting.
-- **Most exposed hosts:** settings Kinds and Rows (1 to 10, default 6).
+- **Most exposed hosts:** settings Count (All kinds or Vulnerabilities only) and Hosts (1 to 10, default 6).
   - All kinds ranks hosts by critical and high problems across alarms,
     vulnerabilities and compliance findings, from
     `GET /api/v1/metrics/top-hosts`. It needs the three read permissions

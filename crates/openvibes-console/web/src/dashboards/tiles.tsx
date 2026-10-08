@@ -6,6 +6,7 @@ import { useSession } from "../app/session";
 import { ObjectLink, SeverityBadge } from "../ui/bits";
 import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
+import { CountError, Unavailable } from "./CountError";
 import { LineChart } from "../ui/LineChart";
 import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
@@ -16,20 +17,21 @@ import type { WidgetProps } from "./widgets";
 
 export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
 
-export function Unavailable() {
-  return <div className="tile-empty"><Icon name="ban" size={18} /> Not available with your role</div>;
-}
+export { Unavailable };
 
 // A count's number is the last point of its history: the API's live "today" value.
 function useCount(metric: string | null, days = 7) {
-  const { data } = useHistory(metric, days);
-  return data;
+  const { data, error } = useHistory(metric, days);
+  return { data, error };
 }
 
-function Part({ kind, id }: { kind: string; id: string }) {
-  const value = useCount(id)?.at(-1)?.value;
+function Part({ kind, id, unset }: { kind: string; id: string; unset: boolean }) {
+  const { data, error } = useCount(id);
+  const value = data?.at(-1)?.value;
+  // No vulnerability feed yet: a 0 would claim nothing was found.
+  if (kind === "vulnerability" && unset) return <span>vulnerabilities not set up</span>;
   const [path, params] = METRICS[id as Metric].view as [string, Record<string, string>]; // catalogue.test.ts: every part has a view
-  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{value === undefined ? "…" : partText(kind, value)}</button>;
+  return <button type="button" className="link-button" onClick={() => nav.view(path, params)}>{error ? "—" : value === undefined ? "…" : partText(kind, value)}</button>;
 }
 
 export function NumberTile({ widget }: WidgetProps) {
@@ -39,17 +41,19 @@ export function NumberTile({ widget }: WidgetProps) {
   const allowed = permitted(metric, (p) => can(p as Permission));
   const trend = trendDays(widget.config.trend);
   // trend <= 7 reuses the 7-day history the number needs anyway.
-  const history = useCount(allowed ? metric : null, Math.max(7, trend));
+  const { data: history, error: historyError } = useCount(allowed ? metric : null, Math.max(7, trend));
   const value = history?.at(-1)?.value;
   const points = trend > 0 ? history?.slice(-trend) ?? [] : [];
   const change = delta(points);
   const since = deltaSince(points, trend);
   // No vulnerability feed yet: a 0 would claim nothing was found.
-  const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
+  const vulns = useResource<VulnerabilitySummary>(allowed && (metric.startsWith("vulns.") || def.parts) ? "/api/v1/vulnerabilities/summary" : null);
   if (!allowed) return <Unavailable />;
   const tone = value && ["compliance.open.critical", "all.open.critical", "vulns.exploited"].includes(metric) ? "crit" : value && metric === "agents.stale" ? "warn" : undefined;
-  const unset = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
+  const noFeed = vulns.data !== undefined && !vulns.data.feed_last_imported_at;
+  const unset = noFeed && metric.startsWith("vulns.");
   // A vulnerability count waits for the summary, so no number turns into a dash.
+  if (historyError) return <CountError error={historyError} />;
   if (vulns.error) return <div className="tile-empty"><Icon name="alert" size={18} /> {vulns.error.message}</div>;
   const shown = metric.startsWith("vulns.") && vulns.data === undefined ? undefined : value;
   const body = (
@@ -62,7 +66,7 @@ export function NumberTile({ widget }: WidgetProps) {
   const view = def.view;
   // Reserve the chart's height while history loads so the fine print does not jump.
   const chart = trend > 0 && !unset && <div style={{ minHeight: 36 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
-  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} /></Fragment>)}</div>;
+  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} unset={noFeed} /></Fragment>)}</div>;
   return (
     <div className="stack">
       {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>
@@ -187,7 +191,7 @@ export function TopHostsTile({ widget }: WidgetProps) {
         {hosts.map((host) => (
           <li key={host.agent_id}><ObjectLink to={{ kind: "agent", id: host.agent_id }} className="list__row">
             <Icon name="agents" size={15} className="subtle" /><span className="grow truncate">{host.hostname ?? host.agent_id}</span>
-            {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.open} open</span>
+            {host.serious > 0 && <span className="badge badge--high badge--plain num">{host.serious} serious</span>}<span className="subtle num nowrap">{host.serious > 0 && "· "}{host.open} open</span>
           </ObjectLink></li>
         ))}
       </ul>

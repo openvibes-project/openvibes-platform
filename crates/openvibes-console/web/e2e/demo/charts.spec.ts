@@ -46,3 +46,15 @@ test("a two-line graph names both counts in its hover tooltip, and a count canno
   await expect(tip).toContainText("Critical (all kinds)");
   await expect(tip).toContainText("Active critical alarms");
 });
+
+test("a graph shows as a table and back as a chart", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await page.getByRole("menuitem", { name: "New dashboard" }).click();
+  await page.getByRole("button", { name: /^Graph/ }).click();
+  await page.getByRole("button", { name: "Show as table" }).click();
+  await expect(page.getByRole("table")).toBeVisible();
+  await page.getByRole("button", { name: "Show as chart" }).click();
+  await expect(page.getByRole("table")).toHaveCount(0);
+  await expect(page.locator(".linechart svg").first()).toBeVisible();
+});

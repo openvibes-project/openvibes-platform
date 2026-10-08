@@ -12,7 +12,7 @@ import { useHistory } from "./history";
 import type { Permission } from "../api/types";
 import { GRAPH_MAX_LINES, TREND_DAYS, graphLabel, graphMetrics, permitted, trendDays } from "./metrics";
 import type { Metric } from "./metrics";
-import { BREAKDOWN_SOURCES, BREAKDOWN_TITLES, METRICS, METRIC_KEYS, Unavailable } from "./tiles";
+import { BREAKDOWN_SOURCES, BREAKDOWN_TITLES, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
 
 export function TrendTile({ widget }: WidgetProps) {
@@ -95,7 +95,7 @@ export function NumberSettings({ widget, onChange }: SettingsProps) {
   return (
     <div className="stack">
       {field("Count", <select className="select" value={metric} onChange={(e) => onChange({ ...widget.config, metric: e.target.value })}>
-        {METRIC_KEYS.map((key) => <option key={key} value={key}>{METRICS[key].label}</option>)}
+        {METRIC_KEYS.map((key) => <option key={key} value={key}>{graphLabel(key)}</option>)}
       </select>)}
       {field("Trend", <select className="select" value={trend} onChange={(e) => onChange({ ...widget.config, trend: Number(e.target.value) })}>
         {TREND_DAYS.map((d) => <option key={d} value={d}>{d === 0 ? "Off" : `${d} days`}</option>)}

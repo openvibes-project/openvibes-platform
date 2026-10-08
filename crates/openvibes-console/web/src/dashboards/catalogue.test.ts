@@ -9,16 +9,16 @@ const PERMISSION = { AL: "alarms.read", VU: "vulnerabilities.read", CO: "complia
 const start = source.indexOf("CATALOGUE: [Metric;");
 const block = source.slice(start, source.indexOf("];", start));
 const expected = Number(/\[Metric; (\d+)\]/.exec(block)?.[1]);
-const server = [...block.matchAll(/m!\(\s*"([^"]+)",\s*"[^"]*",\s*&\[([A-Z, ]+)\]/g)].map(([, id, perms]) => [
-  id, (perms ?? "").split(",").map((p) => p.trim()).filter(Boolean).map((p) => PERMISSION[p as keyof typeof PERMISSION]),
+const server = [...block.matchAll(/m!\(\s*"([^"]+)",\s*"([^"]*)",\s*&\[([A-Z, ]+)\]/g)].map(([, id, label, perms]) => [
+  id, label, (perms ?? "").split(",").map((p) => p.trim()).filter(Boolean).map((p) => PERMISSION[p as keyof typeof PERMISSION]),
 ] as const);
 
 describe("catalogue", () => {
-  it("matches the server catalogue ids and permissions", () => {
+  it("matches the server catalogue ids, labels and permissions", () => {
     expect(expected).toBeGreaterThan(0);
     expect(server).toHaveLength(expected);
     expect(Object.keys(METRICS).sort()).toEqual(server.map(([id]) => id).sort());
-    for (const [id, permissions] of server) expect([id, METRICS[id as keyof typeof METRICS].permissions]).toEqual([id, permissions]);
+    for (const [id, label, permissions] of server) expect([id, METRICS[id as keyof typeof METRICS].label, METRICS[id as keyof typeof METRICS].permissions]).toEqual([id, label, permissions]);
   });
   it("cross-kind counts need all three read permissions and link each part", () => {
     expect(METRICS["all.open.high"].permissions).toEqual(["alarms.read", "vulnerabilities.read", "compliance.read"]);

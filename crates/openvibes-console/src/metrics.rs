@@ -30,7 +30,7 @@ use Permission::{
 /// One countable thing: who may read it and how to compute it.
 pub struct Metric {
     pub id: &'static str,
-    // ponytail: read by the metric picker (a later task); API ignores it.
+    // Equal to the web catalogue's label (catalogue.test.ts); the API does not serve it.
     #[allow(dead_code)]
     pub label: &'static str,
     pub permissions: &'static [Permission],
@@ -53,13 +53,13 @@ macro_rules! m {
 pub static CATALOGUE: [Metric; 21] = [
     m!(
         "all.open.critical",
-        "Critical problems",
+        "Critical",
         &[AL, VU, CO],
         Expr::Sum(&["alarms_critical", "vulns_critical", "compliance_critical"])
     ),
     m!(
         "all.open.high",
-        "High problems",
+        "High",
         &[AL, VU, CO],
         Expr::Sum(&["alarms_high", "vulns_high", "compliance_high"])
     ),
@@ -77,49 +77,49 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "alarms.active.critical",
-        "Critical alarms",
+        "Active critical alarms",
         &[AL],
         Expr::Sum(&["alarms_critical"])
     ),
     m!(
         "alarms.active.high",
-        "High alarms",
+        "Active high alarms",
         &[AL],
         Expr::Sum(&["alarms_high"])
     ),
     m!(
         "alarms.active.medium",
-        "Medium alarms",
+        "Active medium alarms",
         &[AL],
         Expr::Sum(&["alarms_medium"])
     ),
     m!(
         "alarms.active.low",
-        "Low alarms",
+        "Active low alarms",
         &[AL],
         Expr::Sum(&["alarms_low"])
     ),
     m!(
         "vulns.open.critical",
-        "Critical vulnerabilities",
+        "Open critical vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_critical"])
     ),
     m!(
         "vulns.open.high",
-        "High vulnerabilities",
+        "Open high vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_high"])
     ),
     m!(
         "vulns.open.medium",
-        "Medium vulnerabilities",
+        "Open medium vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_medium"])
     ),
     m!(
         "vulns.open.low",
-        "Low vulnerabilities",
+        "Open low vulnerabilities",
         &[VU],
         Expr::Sum(&["vulns_low"])
     ),
@@ -131,7 +131,7 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "vulns.no_fix",
-        "Vulnerabilities without a fix",
+        "No fix yet",
         &[VU],
         Expr::Sum(&["vulns_no_fix"])
     ),
@@ -143,43 +143,43 @@ pub static CATALOGUE: [Metric; 21] = [
     ),
     m!(
         "compliance.open.critical",
-        "Critical compliance findings",
+        "Open critical compliance findings",
         &[CO],
         Expr::Sum(&["compliance_critical"])
     ),
     m!(
         "compliance.open.high",
-        "High compliance findings",
+        "Open high compliance findings",
         &[CO],
         Expr::Sum(&["compliance_high"])
     ),
     m!(
         "compliance.open.medium",
-        "Medium compliance findings",
+        "Open medium compliance findings",
         &[CO],
         Expr::Sum(&["compliance_medium"])
     ),
     m!(
         "compliance.open.low",
-        "Low compliance findings",
+        "Open low compliance findings",
         &[CO],
         Expr::Sum(&["compliance_low"])
     ),
     m!(
         "agents.active",
-        "Active agents",
+        "Hosts online",
         &[AG],
         Expr::HostsWhere("status = 'active'")
     ),
     m!(
         "agents.stale",
-        "Stale agents",
+        "Stale hosts",
         &[AG],
         Expr::HostsWhere("status = 'stale'")
     ),
     m!(
         "agents.revoked",
-        "Revoked agents",
+        "Revoked hosts",
         &[AG],
         Expr::HostsWhere("status = 'revoked'")
     ),
