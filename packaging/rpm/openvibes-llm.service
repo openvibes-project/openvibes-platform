@@ -18,8 +18,6 @@ StopWhenUnneeded=yes
 Type=exec
 User=openvibes-llm
 Group=openvibes-llm
-# Behind the socket proxy; llm.conf overrides (an older llm.conf has none).
-Environment=OPENVIBES_LLM_INTERNAL_PORT=18431
 EnvironmentFile=/etc/openvibes/llm.conf
 # Written by `sudo openvibes-admin helper assistant-tune`; overrides llm.conf
 # for OPENVIBES_LLM_THREADS and OPENVIBES_LLM_GPU_LAYERS. After changing either
@@ -44,15 +42,22 @@ ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check
 # web UI, props changes, metrics, tools/MCP, media paths, model downloads.
 ExecStart=/usr/libexec/openvibes-llm/llama-server \
     --model ${OPENVIBES_LLM_MODEL} --alias ${OPENVIBES_LLM_ALIAS} \
-    --host 127.0.0.1 --port ${OPENVIBES_LLM_INTERNAL_PORT} \
+    --host /run/openvibes-llm/llama.sock \
     --ctx-size ${OPENVIBES_LLM_CONTEXT} --threads ${OPENVIBES_LLM_THREADS} \
     --n-gpu-layers ${OPENVIBES_LLM_GPU_LAYERS} --parallel ${OPENVIBES_LLM_PARALLEL} \
     --api-key-file %d/api-key \
     --no-webui --no-slots --offline --jinja --timeout 300 --log-colors off
+# Behind the proxy on a Unix socket, not a TCP port: a port is free while
+# the server is stopped and any local user could bind it. The directory is
+# 0750 openvibes-llm (the proxy runs as this account too), the socket 0700
+# (UMask=). It is removed whenever the service stops, crash included, so a
+# stale socket never blocks the next start.
+RuntimeDirectory=openvibes-llm
+RuntimeDirectoryMode=0750
 # Active only once the model is loaded: the proxy (After= this) then passes
 # the waiting connection on. Never --sleep-idle-seconds (CVE-2026-43631):
 # idle unloading stops the whole process instead.
-ExecStartPost=/usr/libexec/openvibes-llm/openvibes-llm-check --wait-ready
+ExecStartPost=/usr/libexec/openvibes-llm/openvibes-llm-check --wait-ready /run/openvibes-llm/llama.sock
 # The check hashes the model, then --wait-ready allows 180 s for loading.
 TimeoutStartSec=300
 Restart=on-failure
@@ -80,10 +85,10 @@ ProtectHostname=yes
 # shell, no gdb, nothing a hijacked process could start.
 NoExecPaths=/
 ExecPaths=/usr/libexec/openvibes-llm /usr/lib64 /usr/lib
-# Loopback only, in and out.
+# No network at all: the Unix socket is its only way in.
+PrivateNetwork=yes
 IPAddressDeny=any
-IPAddressAllow=localhost
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_UNIX
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes

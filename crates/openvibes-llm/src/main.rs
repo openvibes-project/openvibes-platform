@@ -13,13 +13,18 @@ use openvibes_llm::{
 };
 
 fn main() -> ExitCode {
-    let mode = std::env::args().nth(1);
-    if std::env::args().count() > 2
-        || !matches!(mode.as_deref(), None | Some("--idle-only" | "--wait-ready"))
-    {
-        eprintln!("usage: openvibes-llm-check [--idle-only | --wait-ready]");
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let mode = args.first().cloned();
+    let usage = !matches!(
+        args.iter().map(String::as_str).collect::<Vec<_>>()[..],
+        [] | ["--idle-only"] | ["--wait-ready"] | ["--wait-ready", _]
+    );
+    if usage {
+        eprintln!("usage: openvibes-llm-check [--idle-only | --wait-ready [SOCKET]]");
         return ExitCode::FAILURE;
     }
+    // The unit names the socket it gives llama-server's --host.
+    let socket = args.get(1).map_or(LLAMA_SOCKET, String::as_str);
     let run = || -> Result<String, CheckError> {
         if running_as_root() {
             return Err(CheckError::Root);
@@ -47,11 +52,11 @@ fn main() -> ExitCode {
             }
             Some(_) => {
                 wait_ready(
-                    Path::new(LLAMA_SOCKET),
+                    Path::new(socket),
                     Duration::from_millis(500),
                     Duration::from_secs(180),
                 )?;
-                return Ok(format!("openvibes-llm-check: ready on {LLAMA_SOCKET}"));
+                return Ok(format!("openvibes-llm-check: ready on {socket}"));
             }
             None => {}
         }

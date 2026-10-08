@@ -80,7 +80,7 @@ impl fmt::Display for CheckError {
             Self::Root => f.write_str("openvibes-llm must not run as root"),
             Self::NotReady => write!(
                 f,
-                "llama-server did not become healthy on {LLAMA_SOCKET} in time"
+                "llama-server did not become healthy on its socket in time"
             ),
         }
     }

@@ -1,5 +1,5 @@
-# Passes connections from openvibes-llm.socket to llama-server on
-# OPENVIBES_LLM_INTERNAL_PORT and exits after OPENVIBES_LLM_IDLE without one;
+# Passes connections from openvibes-llm.socket to llama-server's Unix socket
+# and exits after OPENVIBES_LLM_IDLE without one;
 # openvibes-llm.service (StopWhenUnneeded=yes) then stops and the model is
 # unloaded. Not llama-server's --sleep-idle-seconds: CVE-2026-43631.
 [Unit]
@@ -10,15 +10,16 @@ After=openvibes-llm.service
 
 [Service]
 Type=exec
-# Defaults for an llm.conf from before idle unloading; llm.conf overrides.
+# The default for an llm.conf from before idle unloading; llm.conf overrides.
 Environment=OPENVIBES_LLM_IDLE=5min
-Environment=OPENVIBES_LLM_INTERNAL_PORT=18431
 EnvironmentFile=/etc/openvibes/llm.conf
-# Refuses a malformed idle time or an internal port equal to the public one.
+# Refuses a malformed idle time.
 ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check --idle-only
 ExecStart=/usr/lib/systemd/systemd-socket-proxyd \
-    --exit-idle-time=${OPENVIBES_LLM_IDLE} 127.0.0.1:${OPENVIBES_LLM_INTERNAL_PORT}
-DynamicUser=yes
+    --exit-idle-time=${OPENVIBES_LLM_IDLE} /run/openvibes-llm/llama.sock
+# The server's account: only it (and root) can enter /run/openvibes-llm.
+User=openvibes-llm
+Group=openvibes-llm
 UMask=0077
 NoNewPrivileges=yes
 PrivateTmp=yes
@@ -33,10 +34,10 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
-# Loopback only, in and out.
+# Accepts on the socket unit's loopback port; connects only to the Unix socket.
 IPAddressDeny=any
 IPAddressAllow=localhost
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictAddressFamilies=AF_UNIX
 RestrictNamespaces=yes
 RestrictRealtime=yes
 RestrictSUIDSGID=yes

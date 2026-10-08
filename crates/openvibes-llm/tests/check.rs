@@ -11,8 +11,8 @@ use std::{
 };
 
 use openvibes_llm::{
-    CheckError, LLAMA_SOCKET, check_environment, check_model, idle_seconds, idle_setting,
-    running_as_root, settings, sha256_hex, wait_ready,
+    CheckError, check_environment, check_model, idle_seconds, idle_setting, running_as_root,
+    settings, sha256_hex, wait_ready,
 };
 
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -328,7 +328,6 @@ fn wait_ready_gives_up_after_the_timeout() {
         ),
         Err(CheckError::NotReady)
     );
-    assert!(CheckError::NotReady.to_string().contains(LLAMA_SOCKET));
 }
 
 #[test]
@@ -356,4 +355,14 @@ fn binary_idle_only_checks_no_model() {
         .unwrap();
     assert!(!unknown.status.success());
     assert!(String::from_utf8_lossy(&unknown.stderr).contains("usage"));
+    // --wait-ready takes the socket the unit names.
+    let path = health_server("binary", &["200 OK"]);
+    let ready = Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+        .env_clear()
+        .arg("--wait-ready")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(ready.status.success(), "{ready:?}");
+    assert!(String::from_utf8_lossy(&ready.stdout).contains("ready on"));
 }
