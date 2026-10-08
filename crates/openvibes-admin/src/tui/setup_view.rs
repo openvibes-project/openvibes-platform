@@ -1,7 +1,7 @@
 //! Draws the Setup tab at 80×24: the form, the password prompt, the
 //! checklist while running or stopped, and what to keep when finished.
 
-use platform_host::{Host, Step};
+use platform_host::{Host, Step, StepState};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Rect},
@@ -184,6 +184,16 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
             let (label, detail) = match (state, app.setup.phase) {
                 (_, Phase::Running(next)) if next == index => {
                     ("running…".to_owned(), String::new())
+                }
+                // The generated password waits for the last screen.
+                (Some(StepState::Done(_)), _)
+                    if matches!(app.setup.job, Job::Install | Job::Repair)
+                        && Step::ALL.get(index) == Some(&Step::Console) =>
+                {
+                    (
+                        "done".to_owned(),
+                        "admin account ready (password at the end)".to_owned(),
+                    )
                 }
                 (Some(state), _) => (state.label().to_owned(), state.detail().to_owned()),
                 (None, _) => (String::new(), String::new()),

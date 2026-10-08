@@ -735,3 +735,35 @@ fn start_draws_the_checklist_before_the_first_step_runs() {
     app.key_then_tick(None);
     assert_eq!(app.setup.phase, Phase::Running(1));
 }
+
+/// The step list is on screen while later steps run: the generated admin
+/// password waits for the last screen (walkthrough, 2026-10-08).
+#[test]
+fn the_step_list_never_shows_the_admin_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    let console = Step::ALL.iter().position(|s| *s == Step::Console).unwrap();
+    for _ in 0..=console {
+        app.setup_tick();
+    }
+    assert!(matches!(app.setup.phase, Phase::Running(_)));
+    let text = screen(&app);
+    assert!(!text.contains("Abc123"), "{text}");
+    let row = text
+        .lines()
+        .find(|l| l.contains("Console and admin"))
+        .unwrap();
+    assert!(!row.contains('…'), "the row is not cut at 80x24: {row}");
+    assert!(
+        text.contains("admin account ready (password at the end)"),
+        "{text}"
+    );
+}
