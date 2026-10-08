@@ -107,6 +107,10 @@ impl Fake {
         std::fs::write(path, text).unwrap();
     }
 
+    pub fn remove(&self, abs: &str) {
+        std::fs::remove_file(self.root.join(abs.trim_start_matches('/'))).unwrap();
+    }
+
     pub fn text(&self, abs: &str) -> String {
         std::fs::read_to_string(self.root.join(abs.trim_start_matches('/'))).unwrap()
     }

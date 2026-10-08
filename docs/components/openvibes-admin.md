@@ -476,13 +476,16 @@ the package also carries `alarms.json`/`alarms.key` (rules v2), the
 threat-alarm set is trusted and published the same way),
 `agent` (the agent on this host, waits
 up to 60 s for it to report; when the alarm rules are published and the
-installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` (a P14
-agent), its `agent.toml` adds `process_events` to `collectors` and the
-alarm rule set; an older agent never gets either, since it would refuse
-the collector name. When `/etc/audit/audit.rules` has `-a task,never`
-(Fedora's default, which switches syscall auditing off), the step's line
-says alarms can't fire and how to fix it; Setup never edits audit rules
-itself. Health shows the same as a problem when the TUI runs as root),
+installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` or, from
+agent #57, its template `/usr/share/openvibes-agent/openvibes-agent.rules`
+(a P14 agent), its `agent.toml` adds `process_events` to `collectors` and
+the alarm rule set; an older agent never gets either, since it would refuse
+the collector name. When the host's agent reads kernel audit (the exec rule
+is in `/etc/audit/rules.d`; an eBPF host has none there) and
+`/etc/audit/audit.rules` has `-a task,never` (Fedora's default, which
+switches syscall auditing off), the step's line says alarms can't fire and
+how to fix it; Setup never edits audit rules itself. Health shows the same
+as a problem when the TUI runs as root),
 `ready` (and, on a first install, the standing token; a Repair shows no
 install line and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).

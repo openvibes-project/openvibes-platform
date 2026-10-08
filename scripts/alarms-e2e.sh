@@ -81,7 +81,11 @@ echo "ok: signed in to the console API"
 
 # The agent: packaged binary, its exec audit rule, one signed alarm rule.
 A=$SHARED/agent
-sudo auditctl -R "$X/etc/audit/rules.d/openvibes-agent.rules" >/dev/null
+# Agent #57 on ships the rule as a template (an eBPF host loads none); an
+# older agent RPM had it in rules.d. This job tests the audit path.
+rule=$X/usr/share/openvibes-agent/openvibes-agent.rules
+[[ -f $rule ]] || rule=$X/etc/audit/rules.d/openvibes-agent.rules
+sudo auditctl -R "$rule" >/dev/null
 sudo auditctl -l | grep -q 'key=openvibes-exec' || fail "the packaged audit rule did not load"
 SIGN="$RPMS/sign_bundle"; chmod +x "$SIGN" 2>/dev/null || { cp "$SIGN" "$A/sign_bundle"; chmod +x "$A/sign_bundle"; SIGN=$A/sign_bundle; }
 KEY=$("$SIGN" keygen "$A/signing.key" | tail -1)

@@ -20,9 +20,18 @@ const AGENT_WAIT: u32 = 60;
 const BASELINE: &str = "baseline";
 const ALARMS: &str = "alarms";
 
-/// The audit rule the P14 agent package ships: an agent that has it knows
-/// the `process_events` collector (an older one refuses the name).
-const AGENT_AUDIT_RULE: &str = "/etc/audit/rules.d/openvibes-agent.rules";
+/// The exec audit rule a P14 agent package ships; agent #57 on keeps it only
+/// as a template and copies it here on audit-fallback hosts, so here it
+/// also means "this host's agent reads kernel audit".
+pub const AGENT_AUDIT_RULE: &str = "/etc/audit/rules.d/openvibes-agent.rules";
+/// The template of that rule (agent #57 on, eBPF hosts included).
+const AGENT_AUDIT_TEMPLATE: &str = "/usr/share/openvibes-agent/openvibes-agent.rules";
+
+/// The local agent knows the `process_events` collector (an older one
+/// refuses the name): its package ships the exec audit rule or its template.
+fn p14_agent<R: Runner>(ctx: &Ctx<R>) -> bool {
+    ctx.exists(AGENT_AUDIT_RULE) || ctx.exists(AGENT_AUDIT_TEMPLATE)
+}
 
 /// `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` from `STEM.key`.
 fn set_key<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Result<[String; 3], String> {
@@ -164,13 +173,10 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
         // Threat alarms (P14): only for an agent that knows the collector,
         // and only when the rules package carries the alarm rules.
         // (A broken alarms.key already failed the rules step.)
-        let alarms = alarms_key(ctx)
-            .ok()
-            .flatten()
-            .filter(|_| ctx.exists(AGENT_AUDIT_RULE));
+        let alarms = alarms_key(ctx).ok().flatten().filter(|_| p14_agent(ctx));
         if alarms.is_some() {
             text.push_str(
-                "# Threat alarms need auditd running (it loads the agent's exec rule).\n\
+                "# Threat alarms: the agent's eBPF watcher, or kernel audit (auditd) as the fallback.\n\
                  collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n",
             );
         }
@@ -189,7 +195,10 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
 /// configured for this host's agent could never fire: a note for the
 /// Agent step's line (empty when alarms are off or auditing is on).
 fn audit_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
+    // Only an agent reading kernel audit is silenced by it: on an eBPF
+    // host the exec rule is not in rules.d (agent #57).
     let off = agent_toml(ctx).contains("process_events")
+        && ctx.exists(AGENT_AUDIT_RULE)
         && ctx
             .read(super::AUDIT_RULES)
             .is_ok_and(|rules| super::audit_off(&rules));
@@ -577,6 +586,19 @@ mod tests {
         fake.file("/etc/audit/audit.rules", "-D\n-a always,exit\n");
         let state = run_step(&fake.ctx(&plan_defaults()), Step::Agent);
         assert!(!state.detail().contains("never"), "{state:?}");
+        // An eBPF host (agent #57: the rule is only a template there, not in
+        // rules.d) does not read kernel audit: no warning even with the line.
+        fake.remove("/etc/audit/rules.d/openvibes-agent.rules");
+        fake.file(
+            "/usr/share/openvibes-agent/openvibes-agent.rules",
+            "-a always,exit\n",
+        );
+        fake.file(
+            "/etc/audit/audit.rules",
+            "-D\n-a task,never\n-a always,exit\n",
+        );
+        let state = run_step(&fake.ctx(&plan_defaults()), Step::Agent);
+        assert!(!state.detail().contains("never"), "{state:?}");
     }
 
     const ALARMS_KEY: &str =
@@ -654,6 +676,16 @@ mod tests {
         // collectors is a top-level key: it must come before any table.
         assert!(new.find("collectors").unwrap() < new.find("[[rule_sets]]").unwrap());
         assert!(toml::from_str::<toml::Value>(&new).is_ok(), "{new}");
+        // An eBPF-era agent (agent #57) ships the rule only as a template, and
+        // an eBPF host has nothing in rules.d: it still gets the alarms.
+        fake.remove("/etc/audit/rules.d/openvibes-agent.rules");
+        fake.file(
+            "/usr/share/openvibes-agent/openvibes-agent.rules",
+            "-a always,exit\n",
+        );
+        let ebpf = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(ebpf.contains("process_events"), "{ebpf}");
+        assert!(ebpf.contains("id = \"baseline-alarms\""), "{ebpf}");
     }
 
     #[test]
