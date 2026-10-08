@@ -82,15 +82,20 @@ export function BreakdownTile({ widget }: WidgetProps) {
   const source = str(widget.config, "source", "compliance", BREAKDOWN_SOURCES);
   const permission = { alarms: "alarms.read", compliance: "compliance.read", agents: "agents.read", vulnerabilities: "vulnerabilities.read" }[source] as Permission;
   const allowed = can(permission);
-  // The tiles' own numbers: the history API's live value (last point) of each alarm severity.
-  const alarmCounts = ALARM_SEVERITIES.map((s) => useHistory(allowed && source === "alarms" ? `alarms.active.${s}` : null, 7).data?.at(-1)?.value); // eslint-disable-line react-hooks/rules-of-hooks
+  // The tiles' own numbers: the history API's live value (last point) of each alarm severity and of all.
+  const alarmHistory = [...ALARM_SEVERITIES.map((s) => `alarms.active.${s}`), "alarms.active"].map((id) => useHistory(allowed && source === "alarms" ? id : null, 7)); // eslint-disable-line react-hooks/rules-of-hooks
+  const alarmCounts = alarmHistory.map((h) => h.data?.at(-1)?.value);
+  const alarmError = alarmHistory.find((h) => h.error)?.error;
   const findings = useResource<FindingSummary>(allowed && source === "compliance" ? "/api/v1/compliance/summary" : null);
   const vulns = useResource<VulnerabilitySummary>(allowed && source === "vulnerabilities" ? "/api/v1/vulnerabilities/summary" : null);
   const agents = useResource<AgentSummary>(allowed && source === "agents" ? "/api/v1/agents/summary" : null);
   if (!allowed) return <Unavailable />;
+  if (alarmError) return <div className="tile-empty"><Icon name="alert" size={18} /> {alarmError.message}</div>;
   if (vulns.data && !vulns.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
   const parts: { key: string; label: string; value: number; tone: string; go: () => void }[] =
-    source === "alarms" ? ALARM_SEVERITIES.map((s, i) => ({ key: s, label: s, value: alarmCounts[i] ?? 0, tone: s, go: () => nav.view("/alarms", { severity: s }) }))
+    source === "alarms" ? [...ALARM_SEVERITIES.map((s, i) => ({ key: s, label: s, value: alarmCounts[i] ?? 0, tone: s, go: () => nav.view("/alarms", { severity: s }) })),
+      // Info is what the Active alarms tile counts beyond the four severities.
+      { key: "info", label: "info", value: Math.max(0, (alarmCounts[4] ?? 0) - alarmCounts.slice(0, 4).reduce<number>((n, v) => n + (v ?? 0), 0)), tone: "unrated", go: () => nav.view("/alarms", { severity: "info" }) }]
       : source === "compliance" ? (["critical", "high", "medium", "low"] as const).map((s) => ({ key: s, label: s, value: findings.data?.[s] ?? 0, tone: s, go: () => nav.view("/compliance", { severity: s }) }))
       : source === "vulnerabilities" ? (vulns.data?.by_severity ?? []).map((row) => ({ key: row.severity, label: row.severity, value: row.count, tone: row.severity, go: () => nav.view("/vulnerabilities", { severity: row.severity }) }))
         : (["active", "stale", "revoked", "imported"] as const).map((s) => ({ key: s, label: s, value: agents.data?.[s] ?? 0, tone: { active: "low", stale: "medium", revoked: "high", imported: "unrated" }[s], go: () => nav.view("/agents", { status: s }) }));
@@ -168,6 +173,8 @@ export function TopHostsTile({ widget }: WidgetProps) {
   const unavailable = (text: string) => <div className="tile-empty"><Icon name="ban" size={18} /> {text}</div>;
   if (all ? !allowedAll : !can("vulnerabilities.read")) return all ? unavailable("Not available with your role — choose Vulnerabilities only") : <Unavailable />;
   const failed = all ? ranking.error : summary.error;
+  // 403: the three kinds are readable with different scopes.
+  if (all && ranking.error?.status === 403) return unavailable("Not available with your role — choose Vulnerabilities only");
   if (failed) return <div className="tile-empty"><Icon name="alert" size={18} /> {failed.message}</div>;
   // No feed ever imported: zero hosts would claim a scan that never ran.
   if (!all && summary.data && !summary.data.feed_last_imported_at) return <div className="tile-empty"><Icon name="alert" size={18} /> Vulnerability scanning is not set up</div>;
@@ -184,7 +191,7 @@ export function TopHostsTile({ widget }: WidgetProps) {
           </ObjectLink></li>
         ))}
       </ul>
-      {all && <div className="subtle">all kinds</div>}
+      {all && <div className="subtle">all kinds; unrated vulnerabilities not counted</div>}
     </div>
   );
 }

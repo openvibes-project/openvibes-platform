@@ -19,12 +19,17 @@ export function greeting(now = new Date()) {
   return hour < 5 ? "Good night" : hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 }
 
-/** What the list is built from; each part is empty when its kind is off. */
-export type AttentionInput = { alarms: Alarm[]; exploited: Vulnerability[]; serious: Vulnerability[]; groups: FindingGroup[]; stale: Agent[] };
+/** What the list is built from; each part is empty when its kind is off.
+ *  `seriousMore`: the server cut the serious vulnerabilities short, so host counts are lower bounds. */
+export type AttentionInput = { alarms: Alarm[]; exploited: Vulnerability[]; serious: Vulnerability[]; seriousMore?: boolean; groups: FindingGroup[]; stale: Agent[] };
 
-/** Rank: critical alarm -1, exploited 0, critical of any kind 1, high of any kind 3, stale 5. */
-export function buildAttention({ alarms, exploited, serious, groups, stale }: AttentionInput): AttentionItem[] {
-  const items: AttentionItem[] = [];
+const SERIOUS_ADVISORIES = 20;
+
+/** Bands: critical alarm -1, exploited 0, critical of any kind 1, high of any kind 3, medium alarm 4,
+ *  stale 5. Within a band: more hosts first, then kind order, then title; a count never changes the band. */
+export function buildAttention({ alarms, exploited, serious, seriousMore = false, groups, stale }: AttentionInput): AttentionItem[] {
+  const items: (AttentionItem & { size: number; order: number })[] = [];
+  const add = (order: number, size: number, item: AttentionItem) => items.push({ ...item, size, order });
   const byAdvisory = (list: Vulnerability[]) => {
     const map = new Map<string, { title: string; severity: string; hosts: number }>();
     for (const item of list) {
@@ -34,16 +39,15 @@ export function buildAttention({ alarms, exploited, serious, groups, stale }: At
     }
     return map;
   };
-  const known = byAdvisory(exploited);
-  for (const [id, entry] of known) {
-    items.push({ key: `a${id}`, icon: "flame", to: { kind: "advisory", id }, severity: entry.severity, title: entry.title, meta: `Vulnerability · known exploited · ${plural(entry.hosts, "host")}`, rank: 0 - entry.hosts / 1000 });
+  for (const [id, entry] of byAdvisory(exploited)) {
+    add(1, entry.hosts, { key: `a${id}`, icon: "flame", to: { kind: "advisory", id }, severity: entry.severity, title: entry.title, meta: `Vulnerability · known exploited · ${plural(entry.hosts, "host")}`, rank: 0 });
   }
-  for (const [id, entry] of byAdvisory(serious)) {
-    if (known.has(id)) continue;
-    const critical = entry.severity === "critical";
-    items.push({ key: `v${id}`, icon: "vulnerabilities", to: { kind: "advisory", id }, severity: entry.severity, title: entry.title, meta: `Vulnerability · ${plural(entry.hosts, "host")}`, rank: (critical ? 1 : 3) - entry.hosts / 1000 });
+  // All returned rows are grouped first, then the 20 advisories on most hosts are kept.
+  const advisories = [...byAdvisory(serious)].sort(([, a], [, b]) => b.hosts - a.hosts).slice(0, SERIOUS_ADVISORIES);
+  for (const [id, entry] of advisories) {
+    add(2, entry.hosts, { key: `v${id}`, icon: "vulnerabilities", to: { kind: "advisory", id }, severity: entry.severity, title: entry.title, meta: `Vulnerability · ${seriousMore ? `${entry.hosts}+ hosts` : plural(entry.hosts, "host")}`, rank: entry.severity === "critical" ? 1 : 3 });
   }
-  const alarmRank: Record<string, number> = { critical: -1, high: 3 - 1 / 1000, medium: 4 };
+  const alarmRank: Record<string, number> = { critical: -1, high: 3, medium: 4 };
   const seen = new Set<string>();
   for (const alarm of alarms) {
     if (seen.has(alarm.id)) continue;
@@ -51,17 +55,17 @@ export function buildAttention({ alarms, exploited, serious, groups, stale }: At
     const rank = alarmRank[alarm.severity];
     if (rank === undefined) continue;
     const program = alarm.exe.split("/").pop() ?? alarm.exe;
-    items.push({ key: `m${alarm.id}`, icon: "alarm", to: { kind: "alarm", id: alarm.id }, severity: alarm.severity, title: alarm.message, meta: `Alarm · ${alarm.hostname ?? alarm.agent_id} · ${program}${alarm.count > 1 ? ` · ${alarm.count}×` : ""}`, rank });
+    add(0, alarm.count, { key: `m${alarm.id}`, icon: "alarm", to: { kind: "alarm", id: alarm.id }, severity: alarm.severity, title: alarm.message, meta: `Alarm · ${alarm.hostname ?? alarm.agent_id} · ${program}${alarm.count > 1 ? ` · ${alarm.count}×` : ""}`, rank });
   }
   for (const group of groups) {
     if (group.triage_counts.open === 0 || (group.severity !== "critical" && group.severity !== "high")) continue;
-    items.push({ key: `f${group.rule_set_id}/${group.rule_id}`, icon: "findings", to: { kind: "finding", id: `${group.rule_set_id}/${group.rule_id}` }, severity: group.severity, title: group.latest_message, meta: `Compliance · ${group.rule_id} · ${plural(group.triage_counts.open, "host")} open`, rank: (group.severity === "critical" ? 1 : 3) - group.triage_counts.open / 1000 });
+    add(3, group.triage_counts.open, { key: `f${group.rule_set_id}/${group.rule_id}`, icon: "findings", to: { kind: "finding", id: `${group.rule_set_id}/${group.rule_id}` }, severity: group.severity, title: group.latest_message, meta: `Compliance · ${group.rule_id} · ${plural(group.triage_counts.open, "host")} open`, rank: group.severity === "critical" ? 1 : 3 });
   }
   const silent = [...stale].sort((a, b) => (a.last_seen_at ?? "").localeCompare(b.last_seen_at ?? "")).slice(0, 6);
   for (const agent of silent) {
-    items.push({ key: `g${agent.id}`, icon: "agents", to: { kind: "agent", id: agent.id }, severity: "stale", title: agent.hostname ?? agent.id, meta: "Host · stopped reporting", rank: 5 });
+    add(4, 0, { key: `g${agent.id}`, icon: "agents", to: { kind: "agent", id: agent.id }, severity: "stale", title: agent.hostname ?? agent.id, meta: "Host · stopped reporting", rank: 5 });
   }
-  return items.sort((a, b) => a.rank - b.rank);
+  return items.sort((a, b) => a.rank - b.rank || b.size - a.size || a.order - b.order || a.title.localeCompare(b.title));
 }
 
 /** The "Needs attention" list: alarms, exploited and serious vulnerabilities,
@@ -73,8 +77,8 @@ export function useAttention(include: readonly string[], limit: number): { items
   const groups = useAllPages<FindingGroup>(want("compliance") && can("compliance.read") ? "/api/v1/compliance/groups" : null);
   const vulns = want("exploited") || want("serious") ? can("vulnerabilities.read") : false;
   const exploited = useResource<VulnerabilityPage>(want("exploited") && vulns ? "/api/v1/vulnerabilities?exploited=true" : null);
-  const critical = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=critical" : null);
-  const important = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=important" : null);
+  const critical = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=critical&exploited=false" : null);
+  const important = useResource<VulnerabilityPage>(want("serious") && vulns ? "/api/v1/vulnerabilities?severity=important&exploited=false" : null);
   const stale = useAllPages<Agent>(want("stale") && can("agents.read") ? "/api/v1/agents?state=stale" : null);
   // Newest first by last_seen: repeating medium alarms could push an older
   // critical one off one page, so critical ones are fetched on their own.
@@ -86,8 +90,8 @@ export function useAttention(include: readonly string[], limit: number): { items
   const items = useMemo(() => buildAttention({
     alarms: [...(criticalAlarms.data?.items ?? []), ...(alarms.data?.items ?? [])],
     exploited: exploited.data?.items ?? [],
-    // The vulnerability list has no limit parameter: 20 of each severity.
-    serious: [...(critical.data?.items ?? []).slice(0, 20), ...(important.data?.items ?? []).slice(0, 20)],
+    serious: [...(critical.data?.items ?? []), ...(important.data?.items ?? [])],
+    seriousMore: !!(critical.data?.more_available || important.data?.more_available),
     groups: groups.data ?? [],
     stale: stale.data ?? [],
   }), [alarms.data, criticalAlarms.data, exploited.data, critical.data, important.data, groups.data, stale.data]);

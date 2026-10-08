@@ -14,15 +14,33 @@ describe("needs attention", () => {
     const items = buildAttention({
       alarms: [alarm("al-high", "high"), alarm("al-crit", "critical")],
       exploited: [vuln("kev", "important")],
-      serious: [vuln("kev", "important"), vuln("v-high", "important"), vuln("v-crit", "critical")],
+      serious: [vuln("v-high", "important"), vuln("v-crit", "critical")],
       groups: [group("c-high", "high"), group("c-crit", "critical")],
       stale: [{ id: "g1", hostname: "quiet", last_seen_at: null } as unknown as Agent],
     });
     expect(items.map((i) => [i.title, i.meta.split(" · ")[0]])).toEqual([
       ["al-crit", "Alarm"], ["kev", "Vulnerability"], ["v-crit", "Vulnerability"], ["c-crit", "Compliance"],
-      ["v-high", "Vulnerability"], ["al-high", "Alarm"], ["c-high", "Compliance"], ["quiet", "Host"],
+      ["al-high", "Alarm"], ["v-high", "Vulnerability"], ["c-high", "Compliance"], ["quiet", "Host"],
     ]);
     expect(items.at(-1)?.rank).toBe(5);
   });
+  it("groups every returned row before keeping 20 advisories, and says when the page was cut", () => {
+    const rows = [...Array.from({ length: 30 }, (_, i) => vuln(`adv-${i}`, "critical")), ...Array.from({ length: 5 }, () => vuln("adv-0", "critical"))];
+    const items = buildAttention({ alarms: [], exploited: [vuln("kev", "critical")], serious: rows, seriousMore: true, groups: [], stale: [] });
+    expect(items).toHaveLength(21);
+    expect(items.map((i) => i.title).slice(0, 2)).toEqual(["kev", "adv-0"]);
+    expect(items[1]?.meta).toBe("Vulnerability · 6+ hosts");
+    expect(items[0]?.meta).toContain("known exploited");
+  });
+  it("never lets a host count move an item out of its band", () => {
+    const many = (n: number, advisory: string, severity: string) => Array.from({ length: n }, () => vuln(advisory, severity));
+    const items = buildAttention({
+      alarms: [alarm("al-crit", "critical")],
+      exploited: [],
+      serious: [...many(5000, "v-high", "important"), ...many(1, "v-crit", "critical")],
+      groups: [{ ...group("c-high", "high"), triage_counts: { open: 5000 } } as FindingGroup, group("c-crit", "critical")],
+      stale: [],
+    });
+    expect(items.map((i) => i.title)).toEqual(["al-crit", "v-crit", "c-crit", "v-high", "c-high"]);
+  });
 });
-

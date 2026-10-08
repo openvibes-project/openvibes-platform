@@ -527,7 +527,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       (query.get("advisory") === null || item.advisory_id === query.get("advisory")) &&
       (query.get("severity") === null || item.severity === query.get("severity")) &&
       (query.get("cve") === null || item.cves.includes(query.get("cve") ?? "")) &&
-      (!flag("exploited") || item.exploited) && (!flag("reboot_needed") || item.reboot_needed))
+      (query.get("exploited") === "false" ? !item.exploited : !flag("exploited") || item.exploited) && (!flag("reboot_needed") || item.reboot_needed))
       .sort((a, b) => Number(b.exploited) - Number(a.exploited) || (severityRank[a.severity] ?? 9) - (severityRank[b.severity] ?? 9) || (b.epss ?? 0) - (a.epss ?? 0));
     return json({ items: items.slice(0, 1000), more_available: items.length > 1000, generated_at: iso() });
   });

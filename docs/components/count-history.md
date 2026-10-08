@@ -57,7 +57,7 @@ code `invalid_limit`). Response: `{items: [{agent_id, hostname, serious, open}]}
 from the same per-host query (`history::top_hosts`): `serious` is critical plus
 high of alarms, vulnerabilities and compliance; `open` adds medium and low
 (info alarms excluded). Ordered by `serious`, then `open`, then agent id; hosts
-with nothing open are left out. Same permission rule and scoping as the
+with nothing open are left out. Unrated vulnerabilities are in no count here (the vulnerabilities-only mode of the Most exposed hosts tile does list them). Same permission rule and scoping as the
 cross-kind metrics (403 unless alarms, vulnerabilities and compliance reads
 share one scope).
 
