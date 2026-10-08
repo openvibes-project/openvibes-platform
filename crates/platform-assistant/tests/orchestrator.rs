@@ -733,7 +733,7 @@ async fn a_reminder_with_the_question_follows_the_last_result() {
 #[tokio::test]
 async fn the_reminder_counts_against_the_prompt_budget() {
     // Small native: tools and system take ~3,100 of 6,000 characters, so a
-    // question sent twice (asked, then restated) must stay under ~880.
+    // question sent twice (asked, then restated) must stay under roughly 850.
     let long = "x".repeat(1_000);
     assert_eq!(
         ask(
