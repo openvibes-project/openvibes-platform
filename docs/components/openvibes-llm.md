@@ -87,7 +87,8 @@ against the result.
 ## Unit
 
 `openvibes-llm.service` fixes every `llama-server` option itself. It
-passes `--host 127.0.0.1`, `--api-key-file` (the credential), `--no-webui`,
+passes `--host /run/openvibes-llm/llama.sock` (a Unix socket; such paths
+are limited to 108 bytes), `--api-key-file` (the credential), `--no-webui`,
 `--no-slots`, `--offline`, `--jinja`, and `--timeout 300`. Props changes,
 metrics, tools, MCP, and media paths stay at their default (off).
 `llama-server` also reads `LLAMA_ARG_*` variables, so `openvibes-llm-check`
