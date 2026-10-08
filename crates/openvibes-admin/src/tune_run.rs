@@ -39,9 +39,38 @@ pub struct TuneOptions {
     pub json: bool,
 }
 
+/// Stops the model server; the next request through its socket starts it
+/// with the new tuning (a stopped one stays stopped).
+const STOP_LLM: [&str; 3] = [
+    "stop",
+    "openvibes-llm-proxy.service",
+    "openvibes-llm.service",
+];
+
+/// Whether `systemctl show -p ActiveState -p Listen openvibes-llm.socket`
+/// says systemd holds `127.0.0.1:port`. Only then can no other local user
+/// listen there and receive the server's key.
+pub fn socket_holds(show: &str, port: &str) -> Result<(), String> {
+    if !show.lines().any(|line| line == "ActiveState=active") {
+        return Err(
+            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
+                .into(),
+        );
+    }
+    let listen = format!("Listen=127.0.0.1:{port} (Stream)");
+    if !show.lines().any(|line| line == listen) {
+        return Err(format!(
+            "openvibes-llm.socket does not listen on 127.0.0.1:{port} (OPENVIBES_LLM_PORT); change both together (docs/components/openvibes-llm.md)"
+        ));
+    }
+    Ok(())
+}
+
 /// The side effects that change the host's services.
 pub trait Restarter {
     fn systemctl(&self, args: &[&str]) -> Result<(), String>;
+    /// [`socket_holds`] for the host's `openvibes-llm.socket`.
+    fn llm_socket_holds(&self, port: &str) -> Result<(), String>;
 }
 
 pub struct Systemd;
@@ -61,17 +90,46 @@ impl Restarter for Systemd {
             ))
         }
     }
+
+    fn llm_socket_holds(&self, port: &str) -> Result<(), String> {
+        let args = [
+            "show",
+            "--property=ActiveState",
+            "--property=Listen",
+            "openvibes-llm.socket",
+        ];
+        let out = SystemRunner
+            .run(Systemctl, &args)
+            .map_err(|error| error.to_string())?;
+        socket_holds(&out.stdout, port)
+    }
 }
 
 /// For tests under `--root`: the services are not the host's.
 #[cfg(debug_assertions)]
-pub struct NoRestart;
+#[derive(Default)]
+pub struct NoRestart {
+    socket_checks: std::cell::Cell<usize>,
+}
 
 #[cfg(debug_assertions)]
 impl Restarter for NoRestart {
     fn systemctl(&self, args: &[&str]) -> Result<(), String> {
         eprintln!("--root: not run: systemctl {}", args.join(" "));
         Ok(())
+    }
+
+    /// Active on the port unless `OPENVIBES_TUNE_SOCKET` says otherwise: a
+    /// comma list, one state per check, the last one repeated.
+    fn llm_socket_holds(&self, port: &str) -> Result<(), String> {
+        let states = std::env::var("OPENVIBES_TUNE_SOCKET").unwrap_or_else(|_| "active".into());
+        let states: Vec<&str> = states.split(',').collect();
+        let check = self.socket_checks.replace(self.socket_checks.get() + 1);
+        let state = states[check.min(states.len() - 1)];
+        socket_holds(
+            &format!("ActiveState={state}\nListen=127.0.0.1:{port} (Stream)\n"),
+            port,
+        )
     }
 }
 
@@ -278,9 +336,15 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         .backend
         .as_ref()
         .is_some_and(|b| is_local(&b.url, port));
+    // Nothing is sent to the port unless systemd's socket holds it: a
+    // stopped socket would leave it to any local user.
+    if local {
+        restarter.llm_socket_holds(port)?;
+    }
     // Root sends the local server only its own key: console.toml's
-    // api_key_file is operator-chosen (any root-readable secret), and
-    // another local user may hold the port while openvibes-llm restarts.
+    // api_key_file is operator-chosen (any root-readable secret). The port
+    // is checked to be systemd's socket (above), which keeps it while the
+    // server stops and starts, so no other local user can listen there.
     let server_key = if let (true, Some(b)) = (local, config.backend.as_mut()) {
         b.api_key_file = None;
         let key = read_regular(&etc.join("llm-api-key")).unwrap_or_default();
@@ -321,23 +385,25 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     let tuning = data.join("tuning.conf");
     let old = read_regular(&tuning);
     write_atomic(&tuning, &tune::tuning_conf(&plan))?;
-    // Another backend: only a running server picks up the tuning; a
-    // stopped or broken one is not started, waited for, or measured.
-    let verb = if local { "restart" } else { "try-restart" };
-    let measured = restarter
-        .systemctl(&[verb, "openvibes-llm"])
-        .and_then(|()| {
-            if !local {
-                return Ok(None);
-            }
-            wait_health(port)?;
-            let t = time_call(&client, limit)?;
-            if t.is_finite() {
-                Ok(Some(t))
-            } else {
-                Err("the timed call gave no usable time".into())
-            }
-        });
+    // Stopped either way. Local: the health wait goes through the socket,
+    // which starts the server on the new tuning. Another backend: nothing
+    // starts it, waits for it, or measures it.
+    let measured = restarter.systemctl(&STOP_LLM).and_then(|()| {
+        if !local {
+            return Ok(None);
+        }
+        restarter.llm_socket_holds(port)?;
+        wait_health(port)?;
+        // The socket may have gone during the wait: check right before the
+        // key is sent.
+        restarter.llm_socket_holds(port)?;
+        let t = time_call(&client, limit)?;
+        if t.is_finite() {
+            Ok(Some(t))
+        } else {
+            Err("the timed call gave no usable time".into())
+        }
+    });
     let t = match measured {
         Ok(t) => t,
         Err(error) => {
@@ -349,7 +415,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             if let Err(why) = restored {
                 eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
-            let _ = restarter.systemctl(&[verb, "openvibes-llm"]);
+            let _ = restarter.systemctl(&STOP_LLM);
             return Err(error);
         }
     };
@@ -458,6 +524,41 @@ fn is_local(base_url: &str, port: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn only_an_active_socket_on_the_port_may_receive_the_key() {
+        let show = "ActiveState=active\nListen=127.0.0.1:18430 (Stream)\n";
+        assert_eq!(super::socket_holds(show, "18430"), Ok(()));
+        let inactive = super::socket_holds(
+            "ActiveState=inactive\nListen=127.0.0.1:18430 (Stream)\n",
+            "18430",
+        )
+        .unwrap_err();
+        assert!(
+            inactive.contains("openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"),
+            "{inactive}"
+        );
+        // Not found, failed, another port, or a port that merely starts the same.
+        for (show, port) in [
+            ("", "18430"),
+            (
+                "ActiveState=failed\nListen=127.0.0.1:18430 (Stream)\n",
+                "18430",
+            ),
+            (show, "18431"),
+            (show, "1843"),
+            (
+                "ActiveState=active\nListen=127.0.0.1:184300 (Stream)\n",
+                "18430",
+            ),
+            (
+                "ActiveState=active\nListen=0.0.0.0:18430 (Stream)\n",
+                "18430",
+            ),
+        ] {
+            assert!(super::socket_holds(show, port).is_err(), "{show:?} {port}");
+        }
+    }
+
     #[test]
     fn local_means_loopback_on_the_server_port() {
         for url in ["http://127.0.0.1:18430/v1", "http://localhost:18430/v1"] {

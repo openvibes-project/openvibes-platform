@@ -1,8 +1,8 @@
 //! `openvibes-admin helper assistant-setup`: points the console's assistant
 //! at the bundled `openvibes-llm` service in one step. As root it hands the
 //! shared API key to the console's account, writes `[assistant]` into
-//! `console.toml` (kept layout and comments), enables the model service and
-//! restarts the console. The model itself ships in the `openvibes-llm`
+//! `console.toml` (kept layout and comments), enables the model server's
+//! socket and restarts the console. The model itself ships in the `openvibes-llm`
 //! package, pinned by SHA-256 in `/var/lib/openvibes-llm/model.conf`.
 
 use std::{
@@ -106,6 +106,18 @@ fn account(name: &str) -> Result<(u32, u32), String> {
         .ok_or_else(|| format!("no {name} account: is openvibes-console installed?"))
 }
 
+/// The model server is started by its socket on the first request; a
+/// running one is stopped first so the next request loads the new settings.
+const SYSTEMCTL_STEPS: [&[&str]; 3] = [
+    &[
+        "stop",
+        "openvibes-llm-proxy.service",
+        "openvibes-llm.service",
+    ],
+    &["enable", "--now", "openvibes-llm.socket"],
+    &["try-restart", "openvibes-console"],
+];
+
 /// Runs as root. Safe to repeat.
 pub fn run(force: bool) -> Result<String, String> {
     if !Path::new(MODEL_CONF).exists() {
@@ -129,11 +141,7 @@ pub fn run(force: bool) -> Result<String, String> {
     fs::set_permissions(API_KEY, fs::Permissions::from_mode(0o400))
         .map_err(|error| format!("{API_KEY}: {error}"))?;
     config_file::replace(dir, Service::Console, &updated)?;
-    for args in [
-        &["enable", "--now", "openvibes-llm"][..],
-        &["restart", "openvibes-llm"],
-        &["try-restart", "openvibes-console"],
-    ] {
+    for args in SYSTEMCTL_STEPS {
         let out = SystemRunner
             .run(Systemctl, args)
             .map_err(|error| error.to_string())?;
@@ -145,6 +153,12 @@ pub fn run(force: bool) -> Result<String, String> {
             ));
         }
     }
+    // Tune sends the server's key to the port: only once systemd's socket
+    // is confirmed to hold it (tune checks again itself).
+    let port = env
+        .get("OPENVIBES_LLM_PORT")
+        .map_or(DEFAULT_PORT, String::as_str);
+    crate::tune_run::Restarter::llm_socket_holds(&crate::tune_run::Systemd, port)?;
     // Tuning is best effort: a model that cannot answer yet is reported.
     let tuned = crate::tune_run::run(
         &crate::tune_run::TuneOptions {
@@ -174,6 +188,22 @@ mod tests {
             .iter()
             .map(|(k, v)| ((*k).into(), (*v).into()))
             .collect()
+    }
+
+    #[test]
+    fn the_socket_is_enabled_and_a_running_server_stopped_first() {
+        assert_eq!(
+            SYSTEMCTL_STEPS,
+            [
+                &[
+                    "stop",
+                    "openvibes-llm-proxy.service",
+                    "openvibes-llm.service"
+                ][..],
+                &["enable", "--now", "openvibes-llm.socket"],
+                &["try-restart", "openvibes-console"],
+            ]
+        );
     }
 
     #[test]

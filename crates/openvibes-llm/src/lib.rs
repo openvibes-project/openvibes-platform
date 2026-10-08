@@ -17,8 +17,10 @@ use std::{
     collections::BTreeMap,
     fmt,
     fs::{File, OpenOptions},
-    io::{self, Read},
+    io::{self, Read, Write},
+    os::unix::net::UnixStream,
     path::{Component, Path, PathBuf},
+    time::{Duration, Instant},
 };
 
 use sha2::{Digest, Sha256};
@@ -48,6 +50,8 @@ pub enum CheckError {
     ForeignVariable(String),
     /// Running as root: the service must run as its own user.
     Root,
+    /// `llama-server` did not answer `/health` with 200 on its socket in time.
+    NotReady,
 }
 
 impl fmt::Display for CheckError {
@@ -74,6 +78,10 @@ impl fmt::Display for CheckError {
                 "{name} is set; llama-server options come only from the unit and OPENVIBES_LLM_* settings"
             ),
             Self::Root => f.write_str("openvibes-llm must not run as root"),
+            Self::NotReady => write!(
+                f,
+                "llama-server did not become healthy on its socket in time"
+            ),
         }
     }
 }
@@ -89,8 +97,11 @@ pub struct Settings {
     pub model_sha256: String,
     /// Name the server reports for the model.
     pub alias: String,
-    /// Loopback port.
+    /// Public loopback port (the socket unit's).
     pub port: u16,
+    /// Seconds without a request before the model is unloaded; `None`
+    /// keeps it loaded.
+    pub idle_seconds: Option<u64>,
     /// Context size in tokens.
     pub context: u32,
     /// CPU threads.
@@ -204,11 +215,78 @@ pub fn settings(env: &BTreeMap<String, String>, models_dir: &Path) -> Result<Set
         model_sha256: digest,
         alias,
         port: number(env, "OPENVIBES_LLM_PORT", 1024..=65535)?,
+        idle_seconds: idle_setting(env)?,
         context: number(env, "OPENVIBES_LLM_CONTEXT", 512..=131_072)?,
         threads: number(env, "OPENVIBES_LLM_THREADS", 1..=256)?,
         gpu_layers: number(env, "OPENVIBES_LLM_GPU_LAYERS", 0..=999)?,
         parallel: number(env, "OPENVIBES_LLM_PARALLEL", 1..=16)?,
     })
+}
+
+/// Where `llama-server` listens: a Unix socket in the service's
+/// `RuntimeDirectory=` (0750, its own account), never a TCP port another
+/// local user could bind while the server is stopped.
+pub const LLAMA_SOCKET: &str = "/run/openvibes-llm/llama.sock";
+/// The packaged idle time, `5min`.
+pub const DEFAULT_IDLE_SECONDS: u64 = 300;
+
+/// `OPENVIBES_LLM_IDLE` in seconds: `infinity` (`None`), or a whole number
+/// with `s`, `min` or `h` (bare: seconds), from 30 s to 24 h. A subset of
+/// systemd's time spans, so `systemd-socket-proxyd --exit-idle-time=` reads
+/// it the same way.
+pub fn idle_seconds(text: &str) -> Result<Option<u64>, CheckError> {
+    let text = text.trim();
+    if text == "infinity" {
+        return Ok(None);
+    }
+    let digits = text.bytes().take_while(u8::is_ascii_digit).count();
+    let (number, unit) = text.split_at(digits);
+    let scale = match unit {
+        "" | "s" => 1,
+        "min" => 60,
+        "h" => 3600,
+        _ => 0,
+    };
+    number
+        .parse::<u64>()
+        .ok()
+        .and_then(|n| n.checked_mul(scale))
+        .filter(|seconds| (30..=86_400).contains(seconds))
+        .map(Some)
+        .ok_or(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
+}
+
+/// `OPENVIBES_LLM_IDLE`, or the packaged `5min` when absent (an `llm.conf`
+/// from before idle unloading).
+pub fn idle_setting(env: &BTreeMap<String, String>) -> Result<Option<u64>, CheckError> {
+    env.get("OPENVIBES_LLM_IDLE")
+        .map_or(Ok(Some(DEFAULT_IDLE_SECONDS)), |v| idle_seconds(v))
+}
+
+/// Polls `/health` on the Unix socket `path` every `interval` until it
+/// answers 200 (`llama-server` has loaded the model) or `timeout` has passed.
+pub fn wait_ready(path: &Path, interval: Duration, timeout: Duration) -> Result<(), CheckError> {
+    let started = Instant::now();
+    loop {
+        let healthy = UnixStream::connect(path).is_ok_and(|mut stream| {
+            let mut head = [0; 12];
+            stream
+                .set_read_timeout(Some(Duration::from_secs(2)))
+                .is_ok()
+                && stream
+                    .write_all(b"GET /health HTTP/1.0\r\nhost: localhost\r\n\r\n")
+                    .is_ok()
+                && stream.read_exact(&mut head).is_ok()
+                && head.ends_with(b" 200")
+        });
+        if healthy {
+            return Ok(());
+        }
+        if started.elapsed() + interval > timeout {
+            return Err(CheckError::NotReady);
+        }
+        std::thread::sleep(interval);
+    }
 }
 
 /// The SHA-256 of everything `reader` yields, in lowercase hex, reading at

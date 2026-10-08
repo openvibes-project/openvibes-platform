@@ -1,0 +1,27 @@
+# The assistant's public loopback port. The first connection starts
+# openvibes-llm-proxy.service, which starts the model server and passes the
+# connection on; after OPENVIBES_LLM_IDLE without a request both stop and the
+# model's memory is freed. Enable this, not openvibes-llm.service.
+# `systemctl restart openvibes-llm.socket` also restarts the proxy and the
+# server (PartOf=) if they run, so llm.conf changes apply at once.
+# Another port: `systemctl edit openvibes-llm.socket` with
+#   [Socket]
+#   ListenStream=
+#   ListenStream=127.0.0.1:PORT
+# and the same PORT as OPENVIBES_LLM_PORT in /etc/openvibes/llm.conf.
+[Unit]
+Description=OpenVIBES local model server socket (assistant)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+
+[Socket]
+ListenStream=127.0.0.1:18430
+Accept=no
+# A proxy that fails to start (no model, digest mismatch, out of memory,
+# load timeout) drops the waiting connections instead of re-triggering from
+# the backlog: otherwise the start limit closes the socket for good and
+# leaves 18430 to any local user.
+FlushPending=yes
+Service=openvibes-llm-proxy.service
+
+[Install]
+WantedBy=sockets.target

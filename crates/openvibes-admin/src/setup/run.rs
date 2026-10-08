@@ -81,7 +81,7 @@ fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
     let mut text = format!("enabled and started: {}", names(units).join(" "));
     if ctx.plan.has(Component::Assistant) {
         text.push_str(
-            "; start openvibes-llm after installing a model (docs/components/openvibes-llm.md)",
+            "; after installing a model, enable openvibes-llm.socket with `sudo openvibes-admin helper assistant-setup` (docs/components/openvibes-llm.md)",
         );
     }
     text

@@ -100,7 +100,11 @@ fn stop<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String>
                 units.push("openvibes-agent.service");
             }
             if *component == Component::Assistant {
-                units.push("openvibes-llm.service");
+                units.extend([
+                    "openvibes-llm.socket",
+                    "openvibes-llm-proxy.service",
+                    "openvibes-llm.service",
+                ]);
             }
         }
     }

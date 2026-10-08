@@ -7,10 +7,12 @@ use std::{
     fs,
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 use openvibes_llm::{
-    CheckError, check_environment, check_model, running_as_root, settings, sha256_hex,
+    CheckError, check_environment, check_model, idle_seconds, idle_setting, running_as_root,
+    settings, sha256_hex, wait_ready,
 };
 
 const EMPTY_SHA256: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -214,4 +216,153 @@ fn binary_refuses_llama_variables_before_anything_else() {
         .unwrap();
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("LLAMA_ARG_TOOLS is set"));
+}
+
+#[test]
+fn idle_defaults_for_upgraded_settings_files() {
+    let models = Path::new("/var/lib/openvibes-llm/models");
+    let checked = settings(&env(models, "m.gguf", EMPTY_SHA256), models).unwrap();
+    assert_eq!(checked.idle_seconds, Some(300));
+    let mut vars = env(models, "m.gguf", EMPTY_SHA256);
+    vars.insert("OPENVIBES_LLM_IDLE".into(), "infinity".into());
+    assert_eq!(settings(&vars, models).unwrap().idle_seconds, None);
+    vars.insert("OPENVIBES_LLM_IDLE".into(), "1s".into());
+    assert_eq!(
+        settings(&vars, models),
+        Err(CheckError::Invalid("OPENVIBES_LLM_IDLE"))
+    );
+    assert_eq!(idle_setting(&BTreeMap::new()), Ok(Some(300)));
+}
+
+#[test]
+fn idle_accepts_seconds_minutes_hours_within_30s_to_24h() {
+    for (text, seconds) in [
+        ("30", 30),
+        ("30s", 30),
+        ("5min", 300),
+        (" 90s ", 90),
+        ("2h", 7200),
+        ("24h", 86_400),
+        ("1440min", 86_400),
+    ] {
+        assert_eq!(idle_seconds(text), Ok(Some(seconds)), "{text}");
+    }
+    assert_eq!(idle_seconds("infinity"), Ok(None));
+    for text in [
+        "",
+        "29s",
+        "29",
+        "0",
+        "25h",
+        "86401",
+        "5m",
+        "5 min",
+        "-5min",
+        "+5min",
+        "1.5h",
+        "min",
+        "5min30s",
+        "Infinity",
+        "99999999999999999999h",
+    ] {
+        assert_eq!(
+            idle_seconds(text),
+            Err(CheckError::Invalid("OPENVIBES_LLM_IDLE")),
+            "{text}"
+        );
+    }
+}
+
+/// A server on a Unix socket answering `/health` with each status in turn.
+#[cfg(unix)]
+fn health_server(name: &str, statuses: &'static [&'static str]) -> PathBuf {
+    use std::io::{Read, Write};
+    let path = scratch(name).join("llama.sock");
+    let listener = std::os::unix::net::UnixListener::bind(&path).unwrap();
+    std::thread::spawn(move || {
+        for (status, stream) in statuses.iter().cycle().zip(listener.incoming()) {
+            let mut stream = stream.unwrap();
+            let mut request = [0; 256];
+            let read = stream.read(&mut request).unwrap();
+            assert!(request[..read].starts_with(b"GET /health HTTP/1."));
+            let _ = write!(stream, "HTTP/1.1 {status}\r\ncontent-length: 0\r\n\r\n");
+        }
+    });
+    path
+}
+
+#[cfg(unix)]
+#[test]
+fn wait_ready_polls_the_unix_socket_until_health_answers_200() {
+    let path = health_server(
+        "ready",
+        &[
+            "503 Service Unavailable",
+            "503 Service Unavailable",
+            "200 OK",
+        ],
+    );
+    let started = std::time::Instant::now();
+    assert_eq!(
+        wait_ready(&path, Duration::from_millis(50), Duration::from_secs(5)),
+        Ok(())
+    );
+    assert!(started.elapsed() >= Duration::from_millis(100));
+}
+
+#[cfg(unix)]
+#[test]
+fn wait_ready_gives_up_after_the_timeout() {
+    let path = health_server("busy", &["503 Service Unavailable"]);
+    assert_eq!(
+        wait_ready(&path, Duration::from_millis(50), Duration::from_millis(300)),
+        Err(CheckError::NotReady)
+    );
+    // No socket yet: llama-server has not bound it.
+    let absent = scratch("absent").join("llama.sock");
+    assert_eq!(
+        wait_ready(
+            &absent,
+            Duration::from_millis(50),
+            Duration::from_millis(200)
+        ),
+        Err(CheckError::NotReady)
+    );
+}
+
+#[test]
+fn binary_idle_only_checks_no_model() {
+    if running_as_root() {
+        return;
+    }
+    let run = |idle: &str| {
+        Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+            .env_clear()
+            .env("OPENVIBES_LLM_IDLE", idle)
+            .arg("--idle-only")
+            .output()
+            .unwrap()
+    };
+    let ok = run("30s");
+    assert!(ok.status.success(), "{ok:?}");
+    let bad = run("5m");
+    assert!(!bad.status.success());
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("OPENVIBES_LLM_IDLE is invalid"));
+    let unknown = Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+        .env_clear()
+        .arg("--bogus")
+        .output()
+        .unwrap();
+    assert!(!unknown.status.success());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("usage"));
+    // --wait-ready takes the socket the unit names.
+    let path = health_server("binary", &["200 OK"]);
+    let ready = Command::new(env!("CARGO_BIN_EXE_openvibes-llm-check"))
+        .env_clear()
+        .arg("--wait-ready")
+        .arg(&path)
+        .output()
+        .unwrap();
+    assert!(ready.status.success(), "{ready:?}");
+    assert!(String::from_utf8_lossy(&ready.stdout).contains("ready on"));
 }

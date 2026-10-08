@@ -31,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-signer; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -454,7 +454,8 @@ ok "operators restart units through polkit; sudo lets them read logs, read and s
 
 # 8. openvibes-llm (assistant AS5): refuses to start without a verified
 # model, serves the tiny test model on loopback behind its API key, runs
-# sandboxed, and refuses a model file changed after installation.
+# sandboxed, is started by its socket and stopped when idle, and refuses a
+# model file changed after installation.
 LLM=http://127.0.0.1:18430
 in_c 'dnf -q -y install /test/openvibes-llm-*.rpm' >/dev/null 2>&1 || fail "install openvibes-llm"
 in_c 'systemctl start openvibes-llm' >/dev/null 2>&1 && fail "openvibes-llm started without a model"
@@ -465,8 +466,10 @@ SHA=$(sha256sum "$W/tiny.gguf" | cut -d' ' -f1)
 in_c "runuser -u openvibes-admin -- openvibes-admin assistant model install /test/tiny.gguf --sha256 $SHA --alias tiny" \
     >/dev/null || fail "model install"
 [[ "$(in_c 'stat -c "%a" /var/lib/openvibes-llm/models/tiny.gguf')" == 444 ]] || fail "installed model is not read-only"
-in_c 'systemctl reset-failed openvibes-llm; systemctl enable --now openvibes-llm' >/dev/null 2>&1 || fail "start openvibes-llm"
-wait_for "openvibes-llm ready" 60 "curl -fsS $LLM/health"
+in_c "sed -i 's/^OPENVIBES_LLM_IDLE=.*/OPENVIBES_LLM_IDLE=30s/' /etc/openvibes/llm.conf" || fail "idle time"
+in_c 'systemctl reset-failed openvibes-llm; systemctl enable --now openvibes-llm.socket' >/dev/null 2>&1 ||
+    fail "enable openvibes-llm.socket"
+wait_for "openvibes-llm ready (started by its socket)" 60 "curl -fsS $LLM/health"
 in_c "pid=\$(systemctl show -p MainPID --value openvibes-llm);
       [[ \$(stat -c %U /proc/\$pid) == openvibes-llm ]] &&
       grep -q '^Seccomp:[[:space:]]*2\$' /proc/\$pid/status &&
@@ -491,9 +494,28 @@ in_c "install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key /run/llm-key
 in_c 'grep -q "models listed 1 (configured model listed)" /run/check.out && grep -q "^first token" /run/check.out' ||
     fail "assistant check output"
 ok "openvibes-admin assistant check passes against openvibes-llm"
+in_c "[[ \$(stat -c %U /proc/\$(systemctl show -p MainPID --value openvibes-llm-proxy)) == openvibes-llm ]] &&
+      [[ \$(stat -c '%a %U' /run/openvibes-llm) == '750 openvibes-llm' ]] &&
+      [[ \$(stat -c '%a' /run/openvibes-llm/llama.sock) == 700 ]] &&
+      [[ \$(readlink /proc/\$(systemctl show -p MainPID --value openvibes-llm)/ns/net) != \$(readlink /proc/1/ns/net) ]]" ||
+    fail "openvibes-llm: proxy not its user, the runtime directory or socket open to others, or the server on the host network"
+# Nothing else here talks to the model (the console's assistant is off in
+# this run); the idle clock restarts with any connection, so allow several
+# idle periods rather than 30 s and a margin.
+wait_for "openvibes-llm stopped after 30 s idle" 180 '! systemctl is-active -q openvibes-llm'
+in_c 'systemctl is-active -q openvibes-llm.socket' || fail "openvibes-llm.socket stopped listening"
+wait_for "openvibes-llm loaded again by the next request" 60 "curl -fsS $LLM/health"
+ok "openvibes-llm is started by its socket and unloaded when idle"
 in_c 'f=/var/lib/openvibes-llm/models/tiny.gguf; chmod 0644 $f && printf x >> $f && chmod 0444 $f &&
       systemctl restart openvibes-llm' >/dev/null 2>&1 && fail "openvibes-llm started with a changed model file"
 in_c 'journalctl -u openvibes-llm -o cat | grep -q "does not match OPENVIBES_LLM_MODEL_SHA256"' ||
     fail "openvibes-llm did not report the changed model"
 ok "openvibes-llm refuses a model file changed after installation"
+# A server that cannot start must not cost the socket: without
+# FlushPending=yes the waiting connections re-trigger the proxy until the
+# start limit closes 18430 for good, free for any local user.
+in_c "for i in 1 2 3 4 5 6 7 8; do curl -s -m 20 -o /dev/null $LLM/health; done
+      systemctl is-active -q openvibes-llm.socket && exec 3<>/dev/tcp/127.0.0.1/18430" ||
+    fail "openvibes-llm.socket gave up its port after failed starts"
+ok "openvibes-llm.socket keeps 18430 while the server cannot start"
 echo "systemd-e2e: all checks passed"

@@ -64,8 +64,25 @@ expect_stat /etc/openvibes/llm-api-key 600 root:root
 expect_stat /var/lib/openvibes-llm 775 root:openvibes-admin
 expect_stat /var/lib/openvibes-llm/models 775 root:openvibes-admin
 rpm -qc openvibes-llm | grep -qx /etc/openvibes/llm.conf || fail "llm.conf not %config"
-systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.service || fail "llm unit verification"
-for line in 'IPAddressDeny=any' 'IPAddressAllow=localhost' 'CapabilityBoundingSet=' 'NoExecPaths=/' \
+systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
+    /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
+# Idle unloading stops the process; llama-server's own idle sleep has a
+# use-after-free (CVE-2026-43631).
+# The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart; without
+# it the directory is absent, so only files that exist are listed. Comments
+# name the flag (to say it is never passed): only other lines count. One
+# grep, no pipeline, so set -e/pipefail cannot hide a match.
+llm_units=(/usr/lib/systemd/system/openvibes-llm.service)
+for f in /usr/lib/systemd/system/openvibes-llm.service.d/*.conf; do
+    [[ -f "$f" ]] && llm_units+=("$f")
+done
+if grep -qE '^[[:space:]]*[^[:space:]#].*--sleep-idle-seconds' "${llm_units[@]}"; then
+    fail "llm unit passes --sleep-idle-seconds"
+fi
+grep -qx 'FlushPending=yes' /usr/lib/systemd/system/openvibes-llm.socket ||
+    fail "llm socket lacks FlushPending=yes"
+for line in 'IPAddressDeny=any' 'PrivateNetwork=yes' 'RestrictAddressFamilies=AF_UNIX' \
+    'CapabilityBoundingSet=' 'NoExecPaths=/' 'Restart=no' \
     'LoadCredential=api-key:/etc/openvibes/llm-api-key' 'ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check'; do
     grep -qx "$line" /usr/lib/systemd/system/openvibes-llm.service || fail "llm unit lacks $line"
 done

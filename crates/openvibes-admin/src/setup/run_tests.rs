@@ -20,7 +20,7 @@ fn chosen_services_are_enabled_and_started() {
         Step::Services,
     );
     assert!(
-        state.detail().contains("openvibes-llm"),
+        state.detail().contains("openvibes-llm.socket"),
         "the model server is left to the user: {state:?}"
     );
     assert_eq!(

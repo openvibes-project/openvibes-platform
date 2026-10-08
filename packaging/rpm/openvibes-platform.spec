@@ -212,6 +212,8 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
 install -D -m 0755 $S/target/llama/cpu/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server
 install -D -m 0755 $S/target/release/openvibes-llm-check %{buildroot}%{_libexecdir}/openvibes-llm/openvibes-llm-check
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.service %{buildroot}%{_unitdir}/openvibes-llm.service
+install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}/openvibes-llm.socket
+install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
 install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
 install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
@@ -302,18 +304,41 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %pre -n openvibes-llm
 %rename_pre llm openvibes-llm.service
 %post -n openvibes-llm
-%systemd_post openvibes-llm.service
+%systemd_post openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 # The API key the console sends: generated once, root's only. The console
 # and openvibes-llm each receive it as a systemd credential.
 if [ ! -s %{_sysconfdir}/openvibes/llm-api-key ]; then
     (umask 077 && head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > %{_sysconfdir}/openvibes/llm-api-key)
 fi
 %posttrans -n openvibes-llm
+# Upgrade from the always-on server, which was enabled and held 18430: the
+# socket takes over the port and the boot start, and starts the server only
+# while it is used. The new unit has no [Install], so only an old enable
+# leaves it "enabled" (not -q: a unit without [Install] is "static", exit 0):
+# this runs once. Stop the old server first so the socket can bind; what
+# %%rename_pre stopped is now started by the socket.
+if [ "$(systemctl is-enabled openvibes-llm.service 2>/dev/null)" = enabled ]; then
+    rm -f /run/openvibes-restart-openvibes-llm.service
+    systemctl daemon-reload
+    systemctl disable -q openvibes-llm.service || :
+    systemctl stop openvibes-llm.service || :
+    systemctl enable -q --now openvibes-llm.socket || :
+    systemctl is-active -q openvibes-llm.socket ||
+        echo "openvibes-llm: openvibes-llm.socket did not start; see systemctl status openvibes-llm.socket, then: systemctl enable --now openvibes-llm.socket" >&2
+fi
+# An old server that ran but was not enabled (and whose account was renamed)
+# is started here once; with StopWhenUnneeded= and no proxy it stops again at
+# once. Accepted: it was not meant to run at boot either.
 %restart_renamed openvibes-llm.service
 %preun -n openvibes-llm
-%systemd_preun openvibes-llm.service
+%systemd_preun openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 %postun -n openvibes-llm
-%systemd_postun_with_restart openvibes-llm.service
+# Not the socket: a running proxy holds its fd. Restarting the proxy and the
+# server (try-restart: only if running) reloads the model on the new files;
+# the socket keeps 18430 throughout. `systemctl restart openvibes-llm.socket`
+# would restart all three (PartOf=).
+%systemd_postun openvibes-llm.socket
+%systemd_postun_with_restart openvibes-llm-proxy.service openvibes-llm.service
 %endif
 
 %files -n openvibes-ingest
@@ -383,6 +408,8 @@ fi
 %{_libexecdir}/openvibes-llm/llama-server
 %{_libexecdir}/openvibes-llm/openvibes-llm-check
 %{_unitdir}/openvibes-llm.service
+%{_unitdir}/openvibes-llm.socket
+%{_unitdir}/openvibes-llm-proxy.service
 %{_sysusersdir}/openvibes-llm.conf
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0644, root, root) %{_sysconfdir}/openvibes/llm.conf

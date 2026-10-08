@@ -143,6 +143,14 @@ fn fast_server_sets_threads_and_leaves_console_alone() {
     );
     assert!(read(&root, TUNING).contains("OPENVIBES_LLM_THREADS=2\n"));
     assert_eq!(read(&root, CONSOLE), before);
+    // Stopped, not restarted: the health wait through the socket starts it
+    // with the new tuning.
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("systemctl stop openvibes-llm-proxy.service openvibes-llm.service"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("restart openvibes-llm"), "{stderr}");
     let json: serde_json::Value = serde_json::from_str(&read(&root, TUNE_JSON)).unwrap();
     assert_eq!(json["mode"], "cpu");
     assert_eq!(json["threads"], 2);
@@ -338,7 +346,7 @@ fn keys_left_alone_are_named() {
 }
 
 #[test]
-fn another_backend_only_try_restarts_and_skips_the_health_wait() {
+fn another_backend_only_stops_the_server_and_skips_the_health_wait() {
     let port = server_with(None, "503 Service Unavailable", "200 OK");
     let root = tree("other-down", port, 60);
     fs::write(root.join(CONSOLE), console(port + 1, 60)).unwrap();
@@ -347,10 +355,10 @@ fn another_backend_only_try_restarts_and_skips_the_health_wait() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains("systemctl try-restart openvibes-llm"),
+        stderr.contains("systemctl stop openvibes-llm-proxy.service openvibes-llm.service"),
         "{stderr}"
     );
-    assert!(!stderr.contains("systemctl restart"), "{stderr}");
+    assert!(!stderr.contains("restart openvibes-llm"), "{stderr}");
     fs::remove_dir_all(&root).unwrap();
 }
 
@@ -452,5 +460,63 @@ fn an_ipv6_loopback_url_is_not_measured_and_gets_no_key() {
     assert!(String::from_utf8_lossy(&out.stdout).contains("speed not measured"));
     let seen = seen.lock().unwrap().to_lowercase();
     assert!(!seen.contains("authorization"), "{seen}");
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn an_inactive_llm_socket_is_refused_before_anything_is_sent() {
+    // Whoever holds the port is not systemd's socket: no key, no request,
+    // nothing changed, nothing stopped.
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("socket-inactive", port, 60);
+    let out = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
+        .env("OPENVIBES_TUNE_SOCKET", "inactive")
+        .args(["helper", "assistant-tune", "--root"])
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(
+            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
+        ),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("systemctl stop"), "{stderr}");
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        seen.lock().unwrap().as_str(),
+        "",
+        "a request reached the port"
+    );
+    assert!(!root.join(TUNING).exists());
+    fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_socket_lost_during_the_health_wait_never_receives_the_key() {
+    // Active for the first check and the health wait, gone before the
+    // timed call: the key is not sent and the old tuning comes back.
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("socket-lost", port, 60);
+    let out = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
+        .env("OPENVIBES_TUNE_SOCKET", "active,active,inactive")
+        .args(["helper", "assistant-tune", "--root"])
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("openvibes-llm.socket is not active"),
+        "{out:?}"
+    );
+    thread::sleep(Duration::from_millis(200));
+    let seen = seen.lock().unwrap().to_lowercase();
+    assert!(seen.contains("host:"), "the health wait ran: {seen}");
+    assert!(!seen.contains("server-key"), "{seen}");
+    assert!(!root.join(TUNING).exists());
     fs::remove_dir_all(&root).unwrap();
 }
