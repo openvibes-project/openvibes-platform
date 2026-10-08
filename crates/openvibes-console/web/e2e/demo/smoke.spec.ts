@@ -206,3 +206,13 @@ test("the menu shows counts beside Alarms, Compliance and Vulnerabilities (#117)
   await expect(page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count--bad")).toBeVisible();
   await expect(page.locator(".rail .rail__item").filter({ hasText: "Software" }).first().locator(".rail__count")).toHaveCount(0);
 });
+
+test("Enrollment offers the install command to copy beside the package (install walkthrough)", async ({ page }) => {
+  await page.goto("/enrollment");
+  const add = page.getByRole("region", { name: "Add a host" });
+  await expect(add).toBeVisible();
+  await expect(add.getByLabel("Install command", { exact: true })).toContainText("curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform ");
+  await expect(add.getByRole("button", { name: "Copy the install command" })).toBeVisible();
+  await expect(add.getByRole("button", { name: /Install package/ })).toBeVisible();
+  await expect(add).toContainText("anyone with it can enroll a host");
+});
