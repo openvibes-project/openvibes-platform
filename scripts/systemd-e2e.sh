@@ -499,7 +499,10 @@ in_c "[[ \$(stat -c %U /proc/\$(systemctl show -p MainPID --value openvibes-llm-
       [[ \$(stat -c '%a' /run/openvibes-llm/llama.sock) == 700 ]] &&
       [[ \$(readlink /proc/\$(systemctl show -p MainPID --value openvibes-llm)/ns/net) != \$(readlink /proc/1/ns/net) ]]" ||
     fail "openvibes-llm: proxy not its user, the runtime directory or socket open to others, or the server on the host network"
-wait_for "openvibes-llm stopped after 30 s idle" 90 '! systemctl is-active -q openvibes-llm'
+# Nothing else here talks to the model (the console's assistant is off in
+# this run); the idle clock restarts with any connection, so allow several
+# idle periods rather than 30 s and a margin.
+wait_for "openvibes-llm stopped after 30 s idle" 180 '! systemctl is-active -q openvibes-llm'
 in_c 'systemctl is-active -q openvibes-llm.socket' || fail "openvibes-llm.socket stopped listening"
 wait_for "openvibes-llm loaded again by the next request" 60 "curl -fsS $LLM/health"
 ok "openvibes-llm is started by its socket and unloaded when idle"
@@ -508,4 +511,11 @@ in_c 'f=/var/lib/openvibes-llm/models/tiny.gguf; chmod 0644 $f && printf x >> $f
 in_c 'journalctl -u openvibes-llm -o cat | grep -q "does not match OPENVIBES_LLM_MODEL_SHA256"' ||
     fail "openvibes-llm did not report the changed model"
 ok "openvibes-llm refuses a model file changed after installation"
+# A server that cannot start must not cost the socket: without
+# FlushPending=yes the waiting connections re-trigger the proxy until the
+# start limit closes 18430 for good, free for any local user.
+in_c "for i in 1 2 3 4 5 6 7 8; do curl -s -m 20 -o /dev/null $LLM/health; done
+      systemctl is-active -q openvibes-llm.socket && exec 3<>/dev/tcp/127.0.0.1/18430" ||
+    fail "openvibes-llm.socket gave up its port after failed starts"
+ok "openvibes-llm.socket keeps 18430 while the server cannot start"
 echo "systemd-e2e: all checks passed"

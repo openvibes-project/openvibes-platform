@@ -68,9 +68,15 @@ systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
     /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
 # Idle unloading stops the process; llama-server's own idle sleep has a
 # use-after-free (CVE-2026-43631).
-grep -q -- --sleep-idle-seconds /usr/lib/systemd/system/openvibes-llm.service &&
+# The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart.
+# Comments name it (to say it is never passed): look at the settings only.
+grep -rhsv '^[[:space:]]*#' /usr/lib/systemd/system/openvibes-llm.service \
+    /usr/lib/systemd/system/openvibes-llm.service.d | grep -q -- --sleep-idle-seconds &&
     fail "llm unit passes --sleep-idle-seconds"
-for line in 'IPAddressDeny=any' 'IPAddressAllow=localhost' 'CapabilityBoundingSet=' 'NoExecPaths=/' \
+grep -qx 'FlushPending=yes' /usr/lib/systemd/system/openvibes-llm.socket ||
+    fail "llm socket lacks FlushPending=yes"
+for line in 'IPAddressDeny=any' 'PrivateNetwork=yes' 'RestrictAddressFamilies=AF_UNIX' \
+    'CapabilityBoundingSet=' 'NoExecPaths=/' 'Restart=no' \
     'LoadCredential=api-key:/etc/openvibes/llm-api-key' 'ExecStartPre=/usr/libexec/openvibes-llm/openvibes-llm-check'; do
     grep -qx "$line" /usr/lib/systemd/system/openvibes-llm.service || fail "llm unit lacks $line"
 done

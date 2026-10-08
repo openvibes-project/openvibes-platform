@@ -22,7 +22,7 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `sudo openvibes-admin helper assistant-tune`; read after `llm.conf`, before `model.conf` |
 | `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `helper assistant-tune` measured and wrote, so it can tell its own values from yours |
 
-Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `helper assistant-tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and stop `openvibes-llm-proxy openvibes-llm` (the next question starts them with it); or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
+Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `helper assistant-tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and `systemctl restart openvibes-llm.socket` (a running server restarts with it); or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
 
 A value equal to the packaged default (`OPENVIBES_LLM_THREADS=4`,
 `OPENVIBES_LLM_GPU_LAYERS=0`) counts as unset, so the next tune replaces
@@ -33,7 +33,7 @@ printf 'OPENVIBES_LLM_THREADS=4\n' | sudo tee /etc/openvibes/llm-pin.conf
 sudo systemctl edit openvibes-llm     # add the two lines below
 #   [Service]
 #   EnvironmentFile=/etc/openvibes/llm-pin.conf
-sudo systemctl stop openvibes-llm-proxy openvibes-llm   # the next question starts them
+sudo systemctl restart openvibes-llm.socket
 ```
 
 `EnvironmentFile=` lines accumulate, and systemd reads a unit's drop-ins
@@ -178,8 +178,17 @@ In `/etc/openvibes/llm.conf`:
   loads it).
 
 An `llm.conf` from before idle unloading does not have it; the proxy unit
-defaults it to `5min`. After a change, `sudo systemctl stop
-openvibes-llm-proxy openvibes-llm`; the next question uses it.
+defaults it to `5min`. After a change, `sudo systemctl restart
+openvibes-llm.socket`: the proxy and the server are `PartOf=` it, so a
+running server restarts on the new settings and an idle one uses them at
+the next question. That is the way to apply any `llm.conf` change, and
+members of `openvibes-operators` may do it without a password (polkit, or
+`r` on the TUI's `llm` row). The socket keeps 18430 through the restart.
+`FlushPending=yes` keeps it listening when the server cannot start (no
+model, a changed model file, out of memory): the waiting question is
+dropped instead of re-triggering the start until systemd gives up on the
+socket. The server does not restart itself (`Restart=no`): the next
+question starts it.
 
 `OPENVIBES_LLM_PORT` stays the public port, the one the console calls,
 but the socket's port is fixed in `openvibes-llm.socket`. To move it:
@@ -257,8 +266,7 @@ root loads. Run `assistant check` and `assistant eval` as that account:
 `sudo -u openvibes-console openvibes-admin assistant check`.
 
 Replacing the model is another `model install` and
-`sudo systemctl stop openvibes-llm-proxy openvibes-llm`; the next question
-loads it. A model file changed after installation fails the digest check,
+`sudo systemctl restart openvibes-llm.socket`; the next question loads it. A model file changed after installation fails the digest check,
 and the service does not start.
 
 ## How to test

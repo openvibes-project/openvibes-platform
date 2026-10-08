@@ -323,7 +323,12 @@ if [ "$(systemctl is-enabled openvibes-llm.service 2>/dev/null)" = enabled ]; th
     systemctl disable -q openvibes-llm.service || :
     systemctl stop openvibes-llm.service || :
     systemctl enable -q --now openvibes-llm.socket || :
+    systemctl is-active -q openvibes-llm.socket ||
+        echo "openvibes-llm: openvibes-llm.socket did not start; see systemctl status openvibes-llm.socket, then: systemctl enable --now openvibes-llm.socket" >&2
 fi
+# An old server that ran but was not enabled (and whose account was renamed)
+# is started here once; with StopWhenUnneeded= and no proxy it stops again at
+# once. Accepted: it was not meant to run at boot either.
 %restart_renamed openvibes-llm.service
 %preun -n openvibes-llm
 %systemd_preun openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service

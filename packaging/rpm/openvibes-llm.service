@@ -13,6 +13,7 @@ Description=OpenVIBES local model server (assistant)
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=network.target
 StopWhenUnneeded=yes
+PartOf=openvibes-llm.socket
 
 [Service]
 Type=exec
@@ -60,8 +61,9 @@ RuntimeDirectoryMode=0750
 ExecStartPost=/usr/libexec/openvibes-llm/openvibes-llm-check --wait-ready /run/openvibes-llm/llama.sock
 # The check hashes the model, then --wait-ready allows 180 s for loading.
 TimeoutStartSec=300
-Restart=on-failure
-RestartSec=10s
+# The next request starts it again; restarting on its own would reload
+# 5.4 GB after an out-of-memory kill or re-hash in a loop on a bad model.
+Restart=no
 # Resource shares: the model must never starve ingest or PostgreSQL.
 MemoryMax=8G
 CPUWeight=20

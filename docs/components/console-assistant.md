@@ -70,8 +70,10 @@ keeps its per-user and global capacity permits until it finishes.
 
 Disabled assistant routes return `assistant_disabled`. An unreachable or
 unsupported model reports unavailable. The console probes the model at
-start; while the model server is not answering yet (still loading its model)
-it probes again every 10 seconds, otherwise every 5 minutes until it passes.
+start; while the model server cannot be reached it probes again every 10
+seconds for the first minute, otherwise (and after that) every 15 minutes
+until it passes: longer than `openvibes-llm`'s 5-minute idle time, since each
+probe through its socket loads the model.
 Backend errors, invalid model output,
 rate capacity, and timeouts return fixed problem codes without upstream
 response bodies. Permission failures do not reveal hidden record existence.

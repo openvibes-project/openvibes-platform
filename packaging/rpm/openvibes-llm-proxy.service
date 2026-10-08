@@ -7,6 +7,9 @@ Description=OpenVIBES local model server proxy (assistant)
 Documentation=https://github.com/openvibes-project/openvibes-platform
 Requires=openvibes-llm.service
 After=openvibes-llm.service
+# Restarted with the socket: a running proxy would otherwise keep the
+# socket from restarting ("already active, refusing").
+PartOf=openvibes-llm.socket
 
 [Service]
 Type=exec
