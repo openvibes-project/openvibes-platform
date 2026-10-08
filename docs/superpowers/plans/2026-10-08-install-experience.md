@@ -165,15 +165,14 @@ Style: labels dim, the password bold. The root certificate fingerprint moves off
 
 The user wants the console's install package to need no internet on the host, only a route to the platform. Today the package (`agent_package.rs::render`) is a script that fetches `install.sh` from GitHub and the agent from the package repository.
 
-Before a plan, a short design (brainstorming → spec) settles, with the user:
+**Shape (user, 2026-10-08):** one installer script, the same everywhere; one settings file per platform; one native agent package per distribution.
 
-1. **What the platform holds:** the agent artefacts for each system family, shipped with the platform (an `openvibes-agent-payload` RPM installed by Setup's `agent` or `distribution` component) or fetched by Setup once from the release.
-2. **Package shape:** one self-extracting script per family (RPM hosts: the agent RPM inside; Debian-family and others: the agent files, as `openvibes-lab/guest/agent-generic.sh` does today), or one bundle for all families (bigger).
-3. **The one-line command:** downloads the same package from the platform (distribution port, the root CA pinned by fingerprint) instead of GitHub, so even "online" never leaves the network.
-4. **Updates for offline hosts:** the platform serves new agent versions the same way; Setup's update fetches them.
-5. **Size and signing:** a few MB per family; the payload keeps its release signature and checksums, verified by the script.
+- **Installer script:** generic, versioned with the agent, no secrets. It detects the distribution, installs the package beside it (or fetches it from the platform), writes the settings, and enrolls.
+- **Settings file** (per platform): platform URL and ports, the root certificate itself (not only its fingerprint, so a fully offline host needs no first contact to trust it), the rule-set trust lines, and the enrollment token. The token is a secret: the script installs it readable by root only, and the agent drops it once enrolled. The console warns that the file can enroll hosts.
+- **Agent package per distribution:** the normal signed release artefacts (RPM today; `.deb` and an Arch package to be built and released by the agent repository). Checksums and signatures are verified by the script; updates go through the distribution's package manager, a local mirror, or config management.
+- **Console:** Enrollment offers one download per distribution, an archive holding the script, the settings file and that package. The one-line command fetches the same pieces from the platform (distribution port, CA pinned), never from the internet.
 
-Recommendation to bring to that design: one script per family, served by the platform, with the agent payload shipped as a platform package; the one-line command fetches it from the platform. Its plan follows the user's choices.
+Still to settle in the design session: where the platform gets the packages (shipped with a platform package, or fetched once by Setup), the settings file format (TOML, so the agent can read it as is, or shell variables), how offline hosts receive agent updates, and the build and release of `.deb` and Arch packages (agent repository; this also retires the lab's `guest/agent-generic.sh` stand-in). Then this part gets its own plan.
 
 ## Part E: Quick-setup guide
 
