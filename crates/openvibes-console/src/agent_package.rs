@@ -95,14 +95,14 @@ fn fingerprint(pem: &str) -> Option<String> {
 /// The installer command line the script runs (what `openvibes-admin agent
 /// command` prints), with the token read from a variable, so it is not in a
 /// process list longer than the installer needs it.
-fn installer_args(spec: &PackageSpec<'_>, fingerprint: &str) -> String {
+fn installer_args(spec: &PackageSpec<'_>, fingerprint: &str, token: &str) -> String {
     let platform = if spec.ingest_port == DEFAULT_INGEST_PORT {
         spec.platform.to_owned()
     } else {
         format!("{}:{}", spec.platform, spec.ingest_port)
     };
     let mut args =
-        format!("--agent --platform {platform} --token \"$TOKEN\" --ca-sha256 {fingerprint}");
+        format!("--agent --platform {platform} --token {token} --ca-sha256 {fingerprint}");
     if let Some(rules) = &spec.rules {
         let _ = write!(args, " --rules {}", rules.arg());
         if spec.distribution_port != DEFAULT_DISTRIBUTION_PORT {
@@ -115,8 +115,8 @@ fn installer_args(spec: &PackageSpec<'_>, fingerprint: &str) -> String {
     args
 }
 
-/// Renders the install script.
-pub fn render(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
+/// Checks the spec; the root certificate's fingerprint.
+fn checked(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
     if !valid_platform(spec.platform) {
         return Err(PackageError::Platform);
     }
@@ -138,8 +138,24 @@ pub fn render(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
     {
         return Err(PackageError::Rules);
     }
-    let fingerprint = fingerprint(spec.root_cert_pem).ok_or(PackageError::RootCertificate)?;
-    let args = installer_args(spec, &fingerprint);
+    fingerprint(spec.root_cert_pem).ok_or(PackageError::RootCertificate)
+}
+
+/// The one-line install command (what `openvibes-admin agent command`
+/// prints), token inline: the console's Enrollment page offers it to copy.
+/// The token's characters are checked, so it needs no shell quoting.
+pub fn command(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
+    let fingerprint = checked(spec)?;
+    Ok(format!(
+        "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- {}",
+        installer_args(spec, &fingerprint, spec.token)
+    ))
+}
+
+/// Renders the install script.
+pub fn render(spec: &PackageSpec<'_>) -> Result<String, PackageError> {
+    let fingerprint = checked(spec)?;
+    let args = installer_args(spec, &fingerprint, "\"$TOKEN\"");
     Ok(format!(
         "#!/bin/sh\n\
          # OpenVIBES agent install package for {platform}.\n\
@@ -188,6 +204,37 @@ mod tests {
             issuer: "issuer-1".into(),
             key: "A".repeat(43),
         }
+    }
+
+    /// The console's copyable command is the line `openvibes-admin agent
+    /// command` prints (setup/command_tests.rs), token inline.
+    #[test]
+    fn command_is_the_admin_cli_line() {
+        let pem = root();
+        let spec = PackageSpec {
+            platform: "h.example",
+            ingest_port: DEFAULT_INGEST_PORT,
+            distribution_port: DEFAULT_DISTRIBUTION_PORT,
+            root_cert_pem: &pem,
+            rules: Some(trust("baseline")),
+            alarm_rules: Some(trust("baseline-alarms")),
+            token: "T0k",
+        };
+        let fp = fingerprint(&pem).unwrap();
+        let k = "A".repeat(43);
+        assert_eq!(
+            command(&spec).unwrap(),
+            format!(
+                "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
+                 --agent --platform h.example --token T0k --ca-sha256 {fp} \
+                 --rules baseline,issuer-1,{k} --alarm-rules baseline-alarms,issuer-1,{k}"
+            )
+        );
+        let bad = PackageSpec {
+            token: "x'y",
+            ..spec
+        };
+        assert_eq!(command(&bad), Err(PackageError::Token));
     }
 
     #[test]

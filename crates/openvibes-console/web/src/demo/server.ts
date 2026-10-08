@@ -621,6 +621,10 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   });
 
   route("GET", "/api/v1/enrollment-tokens", "tokens.read", () => json({ items: data.enrollmentTokens }));
+  // The real command carries the platform's standing token; the demo's is made up.
+  route("GET", "/api/v1/agent-command", "tokens.create", () => json({
+    command: "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- --agent --platform platform.example.com --token DEMO-standing-token-not-real --ca-sha256 4F:2A:9C:11:D3:7E:58:B0:6A:C4:22:91:EE:03:7B:5D:A8:16:F0:3C:94:BB:2E:61:0D:7A:C9:55:18:E4:A3:F2",
+  }));
   const idempotent = new Map<string, { token_id: string; expires_at: string }>();
   route("POST", "/api/v1/enrollment-tokens", "tokens.create", (_, __, body, headers) => {
     const key = headers["idempotency-key"] ?? "";

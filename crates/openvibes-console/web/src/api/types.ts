@@ -50,6 +50,7 @@ export type AccessRole = S["AccessRole"];
 export type AccessBinding = S["AccessBinding"];
 export type AssetGroup = S["AccessAssetGroup"];
 export type EnrollmentToken = S["EnrollmentTokenView"];
+export type AgentCommand = S["AgentCommandView"];
 export type CreatedToken = S["CreatedEnrollmentToken"];
 export type RuleSet = S["RuleSetView"];
 export type RuleDraft = S["RuleDraftView"];

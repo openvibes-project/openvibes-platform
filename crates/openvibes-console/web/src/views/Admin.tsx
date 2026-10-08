@@ -4,7 +4,7 @@
 import { useMemo } from "react";
 
 import { isDemo, useAllPages, useResource } from "../api/client";
-import type { AccessInventory, AuditEvent, AuditRetention, EnrollmentToken, RuleSet, ServiceAccount } from "../api/types";
+import type { AccessInventory, AgentCommand, AuditEvent, AuditRetention, EnrollmentToken, RuleSet, ServiceAccount } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { tokenState, tokenUsable } from "../panels/tokens";
@@ -13,6 +13,7 @@ import { DataTable } from "../ui/DataTable";
 import { auditSince, within } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { matches } from "../ui/table";
+import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
 import { selectAudit } from "./rows";
 
@@ -55,11 +56,9 @@ export function Enrollment() {
       <ViewHeader title="Enrollment" count={rows.length} refresh="/api/v1/enrollment-tokens" placeholder="Filter tokens…"
         chips={[{ label: "Show expired and revoked", param: "all", value: "true", count: hidden }]}
         actions={can("tokens.create", true) && (<>
-          {all.some((t) => t.standing && !t.revoked) && (isDemo()
-            ? <button type="button" className="button" onClick={downloadDemoPackage} title="One install script for every host"><Icon name="download" size={15} /> Install package</button>
-            : <a className="button" href="/api/v1/agent-package" download title="One install script for every host"><Icon name="download" size={15} /> Install package</a>)}
           <button type="button" className="button button--primary" onClick={() => nav.open({ kind: "enrollment-token", id: "new" }, true)}><Icon name="plus" size={15} /> New token</button>
         </>)} />
+      {can("tokens.create", true) && all.some((t) => t.standing && !t.revoked) && <AddHost />}
       {tokens.error ? <div className="view-pad"><ErrorBox error={tokens.error} /></div> : !tokens.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="enrollment" title={all.length === 0 ? "No enrollment tokens" : "No usable enrollment tokens"}>
           {all.length === 0 ? "Create one to let new hosts enroll." : `${hidden} expired or revoked ${hidden === 1 ? "token is" : "tokens are"} hidden. Run openvibes-admin agent command to create the standing token.`}
@@ -236,5 +235,30 @@ export function Audit() {
           ]} />
       )}
     </div>
+  );
+}
+
+/** How to add a host: the install package, or the one-line command to copy
+ * (install walkthrough, 2026-10-08: hosts are added from the console). Both
+ * carry the standing token. The command is copied, not shown: it is long and
+ * holds the token. */
+function AddHost() {
+  const command = useResource<AgentCommand>("/api/v1/agent-command");
+  const text = command.data?.command;
+  return (
+    <section className="view-pad stack" aria-labelledby="add-host">
+      <h2 id="add-host" className="section-title">Add a host</h2>
+      <p className="subtle">Run either as root on the new host. Both carry the standing token: anyone with it can enroll a host.</p>
+      {command.error && <ErrorBox error={command.error} />}
+      <div className="row row--wrap">
+        {isDemo()
+          ? <button type="button" className="button" onClick={downloadDemoPackage} title="A script to copy to the host and run with sudo"><Icon name="download" size={15} /> Install package</button>
+          : <a className="button" href="/api/v1/agent-package" download title="A script to copy to the host and run with sudo"><Icon name="download" size={15} /> Install package</a>}
+        <button type="button" className="button" disabled={!text} title="A one-line command to paste into a root shell on the host"
+          onClick={() => { if (text) { void navigator.clipboard?.writeText(text); toast("Install command copied"); } }}>
+          <Icon name="copy" size={15} /> Copy CLI install
+        </button>
+      </div>
+    </section>
   );
 }

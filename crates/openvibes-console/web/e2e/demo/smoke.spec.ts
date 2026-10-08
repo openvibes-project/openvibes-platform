@@ -206,3 +206,18 @@ test("the menu shows counts beside Alarms, Compliance and Vulnerabilities (#117)
   await expect(page.locator(".rail .rail__item").filter({ hasText: "Alarms" }).first().locator(".rail__count--bad")).toBeVisible();
   await expect(page.locator(".rail .rail__item").filter({ hasText: "Software" }).first().locator(".rail__count")).toHaveCount(0);
 });
+
+test("Enrollment offers the install package and a CLI install command to copy (install walkthrough)", async ({ page }) => {
+  await page.goto("/enrollment");
+  const add = page.getByRole("region", { name: "Add a host" });
+  await expect(add).toBeVisible();
+  await expect(add.getByRole("button", { name: /Install package/ })).toBeVisible();
+  const copy = add.getByRole("button", { name: "Copy CLI install" });
+  await expect(copy).toBeEnabled();
+  // The command is copied, not shown: the long line no longer fills the page.
+  await expect(add.locator("pre")).toHaveCount(0);
+  await expect(add).not.toContainText("curl -fsSL");
+  await copy.click();
+  await expect(page.getByText("Install command copied")).toBeVisible();
+  await expect(add).toContainText("anyone with it can enroll a host");
+});

@@ -139,6 +139,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agent-command": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The one-line agent install command to copy (install walkthrough,
+         *     2026-10-08): what `openvibes-admin agent command` prints.
+         */
+        get: operations["authenticated_agent_command"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agent-package": {
         parameters: {
             query?: never;
@@ -1543,6 +1563,11 @@ export interface components {
             state: string;
             /** @description Why off, in words. */
             text?: string | null;
+        };
+        /** @description The one-line agent install command for the Enrollment page. */
+        AgentCommandView: {
+            /** @description Run as root on a new host; it carries the standing enrollment token. */
+            command: string;
         };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
@@ -4133,6 +4158,35 @@ export interface operations {
             };
             /** @description The username is taken */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    authenticated_agent_command: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The install command, carrying the standing fleet token */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentCommandView"];
+                };
+            };
+            /** @description The package is not configured or there is no standing token */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
