@@ -16,13 +16,16 @@ use crate::setup::{
     ports,
 };
 
-pub const HOSTNAME_ROW: usize = 7;
-pub const SANS_ROW: usize = 8;
-pub const CA_ROW: usize = 9;
-pub const KEY_ROW: usize = 10;
-pub const PORT_ROW: usize = 11;
-pub const AGENT_PORTS_ROW: usize = 12;
-pub const START_ROW: usize = 13;
+// The form's rows: one per component, then these. Counted from the
+// component list, so a new component cannot share a row with the hostname
+// (the signer once did: both lit, and space there ticked the signer).
+pub const HOSTNAME_ROW: usize = Component::ALL.len();
+pub const SANS_ROW: usize = HOSTNAME_ROW + 1;
+pub const CA_ROW: usize = HOSTNAME_ROW + 2;
+pub const KEY_ROW: usize = HOSTNAME_ROW + 3;
+pub const PORT_ROW: usize = HOSTNAME_ROW + 4;
+pub const AGENT_PORTS_ROW: usize = HOSTNAME_ROW + 5;
+pub const START_ROW: usize = HOSTNAME_ROW + 6;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum After {
@@ -251,8 +254,8 @@ impl Setup {
 
     fn toggle(&mut self, component: Component) {
         use Component::*;
-        if matches!(component, Ingest | Console) {
-            return; // always installed
+        if component.always() {
+            return;
         }
         if !self.components.remove(&component) {
             self.components.insert(component);

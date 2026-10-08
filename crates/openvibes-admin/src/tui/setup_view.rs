@@ -98,7 +98,9 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         .iter()
         .enumerate()
         .map(|(row, c)| {
-            let tick = if setup.components.contains(c) {
+            let tick = if c.always() {
+                "•"
+            } else if setup.components.contains(c) {
                 "x"
             } else {
                 " "
@@ -166,7 +168,37 @@ fn form<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         ),
     ));
     lines.push(mark(setup.row == START_ROW, "[ Start ]".into()));
+    lines.push(Line::raw(""));
+    lines.push(Line::styled(
+        help(setup),
+        Style::default().add_modifier(Modifier::DIM),
+    ));
     lines
+}
+
+/// What the row under the cursor means (install walkthrough, 2026-10-08:
+/// the CA and root key rows were unexplained).
+fn help(setup: &super::setup::Setup) -> &'static str {
+    match setup.row {
+        row if row < Component::ALL.len() => {
+            "Space ticks or unticks a component; [•] ones are always installed."
+        }
+        HOSTNAME_ROW => "The name agents and browsers use to reach this host.",
+        SANS_ROW => "More names or IP addresses for its certificate, e.g. 10.0.0.5.",
+        CA_ROW if setup.previous.is_some() => "This host keeps the CA it was set up with.",
+        CA_ROW => match setup.ca {
+            CaMode::Quick => {
+                "Quick: the root CA is made here; its key is written once to the file below."
+            }
+            CaMode::Careful => {
+                "Careful: the root key never touches this host. Space switches the mode."
+            }
+        },
+        KEY_ROW => "The file gets the only copy of the root key; move it offline after Setup.",
+        PORT_ROW => "Where the web console listens: 443 unless another program has it.",
+        AGENT_PORTS_ROW => "Where agents send findings and fetch rules.",
+        _ => "Enter installs the ticked components; takes a few minutes.",
+    }
 }
 
 /// One line per step, cut to `width` so the list never runs off the screen

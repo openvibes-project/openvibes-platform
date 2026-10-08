@@ -49,6 +49,10 @@ version on the right; with `NO_COLOR` set it is plain text.
 form: components (ingest and console always; distribution, vulns, rules,
 the agent on this host on by default; the assistant off), hostname, other
 names or addresses, CA mode (quick or careful) and the root key file.
+Ingest and console show `[•]` (always installed, not a box to untick). A dim
+line under the form says what the row under the cursor means (install
+walkthrough, 2026-10-08). The field rows are numbered after the last
+component, so each row is its own cursor position.
 `Start` asks for the user's password once (masked; the user needs sudo
 rights, not operator membership), writes the plan through `helper
 setup-plan`, then runs one step per screen refresh through `helper

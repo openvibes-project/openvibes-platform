@@ -148,7 +148,7 @@ fn a_new_host_opens_on_setup_with_the_components() {
     let text = screen(&app);
     for want in [
         "[Setup]",
-        "[x] ingest",
+        "[•] ingest",
         "[x] agent",
         "[ ] assistant",
         "platform.example.com",
@@ -840,4 +840,60 @@ fn an_unknown_detail_is_shown_as_it_is() {
         text.contains("root certificate kept from the careful CA"),
         "{text}"
     );
+}
+
+/// Each form row is its own cursor position: the rows after the components
+/// start after the last one (the signer row once shared row 7 with the
+/// hostname: both were highlighted, and space there ticked the signer).
+#[test]
+fn every_form_row_is_its_own_cursor_position() {
+    use crate::setup::plan::Component;
+    assert_eq!(super::setup::HOSTNAME_ROW, Component::ALL.len());
+    let mut app = app(false, vec![]);
+    while app.setup.row != super::setup::HOSTNAME_ROW {
+        app.key(Key::Down);
+    }
+    let before = app.setup.components.clone();
+    app.key(Key::Char(' '));
+    assert_eq!(
+        app.setup.components, before,
+        "space on Hostname ticks nothing"
+    );
+}
+
+/// The form says what the selected row means (walkthrough, 2026-10-08: the
+/// CA and root key fields were unexplained), and always-installed
+/// components do not look like boxes to untick.
+#[test]
+fn the_form_explains_the_selected_row() {
+    let mut app = app(false, vec![]);
+    let text = screen(&app);
+    assert!(
+        text.contains("[•] ingest") && text.contains("[•] console"),
+        "{text}"
+    );
+    assert!(text.contains("always installed"), "{text}");
+    for (row, want) in [
+        (
+            super::setup::CA_ROW,
+            "made here; its key is written once to the file below",
+        ),
+        (
+            super::setup::KEY_ROW,
+            "the only copy of the root key; move it offline after Setup",
+        ),
+        (
+            super::setup::START_ROW,
+            "installs the ticked components; takes a few minutes",
+        ),
+    ] {
+        while app.setup.row != row {
+            app.key(Key::Down);
+        }
+        let text = screen(&app);
+        assert!(
+            text.contains(want),
+            "row {row}: missing {want:?} in\n{text}"
+        );
+    }
 }
