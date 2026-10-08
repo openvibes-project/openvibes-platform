@@ -36,7 +36,7 @@ if [ ! -d "$source_dir" ]; then
     rm -rf "$work/extract"
     mkdir -p "$work/extract"
     tar -xzf "$tarball" -C "$work/extract" --no-same-owner --no-same-permissions
-    mv "$work"/extract/*/vendor/llama.cpp "$source_dir"
+    mv "$work"/extract/llama.cpp-* "$source_dir"
     rm -rf "$work/extract"
 fi
 
@@ -56,7 +56,7 @@ cmake --build "$build" --target llama-server -j "$(nproc)"
 # The switches must have taken effect: no process spawning beyond ggml's
 # crash backtrace (disabled by the unit), no TLS library.
 binary=$build/bin/llama-server
-if nm -D "$binary" | grep -qE ' U (posix_spawn|execv|execve|execvp|popen|system)@'; then
+if nm -D "$binary" | grep -qE ' U (posix_spawnp?|execv|execve|execvp|execvpe|fexecve|execl|execle|popen|system)@'; then
     echo "llama-server can start processes; subprocess support was not disabled" >&2
     exit 1
 fi
