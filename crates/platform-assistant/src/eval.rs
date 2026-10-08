@@ -827,7 +827,10 @@ impl fmt::Display for EvalReport {
                 problems.push(format!("lookups {:?}", r.lookups));
             }
             if !r.not_exposed.is_empty() {
-                problems.push(format!("not exposed {:?}", r.not_exposed));
+                problems.push(format!(
+                    "not exposed {:?} by lookups {:?}",
+                    r.not_exposed, r.lookups
+                ));
             }
             if !r.facts_missing.is_empty() {
                 problems.push(format!("missing {:?}", r.facts_missing));
