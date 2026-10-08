@@ -494,8 +494,11 @@ in_c "install -o openvibes-admin -m 0600 /etc/openvibes/llm-api-key /run/llm-key
 in_c 'grep -q "models listed 1 (configured model listed)" /run/check.out && grep -q "^first token" /run/check.out' ||
     fail "assistant check output"
 ok "openvibes-admin assistant check passes against openvibes-llm"
-in_c "[[ \$(stat -c %U /proc/\$(systemctl show -p MainPID --value openvibes-llm-proxy)) != root ]]" ||
-    fail "openvibes-llm-proxy runs as root"
+in_c "[[ \$(stat -c %U /proc/\$(systemctl show -p MainPID --value openvibes-llm-proxy)) == openvibes-llm ]] &&
+      [[ \$(stat -c '%a %U' /run/openvibes-llm) == '750 openvibes-llm' ]] &&
+      [[ \$(stat -c '%a' /run/openvibes-llm/llama.sock) == 700 ]] &&
+      [[ \$(readlink /proc/\$(systemctl show -p MainPID --value openvibes-llm)/ns/net) != \$(readlink /proc/1/ns/net) ]]" ||
+    fail "openvibes-llm: proxy not its user, the runtime directory or socket open to others, or the server on the host network"
 wait_for "openvibes-llm stopped after 30 s idle" 90 '! systemctl is-active -q openvibes-llm'
 in_c 'systemctl is-active -q openvibes-llm.socket' || fail "openvibes-llm.socket stopped listening"
 wait_for "openvibes-llm loaded again by the next request" 60 "curl -fsS $LLM/health"
