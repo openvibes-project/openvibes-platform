@@ -10,6 +10,8 @@ pub mod agents;
 pub mod alarm_suppressions;
 /// Threat alarms (P14): insert with suppression.
 pub mod alarms;
+/// Threat alarms on a host: on (eBPF or audit) or off, why, and the fix.
+pub mod alarms_status;
 /// Read-only, scoped lookups for the console's assistant.
 pub mod assistant;
 /// The append-only audit log.

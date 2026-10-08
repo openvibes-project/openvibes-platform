@@ -954,6 +954,28 @@ pub struct AgentView {
     pub rule_sets: Vec<AgentRuleSetView>,
     /// RFC 3339 time that report was written.
     pub rule_sets_at: Option<String>,
+    /// Threat alarms on this host, from the same report; absent before one.
+    pub alarms: Option<AgentAlarmsView>,
+}
+
+/// Threat alarms on one host: on and from which source, or off, why, and the
+/// command that turns them on.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentAlarmsView {
+    /// `on` or `off`.
+    pub state: String,
+    /// `ebpf` or `audit` when on.
+    pub source: Option<String>,
+    /// Why off: `not_enabled`, `audit_not_set_up` or `no_source`.
+    pub reason: Option<String>,
+    /// Why off, in words.
+    pub text: Option<String>,
+    /// What turns them on, in words.
+    pub fix: Option<String>,
+    /// The command to run on the host for that, when there is one (copyable).
+    pub command: Option<String>,
+    /// Off by a fault, not by the admin's choice: the Hosts list badges these.
+    pub fault: bool,
 }
 
 /// One rule set an agent reports holding.

@@ -11,6 +11,7 @@ mod console;
 #[cfg(test)]
 mod fake;
 mod fleet;
+pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;

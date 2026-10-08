@@ -1,8 +1,8 @@
 use openvibes_console::{
-    AgentPage, AgentStatus, AgentView, AuthenticationLevel, AuthenticationMethod, CursorPage,
-    CursorPagination, EffectiveCapability, FindingOrigin, FindingPage, FindingView, LoginRequest,
-    LoginResponse, Permission, PermissionScope, PreauthResponse, SessionPrincipal, SessionResponse,
-    Severity, openapi_json,
+    AgentAlarmsView, AgentPage, AgentStatus, AgentView, AuthenticationLevel, AuthenticationMethod,
+    CursorPage, CursorPagination, EffectiveCapability, FindingOrigin, FindingPage, FindingView,
+    LoginRequest, LoginResponse, Permission, PermissionScope, PreauthResponse, SessionPrincipal,
+    SessionResponse, Severity, openapi_json,
 };
 
 const SNAPSHOT: &str = include_str!("../../../docs/api/console-v1.openapi.json");
@@ -103,6 +103,15 @@ fn read_model_dtos_have_stable_wire_names() {
         inventory_at: Some("2026-09-23T11:59:00Z".to_owned()),
         rule_sets: Vec::new(),
         rule_sets_at: None,
+        alarms: Some(AgentAlarmsView {
+            state: "off".to_owned(),
+            source: None,
+            reason: Some("audit_not_set_up".to_owned()),
+            text: Some("this kernel has no BTF".to_owned()),
+            fix: Some("make sure auditd runs, then run the command".to_owned()),
+            command: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
+            fault: true,
+        }),
     };
     let agent_page = AgentPage {
         items: vec![agent],
@@ -123,6 +132,18 @@ fn read_model_dtos_have_stable_wire_names() {
         "2026-09-23T11:59:00Z"
     );
     assert!(agent_page["next_cursor"].is_null());
+    assert_eq!(
+        agent_page["items"][0]["alarms"],
+        serde_json::json!({
+            "state": "off",
+            "source": null,
+            "reason": "audit_not_set_up",
+            "text": "this kernel has no BTF",
+            "fix": "make sure auditd runs, then run the command",
+            "command": "sudo /usr/libexec/openvibes-agent/audit-fallback",
+            "fault": true
+        })
+    );
 
     let finding_page = FindingPage {
         items: vec![FindingView {

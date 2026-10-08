@@ -225,6 +225,8 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .process--current { background: var(--surface-3); }
 .process--current::before { border-left-color: var(--bad); }
 .process__args { white-space: pre-wrap; }
+/* A command to copy: wrapped, so it reads whole in a narrow panel. */
+.code--wrap { white-space: pre-wrap; overflow-wrap: anywhere; }
 /* Cases */
 .case-items { list-style: none; margin: 0; padding: 0; }
 .case-item { display: grid; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); }

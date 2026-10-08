@@ -385,8 +385,12 @@ impl<H: Host> App<H> {
         if let Some(files) = self.host.signer() {
             self.database.health.extend(signer_checks(&files));
         }
-        // Readable as root only; as another user the line is left out.
-        if let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES) {
+        // Readable as root only; as another user the line is left out. Only
+        // an agent reading kernel audit (its exec rule in rules.d) cares: an
+        // eBPF host's agent does not.
+        if Path::new(crate::setup::AGENT_AUDIT_RULE).exists()
+            && let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES)
+        {
             self.database.health.extend(audit_check(&rules));
         }
         self.database.health.extend(tune_check(

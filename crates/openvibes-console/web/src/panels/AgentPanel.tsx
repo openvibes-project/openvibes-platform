@@ -148,7 +148,9 @@ export function AgentPanel({ id }: { id: string }) {
             </ul>
           )
         ) : tab === "alarms" ? (
-          alarmItems.length === 0 ? <Empty title={alarms.loading ? "Loading…" : "No active alarms"} /> : (
+          <>
+          {data.alarms?.state === "off" && <div className="view-pad"><ThreatAlarms alarms={data.alarms} /></div>}
+          {alarmItems.length === 0 ? <Empty title={alarms.loading ? "Loading…" : "No active alarms"} /> : (
             <ul className="list">
               {alarmItems.map((alarm) => (
                 <li key={alarm.id}>
@@ -160,7 +162,8 @@ export function AgentPanel({ id }: { id: string }) {
                 </li>
               ))}
             </ul>
-          )
+          )}
+          </>
         ) : tab === "software" ? (
           <SoftwareTab id={id} />
         ) : tab === "ports" || tab === "services" ? (
@@ -178,6 +181,7 @@ export function AgentPanel({ id }: { id: string }) {
                 <dt>Enrolled</dt><dd>{date(data.enrolled_at)}</dd>
                 {data.revoked_at && <><dt>Revoked</dt><dd>{date(data.revoked_at)}</dd></>}
                 <dt>Capabilities</dt><dd className="row row--wrap">{data.capabilities.length ? data.capabilities.map((c) => <span key={c} className="tag">{c}</span>) : "—"}</dd>
+                {data.alarms && <><dt>Threat alarms</dt><dd><ThreatAlarms alarms={data.alarms} /></dd></>}
               </dl>
             </Section>
             {data.status !== "imported" && <HostRuleSets agent={data} />}
@@ -274,5 +278,21 @@ function TagEditor({ id }: { id: string }) {
         )}
       </form>
     </Section>
+  );
+}
+
+/** On and from which source, or off: why, and the command that fixes it. */
+function ThreatAlarms({ alarms }: { alarms: NonNullable<Agent["alarms"]> }) {
+  if (alarms.state === "on") return <>On <span className="subtle">({alarms.source === "ebpf" ? "eBPF" : "audit"})</span></>;
+  const command = alarms.command;
+  return (
+    <div className="stack">
+      <span className={alarms.fault ? "warn-text" : undefined}>Off: {alarms.text}</span>
+      {alarms.fix && <span className="subtle">To fix: {alarms.fix}</span>}
+      {command && <div className="row">
+        <pre className="code code--wrap grow" tabIndex={0} aria-label="Command to run on the host">{command}</pre>
+        <button type="button" className="icon-button" aria-label="Copy the command" onClick={() => { void navigator.clipboard?.writeText(command); toast("Copied"); }}><Icon name="copy" size={16} /></button>
+      </div>}
+    </div>
   );
 }

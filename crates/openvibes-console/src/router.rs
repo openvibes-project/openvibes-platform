@@ -3532,6 +3532,37 @@ fn agent_view(agent: platform_store::console_read::Agent) -> crate::AgentView {
         rule_sets_at: agent
             .rule_sets_at
             .map(|value| value.to_rfc3339_opts(SecondsFormat::Secs, true)),
+        alarms: agent.alarms.map(alarms_view),
+    }
+}
+
+fn alarms_view(status: platform_store::alarms_status::AlarmsStatus) -> crate::AgentAlarmsView {
+    use platform_store::alarms_status::AlarmsStatus;
+    match status {
+        AlarmsStatus::On { source } => crate::AgentAlarmsView {
+            state: "on".to_owned(),
+            source: Some(source.to_owned()),
+            reason: None,
+            text: None,
+            fix: None,
+            command: None,
+            fault: false,
+        },
+        AlarmsStatus::Off {
+            reason,
+            text,
+            fix,
+            command,
+            fault,
+        } => crate::AgentAlarmsView {
+            state: "off".to_owned(),
+            source: None,
+            reason: Some(reason.to_owned()),
+            text: Some(text),
+            fix: Some(fix),
+            command: command.map(str::to_owned),
+            fault,
+        },
     }
 }
 

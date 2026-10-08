@@ -4,6 +4,7 @@ use chrono::{DateTime, Utc};
 use clap::Subcommand;
 use platform_store::{
     agents::{self, AgentInfo, Filter, Revoke},
+    alarms_status::AlarmsStatus,
     health::HealthStatus,
 };
 
@@ -166,6 +167,22 @@ fn health_lines(agent: &AgentInfo, now: DateTime<Utc>) -> String {
             set.expires_at_unix_ms
                 .map_or_else(|| "never".to_owned(), when_ms),
         ));
+    }
+    let alarms = serde_json::to_value(&health.alarms).ok();
+    match platform_store::alarms_status::alarms_status(true, alarms.as_ref()) {
+        Some(AlarmsStatus::On { source }) => out.push_str(&format!(
+            "alarms on ({})\n",
+            if source == "ebpf" { "eBPF" } else { "audit" }
+        )),
+        Some(AlarmsStatus::Off {
+            text, fix, command, ..
+        }) => {
+            out.push_str(&format!("alarms off: {text}; fix: {fix}\n"));
+            if let Some(command) = command {
+                out.push_str(&format!("alarms fix command: {command}\n"));
+            }
+        }
+        None => {}
     }
     out.push_str(&format!("storage errors {}\n", health.storage_errors));
     if let Some(jump) = health.clock_jump_s {

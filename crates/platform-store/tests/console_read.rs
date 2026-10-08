@@ -187,6 +187,48 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
         agent.rule_sets_at.map(|at| at.timestamp()),
         Some(inventory_at.timestamp())
     );
+    // No alarms object in that report: process events are not enabled.
+    assert!(matches!(
+        agent.alarms,
+        Some(platform_store::alarms_status::AlarmsStatus::Off {
+            reason: "not_enabled",
+            ..
+        })
+    ));
+    // The eBPF watcher's source, from the stored report.
+    let fixture: serde_json::Value = serde_json::from_str(include_str!(
+        "../../../protocol/fixtures/v1/heartbeat/valid-alarms-source-ebpf.json"
+    ))
+    .unwrap();
+    client
+        .execute(
+            "UPDATE agents SET health = $2 WHERE agent_id = $1",
+            &[&RECENT, &fixture["health"]],
+        )
+        .await
+        .unwrap();
+    let agent = platform_store::console_read::agent(&client, RECENT, now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        agent.alarms,
+        Some(platform_store::alarms_status::AlarmsStatus::On { source: "ebpf" })
+    );
+    // A stale host's last report no longer says what is true: no status.
+    client
+        .execute(
+            "UPDATE agents SET health = $2, health_at = $3 WHERE agent_id = $1",
+            &[&STALE, &fixture["health"], &inventory_at],
+        )
+        .await
+        .unwrap();
+    let stale = platform_store::console_read::agent(&client, STALE, now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stale.state, platform_store::console_read::AgentState::Stale);
+    assert_eq!(stale.alarms, None);
     let certificates = platform_store::console_read::certificates(
         &client,
         RECENT,

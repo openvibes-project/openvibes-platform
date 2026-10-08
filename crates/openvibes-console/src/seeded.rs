@@ -285,6 +285,27 @@ impl Default for SeededRepository {
                             refused: None,
                         }],
                         rule_sets_at: last_seen_at.map(str::to_owned),
+                        alarms: Some(if number % 41 == 0 {
+                            crate::AgentAlarmsView {
+                                state: "off".to_owned(),
+                                source: None,
+                                reason: Some("audit_not_set_up".to_owned()),
+                                text: Some("this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded, or auditd is not running".to_owned()),
+                                fix: Some("make sure auditd is installed and running, then run the command below".to_owned()),
+                                command: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
+                                fault: true,
+                            }
+                        } else {
+                            crate::AgentAlarmsView {
+                                state: "on".to_owned(),
+                                source: Some(if number % 7 == 0 { "audit" } else { "ebpf" }.to_owned()),
+                                reason: None,
+                                text: None,
+                                fix: None,
+                                command: None,
+                                fault: false,
+                            }
+                        }),
                     },
                     certificates: vec![certificate],
                     scope_member: number % 5 == 0,

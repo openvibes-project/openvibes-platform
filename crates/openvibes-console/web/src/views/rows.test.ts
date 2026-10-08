@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
+import { activeCount, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -28,6 +28,16 @@ describe("list selection matches the views", () => {
     const all = [agent("web", "active"), agent("db", "stale")];
     expect(selectAgents(all, new URLSearchParams("status=stale")).map((a) => a.id)).toEqual(["db"]);
     expect(selectAgents(all, new URLSearchParams("q=web")).map((a) => a.id)).toEqual(["web"]);
+  });
+
+  it("agents: the Hosts list badges only online hosts whose alarms are off by a fault", () => {
+    const base = { id: "h", hostname: "h", enrolled_at: "", capabilities: [], rule_sets: [] };
+    const off = (fault: boolean) => ({ state: "off", fault });
+    expect(alarmsOff({ ...base, status: "active", alarms: off(true) })).toBe(true);
+    expect(alarmsOff({ ...base, status: "active", alarms: off(false) })).toBe(false);
+    expect(alarmsOff({ ...base, status: "stale", alarms: off(true) })).toBe(false);
+    expect(alarmsOff({ ...base, status: "active", alarms: { state: "on", fault: false } })).toBe(false);
+    expect(alarmsOff({ ...base, status: "active" })).toBe(false);
   });
 
   it("audit: failures filter", () => {

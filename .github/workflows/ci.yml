@@ -290,6 +290,17 @@ jobs:
           git clone -q https://github.com/openvibes-project/openvibes-agent /opt/agent-src
           git -C /opt/agent-src checkout -q "$(agent_rev)"
           cargo fetch --locked --manifest-path /opt/agent-src/Cargo.toml
+          # The agent embeds an eBPF program (agent #56), built with its pinned
+          # nightly and bpf-linker: install both, then fetch the eBPF crate's
+          # dependencies (every target: its build scripts and macros run on
+          # the host) and the nightly's standard library workspace (-Z
+          # build-std resolves it whole), so the agent RPM still builds offline.
+          BIN=/usr/local/bin bash /opt/agent-src/scripts/ebpf-tools.sh
+          ebpf=/opt/agent-src/ebpf/openvibes-agent-ebpf
+          nightly=$(sed -n 's/^channel = "\(.*\)"$/\1/p' "$ebpf/rust-toolchain.toml")
+          (cd "$ebpf" && rustup run "$nightly" cargo fetch --locked)
+          lib=$(rustup run "$nightly" rustc --print sysroot)/lib/rustlib/src/rust/library
+          rustup run "$nightly" cargo fetch --locked --manifest-path "$lib/Cargo.toml"
 
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
