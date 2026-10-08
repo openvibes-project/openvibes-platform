@@ -171,3 +171,54 @@ pub async fn current(
         .await?
         .get(0))
 }
+
+/// A host with open problems, for the "Most exposed hosts" list.
+#[derive(Clone, Debug)]
+pub struct TopHost {
+    /// The host's agent id.
+    pub agent_id: String,
+    /// Its reported hostname, if any.
+    pub hostname: Option<String>,
+    /// Critical plus high, across alarms, vulnerabilities and compliance.
+    pub serious: i64,
+    /// Every open problem of those kinds (info alarms excluded).
+    pub open: i64,
+}
+
+/// Hosts ranked by serious problems, then by all open problems, then id;
+/// hosts with none are left out. `agents` limits the hosts as in [`series`].
+pub async fn top_hosts(
+    client: &Client,
+    now: DateTime<Utc>,
+    limit: i64,
+    agents: Option<&[String]>,
+) -> Result<Vec<TopHost>, StoreError> {
+    let rows = client
+        .query(
+            &format!(
+                "SELECT * FROM (
+                   SELECT h.agent_id, a.hostname,
+                          (alarms_critical + alarms_high + vulns_critical + vulns_high
+                           + compliance_critical + compliance_high)::bigint AS serious,
+                          (alarms_critical + alarms_high + alarms_medium + alarms_low
+                           + vulns_critical + vulns_high + vulns_medium + vulns_low
+                           + compliance_critical + compliance_high + compliance_medium
+                           + compliance_low)::bigint AS open
+                   FROM ({HOST_COUNTS_SQL}) h JOIN agents a USING (agent_id)
+                   WHERE ($2::text[] IS NULL OR h.agent_id = ANY($2))) t
+                 WHERE open > 0
+                 ORDER BY serious DESC, open DESC, agent_id LIMIT $3"
+            ),
+            &[&threshold(now), &agents, &limit],
+        )
+        .await?;
+    Ok(rows
+        .iter()
+        .map(|r| TopHost {
+            agent_id: r.get(0),
+            hostname: r.get(1),
+            serious: r.get(2),
+            open: r.get(3),
+        })
+        .collect())
+}

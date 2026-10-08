@@ -95,6 +95,7 @@ use crate::{
         crate::dashboards::get_home,
         crate::dashboards::set_home,
         crate::metrics::history,
+        crate::metrics::top_hosts,
         crate::software::list_host_packages,
         crate::software::list_software,
         crate::software::get_software,
@@ -131,6 +132,8 @@ use crate::{
     components(schemas(
         crate::metrics::MetricHistory,
         crate::metrics::MetricPoint,
+        crate::metrics::TopHosts,
+        crate::metrics::TopHostItem,
         crate::software::HostPackageView,
         crate::software::HostPackagePage,
         crate::software::SoftwareView,

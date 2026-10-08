@@ -4656,6 +4656,80 @@
         }
       }
     },
+    "/api/v1/metrics/top-hosts": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "operationId": "top_hosts",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "path",
+            "description": "How many hosts, 1 to 10 (default 6).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Hosts ranked by critical and high problems across kinds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopHosts"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing permission, or the kinds have different scopes",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Invalid limit",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ports": {
       "get": {
         "tags": [
@@ -11772,6 +11846,56 @@
           "result": {
             "type": "boolean",
             "description": "Original result."
+          }
+        }
+      },
+      "TopHostItem": {
+        "type": "object",
+        "description": "One host in the ranking.",
+        "required": [
+          "agent_id",
+          "serious",
+          "open"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host's agent id."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its reported hostname."
+          },
+          "open": {
+            "type": "integer",
+            "format": "int64",
+            "description": "All open problems, all kinds.",
+            "minimum": 0
+          },
+          "serious": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Critical plus high problems, all kinds.",
+            "minimum": 0
+          }
+        }
+      },
+      "TopHosts": {
+        "type": "object",
+        "description": "Hosts with the most serious open problems across alarms, vulnerabilities and compliance.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TopHostItem"
+            },
+            "description": "Most exposed first."
           }
         }
       },
