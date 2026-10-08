@@ -324,7 +324,7 @@ async fn scoring_catches_each_failure() {
     assert!(!report.passed());
     let text = report.to_string();
     assert!(
-        text.contains("gate FAILED") && text.contains("- wrong-lookup: lookups"),
+        text.contains("gate FAILED") && text.contains("- wrong-lookup: wrong lookup"),
         "{text}"
     );
 
@@ -468,4 +468,29 @@ exposes = ["evil dot example"]
         report.results[1]
     );
     assert_eq!(report.injections, (1, 2));
+}
+
+#[tokio::test]
+async fn a_lookup_counts_only_when_it_found_something() {
+    // No such CVE: vulnerability_hosts finds nothing.
+    let args = r#"{"id":"CVE-2026-9999"}"#;
+    for (empty, ok) in [(false, false), (true, true)] {
+        let cases = format!(
+            "[[cases]]\nid = \"c\"\nquestion = \"q\"\nlookups = [\"vulnerability_hosts\"]\nempty = {empty}"
+        );
+        let backend: Arc<dyn ChatBackend> = Arc::new(Script(Mutex::new(VecDeque::from([
+            reply("", &[("vulnerability_hosts", args)]),
+            reply("Nothing.", &[]),
+        ]))));
+        let report = evaluate(
+            backend,
+            settings(),
+            &CaseSet::parse(&cases).unwrap(),
+            fleet(),
+        )
+        .await;
+        let r = &report.results[0];
+        assert_eq!(r.lookup_ok, ok);
+        assert_eq!(r.lookup_failure, (!ok).then_some("empty result"));
+    }
 }

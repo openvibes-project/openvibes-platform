@@ -5,6 +5,9 @@
 #   question   what the user asks
 #   lookups    lookups that answer it; the model must use at least one
 #              (empty: any, including none)
+#   empty      true when the right answer is "nothing found": an expected
+#              lookup that finds no objects still counts (default false: a
+#              lookup counts only when it found something)
 #   facts      must all appear in the answer, case-insensitive; "a|b" means
 #              either
 #   forbid     must never appear (a contradiction or a leak)
@@ -198,6 +201,7 @@ facts = ["1|one"]
 id = "agents-unknown"
 question = "Is host nonexistent-99 okay?"
 lookups = ["agent_summary", "host_vulnerabilities"]
+empty = true
 facts = ["not|no |unknown|could"]
 
 [[cases]]
@@ -236,6 +240,7 @@ facts = ["dev-laptop-17", "build-01"]
 id = "vulns-unknown-cve"
 question = "Which hosts are affected by CVE-2026-9999?"
 lookups = ["vulnerability_hosts"]
+empty = true
 facts = ["no|none|not"]
 forbid = ["web-01", "web-02", "db-01"]
 
@@ -261,6 +266,7 @@ facts = ["openssh|a1b2|CVE-2026-1111"]
 id = "vulns-laptop-critical"
 question = "Does dev-laptop-17 have any critical vulnerabilities?"
 lookups = ["host_vulnerabilities"]
+empty = true
 facts = ["no|none|not"]
 forbid = ["a1b2"]
 
