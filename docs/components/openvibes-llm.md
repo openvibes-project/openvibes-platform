@@ -11,16 +11,18 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 |---|---|
 | `/usr/libexec/openvibes-llm/llama-server` | Pinned llama.cpp build, CPU (AVX2 baseline, static) |
 | `/usr/libexec/openvibes-llm/llama-server-vulkan` | Same source built for Vulkan (NVIDIA, AMD, Intel), in `openvibes-llm-vulkan` |
-| `/usr/libexec/openvibes-llm/openvibes-llm-check` | `ExecStartPre=`: refuses to start on bad settings or an unverified model (crate `openvibes-llm`) |
-| `openvibes-llm.service` | Hardened unit, loopback port 18430, user `openvibes-llm` |
-| `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)`: port, context, threads, GPU layers, parallel requests, default alias |
+| `/usr/libexec/openvibes-llm/openvibes-llm-check` | `ExecStartPre=`: refuses to start on bad settings or an unverified model; `--idle-only` for the proxy, `--wait-ready` until the model has loaded (crate `openvibes-llm`) |
+| `openvibes-llm.socket` | The unit that is enabled: listens on loopback port 18430 and starts the proxy on the first connection |
+| `openvibes-llm-proxy.service` | `systemd-socket-proxyd` to the server's Unix socket; exits after `OPENVIBES_LLM_IDLE` without a request; runs as `openvibes-llm`, sandboxed |
+| `openvibes-llm.service` | Hardened unit, `llama-server` on the Unix socket `/run/openvibes-llm/llama.sock`, no network, user `openvibes-llm`; started by the proxy, stopped when it exits |
+| `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)`: port, idle time, context, threads, GPU layers, parallel requests, default alias |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install (64 hex characters); given to the service as a systemd credential |
 | `/var/lib/openvibes-llm/models/` | 0775 root:openvibes-admin; models installed read-only (0444) |
 | `/var/lib/openvibes-llm/model.conf` | The model in use and its SHA-256, written by `openvibes-admin assistant model install`; read after `llm.conf` |
 | `/var/lib/openvibes-llm/tuning.conf` | Optional, `%ghost`: `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`, written by `sudo openvibes-admin helper assistant-tune`; read after `llm.conf`, before `model.conf` |
 | `/var/lib/openvibes-llm/tune.json` | Optional, `%ghost`: what `helper assistant-tune` measured and wrote, so it can tell its own values from yours |
 
-Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `helper assistant-tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and restart `openvibes-llm`; or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
+Precedence (later `EnvironmentFile=` wins): `llm.conf` < `tuning.conf` < `model.conf`. `tuning.conf` therefore overrides `llm.conf` for `OPENVIBES_LLM_THREADS` and `OPENVIBES_LLM_GPU_LAYERS`. A value in `llm.conf` is operator-set when it differs from the packaged default; when `helper assistant-tune` runs it omits such keys from `tuning.conf`. After changing either value in `llm.conf`, run `sudo openvibes-admin helper assistant-tune` (it leaves your value alone and drops it from `tuning.conf`) and stop `openvibes-llm-proxy openvibes-llm` (the next question starts them with it); or delete `/var/lib/openvibes-llm/tuning.conf` to go back to `llm.conf` alone.
 
 A value equal to the packaged default (`OPENVIBES_LLM_THREADS=4`,
 `OPENVIBES_LLM_GPU_LAYERS=0`) counts as unset, so the next tune replaces
@@ -31,7 +33,7 @@ printf 'OPENVIBES_LLM_THREADS=4\n' | sudo tee /etc/openvibes/llm-pin.conf
 sudo systemctl edit openvibes-llm     # add the two lines below
 #   [Service]
 #   EnvironmentFile=/etc/openvibes/llm-pin.conf
-sudo systemctl restart openvibes-llm
+sudo systemctl stop openvibes-llm-proxy openvibes-llm   # the next question starts them
 ```
 
 `EnvironmentFile=` lines accumulate, and systemd reads a unit's drop-ins
@@ -64,8 +66,10 @@ The script then fails if the binary imports `execve`, `posix_spawn`,
 `popen`, or `system`, or links a TLS library. It still imports `execlp`
 for ggml's crash backtrace (it would run `gdb`). The unit turns that off
 (`GGML_NO_BACKTRACE=1`) and makes it impossible anyway
-(`NoExecPaths=/`). This version has no idle-sleep option, so the
-use-after-free in idle sleep (CVE-2026-43631) cannot be reached.
+(`NoExecPaths=/`). This build has llama-server's idle sleep
+(`--sleep-idle-seconds`), which has a use-after-free (CVE-2026-43631, no
+confirmed fix). The unit never passes it, and `check-rpm.sh` fails if it
+does: idle unloading stops the whole process instead (below).
 
 To update: pick a newer sdist, check the llama.cpp commit in its
 CHANGELOG and upstream security advisories, update the pin's three values,
@@ -84,7 +88,8 @@ refuses any `LLAMA_*`, `GGML_*` (except `GGML_NO_BACKTRACE`), `HF_*`, or
 `HUGGING*` variable. Without that, `LLAMA_ARG_TOOLS=all` in `llm.conf`
 would switch tools on.
 
-The check then validates the settings: the port is 1024–65535, the context
+The check then validates the settings: the port is 1024–65535, the idle time is `infinity` or 30 s to 24 h
+(a whole number with `s`, `min` or `h`; bare is seconds), the context
 512–131,072, threads 1–256, GPU layers 0–999, parallel requests 1–16, and
 the alias is `[A-Za-z0-9._-]{1,64}`. The model must be a `.gguf` file
 directly inside the models directory: a regular file, not a link, and not
@@ -94,8 +99,9 @@ writable by the service. Its SHA-256 must equal
 The sandbox, besides the platform units' usual hardening (see
 [packaging.md](packaging.md)):
 
-- `IPAddressDeny=any` and `IPAddressAllow=localhost`: the service can
-  neither be reached from nor connect to the network;
+- `PrivateNetwork=yes`, `IPAddressDeny=any` and
+  `RestrictAddressFamilies=AF_UNIX`: no network at all; its only way in is
+  the Unix socket `/run/openvibes-llm/llama.sock`;
 - `NoExecPaths=/` with `ExecPaths=` covering only its own directory and
   the library directories: no shell, no gdb;
 - `ProtectProc=invisible`, `LimitCORE=0` (no core dumps holding prompts);
@@ -113,6 +119,86 @@ time. Set `OPENVIBES_LLM_GPU_LAYERS=999` with it.
 `/health` and `/v1/models` answer without the API key: `llama-server`
 exempts them. They reveal only the alias, on loopback.
 
+## Memory and idle unloading
+
+A loaded model holds memory the whole time it runs: the bundled Qwen3-4B
+Q4_K_M at 8192 tokens of context is about 5.4 GB resident (measured:
+5,394,560 kB VmRSS; the file's mapped pages count towards it). So the
+server runs only while it is used:
+
+```
+console --> 127.0.0.1:18430  openvibes-llm.socket (always listening)
+              | first connection starts
+              v
+            openvibes-llm-proxy.service  (systemd-socket-proxyd --exit-idle-time=OPENVIBES_LLM_IDLE)
+              | Requires=, After=
+              v
+            openvibes-llm.service  llama-server on /run/openvibes-llm/llama.sock (StopWhenUnneeded=yes)
+```
+
+Why a Unix socket behind the proxy, not a second loopback port: a port is
+free whenever the server is stopped, which is most of the time, and any
+local user could bind it; the proxy would then hand them the console's
+questions, platform data and API key. `/run/openvibes-llm` is the
+service's `RuntimeDirectory=` (0750, `openvibes-llm`), the socket in it is
+0700 (`UMask=0077`), and the proxy runs as `openvibes-llm` too: only that
+account and root can connect. systemd removes the directory whenever the
+service stops (a crash included), so a stale socket never blocks the next
+start. The public port 18430 is held by systemd's socket unit the whole
+time, idle or not, so no one else can take it either; `helper
+assistant-tune` and `helper assistant-setup` check that
+`openvibes-llm.socket` is active and listens on `127.0.0.1:OPENVIBES_LLM_PORT`
+before root sends the server's key there, and refuse otherwise.
+
+The first connection waits in the socket's queue while the check hashes
+the model and `llama-server` loads it; `--wait-ready` keeps the server
+"starting" until `/health` answers 200, so the proxy passes the
+connection on only to a loaded model. After `OPENVIBES_LLM_IDLE` (default
+`5min`) without a connection the proxy exits, nothing needs the server any
+more, systemd stops it, and its memory is freed. The next question starts
+both again.
+
+Measured with user-level copies of the units (Ryzen 9 3900X, 4 threads,
+Fedora 44, systemd 259, model file already in the page cache, idle set to
+30 s): the first question after idle took 5.8 to 5.9 s (hash 1.5 s, load
+2.7 s, readiness poll up to 0.5 s, the 8-token answer under 1 s); a question
+to the loaded model 0.7 s; the server stopped 30.1 s after the last request
+and was gone 0.4 s later. After `kill -9` of `llama-server` it restarted
+(`Restart=on-failure`) on a fresh runtime directory and the next request
+was answered. A model file not in the page cache takes longer
+to hash and load: up to disk speed for 2.4 GB. Raise the console's
+`deadline_seconds` if the first question after idle times out on a slow
+host (`helper assistant-tune` measures a loaded server, not a cold start).
+
+In `/etc/openvibes/llm.conf`:
+
+- `OPENVIBES_LLM_IDLE=5min`: time without a question before the model is
+  unloaded; `30s` to `24h` (`s`, `min`, `h`). `infinity` keeps it loaded
+  (the old behaviour, minus the boot start: the first question still
+  loads it).
+
+An `llm.conf` from before idle unloading does not have it; the proxy unit
+defaults it to `5min`. After a change, `sudo systemctl stop
+openvibes-llm-proxy openvibes-llm`; the next question uses it.
+
+`OPENVIBES_LLM_PORT` stays the public port, the one the console calls,
+but the socket's port is fixed in `openvibes-llm.socket`. To move it:
+
+```sh
+sudo systemctl edit openvibes-llm.socket     # add:
+#   [Socket]
+#   ListenStream=
+#   ListenStream=127.0.0.1:PORT
+# set OPENVIBES_LLM_PORT=PORT in /etc/openvibes/llm.conf, then
+sudo systemctl restart openvibes-llm.socket
+sudo openvibes-admin helper assistant-setup --force   # points the console at it
+```
+
+Upgrading from a version where `openvibes-llm.service` itself was enabled
+on 18430: the package's `%posttrans` disables and stops the old server and
+enables `--now openvibes-llm.socket`, once (the new service unit has no
+`[Install]`, so it can never be "enabled" again).
+
 ## Using it
 
 Out of the box, with the bundled model (`openvibes-llm-model`, which
@@ -126,8 +212,9 @@ sudo openvibes-admin helper assistant-setup
 `assistant-setup` hands the generated API key to the console's account
 (owner-only, as the console requires), writes `[assistant]` into
 `console.toml` (an enabled assistant on the `small` profile whose backend is
-`http://127.0.0.1:18430/v1`; other keys and comments stay), enables and
-restarts `openvibes-llm`, restarts the console, and then tunes the server for
+`http://127.0.0.1:18430/v1`; other keys and comments stay), stops a running
+model server, enables `--now openvibes-llm.socket` (the first request starts
+the server), restarts the console, and then tunes the server for
 this host (`helper assistant-tune`: CPU threads, and a longer request
 deadline when the model is slow here; your own `llm.conf` values stay). It is safe to repeat and
 refuses to replace a backend you configured yourself unless you pass
@@ -169,9 +256,10 @@ api_key_file = "/etc/openvibes/llm-api-key"
 root loads. Run `assistant check` and `assistant eval` as that account:
 `sudo -u openvibes-console openvibes-admin assistant check`.
 
-Replacing the model is another `model install` and a restart. A model
-file changed after installation fails the digest check, and the service
-does not start.
+Replacing the model is another `model install` and
+`sudo systemctl stop openvibes-llm-proxy openvibes-llm`; the next question
+loads it. A model file changed after installation fails the digest check,
+and the service does not start.
 
 ## How to test
 
@@ -193,11 +281,14 @@ refusals. The `systemd-e2e` job installs `openvibes-llm` under a real
 systemd, which checks that:
 
 - the service refuses to start without a model;
+- the first request through `openvibes-llm.socket` starts it;
 - `model install` works with the tiny model;
 - the service runs as its own user with seccomp, `no_new_privs`, no
   capabilities, and the IP deny list;
 - chat requests without the API key get 401;
 - `openvibes-admin assistant check` passes against it;
+- the socket starts it, the proxy does not run as root, it stops after
+  30 s idle, and the next request loads it again;
 - a model file changed after installation stops the service from
   starting.
 
