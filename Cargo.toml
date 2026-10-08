@@ -9,6 +9,7 @@ rust-version = "1.95"
 license = "MIT"
 
 [workspace.dependencies]
+libc = "0.2"
 platform-password = { path = "crates/platform-password" }
 openvibes-core = { git = "https://github.com/openvibes-project/openvibes-agent.git", rev = "4b5b006c1694fd1e0ead42c28663e7ca033a3541" }
 serde = { version = "1.0.228", features = ["derive"] }

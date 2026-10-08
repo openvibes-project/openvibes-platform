@@ -28,7 +28,7 @@ const DEFAULT_PORT: &str = "18430";
 const DEFAULT_ALIAS: &str = "local-model";
 
 /// `KEY=VALUE` lines of a systemd environment file; later lines win.
-fn parse_env(text: &str) -> BTreeMap<String, String> {
+pub(crate) fn parse_env(text: &str) -> BTreeMap<String, String> {
     text.lines()
         .filter(|line| !line.trim_start().starts_with('#'))
         .filter_map(|line| line.split_once('='))
@@ -145,8 +145,21 @@ pub fn run(force: bool) -> Result<String, String> {
             ));
         }
     }
+    // Tuning is best effort: a model that cannot answer yet is reported.
+    let tuned = crate::tune_run::run(
+        &crate::tune_run::TuneOptions {
+            cpu: true,
+            no_install: false,
+            json: false,
+        },
+        Path::new("/"),
+        &crate::tune_run::Systemd,
+    )
+    .unwrap_or_else(|error| {
+        format!("tuning skipped: {error}; rerun `sudo openvibes-admin helper assistant-tune`\n")
+    });
     Ok(format!(
-        "the assistant now uses the bundled model ({})\nnext: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\ncheck: sudo -u openvibes-console openvibes-admin assistant check\n",
+        "the assistant now uses the bundled model ({})\n{tuned}next: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\ncheck: sudo -u openvibes-console openvibes-admin assistant check\n",
         env.get("OPENVIBES_LLM_ALIAS")
             .map_or(DEFAULT_ALIAS, String::as_str)
     ))

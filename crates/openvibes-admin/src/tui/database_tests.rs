@@ -5,7 +5,7 @@ use platform_host::{Database, DiskUse, HostError, ServiceStatus, Unit};
 
 use super::{
     app::{Key, Tab},
-    database::checks,
+    database::{checks, tune_check},
     tests::{app, screen},
 };
 
@@ -352,4 +352,17 @@ fn fedoras_task_never_audit_rule_is_a_health_problem() {
         "#-a task,never\n-a always,exit -F key=openvibes-exec\n"
     ));
     assert!(audit_check("-a always,exit -S execve -F key=openvibes-exec\n").is_none());
+}
+
+#[test]
+fn tune_line_shows_the_summary_or_the_command() {
+    let json = r#"{"mode":"cpu","threads":6,"model":"qwen","seconds_per_call":8.4}"#;
+    let ok = tune_check(true, Some(json.into())).unwrap();
+    assert!(!ok.problem && ok.text.contains("CPU (6 threads) · model qwen · ~8 s"));
+    let hint = tune_check(true, None).unwrap();
+    assert!(
+        hint.text
+            .contains("sudo openvibes-admin helper assistant-tune")
+    );
+    assert!(tune_check(false, None).is_none());
 }

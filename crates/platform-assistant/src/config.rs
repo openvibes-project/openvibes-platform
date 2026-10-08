@@ -279,6 +279,13 @@ pub struct Backend {
     pub(crate) client_identity: Option<(Vec<u8>, Vec<u8>)>,
 }
 
+impl Backend {
+    /// Replaces the API key, for a caller that reads the key itself.
+    pub fn set_api_key(&mut self, key: Option<String>) {
+        self.api_key = key;
+    }
+}
+
 impl fmt::Debug for Backend {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Backend")

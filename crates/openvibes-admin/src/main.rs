@@ -23,6 +23,8 @@ mod run_as;
 mod setup;
 mod token;
 mod tui;
+mod tune;
+mod tune_run;
 mod user;
 mod vulns;
 

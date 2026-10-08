@@ -14,7 +14,9 @@ asking user's scope.
 - `AssistantConfig` (the `[assistant]` TOML section, unknown keys refused) →
   `validate()` → `Assistant`, with `Backend` holding the checked URL,
   `Location` (`Local`, `OwnNetwork`, `External`), model, limits, and the
-  secrets and certificates read once at startup. `Profile::budget()` gives
+  secrets and certificates read once at startup (`Backend::set_api_key`
+  replaces the key for a caller that reads it itself, as
+  `helper assistant-tune` does). `Profile::budget()` gives
   the prompt, output, and lookup-result budget.
 - `BackendClient::new(&Backend)`; `chat(&ChatRequest, on_text)` streams one
   answer (text pieces to `on_text` as they arrive) and returns

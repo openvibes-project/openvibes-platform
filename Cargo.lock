@@ -1679,6 +1679,7 @@ dependencies = [
  "chrono",
  "clap",
  "ed25519-dalek",
+ "libc",
  "openvibes-console",
  "openvibes-core",
  "openvibes-distribution",

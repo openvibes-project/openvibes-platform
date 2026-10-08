@@ -8,3 +8,5 @@
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper config-write *
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-setup
 %openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-setup --force
+%openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-tune
+%openvibes-operators ALL=(root) NOPASSWD: /usr/bin/openvibes-admin helper assistant-tune --json

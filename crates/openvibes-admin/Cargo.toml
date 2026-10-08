@@ -34,6 +34,7 @@ serde.workspace = true
 rpassword = "=7.5.4"
 tokio.workspace = true
 zeroize = "=1.9.0"
+libc.workspace = true
 
 [lints]
 workspace = true

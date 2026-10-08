@@ -72,6 +72,22 @@ pub enum HelperCommand {
         #[arg(long)]
         force: bool,
     },
+    /// Measures the bundled model server and tunes it for this host.
+    AssistantTune {
+        /// Tune for the CPU (the only mode so far).
+        #[arg(long)]
+        cpu: bool,
+        /// Accepted for the GPU plan; does nothing yet.
+        #[arg(long)]
+        no_install: bool,
+        /// Print tune.json instead of the summary line.
+        #[arg(long)]
+        json: bool,
+        /// Tests only: a directory standing in for `/`.
+        #[cfg(debug_assertions)]
+        #[arg(long, hide = true)]
+        root: Option<std::path::PathBuf>,
+    },
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -90,6 +106,7 @@ enum Verb {
     RemoveStep(RemoveStep, crate::setup::remove::RemoveArgs),
     UnitFile(Unit, bool),
     AssistantSetup(bool),
+    AssistantTune(crate::tune_run::TuneOptions, Option<std::path::PathBuf>),
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -132,6 +149,33 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             )
         }
         HelperCommand::AssistantSetup { force } => Verb::AssistantSetup(*force),
+        #[cfg(debug_assertions)]
+        HelperCommand::AssistantTune {
+            cpu,
+            no_install,
+            json,
+            root,
+        } => Verb::AssistantTune(
+            crate::tune_run::TuneOptions {
+                cpu: *cpu,
+                no_install: *no_install,
+                json: *json,
+            },
+            root.clone(),
+        ),
+        #[cfg(not(debug_assertions))]
+        HelperCommand::AssistantTune {
+            cpu,
+            no_install,
+            json,
+        } => Verb::AssistantTune(
+            crate::tune_run::TuneOptions {
+                cpu: *cpu,
+                no_install: *no_install,
+                json: *json,
+            },
+            None,
+        ),
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -150,6 +194,21 @@ pub(crate) fn effective_uid() -> Option<String> {
     ids.split_whitespace().nth(1).map(str::to_owned)
 }
 
+/// Debug builds under a test root leave the host's services alone.
+#[cfg(debug_assertions)]
+fn restarter(root: &Path) -> Box<dyn crate::tune_run::Restarter> {
+    if root == Path::new("/") {
+        Box::new(crate::tune_run::Systemd)
+    } else {
+        Box::new(crate::tune_run::NoRestart)
+    }
+}
+
+#[cfg(not(debug_assertions))]
+fn restarter(_: &Path) -> Box<dyn crate::tune_run::Restarter> {
+    Box::new(crate::tune_run::Systemd)
+}
+
 fn refuse(reason: &str) -> ExitCode {
     eprintln!("openvibes-admin helper: not allowed: {reason}");
     ExitCode::from(2)
@@ -160,7 +219,14 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         Ok(verb) => verb,
         Err(reason) => return refuse(&reason),
     };
-    if effective_uid().as_deref() != Some("0") {
+    // Debug builds only: a test tree stands in for `/`, no root needed.
+    let test_root = match &verb {
+        Verb::AssistantTune(_, Some(root)) if cfg!(debug_assertions) && root != Path::new("/") => {
+            Some(root.clone())
+        }
+        _ => None,
+    };
+    if test_root.is_none() && effective_uid().as_deref() != Some("0") {
         eprintln!("openvibes-admin: helper must run as root (through sudo)");
         return ExitCode::from(1);
     }
@@ -204,6 +270,17 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             }
             Err(error) => failed(&error),
         },
+        Verb::AssistantTune(opts, _) => {
+            let root = test_root.unwrap_or_else(|| "/".into());
+            let result = crate::tune_run::run(&opts, &root, restarter(&root).as_ref());
+            match result {
+                Ok(text) => {
+                    print!("{text}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => failed(&error),
+            }
+        }
         Verb::Logs(unit, lines) => logs(unit, lines),
         Verb::ConfigRead(service) => match config_file::read(dir, service) {
             Ok(text) => {
