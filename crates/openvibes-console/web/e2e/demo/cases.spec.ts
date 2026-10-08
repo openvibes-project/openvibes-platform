@@ -63,6 +63,9 @@ test("a case closes only once every alarm has an outcome", async ({ page }) => {
 test("Add to case from an alarm opens a case, and then points at it", async ({ page }) => {
   await page.goto("/alarms?open=alarm%3A9002");
   const inspector = page.locator(".inspector");
+  // Click once the inspector has slid in: a click during the slide makes
+  // Playwright scroll the inspector, and the menu closes when its anchor moves.
+  await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== "running"));
   await inspector.getByRole("button", { name: "Add to case" }).click();
   const menu = page.getByRole("dialog", { name: /Add alarm to a case/ });
   await expect(menu.getByRole("button", { name: /C-103/ })).toBeVisible();
