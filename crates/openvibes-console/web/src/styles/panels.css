@@ -181,7 +181,9 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .tile-number .subtle { margin-left: 8px; font-size: 13px; }
 .tile-list { display: grid; gap: 6px; }
 .tile-more { justify-self: start; font-size: 13px; }
-.tile-parts { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; }
+.tile-parts { display: flex; flex-wrap: wrap; gap: 4px 6px; font-size: 13px; }
+/* A wrapped line must not start or end with a dot. */
+@container tilebody (max-width: 320px) { .tile-parts__sep { display: none; } .tile-parts { column-gap: 12px; } }
 .tile-note p { margin: 0 0 6px; overflow-wrap: anywhere; white-space: pre-wrap; }
 .grid { position: relative; margin: 0 24px 24px; }
 .grid--stacked { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
@@ -201,7 +203,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .grid--editing .tile:focus-visible, .tile[data-selected] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
 .tile__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px 0 14px; min-height: 36px; user-select: none; }
 .tile__title { font-size: 13px; font-weight: 600; color: var(--text-2); }
-.tile__body { flex: 1; min-height: 0; overflow: auto; padding: 8px 14px 12px; }
+.tile__body { flex: 1; min-height: 0; overflow: auto; padding: 8px 14px 12px; container: tilebody / inline-size; }
 /* Scroll shadows: a shade at an edge only while more content lies past it
    (the covers move with the content, the shades stay with the box). */
 .tile__body {

@@ -11,7 +11,7 @@ import { useListRows } from "../views/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
-import { METRICS, METRIC_KEYS, delta, partText, permitted, trendDays, type Metric } from "./metrics";
+import { METRICS, METRIC_KEYS, delta, deltaSince, partText, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
 export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
@@ -43,6 +43,7 @@ export function NumberTile({ widget }: WidgetProps) {
   const value = history?.at(-1)?.value;
   const points = trend > 0 ? history?.slice(-trend) ?? [] : [];
   const change = delta(points);
+  const since = deltaSince(points, trend);
   // No vulnerability feed yet: a 0 would claim nothing was found.
   const vulns = useResource<VulnerabilitySummary>(allowed && metric.startsWith("vulns.") ? "/api/v1/vulnerabilities/summary" : null);
   if (!allowed) return <Unavailable />;
@@ -55,12 +56,13 @@ export function NumberTile({ widget }: WidgetProps) {
     <>
       <span className={`stat__value num${tone && !unset ? ` stat__value--${tone}` : ""}`}>{unset ? <span aria-hidden="true">—</span> : shown === undefined ? "…" : count(shown)}</span>
       {unset && <span className="subtle">Not set up</span>}
-      {!unset && change && <span className="delta">{change}</span>}
+      {!unset && change && <span className="delta" title={`since ${points[0]?.day}`}>{change}{since && ` ${since}`}</span>}
     </>
   );
   const view = def.view;
-  const chart = trend > 0 && !unset && history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />;
-  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && " · "}<Part kind={kind} id={id} /></Fragment>)}</div>;
+  // Reserve the chart's height while history loads so the fine print does not jump.
+  const chart = trend > 0 && !unset && <div style={{ minHeight: 36 }}>{history && <LineChart series={[{ label: def.label, points }]} variant="spark" smooth={widget.config.line !== "stepped"} />}</div>;
+  const parts = def.parts && <div className="tile-parts">{def.parts.map(([kind, id], i) => <Fragment key={id}>{i > 0 && <span className="tile-parts__sep" aria-hidden="true"> · </span>}<Part kind={kind} id={id} /></Fragment>)}</div>;
   return (
     <div className="stack">
       {view ? <button type="button" className="tile-number" onClick={() => nav.view(view[0], view[1])}>{body}</button>

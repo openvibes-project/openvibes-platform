@@ -168,18 +168,26 @@ test("the editing note is for phones only", async ({ page }) => {
   await expect(page.getByText("Editing needs a wider screen")).toBeHidden();
 });
 
-test("a Critical tile is plain text with per-kind links beneath it", async ({ page }) => {
-  await page.evaluate(() => {
-    const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 4, h: 2, config: { metric: "all.open.critical", trend: 30 } }] };
-    const now = new Date().toISOString();
-    localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
-      { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
-    ], homes: [["u-admin", "d-crit"]] }));
+for (const [name, width] of [["desktop", 1440], ["phone", 390]] as const) {
+  test(`a Critical tile at the Overview size keeps its fine print inside (${name})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.evaluate(() => {
+      const layout = { schema: 1, widgets: [{ id: "crit", type: "number", x: 0, y: 0, w: 3, h: 4, config: { metric: "all.open.critical", trend: 30 } }] };
+      const now = new Date().toISOString();
+      localStorage.setItem("openvibes.v2.demo.dashboards", JSON.stringify({ rows: [
+        { dashboard_id: "d-crit", owner: "u-admin", name: "Critical", shared_role_id: null, layout, version: 1, created_at: now, updated_at: now },
+      ], homes: [["u-admin", "d-crit"]] }));
+    });
+    await page.goto("/");
+    const tile = page.locator(".tile", { hasText: "alarm" });
+    await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 74 vulnerabilities · 9 compliance");
+    await expect(tile.locator(".tile-number .delta")).toBeVisible();
+    await expect(tile.locator(".linechart svg")).toBeVisible();
+    await expect(tile.getByRole("button")).toHaveCount(3);
+    const box = (await tile.boundingBox()) ?? { y: 0, height: 0 };
+    const parts = (await tile.locator(".tile-parts").boundingBox()) ?? { y: Infinity, height: 0 };
+    expect(parts.y).toBeGreaterThanOrEqual(box.y);
+    expect(parts.y + parts.height).toBeLessThanOrEqual(box.y + box.height);
+    expect(await tile.locator(".tile__body").evaluate((el) => el.scrollHeight <= el.clientHeight)).toBe(true);
   });
-  await page.goto("/");
-  const tile = page.locator(".tile", { hasText: "alarm" });
-  await expect(tile.locator(".tile-parts")).toHaveText("1 alarm · 74 vulnerabilities · 9 compliance");
-  await expect(tile.locator(".tile-number .delta")).toBeVisible();
-  await expect(tile.locator(".linechart svg")).toBeVisible();
-  await expect(tile.getByRole("button")).toHaveCount(3);
-});
+}

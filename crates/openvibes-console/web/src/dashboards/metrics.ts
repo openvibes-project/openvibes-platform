@@ -1,8 +1,8 @@
-import { count } from "../ui/format";
 // The count catalogue; ids and permissions must equal the server's CATALOGUE
 // (crates/openvibes-console/src/metrics.rs), which catalogue.test.ts enforces.
 // No DOM imports here so tests can read it.
 // A cross-kind entry has no view of its own: only its parts navigate.
+import { count } from "../ui/format";
 type Entry = {
   label: string; permissions: string[]; view?: [string, Record<string, string>]; parts?: [string, string][];
 };
@@ -54,3 +54,11 @@ export const permitted = (id: Metric, can: (permission: string) => boolean) => M
 export const TREND_DAYS = [0, 7, 30, 90] as const;
 /** The trend period a tile asks for; anything unknown means off. */
 export const trendDays = (v: unknown): (typeof TREND_DAYS)[number] => TREND_DAYS.find((d) => d === v) ?? 0;
+
+/** "vs 12 d ago" when the history starts later than the trend period asks (new install, gaps); else null. */
+export function deltaSince(points: { day: string }[], trend: number, now = Date.now()): string | null {
+  const first = points[0];
+  if (!first || points.length < 2) return null;
+  const ago = Math.round((Math.floor(now / 86_400_000) * 86_400_000 - Date.parse(first.day)) / 86_400_000);
+  return ago < trend - 1 ? `vs ${ago} d ago` : null;
+}
