@@ -43,8 +43,8 @@ mod software;
 mod users;
 
 pub use api::{
-    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentDetail,
-    AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentTagBindingImpact,
+    AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentAlarmsView,
+    AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentTagBindingImpact,
     AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView,
     ApplyAgentTagsRequest, AssetGroupSelectorInput, AuditEventPage, AuditEventView,
     AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange,

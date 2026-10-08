@@ -1524,6 +1524,24 @@ export interface components {
             /** @description Plain text, 1 to 4000 characters. */
             body: string;
         };
+        /**
+         * @description Threat alarms on one host: on and from which source, or off, why, and the
+         *     command that turns them on.
+         */
+        AgentAlarmsView: {
+            /** @description Off by a fault, not by the admin's choice: the Hosts list badges these. */
+            fault: boolean;
+            /** @description The command or setting that turns them on, shown verbatim. */
+            fix?: string | null;
+            /** @description Why off: `not_enabled`, `audit_not_set_up` or `no_source`. */
+            reason?: string | null;
+            /** @description `ebpf` or `audit` when on. */
+            source?: string | null;
+            /** @description `on` or `off`. */
+            state: string;
+            /** @description Why off, in words. */
+            text?: string | null;
+        };
         /** @description Agent and current certificate metadata. */
         AgentDetail: components["schemas"]["AgentView"] & {
             /** @description Certificate metadata for the agent. */
@@ -1642,6 +1660,7 @@ export interface components {
         };
         /** @description Operator-facing agent fields shared by the read API and seeded server. */
         AgentView: {
+            alarms?: null | components["schemas"]["AgentAlarmsView"];
             /** @description Reported agent capabilities. */
             capabilities: string[];
             /** @description RFC 3339 enrollment time. */

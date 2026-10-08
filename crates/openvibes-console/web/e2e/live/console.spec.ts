@@ -69,7 +69,7 @@ test("with no alarm at all, the Alarms view says how to turn alarms on", async (
   await signIn(page, "alex");
   await page.goto("/alarms");
   await expect(page.getByText("No alarms")).toBeVisible();
-  await expect(page.getByText(/auditd runs and "process_events"/)).toBeVisible();
+  await expect(page.getByText(/"process_events" is in their collectors/)).toBeVisible();
 });
 
 test("Most exposed hosts says scanning is not set up before any feed imported", async ({ page }) => {

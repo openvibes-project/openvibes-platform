@@ -6832,6 +6832,52 @@
         },
         "additionalProperties": false
       },
+      "AgentAlarmsView": {
+        "type": "object",
+        "description": "Threat alarms on one host: on and from which source, or off, why, and the\ncommand that turns them on.",
+        "required": [
+          "state",
+          "fault"
+        ],
+        "properties": {
+          "fault": {
+            "type": "boolean",
+            "description": "Off by a fault, not by the admin's choice: the Hosts list badges these."
+          },
+          "fix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The command or setting that turns them on, shown verbatim."
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why off: `not_enabled`, `audit_not_set_up` or `no_source`."
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`ebpf` or `audit` when on."
+          },
+          "state": {
+            "type": "string",
+            "description": "`on` or `off`."
+          },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Why off, in words."
+          }
+        }
+      },
       "AgentDetail": {
         "allOf": [
           {
@@ -7132,6 +7178,17 @@
           "rule_sets"
         ],
         "properties": {
+          "alarms": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/AgentAlarmsView",
+                "description": "Threat alarms on this host, from the same report; absent before one."
+              }
+            ]
+          },
           "capabilities": {
             "type": "array",
             "items": {

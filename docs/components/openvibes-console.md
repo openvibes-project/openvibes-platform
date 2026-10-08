@@ -138,6 +138,10 @@ and stay in the Vulnerabilities view.
   an agent that has not sent a health report. The Host page's Rule sets
   section shows them, flags a set behind the published version (when the
   user holds `rules.read`) and a refused bundle.
+- `AgentView.alarms` (`AgentAlarmsView`: `state` `on`/`off`, `source`
+  `ebpf`/`audit`, `reason`, `text`, `fix`, `fault`) is the host's threat-alarm
+  status from the same report (`platform_store::alarms_status`); absent before
+  a report. Codes and words are on the platform-store page.
 - `GET /api/v1/agents/{agent_id}/packages`: the host's packages by name
   (manager, name, epoch, version, release, arch, `fixable_vulnerable`).
   `q` is a case-insensitive substring of the name (at most 128 bytes).

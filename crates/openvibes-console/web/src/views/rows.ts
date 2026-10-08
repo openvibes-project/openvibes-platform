@@ -77,6 +77,12 @@ export function olderThan(version: string, platform: string): boolean {
   return versionOrder(version, platform) > 0;
 }
 
+/** The Hosts list badges an online host whose threat alarms are off by a
+ * fault; off by choice (process events not enabled) stays quiet. */
+export function alarmsOff(agent: { status: string; alarms?: { state: string; fault: boolean } | null }): boolean {
+  return agent.status === "active" && agent.alarms?.state === "off" && agent.alarms.fault;
+}
+
 export function selectAgents(all: readonly Agent[], params: URLSearchParams): Agent[] {
   const status = params.get("status");
   const q = params.get("q") ?? "";

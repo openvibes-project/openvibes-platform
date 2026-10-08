@@ -122,7 +122,7 @@ export function Alarms() {
       {alarms.error ? <div className="view-pad"><ErrorBox error={alarms.error} /></div> : alarms.loading && !alarms.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="alarm" title={none ? "No alarms" : "Nothing matches these filters"}>
           {none
-            ? "Alarms appear here within seconds of a matching program start. Agents report process starts only when auditd runs and \"process_events\" is in their collectors (agent.toml)."
+            ? "Alarms appear here within seconds of a matching program start. Agents report process starts when \"process_events\" is in their collectors (agent.toml); each host's page says whether its alarms are on."
             : "Resolved and suppressed alarms are hidden unless their chips are on; clear a filter to see more."}
         </Empty>
       ) : (

@@ -210,7 +210,12 @@ triage on alarms and findings stays as it is.
   page** (the `agent` panel): Findings, Vulnerabilities, **Alarms** (active
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
-  running kernel, "software as of", tags, certificates). The list, panel and
+  running kernel, "software as of", threat alarms, tags, certificates).
+  **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why" with
+  the fix in a wrapped code block and a copy button; an off host also shows
+  that line at the top of its Alarms tab. The Hosts list adds an "Alarms off"
+  badge beside Online only when the alarms are off by a fault (not when
+  process events were simply not enabled). The list, panel and
   host export call `last_seen_at` **Last heartbeat**. Its hover text
   says agents send one about every minute and a host is online within three
   minutes of the last. Online and offline changes show up without a reload:
