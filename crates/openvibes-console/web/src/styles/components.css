@@ -177,9 +177,11 @@
 /* Line chart (ui/LineChart.tsx): drawn at pixel size; text never takes a series colour. */
 .linechart { position: relative; width: 100%; --c: var(--accent); }
 .linechart svg { display: block; width: 100%; touch-action: pan-y; }
-.linechart [data-s="1"] { --c: var(--warn); }
-.linechart [data-s="2"] { --c: var(--ok); }
-.linechart [data-s="3"] { --c: var(--crit); }
+/* Several lines take the fixed categorical order (tokens.css --series-*, validated in both modes); never severity colours. One line is the accent. */
+.linechart--multi [data-s="0"] { --c: var(--series-1); }
+.linechart--multi [data-s="1"] { --c: var(--series-2); }
+.linechart--multi [data-s="2"] { --c: var(--series-3); }
+.linechart--multi [data-s="3"] { --c: var(--series-4); }
 .linechart__grid { stroke: var(--line); stroke-width: 1; }
 .linechart__ax { fill: var(--text-3); font-size: 10px; }
 .linechart__end { fill: var(--text-2); font-size: 10px; font-weight: 600; }

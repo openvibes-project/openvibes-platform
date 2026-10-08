@@ -66,7 +66,7 @@ export function LineChart({ series, variant, smooth }: Props) {
   const xLabels = full ? [...new Set([0, Math.floor((n - 1) / 2), n - 1])] : [];
   const hoverDay = hover === null ? undefined : days[hover];
   return (
-    <div className="linechart" ref={box} data-variant={variant}>
+    <div className={`linechart${multi ? " linechart--multi" : ""}`} ref={box} data-variant={variant}>
       {width > 0 && (
         <svg width={width} height={l.H} viewBox={`0 0 ${width} ${l.H}`} role="img" aria-label={label}>
           {full ? ticks(max).map((t) => (

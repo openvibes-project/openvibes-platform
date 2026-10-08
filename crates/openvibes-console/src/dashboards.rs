@@ -20,7 +20,7 @@ use crate::{
     router::{AuthHttpState, parse_if_match_version, session_user, unavailable_auth},
 };
 
-pub(crate) const WIDGET_TYPES: [&str; 7] = [
+pub(crate) const WIDGET_TYPES: [&str; 8] = [
     "number",
     "breakdown",
     "attention",
@@ -28,6 +28,7 @@ pub(crate) const WIDGET_TYPES: [&str; 7] = [
     "trend",
     "top-hosts",
     "note",
+    "graph",
 ];
 const MAX_LAYOUT_BYTES: usize = 65_536;
 const MAX_WIDGETS: usize = 40;
@@ -554,6 +555,12 @@ mod tests {
     fn a_small_valid_layout_passes() {
         assert!(validate_layout(&json!({"schema": 1, "widgets": [widget("w1", "number", 0, 3), widget("w2", "note", 3, 9)]})).is_ok());
         assert!(validate_layout(&json!({"schema": 1, "widgets": []})).is_ok());
+    }
+
+    #[test]
+    fn a_graph_widget_with_several_counts_passes() {
+        let layout = json!({"schema": 1, "widgets": [{"id": "g", "type": "graph", "x": 0, "y": 0, "w": 6, "h": 4, "config": {"metrics": ["alarms.active", "vulns.exploited"], "days": 30}}]});
+        assert!(validate_layout(&layout).is_ok());
     }
 
     #[test]

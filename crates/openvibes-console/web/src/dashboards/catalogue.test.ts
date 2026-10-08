@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { METRICS, partText } from "./metrics";
+import { METRICS, graphMetrics, partText } from "./metrics";
 import { upgradeLayout } from "./legacy";
 
 // The server's CATALOGUE is the source of truth: read it as text so drift fails the build.
@@ -46,5 +46,14 @@ describe("catalogue", () => {
     const widgets = [...old, ...old.filter((id) => id.startsWith("compliance.")).map((id) => id.replace("compliance.", "findings."))]
       .map((metric, i) => ({ id: `w${i}`, type: "number", x: 0, y: 0, w: 3, h: 2, config: { metric } }));
     for (const w of upgradeLayout({ schema: 1, widgets } as never).widgets) expect(METRICS).toHaveProperty(String(w.config.metric));
+  });
+});
+
+describe("graphMetrics", () => {
+  it("keeps catalogue ids, drops repeats and strangers, caps at four, defaults to one", () => {
+    expect(graphMetrics({ metrics: ["agents.stale", "agents.stale", "nope", "agents.active", "vulns.exploited", "alarms.active", "agents.revoked"] }))
+      .toEqual(["agents.stale", "agents.active", "vulns.exploited", "alarms.active"]);
+    expect(graphMetrics({})).toEqual(["alarms.active"]);
+    expect(graphMetrics({ metrics: "x" })).toEqual(["alarms.active"]);
   });
 });

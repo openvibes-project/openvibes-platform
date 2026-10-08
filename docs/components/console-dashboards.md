@@ -31,7 +31,7 @@ Browser session only; a service-account bearer token gets 403.
 Layout: `{ "schema": 1, "widgets": [{ "id", "type", "x", "y", "w", "h", "config" }] }`.
 Limits: at most 64 KiB and 40 widgets; `id` 1–32 of `a-z0-9-`, unique;
 `x` 0–11, `w` 1–12, `x + w ≤ 12`, `y` 0–199, `h` 1–12; `type` one of
-`number breakdown attention list trend top-hosts note`; `config` at most 16
+`number breakdown attention list trend top-hosts note graph`; `config` at most 16
 keys whose values are strings (≤ 256 characters), integers, booleans or
 string lists (≤ 16). Names: 1–80 characters, trimmed, no control characters.
 At most 100 dashboards per owner. Adding a widget type means adding it to

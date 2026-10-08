@@ -5,10 +5,11 @@ import type { ReactNode } from "react";
 
 import type { IconName } from "../ui/Icon";
 import { str } from "./config";
+import { graphMetrics } from "./metrics";
 import { WIDGET_DEFAULTS } from "./defaults";
 import type { Widget, WidgetType } from "./layout";
 import { AttentionTile, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
-import { AttentionSettings, BreakdownSettings, ListSettings, NoteSettings, NoteTile, NumberSettings, TopHostsSettings, TrendSettings, TrendTile } from "./tiles2";
+import { AttentionSettings, BreakdownSettings, GraphSettings, GraphTile, ListSettings, NoteSettings, NoteTile, NumberSettings, TopHostsSettings, TrendSettings, TrendTile } from "./tiles2";
 
 export type WidgetProps = { widget: Widget };
 export type SettingsProps = { widget: Widget; onChange: (config: Widget["config"]) => void };
@@ -24,6 +25,7 @@ export const widgetDefs: Readonly<Record<WidgetType, WidgetDef>> = {
   list: { type: "list", label: "List", description: "The first rows of any list, with its filters", icon: "findings", size: WIDGET_DEFAULTS["list"].size, defaults: WIDGET_DEFAULTS["list"].config, View: ListTile, Settings: ListSettings },
   trend: { type: "trend", label: "Trend", description: "Hosts reporting a compliance finding per day", icon: "activity", size: WIDGET_DEFAULTS["trend"].size, defaults: WIDGET_DEFAULTS["trend"].config, View: TrendTile, Settings: TrendSettings },
   "top-hosts": { type: "top-hosts", label: "Most exposed hosts", description: "Hosts with the most serious vulnerabilities", icon: "agents", size: WIDGET_DEFAULTS["top-hosts"].size, defaults: WIDGET_DEFAULTS["top-hosts"].config, View: TopHostsTile, Settings: TopHostsSettings },
+  graph: { type: "graph", label: "Graph", description: "Counts over time", icon: "activity", size: WIDGET_DEFAULTS["graph"].size, defaults: WIDGET_DEFAULTS["graph"].config, View: GraphTile, Settings: GraphSettings },
   note: { type: "note", label: "Note", description: "Plain text for your team", icon: "help", size: WIDGET_DEFAULTS["note"].size, defaults: WIDGET_DEFAULTS["note"].config, View: NoteTile, Settings: NoteSettings },
 };
 
@@ -34,5 +36,6 @@ export function widgetTitle(widget: Widget): string {
   if (widget.type === "breakdown") {
     return { compliance: "Compliance findings by severity", vulnerabilities: "Vulnerabilities by severity", agents: "Hosts by status" }[str(widget.config, "source", "compliance", ["compliance", "vulnerabilities", "agents"] as const)];
   }
+  if (widget.type === "graph" && graphMetrics(widget.config).length === 1) return METRICS[graphMetrics(widget.config)[0] ?? "alarms.active"].label;
   return (widgetDefs as Partial<Record<string, WidgetDef>>)[widget.type]?.label ?? "Unsupported widget";
 }

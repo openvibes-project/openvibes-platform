@@ -7,7 +7,10 @@ import { Trend, dailyHosts } from "../ui/trend";
 import { LIST_VIEWS } from "../views/rows";
 import { ATTENTION_KINDS } from "./attention";
 import { int, list, noteLines, noteParts, str, toInt } from "./config";
-import { TREND_DAYS, trendDays } from "./metrics";
+import { LineChart } from "../ui/LineChart";
+import { useHistory } from "./history";
+import type { Permission } from "../api/types";
+import { GRAPH_MAX_LINES, TREND_DAYS, graphMetrics, permitted, trendDays } from "./metrics";
 import { METRICS, METRIC_KEYS, Unavailable } from "./tiles";
 import type { SettingsProps, WidgetProps } from "./widgets";
 
@@ -22,6 +25,49 @@ export function TrendTile({ widget }: WidgetProps) {
   if (!can("compliance.read")) return <Unavailable />;
   if (!set || !rule) return <div className="tile-empty">Choose a compliance rule in this tile's settings</div>;
   return <Trend counts={counts} label={`hosts reporting ${rule}`} />;
+}
+
+const GRAPH_DAYS = [7, 30, 90, 365] as const;
+const MAX_LINES = GRAPH_MAX_LINES;
+const graphDays = (config: Record<string, unknown>) => GRAPH_DAYS.find((d) => d === config.days) ?? 30;
+
+export function GraphTile({ widget }: WidgetProps) {
+  const { can } = useSession();
+  const metrics = graphMetrics(widget.config);
+  const days = graphDays(widget.config);
+  const allowed = metrics.every((m) => permitted(m, (p) => can(p as Permission)));
+  // Hooks cannot loop over a list: always four, unused ones idle.
+  const h = [0, 1, 2, 3].map((i) => useHistory(allowed && metrics[i] ? metrics[i] : null, days)); // eslint-disable-line react-hooks/rules-of-hooks
+  if (!allowed) return <Unavailable />;
+  const failed = h.find((r) => r.error);
+  if (failed?.error) return <div className="tile-empty">{failed.error.message}</div>;
+  if (metrics.some((_, i) => !h[i]?.data)) return <div className="skeleton" />;
+  const series = metrics.map((m, i) => ({ label: METRICS[m].label, points: h[i]?.data ?? [] }));
+  return <LineChart series={series} variant="full" smooth={widget.config.line !== "stepped"} />;
+}
+
+export function GraphSettings({ widget, onChange }: SettingsProps) {
+  const metrics = graphMetrics(widget.config);
+  const set = (next: string[]) => onChange({ ...widget.config, metrics: next });
+  return (
+    <div className="stack">
+      {metrics.map((m, i) => (
+        <div key={i} className="row">
+          {field(`Count ${i + 1}`, <select className="select" value={m} onChange={(e) => set(metrics.map((x, j) => j === i ? e.target.value : x))}>
+            {METRIC_KEYS.map((key) => <option key={key} value={key}>{METRICS[key].label}</option>)}
+          </select>)}
+          {metrics.length > 1 && <button type="button" className="button" aria-label={`Remove count ${i + 1}`} onClick={() => set(metrics.filter((_, j) => j !== i))}>Remove</button>}
+        </div>
+      ))}
+      {metrics.length < MAX_LINES && <button type="button" className="button" onClick={() => set([...metrics, METRIC_KEYS.find((k) => !metrics.includes(k) && !k.startsWith("all.")) ?? "alarms.active"])}>+ Add count</button>}
+      {field("Period", <select className="select" value={graphDays(widget.config)} onChange={(e) => onChange({ ...widget.config, days: Number(e.target.value) })}>
+        {GRAPH_DAYS.map((d) => <option key={d} value={d}>{d} days</option>)}
+      </select>)}
+      {field("Line", <select className="select" value={widget.config.line === "stepped" ? "stepped" : "smooth"} onChange={(e) => onChange({ ...widget.config, line: e.target.value })}>
+        <option value="smooth">Smooth</option><option value="stepped">Stepped</option>
+      </select>)}
+    </div>
+  );
 }
 
 export function NoteTile({ widget }: WidgetProps) {

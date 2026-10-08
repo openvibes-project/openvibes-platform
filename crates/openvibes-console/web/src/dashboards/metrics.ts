@@ -62,3 +62,11 @@ export function deltaSince(points: { day: string }[], trend: number, now = Date.
   const ago = Math.round((Math.floor(now / 86_400_000) * 86_400_000 - Date.parse(first.day)) / 86_400_000);
   return ago < trend - 1 ? `vs ${ago} d ago` : null;
 }
+
+export const GRAPH_MAX_LINES = 4;
+/** The counts a graph draws: catalogue ids only, no repeats, at most four; one default if none. */
+export function graphMetrics(config: Record<string, unknown>): Metric[] {
+  const raw = Array.isArray(config.metrics) ? config.metrics : [];
+  const ids = [...new Set(raw.filter((m): m is Metric => typeof m === "string" && m in METRICS))].slice(0, GRAPH_MAX_LINES);
+  return ids.length ? ids : ["alarms.active"];
+}
