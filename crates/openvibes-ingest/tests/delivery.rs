@@ -281,3 +281,41 @@ async fn requests_are_not_delayed_by_nagle() {
     );
     world.stop().await;
 }
+
+/// The eBPF watcher's `health.alarms.source` and `fallback` (protocol #43)
+/// are stored as sent, not dropped by an older wire type.
+#[tokio::test]
+async fn alarms_source_and_fallback_are_stored() {
+    let world = World::start().await;
+    let (agent_id, chain, key) = enrolled(&world).await;
+    let transport = world.transport();
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../protocol/fixtures/v1/heartbeat/valid-alarms-fallback.json");
+    let mut beat: Heartbeat =
+        serde_json::from_str(&std::fs::read_to_string(fixture).unwrap()).unwrap();
+    beat.agent_id = Identifier::new(&agent_id).unwrap();
+    beat.observed_at_unix_ms = Utc::now().timestamp_millis();
+    blocking(move || {
+        let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
+        PlatformClient::new(&transport, Some(&identity))
+            .unwrap()
+            .heartbeat(&beat)
+            .unwrap();
+    })
+    .await;
+    let alarms: serde_json::Value = world
+        .db()
+        .await
+        .query_one(
+            "SELECT health -> 'alarms' FROM agents WHERE agent_id = $1",
+            &[&agent_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(alarms["source"], "audit");
+    assert_eq!(
+        alarms["fallback"],
+        serde_json::json!({"detail": "no_btf", "audit_rule_loaded": true})
+    );
+}
