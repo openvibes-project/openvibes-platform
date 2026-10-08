@@ -118,3 +118,94 @@ pub async fn insert_case_with_item(
         .await
         .unwrap();
 }
+
+/// A migrated database with alarm partitions from yesterday to tomorrow, so
+/// a test spanning UTC midnight still finds today's partition.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn migrated() -> (TestDb, deadpool_postgres::Client) {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let yesterday = chrono::Utc::now().date_naive() - chrono::Duration::days(1);
+    platform_store::ensure_partitions(&client, yesterday, 2)
+        .await
+        .unwrap();
+    (db, client)
+}
+
+/// An active agent last seen at 2026-10-07T02:59:00Z; `agent_id` must match
+/// `agent.<36 hex/dash chars>`.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn seed_agent(client: &deadpool_postgres::Client, agent_id: &str) {
+    client
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at)
+             VALUES ($1, 'active', '2026-10-01T00:00:00Z', '2026-10-07T02:59:00Z')",
+            &[&agent_id],
+        )
+        .await
+        .unwrap();
+}
+
+/// One alarm first seen now, in `state`.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn seed_alarm(
+    client: &deadpool_postgres::Client,
+    agent_id: &str,
+    severity: &str,
+    state: &str,
+) {
+    client
+        .execute(
+            "INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id, rule_set_version,
+                                 rule_id, rule_version, severity, confidence, message, first_seen,
+                                 last_seen, count, process, ancestors, received_at, state, note)
+             VALUES ((now() AT TIME ZONE 'UTC')::date, $1, md5(random()::text), 'rs', 1, 'r', 1, $2,
+                     50, 'm', now(), now(), 1, '{}', '[]', now(), $3, 'n')",
+            &[&agent_id, &severity, &state],
+        )
+        .await
+        .unwrap();
+}
+
+/// A host's stored vulnerability counts (no_fix, unrated and reboot zero).
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn seed_host_vuln_counts(
+    client: &deadpool_postgres::Client,
+    agent_id: &str,
+    critical: i32,
+    important: i32,
+    moderate: i32,
+    low: i32,
+) {
+    client
+        .execute(
+            "INSERT INTO host_vulnerability_counts
+                 (agent_id, no_fix, critical, important, moderate, low, unrated, reboot, counted_at)
+             VALUES ($1, 0, $2, $3, $4, $5, 0, 0, now())",
+            &[&agent_id, &critical, &important, &moderate, &low],
+        )
+        .await
+        .unwrap();
+}
+
+/// One current compliance finding of `severity`.
+#[allow(dead_code, reason = "used by some test binaries only")]
+pub async fn seed_current_finding(
+    client: &deadpool_postgres::Client,
+    agent_id: &str,
+    severity: &str,
+) {
+    client
+        .execute(
+            "INSERT INTO current_findings (agent_id, rule_id, last_finding_id, rule_version,
+                                           severity, first_observed_at, last_observed_at,
+                                           last_observed_day, scan_id, confidence, message, evidence,
+                                           received_at, origin, authenticated)
+             VALUES ($1, 'rule-1', 'f-1', 1, $2, now(), now(), (now() AT TIME ZONE 'UTC')::date,
+                     's', 50, 'm', '{}', now(), 'online', false)",
+            &[&agent_id, &severity],
+        )
+        .await
+        .unwrap();
+}

@@ -132,7 +132,11 @@ fn upgrade<R: Runner>(ctx: &Ctx<R>, args: &UpdateArgs) -> Result<StepState, Stri
 fn migrate<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let migrated = ctx.as_admin(&["migrate"])?;
     let maintained = ctx.as_admin(&["maintenance"])?;
-    let mut detail = format!("{}; {}", migrated.trim(), maintained.trim());
+    let mut detail = format!(
+        "{}; {}",
+        migrated.trim(),
+        super::base::one_line(&maintained)
+    );
     // A newer rules package arrived with the upgrade: publish it now, so
     // agents get it without a separate Repair. Never fatal: a rules problem
     // must not leave the services stopped (Health and Repair show it).
@@ -450,6 +454,34 @@ mod tests {
         assert_eq!(
             state,
             StepState::Done("schema version 25; created 0 partitions".into())
+        );
+    }
+
+    #[test]
+    fn migrate_flattens_multi_line_maintenance_output() {
+        let fake = Fake::new("update-migrate-flat");
+        fake.answer(
+            &[&ADMIN[..], &["migrate"]].concat(),
+            0,
+            "schema version 25\n",
+        );
+        fake.answer(
+            &[&ADMIN[..], &["maintenance"]].concat(),
+            0,
+            "created 0 partitions\nrecorded history for 2 hosts, deleted 0 old rows\n",
+        );
+        let plan = plan(&[Ingest]);
+        let state = run(
+            &fake.ctx(&plan),
+            UpdateStep::Migrate,
+            &UpdateArgs::default(),
+        );
+        assert_eq!(
+            state,
+            StepState::Done(
+                "schema version 25; created 0 partitions; recorded history for 2 hosts, deleted 0 old rows"
+                    .into()
+            )
         );
     }
 

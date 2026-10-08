@@ -110,7 +110,7 @@ New table `host_daily_counts`, one row per host per day:
 
 ```
 day date, agent_id text, status text (active|stale|revoked),
-alarms_critical, alarms_high, alarms_medium, alarms_low int,
+alarms_critical, alarms_high, alarms_medium, alarms_low, alarms_info int,
 vulns_critical, vulns_high, vulns_medium, vulns_low int,
 vulns_exploited, vulns_no_fix int, needs_reboot boolean,
 compliance_critical, compliance_high, compliance_medium, compliance_low int,
@@ -118,7 +118,8 @@ PRIMARY KEY (day, agent_id)
 ```
 
 "Active alarm", "open vulnerability" and "open compliance finding" use the
-same definitions as the current summaries. Per-host rows are what make
+same definitions as the current summaries; `alarms.active` sums all five
+alarm columns, matching the alarm list (info alarms included). Per-host rows are what make
 history respect asset-group scope: a scoped user's series sums only hosts
 they can see, as the lists do.
 
@@ -129,7 +130,8 @@ counts as they are when it runs, under that run's date; re-running the same
 day replaces that day's rows. A missed day stays a gap (past states cannot be
 recomputed). It
 deletes rows older than `--history-days` (default 400, range 30–3650).
-Size: about 40 MB per 1,000 hosts per year.
+Size: about 80–100 MB per 1,000 hosts per year (measured), so about 1 GB
+at 10,000 hosts and the 400-day default.
 
 ### 5.3 Reading
 

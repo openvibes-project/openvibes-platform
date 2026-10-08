@@ -232,8 +232,17 @@ pub fn schema_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!(
         "{}; {}",
         migrated.trim(),
-        maintained.trim()
+        one_line(&maintained)
     )))
+}
+
+/// Command output as one step-detail line: lines joined with "; ".
+pub(super) fn one_line(out: &str) -> String {
+    out.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("; ")
 }
 
 #[cfg(test)]

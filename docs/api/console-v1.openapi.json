@@ -4570,6 +4570,92 @@
         }
       }
     },
+    "/api/v1/metrics/history": {
+      "get": {
+        "tags": [
+          "metrics"
+        ],
+        "operationId": "history",
+        "parameters": [
+          {
+            "name": "metric",
+            "in": "path",
+            "description": "Catalogue id, for example `vulns.open.critical`.",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "days",
+            "in": "path",
+            "description": "Window in days: 7, 30, 90 or 365 (default 30).",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Daily values of one count, ending with today's live value",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing permission, or the metric spans kinds with different scopes",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unknown metric or unsupported window",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ports": {
       "get": {
         "tags": [
@@ -10023,6 +10109,47 @@
           }
         }
       },
+      "MetricHistory": {
+        "type": "object",
+        "description": "A metric's daily values, oldest first; days with no data are absent.",
+        "required": [
+          "metric",
+          "points"
+        ],
+        "properties": {
+          "metric": {
+            "type": "string",
+            "description": "The requested catalogue id."
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MetricPoint"
+            },
+            "description": "Stored days, then today's live value."
+          }
+        }
+      },
+      "MetricPoint": {
+        "type": "object",
+        "description": "One day's value.",
+        "required": [
+          "day",
+          "value"
+        ],
+        "properties": {
+          "day": {
+            "type": "string",
+            "description": "UTC day, `YYYY-MM-DD`."
+          },
+          "value": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The count that day.",
+            "minimum": 0
+          }
+        }
+      },
       "Permission": {
         "type": "string",
         "description": "Stable console permission identifiers.",
@@ -12194,6 +12321,10 @@
     {
       "name": "cases",
       "description": "Investigations: items, notes, assignment and closing, scope-filtered"
+    },
+    {
+      "name": "metrics",
+      "description": "Daily history of problem counts, scope-filtered"
     },
     {
       "name": "software",
