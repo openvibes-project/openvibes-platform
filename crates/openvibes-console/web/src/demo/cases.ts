@@ -522,11 +522,11 @@ export function seedCases(data: DemoData): CaseState {
 
   // SSH, the host it runs on, an alarm and a finding: the investigation the spec describes.
   const sshAlarm = [...data.alarms].sort((a, b) => (a.severity === "critical" ? 0 : 1) - (b.severity === "critical" ? 0 : 1))
-    .find((a) => data.findings.some((f) => f.agent_id === a.agent_id && f.rule_set_id === "hardening-ssh"));
-  const sshFinding = sshAlarm && data.findings.find((f) => f.agent_id === sshAlarm.agent_id && f.rule_set_id === "hardening-ssh");
+    .find((a) => data.findings.some((f) => f.agent_id === a.agent_id && f.rule_id === "port.ssh.exposed"));
+  const sshFinding = sshAlarm && data.findings.find((f) => f.agent_id === sshAlarm.agent_id && f.rule_id === "port.ssh.exposed");
   if (sshAlarm && sshFinding) {
     add({
-      title: `Shell started by a service and password SSH logins on ${short(sshAlarm.agent_id)}`, severity: "critical", status: "investigating",
+      title: `Shell started by a service on ${short(sshAlarm.agent_id)}, SSH open to the network`, severity: "critical", status: "investigating",
       assignee: "u-admin", openedBy: "u-sam", openedAgo: 3 * 60,
       items: [
         { kind: "host", ref: sshAlarm.agent_id, agent_id: sshAlarm.agent_id, by: "u-sam", ago: 175 },
@@ -535,7 +535,7 @@ export function seedCases(data: DemoData): CaseState {
       ],
       timeline: [
         { ago: 150, actor: "u-sam", kind: "status", detail: { from: "open", to: "investigating" } },
-        { ago: 140, actor: "u-sam", kind: "note", body: "SSH allows password logins on this host and the alarm fired 20 minutes after a login from 203.0.113.9. Pulling the auth log." },
+        { ago: 140, actor: "u-sam", kind: "note", body: "SSH is reachable from the network on this host and the alarm fired 20 minutes after a login from 203.0.113.9. Pulling the auth log." },
         { ago: 45, actor: "u-admin", kind: "note", body: "Auth log shows 40 failed logins for one account, then a success. Treating as hostile until we know more." },
       ],
     });

@@ -24,25 +24,32 @@ export type DemoRule = {
   ruleId: string;
   severity: Severity;
   message: string;
+  /** The fact the rule reads. */
   evidence: string;
+  expression: string;
   hitRate: number;
 };
 
+// The rules OpenVIBES ships: openvibes-rules baseline/rules.json (ids, severities,
+// messages and expressions copied as they are), so the demo never shows a check
+// the product does not have. hitRate is demo-only.
 const RULES: readonly DemoRule[] = [
-  { ruleSetId: "hardening-ssh", ruleId: "SSH-001", severity: "critical", message: "SSH permits root login with a password", evidence: "sshd_config: PermitRootLogin yes", hitRate: 0.05 },
-  { ruleSetId: "hardening-ssh", ruleId: "SSH-002", severity: "high", message: "SSH allows password authentication", evidence: "sshd_config: PasswordAuthentication yes", hitRate: 0.22 },
-  { ruleSetId: "hardening-ssh", ruleId: "SSH-004", severity: "medium", message: "SSH uses a weak MAC algorithm", evidence: "sshd -T: macs hmac-sha1", hitRate: 0.12 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-010", severity: "critical", message: "World-writable file in /etc", evidence: "/etc/cron.d/backup mode 0666", hitRate: 0.03 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-014", severity: "high", message: "Host firewall is disabled", evidence: "firewalld.service inactive", hitRate: 0.16 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-021", severity: "high", message: "Unexpected SUID binary", evidence: "/usr/local/bin/helper mode 4755", hitRate: 0.04 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-030", severity: "medium", message: "Automatic security updates are off", evidence: "dnf-automatic.timer disabled", hitRate: 0.35 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-033", severity: "medium", message: "SELinux is permissive", evidence: "getenforce: Permissive", hitRate: 0.1 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-041", severity: "low", message: "Core dumps are enabled for SUID programs", evidence: "fs.suid_dumpable = 2", hitRate: 0.18 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-052", severity: "low", message: "Time synchronisation is not configured", evidence: "chronyd.service inactive", hitRate: 0.07 },
-  { ruleSetId: "baseline-linux", ruleId: "LNX-060", severity: "high", message: "Listening service bound to all interfaces", evidence: "0.0.0.0:6379 redis-server", hitRate: 0.06 },
-  { ruleSetId: "cis-fedora", ruleId: "CIS-1.1.2", severity: "medium", message: "/tmp is not a separate partition", evidence: "findmnt /tmp: not mounted", hitRate: 0.4 },
-  { ruleSetId: "cis-fedora", ruleId: "CIS-5.2.1", severity: "low", message: "Password expiry longer than 365 days", evidence: "PASS_MAX_DAYS 99999", hitRate: 0.5 },
-  { ruleSetId: "cis-fedora", ruleId: "CIS-4.1.1", severity: "medium", message: "Audit daemon is not running", evidence: "auditd.service inactive", hitRate: 0.14 },
+  { ruleSetId: "baseline", ruleId: "port.docker_api.exposed", severity: "critical", message: "The unencrypted Docker API (tcp 2375) listens on a non-loopback address; anyone who reaches it controls the host. Bind it to a Unix socket or loopback, or use TLS on 2376.", evidence: "port.tcp.exposed", expression: "'2375' in facts['port.tcp.exposed']", hitRate: 0.02 },
+  { ruleSetId: "baseline", ruleId: "port.telnet.exposed", severity: "high", message: "Telnet (tcp 23) listens on a non-loopback address; it sends passwords in clear text. Disable it and use SSH.", evidence: "port.tcp.exposed", expression: "'23' in facts['port.tcp.exposed']", hitRate: 0.02 },
+  { ruleSetId: "baseline", ruleId: "port.rsh.exposed", severity: "high", message: "rexec, rlogin or rsh (tcp 512-514) listens on a non-loopback address; these trust host names and send credentials in clear text. Disable them and use SSH.", evidence: "port.tcp.exposed", expression: "'512' in facts['port.tcp.exposed'] || '513' in facts['port.tcp.exposed'] || '514' in facts['port.tcp.exposed']", hitRate: 0.01 },
+  { ruleSetId: "baseline", ruleId: "port.vnc.exposed", severity: "high", message: "VNC (tcp 5900) listens on a non-loopback address; it is often weakly authenticated and unencrypted. Bind it to loopback and tunnel it over SSH, or firewall it.", evidence: "port.tcp.exposed", expression: "'5900' in facts['port.tcp.exposed']", hitRate: 0.03 },
+  { ruleSetId: "baseline", ruleId: "port.redis.exposed", severity: "high", message: "Redis (tcp 6379) listens on a non-loopback address; by default it has no password and can be used to write files. Bind it to loopback, or firewall it and require authentication.", evidence: "port.tcp.exposed", expression: "'6379' in facts['port.tcp.exposed']", hitRate: 0.04 },
+  { ruleSetId: "baseline", ruleId: "port.mongodb.exposed", severity: "high", message: "MongoDB (tcp 27017) listens on a non-loopback address. Bind it to loopback, or firewall it and enable authentication.", evidence: "port.tcp.exposed", expression: "'27017' in facts['port.tcp.exposed']", hitRate: 0.02 },
+  { ruleSetId: "baseline", ruleId: "port.elasticsearch.exposed", severity: "high", message: "Elasticsearch (tcp 9200) listens on a non-loopback address. Bind it to loopback, or firewall it and enable security.", evidence: "port.tcp.exposed", expression: "'9200' in facts['port.tcp.exposed']", hitRate: 0.02 },
+  { ruleSetId: "baseline", ruleId: "port.memcached.exposed", severity: "high", message: "memcached (tcp 11211) listens on a non-loopback address; it has no authentication and can leak cached data. Bind it to loopback, or firewall it.", evidence: "port.tcp.exposed", expression: "'11211' in facts['port.tcp.exposed']", hitRate: 0.02 },
+  { ruleSetId: "baseline", ruleId: "port.ftp.exposed", severity: "medium", message: "FTP (tcp 21) listens on a non-loopback address; it sends passwords in clear text. Use SFTP, or firewall it.", evidence: "port.tcp.exposed", expression: "'21' in facts['port.tcp.exposed']", hitRate: 0.03 },
+  { ruleSetId: "baseline", ruleId: "port.smb.exposed", severity: "medium", message: "SMB (tcp 139 or 445) listens on a non-loopback address. Firewall it to the networks that need file sharing.", evidence: "port.tcp.exposed", expression: "'139' in facts['port.tcp.exposed'] || '445' in facts['port.tcp.exposed']", hitRate: 0.08 },
+  { ruleSetId: "baseline", ruleId: "port.snmp.exposed", severity: "medium", message: "SNMP (udp 161) listens on a non-loopback address; v1/v2c community strings are sent in clear text. Firewall it, or use SNMPv3.", evidence: "port.udp.exposed", expression: "'161' in facts['port.udp.exposed']", hitRate: 0.05 },
+  { ruleSetId: "baseline", ruleId: "port.postgresql.exposed", severity: "medium", message: "PostgreSQL (tcp 5432) listens on a non-loopback address. Bind it to loopback, or firewall it to the hosts that need it.", evidence: "port.tcp.exposed", expression: "'5432' in facts['port.tcp.exposed']", hitRate: 0.06 },
+  { ruleSetId: "baseline", ruleId: "port.mysql.exposed", severity: "medium", message: "MySQL or MariaDB (tcp 3306) listens on a non-loopback address. Bind it to loopback, or firewall it to the hosts that need it.", evidence: "port.tcp.exposed", expression: "'3306' in facts['port.tcp.exposed']", hitRate: 0.05 },
+  { ruleSetId: "baseline", ruleId: "port.ssh.exposed", severity: "low", message: "SSH (tcp 22) listens on a non-loopback address. If the host is reachable from untrusted networks, allow keys only and firewall it.", evidence: "port.tcp.exposed", expression: "'22' in facts['port.tcp.exposed']", hitRate: 0.55 },
+  { ruleSetId: "baseline", ruleId: "package.telnet_server.installed", severity: "low", message: "The telnet-server package is installed. Remove it and use SSH.", evidence: "package.names", expression: "'telnet-server' in facts['package.names']", hitRate: 0.03 },
+  { ruleSetId: "baseline", ruleId: "package.rsh_server.installed", severity: "low", message: "The rsh-server package is installed. Remove it and use SSH.", evidence: "package.names", expression: "'rsh-server' in facts['package.names']", hitRate: 0.01 },
 ];
 
 const ROLES = ["web", "api", "db", "cache", "mail", "vpn", "build", "files", "k8s-node", "ws", "nas", "backup", "proxy", "dns"] as const;
@@ -132,12 +139,12 @@ export function buildDemoData(now = Date.now()) {
         severity: rule.severity,
         confidence: 70 + Math.floor(random() * 30),
         message: rule.message,
-        evidence: rule.ruleId === "LNX-060" ? ["port.tcp.exposed"] : [rule.evidence],
-        ...(rule.ruleId === "LNX-060" ? { detection: {
+        evidence: [rule.evidence],
+        detection: {
           observed_at_unix_ms: Math.floor(now - MINUTE), rule_set_version: 4, preimage_sha256: "a".repeat(64), truncated: false,
-          inputs: [{ key: "port.tcp.exposed", status: "summarized", value: null, item_count: 2 }],
-          steps: [{ expression: '"6379" in facts["port.tcp.exposed"]', result: true }],
-        } } : {}),
+          inputs: [{ key: rule.evidence, status: "summarized", value: null, item_count: 2 }],
+          steps: [{ expression: rule.expression, result: true }],
+        },
         scan_id: `scan-${agent.id}-${Math.floor(now / DAY)}`,
         authenticated: agent.status !== "imported",
         origin: agent.status === "imported" ? "import" : "online",
@@ -258,7 +265,7 @@ export function buildDemoData(now = Date.now()) {
     { token_id: "tok-02bd", label: "Leaked in a ticket", created_at: iso(now - 9 * DAY), expires_at: iso(now + 20 * DAY), max_uses: 50, uses: 1, revoked: true, standing: false },
   ];
 
-  const ruleSets: RuleSet[] = ["baseline-linux", "hardening-ssh", "cis-fedora"].map((rule_set_id, index) => ({
+  const ruleSets: RuleSet[] = ["baseline", "baseline-alarms", "site"].map((rule_set_id, index) => ({
     rule_set_id, retired: false, trusted_keys: index === 0 ? 2 : 1, current_signer_removed: false,
     current_version: 14 - index * 4, current_issuer_key_id: index === 0 ? "ops-2026" : "ops-2025",
     current_expires_at_ms: now + (30 + index * 20) * DAY,
@@ -289,9 +296,9 @@ export function buildDemoData(now = Date.now()) {
   ]);
 
   const actions = [
-    ["user.login", "user", "console", null], ["finding.triage", "finding", "hardening-ssh/SSH-002", "finding"],
+    ["user.login", "user", "console", null], ["finding.triage", "finding", "baseline/port.ssh.exposed", "finding"],
     ["enrollment_token.create", "token", "tok-7f3a", "enrollment_token"], ["agent.revoke", "agent", "agent-00047", "agent"],
-    ["rule_bundle.publish", "rule_set", "baseline-linux", "rule_set"], ["access.binding.create", "binding", "b-5", "binding"],
+    ["rule_bundle.publish", "rule_set", "site", "rule_set"], ["access.binding.create", "binding", "b-5", "binding"],
     ["service_token.create", "service_account", "sa-ci", "service_account"], ["user.login", "user", "console", null],
   ] as const;
   const audit: AuditEvent[] = Array.from({ length: 140 }, (_, index) => {
@@ -361,7 +368,7 @@ export function buildDemoData(now = Date.now()) {
       { dashboard_id: "d-ola-triage", owner: "u-ola", name: "Analyst triage", shared_role_id: "analyst" as string | null,
         layout: { schema: 1 as const, widgets: [
           { id: "critical", type: "list" as const, x: 0, y: 0, w: 8, h: 6, config: { view: "/compliance", query: "severity=critical", limit: 10 } },
-          { id: "trend", type: "trend" as const, x: 8, y: 0, w: 4, h: 3, config: { finding: "hardening-ssh/SSH-002", days: 14 } },
+          { id: "trend", type: "trend" as const, x: 8, y: 0, w: 4, h: 3, config: { finding: "baseline/port.ssh.exposed", days: 14 } },
         ] } },
     ],
     retention: { retention_days: 365, updated_at: iso(now - 90 * DAY), updated_by: "admin", version: 1 },
