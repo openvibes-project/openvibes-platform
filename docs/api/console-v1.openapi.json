@@ -397,6 +397,37 @@
         }
       }
     },
+    "/api/v1/agent-command": {
+      "get": {
+        "tags": [
+          "enrollment"
+        ],
+        "summary": "The one-line agent install command to copy (install walkthrough,\n2026-10-08): what `openvibes-admin agent command` prints.",
+        "operationId": "authenticated_agent_command",
+        "responses": {
+          "200": {
+            "description": "The install command, carrying the standing fleet token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentCommandView"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The package is not configured or there is no standing token",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/agent-package": {
       "get": {
         "tags": [
@@ -6882,6 +6913,19 @@
               "null"
             ],
             "description": "Why off, in words."
+          }
+        }
+      },
+      "AgentCommandView": {
+        "type": "object",
+        "description": "The one-line agent install command for the Enrollment page.",
+        "required": [
+          "command"
+        ],
+        "properties": {
+          "command": {
+            "type": "string",
+            "description": "Run as root on a new host; it carries the standing enrollment token."
           }
         }
       },

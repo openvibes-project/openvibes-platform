@@ -276,6 +276,25 @@ pub fn authenticated_router_with_signer(
     authenticated_router_with_assistant(pool, public_origin, [], None, None, None, Some(socket))
 }
 
+/// As [`authenticated_router`], offering the agent install command and
+/// package built from `agent_install` (tests; the server reads it from
+/// `console.toml`).
+pub fn authenticated_router_with_agent_install(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    agent_install: crate::config::AgentInstallConfig,
+) -> Router {
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        Some(agent_install),
+        None,
+    )
+}
+
 /// Where the rule signer listens (`openvibes-signer.service`).
 const DEFAULT_SIGNER_SOCKET: &str = "/run/openvibes-signer/sign.sock";
 
@@ -451,6 +470,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/about", get(crate::about::about))
         .route("/v1/about/update", get(crate::about::about_update))
         .route("/v1/agent-package", get(authenticated_agent_package))
+        .route("/v1/agent-command", get(authenticated_agent_command))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
         .route("/v1/agents/events", get(crate::presence::agent_events))
         .route("/v1/agents", get(authenticated_agents))
@@ -1453,57 +1473,53 @@ async fn served_rule_trust(
     })
 }
 
-/// Downloads the agent install package: one script that installs and enrolls
-/// an agent, the same on every host, carrying the standing fleet token.
-#[utoipa::path(get,path="/api/v1/agent-package",tag="enrollment",responses((status=200,description="Install script (text/x-shellscript) carrying the standing fleet token",content_type="text/x-shellscript"),(status=404,description="The package is not configured or there is no standing token",body=ProblemDetails)))]
-pub(crate) async fn authenticated_agent_package(
-    State(state): State<AuthHttpState>,
-    headers: HeaderMap,
-) -> Response {
+/// The agent install spec for a global `tokens.create` caller, built into
+/// `T` by `build`, the hand-out audited as `action`. The package and the
+/// command both carry the standing token.
+async fn with_install_spec<T>(
+    state: &AuthHttpState,
+    headers: &HeaderMap,
+    action: &str,
+    build: impl FnOnce(
+        &crate::agent_package::PackageSpec<'_>,
+    ) -> Result<T, crate::agent_package::PackageError>,
+) -> Result<T, Response> {
     use platform_store::console_read::AgentScope;
     let (scope, actor) =
-        match authenticated_permission(&state, &headers, crate::Permission::TokensCreate, false)
-            .await
-        {
-            Ok(v) => v,
-            Err(response) => return response,
-        };
+        authenticated_permission(state, headers, crate::Permission::TokensCreate, false).await?;
     if !matches!(scope, AgentScope::Global) {
-        return problem_response(ProblemDetails::new(
+        return Err(problem_response(ProblemDetails::new(
             StatusCode::FORBIDDEN,
             "permission_denied",
             "Access is not available",
-        ));
+        )));
     }
     let Some(config) = state.agent_install.as_deref() else {
-        return problem_response(ProblemDetails::not_found(
+        return Err(problem_response(ProblemDetails::not_found(
             "agent_package_not_configured",
             "Set agent_install in console.toml to offer the agent install package",
-        ));
+        )));
     };
     let Ok(root_cert) = std::fs::read_to_string(&config.root_cert_file) else {
-        return unavailable_auth();
+        return Err(unavailable_auth());
     };
-    let client = match state.pool.get().await {
-        Ok(v) => v,
-        Err(_) => return unavailable_auth(),
-    };
+    let client = state.pool.get().await.map_err(|_| unavailable_auth())?;
     let token = match platform_store::tokens::live_standing(&client).await {
         Ok(Some((_, secret))) => Zeroizing::new(secret),
         Ok(None) => {
-            return problem_response(ProblemDetails::not_found(
+            return Err(problem_response(ProblemDetails::not_found(
                 "no_standing_token",
                 "There is no standing enrollment token; create one with `openvibes-admin token fleet`",
-            ));
+            )));
         }
-        Err(_) => return unavailable_auth(),
+        Err(_) => return Err(unavailable_auth()),
     };
     let rules = served_rule_trust(&client, "baseline").await;
     let alarm_rules = match rules {
         Some(_) => served_rule_trust(&client, "baseline-alarms").await,
         None => None,
     };
-    let Ok(script) = crate::agent_package::render(&crate::agent_package::PackageSpec {
+    let built = build(&crate::agent_package::PackageSpec {
         platform: &config.platform,
         ingest_port: config.ingest_port,
         distribution_port: config.distribution_port,
@@ -1511,21 +1527,32 @@ pub(crate) async fn authenticated_agent_package(
         rules,
         alarm_rules,
         token: &token,
-    }) else {
-        return unavailable_auth();
-    };
-    if platform_store::audit::record(
-        &client,
-        &actor,
+    })
+    .map_err(|_| unavailable_auth())?;
+    platform_store::audit::record(&client, &actor, action, Some("agent_package"), "success")
+        .await
+        .map_err(|_| unavailable_auth())?;
+    Ok(built)
+}
+
+/// Downloads the agent install package: one script that installs and enrolls
+/// an agent, the same on every host, carrying the standing fleet token.
+#[utoipa::path(get,path="/api/v1/agent-package",tag="enrollment",responses((status=200,description="Install script (text/x-shellscript) carrying the standing fleet token",content_type="text/x-shellscript"),(status=404,description="The package is not configured or there is no standing token",body=ProblemDetails)))]
+pub(crate) async fn authenticated_agent_package(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let script = match with_install_spec(
+        &state,
+        &headers,
         "agent_package.downloaded",
-        Some("agent_package"),
-        "success",
+        crate::agent_package::render,
     )
     .await
-    .is_err()
     {
-        return unavailable_auth();
-    }
+        Ok(script) => script,
+        Err(response) => return response,
+    };
     let mut response = script.into_response();
     let response_headers = response.headers_mut();
     response_headers.insert(
@@ -1537,6 +1564,26 @@ pub(crate) async fn authenticated_agent_package(
         HeaderValue::from_static("attachment; filename=\"openvibes-agent-install.sh\""),
     );
     no_store(response)
+}
+
+/// The one-line agent install command to copy (install walkthrough,
+/// 2026-10-08): what `openvibes-admin agent command` prints.
+#[utoipa::path(get,path="/api/v1/agent-command",tag="enrollment",responses((status=200,description="The install command, carrying the standing fleet token",body=crate::AgentCommandView),(status=404,description="The package is not configured or there is no standing token",body=ProblemDetails)))]
+pub(crate) async fn authenticated_agent_command(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    match with_install_spec(
+        &state,
+        &headers,
+        "agent_command.viewed",
+        crate::agent_package::command,
+    )
+    .await
+    {
+        Ok(command) => no_store(Json(crate::AgentCommandView { command }).into_response()),
+        Err(response) => response,
+    }
 }
 
 fn no_store(mut response: Response) -> Response {

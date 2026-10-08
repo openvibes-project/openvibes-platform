@@ -44,26 +44,27 @@ mod users;
 
 pub use api::{
     AccessAssetGroup, AccessBinding, AccessInventory, AccessRole, AccessUser, AgentAlarmsView,
-    AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentTagBindingImpact,
-    AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput, AgentTagPreviewResponse, AgentView,
-    ApplyAgentTagsRequest, AssetGroupSelectorInput, AuditEventPage, AuditEventView,
-    AuditRetentionPolicy, AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange,
-    BulkFindingTriageRequest, BulkFindingTriageResponse, CertificatePage, CertificateView,
-    ChangePasswordRequest, CreateAccessBindingRequest, CreateEnrollmentTokenRequest,
-    CreateServiceAccountRequest, CreateServiceTokenRequest, CreateUserRequest,
-    CreatedEnrollmentToken, CreatedServiceToken, CreatedUser, CursorPage, CursorPagination,
-    CveDetailView, DEFAULT_PAGE_SIZE, DashboardPage, DashboardView, EffectiveCapability,
-    EnrollmentTokenPage, EnrollmentTokenView, FindingGroupEndpointPage, FindingGroupEndpointView,
-    FindingGroupPage, FindingGroupView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin,
-    FindingPage, FindingSummary, FindingTriageCounts, FindingTriageView, FindingView,
-    HomeDashboard, LoginRequest, LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
-    Permission, PermissionScope, PreauthResponse, RevokeAgentRequest, RuleBundlePage,
-    RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView, SaveAssetGroupRequest,
-    SaveDashboardRequest, ServiceAccountPage, ServiceAccountView, ServiceTokenPage,
-    ServiceTokenView, SessionPrincipal, SessionResponse, Severity, ShareDashboardRequest,
-    SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest, UpdateFindingTriageRequest,
-    VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,
-    VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost, VulnerabilityView,
+    AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary,
+    AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
+    AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput,
+    AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
+    AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
+    BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
+    CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
+    CreateServiceTokenRequest, CreateUserRequest, CreatedEnrollmentToken, CreatedServiceToken,
+    CreatedUser, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE, DashboardPage,
+    DashboardView, EffectiveCapability, EnrollmentTokenPage, EnrollmentTokenView,
+    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
+    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+    FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard, LoginRequest,
+    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
+    PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
+    RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
+    ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
+    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest,
+    UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail, VulnerabilityPage,
+    VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost,
+    VulnerabilityView,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
@@ -71,13 +72,14 @@ pub use auth::{
     browser_origin_allowed, csrf_token_matches, hash_password, presented_credentials,
     session_cookie, verify_password,
 };
-pub use config::{ConsoleConfig, ConsoleTransportMode, load_config};
+pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
 pub use error::ConsoleError;
 pub use openapi::{document as console_openapi, json as openapi_json};
 pub use problem::{FieldError, ProblemDetails};
 pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
 pub use router::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
-    authenticated_router_with_signer, development_router, health_router, public_router,
+    authenticated_router_with_agent_install, authenticated_router_with_signer, development_router,
+    health_router, public_router,
 };
 pub use server::{TrustedPeer, run, serve};

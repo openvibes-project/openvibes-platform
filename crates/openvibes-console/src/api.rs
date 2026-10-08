@@ -958,6 +958,13 @@ pub struct AgentView {
     pub alarms: Option<AgentAlarmsView>,
 }
 
+/// The one-line agent install command for the Enrollment page.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AgentCommandView {
+    /// Run as root on a new host; it carries the standing enrollment token.
+    pub command: String,
+}
+
 /// Threat alarms on one host: on and from which source, or off, why, and the
 /// command that turns them on.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
