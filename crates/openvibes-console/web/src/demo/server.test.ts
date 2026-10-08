@@ -142,6 +142,17 @@ describe("demo server", () => {
     expect(citations[0]?.target_kind).toBe("agent");
   });
 
+  it("quotes the finding's own message when asked what to fix first", async () => {
+    // The rule messages are whole sentences (the shipped baseline): lowercased
+    // into brackets they read "(the unencrypted docker api … 2376., 4 hosts open)".
+    const server = createDemoServer({ persona: "admin" });
+    const reply = await json(await server.handle("POST", "/api/v1/assistant/messages", { question: "What should I fix first?" }));
+    const text = (reply.segments as { kind: string; text?: string }[]).filter((s) => s.kind === "text").map((s) => s.text).join("");
+    expect(text).toContain("The unencrypted Docker API (tcp 2375)");
+    expect(text).not.toContain(".,");
+    expect(text).toMatch(/Open on \d+ hosts?\./);
+  });
+
   it("revokes an agent", async () => {
     const server = createDemoServer({ persona: "admin" });
     const response = await server.handle("POST", "/api/v1/agents/agent-00001/revoke", { reason: "decommissioned" });

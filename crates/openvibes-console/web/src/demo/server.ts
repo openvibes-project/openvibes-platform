@@ -162,7 +162,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         ...(open[0] ? [text("The most serious compliance finding is "), cite("finding", `${open[0].rule_set_id}/${open[0].rule_id}`), text(` — ${open[0].message.toLowerCase()}.`)] : [text("No compliance findings right now.")])];
     }
     const top = groups()[0];
-    return [text("Start with the most severe open compliance finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(` (${top.latest_message.toLowerCase()}, ${top.triage_counts.open} hosts open).`)] : []),
+    return [text("Start with the most severe open compliance finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(`. ${top.latest_message} Open on ${top.triage_counts.open} ${top.triage_counts.open === 1 ? "host" : "hosts"}.`)] : []),
       text(" This is the demo assistant; it answers from synthetic data only.")];
   };
 
