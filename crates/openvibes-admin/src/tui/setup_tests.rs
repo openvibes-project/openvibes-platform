@@ -704,3 +704,34 @@ fn every_step_fits_and_the_failure_is_in_full() {
     }
     assert!(text.contains("END"), "the failure in full:\n{text}");
 }
+
+/// The walkthrough (2026-10-08): pressing Start froze the form while dnf ran,
+/// because the turn that started the run also ran its first step before the
+/// screen was drawn again.
+#[test]
+fn start_draws_the_checklist_before_the_first_step_runs() {
+    let mut app = app(
+        false,
+        vec![Ok("written\n".into()), Ok("done\tinstalled\n".into())],
+    );
+    while app.setup.row != super::setup::START_ROW {
+        app.key_then_tick(Some(Key::Down));
+    }
+    app.key_then_tick(Some(Key::Enter));
+    type_text(&mut app, "pw");
+    app.key_then_tick(Some(Key::Enter));
+    // The turn that started the run ran no step: the screen comes first.
+    assert_eq!(app.setup.phase, Phase::Running(0));
+    let text = screen(&app);
+    assert!(
+        text.contains("Install packages") && text.contains("running"),
+        "{text}"
+    );
+    assert!(text.contains("can take a few minutes"), "{text}");
+    assert!(
+        !text.contains("uninstall"),
+        "no maintenance keys mid-run: {text}"
+    );
+    app.key_then_tick(None);
+    assert_eq!(app.setup.phase, Phase::Running(1));
+}

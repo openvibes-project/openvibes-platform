@@ -21,6 +21,8 @@ use crate::setup::plan::{CaMode, Component};
 const FORM_KEYS: &str = "Tab screens  j/k move  space toggle  Enter edit/start  q quit";
 /// After a failed step: retry it, or any other action (#73). Fits 80 columns.
 const RUN_KEYS: &str = "r retry  c check  u update  x uninstall  m components  p ports  Esc  q";
+/// While a step runs, keys wait for it (the loop runs one step per turn).
+const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
 /// Fits 80 columns.
 const DONE_KEYS: &str = "c check  r repair  u update  m components  p ports  x uninstall  Tab  q";
 
@@ -53,6 +55,8 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             checklist(app, usize::from(body.width.saturating_sub(2))),
             if matches!(setup.phase, Phase::Stopped(_)) {
                 RUN_KEYS
+            } else if matches!(setup.phase, Phase::Running(_)) {
+                RUNNING_KEYS
             } else {
                 DONE_KEYS
             },
@@ -187,6 +191,16 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
             Line::raw(cut(&format!("{title:<26}{label:<9}{detail}"), width))
         })
         .collect();
+    if let Phase::Running(next) = app.setup.phase
+        && matches!(app.setup.job, Job::Install | Job::Repair)
+        && Step::ALL.get(next) == Some(&Step::Packages)
+    {
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            "Installing packages can take a few minutes (dnf downloads them).",
+            Style::default().add_modifier(Modifier::DIM),
+        ));
+    }
     if let Phase::Stopped(at) = app.setup.phase
         && let Some(Some(state)) = app.setup.states.get(at)
     {

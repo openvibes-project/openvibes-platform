@@ -561,6 +561,20 @@ impl<H: Host> App<H> {
         }
     }
 
+    /// One turn of the main loop after its draw: the key, if any, then a
+    /// Setup step, but only if a run was already going before the key. A run
+    /// the key just started waits a turn, so its checklist is drawn before
+    /// the first step blocks (dnf held the form on screen for minutes).
+    pub fn key_then_tick(&mut self, key: Option<Key>) {
+        let was_running = matches!(self.setup.phase, Phase::Running(_));
+        if let Some(key) = key {
+            self.key(key);
+        }
+        if was_running && self.tab == super::app::Tab::Setup {
+            self.setup_tick();
+        }
+    }
+
     /// Runs the next step, if a run is going (called once per loop turn).
     pub fn setup_tick(&mut self) {
         let Phase::Running(next) = self.setup.phase else {
