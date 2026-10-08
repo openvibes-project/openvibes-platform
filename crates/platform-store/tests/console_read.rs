@@ -215,6 +215,20 @@ async fn console_read_models_are_complete_bounded_and_keyset_stable() {
         agent.alarms,
         Some(platform_store::alarms_status::AlarmsStatus::On { source: "ebpf" })
     );
+    // A stale host's last report no longer says what is true: no status.
+    client
+        .execute(
+            "UPDATE agents SET health = $2, health_at = $3 WHERE agent_id = $1",
+            &[&STALE, &fixture["health"], &inventory_at],
+        )
+        .await
+        .unwrap();
+    let stale = platform_store::console_read::agent(&client, STALE, now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(stale.state, platform_store::console_read::AgentState::Stale);
+    assert_eq!(stale.alarms, None);
     let certificates = platform_store::console_read::certificates(
         &client,
         RECENT,

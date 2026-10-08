@@ -290,8 +290,9 @@ impl Default for SeededRepository {
                                 state: "off".to_owned(),
                                 source: None,
                                 reason: Some("audit_not_set_up".to_owned()),
-                                text: Some("this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded".to_owned()),
-                                fix: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
+                                text: Some("this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded, or auditd is not running".to_owned()),
+                                fix: Some("make sure auditd is installed and running, then run the command below".to_owned()),
+                                command: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
                                 fault: true,
                             }
                         } else {
@@ -301,6 +302,7 @@ impl Default for SeededRepository {
                                 reason: None,
                                 text: None,
                                 fix: None,
+                                command: None,
                                 fault: false,
                             }
                         }),

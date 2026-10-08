@@ -109,17 +109,24 @@ minutes). It is computed when read and never stored.
 eBPF watcher): from the stored `health -> 'alarms'`, computed when read.
 `None` before a health report or when the value does not parse; otherwise
 `On { source }` (`ebpf`, or `audit`, which a missing `source` from agents
-before the watcher also means) or `Off { reason, text, fix, fault }`:
+before the watcher also means) or `Off { reason, text, fix, command, fault }`.
+The agent sets `source` and `fallback` once at start; its `collector` is
+`not_found` until the first program start and `ok` after; anything else means
+the reader is not working.
 
-| `reason` | When | `fix` | `fault` |
+| `reason` | When | `fix` (words) and `command` | `fault` |
 |---|---|---|---|
-| `not_enabled` | no `alarms` object (no `process_events` in `collectors`) | add it to `agent.toml`, restart the agent | no |
-| `audit_not_set_up` | `fallback.audit_rule_loaded` false (no keyed audit record seen yet) | `sudo /usr/libexec/openvibes-agent/audit-fallback` | yes |
-| `no_source` | `source: none` (no reader opened) | the same, then restart the agent | yes |
+| `not_enabled` | no `alarms` object (no `process_events` in `collectors`) | add it to `agent.toml`, restart; no command | no |
+| `no_source` | `source: none` (the audit socket did not open either) | `CAP_AUDIT_READ` in the unit when `permission_denied`, else the agent's log; `sudo systemctl restart openvibes-agent` | yes |
+| `reader_failed` | `collector` other than `ok`/`not_found` (the reader stopped, or an older agent's audit socket failed) | the agent's log; the restart command | yes |
+| `audit_not_set_up` | `fallback.audit_rule_loaded` false (no keyed audit record seen yet) | auditd installed and running (and, for `capability`, how to get eBPF back); `sudo /usr/libexec/openvibes-agent/audit-fallback` | yes |
 
-`text` names the eBPF failure (`fallback.detail`) in words. The console's
-agent views (`console_read::Agent.alarms`) and `openvibes-admin agent show`
-use it, so both say the same thing.
+`text` names the eBPF failure (`fallback.detail`) in words when eBPF was
+tried. `console_read::Agent.alarms` carries it for online (`active`) hosts
+only: a stale host's last report no longer says what is true. The console's
+agent views and `openvibes-admin agent show` use it, so both say the same
+thing. Known: right after a fallback host's agent restarts, the status reads
+`audit_not_set_up` until its first program start (seconds on a real host).
 
 Reasons, in this order:
 - `queue_dropping`: `dropped_total` rose;

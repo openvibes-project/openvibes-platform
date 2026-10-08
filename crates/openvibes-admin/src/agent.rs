@@ -174,8 +174,13 @@ fn health_lines(agent: &AgentInfo, now: DateTime<Utc>) -> String {
             "alarms on ({})\n",
             if source == "ebpf" { "eBPF" } else { "audit" }
         )),
-        Some(AlarmsStatus::Off { text, fix, .. }) => {
+        Some(AlarmsStatus::Off {
+            text, fix, command, ..
+        }) => {
             out.push_str(&format!("alarms off: {text}; fix: {fix}\n"));
+            if let Some(command) = command {
+                out.push_str(&format!("alarms fix command: {command}\n"));
+            }
         }
         None => {}
     }

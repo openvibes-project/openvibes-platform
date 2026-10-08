@@ -6840,6 +6840,13 @@
           "fault"
         ],
         "properties": {
+          "command": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The command to run on the host for that, when there is one (copyable)."
+          },
           "fault": {
             "type": "boolean",
             "description": "Off by a fault, not by the admin's choice: the Hosts list badges these."
@@ -6849,7 +6856,7 @@
               "string",
               "null"
             ],
-            "description": "The command or setting that turns them on, shown verbatim."
+            "description": "What turns them on, in words."
           },
           "reason": {
             "type": [

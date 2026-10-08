@@ -284,14 +284,15 @@ function TagEditor({ id }: { id: string }) {
 /** On and from which source, or off: why, and the command that fixes it. */
 function ThreatAlarms({ alarms }: { alarms: NonNullable<Agent["alarms"]> }) {
   if (alarms.state === "on") return <>On <span className="subtle">({alarms.source === "ebpf" ? "eBPF" : "audit"})</span></>;
-  const fix = alarms.fix ?? "";
+  const command = alarms.command;
   return (
     <div className="stack">
       <span className={alarms.fault ? "warn-text" : undefined}>Off: {alarms.text}</span>
-      <div className="row">
-        <pre className="code code--wrap grow" tabIndex={0} aria-label="The fix">{fix}</pre>
-        <button type="button" className="icon-button" aria-label="Copy the fix" onClick={() => { void navigator.clipboard?.writeText(fix); toast("Copied"); }}><Icon name="copy" size={16} /></button>
-      </div>
+      {alarms.fix && <span className="subtle">To fix: {alarms.fix}</span>}
+      {command && <div className="row">
+        <pre className="code code--wrap grow" tabIndex={0} aria-label="Command to run on the host">{command}</pre>
+        <button type="button" className="icon-button" aria-label="Copy the command" onClick={() => { void navigator.clipboard?.writeText(command); toast("Copied"); }}><Icon name="copy" size={16} /></button>
+      </div>}
     </div>
   );
 }

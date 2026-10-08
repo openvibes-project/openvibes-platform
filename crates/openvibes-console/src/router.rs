@@ -3539,12 +3539,14 @@ fn alarms_view(status: platform_store::alarms_status::AlarmsStatus) -> crate::Ag
             reason: None,
             text: None,
             fix: None,
+            command: None,
             fault: false,
         },
         AlarmsStatus::Off {
             reason,
             text,
             fix,
+            command,
             fault,
         } => crate::AgentAlarmsView {
             state: "off".to_owned(),
@@ -3552,6 +3554,7 @@ fn alarms_view(status: platform_store::alarms_status::AlarmsStatus) -> crate::Ag
             reason: Some(reason.to_owned()),
             text: Some(text),
             fix: Some(fix),
+            command: command.map(str::to_owned),
             fault,
         },
     }

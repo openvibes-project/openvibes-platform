@@ -970,8 +970,10 @@ pub struct AgentAlarmsView {
     pub reason: Option<String>,
     /// Why off, in words.
     pub text: Option<String>,
-    /// The command or setting that turns them on, shown verbatim.
+    /// What turns them on, in words.
     pub fix: Option<String>,
+    /// The command to run on the host for that, when there is one (copyable).
+    pub command: Option<String>,
     /// Off by a fault, not by the admin's choice: the Hosts list badges these.
     pub fault: bool,
 }

@@ -1304,10 +1304,15 @@ fn agent_from_row(row: &Row) -> Agent {
             .get::<_, Option<serde_json::Value>>(12)
             .map_or_else(Vec::new, |value| agent_rule_sets(&value)),
         rule_sets_at: row.get(13),
-        alarms: crate::alarms_status::alarms_status(
-            row.get::<_, Option<DateTime<Utc>>>(13).is_some(),
-            row.get::<_, Option<serde_json::Value>>(14).as_ref(),
-        ),
+        // Only an online host's report says what is true now.
+        alarms: matches!(row.get::<_, &str>(2), "active")
+            .then(|| {
+                crate::alarms_status::alarms_status(
+                    row.get::<_, Option<DateTime<Utc>>>(13).is_some(),
+                    row.get::<_, Option<serde_json::Value>>(14).as_ref(),
+                )
+            })
+            .flatten(),
     }
 }
 

@@ -211,8 +211,9 @@ triage on alarms and findings stays as it is.
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
   running kernel, "software as of", threat alarms, tags, certificates).
-  **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why" with
-  the fix in a wrapped code block and a copy button; an off host also shows
+  **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
+  fix: …", and, when there is one, the command in a wrapped code block with
+  a copy button; an off host also shows
   that line at the top of its Alarms tab. The Hosts list adds an "Alarms off"
   badge beside Online only when the alarms are off by a fault (not when
   process events were simply not enabled). The list, panel and

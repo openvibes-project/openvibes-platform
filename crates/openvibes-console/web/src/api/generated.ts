@@ -1529,9 +1529,11 @@ export interface components {
          *     command that turns them on.
          */
         AgentAlarmsView: {
+            /** @description The command to run on the host for that, when there is one (copyable). */
+            command?: string | null;
             /** @description Off by a fault, not by the admin's choice: the Hosts list badges these. */
             fault: boolean;
-            /** @description The command or setting that turns them on, shown verbatim. */
+            /** @description What turns them on, in words. */
             fix?: string | null;
             /** @description Why off: `not_enabled`, `audit_not_set_up` or `no_source`. */
             reason?: string | null;

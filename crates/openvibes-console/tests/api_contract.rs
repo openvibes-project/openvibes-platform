@@ -108,7 +108,8 @@ fn read_model_dtos_have_stable_wire_names() {
             source: None,
             reason: Some("audit_not_set_up".to_owned()),
             text: Some("this kernel has no BTF".to_owned()),
-            fix: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
+            fix: Some("make sure auditd runs, then run the command".to_owned()),
+            command: Some("sudo /usr/libexec/openvibes-agent/audit-fallback".to_owned()),
             fault: true,
         }),
     };
@@ -138,7 +139,8 @@ fn read_model_dtos_have_stable_wire_names() {
             "source": null,
             "reason": "audit_not_set_up",
             "text": "this kernel has no BTF",
-            "fix": "sudo /usr/libexec/openvibes-agent/audit-fallback",
+            "fix": "make sure auditd runs, then run the command",
+            "command": "sudo /usr/libexec/openvibes-agent/audit-fallback",
             "fault": true
         })
     );

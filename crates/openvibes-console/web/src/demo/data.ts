@@ -103,9 +103,9 @@ export function buildDemoData(now = Date.now()) {
       rule_sets_at: status === "imported" ? null : iso(lastSeen),
       // Deterministic, like rule_sets: most on eBPF, every 9th on audit, every 23rd off by a fault, every 29th not enabled.
       alarms: status === "imported" ? null
-        : n % 29 === 0 ? { state: "off", fault: false, source: null, reason: "not_enabled", text: "process events are not enabled on this host", fix: "add \"process_events\" to collectors in /etc/openvibes-agent/agent.toml, then sudo systemctl restart openvibes-agent" }
-        : n % 23 === 0 ? { state: "off", fault: true, source: null, reason: "audit_not_set_up", text: "this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded", fix: "sudo /usr/libexec/openvibes-agent/audit-fallback" }
-        : { state: "on", fault: false, source: n % 9 === 0 ? "audit" : "ebpf", reason: null, text: null, fix: null },
+        : n % 29 === 0 ? { state: "off", fault: false, source: null, reason: "not_enabled", text: "process events are not enabled on this host", fix: "add \"process_events\" to collectors in /etc/openvibes-agent/agent.toml, then restart the agent", command: null }
+        : n % 23 === 0 ? { state: "off", fault: true, source: null, reason: "audit_not_set_up", text: "this kernel has no BTF, and no program start seen through audit yet: the exec audit rule is probably not loaded, or auditd is not running", fix: "make sure auditd is installed and running, then run the command below", command: "sudo /usr/libexec/openvibes-agent/audit-fallback" }
+        : { state: "on", fault: false, source: n % 9 === 0 ? "audit" : "ebpf", reason: null, text: null, fix: null, command: null },
     });
     tags.set(id, [{ key: "env", value: n % 3 === 0 ? "prod" : n % 3 === 1 ? "lab" : "office" }, { key: "role", value: role }]);
     const issued = now - Math.floor(random() * 60) * DAY;
