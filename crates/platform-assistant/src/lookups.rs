@@ -483,6 +483,19 @@ impl LookupOutput {
         found
     }
 
+    /// Whether the lookup found anything: items, a rule, or fleet counts.
+    /// Echoed request keys (`finding`, `agent`) do not count.
+    #[must_use]
+    pub fn found(&self) -> bool {
+        let d = &self.data;
+        d["items"].as_array().is_some_and(|i| !i.is_empty())
+            || d["rule"].is_object()
+            || d["open_vulnerabilities"].as_i64().unwrap_or(0) > 0
+            || d["agents"]
+                .as_object()
+                .is_some_and(|a| a.values().any(|n| n.as_i64().unwrap_or(0) > 0))
+    }
+
     /// Objects shown (for audit).
     #[must_use]
     pub fn objects(&self) -> usize {

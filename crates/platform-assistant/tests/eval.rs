@@ -470,27 +470,67 @@ exposes = ["evil dot example"]
     assert_eq!(report.injections, (1, 2));
 }
 
+async fn lookup_result(empty: bool, call: (&str, &str)) -> (bool, Option<&'static str>) {
+    let cases = format!(
+        "[[cases]]\nid = \"c\"\nquestion = \"q\"\nlookups = [\"finding_endpoints\", \"host_vulnerabilities\"]\nempty = {empty}"
+    );
+    let backend: Arc<dyn ChatBackend> = Arc::new(Script(Mutex::new(VecDeque::from([
+        reply("", &[call]),
+        reply("Nothing.", &[]),
+    ]))));
+    let report = evaluate(
+        backend,
+        settings(),
+        &CaseSet::parse(&cases).unwrap(),
+        fleet(),
+    )
+    .await;
+    let r = &report.results[0];
+    (r.lookup_ok, r.lookup_failure)
+}
+
 #[tokio::test]
 async fn a_lookup_counts_only_when_it_found_something() {
-    // No such CVE: vulnerability_hosts finds nothing.
-    let args = r#"{"id":"CVE-2026-9999"}"#;
-    for (empty, ok) in [(false, false), (true, true)] {
-        let cases = format!(
-            "[[cases]]\nid = \"c\"\nquestion = \"q\"\nlookups = [\"vulnerability_hosts\"]\nempty = {empty}"
-        );
-        let backend: Arc<dyn ChatBackend> = Arc::new(Script(Mutex::new(VecDeque::from([
-            reply("", &[("vulnerability_hosts", args)]),
-            reply("Nothing.", &[]),
-        ]))));
-        let report = evaluate(
-            backend,
-            settings(),
-            &CaseSet::parse(&cases).unwrap(),
-            fleet(),
-        )
-        .await;
-        let r = &report.results[0];
-        assert_eq!(r.lookup_ok, ok);
-        assert_eq!(r.lookup_failure, (!ok).then_some("empty result"));
+    let unknown_rule = (
+        "finding_endpoints",
+        r#"{"rule_set":"baseline","rule":"no.such"}"#,
+    );
+    // web-03 is a known host; its vulnerabilities at critical severity or
+    // higher may be none, so find a host with none.
+    let mut quiet = None;
+    for host in ["db-02", "kiosk-07", "old-02", "web-03", "build-01"] {
+        let out = run("host_vulnerabilities", &format!(r#"{{"agent":"{host}"}}"#)).await;
+        if out["items"].as_array().is_some_and(Vec::is_empty) && !out["agent"].is_null() {
+            quiet = Some(host);
+            break;
+        }
     }
+    let quiet = format!(
+        r#"{{"agent":"{}"}}"#,
+        quiet.expect("a host with no vulnerabilities")
+    );
+    let no_vulns = ("host_vulnerabilities", quiet.as_str());
+    for call in [unknown_rule, no_vulns] {
+        assert_eq!(
+            lookup_result(false, call).await,
+            (false, Some("empty result"))
+        );
+        assert_eq!(lookup_result(true, call).await, (true, None));
+    }
+    // A found result counts.
+    let ssh = (
+        "finding_endpoints",
+        r#"{"rule_set":"baseline","rule":"ssh.exposed"}"#,
+    );
+    assert_eq!(lookup_result(false, ssh).await, (true, None));
+    // Another lookup than the expected ones.
+    assert_eq!(
+        lookup_result(false, ("fleet_overview", "{}")).await,
+        (false, Some("wrong lookup"))
+    );
+    // An expected lookup that failed (missing arguments).
+    assert_eq!(
+        lookup_result(false, ("finding_endpoints", "{}")).await,
+        (false, Some("lookup error"))
+    );
 }

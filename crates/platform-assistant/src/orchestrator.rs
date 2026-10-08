@@ -123,6 +123,8 @@ pub struct LookupRecord {
     pub arguments: Value,
     /// Objects the result showed.
     pub objects: usize,
+    /// The lookup found something (not just an echo of the request).
+    pub found: bool,
     /// Why it was refused or failed.
     pub error: Option<LookupError>,
 }
@@ -475,6 +477,7 @@ impl<R: LookupRunner> Run<'_, R> {
                     name: known,
                     arguments: Value::Null,
                     objects: 0,
+                    found: false,
                     error: Some(error),
                 });
                 return (error.message().to_owned(), None);
@@ -492,11 +495,13 @@ impl<R: LookupRunner> Run<'_, R> {
         {
             Ok(mut output) => {
                 output.shrink_to(room.max(MIN_RESULT_CHARS));
+                let found = output.found();
                 let citations = output.citations();
                 self.records.push(LookupRecord {
                     name: Some(lookup.name()),
                     arguments: lookup.arguments(),
                     objects: citations.len(),
+                    found,
                     error: None,
                 });
                 self.allowed.extend(citations);
@@ -507,6 +512,7 @@ impl<R: LookupRunner> Run<'_, R> {
                     name: Some(lookup.name()),
                     arguments: lookup.arguments(),
                     objects: 0,
+                    found: false,
                     error: Some(error),
                 });
                 error.message().to_owned()

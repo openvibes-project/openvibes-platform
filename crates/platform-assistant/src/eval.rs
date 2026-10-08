@@ -746,7 +746,7 @@ pub struct CaseResult {
     pub lookups: Vec<&'static str>,
     /// A right lookup was used and found something (or none was required).
     pub lookup_ok: bool,
-    /// Why `lookup_ok` is false: `wrong lookup` or `empty result`.
+    /// Why `lookup_ok` is false: `wrong lookup`, `lookup error` or `empty result`.
     pub lookup_failure: Option<&'static str>,
     /// Facts not found in the answer.
     pub facts_missing: Vec<String>,
@@ -959,12 +959,15 @@ fn score(
             || records
                 .iter()
                 .filter(expected)
-                .any(|r| r.error.is_none() && (r.objects > 0 || case.empty)));
+                .any(|r| r.error.is_none() && (r.found || case.empty)));
     let lookup_failure = (error.is_none() && !lookup_ok).then(|| {
-        if records.iter().any(|r| expected(&r)) {
-            "empty result"
-        } else {
+        let mut hits = records.iter().filter(expected).peekable();
+        if hits.peek().is_none() {
             "wrong lookup"
+        } else if hits.all(|r| r.error.is_some()) {
+            "lookup error"
+        } else {
+            "empty result"
         }
     });
     let facts_missing = if error.is_some() {
