@@ -372,7 +372,7 @@ later are not served, and days without a stored row are absent, not zero.
 Most exposed hosts (`GET /api/v1/metrics/top-hosts?limit=1..10`, default 6)
 returns `{items: [{agent_id, hostname, serious, open}]}`, the hosts with the
 most critical and high problems across alarms, vulnerabilities and
-compliance findings. A `limit` outside 1 to 10 is 422 (`invalid_limit`).
+compliance findings. A `limit` outside 1 to 10 is 422 `invalid_metric_query` with field code `invalid_limit`.
 The caller needs `alarms.read`, `vulnerabilities.read` and `compliance.read`
 with one common scope; a missing permission, or scopes that differ, is 403.
 A caller limited to asset groups sees only hosts in those groups. Ranking
