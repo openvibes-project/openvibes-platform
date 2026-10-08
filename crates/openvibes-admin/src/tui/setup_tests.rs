@@ -148,7 +148,7 @@ fn a_new_host_opens_on_setup_with_the_components() {
     let text = screen(&app);
     for want in [
         "[Setup]",
-        "[x] ingest",
+        "[•] ingest",
         "[x] agent",
         "[ ] assistant",
         "platform.example.com",
@@ -703,4 +703,266 @@ fn every_step_fits_and_the_failure_is_in_full() {
         assert!(text.contains(title), "missing step {title:?} in\n{text}");
     }
     assert!(text.contains("END"), "the failure in full:\n{text}");
+}
+
+/// The walkthrough (2026-10-08): pressing Start froze the form while dnf ran,
+/// because the turn that started the run also ran its first step before the
+/// screen was drawn again.
+#[test]
+fn start_draws_the_checklist_before_the_first_step_runs() {
+    let mut app = app(
+        false,
+        vec![Ok("written\n".into()), Ok("done\tinstalled\n".into())],
+    );
+    while app.setup.row != super::setup::START_ROW {
+        app.key_then_tick(Some(Key::Down));
+    }
+    app.key_then_tick(Some(Key::Enter));
+    type_text(&mut app, "pw");
+    app.key_then_tick(Some(Key::Enter));
+    // The turn that started the run ran no step: the screen comes first.
+    assert_eq!(app.setup.phase, Phase::Running(0));
+    let text = screen(&app);
+    assert!(
+        text.contains("Install packages") && text.contains("running"),
+        "{text}"
+    );
+    assert!(text.contains("can take a few minutes"), "{text}");
+    assert!(
+        !text.contains("uninstall"),
+        "no maintenance keys mid-run: {text}"
+    );
+    app.key_then_tick(None);
+    assert_eq!(app.setup.phase, Phase::Running(1));
+}
+
+/// The step list is on screen while later steps run: the generated admin
+/// password waits for the last screen (walkthrough, 2026-10-08).
+#[test]
+fn the_step_list_never_shows_the_admin_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    let console = Step::ALL.iter().position(|s| *s == Step::Console).unwrap();
+    for _ in 0..=console {
+        app.setup_tick();
+    }
+    assert!(matches!(app.setup.phase, Phase::Running(_)));
+    let text = screen(&app);
+    assert!(!text.contains("Abc123"), "{text}");
+    let row = text
+        .lines()
+        .find(|l| l.contains("Console and admin"))
+        .unwrap();
+    assert!(!row.contains('…'), "the row is not cut at 80x24: {row}");
+    assert!(
+        text.contains("admin account ready (password at the end)"),
+        "{text}"
+    );
+}
+
+/// An install run that finished, each step answering `answer(step)`.
+fn finished_with(answer: impl Fn(Step) -> String) -> App<SetupHost> {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    answers.extend(Step::ALL.into_iter().map(|step| Ok(answer(step))));
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    app
+}
+
+fn walkthrough_answers(step: Step) -> String {
+    match step {
+        Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+        Step::Ca => "done\troot key saved to /home/alice/openvibes-root-ca.key: keep it offline; root certificate /etc/openvibes/pki/root.crt, SHA-256 AA:BB\n".into(),
+        Step::Operators => "done\talice added to openvibes-operators; log in again for it to take effect\n".into(),
+        Step::Ready => "done\tready: openvibes-ingest.service openvibes-console.service\n".into(),
+        _ => "done\tok\n".into(),
+    }
+}
+
+/// The walkthrough (2026-10-08): the final screen was "a confusing mess of
+/// text" and the agent line could not be found. Now: what to keep, labelled,
+/// and what to do next; hosts are added from the console.
+#[test]
+fn the_finished_screen_lists_what_to_keep_and_what_next() {
+    let text = screen(&finished_with(walkthrough_answers));
+    for want in [
+        "Setup finished",
+        "Console   https://platform.example.com",
+        "Sign in   admin / Abc123",
+        "Root key  /home/alice/openvibes-root-ca.key",
+        "Next: sign in, change the password, then add hosts under Enrollment",
+        "alice can run openvibes-admin without sudo after logging in again",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(
+        !text.contains("curl") && !text.contains("SHA-256"),
+        "{text}"
+    );
+    assert!(!text.contains('…'), "nothing cut at 80x24:\n{text}");
+}
+
+#[test]
+fn without_the_console_the_finished_screen_promises_no_login() {
+    let text = screen(&finished_with(|step| match step {
+        Step::Console => "skipped\tconsole not chosen\n".into(),
+        _ => walkthrough_answers(step),
+    }));
+    assert!(text.contains("Setup finished"), "{text}");
+    assert!(
+        !text.contains("Sign in") && !text.contains("Enrollment"),
+        "{text}"
+    );
+}
+
+/// A detail worded in a way the screen does not know is shown as it is,
+/// never dropped.
+#[test]
+fn an_unknown_detail_is_shown_as_it_is() {
+    let text = screen(&finished_with(|step| match step {
+        Step::Ca => "done\troot certificate kept from the careful CA\n".into(),
+        _ => walkthrough_answers(step),
+    }));
+    assert!(
+        text.contains("root certificate kept from the careful CA"),
+        "{text}"
+    );
+}
+
+/// Each form row is its own cursor position: the rows after the components
+/// start after the last one (the signer row once shared row 7 with the
+/// hostname: both were highlighted, and space there ticked the signer).
+#[test]
+fn every_form_row_is_its_own_cursor_position() {
+    use crate::setup::plan::Component;
+    assert_eq!(super::setup::HOSTNAME_ROW, Component::ALL.len());
+    let mut app = app(false, vec![]);
+    while app.setup.row != super::setup::HOSTNAME_ROW {
+        app.key(Key::Down);
+    }
+    let before = app.setup.components.clone();
+    app.key(Key::Char(' '));
+    assert_eq!(
+        app.setup.components, before,
+        "space on Hostname ticks nothing"
+    );
+}
+
+/// The form says what the selected row means (walkthrough, 2026-10-08: the
+/// CA and root key fields were unexplained), and always-installed
+/// components do not look like boxes to untick.
+#[test]
+fn the_form_explains_the_selected_row() {
+    let mut app = app(false, vec![]);
+    let text = screen(&app);
+    assert!(
+        text.contains("[•] ingest") && text.contains("[•] console"),
+        "{text}"
+    );
+    assert!(text.contains("always installed"), "{text}");
+    for (row, want) in [
+        (
+            super::setup::CA_ROW,
+            "made here; its key is written once to the file below",
+        ),
+        (
+            super::setup::KEY_ROW,
+            "the only copy of the root key; move it offline after Setup",
+        ),
+        (
+            super::setup::START_ROW,
+            "installs the ticked components; takes a few minutes",
+        ),
+    ] {
+        while app.setup.row != row {
+            app.key(Key::Down);
+        }
+        let text = screen(&app);
+        assert!(
+            text.contains(want),
+            "row {row}: missing {want:?} in\n{text}"
+        );
+    }
+}
+
+/// Review (setup-ux): a step after the console's failing must not hide the
+/// password generated before it; the stopped screen shows it.
+#[test]
+fn a_run_stopped_after_the_console_still_shows_the_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Services => "failed\topenvibes-ingest.service is not ready\n".into(),
+            _ => walkthrough_answers(step),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert!(
+        matches!(app.setup.phase, Phase::Stopped(_)),
+        "{:?}",
+        app.setup.phase
+    );
+    let text = screen(&app);
+    assert!(text.contains("Sign in   admin / Abc123"), "{text}");
+}
+
+/// Review (setup-ux): only a detail that carries a password is masked; a
+/// check or repair shows the console row as it is.
+#[test]
+fn the_console_row_is_masked_only_when_it_carries_a_password() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => {
+                "done\thttps://platform.example.com · console admin: admin · rule signer ready\n"
+                    .into()
+            }
+            Step::Services => "failed\tstop here\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    let text = screen(&app);
+    assert!(text.contains("https://platform.example.com"), "{text}");
+    assert!(!text.contains("password at the end"), "{text}");
+}
+
+/// Review (setup-ux): what the CA step adds after the key path (e.g. that
+/// the file is still owned by root) stays on the final screen.
+#[test]
+fn the_root_key_note_stays_on_the_finished_screen() {
+    let text = screen(&finished_with(|step| {
+        match step {
+        Step::Ca => "done\troot key saved to /root/k.key: keep it offline (still owned by root: move it with sudo); root certificate /etc/openvibes/pki/root.crt, SHA-256 AA\n".into(),
+        _ => walkthrough_answers(step),
+    }
+    }));
+    assert!(text.contains("Root key  /root/k.key"), "{text}");
+    assert!(
+        text.contains("still owned by root: move it with sudo"),
+        "{text}"
+    );
 }

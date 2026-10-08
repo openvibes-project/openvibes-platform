@@ -55,8 +55,9 @@ re-enrolling every agent.
 The last screen shows, once:
 
 - the console address and the `admin` password: **write the password down**;
-- the root certificate's fingerprint;
-- the one-line command that installs an agent on another host.
+- where the root key was written (move it offline, then delete it there);
+- what to do next: sign in, change the password, then add hosts from the
+  console (Enrollment).
 
 Without a terminal, this does the same (keep the `--root-key-out` file as
 above; without it the root key is deleted):
@@ -71,8 +72,7 @@ the setup command).
 
 ## 3. Add a second host *(not yet run)*
 
-On the platform host, print a fresh agent command (the one from Setup's
-last screen also works for 24 hours):
+On the platform host, print the agent command:
 
 ```sh
 sudo openvibes-admin agent command

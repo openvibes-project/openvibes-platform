@@ -26,40 +26,6 @@ fn names(units: &[Unit]) -> Vec<&'static str> {
     units.iter().map(|u| u.name()).collect()
 }
 
-/// What the platform serves for `set`, from the CLI's own output (rules.rs):
-/// `rules list` (`SET vN keys K expires TIME [flags]`), `rules show SET`
-/// (newest first: `vN sha256:… issuer ISSUER …`) and `rules trust list SET`
-/// (`SET ISSUER KEY added TIME [removed TIME]`).
-fn served<R: Runner>(ctx: &Ctx<R>, set: &str) -> Option<super::Served> {
-    let list = ctx.as_admin(&["rules", "list"]).ok()?;
-    list.lines().find(|line| {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        fields.first() == Some(&set)
-            && fields.get(1).is_some_and(|v| v.starts_with('v'))
-            && !line.ends_with(" retired")
-    })?;
-    let show = ctx.as_admin(&["rules", "show", set]).ok()?;
-    let issuer = show
-        .lines()
-        .next()?
-        .split_whitespace()
-        .skip_while(|word| *word != "issuer")
-        .nth(1)?
-        .to_owned();
-    let keys = ctx.as_admin(&["rules", "trust", "list", set]).ok()?;
-    let key = keys.lines().find_map(|line| {
-        let fields: Vec<&str> = line.split_whitespace().collect();
-        (fields.get(1) == Some(&issuer.as_str()) && !line.contains(" removed "))
-            .then(|| fields.get(2).map(|k| (*k).to_owned()))
-            .flatten()
-    })?;
-    Some(super::Served {
-        set: set.to_owned(),
-        issuer,
-        key,
-    })
-}
-
 pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
     let running = units.iter().all(|unit| {
@@ -292,29 +258,13 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             names(&units).join(" ")
         )));
     }
-    let token = token_from(&ctx.as_admin(&["token", "fleet"])?)?;
-    let root = ctx.read(super::pki::ROOT_CERT)?;
-    let rules = ctx.read(super::BASELINE_KEY).ok().and_then(|line| {
-        let set = line.split_whitespace().next()?.to_owned();
-        let served: Vec<super::Served> = served(ctx, &set).into_iter().collect();
-        super::published_rules_arg(&line, &served)
-    });
-    let alarm_rules = ctx.read(super::ALARMS_KEY).ok().and_then(|line| {
-        let set = line.split_whitespace().next()?.to_owned();
-        let served: Vec<super::Served> = served(ctx, &set).into_iter().collect();
-        super::published_rules_arg(&line, &served)
-    });
-    let command = super::agent_install_command(
-        &ctx.plan.hostname,
-        (ctx.plan.ingest_port, ctx.plan.distribution_port),
-        &token,
-        &super::pki::fingerprint(&root)?,
-        rules.as_deref(),
-        alarm_rules.as_deref(),
-    );
+    // The standing token: the console's install package and command carry
+    // it. Setup no longer prints an agent line (hosts are added from the
+    // console, install walkthrough 2026-10-08); `openvibes-admin agent
+    // command` prints one for scripts.
+    token_from(&ctx.as_admin(&["token", "fleet"])?)?;
     Ok(StepState::Done(format!(
-        "ready: {}; add an agent on another host (the standing token, which never expires; \
-         visible in its process list while it runs): {command}",
+        "ready: {}{closed}; add hosts in the console under Enrollment",
         names(&units).join(" ")
     )))
 }

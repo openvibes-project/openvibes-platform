@@ -103,6 +103,7 @@ pub fn run() -> ExitCode {
             eprintln!("openvibes-admin: terminal: {error}");
             return ExitCode::FAILURE;
         }
+        let mut pressed = None;
         match event::poll(Duration::from_millis(250)) {
             Ok(true) => {
                 let Ok(Event::Key(key)) = event::read() else {
@@ -134,16 +135,15 @@ pub fn run() -> ExitCode {
                     KeyCode::BackTab => Key::BackTab,
                     _ => continue,
                 };
-                app.key(key);
+                pressed = Some(key);
             }
             Ok(false) => {}
             Err(_) => app.quit = true,
         }
-        // One Setup step per turn: the screen is redrawn between steps (a
-        // step blocks while it runs, e.g. dnf).
-        if app.tab == Tab::Setup {
-            app.setup_tick();
-        }
+        // The key, then one Setup step per turn: the screen is redrawn
+        // between steps (a step blocks while it runs, e.g. dnf), and before
+        // the first step of a run the key just started.
+        app.key_then_tick(pressed);
         if app.tab == Tab::Services
             && app.confirm.is_none()
             && app.boot.is_none()

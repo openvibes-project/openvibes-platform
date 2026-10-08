@@ -56,11 +56,16 @@ impl Component {
         }
     }
 
+    /// Installed on every platform host: Setup's form cannot untick it.
+    pub fn always(self) -> bool {
+        matches!(self, Component::Ingest | Component::Console)
+    }
+
     /// What it is, for the Setup screen.
     pub fn about(self) -> &'static str {
         match self {
-            Component::Ingest => "agent enrollment and findings (always)",
-            Component::Console => "web console (always)",
+            Component::Ingest => "agent enrollment and findings",
+            Component::Console => "web console",
             Component::Distribution => "rules delivered to agents",
             Component::Vulns => "vulnerability feeds and matching",
             Component::Assistant => "local LLM for the console (heavy; needs a model)",

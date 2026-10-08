@@ -49,18 +49,33 @@ version on the right; with `NO_COLOR` set it is plain text.
 form: components (ingest and console always; distribution, vulns, rules,
 the agent on this host on by default; the assistant off), hostname, other
 names or addresses, CA mode (quick or careful) and the root key file.
+Ingest and console show `[•]` (always installed, not a box to untick). A dim
+line under the form says what the row under the cursor means (install
+walkthrough, 2026-10-08). The field rows are numbered after the last
+component, so each row is its own cursor position.
 `Start` asks for the user's password once (masked; the user needs sudo
 rights, not operator membership), writes the plan through `helper
 setup-plan`, then runs one step per screen refresh through `helper
 setup-step`, showing each step's state on one line (cut with "…" at the
 screen's width; the step a run stopped at has its whole detail under the
-list). The first step that fails or waits
+list; the console step reads "admin account ready (password at the end)",
+never the password). Pressing Start draws this list before the first step
+runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
+footer says keys wait, and the package step says it can take a few minutes.
+The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
 from that step, and every other action (`c`, `u`, `m`, `x`, below) still
 works from there; `Esc` returns to them without retrying (#73). Three
 wrong passwords close the prompt. The finished screen
-shows the root certificate's fingerprint, the console address and admin
-password (shown only then), and an endpoint enrollment token. On a set-up
+of an install is a few labelled rows (install walkthrough, 2026-10-08):
+`Console` (the address), `Sign in` (admin and the generated password, shown
+only then), `Root key` (where the only copy was written, and to move it
+offline), then "Next: sign in, change the password, then add hosts under
+Enrollment" and, when it applies, that the operator can run openvibes-admin
+without sudo after logging in again. A detail in a wording the screen does
+not know is shown as it is. No agent install line: hosts are added from the
+console; `agent command` prints one for scripts. Repair, update and remove
+runs end on every step's outcome. On a set-up
 host, the Setup tab offers `c` check every step (`helper setup-status`),
 `r` repair (every step with `--repair`: never a new CA), `u` update (the
 installed OpenVIBES packages with any newer version, a backup file, then
@@ -252,7 +267,7 @@ the service. The first account can be created after schema 23 is applied.
 | `agent list [--offline \| --revoked \| --imported \| --health STATUS]` | one line per agent: id, status, last seen, version, and `claims ID` for an imported host whose files named an agent id; active agents end with `health <status>` and, when degraded, the reasons in brackets (protocol P12). `--offline` = active with no heartbeat for 3 minutes; `--imported` = hosts from export files (status `imported`, id `import.<install_id>`); `--health healthy\|degraded\|offline\|unknown` = active agents with that health. |
 | `agent show ID` | id, status, enrolled (first import for an imported host), revoked, last seen, version, certificate count, and `claims ID` when set; for an active agent, its health and reasons, then the latest report: queue (pending, oldest age, dropped, rejected by reason), last scan and rule counts, each collector's outcome, each rule set's version, expiry and refusal, storage errors, threat alarms (`alarms on (eBPF)`, or `alarms off: why; fix: what to do`, then `alarms fix command: …` when there is one), clock jump, and when the report was written; `unknown agent` (exit 1) if absent |
 | `agent revoke ID` | `revoked ID`; `agent already revoked`, `unknown agent`, or `imported hosts have no identity to revoke` are errors. The agent's next request gets `identity_revoked` (PM3). |
-| `agent command [--platform HOST] [--root-cert PATH]` | the one-line command that installs and enrolls an agent on another host (`curl -fsSL https://openvibes-project.github.io/install.sh \| sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT`), with the platform's standing token (see `token fleet`): the same token every run, created on first use, so repeated runs add no rows; audited with the token's id. HOST defaults to Setup's hostname (`setup.toml`) and must be a DNS name or IP address; the fingerprint is the root certificate's (default `/etc/openvibes/pki/root.crt`). With the baseline rules package installed and its set served with a bundle signed by that same key (current, non-retired, issuer and trusted key equal to `baseline.key`), the line ends with `--rules SET,ISSUER,KEY` from `/usr/share/openvibes/rules/baseline.key`, and the installer configures the agent to fetch and trust that rule set (the key rides the same fingerprint-checked line). With the rule signer set up and `--rules` on the line, it also prints the `[[rule_sets]]` lines for the site's own sets (`site`, `site-alarms`, from `/etc/openvibes/site-rules.trust`, which Setup saves from `openvibes-signer seed`), to paste into each agent's `agent.toml`: the installer doesn't take them yet. No `restricted` key, so the agent restricts both; after a signer reinstall the key is new and the lines must be replaced. Setup's last screen shows the same line. |
+| `agent command [--platform HOST] [--root-cert PATH]` | the one-line command that installs and enrolls an agent on another host (`curl -fsSL https://openvibes-project.github.io/install.sh \| sudo sh -s -- --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT`), with the platform's standing token (see `token fleet`): the same token every run, created on first use, so repeated runs add no rows; audited with the token's id. HOST defaults to Setup's hostname (`setup.toml`) and must be a DNS name or IP address; the fingerprint is the root certificate's (default `/etc/openvibes/pki/root.crt`). With the baseline rules package installed and its set served with a bundle signed by that same key (current, non-retired, issuer and trusted key equal to `baseline.key`), the line ends with `--rules SET,ISSUER,KEY` from `/usr/share/openvibes/rules/baseline.key`, and the installer configures the agent to fetch and trust that rule set (the key rides the same fingerprint-checked line). With the rule signer set up and `--rules` on the line, it also prints the `[[rule_sets]]` lines for the site's own sets (`site`, `site-alarms`, from `/etc/openvibes/site-rules.trust`, which Setup saves from `openvibes-signer seed`), to paste into each agent's `agent.toml`: the installer doesn't take them yet. No `restricted` key, so the agent restricts both; after a signer reinstall the key is new and the lines must be replaced. |
 
 `show` and `revoke` are audited with the agent id as target. Health is
 computed by `platform_store::health` (thresholds in the platform-store
@@ -486,8 +501,10 @@ is in `/etc/audit/rules.d`; an eBPF host has none there) and
 switches syscall auditing off), the step's line says alarms can't fire and
 how to fix it; Setup never edits audit rules itself. Health shows the same
 as a problem when the TUI runs as root),
-`ready` (and, on a first install, the standing token; a Repair shows no
-install line and points to `agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
+`ready` (and, on a first install, makes sure the standing token exists,
+which the console's install package and command carry; it shows no agent
+line, only "add hosts in the console under Enrollment"; a Repair points to
+`agent command`; a unit not ready after 30 s fails with its last journal line, e.g.
 `Address already in use`).
 
 The same command maintains a set-up host (one action per call; each takes

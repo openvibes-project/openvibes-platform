@@ -109,104 +109,35 @@ fn readiness_waits_then_creates_an_endpoint_token() {
     );
     let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
     fake.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
-    // Everything is already ready (the usual case on a first install):
-    // the run still shows the standing token and the agent command.
+    // Everything is already ready (the usual case on a first install): the
+    // run makes sure the standing token exists (the console's install
+    // package and command need it), but shows neither it nor an agent
+    // line: hosts are added from the console (install walkthrough,
+    // 2026-10-08). The line's own logic is in command_tests.rs.
     let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
-    let fingerprint = crate::setup::pki::fingerprint(&root.cert_pem).unwrap();
-    let command = format!(
-        "curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
-         --agent --platform platform.example.com --token {TOKEN} --ca-sha256 {fingerprint}"
-    );
-    assert!(state.detail().contains(&command), "{state:?}");
+    assert!(fake.called(&[
+        "/usr/sbin/runuser",
+        "-u",
+        "openvibes-admin",
+        "--",
+        "/usr/bin/openvibes-admin",
+        "token",
+        "fleet"
+    ]));
     assert!(
-        !state.detail().contains("--rules"),
-        "no rules package: {state:?}"
+        state
+            .detail()
+            .starts_with("ready: openvibes-ingest.service"),
+        "{state:?}"
     );
-    // The package alone is not enough: until the set is published,
-    // remote agents would be told to fetch what does not exist.
-    fake.file(
-        "/usr/share/openvibes/rules/baseline.key",
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
-    );
-    let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
-    assert!(state.detail().contains(&command), "{state:?}");
     assert!(
-        !state.detail().contains("--rules"),
-        "not published: {state:?}"
+        state
+            .detail()
+            .contains("add hosts in the console under Enrollment"),
+        "{state:?}"
     );
-    // Published, but the current bundle is signed by another trusted
-    // key (an admin's own bundle): agents could not verify it.
-    let admin = |args: &[&'static str]| -> Vec<&'static str> {
-        [
-            &[
-                "/usr/sbin/runuser",
-                "-u",
-                "openvibes-admin",
-                "--",
-                "/usr/bin/openvibes-admin",
-            ][..],
-            args,
-        ]
-        .concat()
-    };
-    let other = Fake::new("ready-other-signer");
-    other.answer(&["/usr/bin/curl"], 0, "");
-    other.answer(&admin(&["token", "create"]), 0, &format!("token {TOKEN}\n"));
-    other.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
-    other.file(
-        "/usr/share/openvibes/rules/baseline.key",
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\n",
-    );
-    other.answer(
-        &admin(&["rules", "list"]),
-        0,
-        "baseline v2 keys 2 expires 2028-09-27T00:00:00Z\n",
-    );
-    other.answer(
-        &admin(&["rules", "show", "baseline"]),
-        0,
-        "v2 sha256:ab issuer org.rules bytes 9 published 2026-09-28T00:00:00Z by x expires 2028-09-27T00:00:00Z\n",
-    );
-    other.answer(
-        &admin(&["rules", "trust", "list", "baseline"]),
-        0,
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA added 2026-09-28T00:00:00Z\n\
-         baseline org.rules BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB added 2026-09-28T00:00:00Z\n",
-    );
-    let state = run_step(&other.ctx(&plan(&[Ingest])), Step::Ready);
     assert!(
-        !state.detail().contains("--rules"),
-        "other signer: {state:?}"
-    );
-    // Published and signed with baseline.key's key: remote agents get it.
-    fake.answer(
-        &admin(&["rules", "show", "baseline"]),
-        0,
-        "v1 sha256:ab issuer openvibes-1 bytes 9 published 2026-09-28T00:00:00Z by x expires 2028-09-27T00:00:00Z\n",
-    );
-    fake.answer(
-        &admin(&["rules", "trust", "list", "baseline"]),
-        0,
-        "baseline openvibes-1 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA added 2026-09-28T00:00:00Z\n",
-    );
-    fake.answer(
-        &[
-            "/usr/sbin/runuser",
-            "-u",
-            "openvibes-admin",
-            "--",
-            "/usr/bin/openvibes-admin",
-            "rules",
-            "list",
-        ],
-        0,
-        "baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n",
-    );
-    let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
-    assert!(
-        state.detail().contains(&format!(
-            "{command} --rules baseline,openvibes-1,AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        )),
+        !state.detail().contains("curl") && !state.detail().contains(TOKEN),
         "{state:?}"
     );
     // Only a status check leaves the token alone.
