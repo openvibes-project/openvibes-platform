@@ -4,11 +4,10 @@ From nothing to a platform, a second host reporting to it, and its first
 results in the web console. You need two Fedora 44 x86_64 hosts that can
 reach each other, and sudo on both.
 
-> **Draft.** The package repository has no packages until the first
-> release (v0.1.0) is tagged. The steps marked *(not yet run)* follow the
-> code and its tests but have not been walked through for real.
+Walked through for real on 2026-10-08 (release 0.2.5, two blank lab
+machines); what was unclear then is being fixed, and this page follows.
 
-## 1. Install the platform *(not yet run)*
+## 1. Install the platform
 
 On the platform host, as your own user (not root):
 
@@ -25,7 +24,7 @@ read it, then `sudo sh install.sh`.
 The script adds the signed OpenVIBES package repository (it checks the key's
 fingerprint), installs `openvibes-admin` and opens its **Setup** screen.
 
-## 2. Run Setup *(not yet run)*
+## 2. Run Setup
 
 The Setup form has the components ticked (ingest, console, distribution,
 vulnerabilities, rules and an agent on this host), a hostname and a CA
@@ -34,7 +33,8 @@ enter the hostname the other hosts will use to reach this one and press
 `Start`. The console port is 443 unless another web server already holds
 it; then the form proposes the first free port from 8443 and says so, and
 the console is at `https://HOST:PORT`. The agent ports (18423, 18424) move
-the same way, and the agent command Setup prints carries them. To move a
+the same way, and the install command and package the console hands out
+(step 3) carry them. To move a
 port later: `sudo openvibes-admin setup --repair --console-port N` (or
 `--ingest-port`, `--distribution-port`, which also need
 `--move-agent-ports`: agents on other hosts then need their install line
@@ -70,39 +70,46 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
 the setup command).
 
-## 3. Add a second host *(not yet run)*
+## 3. Add a second host
 
-On the platform host, print the agent command:
+In the console (step 4 has how to sign in), open **Enrollment**. Under
+**Add a host**:
 
-```sh
-sudo openvibes-admin agent command
-```
+- **Copy CLI install** copies a one-line command: paste it into a root
+  shell on the second host;
+- **Install package** downloads a script that does the same: copy it to the
+  host and run `sudo sh openvibes-agent-install.sh`.
 
-Run the line it prints on the second host. It looks like:
+Without the console, `sudo openvibes-admin agent command` on the platform
+host prints the same line. It looks like:
 
 ```sh
 curl -fsSL https://openvibes-project.github.io/install.sh | sudo sh -s -- \
-  --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT
+  --agent --platform HOST --token TOKEN --ca-sha256 FINGERPRINT \
+  --rules … --alarm-rules …
 ```
 
 The script fetches the platform's CA, refuses it unless its SHA-256
 fingerprint matches, installs `openvibes-agent`, enrolls and prints
-`enrolled as agent.…`. The token works 10 times in 24 hours.
+`enrolled as agent.…`. Both carry the platform's standing token, which
+never expires and enrolls any number of hosts: keep them private, and
+revoke the token under Enrollment if one leaks.
 
-## 4. See it in the console *(not yet run)*
+## 4. See it in the console
 
 Open `https://HOSTNAME` and sign in as `admin`. The browser warns about the
 certificate: it is issued by your platform's own CA (import `root.crt`
 from `/etc/openvibes/pki/` into the browser to stop the warning).
 
-- **Agents:** both hosts, with their health.
+- **Hosts:** both hosts; each host's Details say whether its threat alarms
+  are on (eBPF or audit), and if not, why and the command that fixes it.
 - **Vulnerabilities:** each host's packages matched against the Fedora
   advisories. The vulnerability service checks a feed at startup if a host
   already reports that release, or when the first inventory for a new
   release arrives. Results appear after that check completes.
-- **Findings:** rule findings appear once a rule set is published. The
-  baseline rules package is not released yet, so Setup skips its `rules`
-  step for now.
+- **Compliance:** findings from the baseline rules, which Setup publishes.
+- **Alarms:** threat alarms (for example a web server starting a shell)
+  appear within seconds of the program start.
 
 ## Next
 
