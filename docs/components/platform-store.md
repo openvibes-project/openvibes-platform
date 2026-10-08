@@ -105,6 +105,22 @@ gives `Healthy`, `Degraded` (with reasons), `Offline` (no heartbeat for
 minutes). It is computed when read and never stored.
 `AgentInfo::health_status(now)` applies it to active agents only.
 
+**Threat alarms per host** (`alarms_status::alarms_status(reported, alarms)`,
+eBPF watcher): from the stored `health -> 'alarms'`, computed when read.
+`None` before a health report or when the value does not parse; otherwise
+`On { source }` (`ebpf`, or `audit`, which a missing `source` from agents
+before the watcher also means) or `Off { reason, text, fix, fault }`:
+
+| `reason` | When | `fix` | `fault` |
+|---|---|---|---|
+| `not_enabled` | no `alarms` object (no `process_events` in `collectors`) | add it to `agent.toml`, restart the agent | no |
+| `audit_not_set_up` | `fallback.audit_rule_loaded` false (no keyed audit record seen yet) | `sudo /usr/libexec/openvibes-agent/audit-fallback` | yes |
+| `no_source` | `source: none` (no reader opened) | the same, then restart the agent | yes |
+
+`text` names the eBPF failure (`fallback.detail`) in words. The console's
+agent views (`console_read::Agent.alarms`) and `openvibes-admin agent show`
+use it, so both say the same thing.
+
 Reasons, in this order:
 - `queue_dropping`: `dropped_total` rose;
 - `delivery_stalled`: oldest pending over `DELIVERY_STALLED_S` (3,600);

@@ -147,6 +147,8 @@ pub struct Agent {
     pub rule_sets: Vec<AgentRuleSet>,
     /// When that report was written.
     pub rule_sets_at: Option<DateTime<Utc>>,
+    /// Threat alarms, from the same report; `None` before one.
+    pub alarms: Option<crate::alarms_status::AlarmsStatus>,
 }
 
 /// One rule set an agent reported holding, from its heartbeat health.
@@ -628,7 +630,7 @@ pub async fn agents_in_scope(
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at,
-                    a.health -> 'rule_sets', a.health_at
+                    a.health -> 'rule_sets', a.health_at, a.health -> 'alarms'
              FROM agents a
              WHERE ($2::text IS NULL OR
                     ($2 = 'active' AND a.status = 'active'
@@ -712,7 +714,7 @@ pub async fn agent_in_scope(
                          ELSE 'active' END AS state,
                     a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at,
-                    a.health -> 'rule_sets', a.health_at
+                    a.health -> 'rule_sets', a.health_at, a.health -> 'alarms'
              FROM agents a WHERE a.agent_id = $1
                AND ($3::boolean OR EXISTS (
                     SELECT 1 FROM console_asset_group_selectors s
@@ -755,7 +757,7 @@ pub async fn agent_matches_in_scope(
                      ELSE 'active' END AS state,
                 a.enrolled_at, a.revoked_at, agent_seen_at(a.agent_id, a.last_seen_at), a.scanner_version, a.capabilities,
                     a.os_id, a.os_version, a.running_kernel, a.inventory_at,
-                    a.health -> 'rule_sets', a.health_at
+                    a.health -> 'rule_sets', a.health_at, a.health -> 'alarms'
          FROM agents a
          WHERE (a.agent_id::text = $1 OR lower(a.hostname) = lower($1))
            AND {visible}
@@ -1302,6 +1304,10 @@ fn agent_from_row(row: &Row) -> Agent {
             .get::<_, Option<serde_json::Value>>(12)
             .map_or_else(Vec::new, |value| agent_rule_sets(&value)),
         rule_sets_at: row.get(13),
+        alarms: crate::alarms_status::alarms_status(
+            row.get::<_, Option<DateTime<Utc>>>(13).is_some(),
+            row.get::<_, Option<serde_json::Value>>(14).as_ref(),
+        ),
     }
 }
 
