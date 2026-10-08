@@ -107,7 +107,10 @@ impl Restarter for Systemd {
 
 /// For tests under `--root`: the services are not the host's.
 #[cfg(debug_assertions)]
-pub struct NoRestart;
+#[derive(Default)]
+pub struct NoRestart {
+    socket_checks: std::cell::Cell<usize>,
+}
 
 #[cfg(debug_assertions)]
 impl Restarter for NoRestart {
@@ -116,9 +119,13 @@ impl Restarter for NoRestart {
         Ok(())
     }
 
-    /// Active on the port unless `OPENVIBES_TUNE_SOCKET=inactive`.
+    /// Active on the port unless `OPENVIBES_TUNE_SOCKET` says otherwise: a
+    /// comma list, one state per check, the last one repeated.
     fn llm_socket_holds(&self, port: &str) -> Result<(), String> {
-        let state = std::env::var("OPENVIBES_TUNE_SOCKET").unwrap_or_else(|_| "active".into());
+        let states = std::env::var("OPENVIBES_TUNE_SOCKET").unwrap_or_else(|_| "active".into());
+        let states: Vec<&str> = states.split(',').collect();
+        let check = self.socket_checks.replace(self.socket_checks.get() + 1);
+        let state = states[check.min(states.len() - 1)];
         socket_holds(
             &format!("ActiveState={state}\nListen=127.0.0.1:{port} (Stream)\n"),
             port,
@@ -387,6 +394,9 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
         }
         restarter.llm_socket_holds(port)?;
         wait_health(port)?;
+        // The socket may have gone during the wait: check right before the
+        // key is sent.
+        restarter.llm_socket_holds(port)?;
         let t = time_call(&client, limit)?;
         if t.is_finite() {
             Ok(Some(t))

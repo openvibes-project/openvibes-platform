@@ -200,7 +200,7 @@ fn restarter(root: &Path) -> Box<dyn crate::tune_run::Restarter> {
     if root == Path::new("/") {
         Box::new(crate::tune_run::Systemd)
     } else {
-        Box::new(crate::tune_run::NoRestart)
+        Box::new(crate::tune_run::NoRestart::default())
     }
 }
 

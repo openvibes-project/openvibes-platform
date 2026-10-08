@@ -1,8 +1,8 @@
 use std::{collections::HashMap, sync::Arc, time::Duration};
 
 use platform_assistant::{
-    Assistant, BackendClient, Location, Lookup, LookupError, LookupOutput, LookupRunner,
-    ResolvedMode, Segment, StoreLookups,
+    Assistant, BackendClient, BackendError, Location, Lookup, LookupError, LookupOutput,
+    LookupRunner, ResolvedMode, Segment, StoreLookups,
 };
 use platform_store::{Pool, console_read};
 use serde::{Deserialize, Serialize};
@@ -56,7 +56,7 @@ impl AssistantRuntime {
         let available = self.available.clone();
         let configured = self.assistant.lookup_mode;
         tokio::spawn(async move {
-            loop {
+            for attempt in 0u32.. {
                 let client = backend.clone();
                 let report = tokio::task::spawn_blocking(move || {
                     platform_assistant::probe(&client, configured)
@@ -70,18 +70,12 @@ impl AssistantRuntime {
                     if ready {
                         return;
                     }
-                    // Not listening yet (the model server is still loading,
-                    // as after `assistant-setup`): look again soon. A
-                    // backend that answers but fails the probe is costly to
-                    // probe, so it waits longer.
-                    if report.models.is_err() {
-                        tokio::time::sleep(Duration::from_secs(10)).await;
-                        continue;
-                    }
+                    let unreachable = matches!(report.models, Err(BackendError::Connect));
+                    tokio::time::sleep(probe_retry(unreachable, attempt)).await;
                 } else {
                     *available.write().await = false;
+                    tokio::time::sleep(probe_retry(false, attempt)).await;
                 }
-                tokio::time::sleep(Duration::from_secs(300)).await;
             }
         });
     }
@@ -95,13 +89,37 @@ impl AssistantRuntime {
     }
 }
 
+/// When to probe again. Not reachable (still starting, as after
+/// `assistant-setup`): every 10 s for the first minute. Otherwise, and
+/// after that: a probe is costly and, through openvibes-llm's socket, loads
+/// the model (or retries a model that cannot start), so wait longer than
+/// its idle time (5 min by default): the probe alone never keeps it loaded.
+fn probe_retry(unreachable: bool, attempt: u32) -> Duration {
+    if unreachable && attempt < 6 {
+        Duration::from_secs(10)
+    } else {
+        Duration::from_secs(15 * 60)
+    }
+}
+
 fn semaphore_capacity(configured: u32) -> usize {
     configured.max(1) as usize
 }
 
 #[cfg(test)]
 mod tests {
-    use super::semaphore_capacity;
+    use super::{probe_retry, semaphore_capacity};
+
+    #[test]
+    fn a_failed_probe_waits_longer_than_the_model_servers_idle_time() {
+        // openvibes-llm unloads after 5 min idle by default: retrying a
+        // probe that reaches the model sooner would keep it loaded.
+        let idle = std::time::Duration::from_secs(300);
+        assert!(probe_retry(false, 0) > idle, "answered but failed");
+        assert_eq!(probe_retry(true, 0), std::time::Duration::from_secs(10));
+        assert_eq!(probe_retry(true, 5), std::time::Duration::from_secs(10));
+        assert!(probe_retry(true, 6) > idle, "unreachable for a minute");
+    }
 
     #[test]
     fn assistant_capacity_never_disables_all_requests() {

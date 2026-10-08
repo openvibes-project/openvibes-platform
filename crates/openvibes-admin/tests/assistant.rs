@@ -229,7 +229,7 @@ async fn model_install_verifies_installs_read_only_and_selects_the_model() {
 
     let out = stdout(&run(&ABC_SHA256.to_uppercase()));
     assert!(
-        out.contains("next: systemctl stop openvibes-llm-proxy openvibes-llm"),
+        out.contains("next: systemctl restart openvibes-llm.socket"),
         "{out}"
     );
     let installed = models.join("Tiny-Model.Q4_K_M.gguf");

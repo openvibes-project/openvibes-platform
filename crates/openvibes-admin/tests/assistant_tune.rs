@@ -494,3 +494,29 @@ fn an_inactive_llm_socket_is_refused_before_anything_is_sent() {
     assert!(!root.join(TUNING).exists());
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_socket_lost_during_the_health_wait_never_receives_the_key() {
+    // Active for the first check and the health wait, gone before the
+    // timed call: the key is not sent and the old tuning comes back.
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("socket-lost", port, 60);
+    let out = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
+        .env("OPENVIBES_TUNE_SOCKET", "active,active,inactive")
+        .args(["helper", "assistant-tune", "--root"])
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("openvibes-llm.socket is not active"),
+        "{out:?}"
+    );
+    thread::sleep(Duration::from_millis(200));
+    let seen = seen.lock().unwrap().to_lowercase();
+    assert!(seen.contains("host:"), "the health wait ran: {seen}");
+    assert!(!seen.contains("server-key"), "{seen}");
+    assert!(!root.join(TUNING).exists());
+    fs::remove_dir_all(&root).unwrap();
+}
