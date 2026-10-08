@@ -153,6 +153,12 @@ pub fn run(force: bool) -> Result<String, String> {
             ));
         }
     }
+    // Tune sends the server's key to the port: only once systemd's socket
+    // is confirmed to hold it (tune checks again itself).
+    let port = env
+        .get("OPENVIBES_LLM_PORT")
+        .map_or(DEFAULT_PORT, String::as_str);
+    crate::tune_run::Restarter::llm_socket_holds(&crate::tune_run::Systemd, port)?;
     // Tuning is best effort: a model that cannot answer yet is reported.
     let tuned = crate::tune_run::run(
         &crate::tune_run::TuneOptions {

@@ -462,3 +462,35 @@ fn an_ipv6_loopback_url_is_not_measured_and_gets_no_key() {
     assert!(!seen.contains("authorization"), "{seen}");
     fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn an_inactive_llm_socket_is_refused_before_anything_is_sent() {
+    // Whoever holds the port is not systemd's socket: no key, no request,
+    // nothing changed, nothing stopped.
+    let (port, seen) = recording(Some(Duration::from_millis(50)), "200 OK", "200 OK");
+    let root = tree("socket-inactive", port, 60);
+    let out = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
+        .env("OPENVIBES_TUNE_SOCKET", "inactive")
+        .args(["helper", "assistant-tune", "--root"])
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1), "{out:?}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(
+            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
+        ),
+        "{stderr}"
+    );
+    assert!(!stderr.contains("systemctl stop"), "{stderr}");
+    thread::sleep(Duration::from_millis(200));
+    assert_eq!(
+        seen.lock().unwrap().as_str(),
+        "",
+        "a request reached the port"
+    );
+    assert!(!root.join(TUNING).exists());
+    fs::remove_dir_all(&root).unwrap();
+}
