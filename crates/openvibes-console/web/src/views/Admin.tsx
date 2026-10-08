@@ -238,27 +238,26 @@ export function Audit() {
   );
 }
 
-/** How to add a host: the one-line command to copy, or the install package
+/** How to add a host: the install package, or the one-line command to copy
  * (install walkthrough, 2026-10-08: hosts are added from the console). Both
- * carry the standing token. */
+ * carry the standing token. The command is copied, not shown: it is long and
+ * holds the token. */
 function AddHost() {
   const command = useResource<AgentCommand>("/api/v1/agent-command");
   const text = command.data?.command;
   return (
     <section className="view-pad stack" aria-labelledby="add-host">
       <h2 id="add-host" className="section-title">Add a host</h2>
-      <p className="subtle">Run this as root on the new host. It carries the standing token: anyone with it can enroll a host.</p>
-      {command.error ? <ErrorBox error={command.error} /> : !text ? <Loading /> : (
-        <div className="row">
-          <pre className="code code--wrap grow" tabIndex={0} aria-label="Install command">{text}</pre>
-          <button type="button" className="icon-button" aria-label="Copy the install command" onClick={() => { void navigator.clipboard?.writeText(text); toast("Copied"); }}><Icon name="copy" size={16} /></button>
-        </div>
-      )}
-      <div className="row">
+      <p className="subtle">Run either as root on the new host. Both carry the standing token: anyone with it can enroll a host.</p>
+      {command.error && <ErrorBox error={command.error} />}
+      <div className="row row--wrap">
         {isDemo()
-          ? <button type="button" className="button" onClick={downloadDemoPackage} title="One install script for every host"><Icon name="download" size={15} /> Install package</button>
-          : <a className="button" href="/api/v1/agent-package" download title="One install script for every host"><Icon name="download" size={15} /> Install package</a>}
-        <span className="subtle">The same, as a script to copy to the host and run with sudo.</span>
+          ? <button type="button" className="button" onClick={downloadDemoPackage} title="A script to copy to the host and run with sudo"><Icon name="download" size={15} /> Install package</button>
+          : <a className="button" href="/api/v1/agent-package" download title="A script to copy to the host and run with sudo"><Icon name="download" size={15} /> Install package</a>}
+        <button type="button" className="button" disabled={!text} title="A one-line command to paste into a root shell on the host"
+          onClick={() => { if (text) { void navigator.clipboard?.writeText(text); toast("Install command copied"); } }}>
+          <Icon name="copy" size={15} /> Copy CLI install
+        </button>
       </div>
     </section>
   );

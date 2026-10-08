@@ -421,8 +421,9 @@ carries the standing fleet token (the console role can read
 `agent_command.viewed`, `no-store`) returns `{command}`: the same install as
 one line to copy, token inline, what `openvibes-admin agent command` prints.
 The Enrollment page's "Add a host" section (install walkthrough, 2026-10-08:
-hosts are added from the console) shows that command with a copy button and
-the "Install package" download, while a standing token exists and the user
+hosts are added from the console) has two buttons: "Install package"
+(the download) and "Copy CLI install" (copies that command; it is not shown,
+being long and holding the token), while a standing token exists and the user
 holds global `tokens.create`; without `[agent_install]` both routes answer
 404, without a standing token `no_standing_token`. The script file holds the token:
 keep it private, and revoke the standing token to rotate it.
