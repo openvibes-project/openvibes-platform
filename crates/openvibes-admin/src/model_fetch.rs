@@ -2,13 +2,24 @@
 //! `model.pin` from its publisher with curl (HTTPS only) and installs it
 //! through the verified `model install` path. Setup and assistant-setup call
 //! it; nothing is installed unless the bytes match the pinned SHA-256.
+//!
+//! The models directory is group-writable and fetch may run as root, so the
+//! download goes into a fresh 0700 directory inside it (nobody else can swap
+//! the file), is verified and chmod-ed through one open descriptor, and is
+//! renamed onto the pinned name. Group members can already replace models,
+//! so this protects root, not the model against the group.
+// ponytail: follow-up: models dir group-writable vs root installs (make it
+// root-owned, or install as openvibes-admin only).
 
 // curl and stat run with fixed argument lists, no shell.
 #[allow(clippy::disallowed_types)]
 use std::process::Command;
 use std::{
-    fs, io,
+    fs::{self, DirBuilder, File, OpenOptions},
+    io,
+    os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     path::{Path, PathBuf},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use openvibes_llm::{is_model_name, is_sha256_hex};
@@ -108,12 +119,35 @@ pub fn free_bytes(dir: &Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Removes the path on drop: every return and panic leaves no download.
-struct Temp(PathBuf);
+/// Removes the private download directory on drop (`remove_dir_all` does not
+/// follow symlinks): every return and panic leaves no download.
+struct Private(PathBuf);
 
-impl Drop for Temp {
+impl Drop for Private {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.0);
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+/// Opens a file for reading without following a symlink at the final name.
+fn open_nofollow(path: &Path) -> io::Result<File> {
+    OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(path)
+}
+
+/// Removes `.fetch-*` directories left by killed runs.
+fn sweep(models_dir: &Path) {
+    let Ok(entries) = fs::read_dir(models_dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let leftover = entry.file_name().to_string_lossy().starts_with(".fetch-");
+        if leftover && fs::symlink_metadata(&path).is_ok_and(|m| m.is_dir()) {
+            let _ = fs::remove_dir_all(&path);
+        }
     }
 }
 
@@ -147,7 +181,7 @@ pub fn fetch(
                     pin.file, pin.sha256
                 ));
             }
-            let matches = fs::File::open(&destination)
+            let matches = open_nofollow(&destination)
                 .map_err(|_| "cannot read the installed model".to_owned())
                 .and_then(crate::model::digest)
                 .is_ok_and(|digest| digest == pin.sha256);
@@ -180,33 +214,47 @@ pub fn fetch(
             free as f64 / 1e9
         ));
     }
-    let temporary = Temp(models_dir.join(format!(".{}.download", pin.file)));
-    // A leftover from a killed run.
-    let _ = fs::remove_file(&temporary.0);
-    downloader.download(&pin.url, &temporary.0).map_err(|error| {
+    sweep(models_dir);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos());
+    let private = models_dir.join(format!(".fetch-{}-{nanos}", std::process::id()));
+    // Never reuses a directory: create fails if the name exists.
+    DirBuilder::new()
+        .mode(0o700)
+        .create(&private)
+        .map_err(|_| "cannot create a private download directory".to_owned())?;
+    let private = Private(private);
+    let temporary = private.0.join(&pin.file);
+    downloader.download(&pin.url, &temporary).map_err(|error| {
         format!(
             "cannot download {}: {error}\noffline: download it elsewhere, then `openvibes-admin assistant model install FILE --sha256 {}`",
             pin.url, pin.sha256
         )
     })?;
-    let file = fs::File::open(&temporary.0).map_err(|_| "cannot read the download".to_owned())?;
+    // One descriptor for sync, size, hash and chmod; the directory is ours.
+    let file = open_nofollow(&temporary).map_err(|_| "cannot read the download".to_owned())?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "cannot read the download".to_owned())?;
+    if !metadata.is_file() {
+        return Err("the download is not a regular file".into());
+    }
+    let size = metadata.len();
     // Flushed before the rename: a power loss must not leave a truncated file
     // at the pinned name, which "selected" trusts without a re-hash.
     file.sync_all()
         .map_err(|_| "cannot write the model (disk full?)".to_owned())?;
-    let size = file
-        .metadata()
-        .map_err(|_| "cannot read the download".to_owned())?
-        .len();
-    let digest = crate::model::digest(file)?;
+    let digest = crate::model::digest(&file)?;
     if digest != pin.sha256 {
         return Err(format!(
             "the downloaded file does not match the pinned SHA-256 ({}); nothing was installed",
             pin.url
         ));
     }
-    crate::model::set_mode(&temporary.0, 0o444)?;
-    fs::rename(&temporary.0, &destination).map_err(|_| "cannot install the model".to_owned())?;
+    file.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o444))
+        .map_err(|_| "cannot set file permissions".to_owned())?;
+    fs::rename(&temporary, &destination).map_err(|_| "cannot install the model".to_owned())?;
     crate::model::select(
         &config,
         &destination,
@@ -235,6 +283,12 @@ mod tests {
     impl Downloader for Fake {
         fn download(&self, _: &str, dest: &Path) -> Result<(), String> {
             self.calls.set(self.calls.get() + 1);
+            use std::os::unix::fs::PermissionsExt;
+            let mode = fs::metadata(dest.parent().unwrap())
+                .unwrap()
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o777, 0o700, "download dir is private");
             fs::write(dest, self.bytes).map_err(|e| e.to_string())
         }
     }
@@ -319,6 +373,21 @@ mod tests {
         assert_eq!(downloader.calls.get(), 0);
         let conf = fs::read_to_string(&config).unwrap();
         assert!(conf.contains(&format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256)));
+    }
+
+    #[test]
+    fn planted_symlink_and_old_leftovers_are_harmless() {
+        let (models, config) = dirs("plant");
+        let victim = models.parent().unwrap().join("victim");
+        fs::write(&victim, b"keep").unwrap();
+        std::os::unix::fs::symlink(&victim, models.join(".m.gguf.download")).unwrap();
+        let old = models.join(".fetch-1-1");
+        fs::create_dir(&old).unwrap();
+        fs::write(old.join("m.gguf"), b"stale").unwrap();
+        fetch(&pin(), &fake(BYTES), &models, &config, |_| u64::MAX).unwrap();
+        assert_eq!(fs::read(&victim).unwrap(), b"keep");
+        assert!(!old.exists());
+        assert!(names(&models).iter().all(|n| !n.starts_with(".fetch-")));
     }
 
     #[test]

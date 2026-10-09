@@ -37,3 +37,4 @@ Task 2: fix round 1 dispatched (resume implementer)
 Task 2: fix round 1 f3b82ab (237 tests green)
 Task 2 re-review: approve; round 2 (sync_all before rename, real post-download guard test, llm.md typed commands) dispatched
 Ruling (Task 3 vs user rule): no message tells users to type a command. --no-download error and Setup's "skipped" final text say "turn the assistant on in Setup to download its model (offline: see the offline install guide)"; spec §6 "adding later" = Setup's switch — cost: admins scripting must read the admin reference
+Security review (commit): TOCTOU in fetch temp file (group-writable models dir, root fetch via sudo assistant-setup) → symlink overwrite / unverified swap. Ruling: private 0700 fetch dir + fd-based verify; folded into round 2 (priority). Follow-up: models dir 0775 group-writable vs root installs
