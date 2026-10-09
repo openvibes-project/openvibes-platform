@@ -42,3 +42,35 @@ Task 2: round 2 7eaa01e + security fix b9a3b2b (private 0700 dir, fd-based verif
 Security re-review (opus) of b9a3b2b: High — dir-rename symlink attack (no sticky bit) + read_config follows symlinked model.conf (root leaks /etc/shadow); Low — FIFO hang, curl -q, PATH lookup
 Ruling: fetch + install refuse uid 0 (root already reruns as openvibes-admin by default); Task 3 calls fetch via runuser; read_config O_NOFOLLOW|O_NONBLOCK + fd is_file; curl -q, absolute paths, --max-filesize — cost if wrong: a root-only setup path needs runuser
 Task 2: security round 2 dispatched
+Task 2: security round 2 94b15c9 (uid0 refused, read_config nofollow, curl -q/abs paths)
+Security re-check: SAFE; latent — refuse_root only in model::run; fails open when uid unknown
+Task 2: complete (d51d333..94b15c9; reviews + 2 security rounds clean)
+Ruling: refuse_root moves into fetch() and install() and fails closed (only Some(non-zero) allowed) — done as step 0 of Task 3 — cost: none for tests (non-root)
+Task 3: dispatched (fresh implementer, sonnet), BASE 94b15c9
+Task 3: c4d0e29 (252 tests green); concerns: other messages still name commands (tune_run, post-setup check, tuning skipped)
+Task 3 review (opus): Needs fixes — download failure stops run before Ready (lose URL/password); curl meter fills failure detail + frozen TUI; root FIFO hang in installed()
+Ruling: AssistantModel last (after Ready), Finished shows URL+failure line — spec §7 — cost: Ready doesn't vouch for assistant
+Ruling: external backend → step Skipped; declined text keeps semicolon
+Open: "open Setup (`openvibes-admin`)" in quick-setup — reopening Setup needs typing its name; product question for user, left as is
+Spec §2/§6 still name commands (contradict ruling) — controller updates spec in Task 5
+Task 3: fix round 1 dispatched
+Task 3: fix round 1 d1b6d64 (255 tests green)
+Task 3 re-review: Approved
+Task 3: complete (94b15c9..d1b6d64)
+Parked (fix in Task 5 round): repair --quick leaves moved ports open when only AssistantModel failed (exclude it from the all-Done check, setup/mod.rs ~404); external() treats any configure error as external (match the "already sends" error); Finished detail keeps checked() prefix "/usr/bin/openvibes-admin helper assistant-setup:" (strip); link the offline install guide; remaining "run sudo" strings in assistant_setup/tune_run
+Task 4: dispatched (sonnet) BASE d1b6d64; ruling: installer copies an unreadable --model file to a private /var/tmp dir for the openvibes-admin user (fetch/install refuse root)
+Task 4: 002695a DONE_WITH_CONCERNS — e2e green (54 MB kit, 3+2 negative cases); blocker: model install needs DB (before Setup)
+Ruling: installer stages model in /var/lib/openvibes-offline (root 0755/0444, SHA-checked); Setup's AssistantModel installs a staged model without prompting — spec §5.5 "Setup sees the model" + keeps audit — cost: Setup code change in Task 4
+Ruling: ship full --alldeps closure (no drop by name) — older F44 hosts need newer libs — cost: bigger kit
+Task 4: fix round 1 dispatched
+Task 4: fix round 1 d5db2d8 (kit 92 MB; Setup installs staged model; e2e green)
+Sonar #230: S8233 release.yml:10 workflow-level write permission → job level; fold into Task 4 fix round
+Task 4 review (opus): Needs fixes — rerun doesn't upgrade (dnf5 install no-op); Fedora key not supplied with --disablerepo; staged model lingers; minors
+Ruling: check() honours explicit Skip even with staged model
+Task 4: fix round 2 dispatched (incl. merge main after #232, Sonar S8233)
+User ruling (via coordinator): opening Setup with `sudo openvibes-admin` may be named in docs/messages; no other commands. Task 5 docs follow it
+Task 4: fix round 2 f3ea40e (merged main; 95 MB; upgrade + third-key e2e green; 260 tests + integration)
+Task 4 re-review: Approved (N1 upgrade-failure "nothing changed" wrong; N2 CI higher-release build ungated; N3 Fedora key not in --check; N4 bare upgrade touches unrelated host packages; N5 noted)
+Task 4: complete (d1b6d64..f3ea40e)
+Ruling: N1-N4 go into Task 5's round (N4: upgrade names the OpenVIBES packages + postgresql-server)
+Task 5: dispatched (sonnet) phase A edits: spec update, quick-setup offline section, N1-N4, Task 3 parked fixes; phase B gate after #231 gate

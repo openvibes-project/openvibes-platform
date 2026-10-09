@@ -100,7 +100,14 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             "--sha256",
             &pin.sha256,
         ])
-        .map_err(|error| format!("the staged model was not installed ({error})"))?;
+        .map_err(|error| {
+            // Only what the install said, not the command line before it.
+            let marker = format!("--sha256 {}: ", pin.sha256);
+            let why = error
+                .split_once(&marker)
+                .map_or(error.as_str(), |(_, why)| why);
+            format!("the staged model was not installed: {why}")
+        })?;
         // Installed: the staged copy goes now, whatever assistant-setup does.
         if let Some((_, path)) = &staged {
             remove_staged(path);
@@ -284,7 +291,10 @@ mod tests {
         plan.model = ModelChoice::Fetch;
         let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
         assert!(matches!(state, StepState::Failed(_)), "{state:?}");
-        assert!(state.detail().contains("staged model was not installed"));
+        assert_eq!(
+            state.detail(),
+            "the staged model was not installed: sha256 mismatch"
+        );
         assert!(!fake.called(&["/usr/bin/openvibes-admin", "helper"]));
         assert!(fake.root.join(staged.trim_start_matches('/')).exists());
     }
