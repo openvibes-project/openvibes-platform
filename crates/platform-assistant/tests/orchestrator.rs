@@ -905,10 +905,11 @@ async fn parallel_native_calls_share_the_room() {
         items: 12,
         ..Fake::default()
     };
-    // A small budget keeps every room under MAX_RESULT_CHARS, so only the
-    // characters already produced this turn keep the sum within the limit.
+    // A budget small enough that even the first room (about 900 chars)
+    // is under the 1,600-char cap: the cap cannot be what keeps the sum
+    // within the limit, only the characters already produced this turn.
     let mut s = settings(ResolvedMode::Native);
-    s.budget.prompt_tokens = 2_200;
+    s.budget.prompt_tokens = 2_100;
     ask(&script, &fake, s, "q").await.unwrap();
     let requests = script.requests();
     let tools: usize = requests[0]
@@ -938,6 +939,8 @@ async fn parallel_native_calls_share_the_room() {
             })
             .sum::<usize>();
     let limit = s.budget.prompt_tokens as usize * 3;
-    assert!(tool_sizes(&script).iter().all(|n| *n >= 400));
+    let sizes = tool_sizes(&script);
+    assert!(sizes[0] < 1_600, "{sizes:?}");
+    assert!(sizes.iter().all(|n| *n >= 400), "{sizes:?}");
     assert!(total <= limit, "{total} vs {limit}");
 }
