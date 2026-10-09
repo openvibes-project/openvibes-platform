@@ -120,6 +120,10 @@ Requires:       openvibes-admin = %{version}-%{release}
 # The model store's group is openvibes-admin, renamed in that package's %%pre.
 Requires(pre):  openvibes-admin = %{version}-%{release}
 %{?systemd_requires}
+# The SELinux module (packaging/llm/openvibes-llm.cil) is loaded and removed
+# with semodule.
+Requires(post): policycoreutils
+Requires(postun): policycoreutils
 
 Recommends:     openvibes-llm-model = %{version}-%{release}
 
@@ -221,6 +225,7 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-tune.service %{buildroot}%{_unitdir}/openvibes-llm-tune.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
+install -D -m 0644 $S/packaging/llm/openvibes-llm.cil %{buildroot}%{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
 install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
@@ -315,6 +320,18 @@ systemctl start --no-block openvibes-rules-apply.service >/dev/null 2>&1 || :
 %pre -n openvibes-llm
 %rename_pre llm openvibes-llm.service
 %post -n openvibes-llm
+# Before any unit (re)start below, in %%posttrans or in the old package's
+# %%postun: without it the socket cannot bind 18430 and the proxy cannot
+# reach the server under enforcing SELinux. Priority 200: Fedora's for
+# modules shipped by packages. As Fedora's %%selinux_modules_install: into
+# the targeted store whenever it is the configured policy, enabled or not
+# (a host that enables SELinux later has it), and loaded only if enabled.
+# Not fatal: the platform works without the assistant.
+if [ -e /etc/selinux/config ] && (. /etc/selinux/config && [ "$SELINUXTYPE" = targeted ]); then
+    { semodule -n -s targeted -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil &&
+        { ! selinuxenabled || load_policy; }; } ||
+        echo "openvibes-llm: the SELinux module openvibes-llm could not be installed or loaded; under enforcing SELinux the assistant cannot start" >&2
+fi
 %systemd_post openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 # The API key the console sends: generated once, root's only. The console
 # and openvibes-llm each receive it as a systemd credential.
@@ -335,7 +352,7 @@ if [ "$(systemctl is-enabled openvibes-llm.service 2>/dev/null)" = enabled ]; th
     systemctl stop openvibes-llm.service || :
     systemctl enable -q --now openvibes-llm.socket || :
     systemctl is-active -q openvibes-llm.socket ||
-        echo "openvibes-llm: openvibes-llm.socket did not start; see systemctl status openvibes-llm.socket, then: systemctl enable --now openvibes-llm.socket" >&2
+        echo "openvibes-llm: openvibes-llm.socket did not start, so the assistant is unavailable; the reason is in the journal (openvibes-llm.socket) and on the Health screen of openvibes-admin" >&2
 fi
 # An old server that ran but was not enabled (and whose account was renamed)
 # is started here once; with StopWhenUnneeded= and no proxy it stops again at
@@ -354,6 +371,11 @@ systemctl start --no-block openvibes-llm-tune.service >/dev/null 2>&1 || :
 # would restart all three (PartOf=).
 %systemd_postun openvibes-llm.socket
 %systemd_postun_with_restart openvibes-llm-proxy.service openvibes-llm.service
+# Erase only: an upgrade keeps (and its %%post reloads) the module.
+if [ $1 -eq 0 ] && [ -e /etc/selinux/config ] && (. /etc/selinux/config && [ "$SELINUXTYPE" = targeted ]); then
+    semodule -n -s targeted -X 200 -r openvibes-llm >/dev/null 2>&1 || :
+    selinuxenabled && load_policy || :
+fi
 %endif
 
 %files -n openvibes-ingest
@@ -428,6 +450,7 @@ systemctl start --no-block openvibes-llm-tune.service >/dev/null 2>&1 || :
 %{_unitdir}/openvibes-llm-proxy.service
 %{_unitdir}/openvibes-llm-tune.service
 %{_sysusersdir}/openvibes-llm.conf
+%{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0644, root, root) %{_sysconfdir}/openvibes/llm.conf
 %ghost %config(noreplace) %attr(0600, root, root) %{_sysconfdir}/openvibes/llm-api-key

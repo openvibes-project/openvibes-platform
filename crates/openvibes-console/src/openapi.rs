@@ -229,6 +229,7 @@ use crate::{
         AuditEventView,
         AuditRetentionPolicy,
         AgentDetail,
+        crate::api::LastTest,
         AgentPage,
         AgentStatus,
         AgentSummary,

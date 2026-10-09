@@ -116,6 +116,16 @@ out=$(/usr/libexec/openvibes-llm/openvibes-llm-check 2>&1) && fail "llm check ra
 out=$(runuser -u openvibes-llm -- env -i $(grep -E '^OPENVIBES_LLM_' /etc/openvibes/llm.conf) \
     /usr/libexec/openvibes-llm/openvibes-llm-check 2>&1) && fail "llm check passed without a model"
 [[ "$out" == *"OPENVIBES_LLM_MODEL is not set"* ]] || fail "llm check without a model: $out"
+# The SELinux module compiles against Fedora's policy (an unknown type or
+# permission fails). -n: build the store only; it works with SELinux
+# disabled, as in this container. Needs selinux-policy-targeted.
+llm_cil=/usr/share/selinux/packages/targeted/openvibes-llm.cil
+[[ -f "$llm_cil" ]] || fail "no $llm_cil"
+rpm -q --scripts openvibes-llm | grep -q "semodule -n -s targeted -X 200 -i $llm_cil" || fail "openvibes-llm does not load its SELinux module"
+rpm -q selinux-policy-targeted >/dev/null || fail "install selinux-policy-targeted to check the SELinux module"
+semodule -n -X 200 -i "$llm_cil" || fail "the SELinux module does not compile"
+semodule -l | grep -qx openvibes-llm || fail "the SELinux module is not in the store"
+semodule -n -X 200 -r openvibes-llm || fail "the SELinux module does not remove"
 
 # openvibes-signer (board #107): the socket's group, a state directory only
 # it writes (setgid, so status.json reaches operators), and `seed` creating

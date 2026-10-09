@@ -542,7 +542,7 @@ tests the signing script with a throwaway key (CI's Fedora job).
 ```sh
 scripts/build-rpm.sh
 podman run --rm -v "$PWD:/src:Z" -w /src registry.fedoraproject.org/fedora:44 bash -c \
-  'dnf -q -y install systemd && dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm && bash scripts/check-rpm.sh'
+  'dnf -q -y install systemd selinux-policy-targeted && dnf -q -y install target/rpm/RPMS/x86_64/openvibes-*.rpm && bash scripts/check-rpm.sh'
 ```
 
 `scripts/setup-lifecycle-e2e.sh OLD_DIR NEW_DIR` (CI job "Setup life
@@ -555,7 +555,8 @@ that no packages, files, accounts, database or roles remain.
 `scripts/check-rpm.sh` (as root, after install) checks the users, modes and
 owners, the `%config(noreplace)` flags, `systemd-analyze verify` on all
 six units, the generated `llm-api-key`, the `openvibes-llm` sandbox lines
-and its pre-start check's refusals, that the ingest, distribution, and vulns units stop with
+and its pre-start check's refusals, that its SELinux module compiles
+against Fedora's policy, that the ingest, distribution, and vulns units stop with
 SIGINT (an actual stop is not exercised here), and that the
 binaries run and refuse a missing configuration.
 

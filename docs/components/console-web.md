@@ -351,6 +351,10 @@ triage on alarms and findings stays as it is.
   ones), **Software** (the host's packages, filtered on the server by name
   and "Fix available", 200 at a time) and Details (identity, system and
   running kernel, "software as of", threat alarms, tags, certificates).
+  **Last test** shows when the host last raised the harmless test alarm
+  and test finding (`openvibes-test alarm|finding`, from `last_test` on
+  the host detail), with both commands; test alarms and findings carry a
+  Test badge in the lists (`views/tests.ts`).
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
   a copy button; an off host also shows

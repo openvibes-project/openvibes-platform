@@ -448,7 +448,7 @@ jobs:
 
       - name: Install and check RPMs
         run: |
-          dnf -q -y install dist/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer}-*.rpm
+          dnf -q -y install selinux-policy-targeted dist/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer}-*.rpm
           bash scripts/check-rpm.sh
           chmod +x tools/*
 

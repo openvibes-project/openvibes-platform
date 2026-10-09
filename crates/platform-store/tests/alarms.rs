@@ -372,6 +372,50 @@ async fn each_suppression_scope_closes_matching_alarms_only() {
 }
 
 #[tokio::test]
+async fn a_test_alarm_is_closed_on_arrival_and_stays_closed() {
+    let (db, agent) = setup().await;
+    let mut client = as_ingest(&db).await;
+    let now = Utc::now();
+    let t0 = at(now.timestamp_millis() - 60_000);
+    let test = |count, last| {
+        let mut a = alarm("alarm.00000000000000000000000000000777", count, t0, last);
+        a.rule_set_id = Identifier::new("baseline-alarms").unwrap();
+        a.rule_id = Identifier::new("alarm.openvibes.test").unwrap();
+        a.severity = Severity::Info;
+        a
+    };
+    let first = row(&client, &test(1, t0)).await;
+    alarms::insert_batch(&mut client, &agent, 0, &[first], now)
+        .await
+        .unwrap();
+    let again = row(&client, &test(2, t0 + Duration::seconds(5))).await;
+    alarms::insert_batch(&mut client, &agent, 0, &[again], now)
+        .await
+        .unwrap();
+    // The same rule id from another set is an ordinary alarm.
+    let mut other = alarm("alarm.00000000000000000000000000000778", 1, t0, t0);
+    other.rule_id = Identifier::new("alarm.openvibes.test").unwrap();
+    let other = row(&client, &other).await;
+    alarms::insert_batch(&mut client, &agent, 0, &[other], now)
+        .await
+        .unwrap();
+    let rows = stored(&client, &agent).await;
+    assert_eq!(rows[0].0, 2, "the recurrence still counts");
+    assert_eq!(
+        (rows[0].2.as_str(), rows[0].3.as_deref()),
+        ("mitigated", Some(alarms::TEST_NOTE))
+    );
+    assert_eq!(rows[1].2, "open");
+    let (alarm_at, finding_at) = platform_store::rules::last_tests(&client, &agent)
+        .await
+        .unwrap();
+    assert_eq!(alarm_at, Some(t0 + Duration::seconds(5)));
+    assert_eq!(finding_at, None);
+    drop(client);
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn recurrence_reopens_mitigated_and_expired_risk_only() {
     let (db, agent) = setup().await;
     let mut client = as_ingest(&db).await;

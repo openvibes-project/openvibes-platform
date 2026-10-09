@@ -7062,7 +7062,8 @@
           {
             "type": "object",
             "required": [
-              "certificates"
+              "certificates",
+              "last_test"
             ],
             "properties": {
               "certificates": {
@@ -7071,6 +7072,10 @@
                   "$ref": "#/components/schemas/CertificateView"
                 },
                 "description": "Certificate metadata for the agent."
+              },
+              "last_test": {
+                "$ref": "#/components/schemas/LastTest",
+                "description": "When the host last raised the harmless test triggers\n(`openvibes-test alarm|finding`)."
               }
             }
           }
@@ -10442,6 +10447,26 @@
               "$ref": "#/components/schemas/ItemCaseView"
             },
             "description": "For an alarm, finding or vulnerability at most one: the open case.\nFor a host or software, up to 50, newest change first, open or closed."
+          }
+        }
+      },
+      "LastTest": {
+        "type": "object",
+        "description": "The host's latest test alarm and test finding (spec\n`2026-10-09-test-triggers-design.md`); absent when never seen.",
+        "properties": {
+          "alarm_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest test alarm (RFC 3339)."
+          },
+          "finding_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Latest test finding observation (RFC 3339)."
           }
         }
       },
