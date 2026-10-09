@@ -688,3 +688,22 @@ async fn the_stores_spelling_of_the_rule_is_used() {
     let out = run("rule_description", r#"{"rule":"SSH.Exposed"}"#).await;
     assert_eq!(out["rule"]["cite"], "[finding:baseline/ssh.exposed]");
 }
+
+#[tokio::test]
+async fn a_named_set_with_only_old_findings_says_so() {
+    let old = TWO_SETS.replace(
+        "last_hours_ago = 1\nmessage = \"only baseline\"",
+        "last_hours_ago = 800\nmessage = \"only baseline\"",
+    );
+    let fleet = Arc::new(Fleet::parse(&old, Utc::now()).unwrap());
+    let out = run_on(
+        fleet,
+        "finding_endpoints",
+        r#"{"rule_set":"baseline","rule":"solo.rule"}"#,
+    )
+    .await
+    .unwrap();
+    assert!(out["not_seen_in_window"].as_i64().unwrap() > 0);
+    assert!(out.get("finding").is_none());
+    assert_eq!(out["note"], "no finding with this rule in the window");
+}

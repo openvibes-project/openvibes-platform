@@ -13,6 +13,8 @@ use super::{
 
 /// Result note when a rule matches no finding.
 pub const NOTE_NO_FINDING: &str = "no finding with this rule";
+/// Result note when a rule has only findings older than the window.
+pub const NOTE_NONE_IN_WINDOW: &str = "no finding with this rule in the window";
 /// Result note when a searched rule set has no findings.
 pub const NOTE_SET_NOT_FOUND: &str = "rule set not found; showing all rule sets";
 
@@ -180,7 +182,12 @@ impl<S: Source> Lookups<S> {
             all.truncate(items as usize);
         } else if fallback {
             // Only model text names this finding: no cite, no echo.
-            summary.insert("note".into(), json!(NOTE_NO_FINDING));
+            let note = if older > 0 {
+                NOTE_NONE_IN_WINDOW
+            } else {
+                NOTE_NO_FINDING
+            };
+            summary.insert("note".into(), json!(note));
         } else {
             summary.insert(
                 "finding".into(),
