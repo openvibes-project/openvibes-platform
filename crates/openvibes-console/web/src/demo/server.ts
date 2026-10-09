@@ -8,6 +8,7 @@ import type {
 } from "../api/types";
 import { createCaseStore, seedCases } from "./cases";
 import { createDashboardStore } from "./dashboards";
+import { demoAttack, demoMappings, pairView } from "./attack";
 import { buildDemoData } from "./data";
 import { demoHistory } from "./history";
 
@@ -283,7 +284,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (!finding) return problem(404, "compliance_finding_not_found", "Compliance finding not found");
     return json({ status: finding.detection ? "exact" : "unavailable", rule_set_id: set, rule_set_version: finding.detection?.rule_set_version ?? null,
       rule: finding.detection ? { id: rule, version: finding.rule_version, title: finding.message, expression: finding.detection.steps[0]?.expression,
-        finding_message: finding.message, severity: finding.severity, confidence: finding.confidence, kind: "snapshot", programs: null } : null });
+        finding_message: finding.message, severity: finding.severity, confidence: finding.confidence, kind: "snapshot", programs: null, attack: (demoMappings[rule ?? ""] ?? []).map(pairView) } : null });
   });
   route("GET", "/api/v1/compliance/latest/{agent}/{set}/{rule}/triage", "compliance.read", ({ agent = "", set = "", rule = "" }) =>
     json(data.triage.get(triageKey(agent, set, rule)) ?? { state: "open", version: 0, rule_version: 3, note: null, assigned_to: null, accepted_until: null }));
@@ -318,7 +319,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (!alarm) return problem(404, "alarm_not_found", "Alarm not found");
     return json({ status: "exact", rule_set_id: alarm.rule_set_id, rule_set_version: alarm.rule_set_version,
       rule: { id: alarm.rule_id, version: alarm.rule_version, title: alarm.message, expression: alarm.detection.steps[0]?.expression,
-        finding_message: alarm.message, severity: alarm.severity, confidence: alarm.confidence, kind: "process_event", programs: [alarm.exe] } });
+        finding_message: alarm.message, severity: alarm.severity, confidence: alarm.confidence, kind: "process_event", programs: [alarm.exe], attack: (demoMappings[alarm.rule_id] ?? []).map(pairView) } });
   });
   route("GET", "/api/v1/alarms/{id}", "alarms.read", ({ id = "" }) => {
     const alarm = alarmList().find((candidate) => candidate.id === id);
@@ -735,6 +736,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   // Draft site rules. The demo's check is shallow: it mirrors the real
   // server's field names, not its CEL compiler.
   const drafts = new Map<string, Map<string, RuleDraft>>([["site", new Map()], ["site-alarms", new Map()]]);
+  const attackOf = (body: Record<string, unknown>) => (Array.isArray(body.attack) ? body.attack : [])
+    .map((pair: { tactic?: unknown; technique?: unknown }) => ({
+      tactic: typeof pair.tactic === "string" ? pair.tactic : "",
+      technique: typeof pair.technique === "string" ? pair.technique : null,
+    }));
   const draftProblems = (set: string, body: Record<string, unknown>) => {
     const problems: { field: string; message: string }[] = [];
     const expression = String(body.expression ?? "");
@@ -744,6 +750,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const programs = Array.isArray(body.programs) ? body.programs.map(String) : null;
     if (set === "site-alarms" && (programs === null || programs.length < 1 || programs.length > 8)) problems.push({ field: "programs", message: "name one to 8 distinct programs" });
     if (set === "site" && programs !== null) problems.push({ field: "programs", message: "only alarm rules have a program prefilter" });
+    for (const pair of attackOf(body)) {
+      if (!pairView(pair).known) problems.push({ field: "attack", message: `${pair.technique ?? pair.tactic} is not under ${pair.tactic} in ATT&CK ${demoAttack.version}` });
+    }
     return problems;
   };
   route("GET", "/api/v1/rule-drafts/{set}", "rules.write", ({ set = "" }) => {
@@ -764,7 +773,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const earlier = store.get(id);
     const next: RuleDraft = {
       rule_set_id: set, rule_id: id, title: String(body.title), severity: String(body.severity), confidence: Number(body.confidence), expression: String(body.expression),
-      finding_message: String(body.finding_message), programs: set === "site-alarms" ? (body.programs as string[]) : null, updated_by: actor, updated_at: iso(), version: 1,
+      finding_message: String(body.finding_message), programs: set === "site-alarms" ? (body.programs as string[]) : null, attack: attackOf(body).map(pairView), updated_by: actor, updated_at: iso(), version: 1,
     };
     if (earlier) {
       const same = JSON.stringify({ ...earlier, version: 0, updated_at: "", updated_by: "" }) === JSON.stringify({ ...next, version: 0, updated_at: "", updated_by: "" });
@@ -774,6 +783,15 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("rule_draft.saved", `${set}/${id} v${next.version}`, "rule_draft");
     return json(next);
   });
+  route("GET", "/api/v1/attack", "rules.read", () => json(demoAttack));
+  route("GET", "/api/v1/rules/coverage", "rules.read", () => json({
+    attack_version: demoAttack.version, notice: demoAttack.notice, tactics: demoAttack.tactics, unverified_sets: [],
+    rules: [
+      ...data.rules.map((r) => ({ rule_set_id: r.ruleSetId, rule_id: r.ruleId, title: r.message.split(" listens")[0] ?? r.ruleId, kind: "snapshot", severity: r.severity, draft: false, attack: (demoMappings[r.ruleId] ?? []).map(pairView) })),
+      ...[...new Map(data.alarms.map((a) => [a.rule_id, a])).values()].map((a) => ({ rule_set_id: "baseline-alarms", rule_id: a.rule_id, title: a.message, kind: "process_event", severity: a.severity, draft: false, attack: (demoMappings[a.rule_id] ?? []).map(pairView) })),
+      ...[...drafts.values()].flatMap((store) => [...store.values()]).map((d) => ({ rule_set_id: d.rule_set_id, rule_id: d.rule_id, title: d.title, kind: d.rule_set_id === "site-alarms" ? "process_event" : "snapshot", severity: d.severity, draft: true, attack: d.attack })),
+    ],
+  }));
   route("DELETE", "/api/v1/rule-drafts/{set}/{id}", "rules.write", ({ set = "", id = "" }) => {
     if (!drafts.get(set)?.delete(id)) return problem(404, "draft_not_found", "No such draft");
     audit("rule_draft.deleted", `${set}/${id}`, "rule_draft");

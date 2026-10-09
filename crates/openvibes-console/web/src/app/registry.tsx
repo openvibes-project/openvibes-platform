@@ -24,6 +24,7 @@ import { AuditEventPanel, EnrollmentTokenPanel, RuleSetPanel, ServiceAccountPane
 import type { IconName } from "../ui/Icon";
 import { Cases } from "../views/Cases";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
+import { Coverage } from "../views/Coverage";
 import { SiteRules } from "../views/SiteRules";
 import { About } from "../views/About";
 import { Agents } from "../views/Agents";
@@ -63,6 +64,7 @@ export const views: readonly ViewDef[] = [
   { path: "/enrollment", label: "Enrollment", icon: "enrollment", group: "Operate", keys: "g e", access: [{ permission: "tokens.read", global: true }], render: () => <Enrollment /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.read", global: true }], render: () => <Coverage /> },
   { path: "/rule-sets", label: "Rule sets", icon: "rules", group: "Operate", keys: "g r", access: [{ permission: "rules.read", global: true }], render: () => <RuleSets /> },
   { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
   { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },

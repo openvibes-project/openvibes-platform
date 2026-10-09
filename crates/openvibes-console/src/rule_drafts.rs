@@ -54,6 +54,9 @@ pub struct RuleDraftInput {
     /// Alarm rules only: the programs (exe paths or basenames) an event must
     /// match before the expression runs; one to eight.
     pub programs: Option<Vec<String>>,
+    /// MITRE ATT&CK pairs the rule covers (P18), primary first.
+    #[serde(default)]
+    pub attack: Option<Vec<crate::coverage::AttackPairInput>>,
 }
 
 /// One saved draft rule.
@@ -77,6 +80,8 @@ pub struct RuleDraftView {
     pub finding_message: String,
     /// Alarm rules: the program prefilter.
     pub programs: Option<Vec<String>>,
+    /// Its ATT&CK pairs, resolved against the bundled release.
+    pub attack: Vec<crate::coverage::AttackPairView>,
     /// Who last saved it.
     pub updated_by: String,
     /// When (RFC 3339).
@@ -94,7 +99,7 @@ pub struct RuleDraftList {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct RuleProblem {
     /// The field it concerns: `id`, `title`, `severity`, `confidence`,
-    /// `expression`, `finding_message`, `programs` or `rule`.
+    /// `expression`, `finding_message`, `programs`, `attack` or `rule`.
     pub field: String,
     /// What is wrong.
     pub message: String,
@@ -131,6 +136,7 @@ fn view(draft: Draft) -> Option<RuleDraftView> {
         confidence: rule.confidence.value(),
         expression: rule.expression,
         finding_message: rule.finding_message,
+        attack: crate::coverage::pair_views(rule.attack.as_deref()),
         programs: rule.programs,
         updated_by: draft.updated_by,
         updated_at: draft
@@ -162,6 +168,9 @@ pub(crate) fn rule_json(
     if rule_set_id == SITE_ALARMS {
         rule["kind"] = json!("process_event");
         rule["programs"] = json!(input.programs.clone().unwrap_or_default());
+    }
+    if let Some(attack) = input.attack.as_ref().filter(|a| !a.is_empty()) {
+        rule["attack"] = json!(attack);
     }
     rule
 }
@@ -216,6 +225,11 @@ pub(crate) fn check(
             field.strip_prefix("rules.").unwrap_or(field),
             error.message(),
         ));
+    }
+    for pair in rule.attack.iter().flatten() {
+        if let Some(message) = crate::coverage::unknown_pair(pair) {
+            problems.push(problem("attack", message));
+        }
     }
     // The agent's own static check: what its loader refuses.
     if let Err(error) = openvibes_rules::check_rule(&rule, ResourceLimits::V1) {
@@ -881,7 +895,33 @@ mod tests {
             expression: expression.to_owned(),
             finding_message: "Message".to_owned(),
             programs: programs.map(|names| names.into_iter().map(str::to_owned).collect()),
+            attack: None,
         }
+    }
+
+    fn pair(tactic: &str, technique: Option<&str>) -> crate::coverage::AttackPairInput {
+        crate::coverage::AttackPairInput {
+            tactic: tactic.into(),
+            technique: technique.map(Into::into),
+        }
+    }
+
+    #[test]
+    fn attack_pairs_are_checked_against_the_bundled_release() {
+        let mut rule = input("'sshd' in facts['process.names']", None);
+        rule.attack = Some(vec![pair("TA0001", Some("T1190")), pair("TA0005", None)]);
+        assert!(check("site", "r", &rule, &BTreeSet::new()).is_empty());
+        rule.attack = Some(vec![pair("TA0002", Some("T1190"))]);
+        let problems = check("site", "r", &rule, &BTreeSet::new());
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].field, "attack");
+        rule.attack = Some(vec![pair("TA0002", Some("T1059.4"))]);
+        assert!(
+            check("site", "r", &rule, &BTreeSet::new())
+                .iter()
+                .any(|p| p.field == "attack"),
+            "a malformed id is refused by the agent's own validation"
+        );
     }
 
     fn fields(problems: &[super::RuleProblem]) -> Vec<&str> {

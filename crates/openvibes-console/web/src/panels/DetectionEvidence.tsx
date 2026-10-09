@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useResource } from "../api/client";
+import { nav } from "../app/nav";
 import type { components } from "../api/generated";
 import { ErrorBox, Loading } from "../ui/bits";
 import { date } from "../ui/format";
@@ -7,6 +8,12 @@ import { Section } from "../ui/panel";
 
 type Detection = components["schemas"]["DetectionView"];
 type Rule = components["schemas"]["DetectionRuleView"];
+
+// One ATT&CK pair; opens the Coverage page filtered to it.
+function AttackChip({ technique, tactic, name }: Readonly<{ technique: string | null; tactic: string; name: string | null }>) {
+  return <button type="button" className="attack-chip attack-chip--link" title={name ?? tactic}
+    onClick={() => nav.view("/coverage", technique ? { technique } : { tactic })}>{technique ?? tactic}</button>;
+}
 
 export function DetectionEvidence({ detection, references = [], ruleId, ruleUrl }: {
   detection?: Detection | null | undefined; references?: string[]; ruleId: string; ruleUrl: string;
@@ -59,6 +66,9 @@ export function DetectionEvidence({ detection, references = [], ruleId, ruleUrl 
             {rule.data.status === "legacy" && <p className="subtle">The original bundle version was not recorded. All stored definitions for this rule version agree.</p>}
             <pre className="detection-code"><code>{definition.expression}</code></pre>
             {definition.programs && <p>Applies to programs: <span className="mono">{definition.programs.join(", ")}</span></p>}
+            {definition.attack.length > 0 && <p>MITRE ATT&CK: <span className="attack-chips">{definition.attack.map((p) => (
+              <AttackChip key={`${p.tactic}/${p.technique ?? ""}`} technique={p.technique ?? null} tactic={p.tactic} name={p.technique_name ?? null} />
+            ))}</span></p>}
           </>}
       </div>}
       {detection && <details className="detection-raw"><summary>Raw recorded evidence</summary><pre className="detection-code">{JSON.stringify(detection, null, 2)}</pre></details>}

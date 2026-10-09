@@ -35,6 +35,7 @@ fn rule(id: &str, expression: &str) -> Rule {
         finding_message: "Integration test finding".into(),
         kind: openvibes_core::RuleKind::Snapshot,
         programs: None,
+        attack: None,
     }
 }
 
