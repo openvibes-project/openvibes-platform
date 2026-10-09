@@ -944,3 +944,77 @@ async fn parallel_native_calls_share_the_room() {
     assert!(sizes.iter().all(|n| *n >= 400), "{sizes:?}");
     assert!(total <= limit, "{total} vs {limit}");
 }
+
+async fn prompted(
+    replies: &[&str],
+) -> (
+    Arc<Script>,
+    Fake,
+    Result<platform_assistant::Answer, AnswerError>,
+) {
+    let script = Script::new(replies.iter().map(|r| text(r)).collect());
+    let fake = Fake::default();
+    let result = ask(
+        &script,
+        &fake,
+        settings(ResolvedMode::Prompted),
+        "Is web-01 up?",
+    )
+    .await;
+    (script, fake, result)
+}
+
+#[tokio::test]
+async fn prompted_mode_accepts_the_shapes_small_models_send() {
+    for (reply, expected) in [
+        (
+            r#"{"action":"agent_summary","agent":"web-01"}"#,
+            Lookup::AgentSummary {
+                agent: "web-01".into(),
+            },
+        ),
+        (
+            r#"{"action":"agent_summary","arguments":{"agent":"web-01"}}"#,
+            Lookup::AgentSummary {
+                agent: "web-01".into(),
+            },
+        ),
+        (
+            r#"{"action":"vulnerability_hosts","arguments":{"id":"CVE-2026-1"}}"#,
+            Lookup::VulnerabilityHosts {
+                id: "CVE-2026-1".into(),
+            },
+        ),
+        (
+            r#"{"action":"lookup","arguments":{"name":"fleet_overview"}}"#,
+            Lookup::parse("fleet_overview", "{}").unwrap(),
+        ),
+    ] {
+        let (_, fake, result) = prompted(&[reply, "ok [agent:agent.0]"]).await;
+        result.unwrap();
+        assert_eq!(*fake.ran.lock().unwrap(), [expected], "{reply}");
+    }
+}
+
+#[tokio::test]
+async fn prompted_json_that_is_no_action_is_repaired_once_never_shown() {
+    let (script, fake, result) = prompted(&[r#"{"foo":1}"#, r#"{"bar":2}"#]).await;
+    assert!(matches!(result, Err(AnswerError::NoAnswer)));
+    assert!(fake.ran.lock().unwrap().is_empty());
+    assert_eq!(script.requests().len(), 2);
+
+    let (script, _, result) = prompted(&[r#"{"foo":1}"#, "web-01 is fine."]).await;
+    assert_eq!(plain_text(&result.unwrap().segments), "web-01 is fine.");
+    let second = &script.requests()[1].messages;
+    let n = second.len();
+    assert!(
+        matches!(&second[n - 2], Message::Assistant { content: Some(c), .. } if c == r#"{"foo":1}"#)
+    );
+    assert!(
+        matches!(&second[n - 1], Message::User(t) if t.starts_with("Reply with one JSON object"))
+    );
+    assert!(alternates(second));
+
+    let (_, _, result) = prompted(&["No braces here."]).await;
+    assert_eq!(plain_text(&result.unwrap().segments), "No braces here.");
+}

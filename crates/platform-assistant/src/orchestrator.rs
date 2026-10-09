@@ -280,27 +280,60 @@ fn action_schema(final_turn: bool) -> Value {
 
 /// What the model asked for in JSON-schema or prompted mode.
 enum Action {
-    Lookup { name: String, arguments: String },
+    Lookup {
+        name: String,
+        arguments: String,
+    },
     Answer(String),
+    /// Looks like JSON but is no action; never shown as an answer.
+    Malformed,
+    /// No `{` at all: plain prose.
+    Prose,
 }
 
+const REPAIR: &str = "Reply with one JSON object: {\"action\":\"lookup\",\"name\":…,\"arguments\":{…}} or {\"action\":\"answer\",\"text\":…}.";
+
 /// The first JSON object in `content` (code fences and prose around it
-/// allowed), read as an action.
-fn parse_action(content: &str) -> Option<Action> {
-    let start = content.find('{')?;
-    let value: Value = serde_json::Deserializer::from_str(&content[start..])
+/// allowed), read as an action. Also accepts the action name as `action`
+/// and arguments given flat beside it, which small models send.
+fn parse_action(content: &str) -> Action {
+    let Some(start) = content.find('{') else {
+        return Action::Prose;
+    };
+    let Some(Ok(Value::Object(mut map))) = serde_json::Deserializer::from_str(&content[start..])
         .into_iter::<Value>()
-        .next()?
-        .ok()?;
-    match value.get("action")?.as_str()? {
-        "lookup" => Some(Action::Lookup {
-            name: value.get("name")?.as_str()?.to_owned(),
-            arguments: value
-                .get("arguments")
-                .map_or_else(|| "{}".to_owned(), Value::to_string),
-        }),
-        "answer" => Some(Action::Answer(value.get("text")?.as_str()?.to_owned())),
-        _ => None,
+        .next()
+    else {
+        return Action::Malformed;
+    };
+    let Some(Value::String(action)) = map.remove("action") else {
+        return Action::Malformed;
+    };
+    if action == "answer" {
+        return match map.remove("text") {
+            Some(Value::String(text)) => Action::Answer(text),
+            _ => Action::Malformed,
+        };
+    }
+    let (name, arguments) = if action == "lookup" {
+        let mut arguments = map.remove("arguments").unwrap_or_else(|| json!({}));
+        let name = map.remove("name").or_else(|| match &mut arguments {
+            Value::Object(inner) => inner.remove("name"),
+            _ => None,
+        });
+        match name {
+            Some(Value::String(name)) => (name, arguments),
+            _ => return Action::Malformed,
+        }
+    } else if NAMES.contains(&action.as_str()) {
+        let arguments = map.remove("arguments").unwrap_or(Value::Object(map));
+        (action, arguments)
+    } else {
+        return Action::Malformed;
+    };
+    Action::Lookup {
+        name,
+        arguments: arguments.to_string(),
     }
 }
 
@@ -542,6 +575,7 @@ impl<R: LookupRunner> Run<'_, R> {
     async fn answer(mut self) -> Result<Answer, AnswerError> {
         let mut lookups_done = 0;
         let mut turn = 0;
+        let mut repaired = false;
         loop {
             turn += 1;
             let final_turn = lookups_done >= self.settings.max_lookups;
@@ -591,8 +625,9 @@ impl<R: LookupRunner> Run<'_, R> {
                 continue;
             }
             match parse_action(&response.content) {
-                Some(Action::Answer(text)) => return self.finish(&text, false),
-                Some(Action::Lookup { name, arguments }) => {
+                Action::Answer(text) => return self.finish(&text, false),
+                Action::Lookup { name, arguments } => {
+                    repaired = false;
                     if final_turn {
                         return self.finish(LIMIT_ANSWER, true);
                     }
@@ -610,8 +645,17 @@ impl<R: LookupRunner> Run<'_, R> {
                     });
                     self.working.push(Message::User(text));
                 }
+                Action::Malformed if repaired => return Err(AnswerError::NoAnswer),
+                Action::Malformed => {
+                    repaired = true;
+                    self.working.push(Message::Assistant {
+                        content: Some(response.content),
+                        tool_calls: Vec::new(),
+                    });
+                    self.working.push(Message::User(REPAIR.to_owned()));
+                }
                 // Prose instead of an action: take it as the answer.
-                None => return self.finish(&response.content, false),
+                Action::Prose => return self.finish(&response.content, false),
             }
         }
     }
