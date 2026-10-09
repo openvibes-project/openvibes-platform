@@ -258,9 +258,11 @@ impl<R: Runner> Ctx<'_, R> {
             .mode(0o600)
             .open(self.path(abs))
             .map_err(fail)?;
-        std::io::copy(from, &mut file)
-            .and_then(|_| file.sync_all())
-            .map_err(fail)?;
+        // A partial file must never look like a backup.
+        if let Err(error) = std::io::copy(from, &mut file).and_then(|_| file.sync_all()) {
+            let _ = fs::remove_file(self.path(abs));
+            return Err(fail(error));
+        }
         let owner = self.plan.operator.as_deref().map(|user| {
             self.ids(Some((user, user))).and_then(|(uid, gid)| {
                 std::os::unix::fs::fchown(&file, Some(uid), Some(gid))

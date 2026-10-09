@@ -1,5 +1,5 @@
 [Unit]
-Description=OpenVIBES additive schema migrations before the services start
+Description=OpenVIBES schema migrations after an upgrade, before the services start
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=postgresql.service
 # Before Setup there is no database to migrate.
@@ -9,10 +9,15 @@ ConditionPathExists=/etc/openvibes/setup.toml
 Type=oneshot
 User=openvibes-admin
 Group=openvibes-admin
-# After a plain `dnf upgrade` (board #77): additive migrations only; one
-# that changes stored data fails this unit with "run Update", and the
-# services then refuse the old schema as before.
-ExecStart=/usr/bin/openvibes-admin migrate --additive
+# A backup and a data migration can take a while; the services wait for it.
+TimeoutStartSec=30min
+# After a plain `dnf upgrade` (board #77). Run with full privileges ("+"):
+# applies additive migrations as the service account; for one that changes
+# stored data (Update's case) it stops the running services, backs up to
+# /var/backups/openvibes, migrates, publishes newer rules and queues the
+# services to start again. A current database costs nothing; the unit fails
+# only when a migration failed.
+ExecStart=+/usr/bin/openvibes-admin helper upgrade-migrate
 UMask=0077
 NoNewPrivileges=yes
 ProtectSystem=strict

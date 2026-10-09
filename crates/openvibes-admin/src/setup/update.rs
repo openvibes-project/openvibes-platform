@@ -129,7 +129,7 @@ fn upgrade<R: Runner>(ctx: &Ctx<R>, args: &UpdateArgs) -> Result<StepState, Stri
     )))
 }
 
-fn migrate<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+pub(super) fn migrate<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let migrated = ctx.as_admin(&["migrate"])?;
     let maintained = ctx.as_admin(&["maintenance"])?;
     let mut detail = format!(

@@ -1,0 +1,39 @@
+[Unit]
+Description=OpenVIBES publishes the installed rules package
+Documentation=https://github.com/openvibes-project/openvibes-platform
+# The trigger can run before the upgraded services restart: migrate first
+# (an idempotent oneshot, skipped before Setup).
+Wants=openvibes-migrate.service
+After=postgresql.service openvibes-migrate.service
+
+[Service]
+Type=oneshot
+# Started by a file trigger when the rules package installs or upgrades
+# (no [Install]). Publishes like Setup's Update does; skips, with one log
+# line, when Setup never ran or is running; never fails the transaction.
+ExecStart=/usr/bin/openvibes-admin helper rules-apply
+TimeoutStartSec=5min
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+# Setup's lock and its marks live in /run/openvibes-admin.
+ReadWritePaths=/run
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Root runs the publish as openvibes-admin through runuser.
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID CAP_AUDIT_WRITE CAP_DAC_OVERRIDE

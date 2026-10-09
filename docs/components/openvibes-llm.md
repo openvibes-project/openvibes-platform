@@ -357,3 +357,13 @@ systemd, which checks that:
 
 Not in CI: the Vulkan build, and answer quality or speed with a real
 model, because Hugging Face is not reachable from the build environment.
+
+## Tuning after an upgrade
+
+Installing or upgrading the package starts `openvibes-llm-tune.service`
+(a file trigger after all `%posttrans` scriptlets and the restart, no wait, not enabled by anyone). It runs `openvibes-admin
+helper assistant-tune --auto`: if the assistant is set up with the bundled
+model and the host has no `tuning.conf` yet, it tunes the host; otherwise
+it logs why it did nothing (`journalctl -u openvibes-llm-tune`) and exits
+0. A host that is tuned already keeps its tuning; run `helper assistant-tune`
+to measure again. The unit never passes `--sleep-idle-seconds`.
