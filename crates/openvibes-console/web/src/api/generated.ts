@@ -1621,6 +1621,11 @@ export interface components {
         AgentDetail: components["schemas"]["AgentView"] & {
             /** @description Certificate metadata for the agent. */
             certificates: components["schemas"]["CertificateView"][];
+            /**
+             * @description When the host last raised the harmless test triggers
+             *     (`openvibes-test alarm|finding`).
+             */
+            last_test: components["schemas"]["LastTest"];
         };
         /** @description A page of agents using the shared cursor response shape. */
         AgentPage: {
@@ -2961,6 +2966,16 @@ export interface components {
              *     For a host or software, up to 50, newest change first, open or closed.
              */
             items: components["schemas"]["ItemCaseView"][];
+        };
+        /**
+         * @description The host's latest test alarm and test finding (spec
+         *     `2026-10-09-test-triggers-design.md`); absent when never seen.
+         */
+        LastTest: {
+            /** @description Latest test alarm (RFC 3339). */
+            alarm_at?: string | null;
+            /** @description Latest test finding observation (RFC 3339). */
+            finding_at?: string | null;
         };
         /** @description One listening socket on a host. */
         ListenerView: {

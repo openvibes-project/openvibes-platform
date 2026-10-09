@@ -9,6 +9,9 @@
 #   ListenStream=
 #   ListenStream=127.0.0.1:PORT
 # and the same PORT as OPENVIBES_LLM_PORT in /etc/openvibes/llm.conf.
+# With SELinux enforcing, label it for the proxy too (package
+# policycoreutils-python-utils):
+#   semanage port -a -t systemd_socket_proxyd_port_t -p tcp PORT
 [Unit]
 Description=OpenVIBES local model server socket (assistant)
 Documentation=https://github.com/openvibes-project/openvibes-platform

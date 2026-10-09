@@ -1,0 +1,61 @@
+; SELinux policy module openvibes-llm (CIL; loaded by the openvibes-llm RPM
+; with `semodule -X 200 -i`, removed on erase). It lets the assistant's
+; socket activation run under enforcing SELinux with the proxy confined:
+;   openvibes-llm.socket (127.0.0.1:18430)
+;   -> openvibes-llm-proxy.service: systemd-socket-proxyd as
+;      systemd_socket_proxyd_t (Fedora's domain for it)
+;   -> /run/openvibes-llm/llama.sock: llama-server as unconfined_service_t
+; Each rule answers a denial seen on Fedora 44 (selinux-policy 44.11,
+; systemd 259). Nothing here widens another domain.
+
+; The socket's port. Fedora lets systemd_socket_proxyd_t bind only
+; systemd_socket_proxyd_port_t (no port carries it) unless the boolean
+; systemd_socket_proxyd_bind_any is on; 18430 is otherwise unreserved_port_t.
+; systemd 259 binds the socket in an (sd-listen) child already labelled for
+; the proxy:
+;   denied { name_bind } comm="(sd-listen)" src=18430
+;   scontext=systemd_socket_proxyd_t tcontext=unreserved_port_t tclass=tcp_socket
+; Another port in openvibes-llm.socket needs the same label:
+;   semanage port -a -t systemd_socket_proxyd_port_t -p tcp PORT
+(portcon tcp 18430 (system_u object_r systemd_socket_proxyd_port_t ((s0) (s0))))
+
+; The unit's sandbox implies no_new_privs (NoNewPrivileges=, and a non-root
+; User= with SystemCallFilter=), which blocks the exec transition into the
+; proxy's domain; it then ran as init_t:
+;   denied { nnp_transition } scontext=init_t
+;   tcontext=systemd_socket_proxyd_t tclass=process2
+; Both permissions, as Fedora's init_nnp_daemon_domain() grants them.
+(allow init_t systemd_socket_proxyd_t (process2 (nnp_transition nosuid_transition)))
+
+; The server's runtime directory and socket get their own type instead of
+; the generic var_run_t, so the proxy may write to this one socket file and
+; not to every var_run_t socket. pidfile gives systemd (init_t) what it
+; needs for RuntimeDirectory= (create, chown, remove) and the proxy search
+; on the directory; llama-server (unconfined) creates the socket in it,
+; which inherits the directory's type.
+(type openvibes_llm_runtime_t)
+(roletype object_r openvibes_llm_runtime_t)
+(typeattributeset file_type (openvibes_llm_runtime_t))
+(typeattributeset non_auth_file_type (openvibes_llm_runtime_t))
+(typeattributeset non_security_file_type (openvibes_llm_runtime_t))
+(typeattributeset pidfile (openvibes_llm_runtime_t))
+(filecon "/run/openvibes-llm(/.*)?" any (system_u object_r openvibes_llm_runtime_t ((s0) (s0))))
+
+; Connecting to llama-server's socket: write on the socket file (var_run_t
+; without this module), then connectto on the server's domain:
+;   denied { connectto } scontext=init_t (before the nnp fix)
+;   tcontext=unconfined_service_t tclass=unix_stream_socket
+(allow systemd_socket_proxyd_t openvibes_llm_runtime_t (sock_file (write)))
+(allow systemd_socket_proxyd_t unconfined_service_t (unix_stream_socket (connectto)))
+
+; Logging to the journal (the proxy's domain is not a syslog client):
+;   denied { write } tcontext=syslogd_var_run_t tclass=sock_file
+;   denied { sendto } tcontext=kernel_t tclass=unix_dgram_socket
+(allow systemd_socket_proxyd_t syslogd_var_run_t (sock_file (write)))
+(allow systemd_socket_proxyd_t kernel_t (unix_dgram_socket (sendto)))
+
+; systemd 259's process and namespace probes in the proxy:
+;   denied { getattr } tcontext=pidfs_t tclass=filesystem
+;   denied { getattr } tcontext=nsfs_t tclass=file
+(allow systemd_socket_proxyd_t pidfs_t (filesystem (getattr)))
+(allow systemd_socket_proxyd_t nsfs_t (file (getattr)))

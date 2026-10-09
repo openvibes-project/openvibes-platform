@@ -57,6 +57,7 @@ export type CreatedToken = S["CreatedEnrollmentToken"];
 export type RuleSet = S["RuleSetView"];
 export type RuleDraft = S["RuleDraftView"];
 export type AttackCoverage = S["AttackCoverage"];
+export type LastTest = S["LastTest"];
 export type AttackCatalog = S["AttackCatalog"];
 export type CoverageRule = S["CoverageRule"];
 export type AttackPair = S["AttackPairView"];

@@ -15,6 +15,7 @@ another one such as vLLM on a GPU server, replaces it without code changes.
 | `openvibes-llm.socket` | The unit that is enabled: listens on loopback port 18430 and starts the proxy on the first connection |
 | `openvibes-llm-proxy.service` | `systemd-socket-proxyd` to the server's Unix socket; exits after `OPENVIBES_LLM_IDLE` without a request; runs as `openvibes-llm`, sandboxed |
 | `openvibes-llm.service` | Hardened unit, `llama-server` on the Unix socket `/run/openvibes-llm/llama.sock`, no network, user `openvibes-llm`; started by the proxy, stopped when it exits |
+| `/usr/share/selinux/packages/targeted/openvibes-llm.cil` | SELinux policy module, loaded at install (see [SELinux](#selinux)) |
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)`: port, idle time, context, threads, GPU layers, parallel requests, default alias |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install (64 hex characters); given to the service as a systemd credential |
 | `/var/lib/openvibes-llm/models/` | 0775 root:openvibes-admin; models installed read-only (0444) |
@@ -217,7 +218,9 @@ sudo systemctl edit openvibes-llm.socket     # add:
 #   [Socket]
 #   ListenStream=
 #   ListenStream=127.0.0.1:PORT
-# set OPENVIBES_LLM_PORT=PORT in /etc/openvibes/llm.conf, then
+# set OPENVIBES_LLM_PORT=PORT in /etc/openvibes/llm.conf; with SELinux
+# enforcing, label the port for the proxy (policycoreutils-python-utils):
+sudo semanage port -a -t systemd_socket_proxyd_port_t -p tcp PORT
 sudo systemctl restart openvibes-llm.socket
 sudo openvibes-admin helper assistant-setup --force   # points the console at it
 ```
@@ -226,6 +229,38 @@ Upgrading from a version where `openvibes-llm.service` itself was enabled
 on 18430: the package's `%posttrans` disables and stops the old server and
 enables `--now openvibes-llm.socket`, once (the new service unit has no
 `[Install]`, so it can never be "enabled" again).
+
+## SELinux
+
+Fedora confines `systemd-socket-proxyd` (domain
+`systemd_socket_proxyd_t`), and its policy does not cover this chain, so
+under enforcing SELinux the socket could not bind 18430 and the proxy
+could not reach the server. The package ships a small policy module,
+`packaging/llm/openvibes-llm.cil`, keeps the proxy confined, and loads the
+module with `semodule -X 200 -i` in `%post`, before any unit starts. Like
+Fedora's own packages, it installs it whenever the targeted policy is
+configured, even with SELinux disabled (so enabling SELinux later needs no
+step), and loads it only when SELinux is enabled. Erasing the package
+removes it. It allows only:
+
+| Rule | Why |
+|---|---|
+| port 18430 labelled `systemd_socket_proxyd_port_t` | the proxy's domain may bind only that type (unless the boolean `systemd_socket_proxyd_bind_any` is on); systemd 259 binds the socket in a child already in that domain |
+| `init_t` → `systemd_socket_proxyd_t`: `nnp_transition nosuid_transition` | the unit's sandbox sets no_new_privs, which otherwise blocks the transition and leaves the proxy running as `init_t` |
+| type `openvibes_llm_runtime_t` for `/run/openvibes-llm` and the socket in it; the proxy may write that socket file | the proxy reaches this one socket, not every `var_run_t` socket |
+| the proxy may `connectto` `unconfined_service_t` | `llama-server` runs as `unconfined_service_t` (no policy of its own; its systemd sandbox is what confines it) |
+| the proxy may write journald's socket and send to its datagram socket | logging |
+| `getattr` on the `pidfs` filesystem and on `nsfs` files | systemd 259's process and namespace checks |
+
+Check it is loaded and see what it denies:
+
+```sh
+sudo semodule -l | grep openvibes-llm
+sudo ausearch -m avc -ts recent -c systemd-socket-proxyd
+```
+
+Another port for the socket needs its own label (see above):
+`semanage port -a -t systemd_socket_proxyd_port_t -p tcp PORT`.
 
 ## Using it
 
@@ -302,7 +337,10 @@ answer quality: that is what `assistant eval` measures with a real model.
 
 CI: the `fedora` job builds `llama-server` and the RPM, and
 `check-rpm.sh` checks the files, the API key, the unit, and the check's
-refusals. The `systemd-e2e` job installs `openvibes-llm` under a real
+refusals, and compiles the SELinux module against Fedora's policy
+(`semodule -n`, which works without SELinux enabled). The containers run
+without SELinux, so enforcement itself is tested in the lab (a Fedora VM,
+enforcing). The `systemd-e2e` job installs `openvibes-llm` under a real
 systemd, which checks that:
 
 - the service refuses to start without a model;

@@ -1030,6 +1030,19 @@ pub struct AgentDetail {
     pub agent: AgentView,
     /// Certificate metadata for the agent.
     pub certificates: Vec<CertificateView>,
+    /// When the host last raised the harmless test triggers
+    /// (`openvibes-test alarm|finding`).
+    pub last_test: LastTest,
+}
+
+/// The host's latest test alarm and test finding (spec
+/// `2026-10-09-test-triggers-design.md`); absent when never seen.
+#[derive(Clone, Debug, Default, Serialize, ToSchema)]
+pub struct LastTest {
+    /// Latest test alarm (RFC 3339).
+    pub alarm_at: Option<String>,
+    /// Latest test finding observation (RFC 3339).
+    pub finding_at: Option<String>,
 }
 
 /// Fleet counts visible to the current principal.
