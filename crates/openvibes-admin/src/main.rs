@@ -15,6 +15,7 @@ mod files;
 mod helper;
 mod import;
 mod model;
+mod model_fetch;
 mod rules;
 mod rules_sign;
 mod rules_site;

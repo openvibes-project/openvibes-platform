@@ -5,11 +5,9 @@
 **openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
 (the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
 `OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**;
-`OV_LLM_MODEL=0` skips **openvibes-llm-model**, the 2.5 GB bundled model (delivered as
-**openvibes-llm-model-part1** and **-part2**, each under GitHub's 2 GiB release-asset limit, joined
-and verified by the package's `%posttrans`, `join-model`) that
-`scripts/fetch-llm-model.sh` downloads and verifies against
-`packaging/llm/model.pin`; `openvibes-llm` recommends it).
+**openvibes-llm-model** carries no model bytes: it selects the pinned model and owns its
+path so upgrades keep it; `openvibes-admin assistant model fetch` downloads the model;
+`openvibes-llm` recommends the bridge).
 `scripts/build-rpm.sh` compiles the release binaries (with
 `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
 them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
@@ -67,8 +65,8 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
-| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, made by `join-model`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
-| `/usr/share/openvibes-llm/model/*.part{0,1}` | 0644 root; removed once joined | llm-model-part1, -part2 |
+| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+| `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |
 | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
 | `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |
@@ -138,7 +136,7 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-llm-tune.service` (llm package): a oneshot as root, running
   `openvibes-admin helper assistant-tune --auto`; no `[Install]`; the
   llm package's `%transfiletriggerin -P 900000` on `/usr/libexec/openvibes-llm` starts it (`--no-block`, after the `%posttrans` scriptlets and the restart). It tunes only an
-  untuned host with the assistant on the bundled model.
+  untuned host with the assistant on the pinned model.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes-admin`, with the same hardening.

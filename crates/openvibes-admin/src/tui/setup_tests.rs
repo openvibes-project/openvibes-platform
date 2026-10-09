@@ -106,6 +106,7 @@ fn app_taken(
         taken,
         root: false,
     });
+    app.setup.model_present = false;
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
     app
@@ -965,4 +966,97 @@ fn the_root_key_note_stays_on_the_finished_screen() {
         text.contains("still owned by root: move it with sudo"),
         "{text}"
     );
+}
+
+#[test]
+fn the_assistant_asks_before_downloading_its_model_and_n_skips_it() {
+    let mut app = app(false, vec![Ok("setup.toml written\n".into())]);
+    app.setup
+        .components
+        .insert(crate::setup::plan::Component::Assistant);
+    while app.setup.row != super::setup::START_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert_eq!(app.setup.phase, Phase::Model);
+    let text = screen(&app);
+    assert!(
+        text.contains("Download the assistant's model (2.5 GB from Hugging Face)?"),
+        "{text}"
+    );
+    assert!(
+        text.contains("Licence:") && text.contains("https://huggingface.co/"),
+        "{text}"
+    );
+    assert!(!text.contains("sudo openvibes-admin assistant"), "{text}");
+    app.key(Key::Char('n'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert!(app.host.calls.borrow()[0].0.contains("--model skip"));
+}
+
+#[test]
+fn y_downloads_the_model_and_no_assistant_means_no_question() {
+    let mut app = app(false, vec![Ok("setup.toml written\n".into())]);
+    app.setup
+        .components
+        .insert(crate::setup::plan::Component::Assistant);
+    while app.setup.row != super::setup::START_ROW {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert!(app.host.calls.borrow()[0].0.contains("--model fetch"));
+    let mut plain = app_taken(false, vec![], vec![]);
+    while plain.setup.row != super::setup::START_ROW {
+        plain.key(Key::Down);
+    }
+    plain.key(Key::Enter);
+    assert!(matches!(plain.setup.phase, Phase::Password(_)));
+}
+
+#[test]
+fn a_failed_model_download_still_ends_on_the_finished_screen_with_the_login() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+            Step::AssistantModel => "failed\tthe model download failed (offline: see the offline install guide)\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    let text = screen(&app);
+    assert!(
+        text.contains("Abc123") && text.contains("https://platform.example.com"),
+        "{text}"
+    );
+    assert!(text.contains("model download failed"), "{text}");
+}
+
+#[test]
+fn a_declined_model_is_named_on_the_finished_screen() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::AssistantModel => "skipped\tassistant: off until its model is installed; turn the assistant on in Setup again to download it\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    assert!(screen(&app).contains("assistant: off until its model is installed"));
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Builds target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm,llm-model}-*.rpm.
-# OV_LLM_MODEL=0 skips the 2.5 GB bundled model package (openvibes-llm-model).
+# openvibes-llm-model carries no model bytes (the model is fetched at run time).
 # OV_LLM=0 skips openvibes-llm (and its llama.cpp build); OV_LLM_VULKAN=1
 # adds openvibes-llm-vulkan (needs glslc and the Vulkan headers).
 # OV_VERSION overrides the package version (a lower one for the update test);
@@ -16,12 +16,6 @@ llm=(--without llm)
 if [[ ${OV_LLM:-1} == 1 ]]; then
     scripts/build-llama-server.sh cpu
     llm=(--with llm)
-    if [[ ${OV_LLM_MODEL:-1} == 1 ]]; then
-        scripts/fetch-llm-model.sh >/dev/null
-        llm+=(--with model)
-    else
-        llm+=(--without model)
-    fi
     if [[ ${OV_LLM_VULKAN:-0} == 1 ]]; then
         scripts/build-llama-server.sh vulkan
         llm+=(--with vulkan)

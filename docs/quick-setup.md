@@ -16,7 +16,7 @@ sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 ```
 
 (Piped as `curl … | sudo sh`, it installs but cannot open Setup, because a
-pipe is not a terminal; it then tells you to run `openvibes-admin`.)
+pipe is not a terminal; it then tells you to run `sudo openvibes-admin`.)
 
 Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/install.sh`,
 read it, then `sudo sh install.sh`.
@@ -41,7 +41,7 @@ port later: `sudo openvibes-admin setup --repair --console-port N` (or
 run again). Setup asks for
 your password once and then shows each step as it runs: packages,
 PostgreSQL, database, CA, certificates, console, services, firewall
-(the console and agent ports), agent and readiness. A port another
+(the console and agent ports), agent, readiness and the assistant model. A port another
 process holds stops Setup before any service starts, naming the process. If a step fails, fix the cause
 and press `r` to continue from it.
 
@@ -51,6 +51,16 @@ root key once to the form's *Root key file*, by default
 issue a new intermediate certificate later, so copy it to offline
 storage and then delete it from the host. Without it, a new CA means
 re-enrolling every agent.
+
+**The assistant (optional).** Tick `assistant` in the form to have the
+console's chat assistant. Setup then asks "Download the assistant's model
+(2.5 GB from Hugging Face)?" and shows the model's licence: answer **Y**
+and Setup downloads it, checks it against its pinned checksum and turns the
+assistant on. Answer **N** and the assistant stays off; the last screen
+says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
+
+**Adding the assistant later:** open Setup (`sudo openvibes-admin`), turn the
+assistant on with `m` (change components) and answer **Y**.
 
 The last screen shows, once:
 
@@ -69,6 +79,17 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
 
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
 the setup command).
+
+## Step 1 (offline): install from the kit
+
+Instead of step 1, for a platform host with no internet. Details:
+[`offline-kit.md`](components/offline-kit.md).
+
+1. Download `openvibes-platform-<v>-offline-fedora44.tar`, and optionally the model from the Hugging Face link, in any browser.
+2. Copy both to the server, into the same folder.
+3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
+
+Setup opens at the end; continue with step 2. If you copied the model, Setup installs it.
 
 ## 3. Add a second host
 

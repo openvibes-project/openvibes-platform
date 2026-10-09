@@ -355,14 +355,11 @@ fn fedoras_task_never_audit_rule_is_a_health_problem() {
 }
 
 #[test]
-fn tune_line_shows_the_summary_or_the_command() {
+fn tune_line_shows_the_summary_or_the_hint() {
     let json = r#"{"mode":"cpu","threads":6,"model":"qwen","seconds_per_call":8.4}"#;
     let ok = tune_check(true, Some(json.into())).unwrap();
     assert!(!ok.problem && ok.text.contains("CPU (6 threads) · model qwen · ~8 s"));
     let hint = tune_check(true, None).unwrap();
-    assert!(
-        hint.text
-            .contains("sudo openvibes-admin helper assistant-tune")
-    );
+    assert!(hint.text.contains("turn the assistant on in Setup again"));
     assert!(tune_check(false, None).is_none());
 }

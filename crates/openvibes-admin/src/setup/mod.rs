@@ -3,6 +3,7 @@
 //! `setup --quick` (as root). Every step checks first, so re-running is
 //! safe and resumes.
 
+mod assistant;
 mod auto_migrate;
 mod auto_rules;
 mod backup;
@@ -14,6 +15,7 @@ mod console;
 mod fake;
 mod fleet;
 pub use fleet::AGENT_AUDIT_RULE;
+pub(crate) use fleet::agent_by_default;
 pub(crate) mod pki;
 #[cfg(test)]
 mod pki_tests;
@@ -168,6 +170,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Firewall => run::firewall_check(ctx),
         Step::Rules => fleet::rules_check(ctx),
         Step::Agent => fleet::agent_check(ctx),
+        Step::AssistantModel => assistant::check(ctx),
         Step::Ready => run::ready_check(ctx),
     };
     result.unwrap_or_else(StepState::Failed)
@@ -188,6 +191,7 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Firewall => run::firewall_apply(ctx),
         Step::Rules => fleet::rules_apply(ctx),
         Step::Agent => fleet::agent_apply(ctx),
+        Step::AssistantModel => assistant::apply(ctx),
         Step::Ready => run::ready_apply(ctx),
     };
     result.unwrap_or_else(StepState::Failed)
@@ -427,14 +431,15 @@ pub fn repair_all(
     let ctx = host_ctx(&plan, true);
     let states: Vec<_> = Step::ALL
         .into_iter()
-        .map(|step| (step.title(), run_step(&ctx, step)))
+        .map(|step| (step, run_step(&ctx, step)))
         .collect();
     // Old ports close only once every step worked: until then the services
     // may still listen there.
-    if states
-        .iter()
-        .all(|(_, state)| matches!(state, StepState::Done(_) | StepState::Skipped(_)))
-    {
+    // The optional assistant model (a download that may fail) does not hold
+    // the ports open.
+    if states.iter().all(|(step, state)| {
+        *step == Step::AssistantModel || matches!(state, StepState::Done(_) | StepState::Skipped(_))
+    }) {
         match ports::close_old(&ctx, &old) {
             Ok((closed, kept)) => {
                 if !closed.is_empty() {
@@ -447,7 +452,11 @@ pub fn repair_all(
             Err(error) => eprintln!("openvibes-admin: {error}"),
         }
     }
-    report(states.into_iter())
+    report(
+        states
+            .into_iter()
+            .map(|(step, state)| (step.title(), state)),
+    )
 }
 
 /// `setup --update [--backup PATH] [--repo-dir DIR]`.

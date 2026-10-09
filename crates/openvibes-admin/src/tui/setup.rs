@@ -12,7 +12,7 @@ use super::{
     password::{PasswordPrompt, Typed},
 };
 use crate::setup::{
-    plan::{CaMode, Component},
+    plan::{CaMode, Component, ModelChoice},
     ports,
 };
 
@@ -40,6 +40,8 @@ pub enum After {
 pub enum Phase {
     Form,
     Password(After),
+    /// Whether to download the assistant's model (asked before the password).
+    Model,
     Running(usize),
     Stopped(usize),
     Finished,
@@ -57,6 +59,9 @@ pub struct Setup {
     pub hostname: String,
     pub sans: String,
     pub ca: CaMode,
+    pub model: ModelChoice,
+    /// The model is already installed: Setup does not ask.
+    pub model_present: bool,
     pub root_key_out: String,
     pub console_port: String,
     /// "INGEST, DISTRIBUTION": one row, so the form fits 80×24.
@@ -94,12 +99,21 @@ pub struct Setup {
 impl Setup {
     pub fn new(set_up: bool, hostname: String, home: Option<String>) -> Setup {
         use Component::*;
+        let mut components: BTreeSet<Component> =
+            [Ingest, Console, Distribution, Vulns, Rules].into();
+        // Tests run on any host: the full default there.
+        if cfg!(test) || crate::setup::agent_by_default(std::path::Path::new("/")) {
+            components.insert(Agent);
+        }
         Setup {
-            components: [Ingest, Console, Distribution, Vulns, Rules, Agent].into(),
+            components,
             row: 0,
             hostname,
             sans: String::new(),
             ca: CaMode::Quick,
+            model: ModelChoice::Fetch,
+            model_present: crate::assistant_setup::model_installed()
+                || crate::model_fetch::staged_in(std::path::Path::new("/")).is_some(),
             root_key_out: default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
@@ -151,6 +165,16 @@ impl Setup {
         ]);
         if self.ca == CaMode::Quick && !self.root_key_out.trim().is_empty() {
             args.extend(["--root-key-out".into(), self.root_key_out.trim().into()]);
+        }
+        if self.components.contains(&Component::Assistant) {
+            args.extend([
+                "--model".into(),
+                match self.model {
+                    ModelChoice::Fetch => "fetch",
+                    ModelChoice::Skip => "skip",
+                }
+                .into(),
+            ]);
         }
         args.extend(["--console-port".into(), self.console_port.trim().into()]);
         // Two numbers; anything else goes through as typed, so Setup's own
@@ -284,6 +308,7 @@ impl<H: Host> App<H> {
         match self.setup.phase {
             Phase::Password(after) => self.password_key(key, after),
             Phase::Form => self.form_key(key),
+            Phase::Model => self.model_key(key),
             Phase::Running(_) => {}
             Phase::Update => self.update_key(key),
             Phase::Uninstall => self.uninstall_key(key),
@@ -389,6 +414,27 @@ impl<H: Host> App<H> {
             );
             return;
         }
+        // The model is a 2.5 GB download: asked first, unless it is there.
+        if self.setup.components.contains(&Component::Assistant) && !self.setup.model_present {
+            self.setup.phase = Phase::Model;
+            return;
+        }
+        self.setup.model = ModelChoice::Fetch;
+        self.ask_password(After::Plan);
+    }
+
+    /// Y (or Enter) downloads the model, N leaves the assistant off.
+    fn model_key(&mut self, key: Key) {
+        let choice = match key {
+            Key::Enter | Key::Char('y' | 'Y') => ModelChoice::Fetch,
+            Key::Char('n' | 'N') => ModelChoice::Skip,
+            Key::Esc => {
+                self.setup.phase = Phase::Form;
+                return;
+            }
+            _ => return,
+        };
+        self.setup.model = choice;
         self.ask_password(After::Plan);
     }
 
@@ -604,7 +650,11 @@ impl<H: Host> App<H> {
         self.setup.prompt.failures = 0;
         let finished = state.finished();
         self.setup.states[next] = Some(state);
-        self.setup.phase = if !finished {
+        // The model step is last and optional: its failure still ends on
+        // the Finished screen, which shows the URL and password.
+        let optional_last = matches!(self.setup.job, Job::Install | Job::Repair)
+            && Step::ALL.get(next) == Some(&Step::AssistantModel);
+        self.setup.phase = if !finished && !optional_last {
             self.setup.password = None;
             Phase::Stopped(next)
         } else if next + 1 == self.setup.job.steps() {
@@ -643,6 +693,22 @@ fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
 
 #[cfg(test)]
 mod root_key_tests {
+    #[test]
+    fn the_agent_is_ticked_only_with_the_package_or_a_repository() {
+        let dir = std::env::temp_dir().join(format!("ov-agent-default-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("etc/yum.repos.d")).unwrap();
+        std::fs::write(dir.join("etc/yum.repos.d/fedora.repo"), "").unwrap();
+        assert!(!crate::setup::agent_by_default(&dir));
+        std::fs::write(dir.join("etc/yum.repos.d/openvibes.repo"), "").unwrap();
+        assert!(crate::setup::agent_by_default(&dir));
+        std::fs::remove_file(dir.join("etc/yum.repos.d/openvibes.repo")).unwrap();
+        std::fs::create_dir_all(dir.join("usr/bin")).unwrap();
+        std::fs::write(dir.join("usr/bin/openvibes-agent"), "").unwrap();
+        assert!(crate::setup::agent_by_default(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_default_root_key_name_skips_taken_files() {
         let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];

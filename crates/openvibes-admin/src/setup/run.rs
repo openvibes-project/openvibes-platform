@@ -36,21 +36,15 @@ pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // listen address to rewrite (#72): not done.
     Ok(
         if running && super::ports::check(ctx)?.is_empty() && !super::ports::listen_stale(ctx)? {
-            StepState::Done(done_text(ctx, &units))
+            StepState::Done(done_text(&units))
         } else {
             StepState::Todo
         },
     )
 }
 
-fn done_text<R: Runner>(ctx: &Ctx<R>, units: &[Unit]) -> String {
-    let mut text = format!("enabled and started: {}", names(units).join(" "));
-    if ctx.plan.has(Component::Assistant) {
-        text.push_str(
-            "; after installing a model, enable openvibes-llm.socket with `sudo openvibes-admin helper assistant-setup` (docs/components/openvibes-llm.md)",
-        );
-    }
-    text
+fn done_text(units: &[Unit]) -> String {
+    format!("enabled and started: {}", names(units).join(" "))
 }
 
 pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -70,7 +64,7 @@ pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     for unit in restart {
         ctx.ok(Systemctl, &["try-restart", unit])?;
     }
-    Ok(StepState::Done(done_text(ctx, &units)))
+    Ok(StepState::Done(done_text(&units)))
 }
 
 fn console_port<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {

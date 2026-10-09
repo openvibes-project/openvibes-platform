@@ -2,13 +2,15 @@
 //! against the SHA-256 the operator got from its publisher, installs it
 //! read-only for `openvibes-llm`, and selects it in
 //! `/var/lib/openvibes-llm/model.conf` (assistant spec §6, §9). The platform
-//! never downloads models itself. Runs as `openvibes-admin`, whose group owns
+//! downloads a model only when an admin runs `model fetch` (see
+//! `model_fetch.rs`; Setup and assistant-setup call it). Runs as `openvibes-admin`, whose group owns
 //! `/var/lib/openvibes-llm`; the service's own settings stay root's in
 //! `/etc/openvibes/llm.conf`.
 
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
+    os::unix::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
 };
 
@@ -46,18 +48,55 @@ pub enum ModelCommand {
         #[arg(long, default_value = MODEL_CONFIG)]
         model_config: PathBuf,
     },
+    /// Download the model named by model.pin from its publisher (HTTPS),
+    /// then install it as `install` does; a no-op if already installed.
+    Fetch {
+        /// The pin file (`LLM_MODEL_*` values).
+        #[arg(long, default_value = crate::model_fetch::PIN_PATH)]
+        pin: PathBuf,
+        /// Models directory.
+        #[arg(long, default_value = MODELS_DIR)]
+        models_dir: PathBuf,
+        /// The model selection file.
+        #[arg(long, default_value = MODEL_CONFIG)]
+        model_config: PathBuf,
+    },
 }
 
 /// Runs a model command; the audit target is the installed file name.
 pub fn run(command: &ModelCommand) -> (Result<String, String>, Option<String>) {
-    let ModelCommand::Install {
-        file,
-        sha256,
-        name,
-        alias,
-        models_dir,
-        model_config,
-    } = command;
+    if let Err(error) = refuse_root(crate::run_as::uid()) {
+        return (Err(error), None);
+    }
+    let (file, sha256, name, alias, models_dir, model_config) = match command {
+        ModelCommand::Install {
+            file,
+            sha256,
+            name,
+            alias,
+            models_dir,
+            model_config,
+        } => (file, sha256, name, alias, models_dir, model_config),
+        ModelCommand::Fetch {
+            pin,
+            models_dir,
+            model_config,
+        } => {
+            return match crate::model_fetch::read_pin(pin) {
+                Ok(pin) => (
+                    crate::model_fetch::fetch(
+                        &pin,
+                        &crate::model_fetch::Curl,
+                        models_dir,
+                        model_config,
+                        crate::model_fetch::free_bytes,
+                    ),
+                    Some(pin.file),
+                ),
+                Err(error) => (Err(error), None),
+            };
+        }
+    };
     let name = name.clone().or_else(|| {
         file.file_name()
             .and_then(|name| name.to_str())
@@ -81,7 +120,7 @@ pub fn run(command: &ModelCommand) -> (Result<String, String>, Option<String>) {
     (result, target)
 }
 
-fn install(
+pub(crate) fn install(
     source: &Path,
     sha256: &str,
     name: &str,
@@ -89,6 +128,7 @@ fn install(
     models_dir: &Path,
     model_config: &Path,
 ) -> Result<String, String> {
+    refuse_root(crate::run_as::uid())?;
     let expected = sha256.trim().to_ascii_lowercase();
     if !is_sha256_hex(&expected) {
         return Err("--sha256 must be 64 hexadecimal characters".into());
@@ -141,7 +181,19 @@ fn install(
         }
         Err(_) => return Err("cannot inspect the models directory".into()),
     };
-    let updated = update_config(&config, &destination, &expected, alias);
+    select(&config, &destination, size, &expected, alias, model_config)
+}
+
+/// Selects the installed `destination` in `model.conf`; returns the report.
+pub(crate) fn select(
+    config: &str,
+    destination: &Path,
+    size: u64,
+    expected: &str,
+    alias: Option<&str>,
+    model_config: &Path,
+) -> Result<String, String> {
+    let updated = update_config(config, destination, expected, alias);
     write_replacing(model_config, &updated, 0o644)?;
     Ok(format!(
         "installed {} ({} MiB, sha256 {expected})\nupdated {}\nnext: systemctl restart openvibes-llm.socket (the next question loads the new model)\n",
@@ -151,7 +203,7 @@ fn install(
     ))
 }
 
-fn digest(mut reader: impl Read) -> Result<String, String> {
+pub(crate) fn digest(mut reader: impl Read) -> Result<String, String> {
     openvibes_llm::sha256_hex(&mut reader, MAX_MODEL_BYTES)
         .map_err(|_| "cannot read the model file, or it exceeds 256 GiB".to_owned())
 }
@@ -216,7 +268,7 @@ fn copy_verified(source: &Path, dir: &Path, name: &str, expected: &str) -> Resul
     copied
 }
 
-fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
+pub(crate) fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -230,16 +282,39 @@ fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
     }
 }
 
-fn read_config(path: &Path) -> Result<String, String> {
+pub(crate) fn read_config(path: &Path) -> Result<String, String> {
+    // No symlink at the final name and no FIFO hang: /var/lib/openvibes-llm
+    // is group-writable.
+    let opened = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path);
+    let file = match opened {
+        Ok(file) => file,
+        // The first install creates it.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(_) => return Err(format!("cannot read {}", path.display())),
+    };
+    if !file.metadata().is_ok_and(|m| m.is_file()) {
+        return Err(format!("{} is not a regular file", path.display()));
+    }
     let mut text = String::new();
-    match File::open(path)
-        .and_then(|file| file.take(MAX_CONFIG_BYTES + 1).read_to_string(&mut text))
-    {
+    match file.take(MAX_CONFIG_BYTES + 1).read_to_string(&mut text) {
         Ok(length) if length as u64 <= MAX_CONFIG_BYTES => Ok(text),
         Ok(_) => Err(format!("{} exceeds 64 KiB", path.display())),
-        // The first install creates it.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
         Err(_) => Err(format!("cannot read {}", path.display())),
+    }
+}
+
+/// `model install` and `model fetch` write into group-writable directories
+/// and follow paths there, so they never run as root (`openvibes-admin`
+/// reruns itself as its account; callers use `runuser -u openvibes-admin`).
+/// Fails closed: only a known, non-zero user id passes (no `/proc` means
+/// unknown, which is refused).
+pub(crate) fn refuse_root(uid: Option<u32>) -> Result<(), String> {
+    match uid {
+        Some(uid) if uid != 0 => Ok(()),
+        _ => Err("run as the openvibes-admin user (openvibes-admin does this itself with the default config)".into()),
     }
 }
 
@@ -308,6 +383,30 @@ fn write_replacing(path: &Path, contents: &str, mode: u32) -> Result<(), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn root_is_refused() {
+        assert!(
+            refuse_root(Some(0))
+                .unwrap_err()
+                .contains("openvibes-admin user")
+        );
+        assert!(refuse_root(Some(1000)).is_ok());
+        assert!(refuse_root(None).is_err(), "unknown user fails closed");
+    }
+
+    #[test]
+    fn symlinked_model_config_is_refused_not_followed() {
+        let dir = std::env::temp_dir().join(format!("ov-conf-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let secret = dir.join("secret");
+        fs::write(&secret, "OPENVIBES_LLM_PORT=1\n").unwrap();
+        let link = dir.join("model.conf");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        assert!(read_config(&link).is_err());
+        assert_eq!(read_config(&dir.join("absent")).unwrap(), "");
+    }
 
     #[test]
     fn config_update_keeps_other_lines_and_drops_repeats() {

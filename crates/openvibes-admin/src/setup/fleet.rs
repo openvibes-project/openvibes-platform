@@ -210,6 +210,36 @@ fn audit_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
     }
 }
 
+/// Whether the form ticks "agent on this host": only when the agent package
+/// is installed or an OpenVIBES repository could supply it (an offline kit
+/// carries neither; agents are added from the console).
+pub(crate) fn agent_by_default(root: &std::path::Path) -> bool {
+    agent_available(root, None)
+}
+
+/// As above, and a plan's `--repo-dir` holding an agent package counts too.
+fn agent_available(root: &std::path::Path, repo_dir: Option<&std::path::Path>) -> bool {
+    root.join("usr/bin/openvibes-agent").exists()
+        || repo_dir.is_some_and(|dir| {
+            std::fs::read_dir(root.join(dir.strip_prefix("/").unwrap_or(dir))).is_ok_and(|dir| {
+                dir.flatten().any(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name.starts_with("openvibes-agent-") && name.ends_with(".rpm")
+                })
+            })
+        })
+        || std::fs::read_dir(root.join("etc/yum.repos.d")).is_ok_and(|dir| {
+            dir.flatten().any(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                name.starts_with("openvibes") && name.ends_with(".repo")
+            })
+        })
+}
+
+const NO_AGENT: &str = "agent: package not available on this host (offline install); add agents from the console's Enroll page";
+
 pub fn agent_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Agent) {
         return Ok(StepState::Skipped("agent on this host not chosen".into()));
@@ -241,7 +271,18 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return agent_check(ctx);
     }
     if !ctx.succeeds(Rpm, &["-q", "--quiet", "openvibes-agent"]) {
-        install(ctx, &["openvibes-agent"])?;
+        // Offline, dnf fails on unreachable metadata before it can say
+        // "No match": do not ask it when nothing could supply the package.
+        if !agent_available(ctx.root, ctx.plan.repo_dir.as_deref()) {
+            return Ok(StepState::Skipped(NO_AGENT.into()));
+        }
+        match install(ctx, &["openvibes-agent"]) {
+            Ok(()) => {}
+            Err(error) if error.contains("No match for argument") => {
+                return Ok(StepState::Skipped(NO_AGENT.into()));
+            }
+            Err(error) => return Err(error),
+        }
     }
     let token = token_from(&ctx.as_admin(&["token", "fleet"])?)?;
     let agent = Some(("openvibes_agent", "openvibes_agent"));
@@ -508,6 +549,45 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn an_agent_with_no_repository_is_skipped_without_asking_dnf() {
+        let fake = Fake::new("agent-no-repo");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 1, "");
+        let state = run_step(
+            &fake.ctx(&plan(&[Ingest, Distribution, Rules, Agent])),
+            Step::Agent,
+        );
+        assert!(matches!(state, StepState::Skipped(_)), "{state:?}");
+        assert!(!fake.called(&["/usr/bin/dnf"]));
+    }
+
+    #[test]
+    fn an_agent_in_the_plans_repo_dir_is_installed_with_dnf() {
+        let fake = Fake::new("agent-repo-dir");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 1, "");
+        fake.file("/test/old/openvibes-agent-1.rpm", "");
+        fake.fail(&["/usr/bin/dnf"], "stop here");
+        let mut plan = plan(&[Ingest, Distribution, Rules, Agent]);
+        plan.repo_dir = Some("/test/old".into());
+        let state = run_step(&fake.ctx(&plan), Step::Agent);
+        assert!(fake.called(&["/usr/bin/dnf"]));
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    }
+
+    #[test]
+    fn an_unavailable_agent_package_skips_the_step() {
+        let fake = Fake::new("agent-offline");
+        fake.file("/etc/yum.repos.d/openvibes.repo", "");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 1, "");
+        fake.fail(&["/usr/bin/dnf"], "No match for argument: openvibes-agent");
+        let state = run_step(
+            &fake.ctx(&plan(&[Ingest, Distribution, Rules, Agent])),
+            Step::Agent,
+        );
+        assert!(matches!(state, StepState::Skipped(_)), "{state:?}");
+        assert!(state.detail().contains("add agents from the console"));
     }
 
     #[test]

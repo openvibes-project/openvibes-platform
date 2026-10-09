@@ -24,11 +24,13 @@ pub enum Step {
     Rules,
     Agent,
     Ready,
+    /// Last: a failed download must not hide the end of the install.
+    AssistantModel,
 }
 
 impl Step {
     /// Every step, in order.
-    pub const ALL: [Step; 13] = [
+    pub const ALL: [Step; 14] = [
         Step::Packages,
         Step::Postgres,
         Step::Operators,
@@ -42,6 +44,7 @@ impl Step {
         Step::Rules,
         Step::Agent,
         Step::Ready,
+        Step::AssistantModel,
     ];
 
     /// The name the helper takes.
@@ -60,6 +63,7 @@ impl Step {
             Step::Firewall => "firewall",
             Step::Rules => "rules",
             Step::Agent => "agent",
+            Step::AssistantModel => "assistant-model",
             Step::Ready => "ready",
         }
     }
@@ -80,6 +84,7 @@ impl Step {
             Step::Firewall => "Firewall",
             Step::Rules => "Baseline rules",
             Step::Agent => "Agent on this host",
+            Step::AssistantModel => "Assistant model",
             Step::Ready => "Readiness",
         }
     }

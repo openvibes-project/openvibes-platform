@@ -1,4 +1,4 @@
-//! `openvibes-admin helper assistant-tune`: measures the bundled model
+//! `openvibes-admin helper assistant-tune`: measures the pinned model
 //! server on this host and tunes it (CPU threads, console deadline). The
 //! decisions are in [`crate::tune`]; this file does the IO as root. `root`
 //! prefixes every absolute path (`/` in production).
@@ -52,10 +52,7 @@ const STOP_LLM: [&str; 3] = [
 /// listen there and receive the server's key.
 pub fn socket_holds(show: &str, port: &str) -> Result<(), String> {
     if !show.lines().any(|line| line == "ActiveState=active") {
-        return Err(
-            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
-                .into(),
-        );
+        return Err("openvibes-llm.socket is not active; turn the assistant on in Setup".into());
     }
     let listen = format!("Listen=127.0.0.1:{port} (Stream)");
     if !show.lines().any(|line| line == listen) {
@@ -332,7 +329,7 @@ fn time_call(client: &BackendClient, limit: u64) -> Result<f64, String> {
 }
 
 /// `assistant-tune --auto`: tunes only a host that has the assistant on
-/// the bundled model and is not tuned yet; returns the one line to log.
+/// the pinned model and is not tuned yet; returns the one line to log.
 /// Never fails: any problem is the line.
 pub fn auto(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> String {
     let etc = root.join("etc/openvibes");
@@ -591,7 +588,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            inactive.contains("openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"),
+            inactive.contains("openvibes-llm.socket is not active; turn the assistant on in Setup"),
             "{inactive}"
         );
         // Not found, failed, another port, or a port that merely starts the same.

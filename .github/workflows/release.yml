@@ -6,11 +6,13 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+# No permissions by default; each job asks for what it needs.
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     container: registry.fedoraproject.org/fedora:44
@@ -61,3 +63,59 @@ jobs:
               --title "openvibes-platform $GITHUB_REF_NAME" --generate-notes dist/*
             gh release edit "$GITHUB_REF_NAME" --draft=false
           fi
+
+  # The offline kit (model-download-and-offline-kit spec §4): the signed
+  # packages, the rule sets and Fedora's dependency closure in one tar. It is
+  # uploaded only after a network-less container has installed from it.
+  offline-kit:
+    needs: release
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      matrix:
+        fedora: [44]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch the signed packages and the rule sets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir rpms
+          gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --pattern 'openvibes-*.rpm' --dir rpms
+          rm -f rpms/*-debuginfo-* rpms/*-debugsource-* rpms/openvibes-agent-*
+          # The rule sets: the latest rules release (signed with the same key).
+          gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir rpms
+          ls rpms/openvibes-rules-*.rpm > /dev/null || { echo 'no openvibes-rules RPM in the latest rules release' >&2; exit 1; }
+      - name: Build the kit
+        run: |
+          mkdir -p target/offline
+          podman run --rm -v "$PWD:/src:ro" -v "$PWD/rpms:/rpms:ro" -v "$PWD/target/offline:/out" \
+            "registry.fedoraproject.org/fedora:${{ matrix.fedora }}" \
+            bash /src/scripts/build-offline-kit.sh /rpms /out ${{ matrix.fedora }}
+      - name: Sign the checksums
+        env:
+          RPM_SIGNING_KEY: ${{ secrets.RPM_SIGNING_KEY }}
+          RPM_SIGNING_PASSPHRASE: ${{ secrets.RPM_SIGNING_PASSPHRASE }}
+        run: |
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          trap 'gpgconf --kill all; rm -rf "$RUNNER_TEMP/pass" "$GNUPGHOME"' EXIT
+          mkdir -m 0700 "$GNUPGHOME"
+          printf '%s' "$RPM_SIGNING_KEY" | gpg --batch --quiet --import
+          (umask 077 && printf '%s' "$RPM_SIGNING_PASSPHRASE" > "$RUNNER_TEMP/pass")
+          gpg --batch --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/pass" \
+            --detach-sign --armor -o target/offline/openvibes-offline/SHA256SUMS.asc \
+            target/offline/openvibes-offline/SHA256SUMS
+          bash scripts/build-offline-kit.sh --pack target/offline ${{ matrix.fedora }}
+      - name: Test the kit with no network
+        run: |
+          FEDORA=${{ matrix.fedora }} bash scripts/offline-kit-e2e.sh target/offline/openvibes-platform-*-offline-fedora${{ matrix.fedora }}.tar
+      - name: Upload the kit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber target/offline/openvibes-platform-*-offline-fedora${{ matrix.fedora }}.tar

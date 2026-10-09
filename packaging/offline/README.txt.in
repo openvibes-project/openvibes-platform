@@ -1,0 +1,45 @@
+OpenVIBES platform @VERSION@, offline kit for Fedora @FEDORA@ (x86_64)
+
+This kit installs the OpenVIBES platform on a server with no network access:
+the platform packages, the rule sets, and every Fedora package they need
+(including PostgreSQL).
+
+Install
+
+  1. Download openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar, and optionally the model from the Hugging Face link (below), in any browser.
+  2. Copy both to the server, into the same folder.
+  3. Run `tar xf openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar && sudo ./openvibes-offline/install`.
+
+The installer first checks that the host is Fedora @FEDORA@ on x86_64 and that
+the kit is genuine, then installs from the kit only. Nothing changes if a
+check fails. The OpenVIBES package key is added to the host's rpm keys, as
+with an online install. Run it again with a newer kit to update. It then opens
+Setup (to open it later: sudo openvibes-admin).
+
+The assistant's model (optional)
+
+  File:    @MODEL_FILE@
+  Link:    @MODEL_URL@
+  SHA-256: @MODEL_SHA256@
+  Licence: @MODEL_LICENSE_URL@
+
+Put the file in the folder that holds the kit (or give its path to the
+installer with --model FILE). The installer checks it against the SHA-256
+above, refuses any other file, and stages it; open Setup (sudo openvibes-admin)
+and turn on the assistant to install it. Without it the platform works as usual and
+the assistant stays off.
+
+Checking the kit by hand
+
+  The kit is signed with the OpenVIBES package key, fingerprint
+  @KEY_FINGERPRINT@
+  (openvibes.gpg). SHA256SUMS lists every file and SHA256SUMS.asc is its
+  signature; the installer checks both (and only does so; --check stops there).
+
+Fedora sources
+
+  packages/ holds unmodified Fedora packages, signed by Fedora. LICENSES/
+  fedora-packages.txt lists each package with its licence and source RPM;
+  sources for any of them are at https://src.fedoraproject.org/rpms/<name>
+  and in Fedora's source repositories. The OpenVIBES packages are MIT
+  licensed; their sources are at https://github.com/openvibes-project.

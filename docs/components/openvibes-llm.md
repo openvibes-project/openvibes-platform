@@ -264,15 +264,19 @@ Another port for the socket needs its own label (see above):
 
 ## Using it
 
-Out of the box, with the bundled model (`openvibes-llm-model`, which
-`dnf install openvibes-llm` pulls in as a recommended package):
+The model is not packaged (a 2.5 GB file made every release asset and
+`dnf` transaction huge, and the assistant is optional). `openvibes-llm-model`
+is a small bridge package with no model bytes: it selects the pinned model
+(Qwen3-4B Q4_K_M, Apache 2.0, about 2.5 GB, pinned by SHA-256 in
+`packaging/llm/model.pin`, also installed as
+`/usr/share/openvibes-llm/model.pin`) in `/var/lib/openvibes-llm/model.conf`
+and owns the model path as a `%ghost` file, so upgrading from 0.2.5 (which
+shipped the model) does not delete an installed model. It replaces
+`openvibes-llm-model-part1` and `-part2`. If the model is missing after
+install, the package prints how to get it. If a future release changes `LLM_MODEL_FILE`, the old ghost path is no longer owned, so rpm removes the old GGUF on upgrade and Setup fetches the new model (the internal `assistant model fetch` step; changing the pin is a release-note item).
 
-```sh
-dnf install openvibes-llm
-sudo openvibes-admin helper assistant-setup
-```
-
-`assistant-setup` hands the generated API key to the console's account
+After `dnf install openvibes-llm`, Setup's assistant switch downloads and
+verifies the pinned model and then runs `assistant-setup`, which hands the generated API key to the console's account
 (owner-only, as the console requires), writes `[assistant]` into
 `console.toml` (an enabled assistant on the `small` profile whose backend is
 `http://127.0.0.1:18430/v1`; other keys and comments stay), stops a running
@@ -283,14 +287,8 @@ deadline when the model is slow here; your own `llm.conf` values stay). It is sa
 refuses to replace a backend you configured yourself unless you pass
 `--force`. Users still need the `assistant.use` permission.
 
-The bundled model is Qwen3-4B Q4_K_M (Apache 2.0, about 2.5 GB, delivered as two
-packages under 2 GiB each that `openvibes-llm-model` joins and verifies on
-install; if that fails, run `/usr/libexec/openvibes-llm/join-model`; during the
-join the host briefly needs about 5 GB free), selected by
-the package's `/var/lib/openvibes-llm/model.conf` and pinned by SHA-256 in
-`packaging/llm/model.pin`. Without the model package, or to use another
-model, install one yourself (the platform never downloads models while
-running):
+To use another model, or to install one from a file on a host without
+internet access:
 
 ```sh
 # Download a GGUF model yourself (see `assistant check` for the recommended
