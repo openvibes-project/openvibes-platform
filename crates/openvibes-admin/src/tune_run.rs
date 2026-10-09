@@ -82,23 +82,39 @@ pub trait Restarter {
     fn pause(&self, _seconds: u64) {}
 }
 
-/// Longest wait for systemd's jobs on the model server, in seconds.
-const JOB_WAIT: u64 = 60;
+/// Longest wait for systemd's jobs on the model server, in seconds: a
+/// pending start hashes the whole model (openvibes-llm-check) and waits for
+/// readiness (TimeoutStartSec=300).
+const JOB_WAIT: u64 = 300;
+/// The wait before restoring after a failure: the jobs were just waited out.
+const JOB_WAIT_SHORT: u64 = 10;
 /// Tries at stopping the server when systemd cancels the job.
 const STOP_TRIES: u32 = 3;
 const STOP_PAUSE: u64 = 5;
 
-/// Stops the model server and its proxy after systemd's own jobs on them
-/// are done: the restart that ends a dnf transaction cancels a stop sent
-/// meanwhile ("Job for openvibes-llm.service canceled"), so a canceled stop
-/// is tried again.
-fn stop_llm(restarter: &dyn Restarter) -> Result<(), String> {
-    for _ in 0..JOB_WAIT {
+/// Waits until systemd has no job on the model server or its proxy, at
+/// most `cap` seconds; true when it ran out (and says so).
+fn wait_jobs(restarter: &dyn Restarter, cap: u64) -> bool {
+    for _ in 0..cap {
         if !restarter.llm_jobs_pending() {
-            break;
+            return false;
         }
         restarter.pause(1);
     }
+    if !restarter.llm_jobs_pending() {
+        return false;
+    }
+    eprintln!(
+        "openvibes-admin helper: systemd jobs on the model server still pending after {cap} s; stopping anyway"
+    );
+    true
+}
+
+/// Stops the model server and its proxy. The restart that ends a dnf
+/// transaction cancels a stop sent meanwhile ("Job for openvibes-llm.service
+/// canceled"), so callers [`wait_jobs`] first and a canceled stop is tried
+/// again.
+fn stop_llm(restarter: &dyn Restarter) -> Result<(), String> {
     let mut result = restarter.systemctl(&STOP_LLM);
     for _ in 1..STOP_TRIES {
         if !result.as_ref().is_err_and(|e| e.contains("canceled")) {
@@ -151,9 +167,12 @@ impl Restarter for Systemd {
             "openvibes-llm-proxy.service",
         ];
         // One line per unit; empty when it has no job. Unknown: not pending.
-        SystemRunner
-            .run(Systemctl, &args)
-            .is_ok_and(|out| out.stdout.lines().any(|line| !line.trim().is_empty()))
+        SystemRunner.run(Systemctl, &args).is_ok_and(|out| {
+            out.stdout
+                .lines()
+                .map(str::trim)
+                .any(|line| !line.is_empty() && line != "0")
+        })
     }
 
     fn pause(&self, seconds: u64) {
@@ -499,6 +518,9 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
 
     let tuning = data.join("tuning.conf");
     let old = read_regular(&tuning);
+    // Before the new tuning is written: a start in this window would come
+    // up on unmeasured settings.
+    wait_jobs(restarter, JOB_WAIT);
     write_atomic(&tuning, &tune::tuning_conf(&plan))?;
     // Stopped either way. Local: the health wait goes through the socket,
     // which starts the server on the new tuning. Another backend: nothing
@@ -530,6 +552,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             if let Err(why) = restored {
                 eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
+            wait_jobs(restarter, JOB_WAIT_SHORT);
             let _ = stop_llm(restarter);
             return Err(error);
         }
@@ -639,7 +662,7 @@ fn is_local(base_url: &str, port: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Restarter, stop_llm};
+    use super::{Restarter, stop_llm, wait_jobs};
     use std::cell::{Cell, RefCell};
 
     /// Scripted systemd: `pending` polls report a job, then the stops
@@ -711,18 +734,25 @@ mod tests {
     }
 
     #[test]
-    fn pending_jobs_are_waited_out_before_the_stop() {
+    fn pending_jobs_are_waited_out() {
         let s = Script::new(3, vec![Ok(())]);
-        assert_eq!(stop_llm(&s), Ok(()));
+        assert!(!wait_jobs(&s, 300));
         assert_eq!(*s.pauses.borrow(), [1, 1, 1]);
-        assert_eq!(s.calls.get(), 1);
+        assert_eq!(s.calls.get(), 0);
     }
 
     #[test]
-    fn jobs_that_never_clear_do_not_wait_forever() {
+    fn jobs_that_never_clear_time_out_after_300_pauses() {
         let s = Script::new(u32::MAX, vec![Ok(())]);
-        assert_eq!(stop_llm(&s), Ok(()));
-        assert_eq!(s.pauses.borrow().len(), 60);
+        assert!(wait_jobs(&s, 300));
+        assert_eq!(s.pauses.borrow().len(), 300);
+    }
+
+    #[test]
+    fn a_short_cap_stops_waiting_early() {
+        let s = Script::new(u32::MAX, vec![Ok(())]);
+        assert!(wait_jobs(&s, 10));
+        assert_eq!(s.pauses.borrow().len(), 10);
     }
 
     #[test]
