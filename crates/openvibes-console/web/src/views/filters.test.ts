@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { LIST_FILTERS, chipsOf, dropUnsupported, queryOf } from "./filters";
+import { LIST_FILTERS, chipsOf, dropUnsupported, queryOf, setFilter } from "./filters";
 
 describe("filters", () => {
   it("labels known chips and keeps unknown ones", () => {
@@ -19,6 +19,23 @@ describe("filters", () => {
   });
   it("drops known params the view lacks, keeps unknown", () => {
     expect(dropUnsupported("/agents", "severity=critical&bad=1&status=stale")).toBe("status=stale&bad=1");
+  });
+  it("an empty query has no chips", () => {
+    expect(chipsOf("/compliance", "")).toEqual([]);
+    expect(queryOf([])).toBe("");
+  });
+  it("the first occurrence of a param is its chip, later duplicates are unknown", () => {
+    const chips = chipsOf("/compliance", "severity=high&severity=low");
+    expect(chips.map((c) => [c.label, c.known])).toEqual([["Severity: High", true], ["severity=low", false]]);
+  });
+  it("a value with a space and an ampersand survives queryOf", () => {
+    const q = queryOf(chipsOf("/compliance", "a=x+y%26z&severity=low"));
+    expect(new URLSearchParams(q).get("a")).toBe("x y&z");
+    expect(chipsOf("/compliance", q).find((c) => c.param === "a")?.value).toBe("x y&z");
+  });
+  it("setFilter replaces the param's value and keeps unknown chips", () => {
+    expect(setFilter("/compliance", "severity=low&bad=1", "severity", "high")).toBe("severity=high&bad=1");
+    expect(setFilter("/compliance", "", "state", "all")).toBe("state=all");
   });
   it.each([
     ["/compliance", "Findings"], ["/vulnerabilities", "Vulnerabilities"], ["/agents", "Agents"], ["/audit", "Admin"],

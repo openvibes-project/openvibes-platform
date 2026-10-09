@@ -54,9 +54,15 @@ function labelOf(view: ListView, param: string, value: string): string | undefin
   return v && `${def.label}: ${v.label}`;
 }
 
+/**
+ * A query as chips in catalogue order. Each catalogue param holds one value: the first occurrence
+ * with a known value is its chip; later duplicates and unknown params are plain (removable) chips.
+ */
 export function chipsOf(view: ListView, query: string): Chip[] {
+  const seen = new Set<string>();
   const all = [...new URLSearchParams(query)].map(([param, value]): Chip => {
-    const label = labelOf(view, param, value);
+    const label = seen.has(param) ? undefined : labelOf(view, param, value);
+    if (label !== undefined) seen.add(param);
     return { param, value, label: label ?? `${param}=${value}`, known: label !== undefined };
   });
   const order = (c: Chip) => (c.known ? LIST_FILTERS[view].findIndex((f) => f.param === c.param) : Infinity);
@@ -67,7 +73,16 @@ export function queryOf(chips: Chip[]): string {
   return new URLSearchParams(chips.map((c) => [c.param, c.value] as [string, string])).toString();
 }
 
-/** Keeps unknown params, drops params that some other list filters on but this one does not. */
+/** Sets a catalogue filter, replacing the value that param already has. */
+export function setFilter(view: ListView, query: string, param: string, value: string): string {
+  const rest = chipsOf(view, query).filter((c) => !(c.known && c.param === param));
+  return queryOf(chipsOf(view, queryOf([...rest, { param, value, label: "", known: true }])));
+}
+
+/**
+ * Keeps unknown params, drops params that some other list filters on but this one does not.
+ * The result is re-sorted into catalogue order and re-encoded, so it may differ from the input text.
+ */
 export function dropUnsupported(view: ListView, query: string): string {
   const mine = new Set(LIST_FILTERS[view].map((f) => f.param));
   const others = new Set(Object.values(LIST_FILTERS).flat().map((f) => f.param));

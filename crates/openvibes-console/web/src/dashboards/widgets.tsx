@@ -9,7 +9,8 @@ import { graphLabel, graphMetrics } from "./metrics";
 import { WIDGET_DEFAULTS } from "./defaults";
 import type { Widget, WidgetType } from "./layout";
 import { AttentionTile, BREAKDOWN_SOURCES, BREAKDOWN_TITLES, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
-import { AttentionSettings, BreakdownSettings, GraphSettings, GraphTile, ListSettings, NoteSettings, NoteTile, NumberSettings, TopHostsSettings, TrendSettings, TrendTile } from "./tiles2";
+import { GraphTile, NoteTile, TrendTile } from "./tiles2";
+import { AttentionSettings, BreakdownSettings, GraphSettings, ListSettings, NoteSettings, NumberSettings, TopHostsSettings, TrendSettings } from "./settings";
 
 export type WidgetProps = { widget: Widget };
 export type SettingsProps = { widget: Widget; onChange: (config: Widget["config"]) => void };
