@@ -58,8 +58,6 @@
   height: 32px; padding: 0 10px; border-radius: var(--r-2); border: 1px solid var(--line-strong);
   background: var(--surface); color: var(--text); min-width: 0; transition: border-color var(--fast), box-shadow var(--fast);
 }
-.select option { background: var(--surface); color: var(--text); }
-.select option:checked { background: var(--accent-soft); color: var(--text); }
 .textarea { height: auto; padding: 8px 10px; resize: vertical; }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field { display: grid; gap: 5px; font-size: 12.5px; color: var(--text-2); font-weight: 500; }
@@ -235,6 +233,9 @@ input.input[type="number"] { -moz-appearance: textfield; appearance: textfield; 
 input.input[type="number"]::-webkit-inner-spin-button, input.input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 @media (forced-colors: active) {
   .checkbox:focus-visible, .seg__opt:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+  .sel__option--active { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .sel__option[aria-disabled="true"] { color: GrayText; }
+  .sel__button:focus-visible, .select:focus-visible { outline: 2px solid Highlight; }
   .seg__opt { border: 1px solid ButtonText; }
   .seg__opt[aria-checked="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
   .switch__track { border: 1px solid ButtonText; }

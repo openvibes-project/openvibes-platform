@@ -38,22 +38,31 @@ const lineOptions = [{ value: "smooth", label: "Smooth" }, { value: "stepped", l
 export function GraphSettings({ widget, onChange }: SettingsProps) {
   const raw: unknown = widget.config.metrics;
   const metrics = Array.isArray(raw) && raw.length ? raw.filter((m): m is string => typeof m === "string").slice(0, GRAPH_MAX_LINES) : ["alarms.active"];
-  const set = (next: string[]) => onChange({ ...widget.config, metrics: next });
+  // Removing a count or adding the last one unmounts the focused button: focus moves on to "Add a count" or the first Select.
+  const [tick, setTick] = useState(0);
+  const refocus = useRef(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!refocus.current) return;
+    refocus.current = false;
+    (box.current?.querySelector<HTMLElement>(".link-add") ?? box.current?.querySelector<HTMLElement>(".sel__button"))?.focus();
+  }, [tick]);
+  const set = (next: string[], move = false) => { onChange({ ...widget.config, metrics: next }); if (move) { refocus.current = true; setTick((t) => t + 1); } };
   const options = (own: string): SelectGroup[] => METRIC_GROUPS.map((g) => ({ group: g.group, options: g.options.map((o) => ({ ...o, disabled: o.value !== own && metrics.includes(o.value) })) }));
   return (
     <div className="stack">
-      {group("Counts", <>
+      {group("Counts", <div ref={box} className="stack stack--tight">
         {metrics.map((m, i) => (
           <div key={i} className="editor-count">
             <span className="editor-count__dot" style={{ background: `var(--series-${i + 1})` }} aria-hidden="true" />
             <Select label={`Count ${i + 1}`} value={m} options={options(m)} onChange={(v) => set(metrics.map((x, j) => (j === i ? v : x)))} />
-            {metrics.length > 1 && <button type="button" className="icon-button editor-count__remove" aria-label={`Remove count ${i + 1}`} onClick={() => set(metrics.filter((_, j) => j !== i))}><Icon name="close" size={14} /></button>}
+            {metrics.length > 1 && <button type="button" className="icon-button editor-count__remove" aria-label={`Remove count ${i + 1}`} onClick={() => set(metrics.filter((_, j) => j !== i), true)}><Icon name="close" size={14} /></button>}
           </div>
         ))}
         {metrics.length < GRAPH_MAX_LINES && (
-          <button type="button" className="link-add" onClick={() => set([...metrics, METRIC_GROUPS.flatMap((g) => g.options).find((o) => !metrics.includes(o.value) && !o.value.startsWith("all."))?.value ?? "alarms.active"])}><Icon name="plus" size={14} /> Add a count</button>
+          <button type="button" className="link-add" onClick={() => set([...metrics, METRIC_GROUPS.flatMap((g) => g.options).find((o) => !metrics.includes(o.value) && !o.value.startsWith("all."))?.value ?? "alarms.active"], true)}><Icon name="plus" size={14} /> Add a count</button>
         )}
-      </>, `up to ${GRAPH_MAX_LINES}`)}
+      </div>, `up to ${GRAPH_MAX_LINES}`)}
       {group("Period", <Segmented label="Period" value={rawInt(widget.config, "days", 30)} options={[...GRAPH_DAYS].map((d) => ({ value: d as number, label: d === 365 ? "1 y" : days(d) }))} unknownLabel={days} onChange={(d) => onChange({ ...widget.config, days: d })} />)}
       {group("Line", <Segmented label="Line" value={rawStr(widget.config, "line", "smooth")} options={lineOptions} onChange={(line) => onChange({ ...widget.config, line })} />)}
     </div>
@@ -66,7 +75,7 @@ export function NumberSettings({ widget, onChange }: SettingsProps) {
     <div className="stack">
       {selectField("Count", <Select label="Count" value={rawStr(widget.config, "metric", "agents.active")} options={METRIC_GROUPS} onChange={(metric) => onChange({ ...widget.config, metric })} />)}
       {group("Trend", <Segmented label="Trend" value={trend} options={TREND_DAYS.map((d) => ({ value: d as number, label: d === 0 ? "Off" : days(d) }))} unknownLabel={days} onChange={(t) => onChange({ ...widget.config, trend: t })} />)}
-      {trend > 0 && group("Line", <Segmented label="Line" value={rawStr(widget.config, "line", "smooth")} options={lineOptions} onChange={(line) => onChange({ ...widget.config, line })} />)}
+      {(TREND_DAYS as readonly number[]).includes(trend) && trend > 0 && group("Line", <Segmented label="Line" value={rawStr(widget.config, "line", "smooth")} options={lineOptions} onChange={(line) => onChange({ ...widget.config, line })} />)}
     </div>
   );
 }
@@ -78,16 +87,18 @@ export function BreakdownSettings({ widget, onChange }: SettingsProps) {
 }
 
 const ATTENTION_LABELS = { alarms: "Active threat alarms (medium and above)", exploited: "Exploited vulnerabilities", serious: "Open critical and high vulnerabilities", compliance: "Open critical and high compliance findings", stale: "Hosts that stopped reporting" };
+/** The stored include list after switching one kind; unknown entries stay, and no known kind stored means all are on. */
+export function toggledKinds(include: string[], kind: string): string[] {
+  const base = include.some((v) => (ATTENTION_KINDS as readonly string[]).includes(v)) ? include : [...include, ...ATTENTION_KINDS];
+  return base.includes(kind) ? base.filter((v) => v !== kind) : [...base, kind];
+}
 export function AttentionSettings({ widget, onChange }: SettingsProps) {
   const stored: unknown = widget.config.include;
   const include = Array.isArray(stored) ? stored.filter((v): v is string => typeof v === "string") : [];
   // An empty (or all-unknown) list means every kind; unknown stored entries are kept on save.
   const known = include.filter((v) => (ATTENTION_KINDS as readonly string[]).includes(v));
   const on = known.length ? known : [...ATTENTION_KINDS];
-  const toggle = (kind: string) => {
-    const base = known.length ? include : [...ATTENTION_KINDS];
-    onChange({ ...widget.config, include: base.includes(kind) ? base.filter((v) => v !== kind) : [...base, kind] });
-  };
+  const toggle = (kind: string) => onChange({ ...widget.config, include: toggledKinds(include, kind) });
   return (
     <div className="stack">
       <div className="stack stack--tight">

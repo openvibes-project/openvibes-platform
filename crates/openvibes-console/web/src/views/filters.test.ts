@@ -20,6 +20,10 @@ describe("filters", () => {
   it("drops known params the view lacks, keeps unknown", () => {
     expect(dropUnsupported("/agents", "severity=critical&bad=1&status=stale")).toBe("status=stale&bad=1");
   });
+  it("drops a known param whose value the new list does not offer", () => {
+    expect(dropUnsupported("/compliance", "severity=important&state=all")).toBe("state=all");
+    expect(dropUnsupported("/compliance", "severity=high")).toBe("severity=high");
+  });
   it("an empty query has no chips", () => {
     expect(chipsOf("/compliance", "")).toEqual([]);
     expect(queryOf([])).toBe("");

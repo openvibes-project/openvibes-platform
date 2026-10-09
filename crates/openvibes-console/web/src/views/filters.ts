@@ -80,12 +80,12 @@ export function setFilter(view: ListView, query: string, param: string, value: s
 }
 
 /**
- * Keeps unknown params, drops params that some other list filters on but this one does not.
+ * Keeps unknown params, drops params that some other list filters on but this one does not,
+ * or whose value this list does not offer.
  * The result is re-sorted into catalogue order and re-encoded, so it may differ from the input text.
  */
 export function dropUnsupported(view: ListView, query: string): string {
-  const mine = new Set(LIST_FILTERS[view].map((f) => f.param));
   const others = new Set(Object.values(LIST_FILTERS).flat().map((f) => f.param));
-  const kept = [...new URLSearchParams(query)].filter(([p]) => mine.has(p) || !others.has(p));
+  const kept = [...new URLSearchParams(query)].filter(([p, v]) => !others.has(p) || labelOf(view, p, v) !== undefined);
   return queryOf(chipsOf(view, new URLSearchParams(kept).toString()));
 }

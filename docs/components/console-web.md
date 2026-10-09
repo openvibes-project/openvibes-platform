@@ -218,7 +218,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   used filter replaces the old one), and Rows (5, 8, 10, 15). Only the
   catalogue's filters are offered: runtime rule-set filters are not, but a
   stored `set=` parameter shows as a chip and is kept. Changing the list
-  drops the filters the new list does not support.
+  drops the filters the new list does not support, or whose value it does not offer.
 - **Trend:** the compliance rule, grouped by rule set and labelled
   "<latest message> · <rule id>" (the API has no rule title), and Days (7,
   14, 30). Without `compliance.read` the list is empty.

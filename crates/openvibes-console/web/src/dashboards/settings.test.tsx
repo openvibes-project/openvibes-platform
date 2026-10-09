@@ -8,7 +8,7 @@ import { METRIC_GROUPS } from "./metrics";
 
 // The tiles import the router, which reads window at load; a bare location is enough for markup.
 vi.stubGlobal("window", { location: { pathname: "/", search: "" }, addEventListener: () => {}, removeEventListener: () => {} });
-const { AttentionSettings, BreakdownSettings, GraphSettings, ListSettings, NumberSettings, ruleGroups, ruleUnknownLabel, TopHostsSettings } = await import("./settings");
+const { AttentionSettings, BreakdownSettings, GraphSettings, ListSettings, NumberSettings, toggledKinds, ruleGroups, ruleUnknownLabel, TopHostsSettings } = await import("./settings");
 
 const noop = () => {};
 const html = (Settings: ComponentType<{ widget: Widget; onChange: () => void }>, type: WidgetType, config: Widget["config"]) =>
@@ -58,6 +58,14 @@ describe("Number editor", () => {
 });
 
 describe("Attention editor", () => {
+  it("keeps unknown stored entries when a toggle starts from all-unknown", () => {
+    expect(toggledKinds(["bogus"], "alarms")).toEqual(["bogus", "exploited", "serious", "compliance", "stale"]);
+    expect(toggledKinds(["alarms", "bogus"], "stale")).toEqual(["alarms", "bogus", "stale"]);
+  });
+  it("hides Line for a trend the tile treats as Off", () => {
+    expect(html(NumberSettings, "number", { trend: 14 })).not.toContain('aria-label="Line"');
+    expect(html(NumberSettings, "number", { trend: 30 })).toContain('aria-label="Line"');
+  });
   it("one switch per kind; Show at most keeps a stored 12", () => {
     const m = html(AttentionSettings, "attention", { limit: 12 });
     expect(m.match(/role="switch"/g)).toHaveLength(5);

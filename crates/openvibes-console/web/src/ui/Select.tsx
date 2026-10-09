@@ -140,7 +140,7 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
           {searchable && (
             <div className="search">
               <Icon name="search" size={14} />
-              <input className="input" value={filter} placeholder="Filter…" aria-label={`Filter ${label}`} autoComplete="off" spellCheck={false}
+              <input className="input" role="combobox" aria-expanded="true" aria-autocomplete="list" value={filter} placeholder="Filter…" aria-label={`Filter ${label}`} autoComplete="off" spellCheck={false}
                 aria-controls={listId} aria-activedescendant={activeId}
                 onChange={(event) => { setFilter(event.target.value); setActive(Math.max(0, firstEnabled(filterSections(sections, event.target.value).flatMap((s) => s.options)))); }} />
             </div>

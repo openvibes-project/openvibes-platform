@@ -33,7 +33,7 @@ test("the host Select filters, picks a host and its evidence opens", async ({ pa
   await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(1).click();
   const panel = page.locator(".inspector");
   await panel.getByRole("combobox", { name: "Host", exact: true }).click();
-  await panel.getByRole("textbox", { name: "Filter Host" }).fill("db-01");
+  await panel.getByRole("combobox", { name: "Filter Host" }).fill("db-01");
   await expect(panel.getByRole("option")).toHaveCount(1);
   expect((await new AxeBuilder({ page }).include(".inspector").analyze()).violations).toEqual([]);
   await panel.getByRole("option").click();
@@ -68,7 +68,7 @@ test("a typed letter opens the Select with the search filled and a row active", 
   const panel = page.locator(".inspector");
   await panel.getByRole("combobox", { name: "Host", exact: true }).focus();
   await page.keyboard.press("d");
-  await expect(panel.getByRole("textbox", { name: "Filter Host" })).toHaveValue("d");
+  await expect(panel.getByRole("combobox", { name: "Filter Host" })).toHaveValue("d");
   await expect(panel.locator(".sel__option--active")).toHaveCount(1);
-  await expect(panel.getByRole("textbox", { name: "Filter Host" })).toBeFocused();
+  await expect(panel.getByRole("combobox", { name: "Filter Host" })).toBeFocused();
 });

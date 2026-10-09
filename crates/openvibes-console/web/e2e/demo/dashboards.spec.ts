@@ -251,7 +251,7 @@ test("the widget panel is named for the widget, and the Graph editor's selects s
   // Group headings, the search box, and clicks on a heading or a disabled option keep focus in it.
   const popup = page.locator(".sel__popup");
   await expect(popup.getByRole("group")).toHaveCount(5);
-  const search = popup.getByRole("textbox", { name: "Filter Count 2" });
+  const search = popup.getByRole("combobox", { name: "Filter Count 2" });
   await expect(search).toBeFocused();
   await popup.locator(".sel__group").first().click();
   await expect(search).toBeFocused();
@@ -264,7 +264,7 @@ test("the widget panel is named for the widget, and the Graph editor's selects s
   // A typed letter opens with the search filled and an enabled row active, even when the first match is disabled.
   await two.focus();
   await page.keyboard.press("a");
-  await expect(popup.getByRole("textbox")).toHaveValue("a");
+  await expect(popup.getByRole("combobox", { name: "Filter Count 2" })).toHaveValue("a");
   const active = popup.locator(".sel__option--active");
   await expect(active).toHaveCount(1);
   await expect(active).not.toHaveAttribute("aria-disabled", "true");
@@ -341,7 +341,7 @@ test("the Trend editor picks a rule from a searchable list", async ({ page }) =>
   const rule = panel.getByRole("combobox", { name: "Compliance rule" });
   await expect(rule).toContainText("Choose a rule");
   await rule.click();
-  await expect(page.getByRole("textbox", { name: "Filter Compliance rule" })).toBeFocused();
+  await expect(page.getByRole("combobox", { name: "Filter Compliance rule" })).toBeFocused();
   await page.getByRole("option").first().click();
   await expect(rule).not.toContainText("Choose a rule");
   await expect(panel.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "14" })).toBeChecked();
@@ -438,4 +438,21 @@ test("Edit shows a pencil, and new widgets fill the first free spot", async ({ p
   const [boxA, boxB] = [await a.boundingBox(), await b.boundingBox()];
   expect(boxA?.y).toBe(boxB?.y);
   expect(boxB?.x).toBeGreaterThan(boxA?.x ?? 0);
+});
+
+test("an Overview copy's tile editor is named for its type, not its id", async ({ page }) => {
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await page.getByRole("button", { name: "Settings for Critical" }).click();
+  await expect(page.locator(".inspector").getByText("Edit widget · Number")).toBeVisible();
+});
+
+test("the Graph editor keeps focus when a count is removed or the last one is added", async ({ page }) => {
+  const panel = await newWidget(page, /^Graph/);
+  await panel.getByRole("button", { name: "Add a count" }).click();
+  await expect(panel.getByRole("button", { name: "Add a count" })).toBeFocused();
+  await panel.getByRole("button", { name: "Add a count" }).click();
+  await panel.getByRole("button", { name: "Add a count" }).click();
+  await expect(panel.getByRole("combobox", { name: "Count 1", exact: true })).toBeFocused();
+  await panel.getByRole("button", { name: "Remove count 4" }).click();
+  await expect(panel.getByRole("button", { name: "Add a count" })).toBeFocused();
 });
