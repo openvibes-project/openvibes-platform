@@ -325,7 +325,7 @@ model, because Hugging Face is not reachable from the build environment.
 ## Tuning after an upgrade
 
 Installing or upgrading the package starts `openvibes-llm-tune.service`
-(`%posttrans`, no wait, not enabled by anyone). It runs `openvibes-admin
+(a file trigger after all `%posttrans` scriptlets and the restart, no wait, not enabled by anyone). It runs `openvibes-admin
 helper assistant-tune --auto`: if the assistant is set up with the bundled
 model and the host has no `tuning.conf` yet, it tunes the host; otherwise
 it logs why it did nothing (`journalctl -u openvibes-llm-tune`) and exits

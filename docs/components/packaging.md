@@ -120,13 +120,13 @@ directory itself, so no tmpfiles.d entry is needed.
   then refuse the old schema as before; Update backs up and migrates.
 - `openvibes-rules-apply.service` (admin package): a oneshot as root, running
   `openvibes-admin helper rules-apply`; no `[Install]`. A
-  `%transfiletriggerin` on `/usr/share/openvibes/rules` starts it
+  `%transfiletriggerin -P 900000` on `/usr/share/openvibes/rules` starts it
   (`--no-block`) after any transaction that installs or upgrades files
   there, so new rules are published with no Update or Repair. It skips
   when Setup never ran or is running.
 - `openvibes-llm-tune.service` (llm package): a oneshot as root, running
   `openvibes-admin helper assistant-tune --auto`; no `[Install]`; the
-  llm package's `%posttrans` starts it (`--no-block`). It tunes only an
+  llm package's `%transfiletriggerin -P 900000` on `/usr/libexec/openvibes-llm` starts it (`--no-block`, after the `%posttrans` scriptlets and the restart). It tunes only an
   untuned host with the assistant on the bundled model.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs

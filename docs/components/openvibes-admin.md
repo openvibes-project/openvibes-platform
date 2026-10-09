@@ -608,8 +608,9 @@ enabled `[assistant]` on the local backend, the model file named in
 `/var/lib/openvibes-llm/model.conf` does not exist, or the host is already
 tuned (`tuning.conf` exists). Otherwise it tunes as above; a failure (the
 old tuning is restored) is the line, still exit 0. `openvibes-llm-tune.service`
-(openvibes-llm package) runs it; the package's `%posttrans` starts it with
-`systemctl start --no-block`. To tune again, run plain `assistant-tune`.
+(openvibes-llm package) runs it; a `%transfiletriggerin -P 900000` on
+`/usr/libexec/openvibes-llm` starts it with `systemctl start --no-block`, after
+the `%posttrans` scriptlets and systemd's restart of the model server. To tune again, run plain `assistant-tune`.
 
 `helper rules-apply` (root) is Update's publish step without the TUI
 (`setup/auto_rules.rs` calls `fleet::rules_check` then `fleet::rules_apply`,
@@ -623,5 +624,8 @@ Update would refuse is an error line, never trusted. It runs the sets Update
 knows (`baseline`, and `alarms` when the package carries it). `openvibes-rules-apply.service`
 (admin package) runs it, started by a transaction file trigger on
 `/usr/share/openvibes/rules`, which fires after the whole transaction on
-first install and on upgrade of the rules package, so it uses the new
-binary. Test: `setup/auto_rules.rs` unit tests.
+first install and on upgrade of the rules package (priority 900000, after
+systemd's restart; the unit also wants `openvibes-migrate.service` first), so
+it uses the new binary. A skipped or failed automatic publish is not retried
+until the next rules or admin package transaction; Setup's Update publishes
+it. Test: `setup/auto_rules.rs` unit tests.

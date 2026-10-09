@@ -303,7 +303,8 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_postun openvibes-maintenance.timer
 # A new or upgraded rules package is published after the whole transaction,
 # by the new admin binary (the unit skips unless Setup ran and is idle).
-%transfiletriggerin -n openvibes-admin -- %{_datadir}/openvibes/rules
+# Priority below systemd's restart trigger; the unit also waits for migrate.
+%transfiletriggerin -P 900000 -n openvibes-admin -- %{_datadir}/openvibes/rules
 systemctl start --no-block openvibes-rules-apply.service >/dev/null 2>&1 || :
 
 %if %{with llm}
@@ -336,8 +337,9 @@ fi
 # is started here once; with StopWhenUnneeded= and no proxy it stops again at
 # once. Accepted: it was not meant to run at boot either.
 %restart_renamed openvibes-llm.service
-# The assistant tunes itself after an install or upgrade (the unit does
-# nothing unless the assistant uses the bundled model and is not tuned).
+# The assistant tunes itself after an install or upgrade: a file trigger
+# after the %%posttrans scriptlets and systemd's restart (see below).
+%transfiletriggerin -P 900000 -n openvibes-llm -- %{_libexecdir}/openvibes-llm
 systemctl start --no-block openvibes-llm-tune.service >/dev/null 2>&1 || :
 %preun -n openvibes-llm
 %systemd_preun openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service

@@ -520,3 +520,111 @@ fn a_socket_lost_during_the_health_wait_never_receives_the_key() {
     assert!(!root.join(TUNING).exists());
     fs::remove_dir_all(&root).unwrap();
 }
+
+/// A tree where `--auto` has everything it needs: the model file named in
+/// model.conf exists.
+fn auto_tree(name: &str, port: u16) -> PathBuf {
+    let root = tree(name, port, 60);
+    let model = root.join("var/lib/openvibes-llm/models/m.gguf");
+    fs::create_dir_all(model.parent().unwrap()).unwrap();
+    fs::write(&model, "gguf").unwrap();
+    fs::write(
+        root.join("var/lib/openvibes-llm/model.conf"),
+        format!("OPENVIBES_LLM_MODEL={}\n", model.display()),
+    )
+    .unwrap();
+    root
+}
+
+/// `--auto` prints one line and exits 0; returns it.
+fn auto(root: &Path, envs: &[(&str, &str)]) -> String {
+    let out = Command::new(env!("CARGO_BIN_EXE_openvibes-admin"))
+        .env("OPENVIBES_TUNE_HEALTH_SECS", "2")
+        .envs(envs.iter().copied())
+        .args(["helper", "assistant-tune", "--auto", "--root"])
+        .arg(root)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(0), "{out:?}");
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    assert_eq!(text.lines().count(), 1, "{text}");
+    text
+}
+
+#[test]
+fn auto_does_nothing_when_the_socket_is_not_enabled() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-socket", port);
+    let line = auto(&root, &[("OPENVIBES_TUNE_ENABLED", "0")]);
+    assert!(
+        line.contains("nothing to do") && line.contains("socket"),
+        "{line}"
+    );
+    assert!(!root.join(TUNING).exists());
+}
+
+#[test]
+fn auto_does_nothing_for_another_backend() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-other", port);
+    fs::write(
+        root.join(CONSOLE),
+        console(port, 60).replace("127.0.0.1", "gpu.lan"),
+    )
+    .unwrap();
+    let line = auto(&root, &[]);
+    assert!(
+        line.contains("nothing to do") && line.contains("local model"),
+        "{line}"
+    );
+    assert!(!root.join(TUNING).exists());
+}
+
+#[test]
+fn auto_does_nothing_without_the_model_file() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-model", port);
+    fs::remove_file(root.join("var/lib/openvibes-llm/models/m.gguf")).unwrap();
+    let line = auto(&root, &[]);
+    assert!(
+        line.contains("nothing to do") && line.contains("model file"),
+        "{line}"
+    );
+    assert!(!root.join(TUNING).exists());
+}
+
+#[test]
+fn auto_leaves_a_tuned_host_alone() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-tuned", port);
+    fs::write(root.join(TUNING), "OPENVIBES_LLM_THREADS=7\n").unwrap();
+    let line = auto(&root, &[]);
+    assert!(line.contains("already tuned"), "{line}");
+    assert_eq!(read(&root, TUNING), "OPENVIBES_LLM_THREADS=7\n");
+}
+
+#[test]
+fn auto_tunes_an_untuned_host() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-run", port);
+    let line = auto(&root, &[]);
+    assert!(
+        line.starts_with("assistant-tune --auto: assistant:"),
+        "{line}"
+    );
+    assert!(read(&root, TUNING).contains("OPENVIBES_LLM_THREADS"));
+    assert!(root.join(TUNE_JSON).exists());
+}
+
+#[test]
+fn auto_reports_a_failure_and_still_exits_zero() {
+    let port = server_with(
+        Some(Duration::from_millis(50)),
+        "200 OK",
+        "500 Internal Server Error",
+    );
+    let root = auto_tree("auto-fail", port);
+    let line = auto(&root, &[]);
+    assert!(line.contains("not tuned"), "{line}");
+    assert!(!root.join(TUNING).exists());
+}

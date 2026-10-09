@@ -143,6 +143,18 @@ mod tests {
     }
 
     #[test]
+    fn a_half_done_update_or_uninstall_skips() {
+        for kind in ["update", "uninstall"] {
+            let fake = host(&format!("auto-job-{kind}"), "baseline v1 keys 1\n", KEY);
+            fake.file("/run/openvibes-admin/job", kind);
+            let line = run(&fake.root, &fake);
+            assert!(line.starts_with("rules not published"), "{line}");
+            assert!(line.contains("half done"), "{line}");
+            assert!(!published(&fake));
+        }
+    }
+
+    #[test]
     fn setup_never_ran_skips() {
         let fake = Fake::new("auto-no-setup");
         let line = run(&fake.root, &fake);

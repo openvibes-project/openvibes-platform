@@ -1,7 +1,10 @@
 [Unit]
 Description=OpenVIBES publishes the installed rules package
 Documentation=https://github.com/openvibes-project/openvibes-platform
-After=postgresql.service
+# The trigger can run before the upgraded services restart: migrate first
+# (an idempotent oneshot, skipped before Setup).
+Wants=openvibes-migrate.service
+After=postgresql.service openvibes-migrate.service
 
 [Service]
 Type=oneshot

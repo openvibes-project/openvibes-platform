@@ -76,13 +76,13 @@ expect_stat /var/lib/openvibes-llm/models 775 root:openvibes-admin
 rpm -qc openvibes-llm | grep -qx /etc/openvibes/llm.conf || fail "llm.conf not %config"
 systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
     /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
-# The assistant tunes itself after an upgrade: the package starts the unit.
+# The assistant tunes itself after an upgrade: a file trigger starts the unit.
 systemd-analyze verify /usr/lib/systemd/system/openvibes-llm-tune.service || fail "llm-tune unit verification"
 grep -qx 'ExecStart=/usr/bin/openvibes-admin helper assistant-tune --auto' /usr/lib/systemd/system/openvibes-llm-tune.service \
     || fail "openvibes-llm-tune.service does not run assistant-tune --auto"
 ! grep -q '^\[Install\]' /usr/lib/systemd/system/openvibes-llm-tune.service || fail "llm-tune has an [Install]"
-rpm -q --scripts openvibes-llm | grep -q 'systemctl start --no-block openvibes-llm-tune.service' \
-    || fail "openvibes-llm %posttrans does not start openvibes-llm-tune.service"
+rpm -q --filetriggers openvibes-llm | grep -q 'systemctl start --no-block openvibes-llm-tune.service' \
+    || fail "openvibes-llm lacks the file trigger that starts openvibes-llm-tune.service"
 # Idle unloading stops the process; llama-server's own idle sleep has a
 # use-after-free (CVE-2026-43631).
 # The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart; without
