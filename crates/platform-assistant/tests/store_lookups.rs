@@ -306,10 +306,19 @@ async fn rules_are_read_from_published_json_bundles() {
     assert_eq!(rule.data["rule"]["title"], "SSH exposed on all interfaces");
     assert_eq!(rule.data["rule"]["severity"], "high");
     assert_eq!(rule.data["rule"]["bundle_version"], 7);
+    // A wrong set name resolves from the findings, which are in baseline.
+    let resolved = lookups
+        .run(
+            &Lookup::parse("rule_description", r#"{"rule":"ssh.exposed"}"#).unwrap(),
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(resolved.data["rule"]["bundle_version"], 7);
     for (set, name) in [
         ("baseline", "absent.rule"),
-        ("unknown", "ssh.exposed"),
-        ("yaml", "ssh.exposed"),
+        ("unknown", "absent.rule"),
+        ("yaml", "absent.rule"),
     ] {
         let missing = lookups
             .run(

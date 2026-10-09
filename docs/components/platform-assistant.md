@@ -49,13 +49,13 @@ asking user's scope.
 
 | Lookup | Arguments | Result |
 |---|---|---|
-| `search_findings` | `text?`, `min_severity?` (finding severity), `rule_set?`, `window_hours?` | Finding groups: severity, endpoints, versions, first/last observed, latest message |
-| `finding_endpoints` | `rule_set`, `rule`, `window_hours?` | Endpoints in the window, and how many were not seen in it |
+| `search_findings` | `text?`, `min_severity?` (finding severity), `rule_set?`, `window_hours?` | Finding groups (an unknown `rule_set` falls back to all sets with a note): severity, endpoints, versions, first/last observed, latest message |
+| `finding_endpoints` | `rule_set?`, `rule`, `window_hours?` | Endpoints in the window, and how many were not seen in it. A missing or unknown `rule_set` resolves from the findings; a rule in several sets returns all, each item naming its set |
 | `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents) |
 | `host_vulnerabilities` | `agent`, `min_severity?` (advisory severity) | Open vulnerabilities by priority; a host name matching several agents in scope is refused as ambiguous |
 | `vulnerability_hosts` | `id` (CVE or advisory) | Hosts where it is open |
 | `fleet_overview` | `window_hours?` | Agent counts, open and exploited vulnerabilities, top findings and advisories |
-| `rule_description` | `rule_set`, `rule` | Title, severity, message, and expression from the latest published JSON bundle |
+| `rule_description` | `rule_set?`, `rule` | Title, severity, message, and expression from the latest published JSON bundle. A missing or unknown set resolves from the findings; a rule in several sets is a fixed error asking for one |
 
 Arguments are parsed with unknown fields refused, strings trimmed and at most
 128 characters without control characters, windows 1–720 hours (default

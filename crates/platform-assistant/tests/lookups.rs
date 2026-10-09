@@ -53,7 +53,7 @@ fn valid_requests_parse_with_defaults() {
         )
         .unwrap(),
         Lookup::FindingEndpoints {
-            rule_set: String::new(),
+            rule_set: Some(String::new()),
             rule: "legacy.rule".into(),
             window_hours: 24
         }
@@ -79,6 +79,16 @@ fn valid_requests_parse_with_defaults() {
         .is_ok()
     );
     assert!(Lookup::parse("agent_summary", r#"{"agent":"db-02"}"#).is_ok());
+    for name in ["finding_endpoints", "rule_description"] {
+        assert!(
+            matches!(
+                Lookup::parse(name, r#"{"rule":"ssh-root-login"}"#).unwrap(),
+                Lookup::FindingEndpoints { rule_set: None, .. }
+                    | Lookup::RuleDescription { rule_set: None, .. }
+            ),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -129,6 +139,11 @@ fn audit_arguments_are_the_validated_ones() {
     )
     .unwrap();
     assert_eq!(lookup.name(), "search_findings");
+    let endpoints = Lookup::parse("finding_endpoints", r#"{"rule":"ssh-root-login"}"#).unwrap();
+    assert_eq!(
+        endpoints.arguments(),
+        json!({ "rule_set": null, "rule": "ssh-root-login", "window_hours": 24 })
+    );
     assert_eq!(
         lookup.arguments(),
         json!({ "text": "ssh", "min_severity": "high", "rule_set": null, "window_hours": 24 })
