@@ -484,17 +484,14 @@ impl<R: LookupRunner> Run<'_, R> {
             }
         };
         self.emit(Event::Lookup(lookup.name()));
-        let room = self
-            .limit_chars
-            .saturating_sub(self.base_chars() + RESERVE_CHARS + RESULT_PREFIX.len())
-            / lookups_left.max(1) as usize;
+        let room = result_room(self.limit_chars, self.base_chars(), lookups_left);
         let text = match self
             .runner
             .run(&lookup, self.settings.budget.result_items)
             .await
         {
             Ok(mut output) => {
-                output.shrink_to(room.max(MIN_RESULT_CHARS));
+                output.shrink_to(room);
                 let found = output.found();
                 let citations = output.citations();
                 self.records.push(LookupRecord {
@@ -681,4 +678,28 @@ pub async fn answer<R: LookupRunner>(
 #[must_use]
 pub fn history_text(answer: &Answer) -> String {
     plain_text(&answer.segments)
+}
+
+/// Room for the current lookup's result: what is left, minus the minimum
+/// kept for each lookup still allowed after it.
+fn result_room(limit: usize, base: usize, lookups_left: u32) -> usize {
+    let available = limit.saturating_sub(base + RESERVE_CHARS + RESULT_PREFIX.len());
+    let later = lookups_left.saturating_sub(1) as usize * MIN_RESULT_CHARS;
+    available.saturating_sub(later).max(MIN_RESULT_CHARS)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_current_lookup_gets_the_room_and_later_ones_keep_the_minimum() {
+        let available = 9_000 - (3_200 + RESERVE_CHARS + RESULT_PREFIX.len());
+        assert_eq!(result_room(9_000, 3_200, 1), available);
+        assert_eq!(
+            result_room(9_000, 3_200, 4),
+            available - 3 * MIN_RESULT_CHARS
+        );
+        assert_eq!(result_room(9_000, 8_900, 4), MIN_RESULT_CHARS);
+    }
 }

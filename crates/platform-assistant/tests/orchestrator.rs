@@ -813,7 +813,9 @@ async fn the_reminder_restates_at_most_300_characters_of_the_question() {
 async fn the_reminder_counts_against_the_prompt_budget() {
     // Small native: tools, system prompt, the reminder (at most 300
     // characters of the question) and the final notice take ~3,700 of
-    // 6,000 characters, leaving room for a question of about 1,280.
+    // 9,000 characters, leaving room for a question of about 4,000 (the
+    // 2,000-character question cap applies first, so probe the cap edge
+    // with Medium and the budget with a lowered limit).
     let fits = |n: usize, profile: Profile| async move {
         let mut s = settings(ResolvedMode::Native);
         s.budget = profile.budget();
@@ -826,9 +828,69 @@ async fn the_reminder_counts_against_the_prompt_budget() {
         .await
     };
     assert!(fits(1_200, Profile::Small).await.is_ok());
+    assert!(fits(2_000, Profile::Small).await.is_ok());
     assert_eq!(
-        fits(1_400, Profile::Small).await.unwrap_err(),
+        fits(2_001, Profile::Small).await.unwrap_err(),
         AnswerError::QuestionTooLong
     );
     assert!(fits(2_000, Profile::Medium).await.is_ok());
+}
+
+fn tool_sizes(script: &Script) -> Vec<usize> {
+    let last = script.requests().pop().unwrap();
+    last.messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::Tool { content, .. } => Some(content.len()),
+            _ => None,
+        })
+        .collect()
+}
+
+#[tokio::test]
+async fn the_only_lookup_gets_the_room_not_a_fraction() {
+    let script = Script::new(vec![
+        tool_turn(vec![call("c1", "search_findings", "{}")]),
+        text("done"),
+    ]);
+    let fake = Fake {
+        items: 12, // about 3,000 characters
+        ..Fake::default()
+    };
+    ask(&script, &fake, settings(ResolvedMode::Native), "q")
+        .await
+        .unwrap();
+    assert!(tool_sizes(&script)[0] > 2_000, "{:?}", tool_sizes(&script));
+}
+
+#[tokio::test]
+async fn four_lookups_after_a_long_history_each_keep_the_minimum() {
+    let history: Vec<Turn> = (0..40)
+        .map(|i| Turn {
+            question: format!("old question {i} {}", "q".repeat(300)),
+            answer: "a".repeat(300),
+        })
+        .collect();
+    let calls = (1..=4)
+        .map(|i| call(&format!("c{i}"), "search_findings", "{}"))
+        .collect();
+    let script = Script::new(vec![tool_turn(calls), text("done")]);
+    let fake = Fake {
+        items: 12,
+        ..Fake::default()
+    };
+    let backend: Arc<dyn ChatBackend> = script.clone();
+    answer(
+        backend,
+        &fake,
+        settings(ResolvedMode::Native),
+        &history,
+        "q",
+        None,
+    )
+    .await
+    .unwrap();
+    let sizes = tool_sizes(&script);
+    assert_eq!(sizes.len(), 4);
+    assert!(sizes.iter().all(|s| *s >= 400), "{sizes:?}");
 }

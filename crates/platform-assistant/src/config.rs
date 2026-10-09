@@ -52,7 +52,7 @@ impl Profile {
     pub const fn budget(self) -> Budget {
         match self {
             Self::Small => Budget {
-                prompt_tokens: 2_000,
+                prompt_tokens: 3_000,
                 output_tokens: 300,
                 result_items: 10,
             },
