@@ -39,8 +39,8 @@ missing audit rule, an unloaded rule set or a delivery problem shows up as
   program is running; findings work on this host." Uses only an allowlisted
   fact, so the oldest supported agent evaluates it.
 - Both get test cases (match and near misses such as `openvibes-tester`)
-  and an ATT&CK-free mapping (they cover nothing; the Coverage page leaves
-  them out).
+  and no ATT&CK mapping (they cover nothing; the Coverage page leaves them
+  out).
 - Anyone can start a program named `openvibes-test`, which is the point; a
   user can therefore also raise info-level test events on purpose. They are
   harmless and clearly labelled (§3).
@@ -51,16 +51,17 @@ missing audit rule, an unloaded rule set or a delivery problem shows up as
   (`baseline-alarms`, `alarm.openvibes.test`) and (`baseline`,
   `test.openvibes.running`). Only those exact pairs from the baseline sets
   count; an operator's own rule with the same id does not.
-- **Auto-close.** Ingest stores test alarms and findings normally, then
-  marks them closed with the reason "Test" so they never need triage and do
-  not count on the dashboard. They stay visible, with a Test badge, in the
-  Alarms and Findings lists (hidden by the default filter, shown with
-  "Include tests").
+- **Auto-close.** Ingest stores a test alarm as `mitigated` with the
+  note "Test: closed automatically", and a recurrence does not reopen it,
+  so it never needs triage and stays out of the active list, the menu count
+  and the dashboard (shown with "Include resolved"). A test finding is not
+  closed through triage (that would fight the automatic reopen of P13
+  matches): it ends by itself when `openvibes-test finding` stops. Both
+  carry a Test badge in the lists.
 - **Host page.** A "Last test" line: when the last test alarm and test
   finding arrived ("Alarm OK 2 min ago · Finding not seen yet"), with a
   one-line hint and the two commands to copy.
-- **Retention.** Keep the latest test alarm and finding per host; older
-  ones are deleted with normal retention.
+- **Retention.** Normal retention; "Last test" reads the newest row.
 
 ## 4. Order of work
 
