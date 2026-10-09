@@ -182,6 +182,8 @@ mod tests {
 
     /// Only the console is running.
     fn console_only(fake: &Fake) {
+        fake.answer(&[SYSTEMCTL, "stop"], 0, "");
+        fake.answer(&[SYSTEMCTL, "start"], 0, "");
         fake.answer(
             &[
                 SYSTEMCTL,
