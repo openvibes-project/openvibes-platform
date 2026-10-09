@@ -156,7 +156,8 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
                 return (
                   <div key={option.value} id={`${listId}-${i}`} data-index={i} role="option" aria-selected={selected} aria-disabled={option.disabled || undefined} title={option.hint}
                     className={i === active ? "sel__option sel__option--active" : "sel__option"}
-                    onPointerEnter={() => { if (!option.disabled) setActive(i); }} onClick={() => choose(option)}>
+                    onPointerEnter={() => { if (!option.disabled) setActive(i); }} onClick={() => choose(option)}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(option); } }}>
                     <span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}</span>
                     {selected && <Icon name="check" size={14} />}
                   </div>
