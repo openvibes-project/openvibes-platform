@@ -208,23 +208,40 @@ fn descriptions_name_the_fields_the_results_carry() {
             .description
             .to_lowercase()
     };
-    for word in ["kernel", "collectors", "os", "last contact"] {
+    for word in ["kernel", "collectors", "last contact", "last 24 hours"] {
         assert!(d("agent_summary").contains(word), "{word}");
     }
-    for word in ["reboot", "exploited"] {
+    for word in ["reboot", "needs one named endpoint"] {
         assert!(d("host_vulnerabilities").contains(word), "{word}");
     }
-    for word in ["revoked", "never seen", "fleet-wide", "exploited"] {
+    for word in [
+        "revoked",
+        "never seen",
+        "fleet-wide",
+        "hosts with an exploited",
+    ] {
         assert!(d("fleet_overview").contains(word), "{word}");
     }
-    for word in ["firewall", "auditd", "root login"] {
+    for word in [
+        "firewall",
+        "auditd",
+        "root login",
+        "no host names",
+        "finding_endpoints",
+    ] {
         assert!(d("search_findings").contains(word), "{word}");
     }
+    assert!(
+        d("agent_summary")
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| w == "os")
+    );
     let total: usize = specs
         .iter()
         .map(|s| {
             serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
         })
         .sum();
+    eprintln!("total spec length {total}");
     assert!(total <= 3_100, "{total}");
 }

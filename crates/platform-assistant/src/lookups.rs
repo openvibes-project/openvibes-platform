@@ -147,7 +147,7 @@ pub fn specs() -> Vec<ToolSpec> {
     vec![
         spec(
             "search_findings",
-            "Search compliance findings by words, such as firewall, auditd or root login, one row per rule, most severe and widespread first.",
+            "Search compliance findings by words, such as firewall, auditd or root login: one row per rule with an endpoint count but no host names; use finding_endpoints for the hosts.",
             object(
                 json!({
                     "text": text_schema("Words in the rule or message, e.g. ssh."),
@@ -160,7 +160,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "finding_endpoints",
-            "Endpoints that reported one finding, most recent first.",
+            "Host names that reported one finding, most recent first.",
             object(
                 json!({
                     "rule_set": text_schema("Rule set; leave out unless the user names one."),
@@ -172,7 +172,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "agent_summary",
-            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, collectors, counts of findings and vulnerabilities.",
+            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), findings in the last 24 hours, open vulnerabilities.",
             object(
                 json!({ "agent": text_schema("Agent ID or host name.") }),
                 &["agent"],
@@ -180,7 +180,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one named endpoint, never all, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
+            "Open vulnerabilities on one endpoint; needs one named endpoint, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
@@ -199,7 +199,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "For fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open and exploited vulnerabilities, top findings and advisories.",
+            "For fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(
