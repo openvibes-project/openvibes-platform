@@ -136,7 +136,7 @@ directory itself, so no tmpfiles.d entry is needed.
 - `openvibes-llm-tune.service` (llm package): a oneshot as root, running
   `openvibes-admin helper assistant-tune --auto`; no `[Install]`; the
   llm package's `%transfiletriggerin -P 900000` on `/usr/libexec/openvibes-llm` starts it (`--no-block`, after the `%posttrans` scriptlets and the restart). It tunes only an
-  untuned host with the assistant on the bundled model.
+  untuned host with the assistant on the pinned model.
 - `openvibes-maintenance.timer` → `openvibes-maintenance.service`: daily
   (randomized within one hour, catches up after downtime) runs
   `openvibes-admin maintenance` as `openvibes-admin`, with the same hardening.

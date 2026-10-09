@@ -75,7 +75,7 @@ pub enum HelperCommand {
         #[arg(long)]
         no_download: bool,
     },
-    /// Measures the bundled model server and tunes it for this host.
+    /// Measures the pinned model server and tunes it for this host.
     AssistantTune {
         /// Tune for the CPU (the only mode so far).
         #[arg(long)]
@@ -87,7 +87,7 @@ pub enum HelperCommand {
         #[arg(long)]
         json: bool,
         /// Run by the package after an upgrade: tune only a host with the
-        /// assistant on the bundled model that is not tuned yet; one log
+        /// assistant on the pinned model that is not tuned yet; one log
         /// line, exit 0 whatever happens.
         #[arg(long)]
         auto: bool,

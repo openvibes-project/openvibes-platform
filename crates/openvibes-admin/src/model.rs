@@ -52,7 +52,7 @@ pub enum ModelCommand {
     /// then install it as `install` does; a no-op if already installed.
     Fetch {
         /// The pin file (`LLM_MODEL_*` values).
-        #[arg(long, default_value = "/usr/share/openvibes-llm/model.pin")]
+        #[arg(long, default_value = crate::model_fetch::PIN_PATH)]
         pin: PathBuf,
         /// Models directory.
         #[arg(long, default_value = MODELS_DIR)]

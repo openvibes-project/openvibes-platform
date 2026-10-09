@@ -41,7 +41,7 @@ Requirements (the user):
 - **`check-rpm.sh`** gains two tests:
   - no package contains a `.gguf` or a model part;
   - `openvibes-llm-model` owns exactly those two paths.
-- **Release workflow:** stops fetching the model (`fetch-llm-model.sh` is used only by the kit's optional model test and by CI's assistant e2e) and stops uploading model RPMs.
+- **Release workflow:** stops fetching the model (`fetch-llm-model.sh` is deleted) and stops uploading model RPMs.
 
 ## 4. Offline: the platform kit
 

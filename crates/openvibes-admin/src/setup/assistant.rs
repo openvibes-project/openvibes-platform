@@ -58,21 +58,23 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("using an external assistant".into()));
     }
     let present = installed(ctx);
-    if let Some((_, path)) = crate::model_fetch::staged_in(ctx.root) {
-        if present {
-            // The model is installed: the staged copy is only 2.5 GB in the way.
-            remove_staged(&path);
-        } else if ctx.plan.model != ModelChoice::Skip {
-            // Staged by the offline installer: installed unless declined.
-            return Ok(StepState::Todo);
-        }
+    // Status only reads: a staged copy of an installed model (2.5 GB in the
+    // way) is removed by apply, which this makes Setup run.
+    if crate::model_fetch::staged_in(ctx.root).is_some() && ctx.plan.model != ModelChoice::Skip {
+        // Staged by the offline installer: installed unless declined.
+        return Ok(StepState::Todo);
     }
     let on = present
         && ctx.succeeds(
             Systemctl,
             &["is-enabled", "--quiet", "openvibes-llm.socket"],
         );
-    Ok(if on {
+    // Tuned once the model server is on; a missing tuning (it was skipped or
+    // failed) is retried by running the step again.
+    let tuned = ctx.path("/var/lib/openvibes-llm/tuning.conf").is_file();
+    Ok(if on && !tuned && ctx.plan.model != ModelChoice::Skip {
+        StepState::Todo
+    } else if on {
         StepState::Done("assistant on: model installed, model server enabled".into())
     } else if ctx.plan.model == ModelChoice::Skip {
         StepState::Skipped(if present {
@@ -89,7 +91,13 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     // The offline kit's staged model: installed as openvibes-admin (never
     // root), checked against the pin, and removed once installed. A failure
     // keeps the file.
-    let staged = crate::model_fetch::staged_in(ctx.root).filter(|_| !installed(ctx));
+    let staged = crate::model_fetch::staged_in(ctx.root);
+    if let Some((_, path)) = &staged
+        && installed(ctx)
+    {
+        remove_staged(path);
+    }
+    let staged = staged.filter(|_| !installed(ctx));
     if let Some((abs, _)) = &staged {
         let pin = crate::model_fetch::pin_or_embedded()?;
         ctx.as_admin(&[
@@ -203,12 +211,38 @@ mod tests {
             CONF,
             "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/m.gguf\n",
         );
+        fake.file("/var/lib/openvibes-llm/tuning.conf", "x");
         fake.answer(&["/usr/bin/systemctl", "is-enabled"], 0, "");
         let mut plan = plan(&[Ingest, Assistant]);
         plan.model = ModelChoice::Fetch;
         let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
         assert!(!fake.called(&["/usr/bin/openvibes-admin"]));
+    }
+
+    #[test]
+    fn an_untuned_assistant_is_run_again_to_tune_it() {
+        let fake = Fake::new("model-untuned");
+        fake.file("/var/lib/openvibes-llm/models/m.gguf", "x");
+        fake.file(
+            CONF,
+            "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/m.gguf\n",
+        );
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 0, "");
+        fake.answer(
+            &["/usr/bin/openvibes-admin", "helper", "assistant-setup"],
+            0,
+            "",
+        );
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
+        assert!(matches!(
+            super::check(&fake.ctx(&plan)),
+            Ok(StepState::Todo)
+        ));
+        let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(fake.called(&["/usr/bin/openvibes-admin", "helper", "assistant-setup"]));
     }
 
     #[test]
@@ -324,7 +358,16 @@ mod tests {
             CONF,
             "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/m.gguf\n",
         );
+        // Status only reads; with the model chosen, apply removes the copy.
         let _ = super::check(&fake.ctx(&plan));
+        assert!(fake.root.join(staged.trim_start_matches('/')).exists());
+        plan.model = ModelChoice::Fetch;
+        fake.answer(
+            &["/usr/bin/openvibes-admin", "helper", "assistant-setup"],
+            0,
+            "",
+        );
+        let _ = super::apply(&fake.ctx(&plan));
         assert!(!fake.root.join(staged.trim_start_matches('/')).exists());
     }
 }

@@ -99,8 +99,14 @@ pub struct Setup {
 impl Setup {
     pub fn new(set_up: bool, hostname: String, home: Option<String>) -> Setup {
         use Component::*;
+        let mut components: BTreeSet<Component> =
+            [Ingest, Console, Distribution, Vulns, Rules].into();
+        // Tests run on any host: the full default there.
+        if cfg!(test) || agent_by_default(std::path::Path::new("/")) {
+            components.insert(Agent);
+        }
         Setup {
-            components: [Ingest, Console, Distribution, Vulns, Rules, Agent].into(),
+            components,
             row: 0,
             hostname,
             sans: String::new(),
@@ -668,6 +674,20 @@ impl<H: Host> App<H> {
     }
 }
 
+/// Whether the form ticks "agent on this host": only when the agent package
+/// is installed or an OpenVIBES repository could supply it (an offline kit
+/// carries neither; agents are added from the console).
+fn agent_by_default(root: &std::path::Path) -> bool {
+    root.join("usr/bin/openvibes-agent").exists()
+        || std::fs::read_dir(root.join("etc/yum.repos.d")).is_ok_and(|dir| {
+            dir.flatten().any(|entry| {
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                name.starts_with("openvibes") && name.ends_with(".repo")
+            })
+        })
+}
+
 /// The free default root key file in `home`, or empty without a home.
 fn default_root_key(home: Option<&str>) -> String {
     home.map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
@@ -687,6 +707,22 @@ fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
 
 #[cfg(test)]
 mod root_key_tests {
+    #[test]
+    fn the_agent_is_ticked_only_with_the_package_or_a_repository() {
+        let dir = std::env::temp_dir().join(format!("ov-agent-default-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("etc/yum.repos.d")).unwrap();
+        std::fs::write(dir.join("etc/yum.repos.d/fedora.repo"), "").unwrap();
+        assert!(!super::agent_by_default(&dir));
+        std::fs::write(dir.join("etc/yum.repos.d/openvibes.repo"), "").unwrap();
+        assert!(super::agent_by_default(&dir));
+        std::fs::remove_file(dir.join("etc/yum.repos.d/openvibes.repo")).unwrap();
+        std::fs::create_dir_all(dir.join("usr/bin")).unwrap();
+        std::fs::write(dir.join("usr/bin/openvibes-agent"), "").unwrap();
+        assert!(super::agent_by_default(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn the_default_root_key_name_skips_taken_files() {
         let taken = ["/h/openvibes-root-ca.key", "/h/openvibes-root-ca-2.key"];

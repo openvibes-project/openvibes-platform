@@ -5,7 +5,7 @@ Documentation=https://github.com/openvibes-project/openvibes-platform
 [Service]
 Type=oneshot
 # Started by the package after an install or upgrade (no [Install]). Does
-# nothing, with one log line, unless the assistant uses the bundled model
+# nothing, with one log line, unless the assistant uses the pinned model
 # and the host is not tuned yet; never fails the package transaction.
 ExecStart=/usr/bin/openvibes-admin helper assistant-tune --auto
 # The timed call waits up to 180 s after a health wait of up to 120 s.

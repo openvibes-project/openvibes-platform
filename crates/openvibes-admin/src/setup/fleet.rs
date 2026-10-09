@@ -241,7 +241,16 @@ pub fn agent_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return agent_check(ctx);
     }
     if !ctx.succeeds(Rpm, &["-q", "--quiet", "openvibes-agent"]) {
-        install(ctx, &["openvibes-agent"])?;
+        match install(ctx, &["openvibes-agent"]) {
+            Ok(()) => {}
+            Err(error) if error.contains("No match for argument") => {
+                return Ok(StepState::Skipped(
+                    "agent: package not available on this host (offline install); add agents from the console's Enroll page"
+                        .into(),
+                ));
+            }
+            Err(error) => return Err(error),
+        }
     }
     let token = token_from(&ctx.as_admin(&["token", "fleet"])?)?;
     let agent = Some(("openvibes_agent", "openvibes_agent"));
@@ -508,6 +517,19 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn an_unavailable_agent_package_skips_the_step() {
+        let fake = Fake::new("agent-offline");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-agent"], 1, "");
+        fake.fail(&["/usr/bin/dnf"], "No match for argument: openvibes-agent");
+        let state = run_step(
+            &fake.ctx(&plan(&[Ingest, Distribution, Rules, Agent])),
+            Step::Agent,
+        );
+        assert!(matches!(state, StepState::Skipped(_)), "{state:?}");
+        assert!(state.detail().contains("add agents from the console"));
     }
 
     #[test]

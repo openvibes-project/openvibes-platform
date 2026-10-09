@@ -1,4 +1,4 @@
-//! `openvibes-admin helper assistant-tune`: measures the bundled model
+//! `openvibes-admin helper assistant-tune`: measures the pinned model
 //! server on this host and tunes it (CPU threads, console deadline). The
 //! decisions are in [`crate::tune`]; this file does the IO as root. `root`
 //! prefixes every absolute path (`/` in production).
@@ -329,7 +329,7 @@ fn time_call(client: &BackendClient, limit: u64) -> Result<f64, String> {
 }
 
 /// `assistant-tune --auto`: tunes only a host that has the assistant on
-/// the bundled model and is not tuned yet; returns the one line to log.
+/// the pinned model and is not tuned yet; returns the one line to log.
 /// Never fails: any problem is the line.
 pub fn auto(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> String {
     let etc = root.join("etc/openvibes");

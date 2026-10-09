@@ -1,8 +1,10 @@
-# The model the openvibes-llm-model package bundles (assistant spec §8:
-# Apache 2.0, tool calling, 4B for the `small` profile on CPU). Read by
-# scripts/fetch-llm-model.sh and the RPM spec. The URL names an exact
-# Hugging Face commit, and the SHA-256 (the file's published LFS id,
-# re-checked on download) pins its bytes. To update: pick a model, check its
+# The assistant's model (assistant spec §8: Apache 2.0, tool calling, 4B for
+# the `small` profile on CPU). Installed by the openvibes-llm package as
+# /usr/share/openvibes-llm/model.pin; `openvibes-admin assistant model fetch`
+# downloads it from its publisher, and the offline kit's README quotes it.
+# No package carries the model. The URL names an exact Hugging Face commit,
+# and the SHA-256 (the file's published LFS id, re-checked on download) pins
+# its bytes. To update: pick a model, check its
 # licence allows redistribution, set all values, and run
 # `openvibes-admin assistant eval` against it before merging.
 LLM_MODEL_FILE=Qwen3-4B-Q4_K_M.gguf

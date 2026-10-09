@@ -71,7 +71,7 @@ pub fn configure(
         && !force
     {
         return Err(format!(
-            "console.toml already sends the assistant to {existing}; use --force to point it at the bundled model instead"
+            "console.toml already sends the assistant to {existing}; use --force to point it at the pinned model instead"
         ));
     }
     assistant["enabled"] = value(true);
@@ -178,7 +178,7 @@ pub fn run(force: bool, no_download: bool) -> Result<String, String> {
     let mut env =
         parse_env(&fs::read_to_string(LLM_CONF).map_err(|error| format!("{LLM_CONF}: {error}"))?);
     env.extend(parse_env(
-        &fs::read_to_string(MODEL_CONF).unwrap_or_default(),
+        &crate::model::read_config(Path::new(MODEL_CONF)).unwrap_or_default(),
     ));
     let dir = Path::new(CONFIG_DIR);
     let console = config_file::read(dir, Service::Console)?;
@@ -222,7 +222,7 @@ pub fn run(force: bool, no_download: bool) -> Result<String, String> {
         format!("tuning skipped: {error}; open Setup and turn the assistant on again to retry\n")
     });
     Ok(format!(
-        "the assistant now uses the bundled model ({})\n{tuned}next: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\n",
+        "the assistant now uses the pinned model ({})\n{tuned}next: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\n",
         env.get("OPENVIBES_LLM_ALIAS")
             .map_or(DEFAULT_ALIAS, String::as_str)
     ))
