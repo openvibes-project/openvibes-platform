@@ -3,7 +3,10 @@
 //! through the verified `model install` path. Setup and assistant-setup call
 //! it; nothing is installed unless the bytes match the pinned SHA-256.
 
-use std::{fs, path::Path, process::Command};
+// curl and stat run with fixed argument lists, no shell.
+#[allow(clippy::disallowed_types)]
+use std::process::Command;
+use std::{fs, path::Path};
 
 use openvibes_llm::{is_model_name, is_sha256_hex};
 
@@ -11,11 +14,14 @@ use openvibes_llm::{is_model_name, is_sha256_hex};
 const NEEDED_BYTES: u64 = 2_700_000_000;
 
 /// The values of `model.pin` (the only source of the model's identity).
+#[derive(Debug)]
 pub struct Pin {
     pub file: String,
     pub url: String,
     pub sha256: String,
     pub alias: String,
+    /// Shown by Setup's consent step (Task 3).
+    #[allow(dead_code)]
     pub license_url: String,
 }
 
@@ -62,6 +68,7 @@ pub trait Downloader {
 pub struct Curl;
 
 impl Downloader for Curl {
+    #[allow(clippy::disallowed_types)]
     fn download(&self, url: &str, dest: &Path) -> Result<(), String> {
         let status = Command::new("curl")
             .args(["--proto", "=https", "--tlsv1.2", "--fail", "--location"])
@@ -81,6 +88,7 @@ impl Downloader for Curl {
 /// Bytes available to unprivileged writers on the filesystem holding `dir`
 /// (0 if unknown, which refuses the download). `stat` because the crate
 /// forbids the unsafe `statvfs` call.
+#[allow(clippy::disallowed_types)]
 pub fn free_bytes(dir: &Path) -> u64 {
     Command::new("stat")
         .args(["-f", "-c", "%a %S"])
