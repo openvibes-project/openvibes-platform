@@ -96,6 +96,9 @@ pub enum HelperCommand {
     /// Publishes the installed rules package like Update does (run by the
     /// package after it installs or upgrades rules); one log line, exit 0.
     RulesApply,
+    /// Applies pending schema migrations after a package upgrade, backing up
+    /// first when one changes stored data (run by openvibes-migrate.service).
+    UpgradeMigrate,
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -120,6 +123,7 @@ enum Verb {
         bool,
     ),
     RulesApply,
+    UpgradeMigrate,
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -194,6 +198,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             *auto,
         ),
         HelperCommand::RulesApply => Verb::RulesApply,
+        HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -291,6 +296,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             Err(error) => failed(&error),
         },
         Verb::RulesApply => crate::setup::rules_apply(),
+        Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
         Verb::AssistantTune(opts, _, true) => {
             let root = test_root.unwrap_or_else(|| "/".into());
             println!(

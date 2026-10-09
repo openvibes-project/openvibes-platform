@@ -116,8 +116,15 @@ directory itself, so no tmpfiles.d entry is needed.
   migrate --additive` once Setup has run (`setup.toml` exists). Ingest,
   distribution, vulns, the console and maintenance want it and start after
   it, so the restart after a plain `dnf upgrade` migrates first. A migration
-  that changes stored data fails it with "run Update", and the services
-  then refuse the old schema as before; Update backs up and migrates.
+  that changes stored data (e.g. migration 43) is done by the unit itself
+  (`helper upgrade-migrate`, the second `ExecStart`, run with full
+  privileges): a backup to `/var/backups/openvibes/upgrade-<time>.dump`
+  (with `.roles.sql`) first, then the migration and a newer rules package,
+  as Update does. The services wait for the unit, so none starts on a
+  half-migrated schema. If the backup or migration fails, nothing is
+  migrated (or the backup stays), the unit fails with an "upgrade migration
+  failed" journal line, and the services refuse the old schema until Update
+  is run.
 - `openvibes-rules-apply.service` (admin package): a oneshot as root, running
   `openvibes-admin helper rules-apply`; no `[Install]`. A
   `%transfiletriggerin -P 900000` on `/usr/share/openvibes/rules` starts it
