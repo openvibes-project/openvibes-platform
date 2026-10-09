@@ -20,10 +20,16 @@ pub const NOTE_SET_NOT_FOUND: &str = "rule set not found; showing all rule sets"
 const GROUPS: u32 = 100;
 
 impl<S: Source> Lookups<S> {
-    /// The distinct rule sets with a finding group for `rule` (exact id,
-    /// case-insensitive), over the longest window so a quiet rule still
-    /// resolves.
-    pub(crate) async fn rule_sets_for(&self, rule: &str) -> Result<Vec<String>, LookupError> {
+    /// The distinct `(rule set, rule id)` pairs with a finding group for
+    /// `rule` (exact id, case-insensitive), over the longest window so a
+    /// quiet rule still resolves. The id is the store's, not the model's.
+    // ponytail: reads 100 groups matched by substring; a short common id on
+    // a large fleet can miss the exact group. Upgrade: exact rule filter in
+    // the store.
+    pub(crate) async fn rule_sets_for(
+        &self,
+        rule: &str,
+    ) -> Result<Vec<(String, String)>, LookupError> {
         let filter = GroupFilter {
             text: Some(rule),
             min_severity: None,
@@ -35,11 +41,11 @@ impl<S: Source> Lookups<S> {
             .finding_groups(&filter, since, GROUPS)
             .await
             .map_err(|_| LookupError::Store)?;
-        let mut sets: Vec<String> = page
+        let mut sets: Vec<(String, String)> = page
             .items
             .into_iter()
             .filter(|g| g.rule_id.eq_ignore_ascii_case(rule))
-            .map(|g| g.rule_set_id)
+            .map(|g| (g.rule_set_id, g.rule_id))
             .collect();
         sets.sort();
         sets.dedup();
@@ -87,19 +93,24 @@ impl<S: Source> Lookups<S> {
     }
 
     /// The set `rule_description` reads: the named one when it has the rule,
-    /// else the rule's only set. Several sets is an error; none keeps the
-    /// named set (the bundle may know a rule with no findings yet).
+    /// else the rule's only set; with the store's spelling of the rule id.
+    /// Several is an error; none keeps the named set and the given id (the
+    /// bundle may know a rule with no findings yet).
     pub(crate) async fn rule_set_for_description(
         &self,
         named: Option<&str>,
         rule: &str,
-    ) -> Result<String, LookupError> {
-        let sets = self.rule_sets_for(rule).await?;
-        match (named, sets.as_slice()) {
-            (Some(set), _) if sets.iter().any(|s| s == set) => Ok(set.to_owned()),
-            (_, [one]) => Ok(one.clone()),
-            (_, [_, _, ..]) => Err(LookupError::AmbiguousRule),
-            (named, []) => Ok(named.unwrap_or_default().to_owned()),
+    ) -> Result<(String, String), LookupError> {
+        let mut found = self.rule_sets_for(rule).await?;
+        if let Some(set) = named
+            && found.iter().any(|(s, _)| s == set)
+        {
+            found.retain(|(s, _)| s == set);
+        }
+        match found.len() {
+            0 => Ok((named.unwrap_or_default().to_owned(), rule.to_owned())),
+            1 => Ok(found.remove(0)),
+            _ => Err(LookupError::AmbiguousRule),
         }
     }
 
@@ -115,8 +126,19 @@ impl<S: Source> Lookups<S> {
         items: u32,
     ) -> Result<LookupOutput, LookupError> {
         let mut sets = self.rule_sets_for(rule).await?;
-        if let Some(set) = named.filter(|set| sets.iter().any(|s| s == set)) {
-            sets = vec![set.to_owned()];
+        if let Some(set) = named
+            && sets.iter().any(|(s, _)| s == set)
+        {
+            sets.retain(|(s, _)| s == set);
+        }
+        // A named set with no recent group is still asked, so
+        // `not_seen_in_window` reports older sightings.
+        let mut fallback = false;
+        if sets.is_empty()
+            && let Some(set) = named
+        {
+            fallback = true;
+            sets.push((set.to_owned(), rule.to_owned()));
         }
         summary.insert("window_hours".into(), json!(window_hours));
         if sets.is_empty() {
@@ -125,7 +147,7 @@ impl<S: Source> Lookups<S> {
         }
         let many = sets.len() > 1;
         let (mut all, mut total, mut older) = (Vec::new(), 0, 0);
-        for set in &sets {
+        for (set, rule) in &sets {
             let page = self
                 .source
                 .finding_endpoints(set, rule, since, items)
@@ -156,8 +178,14 @@ impl<S: Source> Lookups<S> {
                     .cmp(&a["last_observed"].as_str())
             });
             all.truncate(items as usize);
+        } else if fallback {
+            // Only model text names this finding: no cite, no echo.
+            summary.insert("note".into(), json!(NOTE_NO_FINDING));
         } else {
-            summary.insert("finding".into(), json!(finding_cite(&sets[0], rule)));
+            summary.insert(
+                "finding".into(),
+                json!(finding_cite(&sets[0].0, &sets[0].1)),
+            );
         }
         summary.insert("not_seen_in_window".into(), json!(older));
         Ok(LookupOutput::page(summary, all, total))

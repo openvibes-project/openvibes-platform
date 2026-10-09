@@ -679,3 +679,12 @@ async fn injected_text_in_a_rule_set_or_rule_resolves_to_nothing() {
         .unwrap_err();
     assert!(!err.message().contains(evil));
 }
+
+#[tokio::test]
+async fn the_stores_spelling_of_the_rule_is_used() {
+    let out = run("finding_endpoints", r#"{"rule":"SSH.Exposed"}"#).await;
+    assert!(!hosts(&out).is_empty());
+    assert_eq!(out["finding"], "[finding:baseline/ssh.exposed]");
+    let out = run("rule_description", r#"{"rule":"SSH.Exposed"}"#).await;
+    assert_eq!(out["rule"]["cite"], "[finding:baseline/ssh.exposed]");
+}

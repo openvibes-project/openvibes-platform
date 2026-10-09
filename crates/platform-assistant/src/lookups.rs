@@ -943,7 +943,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                 )
             }
             Lookup::RuleDescription { rule_set, rule } => {
-                let rule_set = self
+                let (rule_set, rule) = self
                     .rule_set_for_description(rule_set.as_deref(), rule)
                     .await?;
                 let served = self
@@ -951,7 +951,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .rule_envelope(&rule_set)
                     .await
                     .map_err(store_error)?;
-                summary.insert("rule".into(), rule_json(served, &rule_set, rule));
+                summary.insert("rule".into(), rule_json(served, &rule_set, &rule));
                 LookupOutput::page(summary, Vec::new(), 0)
             }
         })

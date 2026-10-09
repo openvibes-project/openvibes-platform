@@ -78,17 +78,20 @@ impl Db {
 fn envelope(encoding: PayloadEncoding) -> Vec<u8> {
     let set = RuleSet {
         schema_version: SchemaVersion::V1,
-        rules: vec![Rule {
-            id: Identifier::new("ssh.exposed").unwrap(),
-            version: 3,
-            title: "SSH exposed on all interfaces".into(),
-            severity: Severity::High,
-            confidence: Confidence::new(90).unwrap(),
-            expression: "'22' in facts['port.tcp.exposed']".into(),
-            finding_message: "SSH listens on a non-loopback address".into(),
-            kind: openvibes_core::RuleKind::Snapshot,
-            programs: None,
-        }],
+        rules: ["ssh.exposed", "quiet.rule"]
+            .into_iter()
+            .map(|id| Rule {
+                id: Identifier::new(id).unwrap(),
+                version: 3,
+                title: "SSH exposed on all interfaces".into(),
+                severity: Severity::High,
+                confidence: Confidence::new(90).unwrap(),
+                expression: "'22' in facts['port.tcp.exposed']".into(),
+                finding_message: "SSH listens on a non-loopback address".into(),
+                kind: openvibes_core::RuleKind::Snapshot,
+                programs: None,
+            })
+            .collect(),
     };
     serde_json::to_vec(&SignedRuleEnvelope {
         schema_version: SchemaVersion::V1,
@@ -306,7 +309,20 @@ async fn rules_are_read_from_published_json_bundles() {
     assert_eq!(rule.data["rule"]["title"], "SSH exposed on all interfaces");
     assert_eq!(rule.data["rule"]["severity"], "high");
     assert_eq!(rule.data["rule"]["bundle_version"], 7);
-    // A wrong set name resolves from the findings, which are in baseline.
+    // A wrong or missing set resolves from the findings (all in baseline),
+    // and the store's spelling of the rule id is used.
+    let mixed = lookups
+        .run(
+            &Lookup::parse(
+                "rule_description",
+                r#"{"rule_set":"nope","rule":"SSH.Exposed"}"#,
+            )
+            .unwrap(),
+            10,
+        )
+        .await
+        .unwrap();
+    assert_eq!(mixed.data["rule"]["cite"], "[finding:baseline/ssh.exposed]");
     let resolved = lookups
         .run(
             &Lookup::parse("rule_description", r#"{"rule":"ssh.exposed"}"#).unwrap(),
@@ -317,8 +333,10 @@ async fn rules_are_read_from_published_json_bundles() {
     assert_eq!(resolved.data["rule"]["bundle_version"], 7);
     for (set, name) in [
         ("baseline", "absent.rule"),
-        ("unknown", "absent.rule"),
-        ("yaml", "absent.rule"),
+        // No findings, so resolution cannot rescue a wrong set.
+        ("unknown", "quiet.rule"),
+        // A real rule in a non-JSON bundle is not read.
+        ("yaml", "quiet.rule"),
     ] {
         let missing = lookups
             .run(
@@ -333,5 +351,47 @@ async fn rules_are_read_from_published_json_bundles() {
             .unwrap();
         assert_eq!(missing.data["rule"], Value::Null, "{set}/{name}");
     }
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn resolution_stays_in_scope_and_never_picks_silently() {
+    let (db, now) = seed().await;
+    let client = db.pool.get().await.unwrap();
+    let insert = |agent: &'static str, set: &'static str| {
+        let client = &client;
+        async move {
+            client
+                .execute(
+                    "INSERT INTO current_findings (agent_id, rule_set_id, rule_id, last_finding_id,
+                         rule_version, severity, first_observed_at, last_observed_at,
+                         last_observed_day, scan_id, confidence, message, evidence, received_at,
+                         origin, authenticated)
+                     VALUES ($1, $3, 'ssh.exposed', $1, 3, 'high', $2, $2, $4,
+                             'scan.test', 90, 'SSH exposure', '{}', $2, 'online', true)",
+                    &[&agent, &(now - Duration::hours(1)), &set, &now.date_naive()],
+                )
+                .await
+                .unwrap();
+        }
+    };
+    // A second set only on an agent outside the scope.
+    insert(OTHER, "yaml").await;
+    let lookups = scoped(&db, now);
+    let desc = Lookup::parse("rule_description", r#"{"rule":"ssh.exposed"}"#).unwrap();
+    assert!(lookups.run(&desc, 10).await.unwrap().data["rule"].is_object());
+    let ends = Lookup::parse("finding_endpoints", r#"{"rule":"SSH.EXPOSED"}"#).unwrap();
+    let out = lookups.run(&ends, 10).await.unwrap();
+    assert_eq!(out.data["items"].as_array().unwrap().len(), 2);
+    assert!(out.data["items"][0].get("rule_set").is_none(), "not merged");
+    // The same set on an agent in scope makes it ambiguous.
+    insert(WEB, "yaml").await;
+    assert_eq!(
+        lookups.run(&desc, 10).await.unwrap_err(),
+        platform_assistant::LookupError::AmbiguousRule
+    );
+    let out = lookups.run(&ends, 10).await.unwrap();
+    assert_eq!(out.data["items"].as_array().unwrap().len(), 3);
+    drop(client);
     db.drop().await;
 }
