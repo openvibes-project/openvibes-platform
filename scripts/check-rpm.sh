@@ -38,6 +38,9 @@ systemd-analyze verify /usr/lib/systemd/system/openvibes-rules-apply.service || 
 grep -qx 'ExecStart=/usr/bin/openvibes-admin helper rules-apply' /usr/lib/systemd/system/openvibes-rules-apply.service \
     || fail "openvibes-rules-apply.service does not run helper rules-apply"
 ! grep -q '^\[Install\]' /usr/lib/systemd/system/openvibes-rules-apply.service || fail "rules-apply has an [Install]"
+# An older console would refuse the schema this admin migrates to.
+rpm -q --conflicts openvibes-admin | grep -Eqx 'openvibes-console < [0-9.]+' \
+    || fail "openvibes-admin does not conflict with an older openvibes-console"
 rpm -q --filetriggers openvibes-admin | grep -q '/usr/share/openvibes/rules' \
     || fail "openvibes-admin lacks the rules file trigger"
 rpm -q --filetriggers openvibes-admin | grep -q 'openvibes-rules-apply.service' \

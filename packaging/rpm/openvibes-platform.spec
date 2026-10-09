@@ -87,6 +87,10 @@ Requires(pre):  shadow-utils procps-ng systemd
 # The administration TUI: operators act through sudo, polkit and curl;
 # Setup checks ports with ss (iproute).
 Requires:       sudo polkit curl iproute
+# admin ships the migrations: an older console refuses the new schema and
+# stays down, so dnf must upgrade the console with it (a fresh install
+# without a console is unaffected).
+Conflicts:      openvibes-console < %{version}
 Summary:        OpenVIBES operator CLI and maintenance timer
 %{?systemd_requires}
 
