@@ -14,6 +14,7 @@ import { matches } from "../ui/table";
 import { Select } from "../ui/Select";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
+import { isTest } from "./tests";
 
 /** Alarms fetched per "Load more" (the API's page size). */
 const PAGE = 100;
@@ -131,7 +132,7 @@ export function Alarms() {
           defaultSort={{ key: "last", direction: "desc" }}
           columns={[
             { key: "severity", header: "Severity", width: "110px", sort: (a) => severityOrder[a.severity] ?? 9, render: (a) => <SeverityBadge severity={a.severity} /> },
-            { key: "alarm", header: "Alarm", sort: (a) => a.message, render: (a) => <div className="cell-two"><span className="truncate">{a.message}</span><span className="mono subtle">{lineage(a)}</span></div> },
+            { key: "alarm", header: "Alarm", sort: (a) => a.message, render: (a) => <div className="cell-two"><span className="truncate">{isTest(a.rule_set_id, a.rule_id) && <span className="badge badge--plain">Test</span>} {a.message}</span><span className="mono subtle">{lineage(a)}</span></div> },
             { key: "host", header: "Host", width: "160px", hideBelow: 560, sort: (a) => a.hostname ?? a.agent_id, render: (a) => <span className="truncate">{a.hostname ?? a.agent_id}</span> },
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },

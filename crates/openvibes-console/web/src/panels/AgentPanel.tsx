@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
-import type { Agent, AlarmSummary, Certificate, Finding, HostPackage, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
+import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
@@ -20,7 +20,7 @@ import { toast } from "../ui/toast";
 /** Active alarms the Host page lists; more opens the Alarms view. */
 const ALARMS_SHOWN = 100;
 
-type Detail = Agent & { certificates: Certificate[] };
+type Detail = Agent & { certificates: Certificate[]; last_test?: LastTest };
 
 /** The host's installed software (Assets v1), filtered on the server. */
 function SoftwareTab({ id }: { id: string }) {
@@ -184,6 +184,7 @@ export function AgentPanel({ id }: { id: string }) {
                 {data.alarms && <><dt>Threat alarms</dt><dd><ThreatAlarms alarms={data.alarms} /></dd></>}
               </dl>
             </Section>
+            {data.status !== "imported" && <LastTestSection test={data.last_test} />}
             {data.status !== "imported" && <HostRuleSets agent={data} />}
             {can("asset_groups.manage", true) && <TagEditor id={id} />}
             <Section title="Certificates">
@@ -294,5 +295,20 @@ function ThreatAlarms({ alarms }: { alarms: NonNullable<Agent["alarms"]> }) {
         <button type="button" className="icon-button" aria-label="Copy the command" onClick={() => { void navigator.clipboard?.writeText(command); toast("Copied"); }}><Icon name="copy" size={16} /></button>
       </div>}
     </div>
+  );
+}
+
+// The harmless pipeline test (spec 2026-10-09-test-triggers-design.md): run
+// `openvibes-test alarm|finding` on the host and watch this line change.
+function LastTestSection({ test }: { test: LastTest | undefined }) {
+  const seen = (at: string | null | undefined) => at ? <span className="badge badge--ok">OK <Ago value={at} /></span> : <span className="subtle">Not seen yet</span>;
+  return (
+    <Section title="Last test">
+      <dl className="kv">
+        <dt>Alarm</dt><dd>{seen(test?.alarm_at)}</dd>
+        <dt>Finding</dt><dd>{seen(test?.finding_at)}</dd>
+      </dl>
+      <p className="subtle">Check this host end to end: run <code className="mono">openvibes-test alarm</code> (seconds) or <code className="mono">openvibes-test finding</code> (until the next scan) on it, as any user. Test alarms close themselves.</p>
+    </Section>
   );
 }

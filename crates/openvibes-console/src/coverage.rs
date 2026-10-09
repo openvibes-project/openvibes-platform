@@ -23,18 +23,7 @@ use crate::{
     router::{AuthHttpState, authenticated_permission, no_store, unavailable_auth},
 };
 
-/// The test-trigger rules (spec `2026-10-09-test-triggers-design.md`): they
-/// cover no technique, so coverage leaves them out. Only these exact
-/// (set, rule) pairs from the baseline sets count.
-pub(crate) const TEST_RULES: [(&str, &str); 2] = [
-    ("baseline-alarms", "alarm.openvibes.test"),
-    ("baseline", "test.openvibes.running"),
-];
-
-/// Whether `(set, rule)` is one of the test triggers.
-pub(crate) fn is_test_rule(set: &str, rule: &str) -> bool {
-    TEST_RULES.contains(&(set, rule))
-}
+use platform_store::rules::is_test_rule;
 
 #[derive(Deserialize)]
 struct Catalog {

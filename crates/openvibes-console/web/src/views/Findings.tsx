@@ -10,6 +10,7 @@ import { severityOrder } from "../ui/format";
 import { activeCount, selectFindings } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 import { filterChips } from "./filters";
+import { isTest } from "./tests";
 
 export function Findings() {
   const { params, panels } = useLocation();
@@ -44,7 +45,7 @@ export function Findings() {
           defaultSort={{ key: "severity", direction: "asc" }}
           columns={[
             { key: "severity", header: "Severity", width: "110px", sort: (g) => (severityOrder[g.severity] ?? 9) * 100000 - activeCount(g), render: (g) => <SeverityBadge severity={g.severity} /> },
-            { key: "finding", header: "Compliance finding", sort: (g) => g.latest_message, render: (g) => <div className="cell-two"><span className="truncate">{g.latest_message}</span><span className="mono subtle">{g.rule_id} · {g.rule_set_id}</span></div> },
+            { key: "finding", header: "Compliance finding", sort: (g) => g.latest_message, render: (g) => <div className="cell-two"><span className="truncate">{isTest(g.rule_set_id, g.rule_id) && <span className="badge badge--plain">Test</span>} {g.latest_message}</span><span className="mono subtle">{g.rule_id} · {g.rule_set_id}</span></div> },
             { key: "active", header: "Active", numeric: true, width: "80px", sort: (g) => activeCount(g), render: (g) => <strong className="num" title={`${g.triage_counts.open} open, ${g.triage_counts.investigating} investigating`}>{activeCount(g)}</strong> },
             { key: "hosts", header: "Hosts", numeric: true, width: "80px", hideBelow: 560, sort: (g) => g.endpoint_count, render: (g) => <span className="num">{g.endpoint_count}</span> },
             { key: "triage", header: "Triage", width: "140px", hideBelow: 760, render: (g) => <TriageBar counts={g.triage_counts} /> },

@@ -203,7 +203,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   });
   route("GET", "/api/v1/agents/{id}", "agents.read", ({ id = "" }) => {
     const agent = agentById(id);
-    return agent ? json({ ...agent, certificates: data.certificates.get(id) ?? [] }) : problem(404, "not_found", "Agent not found");
+    return agent ? json({ ...agent, certificates: data.certificates.get(id) ?? [], last_test: { alarm_at: agent.id.endsWith("1") ? new Date(Date.now() - 120_000).toISOString() : null, finding_at: null } }) : problem(404, "not_found", "Agent not found");
   });
   route("GET", "/api/v1/agents/{id}/certificates", "agents.read", ({ id = "" }, query) =>
     json({ ...page(data.certificates.get(id) ?? [], query), generated_at: iso() }));

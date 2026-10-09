@@ -16,6 +16,8 @@ use crate::{StoreError, wire};
 
 /// Who ingest writes into triage columns and history.
 const INGEST: &str = "ingest";
+/// Triage note on test alarms, closed on arrival (`rules::TEST_RULES`).
+pub const TEST_NOTE: &str = "Test: closed automatically";
 
 /// One alarm, checked and ready to store.
 #[derive(Clone, Debug)]
@@ -245,7 +247,8 @@ pub async fn insert_batch(
             // Recurrence reopens a mitigated alarm, or one whose accepted
             // risk has expired, as findings do; a false positive or an
             // unexpired accepted risk stays closed.
-            if alarm.count > count && (state == "mitigated" || risk_expired) {
+            let test = crate::rules::is_test_rule(&alarm.rule_set_id, &alarm.rule_id);
+            if !test && alarm.count > count && (state == "mitigated" || risk_expired) {
                 transaction
                     .execute(
                         "UPDATE alarms SET state = 'open', accepted_until = NULL,
@@ -272,15 +275,20 @@ pub async fn insert_batch(
         let suppression = suppressions
             .iter()
             .find(|suppression| suppression.matches(agent_id, alarm));
+        // A test alarm (openvibes-test) is closed on arrival: it proves the
+        // pipeline works and never needs triage. A recurrence keeps it closed.
+        let test = crate::rules::is_test_rule(&alarm.rule_set_id, &alarm.rule_id);
         let (state, note) = match suppression {
             Some(suppression) => (
                 "false_positive",
                 Some(format!("suppressed by #{}", suppression.id)),
             ),
+            None if test => ("mitigated", Some(TEST_NOTE.to_owned())),
             None => ("open", None),
         };
-        let triage_at = suppression.map(|_| now);
-        let triage_by = suppression.map(|_| INGEST);
+        let closed = suppression.is_some() || test;
+        let triage_at = closed.then_some(now);
+        let triage_by = closed.then_some(INGEST);
         let id: i64 = transaction
             .query_one(
                 "INSERT INTO alarms (first_seen_day, agent_id, alarm_id, rule_set_id,
@@ -320,8 +328,10 @@ pub async fn insert_batch(
         done.stored += 1;
         if let Some(note) = &note {
             let day = alarm.first_seen.date_naive();
-            history(&transaction, id, day, None, "false_positive", note, now).await?;
-            done.suppressed += 1;
+            history(&transaction, id, day, None, state, note, now).await?;
+            if suppression.is_some() {
+                done.suppressed += 1;
+            }
         }
     }
     transaction.commit().await?;
