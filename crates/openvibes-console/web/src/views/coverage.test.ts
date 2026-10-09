@@ -23,7 +23,7 @@ const rules = [
 describe("coverage", () => {
   it("drafts are hidden unless asked for; filters combine", () => {
     expect(selectRules(rules, new URLSearchParams()).map((r) => r.rule_id)).toEqual(["redis", "shell", "nc", "bare"]);
-    expect(selectRules(rules, new URLSearchParams("drafts=true")).length).toBe(5);
+    expect(selectRules(rules, new URLSearchParams("drafts=true"))).toHaveLength(5);
     expect(selectRules(rules, new URLSearchParams("kind=process_event")).map((r) => r.rule_id)).toEqual(["shell", "nc"]);
     expect(selectRules(rules, new URLSearchParams("unmapped=true")).map((r) => r.rule_id)).toEqual(["bare"]);
   });

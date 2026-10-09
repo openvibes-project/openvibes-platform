@@ -44,7 +44,7 @@ const pairKey = (p: AttackPairInput) => `${p.tactic}|${p.technique ?? ""}`;
 
 // The rule's MITRE ATT&CK pairs (P18): chips to remove, a picker to add.
 // A technique under several tactics is offered once per tactic.
-function AttackField({ value, onChange, disabled }: { value: AttackPairInput[]; onChange: (next: AttackPairInput[]) => void; disabled: boolean }) {
+function AttackField({ value, onChange, disabled }: Readonly<{ value: AttackPairInput[]; onChange: (next: AttackPairInput[]) => void; disabled: boolean }>) {
   const catalog = useResource<AttackCatalog>("/api/v1/attack");
   const data = catalog.data;
   const tactic = (id: string) => data?.tactics.find((t) => t.id === id)?.name ?? id;
@@ -58,11 +58,13 @@ function AttackField({ value, onChange, disabled }: { value: AttackPairInput[]; 
     ].filter((o) => !taken.has(o.value)),
   }));
   const name = (p: AttackPairInput) => data?.techniques.find((t) => t.id === p.technique)?.name;
+  const chipTitle = (p: AttackPairInput, primary: boolean) =>
+    [p.technique ? name(p) ?? p.technique : null, tactic(p.tactic), primary ? "(primary)" : null].filter(Boolean).join(" · ");
   return (
     <div className="stack">
       {value.length > 0 && <span className="attack-chips">
         {value.map((p, i) => (
-          <span key={pairKey(p)} className="attack-chip" title={`${p.technique ? `${name(p) ?? p.technique} · ` : ""}${tactic(p.tactic)}${i === 0 ? " (primary)" : ""}`}>
+          <span key={pairKey(p)} className="attack-chip" title={chipTitle(p, i === 0)}>
             {p.technique ?? p.tactic}
             {!disabled && <button type="button" className="link-button" aria-label={`Remove ${p.technique ?? p.tactic}`} onClick={() => onChange(value.filter((q) => pairKey(q) !== pairKey(p)))}><Icon name="close" size={11} /></button>}
           </span>

@@ -245,7 +245,7 @@ input.input[type="number"]::-webkit-inner-spin-button, input.input[type="number"
 }
 /* ATT&CK coverage matrix (views/Coverage.tsx). Scrolls sideways inside its
    own box on narrow screens; the page itself never does. */
-.coverage-matrix { contain: inline-size; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(136px, 1fr); gap: 6px; overflow-x: auto; padding-bottom: 6px; }
+.coverage-matrix { contain: inline-size; margin: 0; border: 0; padding: 0; min-width: 0; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(136px, 1fr); gap: 6px; overflow-x: auto; padding-bottom: 6px; }
 .coverage-col { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .coverage-col__head { all: unset; display: flex; justify-content: space-between; gap: 6px; padding: 6px 8px; border-radius: var(--r-1); background: var(--surface-3); font-size: 12px; font-weight: 600; cursor: pointer; }
 .coverage-col__head:disabled { cursor: default; }

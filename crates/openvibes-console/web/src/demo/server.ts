@@ -737,7 +737,10 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   // server's field names, not its CEL compiler.
   const drafts = new Map<string, Map<string, RuleDraft>>([["site", new Map()], ["site-alarms", new Map()]]);
   const attackOf = (body: Record<string, unknown>) => (Array.isArray(body.attack) ? body.attack : [])
-    .map((pair: { tactic?: unknown; technique?: unknown }) => ({ tactic: String(pair.tactic ?? ""), technique: pair.technique == null ? null : String(pair.technique) }));
+    .map((pair: { tactic?: unknown; technique?: unknown }) => ({
+      tactic: typeof pair.tactic === "string" ? pair.tactic : "",
+      technique: typeof pair.technique === "string" ? pair.technique : null,
+    }));
   const draftProblems = (set: string, body: Record<string, unknown>) => {
     const problems: { field: string; message: string }[] = [];
     const expression = String(body.expression ?? "");

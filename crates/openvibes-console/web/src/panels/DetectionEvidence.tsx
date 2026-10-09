@@ -10,7 +10,7 @@ type Detection = components["schemas"]["DetectionView"];
 type Rule = components["schemas"]["DetectionRuleView"];
 
 // One ATT&CK pair; opens the Coverage page filtered to it.
-function AttackChip({ technique, tactic, name }: { technique: string | null; tactic: string; name: string | null }) {
+function AttackChip({ technique, tactic, name }: Readonly<{ technique: string | null; tactic: string; name: string | null }>) {
   return <button type="button" className="attack-chip attack-chip--link" title={name ?? tactic}
     onClick={() => nav.view("/coverage", technique ? { technique } : { tactic })}>{technique ?? tactic}</button>;
 }
