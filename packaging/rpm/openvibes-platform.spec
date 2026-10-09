@@ -116,6 +116,10 @@ Requires:       openvibes-admin = %{version}-%{release}
 # The model store's group is openvibes-admin, renamed in that package's %%pre.
 Requires(pre):  openvibes-admin = %{version}-%{release}
 %{?systemd_requires}
+# The SELinux module (packaging/llm/openvibes-llm.cil) is loaded and removed
+# with semodule.
+Requires(post): policycoreutils
+Requires(postun): policycoreutils
 
 Recommends:     openvibes-llm-model = %{version}-%{release}
 
@@ -215,6 +219,7 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm.service %{buildroot}%{_unitdir
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}/openvibes-llm.socket
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
+install -D -m 0644 $S/packaging/llm/openvibes-llm.cil %{buildroot}%{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
 install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
@@ -304,6 +309,15 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %pre -n openvibes-llm
 %rename_pre llm openvibes-llm.service
 %post -n openvibes-llm
+# Before any unit (re)start below, in %%posttrans or in the old package's
+# %%postun: without it the socket cannot bind 18430 and the proxy cannot
+# reach the server under enforcing SELinux. Priority 200: Fedora's for
+# modules shipped by packages. Not fatal: the platform works without the
+# assistant, and the message says what to run.
+if command -v selinuxenabled >/dev/null && selinuxenabled; then
+    semodule -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil ||
+        echo "openvibes-llm: could not load the SELinux module; the assistant will not start under enforcing SELinux. Run: semodule -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil" >&2
+fi
 %systemd_post openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 # The API key the console sends: generated once, root's only. The console
 # and openvibes-llm each receive it as a systemd credential.
@@ -339,6 +353,10 @@ fi
 # would restart all three (PartOf=).
 %systemd_postun openvibes-llm.socket
 %systemd_postun_with_restart openvibes-llm-proxy.service openvibes-llm.service
+# Erase only: an upgrade keeps (and its %%post reloads) the module.
+if [ $1 -eq 0 ] && command -v semodule >/dev/null; then
+    semodule -X 200 -r openvibes-llm 2>/dev/null || :
+fi
 %endif
 
 %files -n openvibes-ingest
@@ -411,6 +429,7 @@ fi
 %{_unitdir}/openvibes-llm.socket
 %{_unitdir}/openvibes-llm-proxy.service
 %{_sysusersdir}/openvibes-llm.conf
+%{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0644, root, root) %{_sysconfdir}/openvibes/llm.conf
 %ghost %config(noreplace) %attr(0600, root, root) %{_sysconfdir}/openvibes/llm-api-key
