@@ -24,3 +24,7 @@ Task 1: CI RPMs pass (rerun after crates.io outage); lab upgrade test (with #231
 Task 1: complete (commits 29dac4c..d51d333, review clean + lab)
 Ruling (user rule 2026-10-09, no commands): Task 3 — users add the assistant through Setup's switch; `assistant model fetch` stays an internal/admin step, never shown to users as an instruction
 Task 2: dispatched edit-only (host busy with another session's sweep), sonnet
+Task 2: phase A bda32ce (fmt only)
+Ruling: file present but not selected → re-run install (re-hash + select) — Setup must end with a working assistant — cost if wrong: one extra hash (~10 s)
+Ruling: free_bytes via `stat -f` (unsafe forbidden), unknown = 0 = refuse — cost: refusal on odd filesystems
+Task 2: phase B dispatched (waits while lab VMs run)

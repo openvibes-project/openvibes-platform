@@ -110,19 +110,35 @@ pub fn fetch(
             models_dir.display()
         ));
     }
-    // ponytail: presence, not a re-hash of 2.5 GB; the file is 0444 and was
-    // verified when installed.
-    if models_dir.join(&pin.file).exists() {
-        return Ok(format!(
-            "already installed: {} (pinned sha256 {}); nothing downloaded\n",
-            pin.file, pin.sha256
-        ));
+    let installed = models_dir.join(&pin.file);
+    if installed.exists() {
+        let config = fs::read_to_string(model_config).unwrap_or_default();
+        let has = |line: String| config.lines().any(|l| l.trim() == line);
+        // ponytail: "selected" is read from model.conf, not re-hashed.
+        if has(format!("OPENVIBES_LLM_MODEL={}", installed.display()))
+            && has(format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256))
+        {
+            return Ok(format!(
+                "already installed: {} (pinned sha256 {}); nothing downloaded\n",
+                pin.file, pin.sha256
+            ));
+        }
+        // Present but not selected: verify it and select it, no download.
+        return crate::model::install(
+            &installed,
+            &pin.sha256,
+            &pin.file,
+            Some(&pin.alias),
+            models_dir,
+            model_config,
+        );
     }
     let free = free_bytes(models_dir);
     if free < NEEDED_BYTES {
         return Err(format!(
-            "need about 2.7 GB free in {}, have {free} bytes",
-            models_dir.display()
+            "need about 2.7 GB free in {}, have {:.1} GB",
+            models_dir.display(),
+            free as f64 / 1e9
         ));
     }
     let temporary = models_dir.join(format!(".{}.download", pin.file));
@@ -248,6 +264,19 @@ mod tests {
             "{message}"
         );
         assert_eq!(downloader.calls.get(), 1);
+    }
+
+    #[test]
+    fn present_but_unselected_is_selected_without_download() {
+        let (models, config) = dirs("unsel");
+        fs::write(models.join("m.gguf"), BYTES).unwrap();
+        let downloader = fake(BYTES);
+        let pin = pin();
+        let message = fetch(&pin, &downloader, &models, &config, |_| 0).unwrap();
+        assert!(message.starts_with("installed "), "{message}");
+        assert_eq!(downloader.calls.get(), 0);
+        let conf = fs::read_to_string(&config).unwrap();
+        assert!(conf.contains(&format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256)));
     }
 
     #[test]
