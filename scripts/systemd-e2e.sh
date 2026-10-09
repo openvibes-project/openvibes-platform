@@ -123,7 +123,15 @@ if [[ $# == 4 ]]; then
     cp "$3" "$W/openvibes-console-old.rpm"
     cp "$4" "$W/openvibes-console.rpm"
     in_c '! command -v node >/dev/null && ! command -v npm >/dev/null' || fail "test container unexpectedly has Node.js"
-    in_c 'dnf -q -y install /test/openvibes-console-old.rpm' >/dev/null 2>&1 || fail "install prior console RPM"
+    # openvibes-admin conflicts with an older console (it would refuse the
+    # new schema and stay down): dnf must refuse this one.
+    out=$(in_c 'dnf -y install /test/openvibes-console-old.rpm 2>&1' || true)
+    in_c '! rpm -q --quiet openvibes-console' || fail "dnf installed an older console next to the new platform"
+    [[ "$out" == *onflict* ]] || fail "dnf refused the older console without naming the conflict: $out"
+    ok "the platform refuses an older console"
+    # Bypasses that guard on purpose (--nodeps): this part tests the console
+    # package's own upgrade path, which needs the old one installed.
+    in_c 'rpm -i --nodeps /test/openvibes-console-old.rpm' >/dev/null 2>&1 || fail "install prior console RPM"
     in_c 'test "$(rpm -q --qf "%{VERSION}" openvibes-console)" = "$(rpm -qp --qf "%{VERSION}" /test/openvibes-console-old.rpm)" && ! command -v node >/dev/null && ! command -v npm >/dev/null' || fail "console RPM version or runtime dependencies"
     in_c 'set -e
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 \

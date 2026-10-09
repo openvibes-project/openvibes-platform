@@ -71,6 +71,8 @@ pub trait Restarter {
     fn systemctl(&self, args: &[&str]) -> Result<(), String>;
     /// [`socket_holds`] for the host's `openvibes-llm.socket`.
     fn llm_socket_holds(&self, port: &str) -> Result<(), String>;
+    /// Whether `openvibes-llm.socket` is enabled (assistant-setup enables it).
+    fn llm_socket_enabled(&self) -> bool;
 }
 
 pub struct Systemd;
@@ -103,6 +105,15 @@ impl Restarter for Systemd {
             .map_err(|error| error.to_string())?;
         socket_holds(&out.stdout, port)
     }
+
+    fn llm_socket_enabled(&self) -> bool {
+        SystemRunner
+            .run(
+                Systemctl,
+                &["is-enabled", "--quiet", "openvibes-llm.socket"],
+            )
+            .is_ok_and(|out| out.status == 0)
+    }
 }
 
 /// For tests under `--root`: the services are not the host's.
@@ -117,6 +128,10 @@ impl Restarter for NoRestart {
     fn systemctl(&self, args: &[&str]) -> Result<(), String> {
         eprintln!("--root: not run: systemctl {}", args.join(" "));
         Ok(())
+    }
+
+    fn llm_socket_enabled(&self) -> bool {
+        std::env::var("OPENVIBES_TUNE_ENABLED").map_or(true, |v| v != "0")
     }
 
     /// Active on the port unless `OPENVIBES_TUNE_SOCKET` says otherwise: a
@@ -313,6 +328,48 @@ fn time_call(client: &BackendClient, limit: u64) -> Result<f64, String> {
         Ok(_) => Ok(started.elapsed().as_secs_f64()),
         Err(BackendError::Timeout) => Ok(limit as f64),
         Err(error) => Err(format!("timed call failed: {error}")),
+    }
+}
+
+/// `assistant-tune --auto`: tunes only a host that has the assistant on
+/// the bundled model and is not tuned yet; returns the one line to log.
+/// Never fails: any problem is the line.
+pub fn auto(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> String {
+    let etc = root.join("etc/openvibes");
+    let env = parse_env(&fs::read_to_string(etc.join("llm.conf")).unwrap_or_default());
+    let port = env
+        .get("OPENVIBES_LLM_PORT")
+        .map_or(DEFAULT_PORT, String::as_str);
+    let console_local = config_file::read(&etc, Service::Console)
+        .ok()
+        .and_then(|text| toml::from_str::<ConsoleFile>(&text).ok())
+        .and_then(|file| file.assistant)
+        .is_some_and(|a| a.enabled && a.backend.as_ref().is_some_and(|b| is_local(&b.url, port)));
+    let data = root.join(DATA_DIR);
+    // model.conf is what assistant-setup reads: OPENVIBES_LLM_MODEL=/path.
+    let model_present = fs::read_to_string(data.join("model.conf"))
+        .ok()
+        .and_then(|text| {
+            parse_env(&text)
+                .get("OPENVIBES_LLM_MODEL")
+                .map(|path| root.join(tune::unquote(path).trim_start_matches('/')))
+        })
+        .is_some_and(|path| path.is_file());
+    let facts = tune::AutoFacts {
+        socket_enabled: restarter.llm_socket_enabled(),
+        console_local,
+        model_present,
+        tuned: data.join("tuning.conf").exists(),
+    };
+    if let Some(why) = tune::auto_skip(&facts) {
+        return format!("assistant-tune --auto: nothing to do: {why}");
+    }
+    match run(opts, root, restarter) {
+        Ok(text) => format!(
+            "assistant-tune --auto: {}",
+            text.trim().replace('\n', " / ")
+        ),
+        Err(error) => format!("assistant-tune --auto: not tuned: {error}"),
     }
 }
 

@@ -1,0 +1,36 @@
+[Unit]
+Description=OpenVIBES assistant tuning after an upgrade (once per host)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+
+[Service]
+Type=oneshot
+# Started by the package after an install or upgrade (no [Install]). Does
+# nothing, with one log line, unless the assistant uses the bundled model
+# and the host is not tuned yet; never fails the package transaction.
+ExecStart=/usr/bin/openvibes-admin helper assistant-tune --auto
+# The timed call waits up to 180 s after a health wait of up to 120 s.
+TimeoutStartSec=15min
+UMask=0022
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openvibes-llm /etc/openvibes
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+# Root, but only to read root's key, write files owned by other accounts
+# and talk to systemd.
+CapabilityBoundingSet=CAP_CHOWN CAP_FOWNER CAP_DAC_OVERRIDE

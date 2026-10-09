@@ -595,3 +595,58 @@ cargo test --locked -p openvibes-admin
 `helper assistant-setup [--force]` (root, through sudoers) points the console at the bundled `openvibes-llm` model server: it gives the API key to the console's account, writes `[assistant]` into `console.toml`, stops a running model server, enables `--now openvibes-llm.socket` (the first request starts the server), restarts the console, and confirms the socket holds the port before tuning (`assistant_setup.rs`; see [openvibes-llm.md](openvibes-llm.md)).
 
 `helper assistant-tune [--cpu] [--no-install] [--json]` (root; sudoers allows it plain and with `--json`) tunes the bundled model server for this host (`tune_run.rs`, decisions in `tune.rs`). When the console uses the local server it first checks that `openvibes-llm.socket` is active and listens on `127.0.0.1:OPENVIBES_LLM_PORT` (`systemctl show`), so the key goes only to systemd's socket, never to another local user holding the port; otherwise it refuses ("openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup", exit 1, nothing changed), and it checks again before the health wait. It never starts or stops the socket. It picks CPU threads (physical cores minus two, 2 to 16, unless you set `OPENVIBES_LLM_THREADS` or `OPENVIBES_LLM_GPU_LAYERS` in `llm.conf`), writes `/var/lib/openvibes-llm/tuning.conf`, stops `openvibes-llm-proxy.service` and `openvibes-llm.service` (when the console uses another backend: that only, no health wait or measurement), waits for `/health` (through the socket, which starts the server on the new tuning), times one chat call with the console's `[assistant.backend]` settings (but sent to `127.0.0.1:<port>` whatever the URL's host spelling, with the server's own key, `/etc/openvibes/llm-api-key`, never the configured `api_key_file`; a `[::1]` URL counts as another backend), and raises `[assistant.backend] deadline_seconds` (never lowers it) when a call takes over half of it. It writes `tune.json` (mode, threads, model, seconds per call, deadline, keys left alone, time) and prints one summary line (plus `left alone (set in llm.conf): <keys>` when it kept your values), or that JSON with `--json`. `--cpu` is the only mode so far and `--no-install` does nothing yet. Exit 0 on success; exit 1 when the server can't answer or the measurement fails, and then nothing changed (the previous tuning is restored). Once the tuning is in place, a deadline that could not be written, a console that did not restart, or an unsaved `tune.json` is a warning on stderr, still exit 0. It holds `/var/lib/openvibes-llm/tune.lock` while it runs; a second run fails at once ("another assistant-tune is running"). `assistant-setup` runs it; the TUI Health tab shows its summary. Test: `tests/assistant_tune.rs` (a debug-only hidden `--root DIR` stands in for `/`).
+
+## Automatic steps after an upgrade
+
+The user never types a command to finish an upgrade. Two helper verbs are
+run by units that the packages start (neither unit has an `[Install]`).
+
+`helper assistant-tune --auto` (root) is `assistant-tune` that decides for
+itself (`tune::auto_skip`, no IO). It prints one line and exits 0 and does
+nothing when `openvibes-llm.socket` is not enabled, `console.toml` has no
+enabled `[assistant]` on the local backend, the model file named in
+`/var/lib/openvibes-llm/model.conf` does not exist, or the host is already
+tuned (`tuning.conf` exists). Otherwise it tunes as above; a failure (the
+old tuning is restored) is the line, still exit 0. `openvibes-llm-tune.service`
+(openvibes-llm package) runs it; a `%transfiletriggerin -P 900000` on
+`/usr/libexec/openvibes-llm` starts it with `systemctl start --no-block`, after
+the `%posttrans` scriptlets and systemd's restart of the model server. To tune again, run plain `assistant-tune`.
+
+`helper rules-apply` (root) is Update's publish step without the TUI
+(`setup/auto_rules.rs` calls `fleet::rules_check` then `fleet::rules_apply`,
+the same trust-and-publish path). It prints one line and exits 0 (non-zero
+only for misuse or a non-root caller): it skips when Setup is running
+("Setup is running; it publishes the rules itself": it takes
+`/run/openvibes-admin/setup.lock`), when Setup never ran (no `setup.toml`),
+or when an Update or uninstall is half done; it publishes nothing when the
+published version is already the package's or the set is retired; a key
+Update would refuse is an error line, never trusted. It runs the sets Update
+knows (`baseline`, and `alarms` when the package carries it). `openvibes-rules-apply.service`
+(admin package) runs it, started by a transaction file trigger on
+`/usr/share/openvibes/rules`, which fires after the whole transaction on
+first install and on upgrade of the rules package (priority 900000, after
+systemd's restart; the unit also wants `openvibes-migrate.service` first), so
+it uses the new binary. A skipped or failed automatic publish is not retried
+until the next rules or admin package transaction; Setup's Update publishes
+it. Test: `setup/auto_rules.rs` unit tests.
+
+`helper upgrade-migrate` (root; `setup/auto_migrate.rs`) is the only
+`ExecStart` of `openvibes-migrate.service`. It takes Setup's lock (held:
+"Setup or Update is running; if the services then refuse the schema, run
+Update in Setup", exit 0), does nothing before Setup ran or while an update
+or uninstall is half done, and runs `migrate --additive`: done means exit 0.
+The store's "changes stored data" refusal (the compliance rename, migration
+43, is one) makes it, like Update: stop the active ingest, distribution,
+vulns, signer, console and maintenance units; back up the database
+(`/var/backups/openvibes/upgrade-<time>.dump`, 0600, never overwritten, never
+pruned, about twice the dump's size free during the copy); run Update's
+migrate step (migrate, maintenance, publish a newer rules package); and
+queue the stopped units to start (`start --no-block`) on every exit path. A
+failed backup migrates nothing; a failed migration keeps the backup. Either
+failure logs "upgrade migration failed", exits 1 (the unit shows as failed:
+`journalctl -u openvibes-migrate`) and writes the half-done-update mark, so
+later runs (the console's restarts, the maintenance timer) skip until Update
+clears it (the mark is in `/run`: at most one retry per boot). The
+decision is `auto_migrate::decide`; tests use the fake runner. Not built: a
+Health line for a failed upgrade migration, and a free-space check before
+the dump.

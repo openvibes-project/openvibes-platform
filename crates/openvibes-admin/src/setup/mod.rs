@@ -3,6 +3,8 @@
 //! `setup --quick` (as root). Every step checks first, so re-running is
 //! safe and resumes.
 
+mod auto_migrate;
+mod auto_rules;
 mod backup;
 mod base;
 #[cfg(test)]
@@ -302,6 +304,31 @@ pub fn update(step: UpdateStep, args: &update::UpdateArgs) -> ExitCode {
         update::run(&host_ctx(&plan, false), step, args).line()
     );
     ExitCode::SUCCESS
+}
+
+/// `helper rules-apply`: one log line, exit 0 whatever happened.
+pub fn rules_apply() -> ExitCode {
+    println!("{}", auto_rules::run(Path::new("/"), &SystemRunner));
+    ExitCode::SUCCESS
+}
+
+/// `helper upgrade-migrate`: the log lines, exit 1 only when the migration
+/// failed (the unit then shows as failed, as it did before).
+pub fn upgrade_migrate() -> ExitCode {
+    let stamp = chrono::Utc::now().format("%Y%m%dT%H%M%SZ").to_string();
+    let (log, ok) = auto_migrate::run(Path::new("/"), &SystemRunner, &stamp);
+    for line in log {
+        if ok {
+            println!("{line}");
+        } else {
+            eprintln!("openvibes-admin: {line}");
+        }
+    }
+    if ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 /// `helper remove-step STEP …`.

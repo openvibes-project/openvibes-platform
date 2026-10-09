@@ -83,11 +83,22 @@ pub enum HelperCommand {
         /// Print tune.json instead of the summary line.
         #[arg(long)]
         json: bool,
+        /// Run by the package after an upgrade: tune only a host with the
+        /// assistant on the bundled model that is not tuned yet; one log
+        /// line, exit 0 whatever happens.
+        #[arg(long)]
+        auto: bool,
         /// Tests only: a directory standing in for `/`.
         #[cfg(debug_assertions)]
         #[arg(long, hide = true)]
         root: Option<std::path::PathBuf>,
     },
+    /// Publishes the installed rules package like Update does (run by the
+    /// package after it installs or upgrades rules); one log line, exit 0.
+    RulesApply,
+    /// Applies pending schema migrations after a package upgrade, backing up
+    /// first when one changes stored data (run by openvibes-migrate.service).
+    UpgradeMigrate,
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -106,7 +117,13 @@ enum Verb {
     RemoveStep(RemoveStep, crate::setup::remove::RemoveArgs),
     UnitFile(Unit, bool),
     AssistantSetup(bool),
-    AssistantTune(crate::tune_run::TuneOptions, Option<std::path::PathBuf>),
+    AssistantTune(
+        crate::tune_run::TuneOptions,
+        Option<std::path::PathBuf>,
+        bool,
+    ),
+    RulesApply,
+    UpgradeMigrate,
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -154,6 +171,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
             cpu,
             no_install,
             json,
+            auto,
             root,
         } => Verb::AssistantTune(
             crate::tune_run::TuneOptions {
@@ -162,12 +180,14 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
                 json: *json,
             },
             root.clone(),
+            *auto,
         ),
         #[cfg(not(debug_assertions))]
         HelperCommand::AssistantTune {
             cpu,
             no_install,
             json,
+            auto,
         } => Verb::AssistantTune(
             crate::tune_run::TuneOptions {
                 cpu: *cpu,
@@ -175,7 +195,10 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
                 json: *json,
             },
             None,
+            *auto,
         ),
+        HelperCommand::RulesApply => Verb::RulesApply,
+        HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -221,7 +244,9 @@ pub fn run(command: &HelperCommand) -> ExitCode {
     };
     // Debug builds only: a test tree stands in for `/`, no root needed.
     let test_root = match &verb {
-        Verb::AssistantTune(_, Some(root)) if cfg!(debug_assertions) && root != Path::new("/") => {
+        Verb::AssistantTune(_, Some(root), _)
+            if cfg!(debug_assertions) && root != Path::new("/") =>
+        {
             Some(root.clone())
         }
         _ => None,
@@ -270,7 +295,17 @@ pub fn run(command: &HelperCommand) -> ExitCode {
             }
             Err(error) => failed(&error),
         },
-        Verb::AssistantTune(opts, _) => {
+        Verb::RulesApply => crate::setup::rules_apply(),
+        Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
+        Verb::AssistantTune(opts, _, true) => {
+            let root = test_root.unwrap_or_else(|| "/".into());
+            println!(
+                "{}",
+                crate::tune_run::auto(&opts, &root, restarter(&root).as_ref())
+            );
+            ExitCode::SUCCESS
+        }
+        Verb::AssistantTune(opts, _, false) => {
             let root = test_root.unwrap_or_else(|| "/".into());
             let result = crate::tune_run::run(&opts, &root, restarter(&root).as_ref());
             match result {

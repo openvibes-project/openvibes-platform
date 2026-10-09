@@ -30,8 +30,21 @@ for unit in ingest distribution vulns maintenance; do
         && grep -q '^Wants=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-$unit.service \
         || fail "openvibes-$unit.service does not start after openvibes-migrate.service"
 done
-grep -qx 'ExecStart=/usr/bin/openvibes-admin migrate --additive' /usr/lib/systemd/system/openvibes-migrate.service \
-    || fail "openvibes-migrate.service does not run additive migrations only"
+grep -qx 'ExecStart=+/usr/bin/openvibes-admin helper upgrade-migrate' /usr/lib/systemd/system/openvibes-migrate.service \
+    || fail "openvibes-migrate.service does not run helper upgrade-migrate (backup, then migrate)"
+# Rules publish themselves after the rules package installs or upgrades: a
+# transaction file trigger starts a unit that no one enables.
+systemd-analyze verify /usr/lib/systemd/system/openvibes-rules-apply.service || fail "rules-apply unit verification"
+grep -qx 'ExecStart=/usr/bin/openvibes-admin helper rules-apply' /usr/lib/systemd/system/openvibes-rules-apply.service \
+    || fail "openvibes-rules-apply.service does not run helper rules-apply"
+! grep -q '^\[Install\]' /usr/lib/systemd/system/openvibes-rules-apply.service || fail "rules-apply has an [Install]"
+# An older console would refuse the schema this admin migrates to.
+rpm -q --conflicts openvibes-admin | grep -Eqx 'openvibes-console < [0-9.]+' \
+    || fail "openvibes-admin does not conflict with an older openvibes-console"
+rpm -q --filetriggers openvibes-admin | grep -q '/usr/share/openvibes/rules' \
+    || fail "openvibes-admin lacks the rules file trigger"
+rpm -q --filetriggers openvibes-admin | grep -q 'openvibes-rules-apply.service' \
+    || fail "the rules file trigger does not start openvibes-rules-apply.service"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service || fail "unit lacks KillSignal=SIGINT (the drain signal)"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-distribution.service || fail "distribution unit lacks KillSignal=SIGINT"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-vulns.service || fail "vulns unit lacks KillSignal=SIGINT"
@@ -66,6 +79,13 @@ expect_stat /var/lib/openvibes-llm/models 775 root:openvibes-admin
 rpm -qc openvibes-llm | grep -qx /etc/openvibes/llm.conf || fail "llm.conf not %config"
 systemd-analyze verify /usr/lib/systemd/system/openvibes-llm.{socket,service} \
     /usr/lib/systemd/system/openvibes-llm-proxy.service || fail "llm unit verification"
+# The assistant tunes itself after an upgrade: a file trigger starts the unit.
+systemd-analyze verify /usr/lib/systemd/system/openvibes-llm-tune.service || fail "llm-tune unit verification"
+grep -qx 'ExecStart=/usr/bin/openvibes-admin helper assistant-tune --auto' /usr/lib/systemd/system/openvibes-llm-tune.service \
+    || fail "openvibes-llm-tune.service does not run assistant-tune --auto"
+! grep -q '^\[Install\]' /usr/lib/systemd/system/openvibes-llm-tune.service || fail "llm-tune has an [Install]"
+rpm -q --filetriggers openvibes-llm | grep -q 'systemctl start --no-block openvibes-llm-tune.service' \
+    || fail "openvibes-llm lacks the file trigger that starts openvibes-llm-tune.service"
 # Idle unloading stops the process; llama-server's own idle sleep has a
 # use-after-free (CVE-2026-43631).
 # The Vulkan drop-in (openvibes-llm-vulkan) has its own ExecStart; without
