@@ -1,0 +1,540 @@
+# Review package: 29dac4c..d418063
+
+## Commits
+d418063 Packaging: the model leaves the packages; openvibes-llm-model keeps owning the model path across upgrades
+
+## Files changed
+ .github/workflows/ci.yml              | 38 +--------------
+ docs/components/openvibes-llm.md      | 23 +++++----
+ docs/components/packaging.md          | 12 ++---
+ packaging/llm/join-model.sh           | 30 ------------
+ packaging/rpm/openvibes-platform.spec | 89 +++++++++--------------------------
+ scripts/build-rpm.sh                  |  8 +---
+ scripts/check-rpm.sh                  | 21 +++++++++
+ 7 files changed, 63 insertions(+), 158 deletions(-)
+
+## Diff
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 6d9d9e6..4a6f4b9 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -308,26 +308,20 @@ jobs:
+           workspaces: |
+             . -> target
+             /opt/agent-src -> target
+ 
+       - name: Cache llama.cpp build
+         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+         with:
+           path: target/llama
+           key: llama-${{ hashFiles('packaging/llm/llama-cpp.pin', 'scripts/build-llama-server.sh') }}
+ 
+-      - name: Cache bundled model
+-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+-        with:
+-          path: target/llm-model
+-          key: llm-model-${{ hashFiles('packaging/llm/model.pin', 'scripts/fetch-llm-model.sh') }}
+-
+       - name: Package signing script
+         run: bash scripts/test-sign-rpms.sh
+ 
+       - name: Build lower-version RPMs for the update test
+         env:
+           OV_RELEASE: 1.1.ci${{ github.run_number }}
+           CARGO_NET_OFFLINE: "true"
+           OV_LLM: "0"
+           OV_VERSION: "0.0.9"
+           OV_RPM_TOPDIR: ${{ github.workspace }}/target/rpm-old
+@@ -335,50 +329,22 @@ jobs:
+           bash scripts/build-rpm.sh
+           mkdir -p dist/old
+           cp target/rpm-old/RPMS/x86_64/openvibes-*.rpm dist/old/
+ 
+       - name: Build RPMs
+         env:
+           OV_RELEASE: 1.1.ci${{ github.run_number }}
+           CARGO_NET_OFFLINE: "true"
+         run: bash scripts/build-rpm.sh
+ 
+-      # The 2.5 GB model is built as two packages of under 2 GiB each (the
+-      # release asset limit), checked here by really joining them, and not
+-      # uploaded.
+-      - name: Check the bundled model packages
+-        run: |
+-          . packaging/llm/model.pin
+-          rpms=$PWD/target/rpm/RPMS/x86_64
+-          meta=$(ls $rpms/openvibes-llm-model-[0-9]*.rpm)
+-          p1=$(ls $rpms/openvibes-llm-model-part1-*.rpm)
+-          p2=$(ls $rpms/openvibes-llm-model-part2-*.rpm)
+-          for f in "$p1" "$p2" "$meta"; do
+-            [ "$(stat -c %s "$f")" -lt 2147483648 ] || { echo "$f exceeds 2 GiB"; exit 1; }
+-          done
+-          rpm -qp --requires "$meta" | grep -q '^openvibes-llm-model-part1 = '
+-          rpm -qp --requires "$meta" | grep -q '^openvibes-llm-model-part2 = '
+-          rpm -qp --requires "$meta" | grep -q '^openvibes-llm = '
+-          rpm -qlp "$meta" | grep -qx "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
+-          rpm -qlp "$meta" | grep -qx /usr/libexec/openvibes-llm/join-model
+-          rpm -qp --recommends $rpms/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = '
+-          rpm -qp --scripts "$meta" | grep -q join-model
+-          # Join the parts the way the package does and compare to the pin.
+-          work=$(mktemp -d)
+-          for f in "$p1" "$p2" "$meta"; do (cd "$work" && rpm2cpio "$f" | cpio -idm --quiet); done
+-          mkdir "$work/models"
+-          OV_LLM_SHARE="$work/usr/share/openvibes-llm/model" OV_LLM_MODELS="$work/models" \
+-            sh "$work/usr/libexec/openvibes-llm/join-model"
+-          echo "$LLM_MODEL_SHA256  $work/models/$LLM_MODEL_FILE" | sha256sum --check --quiet
+-          [ -z "$(ls "$work"/usr/share/openvibes-llm/model/*.part* 2>/dev/null)" ]
+-          grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256" "$work/var/lib/openvibes-llm/model.conf"
+-          rm -rf "$work"
++      - name: Check the built packages carry no model
++        run: OV_CHECK_BUILT=1 bash scripts/check-rpm.sh
+ 
+       - name: Build offline console RPM
+         env:
+           OV_RELEASE: 1.1.ci${{ github.run_number }}
+           CARGO_NET_OFFLINE: "true"
+         run: |
+           archive=$(bash scripts/build-console-npm-cache.sh target/console-npm-cache)
+           digest=$(sha256sum "$archive" | cut -d ' ' -f1)
+           # The lower-version package exercises a genuine RPM upgrade in the
+           # systemd job; it uses the same binary and schemas because the
+diff --git a/docs/components/openvibes-llm.md b/docs/components/openvibes-llm.md
+index 99a1497..f280a3c 100644
+--- a/docs/components/openvibes-llm.md
++++ b/docs/components/openvibes-llm.md
+@@ -222,47 +222,50 @@ sudo systemctl restart openvibes-llm.socket
+ sudo openvibes-admin helper assistant-setup --force   # points the console at it
+ ```
+ 
+ Upgrading from a version where `openvibes-llm.service` itself was enabled
+ on 18430: the package's `%posttrans` disables and stops the old server and
+ enables `--now openvibes-llm.socket`, once (the new service unit has no
+ `[Install]`, so it can never be "enabled" again).
+ 
+ ## Using it
+ 
+-Out of the box, with the bundled model (`openvibes-llm-model`, which
+-`dnf install openvibes-llm` pulls in as a recommended package):
++The model is not packaged (a 2.5 GB file made every release asset and
++`dnf` transaction huge, and the assistant is optional). `openvibes-llm-model`
++is a small bridge package with no model bytes: it selects the pinned model
++(Qwen3-4B Q4_K_M, Apache 2.0, about 2.5 GB, pinned by SHA-256 in
++`packaging/llm/model.pin`, also installed as
++`/usr/share/openvibes-llm/model.pin`) in `/var/lib/openvibes-llm/model.conf`
++and owns the model path as a `%ghost` file, so upgrading from 0.2.5 (which
++shipped the model) does not delete an installed model. It replaces
++`openvibes-llm-model-part1` and `-part2`. If the model is missing after
++install, the package prints how to get it:
+ 
+ ```sh
+ dnf install openvibes-llm
++sudo openvibes-admin assistant model fetch   # downloads and verifies the pinned model
+ sudo openvibes-admin helper assistant-setup
+ ```
+ 
+ `assistant-setup` hands the generated API key to the console's account
+ (owner-only, as the console requires), writes `[assistant]` into
+ `console.toml` (an enabled assistant on the `small` profile whose backend is
+ `http://127.0.0.1:18430/v1`; other keys and comments stay), stops a running
+ model server, enables `--now openvibes-llm.socket` (the first request starts
+ the server), restarts the console, and then tunes the server for
+ this host (`helper assistant-tune`: CPU threads, and a longer request
+ deadline when the model is slow here; your own `llm.conf` values stay). It is safe to repeat and
+ refuses to replace a backend you configured yourself unless you pass
+ `--force`. Users still need the `assistant.use` permission.
+ 
+-The bundled model is Qwen3-4B Q4_K_M (Apache 2.0, about 2.5 GB, delivered as two
+-packages under 2 GiB each that `openvibes-llm-model` joins and verifies on
+-install; if that fails, run `/usr/libexec/openvibes-llm/join-model`; during the
+-join the host briefly needs about 5 GB free), selected by
+-the package's `/var/lib/openvibes-llm/model.conf` and pinned by SHA-256 in
+-`packaging/llm/model.pin`. Without the model package, or to use another
+-model, install one yourself (the platform never downloads models while
+-running):
++To use another model, or to install one from a file on a host without
++internet access:
+ 
+ ```sh
+ # Download a GGUF model yourself (see `assistant check` for the recommended
+ # ones) and take its SHA-256 from the publisher's page.
+ runuser -u openvibes-admin -- openvibes-admin assistant model install \
+     /path/Qwen3.5-4B-Instruct-Q4_K_M.gguf --sha256 <hex> --alias qwen3.5-4b
+ sudo openvibes-admin helper assistant-setup
+ ```
+ 
+ The resulting console configuration is:
+diff --git a/docs/components/packaging.md b/docs/components/packaging.md
+index f34a334..b306661 100644
+--- a/docs/components/packaging.md
++++ b/docs/components/packaging.md
+@@ -1,22 +1,20 @@
+ # packaging (RPM)
+ 
+ `packaging/rpm/` builds Fedora packages from one spec,
+ `openvibes-platform.spec`: **openvibes-ingest**, **openvibes-distribution**,
+ **openvibes-vulns**, **openvibes-admin**, and the optional **openvibes-llm**
+ (the assistant's local model server, [openvibes-llm.md](openvibes-llm.md);
+ `OV_LLM=0` skips it, `OV_LLM_VULKAN=1` adds **openvibes-llm-vulkan**;
+-`OV_LLM_MODEL=0` skips **openvibes-llm-model**, the 2.5 GB bundled model (delivered as
+-**openvibes-llm-model-part1** and **-part2**, each under GitHub's 2 GiB release-asset limit, joined
+-and verified by the package's `%posttrans`, `join-model`) that
+-`scripts/fetch-llm-model.sh` downloads and verifies against
+-`packaging/llm/model.pin`; `openvibes-llm` recommends it).
++**openvibes-llm-model** carries no model bytes: it selects the pinned model and owns its
++path so upgrades keep it; `openvibes-admin assistant model fetch` downloads the model;
++`openvibes-llm` recommends the bridge).
+ `scripts/build-rpm.sh` compiles the release binaries (with
+ `rust-toolchain.toml` under rustup; CI uses Fedora's own `cargo`) and wraps
+ them (`rpmbuild -bb`); the spec only installs files. The RPMs are for
+ deployment, not for inclusion in Fedora itself.
+ 
+ The web console has a separate `openvibes-console.spec` because its embedded
+ frontend is built from a distinct, checksummed npm cache artefact. Build it
+ with `scripts/build-console-rpm.sh CACHE_ARCHIVE EXPECTED_SHA256 [RPM_VERSION...]`
+ (one package per version from one build; default: the workspace version); the expected
+ digest must come from trusted release/source metadata independently of the
+@@ -59,22 +57,22 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
+ | `/usr/lib/systemd/system/openvibes-console.service` | 0644 root | console |
+ | `/usr/lib/sysusers.d/openvibes-console.conf` | user `openvibes-console` | console |
+ | `/etc/openvibes/console.toml` | 0640 root:openvibes-console, `%config(noreplace)` | console |
+ | `/var/lib/openvibes-console/` | 0700 openvibes-console | console |
+ | `/usr/libexec/openvibes-llm/{llama-server,openvibes-llm-check}` | 0755 root | llm |
+ | `/usr/lib/systemd/system/openvibes-llm.service` | 0644 root | llm |
+ | `/usr/lib/sysusers.d/openvibes-llm.conf` | user `openvibes-llm` | llm |
+ | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
+ | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
+ | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
+-| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, made by `join-model`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+-| `/usr/share/openvibes-llm/model/*.part{0,1}` | 0644 root; removed once joined | llm-model-part1, -part2 |
++| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
++| `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
+ | `/usr/bin/openvibes-signer` | 0755 root | signer |
+ | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
+ | `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |
+ | `/etc/openvibes/signer.toml` | 0640 root:openvibes-signer-clients, `%config(noreplace)` | signer |
+ | `/var/lib/openvibes-signer/` | 2750 openvibes-signer:openvibes-operators (setgid: `status.json` 0640 reaches operators; `site.key`, `versions.json` and the signed rules are 0600) | signer |
+ 
+ **openvibes-signer** (own rules, board #107) runs as `openvibes-signer`
+ with `openvibes-signer-clients` as its group, so its socket
+ (`/run/openvibes-signer/sign.sock`, 0660, in a 0750 runtime directory)
+ reaches only that group's members: Setup adds `openvibes-console`. The unit
+diff --git a/packaging/llm/join-model.sh b/packaging/llm/join-model.sh
+deleted file mode 100755
+index 546798b..0000000
+--- a/packaging/llm/join-model.sh
++++ /dev/null
+@@ -1,30 +0,0 @@
+-#!/bin/sh
+-# Joins the bundled model's two package parts into the one GGUF file
+-# openvibes-llm loads, checks it against the pinned SHA-256, and removes the
+-# parts. Run by the openvibes-llm-model package's %posttrans; safe to repeat.
+-# The parts exist because a release asset may not exceed 2 GiB.
+-# OV_LLM_SHARE and OV_LLM_MODELS are overridden only by the CI test.
+-set -eu
+-share=${OV_LLM_SHARE:-/usr/share/openvibes-llm/model}
+-models=${OV_LLM_MODELS:-/var/lib/openvibes-llm/models}
+-# shellcheck disable=SC1091
+-. "$share/model.env"
+-target=$models/$LLM_MODEL_FILE
+-digest() { sha256sum "$1" | cut -d ' ' -f1; }
+-if [ -f "$target" ] && [ "$(digest "$target")" = "$LLM_MODEL_SHA256" ]; then
+-    rm -f "$share/$LLM_MODEL_FILE".part*
+-    exit 0
+-fi
+-for part in "$share/$LLM_MODEL_FILE".part*; do
+-    [ -f "$part" ] || { echo "openvibes-llm-model: model parts are missing" >&2; exit 1; }
+-done
+-tmp=$models/.$LLM_MODEL_FILE.joining
+-trap 'rm -f "$tmp"' EXIT
+-(umask 077; cat "$share/$LLM_MODEL_FILE".part* > "$tmp")
+-if [ "$(digest "$tmp")" != "$LLM_MODEL_SHA256" ]; then
+-    echo "openvibes-llm-model: joined model does not match its pinned SHA-256" >&2
+-    exit 1
+-fi
+-chmod 0444 "$tmp"
+-mv "$tmp" "$target"
+-rm -f "$share/$LLM_MODEL_FILE".part*
+diff --git a/packaging/rpm/openvibes-platform.spec b/packaging/rpm/openvibes-platform.spec
+index 72b5935..42ff817 100644
+--- a/packaging/rpm/openvibes-platform.spec
++++ b/packaging/rpm/openvibes-platform.spec
+@@ -1,22 +1,19 @@
+ # Binary packaging: scripts/build-rpm.sh builds the release binaries with
+ # the pinned toolchain first; this spec only installs them.
+ %global debug_package %{nil}
+-# The bundled model is already compressed: skip xz on a 2.5 GB file.
+-%define _binary_payload w.ufdio
+ # openvibes-llm: scripts/build-llama-server.sh builds llama-server first
+ # (skip with --without llm); the Vulkan variant with --with vulkan.
+ %bcond llm 1
+-# openvibes-llm-model: the bundled GGUF (scripts/fetch-llm-model.sh fetches it
+-# first; skip with --without model). Needs --with llm.
+-%bcond model 1
+ %bcond vulkan 0
++# The model file name, from the pin (the only place it is written).
++%global llm_model_file %(. %{_sourcedir}/packaging/llm/model.pin; echo $LLM_MODEL_FILE)
+ 
+ # Upgrade from openvibes_NAME service accounts (admin TUI spec §2): rename
+ # the OS user and group before the new files are laid down. Inline because on
+ # the first upgrade no file of the new package exists yet. Stops the unit (and
+ # timer) first, remembering whether it ran; %%posttrans starts it again. If a
+ # process still runs as the old user, usermod could not rename it: start the
+ # unit again, remove the empty new account rpm may already have created from
+ # the sysusers file, and refuse, so rpm skips this package and the install
+ # stays consistent on the old name.
+ # An empty new account rpm may have created from the sysusers file is removed
+@@ -117,54 +114,35 @@ Requires:       openvibes-admin = %{version}-%{release}
+ Requires(pre):  openvibes-admin = %{version}-%{release}
+ %{?systemd_requires}
+ 
+ Recommends:     openvibes-llm-model = %{version}-%{release}
+ 
+ %description -n openvibes-llm
+ llama.cpp's llama-server from a pinned build (no subprocesses, RPC, TLS, or
+ web UI), run on loopback as its own sandboxed user with a model file whose
+ SHA-256 is pinned. Optional: the platform works without it.
+ 
+-%if %{with model}
+-# The model ships as two byte ranges of one file (a release asset may not
+-# exceed 2 GiB); openvibes-llm-model joins and verifies them when installed.
+-%package -n openvibes-llm-model-part1
+-Summary:        First half of the bundled OpenVIBES model (installed with openvibes-llm-model)
+-License:        Apache-2.0
+-
+-%description -n openvibes-llm-model-part1
+-Bytes of the bundled model; installed by openvibes-llm-model, which joins it
+-with part 2.
+-
+-%package -n openvibes-llm-model-part2
+-Summary:        Second half of the bundled OpenVIBES model (installed with openvibes-llm-model)
+-License:        Apache-2.0
+-
+-%description -n openvibes-llm-model-part2
+-Bytes of the bundled model; installed by openvibes-llm-model, which joins it
+-with part 1.
+-
++# No model bytes: `openvibes-admin assistant model fetch` downloads the model.
++# This package only owns its path and model.conf, so upgrading from 0.2.5
++# (which shipped the model) does not delete the user's model file.
+ %package -n openvibes-llm-model
+-Summary:        Bundled model for the OpenVIBES local model server
+-# The model's licence is Apache 2.0 (Qwen3-4B, packaging/llm/model.pin).
+-License:        Apache-2.0
++Summary:        Model selection for the OpenVIBES local model server (no model bytes)
++License:        MIT
+ Requires:       openvibes-llm = %{version}-%{release}
+-Requires:       openvibes-llm-model-part1 = %{version}-%{release}
+-Requires:       openvibes-llm-model-part2 = %{version}-%{release}
++Obsoletes:      openvibes-llm-model-part1 < %{version}-%{release}
++Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
+ 
+ %description -n openvibes-llm-model
+-A 4B-parameter quantised model (Qwen3-4B Q4_K_M) pinned by SHA-256, installed
+-read-only and selected for openvibes-llm, so the console's assistant works
+-after `sudo openvibes-admin helper assistant-setup` with no download. The
+-two parts it is delivered in are joined and verified, then removed, when it
+-is installed.
+-%endif
++Selects the pinned model (Qwen3-4B Q4_K_M, packaging/llm/model.pin) for
++openvibes-llm and owns its path, so upgrades keep an installed model. The
++2.5 GB file is not packaged: fetch it with `sudo openvibes-admin assistant
++model fetch`, or install it from a file (docs: offline install).
+ 
+ %if %{with vulkan}
+ %package -n openvibes-llm-vulkan
+ Summary:        GPU (Vulkan) build of the OpenVIBES local model server
+ License:        MIT
+ Requires:       openvibes-llm = %{version}-%{release}
+ 
+ %description -n openvibes-llm-vulkan
+ The same pinned llama-server built for Vulkan (NVIDIA, AMD, Intel GPUs), and
+ a drop-in that runs openvibes-llm with it and with access to the GPU only.
+@@ -213,39 +191,30 @@ install -D -m 0755 $S/target/llama/cpu/llama-server %{buildroot}%{_libexecdir}/o
+ install -D -m 0755 $S/target/release/openvibes-llm-check %{buildroot}%{_libexecdir}/openvibes-llm/openvibes-llm-check
+ install -D -m 0644 $S/packaging/rpm/openvibes-llm.service %{buildroot}%{_unitdir}/openvibes-llm.service
+ install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}/openvibes-llm.socket
+ install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
+ install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
+ install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
+ install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
+ touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
+ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
+ install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
+-%if %{with model}
++%define _ovm_dir %{buildroot}%{_sharedstatedir}/openvibes-llm
+ . $S/packaging/llm/model.pin
+-share=%{buildroot}%{_datadir}/openvibes-llm/model
+-install -d -m 0755 $share
+-split -n 2 -d -a 1 $S/target/llm-model/$LLM_MODEL_FILE $share/$LLM_MODEL_FILE.part
+-chmod 0644 $share/*
+-cat > $share/model.env <<EOF
+-LLM_MODEL_FILE=$LLM_MODEL_FILE
+-LLM_MODEL_SHA256=$LLM_MODEL_SHA256
+-EOF
+-install -D -m 0755 $S/packaging/llm/join-model.sh %{buildroot}%{_libexecdir}/openvibes-llm/join-model
+-install -D -m 0644 $S/target/llm-model/LICENSE.model %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE.model
+-cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
++install -D -m 0644 $S/packaging/llm/model.pin %{buildroot}%{_datadir}/openvibes-llm/model.pin
++install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE
++cat > %{_ovm_dir}/model.conf <<EOF
+ OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
+ OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
+ OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
+ EOF
+ echo "%ghost %attr(0444, root, root) %{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
+-%endif
+ %if %{with vulkan}
+ install -D -m 0755 $S/target/llama/vulkan/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server-vulkan
+ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_unitdir}/openvibes-llm.service.d/vulkan.conf
+ %endif
+ %endif
+ 
+ %pre -n openvibes-ingest
+ %rename_pre ingest openvibes-ingest.service
+ %post -n openvibes-ingest
+ %{_libexecdir}/openvibes/rename-account-ingest post ingest %{_sysconfdir}/openvibes/ingest.toml
+@@ -400,57 +369,41 @@ fi
+ %{_datadir}/polkit-1/rules.d/50-openvibes-operators.rules
+ %config(noreplace) %attr(0440, root, root) %{_sysconfdir}/sudoers.d/openvibes-operators
+ 
+ %if %{with llm}
+ %files -n openvibes-llm
+ %license %{_licensedir}/openvibes-llm/LICENSE
+ %license %{_licensedir}/openvibes-llm/LICENSE.llama.cpp
+ %dir %{_libexecdir}/openvibes-llm
+ %{_libexecdir}/openvibes-llm/llama-server
+ %{_libexecdir}/openvibes-llm/openvibes-llm-check
++%dir %{_datadir}/openvibes-llm
++%{_datadir}/openvibes-llm/model.pin
+ %{_unitdir}/openvibes-llm.service
+ %{_unitdir}/openvibes-llm.socket
+ %{_unitdir}/openvibes-llm-proxy.service
+ %{_sysusersdir}/openvibes-llm.conf
+ %dir %{_sysconfdir}/openvibes
+ %config(noreplace) %attr(0644, root, root) %{_sysconfdir}/openvibes/llm.conf
+ %ghost %config(noreplace) %attr(0600, root, root) %{_sysconfdir}/openvibes/llm-api-key
+ %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm
+ %dir %attr(0775, root, openvibes-admin) %{_sharedstatedir}/openvibes-llm/models
+ %ghost %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/tuning.conf
+ %ghost %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/tune.json
+ %ghost %attr(0600, root, root) %{_sharedstatedir}/openvibes-llm/tune.lock
+ 
+-%if %{with model}
+-%files -n openvibes-llm-model-part1
+-%dir %{_datadir}/openvibes-llm
+-%dir %{_datadir}/openvibes-llm/model
+-%{_datadir}/openvibes-llm/model/*.part0
+-
+-%files -n openvibes-llm-model-part2
+-%dir %{_datadir}/openvibes-llm
+-%dir %{_datadir}/openvibes-llm/model
+-%{_datadir}/openvibes-llm/model/*.part1
+-
+ %files -n openvibes-llm-model -f model-files.list
+-%license %{_licensedir}/openvibes-llm-model/LICENSE.model
+-%dir %{_datadir}/openvibes-llm
+-%dir %{_datadir}/openvibes-llm/model
+-%{_datadir}/openvibes-llm/model/model.env
+-%{_libexecdir}/openvibes-llm/join-model
++%license %{_licensedir}/openvibes-llm-model/LICENSE
+ %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
+ 
+ %posttrans -n openvibes-llm-model
+-# Joins the parts into the model file; a failure leaves the parts in place so
+-# it can be run again: /usr/libexec/openvibes-llm/join-model
+-%{_libexecdir}/openvibes-llm/join-model || echo "openvibes-llm-model: could not join the model; run %{_libexecdir}/openvibes-llm/join-model" >&2
+-%endif
++[ -e %{_sharedstatedir}/openvibes-llm/models/%{llm_model_file} ] || echo "openvibes-llm-model: the assistant's model is not installed: run 'sudo openvibes-admin assistant model fetch', or install it from a file (docs: offline install)" >&2
+ 
+ %if %{with vulkan}
+ %files -n openvibes-llm-vulkan
+ %{_libexecdir}/openvibes-llm/llama-server-vulkan
+ %dir %{_unitdir}/openvibes-llm.service.d
+ %{_unitdir}/openvibes-llm.service.d/vulkan.conf
+ %endif
+ %endif
+ 
+ %changelog
+diff --git a/scripts/build-rpm.sh b/scripts/build-rpm.sh
+index 9504dce..7132ac2 100755
+--- a/scripts/build-rpm.sh
++++ b/scripts/build-rpm.sh
+@@ -1,34 +1,28 @@
+ #!/usr/bin/env bash
+ # Builds target/rpm/RPMS/x86_64/openvibes-{ingest,distribution,vulns,admin,llm,llm-model}-*.rpm.
+-# OV_LLM_MODEL=0 skips the 2.5 GB bundled model package (openvibes-llm-model).
++# openvibes-llm-model carries no model bytes (the model is fetched at run time).
+ # OV_LLM=0 skips openvibes-llm (and its llama.cpp build); OV_LLM_VULKAN=1
+ # adds openvibes-llm-vulkan (needs glslc and the Vulkan headers).
+ # OV_VERSION overrides the package version (a lower one for the update test);
+ # OV_RPM_TOPDIR the rpmbuild directory (default target/rpm); OV_RELEASE the
+ # RPM release (default 1; CI sets 1.1.ci<run>, board #88).
+ set -euo pipefail
+ cd "$(dirname "$0")/.."
+ export CARGO_NET_GIT_FETCH_WITH_CLI=true
+ packages=(-p openvibes-ingest -p openvibes-distribution -p openvibes-vulns -p openvibes-admin -p openvibes-signer)
+ [[ ${OV_LLM:-1} == 1 ]] && packages+=(-p openvibes-llm)
+ cargo build --release --locked "${packages[@]}"
+ llm=(--without llm)
+ if [[ ${OV_LLM:-1} == 1 ]]; then
+     scripts/build-llama-server.sh cpu
+     llm=(--with llm)
+-    if [[ ${OV_LLM_MODEL:-1} == 1 ]]; then
+-        scripts/fetch-llm-model.sh >/dev/null
+-        llm+=(--with model)
+-    else
+-        llm+=(--without model)
+-    fi
+     if [[ ${OV_LLM_VULKAN:-0} == 1 ]]; then
+         scripts/build-llama-server.sh vulkan
+         llm+=(--with vulkan)
+     fi
+ fi
+ version=${OV_VERSION:-$(grep -m1 '^version = ' Cargo.toml | cut -d'"' -f2)}
+ topdir=${OV_RPM_TOPDIR:-$PWD/target/rpm}
+ rpmbuild -bb packaging/rpm/openvibes-platform.spec "${llm[@]}" \
+     --define "_topdir $topdir" --define "_sourcedir $PWD" \
+     --define "ov_version $version" --define "ov_release ${OV_RELEASE:-1}"
+diff --git a/scripts/check-rpm.sh b/scripts/check-rpm.sh
+index 42ed3ea..ca525c0 100755
+--- a/scripts/check-rpm.sh
++++ b/scripts/check-rpm.sh
+@@ -1,17 +1,38 @@
+ #!/usr/bin/env bash
+ # Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer and -llm (run as root).
+ set -euo pipefail
+ fail() { echo "FAIL: $*" >&2; exit 1; }
+ expect_stat() { # PATH MODE OWNER:GROUP
+     [[ "$(stat -c '%a %U:%G' "$1")" == "$2 $3" ]] || fail "$1 is $(stat -c '%a %U:%G' "$1"), want $2 $3"
+ }
++# Built packages (OV_CHECK_BUILT=1, after build-rpm.sh): the model is not
++# packaged, and openvibes-llm-model keeps owning its path so upgrades from
++# 0.2.5 (which shipped it) leave the user's model alone.
++if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
++    rpms=${OV_RPM_TOPDIR:-target/rpm}/RPMS/x86_64
++    . packaging/llm/model.pin
++    for f in "$rpms"/openvibes-*.rpm; do
++        ! rpm -qlp "$f" | grep -qE '\.(gguf|part0|part1)$' || fail "$f contains model bytes"
++    done
++    ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
++    meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)
++    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$(printf '%s\n' \
++        /var/lib/openvibes-llm/model.conf "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE" | sort)" ]] ||
++        fail "openvibes-llm-model lists other files than model.conf and the model path"
++    rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part1 <' || fail "no Obsoletes part1"
++    rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part2 <' || fail "no Obsoletes part2"
++    rpm -qp --requires "$meta" | grep -q '^openvibes-llm = ' || fail "bridge does not require openvibes-llm"
++    rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
++    echo "check-rpm (built): ok"
++    exit 0
++fi
+ for user in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin; do
+     getent passwd "$user" >/dev/null || fail "no user $user"
+ done
+ expect_stat /etc/openvibes/ingest.toml 640 root:openvibes-ingest
+ expect_stat /etc/openvibes/admin.toml 640 root:openvibes-admin
+ expect_stat /etc/openvibes/distribution.toml 640 root:openvibes-distribution
+ expect_stat /etc/openvibes/vulns.toml 640 root:openvibes-vulns
+ expect_stat /var/lib/openvibes-ingest 700 openvibes-ingest:openvibes-ingest
+ rpm -qc openvibes-ingest | grep -qx /etc/openvibes/ingest.toml || fail "ingest.toml not %config"
+ rpm -qc openvibes-admin | grep -qx /etc/openvibes/admin.toml || fail "admin.toml not %config"
