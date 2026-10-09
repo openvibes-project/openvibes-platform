@@ -48,8 +48,8 @@ pub enum Lookup {
     },
     /// Endpoints reporting one finding.
     FindingEndpoints {
-        /// Rule set (`""` for unknown).
-        rule_set: String,
+        /// Rule set (`""` for unknown); `None` resolves it from the findings.
+        rule_set: Option<String>,
         /// Rule.
         rule: String,
         /// Look-back window.
@@ -79,8 +79,8 @@ pub enum Lookup {
     },
     /// A rule's published definition.
     RuleDescription {
-        /// Rule set.
-        rule_set: String,
+        /// Rule set; `None` resolves it from the findings.
+        rule_set: Option<String>,
         /// Rule.
         rule: String,
     },
@@ -96,6 +96,8 @@ pub enum LookupError {
     InvalidArguments,
     /// A host name matches several agents.
     Ambiguous,
+    /// A rule id is in several rule sets and none was named.
+    AmbiguousRule,
     /// The database failed.
     Store,
 }
@@ -110,6 +112,7 @@ impl LookupError {
             Self::Ambiguous => {
                 "error: that host name matches several agents; use an agent ID from agent_summary"
             }
+            Self::AmbiguousRule => "error: the rule is in several rule sets; name one",
             Self::Store => "error: the lookup failed; try again later",
         }
     }
@@ -117,6 +120,11 @@ impl LookupError {
 
 fn severity_schema(values: &[&str]) -> Value {
     json!({ "type": "string", "enum": values })
+}
+
+fn with_description(mut schema: Value, description: &str) -> Value {
+    schema["description"] = json!(description);
+    schema
 }
 
 fn text_schema(description: &str) -> Value {
@@ -144,12 +152,12 @@ pub fn specs() -> Vec<ToolSpec> {
     vec![
         spec(
             "search_findings",
-            "Findings (rule matches) across endpoints, one row per rule, most severe and widespread first.",
+            "Search compliance findings by words, such as firewall, auditd or root login: one row per rule with an endpoint count but no host names; use finding_endpoints for the hosts.",
             object(
                 json!({
                     "text": text_schema("Words in the rule or message, e.g. ssh."),
                     "min_severity": severity_schema(&FINDING_SEVERITIES),
-                    "rule_set": text_schema("One rule set."),
+                    "rule_set": text_schema("Rule set; leave out to search all."),
                     "window_hours": window_schema(),
                 }),
                 &[],
@@ -157,19 +165,19 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "finding_endpoints",
-            "Endpoints that reported one finding, most recent first.",
+            "Host names that reported one finding, most recent first.",
             object(
                 json!({
-                    "rule_set": text_schema("Rule set of the finding."),
+                    "rule_set": text_schema("Rule set; leave out unless the user names one."),
                     "rule": text_schema("Rule of the finding."),
                     "window_hours": window_schema(),
                 }),
-                &["rule_set", "rule"],
+                &["rule"],
             ),
         ),
         spec(
             "agent_summary",
-            "One endpoint by agent ID or host name: status, last contact, OS, counts of findings and vulnerabilities.",
+            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), counts of findings in the last 24 hours and of open vulnerabilities.",
             object(
                 json!({ "agent": text_schema("Agent ID or host name.") }),
                 &["agent"],
@@ -177,18 +185,21 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one endpoint, highest priority first (exploited, then EPSS, then severity).",
+            "Open vulnerabilities on one named endpoint, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
-                    "min_severity": severity_schema(&ADVISORY_SEVERITIES),
+                    "min_severity": with_description(
+                        severity_schema(&ADVISORY_SEVERITIES),
+                        "Lowest severity; leave out unless the user asks for one.",
+                    ),
                 }),
                 &["agent"],
             ),
         ),
         spec(
             "vulnerability_hosts",
-            "Endpoints with an open vulnerability for a CVE or advisory.",
+            "Endpoints with an open vulnerability for a CVE or advisory ID taken from a result.",
             object(
                 json!({ "id": text_schema("CVE ID or advisory ID.") }),
                 &["id"],
@@ -196,7 +207,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "Agent counts by state, open vulnerabilities, top findings, and top advisories.",
+            "For fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(
@@ -204,10 +215,10 @@ pub fn specs() -> Vec<ToolSpec> {
             "What a rule checks: title, severity, message, and expression.",
             object(
                 json!({
-                    "rule_set": text_schema("Rule set."),
+                    "rule_set": text_schema("Rule set; leave out unless the user names one."),
                     "rule": text_schema("Rule."),
                 }),
-                &["rule_set", "rule"],
+                &["rule"],
             ),
         ),
     ]
@@ -299,7 +310,7 @@ impl Lookup {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Endpoints {
-            rule_set: String,
+            rule_set: Option<String>,
             rule: String,
             window_hours: Option<u32>,
         }
@@ -327,7 +338,7 @@ impl Lookup {
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Rule {
-            rule_set: String,
+            rule_set: Option<String>,
             rule: String,
         }
         match name {
@@ -343,7 +354,7 @@ impl Lookup {
             "finding_endpoints" => {
                 let a: Endpoints = args(arguments)?;
                 Ok(Self::FindingEndpoints {
-                    rule_set: rule_set_arg(a.rule_set)?,
+                    rule_set: a.rule_set.map(rule_set_arg).transpose()?,
                     rule: required(a.rule)?,
                     window_hours: window(a.window_hours)?,
                 })
@@ -376,7 +387,7 @@ impl Lookup {
             "rule_description" => {
                 let a: Rule = args(arguments)?;
                 Ok(Self::RuleDescription {
-                    rule_set: rule_set_arg(a.rule_set)?,
+                    rule_set: a.rule_set.map(rule_set_arg).transpose()?,
                     rule: required(a.rule)?,
                 })
             }
@@ -481,6 +492,19 @@ impl LookupOutput {
         let mut found = BTreeSet::new();
         collect_citations(&self.data, &mut found);
         found
+    }
+
+    /// Whether the lookup found anything: items, a rule, or fleet counts.
+    /// Echoed request keys (`finding`, `agent`) do not count.
+    #[must_use]
+    pub fn found(&self) -> bool {
+        let d = &self.data;
+        d["items"].as_array().is_some_and(|i| !i.is_empty())
+            || d["rule"].is_object()
+            || d["open_vulnerabilities"].as_i64().unwrap_or(0) > 0
+            || d["agents"]
+                .as_object()
+                .is_some_and(|a| a.values().any(|n| n.as_i64().unwrap_or(0) > 0))
     }
 
     /// Objects shown (for audit).
@@ -695,7 +719,7 @@ fn agent_cite(id: &str) -> String {
     Citation::Agent(id.to_owned()).to_string()
 }
 
-fn finding_cite(rule_set: &str, rule: &str) -> String {
+pub(crate) fn finding_cite(rule_set: &str, rule: &str) -> String {
     Citation::Finding {
         rule_set: rule_set.to_owned(),
         rule: rule.to_owned(),
@@ -725,6 +749,8 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
         })
         .collect()
 }
+
+mod resolve;
 
 impl<S: Source> Lookups<S> {
     async fn resolve_agent(&self, key: &str) -> Result<Option<String>, LookupError> {
@@ -758,12 +784,27 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     min_severity: *min_severity,
                     rule_set_id: rule_set.as_deref(),
                 };
-                let page = self
+                let mut page = self
                     .source
                     .finding_groups(&filter, since(*window_hours), items)
                     .await
                     .map_err(store_error)?;
                 summary.insert("window_hours".into(), json!(window_hours));
+                if page.total == 0
+                    && rule_set.is_some()
+                    && let Some(all) = self
+                        .search_all_if_set_unknown(
+                            text,
+                            *min_severity,
+                            rule_set,
+                            *window_hours,
+                            items,
+                        )
+                        .await?
+                {
+                    page = all;
+                    summary.insert("note".into(), json!(resolve::NOTE_SET_NOT_FOUND));
+                }
                 LookupOutput::page(summary, groups_json(&page), page.total)
             }
             Lookup::FindingEndpoints {
@@ -771,29 +812,15 @@ impl<S: Source> LookupRunner for Lookups<S> {
                 rule,
                 window_hours,
             } => {
-                let page = self
-                    .source
-                    .finding_endpoints(rule_set, rule, since(*window_hours), items)
-                    .await
-                    .map_err(store_error)?;
-                summary.insert("finding".into(), json!(finding_cite(rule_set, rule)));
-                summary.insert("window_hours".into(), json!(window_hours));
-                summary.insert("not_seen_in_window".into(), json!(page.older));
-                let endpoints = page
-                    .items
-                    .iter()
-                    .map(|e| {
-                        json!({
-                            "cite": agent_cite(&e.agent_id),
-                            "hostname": e.hostname,
-                            "first_observed": time(e.first_observed_at),
-                            "last_observed": time(e.last_observed_at),
-                            "rule_version": e.rule_version,
-                            "severity": e.severity,
-                        })
-                    })
-                    .collect();
-                LookupOutput::page(summary, endpoints, page.total)
+                self.finding_endpoints_resolved(
+                    summary,
+                    rule_set.as_deref(),
+                    rule,
+                    since(*window_hours),
+                    *window_hours,
+                    items,
+                )
+                .await?
             }
             Lookup::AgentSummary { agent } => {
                 let page = self
@@ -839,6 +866,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .await
                     .map_err(store_error)?;
                 summary.insert("agent".into(), json!(agent_cite(&agent_id)));
+                summary.insert("min_severity".into(), json!(min_severity));
                 let vulns = page
                     .items
                     .iter()
@@ -924,12 +952,15 @@ impl<S: Source> LookupRunner for Lookups<S> {
                 )
             }
             Lookup::RuleDescription { rule_set, rule } => {
+                let (rule_set, rule) = self
+                    .rule_set_for_description(rule_set.as_deref(), rule)
+                    .await?;
                 let served = self
                     .source
-                    .rule_envelope(rule_set)
+                    .rule_envelope(&rule_set)
                     .await
                     .map_err(store_error)?;
-                summary.insert("rule".into(), rule_json(served, rule_set, rule));
+                summary.insert("rule".into(), rule_json(served, &rule_set, &rule));
                 LookupOutput::page(summary, Vec::new(), 0)
             }
         })

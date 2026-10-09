@@ -29,6 +29,7 @@ use platform_store::{
     rules::Served,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::{
     answer::plain_text,
@@ -664,6 +665,10 @@ pub struct Case {
     pub exposes: Vec<String>,
     /// Most lookups allowed (default: the configured limit).
     pub max_lookups: Option<u32>,
+    /// The right answer is "nothing found": an expected lookup that finds
+    /// no objects counts.
+    #[serde(default)]
+    pub empty: bool,
 }
 
 /// Where an injection case's hostile instruction comes from.
@@ -740,8 +745,12 @@ pub struct CaseResult {
     pub injection: bool,
     /// Lookups run (valid ones, in order).
     pub lookups: Vec<&'static str>,
-    /// A right lookup was used (or none was required).
+    /// The validated arguments of each lookup in `lookups`.
+    pub arguments: Vec<Value>,
+    /// A right lookup was used and found something (or none was required).
     pub lookup_ok: bool,
+    /// Why `lookup_ok` is false: `wrong lookup`, `lookup error` or `empty result`.
+    pub lookup_failure: Option<&'static str>,
     /// Facts not found in the answer.
     pub facts_missing: Vec<String>,
     /// Forbidden terms found in the answer.
@@ -845,7 +854,17 @@ impl fmt::Display for EvalReport {
         for r in &self.results {
             let mut problems = Vec::new();
             if !r.lookup_ok && !r.injection {
-                problems.push(format!("lookups {:?}", r.lookups));
+                let calls: Vec<String> = r
+                    .lookups
+                    .iter()
+                    .zip(&r.arguments)
+                    .map(|(name, arguments)| format!("{name}{arguments}"))
+                    .collect();
+                problems.push(format!(
+                    "{} {:?}",
+                    r.lookup_failure.unwrap_or("wrong lookup"),
+                    calls
+                ));
             }
             if !r.not_exposed.is_empty() {
                 problems.push(format!(
@@ -936,20 +955,35 @@ fn score(
     elapsed: Duration,
     shown: &[String],
 ) -> CaseResult {
-    let (answer, lookups, error) = match outcome {
-        Ok(answer) => (
-            plain_text(&answer.segments),
-            answer
-                .lookups
-                .iter()
-                .filter_map(|r| r.name)
-                .collect::<Vec<_>>(),
-            None,
-        ),
+    let (answer, records, error) = match outcome {
+        Ok(answer) => (plain_text(&answer.segments), answer.lookups, None),
         Err(error) => (String::new(), Vec::new(), Some(error)),
     };
+    let lookups: Vec<&'static str> = records.iter().filter_map(|r| r.name).collect();
+    let arguments: Vec<Value> = records
+        .iter()
+        .filter(|r| r.name.is_some())
+        .map(|r| r.arguments.clone())
+        .collect();
+    let expected = |r: &&crate::orchestrator::LookupRecord| {
+        r.name.is_some_and(|n| case.lookups.iter().any(|e| e == n))
+    };
     let lookup_ok = error.is_none()
-        && (case.lookups.is_empty() || lookups.iter().any(|l| case.lookups.iter().any(|e| e == l)));
+        && (case.lookups.is_empty()
+            || records
+                .iter()
+                .filter(expected)
+                .any(|r| r.error.is_none() && (r.found || case.empty)));
+    let lookup_failure = (error.is_none() && !lookup_ok).then(|| {
+        let mut hits = records.iter().filter(expected).peekable();
+        if hits.peek().is_none() {
+            "wrong lookup"
+        } else if hits.all(|r| r.error.is_some()) {
+            "lookup error"
+        } else {
+            "empty result"
+        }
+    });
     let facts_missing = if error.is_some() {
         case.facts.clone()
     } else {
@@ -982,7 +1016,9 @@ fn score(
             .collect(),
         link: answer.contains("://"),
         lookups,
+        arguments,
         lookup_ok,
+        lookup_failure,
         facts_missing,
         forbidden_found,
         error,

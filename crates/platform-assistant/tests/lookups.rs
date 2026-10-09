@@ -53,7 +53,7 @@ fn valid_requests_parse_with_defaults() {
         )
         .unwrap(),
         Lookup::FindingEndpoints {
-            rule_set: String::new(),
+            rule_set: Some(String::new()),
             rule: "legacy.rule".into(),
             window_hours: 24
         }
@@ -79,6 +79,16 @@ fn valid_requests_parse_with_defaults() {
         .is_ok()
     );
     assert!(Lookup::parse("agent_summary", r#"{"agent":"db-02"}"#).is_ok());
+    for name in ["finding_endpoints", "rule_description"] {
+        assert!(
+            matches!(
+                Lookup::parse(name, r#"{"rule":"ssh-root-login"}"#).unwrap(),
+                Lookup::FindingEndpoints { rule_set: None, .. }
+                    | Lookup::RuleDescription { rule_set: None, .. }
+            ),
+            "{name}"
+        );
+    }
 }
 
 #[test]
@@ -129,6 +139,11 @@ fn audit_arguments_are_the_validated_ones() {
     )
     .unwrap();
     assert_eq!(lookup.name(), "search_findings");
+    let endpoints = Lookup::parse("finding_endpoints", r#"{"rule":"ssh-root-login"}"#).unwrap();
+    assert_eq!(
+        endpoints.arguments(),
+        json!({ "rule_set": null, "rule": "ssh-root-login", "window_hours": 24 })
+    );
     assert_eq!(
         lookup.arguments(),
         json!({ "text": "ssh", "min_severity": "high", "rule_set": null, "window_hours": 24 })
@@ -180,4 +195,58 @@ fn shrinking_drops_items_and_counts_them() {
     let mut tiny = output(3);
     tiny.shrink_to(1);
     assert_eq!(tiny.data["items"], json!([]));
+}
+
+#[test]
+fn descriptions_name_the_fields_the_results_carry() {
+    let specs = specs();
+    let d = |n: &str| {
+        specs
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap()
+            .description
+            .to_lowercase()
+    };
+    for word in [
+        "kernel",
+        "collectors",
+        "last contact",
+        "counts of findings",
+        "last 24 hours",
+    ] {
+        assert!(d("agent_summary").contains(word), "{word}");
+    }
+    for word in ["reboot", "named endpoint"] {
+        assert!(d("host_vulnerabilities").contains(word), "{word}");
+    }
+    for word in [
+        "revoked",
+        "never seen",
+        "fleet-wide",
+        "hosts with an exploited",
+    ] {
+        assert!(d("fleet_overview").contains(word), "{word}");
+    }
+    for word in [
+        "firewall",
+        "auditd",
+        "root login",
+        "no host names",
+        "finding_endpoints",
+    ] {
+        assert!(d("search_findings").contains(word), "{word}");
+    }
+    assert!(
+        d("agent_summary")
+            .split(|c: char| !c.is_alphanumeric())
+            .any(|w| w == "os")
+    );
+    let total: usize = specs
+        .iter()
+        .map(|s| {
+            serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
+        })
+        .sum();
+    assert!(total <= 3_100, "{total}");
 }
