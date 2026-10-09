@@ -65,7 +65,7 @@ jobs:
               *)
                 # Heavy unless every changed file is frontend source or docs.
                 changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
-                grep -qE '^(packaging/offline/|scripts/[^/]*offline[^/]*$|packaging/rpm/openvibes-platform\.spec$)' <<<"$changed" || kit=false
+                grep -qE '^(packaging/offline/|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$)' <<<"$changed" || kit=false
                 if ! grep -qvE '^(crates/openvibes-console/web/(src|tests|e2e|public)/|docs/|[^/]+\.md$)' <<<"$changed"; then
                   heavy=false
                 fi
@@ -342,6 +342,16 @@ jobs:
           CARGO_NET_OFFLINE: "true"
         run: bash scripts/build-rpm.sh
 
+      - name: Build higher-release RPMs for the offline kit upgrade test
+        env:
+          OV_RELEASE: 1.2.ci${{ github.run_number }}
+          CARGO_NET_OFFLINE: "true"
+          OV_RPM_TOPDIR: ${{ github.workspace }}/target/rpm-newer
+        run: |
+          bash scripts/build-rpm.sh
+          mkdir -p dist/kit-newer
+          cp target/rpm-newer/RPMS/x86_64/openvibes-{admin,ingest,distribution,vulns,signer,llm,llm-model}-*.rpm dist/kit-newer/
+
       - name: Check the built packages carry no model
         run: OV_CHECK_BUILT=1 bash scripts/check-rpm.sh
 
@@ -546,10 +556,19 @@ jobs:
           gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir kit-rpms
           ls kit-rpms/openvibes-rules-*.rpm > /dev/null || { echo 'no openvibes-rules RPM in the latest rules release' >&2; exit 1; }
           bash scripts/offline-kit-test-kit.sh kit-rpms target/offline 44
+          # A second kit, same key, higher package release: the upgrade test.
+          mkdir kit-rpms2
+          cp kit-rpms/* kit-rpms2/
+          for f in dist/kit-newer/*.rpm; do
+            rm -f kit-rpms2/"$(basename "$f" | sed 's/-[0-9][^-]*-[^-]*$//')"-[0-9]*.rpm
+            cp "$f" kit-rpms2/
+          done
+          OPENVIBES_TEST_KEY=target/offline/test-key.asc bash scripts/offline-kit-test-kit.sh kit-rpms2 target/offline2 44
       - name: Install from the kit with no network
         run: |
           OPENVIBES_KEY_FINGERPRINT=$(cat target/offline/fingerprint) \
-            bash scripts/offline-kit-e2e.sh target/offline/openvibes-platform-*-offline-fedora44.tar
+            bash scripts/offline-kit-e2e.sh target/offline/openvibes-platform-*-offline-fedora44.tar \
+              target/offline2/openvibes-platform-*-offline-fedora44.tar target/offline/bad-signature.tar
 
   setup-lifecycle:
     name: Setup life cycle under systemd (install, repair, update, uninstall)

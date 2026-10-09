@@ -13,7 +13,9 @@ Install
 
 The installer first checks that the host is Fedora @FEDORA@ on x86_64 and that
 the kit is genuine, then installs from the kit only. Nothing changes if a
-check fails. Run it again with a newer kit to update. It then opens Setup.
+check fails. The OpenVIBES package key is added to the host's rpm keys, as
+with an online install. Run it again with a newer kit to update. It then opens
+Setup (to open it later: sudo openvibes-admin).
 
 The assistant's model (optional)
 
@@ -24,7 +26,8 @@ The assistant's model (optional)
 
 Put the file in the folder that holds the kit (or give its path to the
 installer with --model FILE). The installer checks it against the SHA-256
-above and refuses any other file. Without it the platform works as usual and
+above, refuses any other file, and stages it; open Setup (sudo openvibes-admin)
+and turn on the assistant to install it. Without it the platform works as usual and
 the assistant stays off.
 
 Checking the kit by hand

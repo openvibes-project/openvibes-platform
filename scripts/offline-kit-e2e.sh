@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Tests an offline kit with no network: one clean fedora container with
 # networking disabled installs the platform from the kit.
-# Usage: offline-kit-e2e.sh KIT_TAR
+# Usage: offline-kit-e2e.sh KIT_TAR [NEWER_KIT_TAR [BAD_SIGNATURE_TAR]]
+#   NEWER_KIT_TAR  the same kit with a higher package release, signed by the same
+#                  key: a rerun with it must upgrade the installed packages
+#   BAD_SIGNATURE_TAR  a kit whose checksums are signed right but with one RPM
+#                  signed by another key: --check passes, the install must be refused
 # Env: OPENVIBES_KEY_FINGERPRINT  the signing key's fingerprint, for kits signed
 #        with a test key (scripts/offline-kit-test-kit.sh writes it to
 #        OUT_DIR/fingerprint); unset: the installer's built-in release key
@@ -17,12 +21,15 @@ set -euo pipefail
 PODMAN=${PODMAN:-podman}
 FEDORA=${FEDORA:-44}
 OLD_FEDORA=${OLD_FEDORA:-43}
-[[ $# == 1 && -f $1 ]] || { echo "usage: $0 KIT_TAR" >&2; exit 2; }
+[[ $# -ge 1 && $# -le 3 && -f $1 ]] || { echo "usage: $0 KIT_TAR [NEWER_KIT_TAR [BAD_SIGNATURE_TAR]]" >&2; exit 2; }
 tar_name=$(basename "$1")
 # The containers mount a private copy of the tar, relabelled for SELinux: the
 # checkout is never relabelled.
 kit_dir=$(mktemp -d); trap 'rm -rf "$kit_dir"' EXIT
 cp "$1" "$kit_dir/$tar_name"
+newer_name='' bad_name=''
+[[ -n ${2:-} ]] && { newer_name=newer.tar; cp "$2" "$kit_dir/$newer_name"; }
+[[ -n ${3:-} ]] && { bad_name=bad.tar; cp "$3" "$kit_dir/$bad_name"; }
 image() { echo "registry.fedoraproject.org/fedora:$1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
@@ -31,7 +38,7 @@ env_args=()
 # run FEDORA SCRIPT: SCRIPT in a network-less container, the kit's tar at /kit.
 run() {
     "$PODMAN" run --rm --network none -v "$kit_dir:/kit:ro,Z" "${env_args[@]}" \
-        -e "TAR=/kit/$tar_name" \
+        -e "TAR=/kit/$tar_name" -e "NEWER=${newer_name:+/kit/$newer_name}" -e "BAD=${bad_name:+/kit/$bad_name}" \
         "$(image "$1")" bash -c "$2"
 }
 
@@ -47,6 +54,14 @@ tamper() { # NAME SHELL-COMMANDS EXPECTED-MESSAGE
 tamper 'tampered SHA256SUMS' 'echo >> openvibes-offline/SHA256SUMS' 'is not signed by the OpenVIBES package key'
 tamper 'tampered package' 'printf x >> openvibes-offline/packages/openvibes-admin-*.rpm' 'does not match SHA256SUMS'
 tamper 'extra file in the kit' 'echo x > openvibes-offline/packages/extra.rpm' 'does not list'
+if [[ -n $bad_name ]]; then
+    out=$(run "$FEDORA" 'mkdir /w && cd /w && tar xf $BAD && ./openvibes-offline/install --check &&
+        echo CHECK-PASSED; ./openvibes-offline/install --no-setup 2>&1 && echo UNEXPECTED-SUCCESS
+        rpm -q openvibes-admin >/dev/null 2>&1 && echo CHANGED-HOST; true' 2>&1) || fail "bad signature: $out"
+    [[ $out == *CHECK-PASSED* && $out != *UNEXPECTED-SUCCESS* && $out != *CHANGED-HOST* && $out == *"dnf could not install"* ]] ||
+        fail "an RPM signed by another key was not refused: $out"
+    ok "an RPM signed by a third key: --check passes, the install is refused (gpgcheck is on)"
+fi
 out=$(run "$OLD_FEDORA" 'mkdir /w && cd /w && tar xf $TAR && ./openvibes-offline/install --check 2>&1 || true')
 [[ $out == *"this kit is for Fedora $FEDORA; download openvibes-platform-"*"-offline-fedora$OLD_FEDORA.tar"* ]] ||
     fail "fedora:$OLD_FEDORA did not refuse with the kit's name: $out"
@@ -87,4 +102,12 @@ done
 rpm -qa "openvibes-rules-*" | grep -q . || fail "no rule set installed"
 [[ -f /usr/share/openvibes-llm/model.pin ]] || fail "model.pin missing"
 echo "ok: every package installed with no network"
+if [[ -n ${NEWER:-} ]]; then
+    before=$(rpm -q --qf "%{VERSION}-%{RELEASE}" openvibes-admin)
+    mkdir /w2 && cd /w2 && tar xf "$NEWER"
+    ./openvibes-offline/install --no-setup
+    after=$(rpm -q --qf "%{VERSION}-%{RELEASE}" openvibes-admin)
+    [[ $before != "$after" ]] || fail "the newer kit did not upgrade openvibes-admin ($before)"
+    echo "ok: a newer kit upgrades the installed packages ($before -> $after)"
+fi
 '

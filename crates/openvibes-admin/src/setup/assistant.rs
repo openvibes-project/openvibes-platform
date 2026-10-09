@@ -41,6 +41,11 @@ fn external<R: Runner>(ctx: &Ctx<R>) -> bool {
     crate::assistant_setup::configure(&console, &env, false).is_err()
 }
 
+fn remove_staged(path: &std::path::Path) {
+    let _ = std::fs::remove_file(path);
+    let _ = std::fs::remove_dir(path.parent().unwrap_or(path));
+}
+
 pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Assistant) {
         return Ok(StepState::Skipped("assistant not chosen".into()));
@@ -49,9 +54,14 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("using an external assistant".into()));
     }
     let present = installed(ctx);
-    // A model the offline installer staged is installed whatever was chosen.
-    if !present && crate::model_fetch::staged_in(ctx.root).is_some() {
-        return Ok(StepState::Todo);
+    if let Some((_, path)) = crate::model_fetch::staged_in(ctx.root) {
+        if present {
+            // The model is installed: the staged copy is only 2.5 GB in the way.
+            remove_staged(&path);
+        } else if ctx.plan.model != ModelChoice::Skip {
+            // Staged by the offline installer: installed unless declined.
+            return Ok(StepState::Todo);
+        }
     }
     let on = present
         && ctx.succeeds(
@@ -87,12 +97,12 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             &pin.sha256,
         ])
         .map_err(|error| format!("the staged model was not installed ({error})"))?;
+        // Installed: the staged copy goes now, whatever assistant-setup does.
+        if let Some((_, path)) = &staged {
+            remove_staged(path);
+        }
     }
     ctx.ok(Admin, &["helper", "assistant-setup"])?;
-    if let Some((_, path)) = staged {
-        let _ = std::fs::remove_file(&path);
-        let _ = std::fs::remove_dir(path.parent().unwrap_or(&path));
-    }
     Ok(StepState::Done(
         "assistant on: model installed, model server enabled".into(),
     ))
@@ -210,7 +220,8 @@ mod tests {
             0,
             "",
         );
-        let plan = plan(&[Ingest, Assistant]); // Skip: staged overrides it
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
         let ctx = fake.ctx(&plan);
         assert!(matches!(super::check(&ctx), Ok(StepState::Todo)));
         let state = run_step(&ctx, Step::AssistantModel);
@@ -238,5 +249,38 @@ mod tests {
         assert!(state.detail().contains("staged model was not installed"));
         assert!(!fake.called(&["/usr/bin/openvibes-admin", "helper"]));
         assert!(fake.root.join(staged.trim_start_matches('/')).exists());
+    }
+
+    #[test]
+    fn a_symlink_at_the_staged_path_is_ignored() {
+        let fake = Fake::new("model-staged-link");
+        let path = fake
+            .root
+            .join(format!("var/lib/openvibes-offline/{}", staged_name()));
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink("/etc/passwd", &path).unwrap();
+        assert!(crate::model_fetch::staged_in(&fake.root).is_none());
+    }
+
+    #[test]
+    fn an_explicit_skip_is_honoured_and_an_installed_model_removes_the_staged_copy() {
+        let fake = Fake::new("model-staged-skip");
+        let staged = format!("/var/lib/openvibes-offline/{}", staged_name());
+        fake.file(&staged, "x");
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Skip;
+        assert!(matches!(
+            super::check(&fake.ctx(&plan)),
+            Ok(StepState::Skipped(_))
+        ));
+        assert!(fake.root.join(staged.trim_start_matches('/')).exists());
+        fake.file("/var/lib/openvibes-llm/models/m.gguf", "x");
+        fake.file(
+            CONF,
+            "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/m.gguf\n",
+        );
+        let _ = super::check(&fake.ctx(&plan));
+        assert!(!fake.root.join(staged.trim_start_matches('/')).exists());
     }
 }

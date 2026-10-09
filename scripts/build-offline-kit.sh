@@ -4,6 +4,7 @@
 # repository checkout at ../ (mounted).
 # Usage: build-offline-kit.sh RPM_DIR OUT_DIR FEDORA
 #        build-offline-kit.sh --pack OUT_DIR FEDORA     (after signing)
+#        build-offline-kit.sh --sums TREE               (SHA256SUMS again)
 #   RPM_DIR  the platform RPMs (admin console ingest distribution vulns signer
 #            llm llm-model) and the openvibes-rules-*.rpm packages
 #   OUT_DIR  receives openvibes-offline/ and
@@ -15,6 +16,10 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 
+sums() { # TREE: SHA256SUMS over every file (the signature is the caller's)
+    (cd "$1" && rm -f SHA256SUMS SHA256SUMS.asc && find . -type f -print0 | sort -z |
+        sed -z 's|^\./||' | xargs -0 sha256sum > ../SHA256SUMS.new && mv ../SHA256SUMS.new SHA256SUMS)
+}
 pack() { # OUT_DIR FEDORA: the tar of the tree
     local out=$1 fedora=$2 version
     version=$(sed -n 's/^KIT_VERSION=//p' "$out/openvibes-offline/install")
@@ -22,6 +27,11 @@ pack() { # OUT_DIR FEDORA: the tar of the tree
         -cf "$out/openvibes-platform-$version-offline-fedora$fedora.tar" openvibes-offline
     echo "$out/openvibes-platform-$version-offline-fedora$fedora.tar"
 }
+if [[ ${1:-} == --sums ]]; then # TREE: redo SHA256SUMS (tests that alter a kit)
+    [[ $# == 2 ]] || { echo "usage: $0 --sums TREE" >&2; exit 2; }
+    sums "$(realpath "$2")"
+    exit
+fi
 if [[ ${1:-} == --pack ]]; then
     [[ $# == 3 ]] || { echo "usage: $0 --pack OUT_DIR FEDORA" >&2; exit 2; }
     pack "$(realpath "$2")" "$3"
@@ -39,8 +49,10 @@ mkdir -p "$kit/packages" "$kit/LICENSES"
 
 # 1. The OpenVIBES packages, exactly these.
 rpms=()
+admins=$(find "$rpm_dir" -maxdepth 1 -name 'openvibes-admin-[0-9]*.x86_64.rpm')
+(($(grep -c . <<<"$admins") == 1)) || { echo "build-offline-kit: want exactly one openvibes-admin RPM in $rpm_dir, found: ${admins:-none}" >&2; exit 1; }
 for name in admin console ingest distribution vulns signer llm llm-model; do
-    f=$(ls "$rpm_dir"/openvibes-"$name"-[0-9]*.x86_64.rpm 2>/dev/null | tail -n 1 || true)
+    f=$(find "$rpm_dir" -maxdepth 1 -name "openvibes-$name-[0-9]*.x86_64.rpm" | sort -V | tail -n 1)
     [[ -n $f ]] || { echo "build-offline-kit: no openvibes-$name RPM in $rpm_dir" >&2; exit 1; }
     rpms+=("$f")
 done
@@ -50,7 +62,7 @@ shopt -u nullglob
 ((${#rules[@]})) || { echo "build-offline-kit: no openvibes-rules-* RPM in $rpm_dir" >&2; exit 1; }
 rpms+=("${rules[@]}")
 cp "${rpms[@]}" "$kit/packages/"
-version=$(rpm -qp --nosignature --qf '%{VERSION}' "$rpm_dir"/openvibes-admin-[0-9]*.x86_64.rpm)
+version=$(rpm -qp --nosignature --qf '%{VERSION}' "$admins")
 
 # 2. Their dependency closure from Fedora (no weak dependencies). dnf cannot
 # download from local files, so they form a repository first. --alldeps
@@ -95,8 +107,6 @@ cp "${OPENVIBES_KIT_PUBKEY:-$ROOT/packaging/rpm/openvibes-packages.gpg}" "$kit/o
     done | sort
 } > "$kit/LICENSES/fedora-packages.txt"
 
-# 6. Every file, for the signature.
-(cd "$kit" && find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.asc -print0 | sort -z |
-    sed -z 's|^\./||' | xargs -0 sha256sum > SHA256SUMS)
+sums "$kit"
 
 pack "$out" "$fedora"

@@ -6,11 +6,13 @@ on:
   push:
     tags: ["v*"]
 
-permissions:
-  contents: write
+# No permissions by default; each job asks for what it needs.
+permissions: {}
 
 jobs:
   release:
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     container: registry.fedoraproject.org/fedora:44
@@ -67,6 +69,8 @@ jobs:
   # uploaded only after a network-less container has installed from it.
   offline-kit:
     needs: release
+    permissions:
+      contents: write
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     strategy:
@@ -99,13 +103,13 @@ jobs:
           RPM_SIGNING_PASSPHRASE: ${{ secrets.RPM_SIGNING_PASSPHRASE }}
         run: |
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          trap 'gpgconf --kill all; rm -rf "$RUNNER_TEMP/pass" "$GNUPGHOME"' EXIT
           mkdir -m 0700 "$GNUPGHOME"
           printf '%s' "$RPM_SIGNING_KEY" | gpg --batch --quiet --import
-          printf '%s' "$RPM_SIGNING_PASSPHRASE" > "$RUNNER_TEMP/pass"
+          (umask 077 && printf '%s' "$RPM_SIGNING_PASSPHRASE" > "$RUNNER_TEMP/pass")
           gpg --batch --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/pass" \
             --detach-sign --armor -o target/offline/openvibes-offline/SHA256SUMS.asc \
             target/offline/openvibes-offline/SHA256SUMS
-          rm -rf "$RUNNER_TEMP/pass" "$GNUPGHOME"
           bash scripts/build-offline-kit.sh --pack target/offline ${{ matrix.fedora }}
       - name: Test the kit with no network
         run: |

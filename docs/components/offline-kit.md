@@ -23,7 +23,7 @@ Size: about 92 MB.
 ## Building
 
 `scripts/build-offline-kit.sh RPM_DIR OUT_DIR FEDORA` runs as root in a clean
-`fedora:<N>` container with network access and the checkout mounted. It builds a local repository of
+`fedora:<N>` container with network access and the checkout mounted (exactly one `openvibes-admin` RPM in `RPM_DIR`, else it fails; of the others the highest by `sort -V`). It builds a local repository of
 the OpenVIBES packages, runs `dnf download --resolve --alldeps` for them and
 `postgresql-server` (nothing is dropped), runs `createrepo_c`, and writes `README.txt`, `LICENSES/` and `SHA256SUMS`.
 Signing is the caller's job: put `SHA256SUMS.asc` into `OUT_DIR/openvibes-offline/`
@@ -45,20 +45,25 @@ root):
    temporary `GNUPGHOME` is used. `--check` stops here. Test hook:
    `OPENVIBES_KEY_FINGERPRINT` replaces the fingerprint (as in `install.sh`).
 3. `dnf` installs the packages from the kit's repository only
-   (`--disablerepo='*'`, `gpgcheck=1`, the OpenVIBES key imported from a copy
-   made after step 2; it stays in the rpm database, as with an online install).
+   (`--disablerepo='*'`, `gpgcheck=1`), then runs `dnf upgrade` against the same
+   repository, because `install` leaves installed packages alone: running the
+   installer with a newer kit upgrades the platform and the Fedora packages it
+   needs, from the kit only. The OpenVIBES packages are checked against the key
+   verified in step 2 (re-exported from the temporary keyring; dnf adds it to the
+   rpm keys, as with an online install), Fedora's against the host's
+   `/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-<N>-primary` (missing: one-line failure).
 4. The model: `--model FILE` or `<kit>/../<LLM_MODEL_FILE>` is **staged**, not
    installed. The installer checks free space, copies the file as root to
    `/var/lib/openvibes-offline/<LLM_MODEL_FILE>` (directory 0755, file 0444,
-   root:root) and verifies its SHA-256 against `/usr/share/openvibes-llm/model.pin`
-   at once; on a mismatch it deletes the copy and stops ("the platform packages
+   root:root; skipped with a message if the pinned model is already installed) and verifies its SHA-256 against `/usr/share/openvibes-llm/model.pin`
+   at once (the sourced pin values are validated first); on a mismatch it deletes the copy and stops ("the platform packages
    are installed, but the model file does not match the pinned SHA-256"). Setup
    installs the staged file (see [openvibes-admin.md](openvibes-admin.md)), because
    `assistant model install` refuses root and needs the database that Setup creates.
    With no file it says the assistant can be turned on in Setup, or the model
    added later (link and SHA-256). The original file is never changed.
 5. Unless `--no-setup`, and when a person ran it under sudo on a terminal,
-   Setup opens.
+   Setup opens. The messages point to Setup (`sudo openvibes-admin`).
 
 Errors are one line, `openvibes offline install: <what failed> (<what has
 changed so far>)`; dnf's log is shown only on failure. Running it again with a
@@ -77,13 +82,17 @@ newer kit upgrades (the update path for an offline host).
 
 - `scripts/offline-kit-test-kit.sh RPM_DIR OUT_DIR 44` builds a kit signed with
   a throwaway key (re-signing the RPMs with it; needs podman and network) and
-  writes the key's fingerprint to `OUT_DIR/fingerprint`.
+  writes the key's fingerprint to `OUT_DIR/fingerprint`, the key to
+  `test-key.asc` (`OPENVIBES_TEST_KEY` reuses it for a second kit) and the
+  bad-signature kit to `bad-signature.tar`.
 - `OPENVIBES_KEY_FINGERPRINT=$(cat OUT_DIR/fingerprint) scripts/offline-kit-e2e.sh KIT_TAR`
   runs the checks with `--network none` containers: a tampered `SHA256SUMS`, a
   tampered package and an extra file each fail `--check`; a `fedora:43`
   container refuses with the kit's name; in a `fedora:44` container `--check`
   passes, a wrong `--model` file is refused with the packages installed and
-  nothing staged, a second install succeeds, a small file whose hash is written
+  nothing staged, a second install succeeds, a second kit (same key, higher
+  release) upgrades the installed packages, one RPM signed by a third key with
+  SHA256SUMS signed correctly passes `--check` but the install is refused, a small file whose hash is written
   into the container's `model.pin` is staged (0444 root), and every OpenVIBES package,
   `postgresql-server`, a rule set and `model.pin` are present.
 - CI runs the same on pull requests that touch `packaging/offline/`,
