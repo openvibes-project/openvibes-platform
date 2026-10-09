@@ -73,6 +73,41 @@ pub trait Restarter {
     fn llm_socket_holds(&self, port: &str) -> Result<(), String>;
     /// Whether `openvibes-llm.socket` is enabled (assistant-setup enables it).
     fn llm_socket_enabled(&self) -> bool;
+    /// Whether systemd still has a job queued or running for the model
+    /// server or its proxy (the restart a package upgrade ends with).
+    fn llm_jobs_pending(&self) -> bool {
+        false
+    }
+    /// Waits `seconds` (nothing in tests).
+    fn pause(&self, _seconds: u64) {}
+}
+
+/// Longest wait for systemd's jobs on the model server, in seconds.
+const JOB_WAIT: u64 = 60;
+/// Tries at stopping the server when systemd cancels the job.
+const STOP_TRIES: u32 = 3;
+const STOP_PAUSE: u64 = 5;
+
+/// Stops the model server and its proxy after systemd's own jobs on them
+/// are done: the restart that ends a dnf transaction cancels a stop sent
+/// meanwhile ("Job for openvibes-llm.service canceled"), so a canceled stop
+/// is tried again.
+fn stop_llm(restarter: &dyn Restarter) -> Result<(), String> {
+    for _ in 0..JOB_WAIT {
+        if !restarter.llm_jobs_pending() {
+            break;
+        }
+        restarter.pause(1);
+    }
+    let mut result = restarter.systemctl(&STOP_LLM);
+    for _ in 1..STOP_TRIES {
+        if !result.as_ref().is_err_and(|e| e.contains("canceled")) {
+            break;
+        }
+        restarter.pause(STOP_PAUSE);
+        result = restarter.systemctl(&STOP_LLM);
+    }
+    result
 }
 
 pub struct Systemd;
@@ -104,6 +139,25 @@ impl Restarter for Systemd {
             .run(Systemctl, &args)
             .map_err(|error| error.to_string())?;
         socket_holds(&out.stdout, port)
+    }
+
+    fn llm_jobs_pending(&self) -> bool {
+        let args = [
+            "show",
+            "-p",
+            "Job",
+            "--value",
+            "openvibes-llm.service",
+            "openvibes-llm-proxy.service",
+        ];
+        // One line per unit; empty when it has no job. Unknown: not pending.
+        SystemRunner
+            .run(Systemctl, &args)
+            .is_ok_and(|out| out.stdout.lines().any(|line| !line.trim().is_empty()))
+    }
+
+    fn pause(&self, seconds: u64) {
+        std::thread::sleep(Duration::from_secs(seconds));
     }
 
     fn llm_socket_enabled(&self) -> bool {
@@ -369,7 +423,11 @@ pub fn auto(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Strin
             "assistant-tune --auto: {}",
             text.trim().replace('\n', " / ")
         ),
-        Err(error) => format!("assistant-tune --auto: not tuned: {error}"),
+        // The tuning is restored and tune.lock is only a flock (released at
+        // exit): a later run starts clean.
+        Err(error) => format!(
+            "assistant-tune --auto: not tuned: {error}; tuning will be retried at the next upgrade, or from Setup"
+        ),
     }
 }
 
@@ -445,7 +503,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
     // Stopped either way. Local: the health wait goes through the socket,
     // which starts the server on the new tuning. Another backend: nothing
     // starts it, waits for it, or measures it.
-    let measured = restarter.systemctl(&STOP_LLM).and_then(|()| {
+    let measured = stop_llm(restarter).and_then(|()| {
         if !local {
             return Ok(None);
         }
@@ -472,7 +530,7 @@ pub fn run(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Result
             if let Err(why) = restored {
                 eprintln!("openvibes-admin helper: could not restore the old tuning: {why}");
             }
-            let _ = restarter.systemctl(&STOP_LLM);
+            let _ = stop_llm(restarter);
             return Err(error);
         }
     };
@@ -581,6 +639,92 @@ fn is_local(base_url: &str, port: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::{Restarter, stop_llm};
+    use std::cell::{Cell, RefCell};
+
+    /// Scripted systemd: `pending` polls report a job, then the stops
+    /// answer from `stops` (the last repeats).
+    struct Script {
+        pending: Cell<u32>,
+        stops: RefCell<Vec<Result<(), String>>>,
+        calls: Cell<u32>,
+        pauses: RefCell<Vec<u64>>,
+    }
+
+    impl Script {
+        fn new(pending: u32, stops: Vec<Result<(), String>>) -> Script {
+            Script {
+                pending: Cell::new(pending),
+                stops: RefCell::new(stops),
+                calls: Cell::new(0),
+                pauses: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    impl Restarter for Script {
+        fn systemctl(&self, _: &[&str]) -> Result<(), String> {
+            let n = self.calls.replace(self.calls.get() + 1) as usize;
+            let stops = self.stops.borrow();
+            stops[n.min(stops.len() - 1)].clone()
+        }
+        fn llm_socket_holds(&self, _: &str) -> Result<(), String> {
+            Ok(())
+        }
+        fn llm_socket_enabled(&self) -> bool {
+            true
+        }
+        fn llm_jobs_pending(&self) -> bool {
+            let left = self.pending.get();
+            self.pending.set(left.saturating_sub(1));
+            left > 0
+        }
+        fn pause(&self, seconds: u64) {
+            self.pauses.borrow_mut().push(seconds);
+        }
+    }
+
+    fn canceled() -> Result<(), String> {
+        Err("systemctl stop: Job for openvibes-llm.service canceled.".into())
+    }
+
+    #[test]
+    fn a_canceled_stop_is_tried_again() {
+        let s = Script::new(0, vec![canceled(), Ok(())]);
+        assert_eq!(stop_llm(&s), Ok(()));
+        assert_eq!(s.calls.get(), 2);
+        assert_eq!(*s.pauses.borrow(), [5]);
+    }
+
+    #[test]
+    fn three_canceled_stops_give_up() {
+        let s = Script::new(0, vec![canceled()]);
+        assert!(stop_llm(&s).unwrap_err().contains("canceled"));
+        assert_eq!(s.calls.get(), 3);
+    }
+
+    #[test]
+    fn another_failure_is_not_retried() {
+        let s = Script::new(0, vec![Err("systemctl stop: boom".into())]);
+        assert!(stop_llm(&s).is_err());
+        assert_eq!(s.calls.get(), 1);
+    }
+
+    #[test]
+    fn pending_jobs_are_waited_out_before_the_stop() {
+        let s = Script::new(3, vec![Ok(())]);
+        assert_eq!(stop_llm(&s), Ok(()));
+        assert_eq!(*s.pauses.borrow(), [1, 1, 1]);
+        assert_eq!(s.calls.get(), 1);
+    }
+
+    #[test]
+    fn jobs_that_never_clear_do_not_wait_forever() {
+        let s = Script::new(u32::MAX, vec![Ok(())]);
+        assert_eq!(stop_llm(&s), Ok(()));
+        assert_eq!(s.pauses.borrow().len(), 60);
+    }
+
     #[test]
     fn only_an_active_socket_on_the_port_may_receive_the_key() {
         let show = "ActiveState=active\nListen=127.0.0.1:18430 (Stream)\n";
