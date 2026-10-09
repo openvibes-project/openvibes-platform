@@ -9,7 +9,7 @@ import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, daysAgo, isPast, triageLabel } from "../ui/format";
 import { Trend, dailyHosts } from "../ui/trend";
-import { Picker } from "../ui/Picker";
+import { Select } from "../ui/Select";
 import { PanelHeader, Section } from "../ui/panel";
 import { toast } from "../ui/toast";
 import { AddToCase } from "./AddToCase";
@@ -127,7 +127,7 @@ export function FindingPanel({ id }: { id: string }) {
       <div className="panel-body stack">
         <div ref={detailsTop}><Section title="Detection details">
           <div className="field">Host
-            <Picker label="Host" placeholder="Choose a host to inspect its evidence" value={host} onChange={setEvidenceHost}
+            <Select label="Host" placeholder="Choose a host to inspect its evidence" value={host} onChange={setEvidenceHost}
               options={(endpoints.data ?? []).map((item) => ({ value: item.agent_id, label: item.hostname ?? item.agent_id }))} />
           </div>
         </Section></div>

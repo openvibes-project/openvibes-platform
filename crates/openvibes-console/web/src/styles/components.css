@@ -160,19 +160,23 @@
 :root[data-density="compact"] .table .cell-two > :last-child { display: none; }
 :root[data-density="compact"] .list__row { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
 
-/* Picker: a themed, searchable replacement for long native selects */
-.picker { position: relative; }
-.picker__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
-.picker__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker__popup {
-  position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 4px); display: grid; gap: 6px; padding: 6px;
+/* Select (ui/Select.tsx): the console's own dropdown; the popup is position: fixed so no scroll container clips it */
+.sel { position: relative; }
+.sel__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.sel__button:disabled { cursor: not-allowed; opacity: .6; }
+.sel__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel__popup {
+  z-index: 60; display: grid; gap: 6px; padding: 6px; overflow: hidden;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-2); box-shadow: var(--shadow-2);
 }
-.picker__list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
-.picker__option, .picker__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
-.picker__option--active { background: var(--accent-soft); }
-.picker__option[aria-selected="true"] { font-weight: 600; }
-.picker__empty { cursor: default; }
+.sel__list { max-height: 260px; overflow-y: auto; outline: none; }
+.sel__group { padding: 8px 8px 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.sel__option, .sel__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
+.sel__option--active { background: var(--accent-soft); }
+.sel__option[aria-selected="true"] { font-weight: 600; }
+.sel__option[aria-selected="true"] svg { color: var(--accent); }
+.sel__option[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
+.sel__empty { cursor: default; }
 
 /* Line chart (ui/LineChart.tsx): drawn at pixel size; text never takes a series colour. */
 .linechart { position: relative; width: 100%; --c: var(--accent); }
