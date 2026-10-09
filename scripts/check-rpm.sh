@@ -12,7 +12,8 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
     rpms=${OV_RPM_TOPDIR:-target/rpm}/RPMS/x86_64
     . packaging/llm/model.pin
     for f in "$rpms"/openvibes-*.rpm; do
-        ! rpm -qlp "$f" | grep -qE '\.(gguf|part0|part1)$' || fail "$f contains model bytes"
+        list=$(rpm -qlp "$f")
+        [[ -z "$(grep -E '\.(gguf|part0|part1)$' <<<"$list" || true)" ]] || fail "$f contains model bytes"
     done
     ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
     meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)
@@ -23,6 +24,9 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
     rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part2 <' || fail "no Obsoletes part2"
     rpm -qp --requires "$meta" | grep -q '^openvibes-llm = ' || fail "bridge does not require openvibes-llm"
     rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
+    rpm -qp --recommends "$rpms"/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = ' || fail "openvibes-llm does not recommend the bridge"
+    rpm2cpio "$meta" | cpio -i --quiet --to-stdout ./var/lib/openvibes-llm/model.conf |
+        grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256" || fail "model.conf lacks the pinned SHA-256"
     echo "check-rpm (built): ok"
     exit 0
 fi

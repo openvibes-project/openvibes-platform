@@ -238,7 +238,7 @@ is a small bridge package with no model bytes: it selects the pinned model
 and owns the model path as a `%ghost` file, so upgrading from 0.2.5 (which
 shipped the model) does not delete an installed model. It replaces
 `openvibes-llm-model-part1` and `-part2`. If the model is missing after
-install, the package prints how to get it:
+install, the package prints how to get it. If a future release changes `LLM_MODEL_FILE`, the old ghost path is no longer owned, so rpm removes the old GGUF on upgrade and the admin must run `assistant model fetch` (changing the pin is a release-note item):
 
 ```sh
 dnf install openvibes-llm

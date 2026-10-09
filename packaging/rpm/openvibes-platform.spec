@@ -5,8 +5,6 @@
 # (skip with --without llm); the Vulkan variant with --with vulkan.
 %bcond llm 1
 %bcond vulkan 0
-# The model file name, from the pin (the only place it is written).
-%global llm_model_file %(. %{_sourcedir}/packaging/llm/model.pin; echo $LLM_MODEL_FILE)
 
 # Upgrade from openvibes_NAME service accounts (admin TUI spec §2): rename
 # the OS user and group before the new files are laid down. Inline because on
@@ -198,11 +196,10 @@ install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
 install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
-%define _ovm_dir %{buildroot}%{_sharedstatedir}/openvibes-llm
 . $S/packaging/llm/model.pin
 install -D -m 0644 $S/packaging/llm/model.pin %{buildroot}%{_datadir}/openvibes-llm/model.pin
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE
-cat > %{_ovm_dir}/model.conf <<EOF
+cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
 OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
 OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
 OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
@@ -396,7 +393,8 @@ fi
 %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
 
 %posttrans -n openvibes-llm-model
-[ -e %{_sharedstatedir}/openvibes-llm/models/%{llm_model_file} ] || echo "openvibes-llm-model: the assistant's model is not installed: run 'sudo openvibes-admin assistant model fetch', or install it from a file (docs: offline install)" >&2
+. %{_datadir}/openvibes-llm/model.pin
+[ -e %{_sharedstatedir}/openvibes-llm/models/"$LLM_MODEL_FILE" ] || echo "openvibes-llm-model: the assistant's model is not installed: run 'sudo openvibes-admin assistant model fetch', or install it from a file (docs: offline install)" >&2
 
 %if %{with vulkan}
 %files -n openvibes-llm-vulkan
