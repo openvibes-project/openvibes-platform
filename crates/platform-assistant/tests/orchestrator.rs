@@ -1018,3 +1018,36 @@ async fn prompted_json_that_is_no_action_is_repaired_once_never_shown() {
     let (_, _, result) = prompted(&["No braces here."]).await;
     assert_eq!(plain_text(&result.unwrap().segments), "No braces here.");
 }
+
+#[tokio::test]
+async fn braces_in_prose_are_an_answer_but_fenced_junk_is_malformed() {
+    let (_, _, result) = prompted(&["Set PermitRootLogin {no} in sshd_config."]).await;
+    assert_eq!(
+        plain_text(&result.unwrap().segments),
+        "Set PermitRootLogin {no} in sshd_config."
+    );
+    for junk in [
+        "```json\n{\"foo\":1}\n```",
+        r#"{"action":"bogus"}"#,
+        r#"{"action":"answer"}"#,
+        r#"{"action":"lookup","name":5}"#,
+    ] {
+        let (script, fake, result) = prompted(&[junk, "fine."]).await;
+        assert_eq!(plain_text(&result.unwrap().segments), "fine.", "{junk}");
+        assert!(fake.ran.lock().unwrap().is_empty());
+        assert_eq!(script.requests().len(), 2);
+    }
+}
+
+#[tokio::test]
+async fn a_repair_turn_carries_the_repair_alone_even_after_a_lookup() {
+    let (script, _, result) =
+        prompted(&[r#"{"action":"fleet_overview"}"#, r#"{"foo":1}"#, "done."]).await;
+    result.unwrap();
+    let messages = &script.requests()[2].messages;
+    let Message::User(last) = &messages[messages.len() - 1] else {
+        panic!()
+    };
+    assert!(last.starts_with("Reply with one JSON object") && !last.contains("Reminder"));
+    assert!(alternates(messages));
+}

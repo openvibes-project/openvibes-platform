@@ -297,6 +297,25 @@ const REPAIR: &str = "Reply with one JSON object: {\"action\":\"lookup\",\"name\
 /// allowed), read as an action. Also accepts the action name as `action`
 /// and arguments given flat beside it, which small models send.
 fn parse_action(content: &str) -> Action {
+    match read_action(content) {
+        action @ (Action::Lookup { .. } | Action::Answer(_)) => action,
+        _ => {
+            // Not an action: JSON-looking replies are malformed, prose
+            // (even with braces in it) is the answer.
+            let t = content.trim();
+            let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```"));
+            if t.is_some_and(|t| t.trim_start().starts_with('{'))
+                || content.trim_start().starts_with('{')
+            {
+                Action::Malformed
+            } else {
+                Action::Prose
+            }
+        }
+    }
+}
+
+fn read_action(content: &str) -> Action {
     let Some(start) = content.find('{') else {
         return Action::Prose;
     };
@@ -440,7 +459,9 @@ impl<R: LookupRunner> Run<'_, R> {
         // with the final notice inside it. In prompted modes the result is
         // itself a user message, so it is appended there (no two user
         // messages in a row for strict-alternation templates).
-        let mut trailer = if self.working.is_empty() {
+        // No reminder on a repair turn: it would contradict REPAIR.
+        let repair = matches!(self.working.last(), Some(Message::User(t)) if t == REPAIR);
+        let mut trailer = if self.working.is_empty() || repair {
             String::new()
         } else {
             self.reminder.clone()
