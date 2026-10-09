@@ -432,6 +432,11 @@ The `detail` column is never given secrets.
   and SHA-256 of the masked args); a CHECK ties the columns to the scope;
   removal sets `removed_at`/`removed_by` and keeps the row.
 - `agents.alarms_dropped_total`: the largest `dropped_total` reported.
+- Test triggers (`rules::TEST_RULES`: `baseline-alarms/alarm.openvibes.test`
+  and `baseline/test.openvibes.running`, spec
+  `2026-10-09-test-triggers-design.md`): ingest stores a test alarm as
+  `mitigated` with `alarms::TEST_NOTE` and a recurrence never reopens it;
+  `rules::last_tests` reads a host's newest test alarm and test finding.
 - Permissions `alarms.read`, `alarms.triage`, `alarms.suppress` (agent
   scoped) for the roles in `console-rbac.md`.
 - Grants: ingest SELECT/INSERT/UPDATE on `alarms`, INSERT on the history,
