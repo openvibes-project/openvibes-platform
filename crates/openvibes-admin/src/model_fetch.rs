@@ -7,7 +7,9 @@
 //! download goes into a fresh 0700 directory inside it (nobody else can swap
 //! the file), is verified and chmod-ed through one open descriptor, and is
 //! renamed onto the pinned name. Group members can already replace models,
-//! so this protects root, not the model against the group.
+//! and they could swap that directory for a symlink, so fetch runs only as
+//! the openvibes-admin user: `model::run` refuses root (the dirs are
+//! group-writable). Callers use `runuser -u openvibes-admin`.
 // ponytail: follow-up: models dir group-writable vs root installs (make it
 // root-owned, or install as openvibes-admin only).
 
@@ -26,6 +28,8 @@ use openvibes_llm::{is_model_name, is_sha256_hex};
 
 /// Space the 4B model needs, with headroom for the temporary copy's peak.
 const NEEDED_BYTES: u64 = 2_700_000_000;
+const CURL: &str = "/usr/bin/curl";
+const STAT: &str = "/usr/bin/stat";
 
 /// The values of `model.pin` (the only source of the model's identity).
 #[derive(Debug)]
@@ -84,12 +88,8 @@ pub struct Curl;
 impl Downloader for Curl {
     #[allow(clippy::disallowed_types)]
     fn download(&self, url: &str, dest: &Path) -> Result<(), String> {
-        let status = Command::new("curl")
-            .args(["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2"])
-            .args(["--fail", "--location"])
-            .args(["--retry", "3", "--output"])
-            .arg(dest)
-            .arg(url)
+        let status = Command::new(CURL)
+            .args(curl_args(url, dest))
             .status()
             .map_err(|_| "curl is not installed".to_owned())?;
         if status.success() {
@@ -100,12 +100,36 @@ impl Downloader for Curl {
     }
 }
 
+/// `-q` first: no `.curlrc` may change the transfer.
+fn curl_args(url: &str, dest: &Path) -> Vec<std::ffi::OsString> {
+    let mut args: Vec<std::ffi::OsString> = [
+        "-q",
+        "--proto",
+        "=https",
+        "--proto-redir",
+        "=https",
+        "--tlsv1.2",
+        "--fail",
+        "--location",
+        "--retry",
+        "3",
+        "--max-filesize",
+    ]
+    .map(Into::into)
+    .to_vec();
+    args.push(NEEDED_BYTES.to_string().into());
+    args.push("--output".into());
+    args.push(dest.into());
+    args.push(url.into());
+    args
+}
+
 /// Bytes available to unprivileged writers on the filesystem holding `dir`
 /// (0 if unknown, which refuses the download). `stat` because the crate
 /// forbids the unsafe `statvfs` call.
 #[allow(clippy::disallowed_types)]
 pub fn free_bytes(dir: &Path) -> u64 {
-    Command::new("stat")
+    Command::new(STAT)
         .args(["-f", "-c", "%a %S"])
         .arg(dir)
         .output()
@@ -133,7 +157,7 @@ impl Drop for Private {
 fn open_nofollow(path: &Path) -> io::Result<File> {
     OpenOptions::new()
         .read(true)
-        .custom_flags(libc::O_NOFOLLOW)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
         .open(path)
 }
 
@@ -183,7 +207,13 @@ pub fn fetch(
             }
             let matches = open_nofollow(&destination)
                 .map_err(|_| "cannot read the installed model".to_owned())
-                .and_then(crate::model::digest)
+                .and_then(|file| {
+                    if file.metadata().is_ok_and(|m| m.is_file()) {
+                        crate::model::digest(file)
+                    } else {
+                        Err("not a regular file".to_owned())
+                    }
+                })
                 .is_ok_and(|digest| digest == pin.sha256);
             if matches {
                 return crate::model::select(
@@ -388,6 +418,14 @@ mod tests {
         assert_eq!(fs::read(&victim).unwrap(), b"keep");
         assert!(!old.exists());
         assert!(names(&models).iter().all(|n| !n.starts_with(".fetch-")));
+    }
+
+    #[test]
+    fn curl_runs_without_rc_files_and_by_absolute_path() {
+        let args = curl_args("https://x.test/m", Path::new("/d/m"));
+        assert_eq!(args[0], "-q");
+        assert!(args.iter().any(|a| a == "--max-filesize"));
+        assert!(CURL.starts_with("/usr/bin/") && STAT.starts_with("/usr/bin/"));
     }
 
     #[test]

@@ -38,3 +38,7 @@ Task 2: fix round 1 f3b82ab (237 tests green)
 Task 2 re-review: approve; round 2 (sync_all before rename, real post-download guard test, llm.md typed commands) dispatched
 Ruling (Task 3 vs user rule): no message tells users to type a command. --no-download error and Setup's "skipped" final text say "turn the assistant on in Setup to download its model (offline: see the offline install guide)"; spec §6 "adding later" = Setup's switch — cost: admins scripting must read the admin reference
 Security review (commit): TOCTOU in fetch temp file (group-writable models dir, root fetch via sudo assistant-setup) → symlink overwrite / unverified swap. Ruling: private 0700 fetch dir + fd-based verify; folded into round 2 (priority). Follow-up: models dir 0775 group-writable vs root installs
+Task 2: round 2 7eaa01e + security fix b9a3b2b (private 0700 dir, fd-based verify)
+Security re-review (opus) of b9a3b2b: High — dir-rename symlink attack (no sticky bit) + read_config follows symlinked model.conf (root leaks /etc/shadow); Low — FIFO hang, curl -q, PATH lookup
+Ruling: fetch + install refuse uid 0 (root already reruns as openvibes-admin by default); Task 3 calls fetch via runuser; read_config O_NOFOLLOW|O_NONBLOCK + fd is_file; curl -q, absolute paths, --max-filesize — cost if wrong: a root-only setup path needs runuser
+Task 2: security round 2 dispatched

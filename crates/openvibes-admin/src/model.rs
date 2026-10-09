@@ -10,6 +10,7 @@
 use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read, Write},
+    os::unix::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
 };
 
@@ -64,6 +65,9 @@ pub enum ModelCommand {
 
 /// Runs a model command; the audit target is the installed file name.
 pub fn run(command: &ModelCommand) -> (Result<String, String>, Option<String>) {
+    if let Err(error) = refuse_root(crate::run_as::uid()) {
+        return (Err(error), None);
+    }
     let (file, sha256, name, alias, models_dir, model_config) = match command {
         ModelCommand::Install {
             file,
@@ -278,16 +282,37 @@ pub(crate) fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
 }
 
 pub(crate) fn read_config(path: &Path) -> Result<String, String> {
+    // No symlink at the final name and no FIFO hang: /var/lib/openvibes-llm
+    // is group-writable.
+    let opened = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK)
+        .open(path);
+    let file = match opened {
+        Ok(file) => file,
+        // The first install creates it.
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(_) => return Err(format!("cannot read {}", path.display())),
+    };
+    if !file.metadata().is_ok_and(|m| m.is_file()) {
+        return Err(format!("{} is not a regular file", path.display()));
+    }
     let mut text = String::new();
-    match File::open(path)
-        .and_then(|file| file.take(MAX_CONFIG_BYTES + 1).read_to_string(&mut text))
-    {
+    match file.take(MAX_CONFIG_BYTES + 1).read_to_string(&mut text) {
         Ok(length) if length as u64 <= MAX_CONFIG_BYTES => Ok(text),
         Ok(_) => Err(format!("{} exceeds 64 KiB", path.display())),
-        // The first install creates it.
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(String::new()),
         Err(_) => Err(format!("cannot read {}", path.display())),
     }
+}
+
+/// `model install` and `model fetch` write into group-writable directories
+/// and follow paths there, so they never run as root (`openvibes-admin`
+/// reruns itself as its account; callers use `runuser -u openvibes-admin`).
+fn refuse_root(uid: Option<u32>) -> Result<(), String> {
+    if uid == Some(0) {
+        return Err("run as the openvibes-admin user (openvibes-admin does this itself with the default config)".into());
+    }
+    Ok(())
 }
 
 /// Sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and (when
@@ -355,6 +380,29 @@ fn write_replacing(path: &Path, contents: &str, mode: u32) -> Result<(), String>
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn root_is_refused() {
+        assert!(
+            refuse_root(Some(0))
+                .unwrap_err()
+                .contains("openvibes-admin user")
+        );
+        assert!(refuse_root(Some(1000)).is_ok());
+    }
+
+    #[test]
+    fn symlinked_model_config_is_refused_not_followed() {
+        let dir = std::env::temp_dir().join(format!("ov-conf-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let secret = dir.join("secret");
+        fs::write(&secret, "OPENVIBES_LLM_PORT=1\n").unwrap();
+        let link = dir.join("model.conf");
+        std::os::unix::fs::symlink(&secret, &link).unwrap();
+        assert!(read_config(&link).is_err());
+        assert_eq!(read_config(&dir.join("absent")).unwrap(), "");
+    }
 
     #[test]
     fn config_update_keeps_other_lines_and_drops_repeats() {
