@@ -211,7 +211,7 @@ fn descriptions_name_the_fields_the_results_carry() {
     for word in ["kernel", "collectors", "last contact", "last 24 hours"] {
         assert!(d("agent_summary").contains(word), "{word}");
     }
-    for word in ["reboot", "needs one named endpoint"] {
+    for word in ["reboot", "named endpoint"] {
         assert!(d("host_vulnerabilities").contains(word), "{word}");
     }
     for word in [
@@ -242,6 +242,5 @@ fn descriptions_name_the_fields_the_results_carry() {
             serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
         })
         .sum();
-    eprintln!("total spec length {total}");
     assert!(total <= 3_100, "{total}");
 }

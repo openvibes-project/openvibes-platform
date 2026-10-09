@@ -180,7 +180,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one endpoint; needs one named endpoint, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
+            "Open vulnerabilities on one named endpoint, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
