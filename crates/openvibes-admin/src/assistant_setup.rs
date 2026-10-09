@@ -118,14 +118,63 @@ const SYSTEMCTL_STEPS: [&[&str]; 3] = [
     &["try-restart", "openvibes-console"],
 ];
 
-/// Runs as root. Safe to repeat.
-pub fn run(force: bool) -> Result<String, String> {
-    if !Path::new(MODEL_CONF).exists() {
-        return Err(
-            "no model selected: this host has no bundled model; install one with `openvibes-admin assistant model install`, then run this again"
-                .into(),
-        );
+/// Whether `model.conf` selects a model file that exists (Setup asks
+/// before downloading only when this is false).
+pub(crate) fn model_installed() -> bool {
+    crate::model::read_config(Path::new(MODEL_CONF))
+        .ok()
+        .and_then(|text| parse_env(&text).remove("OPENVIBES_LLM_MODEL"))
+        .is_some_and(|file| Path::new(&file).is_file())
+}
+
+/// Makes sure the selected model file exists, fetching the pinned model
+/// (through `fetch`) when it is missing and the pinned one is the selection.
+fn ensure_model(
+    model_conf: &Path,
+    pin: &Path,
+    no_download: bool,
+    fetch: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    let selected = |conf: &Path| {
+        let text = crate::model::read_config(conf)?;
+        Ok::<_, String>(
+            parse_env(&text)
+                .get("OPENVIBES_LLM_MODEL")
+                .cloned()
+                .filter(|file| Path::new(file).is_file()),
+        )
+    };
+    if selected(model_conf)?.is_some() {
+        return Ok(());
     }
+    // Missing: only the pinned model is ours to download.
+    let pin = crate::model_fetch::read_pin(pin)?;
+    let chosen = parse_env(&crate::model::read_config(model_conf)?)
+        .get("OPENVIBES_LLM_MODEL")
+        .cloned();
+    if let Some(chosen) = chosen
+        && Path::new(&chosen).file_name().and_then(|n| n.to_str()) != Some(pin.file.as_str())
+    {
+        return Err(format!("the selected model {chosen} is missing"));
+    }
+    if no_download {
+        return Err("the assistant's model is not installed; turn the assistant on in Setup to download it (offline: see the offline install guide)".into());
+    }
+    fetch()?;
+    selected(model_conf)?
+        .map(|_| ())
+        .ok_or_else(|| "the model was fetched but is not selected".into())
+}
+
+/// Runs as root. Safe to repeat. Downloads the pinned model first when it
+/// is not installed, unless `no_download`.
+pub fn run(force: bool, no_download: bool) -> Result<String, String> {
+    ensure_model(
+        Path::new(MODEL_CONF),
+        Path::new(crate::model_fetch::PIN_PATH),
+        no_download,
+        crate::model_fetch::fetch_as_admin,
+    )?;
     let mut env =
         parse_env(&fs::read_to_string(LLM_CONF).map_err(|error| format!("{LLM_CONF}: {error}"))?);
     env.extend(parse_env(
@@ -240,6 +289,72 @@ mod tests {
             forced.contains("profile = \"large\""),
             "keeps the chosen profile"
         );
+    }
+
+    fn setup(name: &str) -> (std::path::PathBuf, std::path::PathBuf, std::path::PathBuf) {
+        let dir = std::env::temp_dir().join(format!("ov-as-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let pin = dir.join("model.pin");
+        fs::write(
+            &pin,
+            format!(
+                "LLM_MODEL_FILE=m.gguf\nLLM_MODEL_URL=https://example.test/m.gguf\nLLM_MODEL_SHA256={}\nLLM_MODEL_ALIAS=m\nLLM_MODEL_LICENSE_URL=https://example.test/L\n",
+                "a".repeat(64)
+            ),
+        )
+        .unwrap();
+        (dir.clone(), dir.join("model.conf"), pin)
+    }
+
+    #[test]
+    fn a_missing_pinned_model_is_fetched_first() {
+        let (dir, conf, pin) = setup("fetch");
+        let model = dir.join("m.gguf");
+        let (conf2, model2) = (conf.clone(), model.clone());
+        let mut called = false;
+        ensure_model(&conf, &pin, false, || {
+            called = true;
+            fs::write(&model2, b"x").unwrap();
+            fs::write(
+                &conf2,
+                format!("OPENVIBES_LLM_MODEL={}\n", model2.display()),
+            )
+            .unwrap();
+            Ok(())
+        })
+        .unwrap();
+        assert!(called);
+    }
+
+    #[test]
+    fn a_present_model_is_not_downloaded() {
+        let (dir, conf, pin) = setup("present");
+        let model = dir.join("m.gguf");
+        fs::write(&model, b"x").unwrap();
+        fs::write(&conf, format!("OPENVIBES_LLM_MODEL={}\n", model.display())).unwrap();
+        ensure_model(&conf, &pin, false, || Err("must not run".into())).unwrap();
+    }
+
+    #[test]
+    fn no_download_errors_without_a_command_and_never_fetches() {
+        let (_, conf, pin) = setup("nodl");
+        let error = ensure_model(&conf, &pin, true, || Err("must not run".into())).unwrap_err();
+        assert!(error.contains("turn the assistant on in Setup"), "{error}");
+        assert!(error.contains("offline install guide"), "{error}");
+        assert!(!error.contains('`'), "{error}");
+    }
+
+    #[test]
+    fn another_selected_model_that_is_missing_is_not_replaced() {
+        let (dir, conf, pin) = setup("other");
+        fs::write(
+            &conf,
+            format!("OPENVIBES_LLM_MODEL={}/other.gguf\n", dir.display()),
+        )
+        .unwrap();
+        let error = ensure_model(&conf, &pin, false, || Err("must not run".into())).unwrap_err();
+        assert!(error.contains("is missing"), "{error}");
     }
 
     #[test]

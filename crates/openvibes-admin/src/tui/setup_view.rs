@@ -51,6 +51,7 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             ],
             "Enter confirm  Esc cancel",
         ),
+        Phase::Model => (model_prompt(), "Y download  N skip  Esc back"),
         Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
             checklist(app, usize::from(body.width.saturating_sub(2))),
             if matches!(setup.phase, Phase::Stopped(_)) {
@@ -82,6 +83,21 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
         status,
     );
     frame.render_widget(Paragraph::new(help), keys);
+}
+
+/// The consent for the assistant's 2.5 GB model, with its licence.
+fn model_prompt() -> Vec<Line<'static>> {
+    let licence =
+        crate::model_fetch::pin_or_embedded().map_or_else(|_| String::new(), |pin| pin.license_url);
+    vec![
+        Line::raw("Download the assistant's model (2.5 GB from Hugging Face)? [Y/n]"),
+        Line::raw(format!("Licence: {licence}")),
+        Line::raw(""),
+        Line::styled(
+            "N leaves the assistant off until you turn it on in Setup again.",
+            Style::default().add_modifier(Modifier::DIM),
+        ),
+    ]
 }
 
 fn mark(selected: bool, line: String) -> Line<'static> {
@@ -370,6 +386,15 @@ fn install_finished(states: &[Option<StepState>]) -> Vec<Line<'static>> {
         }
     }
     lines.push(Line::raw(""));
+    let model = Step::ALL
+        .iter()
+        .position(|s| *s == Step::AssistantModel)
+        .and_then(|index| states.get(index)?.as_ref());
+    if let Some(StepState::Skipped(detail)) = model
+        && detail.starts_with("assistant: off")
+    {
+        lines.push(Line::raw(detail.clone()));
+    }
     if url.is_some() {
         lines.push(Line::raw(if password.is_some() {
             "Next: sign in, change the password, then add hosts under Enrollment."

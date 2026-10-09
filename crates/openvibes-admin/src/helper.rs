@@ -71,6 +71,9 @@ pub enum HelperCommand {
         /// Replace an assistant backend that is already configured.
         #[arg(long)]
         force: bool,
+        /// Fail instead of downloading the pinned model when it is missing.
+        #[arg(long)]
+        no_download: bool,
     },
     /// Measures the bundled model server and tunes it for this host.
     AssistantTune {
@@ -105,7 +108,7 @@ enum Verb {
     UpdateStep(UpdateStep, crate::setup::update::UpdateArgs),
     RemoveStep(RemoveStep, crate::setup::remove::RemoveArgs),
     UnitFile(Unit, bool),
-    AssistantSetup(bool),
+    AssistantSetup(bool, bool),
     AssistantTune(crate::tune_run::TuneOptions, Option<std::path::PathBuf>),
 }
 
@@ -148,7 +151,9 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
                 args.clone(),
             )
         }
-        HelperCommand::AssistantSetup { force } => Verb::AssistantSetup(*force),
+        HelperCommand::AssistantSetup { force, no_download } => {
+            Verb::AssistantSetup(*force, *no_download)
+        }
         #[cfg(debug_assertions)]
         HelperCommand::AssistantTune {
             cpu,
@@ -263,13 +268,15 @@ pub fn run(command: &HelperCommand) -> ExitCode {
                 Err(error) => failed(&error.to_string()),
             }
         }
-        Verb::AssistantSetup(force) => match crate::assistant_setup::run(force) {
-            Ok(text) => {
-                print!("{text}");
-                ExitCode::SUCCESS
+        Verb::AssistantSetup(force, no_download) => {
+            match crate::assistant_setup::run(force, no_download) {
+                Ok(text) => {
+                    print!("{text}");
+                    ExitCode::SUCCESS
+                }
+                Err(error) => failed(&error),
             }
-            Err(error) => failed(&error),
-        },
+        }
         Verb::AssistantTune(opts, _) => {
             let root = test_root.unwrap_or_else(|| "/".into());
             let result = crate::tune_run::run(&opts, &root, restarter(&root).as_ref());

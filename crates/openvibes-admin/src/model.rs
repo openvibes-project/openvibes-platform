@@ -128,6 +128,7 @@ pub(crate) fn install(
     models_dir: &Path,
     model_config: &Path,
 ) -> Result<String, String> {
+    refuse_root(crate::run_as::uid())?;
     let expected = sha256.trim().to_ascii_lowercase();
     if !is_sha256_hex(&expected) {
         return Err("--sha256 must be 64 hexadecimal characters".into());
@@ -308,11 +309,13 @@ pub(crate) fn read_config(path: &Path) -> Result<String, String> {
 /// `model install` and `model fetch` write into group-writable directories
 /// and follow paths there, so they never run as root (`openvibes-admin`
 /// reruns itself as its account; callers use `runuser -u openvibes-admin`).
-fn refuse_root(uid: Option<u32>) -> Result<(), String> {
-    if uid == Some(0) {
-        return Err("run as the openvibes-admin user (openvibes-admin does this itself with the default config)".into());
+/// Fails closed: only a known, non-zero user id passes (no `/proc` means
+/// unknown, which is refused).
+pub(crate) fn refuse_root(uid: Option<u32>) -> Result<(), String> {
+    match uid {
+        Some(uid) if uid != 0 => Ok(()),
+        _ => Err("run as the openvibes-admin user (openvibes-admin does this itself with the default config)".into()),
     }
-    Ok(())
 }
 
 /// Sets `OPENVIBES_LLM_MODEL`, `OPENVIBES_LLM_MODEL_SHA256`, and (when
@@ -389,6 +392,7 @@ mod tests {
                 .contains("openvibes-admin user")
         );
         assert!(refuse_root(Some(1000)).is_ok());
+        assert!(refuse_root(None).is_err(), "unknown user fails closed");
     }
 
     #[test]

@@ -3,6 +3,7 @@
 //! `setup --quick` (as root). Every step checks first, so re-running is
 //! safe and resumes.
 
+mod assistant;
 mod backup;
 mod base;
 #[cfg(test)]
@@ -166,6 +167,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Firewall => run::firewall_check(ctx),
         Step::Rules => fleet::rules_check(ctx),
         Step::Agent => fleet::agent_check(ctx),
+        Step::AssistantModel => assistant::check(ctx),
         Step::Ready => run::ready_check(ctx),
     };
     result.unwrap_or_else(StepState::Failed)
@@ -186,6 +188,7 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>, step: Step) -> StepState {
         Step::Firewall => run::firewall_apply(ctx),
         Step::Rules => fleet::rules_apply(ctx),
         Step::Agent => fleet::agent_apply(ctx),
+        Step::AssistantModel => assistant::apply(ctx),
         Step::Ready => run::ready_apply(ctx),
     };
     result.unwrap_or_else(StepState::Failed)

@@ -113,6 +113,17 @@ pub enum CaMode {
     Careful,
 }
 
+/// Whether Setup downloads the assistant's model.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, ValueEnum)]
+#[serde(rename_all = "kebab-case")]
+pub enum ModelChoice {
+    /// Download the pinned model unless it is installed.
+    Fetch,
+    /// Leave the assistant off until its model is installed.
+    #[default]
+    Skip,
+}
+
 /// `setup.toml`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -142,6 +153,9 @@ pub struct Plan {
     /// Distribution's port for agents (plans from before board #48: 18424).
     #[serde(default = "distribution_default")]
     pub distribution_port: u16,
+    /// Download the assistant's model (plans from before: skip).
+    #[serde(default)]
+    pub model: ModelChoice,
 }
 
 fn console_default() -> u16 {
@@ -325,6 +339,10 @@ pub struct PlanArgs {
     /// Distribution's port for agents (18424). With --repair: move it there.
     #[arg(long)]
     pub distribution_port: Option<u16>,
+    /// With the assistant: download its model (default) or leave the
+    /// assistant off until the model is installed.
+    #[arg(long, value_enum)]
+    pub model: Option<ModelChoice>,
 }
 
 /// A lowercase DNS name.
@@ -390,6 +408,7 @@ impl PlanArgs {
         {
             return Err("the signer needs console and distribution (it signs the console's rules for agents to fetch)".into());
         }
+        let assistant = components.contains(&Component::Assistant);
         check_name(&self.hostname)?;
         let (console_port, ingest_port, distribution_port) = (
             self.console_port.unwrap_or(super::ports::CONSOLE_DEFAULT),
@@ -429,6 +448,11 @@ impl PlanArgs {
             console_port,
             ingest_port,
             distribution_port,
+            model: self.model.unwrap_or(if assistant {
+                ModelChoice::Fetch
+            } else {
+                ModelChoice::Skip
+            }),
         })
     }
 }

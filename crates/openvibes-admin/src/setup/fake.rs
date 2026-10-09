@@ -194,5 +194,6 @@ pub fn plan(components: &[Component]) -> Plan {
         console_port: 443,
         ingest_port: 18423,
         distribution_port: 18424,
+        model: super::plan::ModelChoice::Skip,
     }
 }

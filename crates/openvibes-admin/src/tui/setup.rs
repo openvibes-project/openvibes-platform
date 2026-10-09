@@ -12,7 +12,7 @@ use super::{
     password::{PasswordPrompt, Typed},
 };
 use crate::setup::{
-    plan::{CaMode, Component},
+    plan::{CaMode, Component, ModelChoice},
     ports,
 };
 
@@ -40,6 +40,8 @@ pub enum After {
 pub enum Phase {
     Form,
     Password(After),
+    /// Whether to download the assistant's model (asked before the password).
+    Model,
     Running(usize),
     Stopped(usize),
     Finished,
@@ -57,6 +59,9 @@ pub struct Setup {
     pub hostname: String,
     pub sans: String,
     pub ca: CaMode,
+    pub model: ModelChoice,
+    /// The model is already installed: Setup does not ask.
+    pub model_present: bool,
     pub root_key_out: String,
     pub console_port: String,
     /// "INGEST, DISTRIBUTION": one row, so the form fits 80×24.
@@ -100,6 +105,8 @@ impl Setup {
             hostname,
             sans: String::new(),
             ca: CaMode::Quick,
+            model: ModelChoice::Fetch,
+            model_present: crate::assistant_setup::model_installed(),
             root_key_out: default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),
@@ -151,6 +158,16 @@ impl Setup {
         ]);
         if self.ca == CaMode::Quick && !self.root_key_out.trim().is_empty() {
             args.extend(["--root-key-out".into(), self.root_key_out.trim().into()]);
+        }
+        if self.components.contains(&Component::Assistant) {
+            args.extend([
+                "--model".into(),
+                match self.model {
+                    ModelChoice::Fetch => "fetch",
+                    ModelChoice::Skip => "skip",
+                }
+                .into(),
+            ]);
         }
         args.extend(["--console-port".into(), self.console_port.trim().into()]);
         // Two numbers; anything else goes through as typed, so Setup's own
@@ -284,6 +301,7 @@ impl<H: Host> App<H> {
         match self.setup.phase {
             Phase::Password(after) => self.password_key(key, after),
             Phase::Form => self.form_key(key),
+            Phase::Model => self.model_key(key),
             Phase::Running(_) => {}
             Phase::Update => self.update_key(key),
             Phase::Uninstall => self.uninstall_key(key),
@@ -389,6 +407,27 @@ impl<H: Host> App<H> {
             );
             return;
         }
+        // The model is a 2.5 GB download: asked first, unless it is there.
+        if self.setup.components.contains(&Component::Assistant) && !self.setup.model_present {
+            self.setup.phase = Phase::Model;
+            return;
+        }
+        self.setup.model = ModelChoice::Fetch;
+        self.ask_password(After::Plan);
+    }
+
+    /// Y (or Enter) downloads the model, N leaves the assistant off.
+    fn model_key(&mut self, key: Key) {
+        let choice = match key {
+            Key::Enter | Key::Char('y' | 'Y') => ModelChoice::Fetch,
+            Key::Char('n' | 'N') => ModelChoice::Skip,
+            Key::Esc => {
+                self.setup.phase = Phase::Form;
+                return;
+            }
+            _ => return,
+        };
+        self.setup.model = choice;
         self.ask_password(After::Plan);
     }
 

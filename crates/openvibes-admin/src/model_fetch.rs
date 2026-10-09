@@ -31,6 +31,40 @@ const NEEDED_BYTES: u64 = 2_700_000_000;
 const CURL: &str = "/usr/bin/curl";
 const STAT: &str = "/usr/bin/stat";
 
+/// Where the `openvibes-llm` package installs the pin.
+pub const PIN_PATH: &str = "/usr/share/openvibes-llm/model.pin";
+
+/// The pin as installed, or the one this build shipped with (Setup shows
+/// the licence before the package is installed).
+pub fn pin_or_embedded() -> Result<Pin, String> {
+    read_pin(Path::new(PIN_PATH))
+        .or_else(|_| parse_pin(include_str!("../../../packaging/llm/model.pin")))
+}
+
+/// Runs `assistant model fetch` as `openvibes-admin` (never in this process:
+/// the caller is root, and the models directory is group-writable). curl's
+/// progress goes to the terminal.
+#[allow(clippy::disallowed_types)]
+pub fn fetch_as_admin() -> Result<(), String> {
+    let status = Command::new("/usr/sbin/runuser")
+        .args([
+            "-u",
+            "openvibes-admin",
+            "--",
+            "/usr/bin/openvibes-admin",
+            "assistant",
+            "model",
+            "fetch",
+        ])
+        .status()
+        .map_err(|error| format!("cannot start the model download: {error}"))?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("the model download failed ({status})"))
+    }
+}
+
 /// The values of `model.pin` (the only source of the model's identity).
 #[derive(Debug)]
 pub struct Pin {
@@ -38,8 +72,7 @@ pub struct Pin {
     pub url: String,
     pub sha256: String,
     pub alias: String,
-    /// Shown by Setup's consent step (Task 3).
-    #[allow(dead_code)]
+    /// Shown by Setup's consent step.
     pub license_url: String,
 }
 
@@ -185,6 +218,7 @@ pub fn fetch(
     model_config: &Path,
     free_bytes: impl Fn(&Path) -> u64,
 ) -> Result<String, String> {
+    crate::model::refuse_root(crate::run_as::uid())?;
     if !models_dir.is_dir() {
         return Err(format!(
             "{} does not exist; is openvibes-llm installed?",
@@ -258,8 +292,8 @@ pub fn fetch(
     let temporary = private.0.join(&pin.file);
     downloader.download(&pin.url, &temporary).map_err(|error| {
         format!(
-            "cannot download {}: {error}\noffline: download it elsewhere, then `openvibes-admin assistant model install FILE --sha256 {}`",
-            pin.url, pin.sha256
+            "cannot download {}: {error}\noffline: see the offline install guide",
+            pin.url
         )
     })?;
     // One descriptor for sync, size, hash and chmod; the directory is ours.
@@ -504,7 +538,8 @@ mod tests {
         let (models, config) = dirs("down");
         let error = fetch(&pin(), &Down, &models, &config, |_| u64::MAX).unwrap_err();
         assert!(error.contains("https://example.test/m.gguf"), "{error}");
-        assert!(error.contains("model install FILE --sha256"), "{error}");
+        assert!(error.contains("offline install guide"), "{error}");
+        assert!(!error.contains('`'), "no command for users: {error}");
         assert!(names(&models).is_empty());
     }
 }

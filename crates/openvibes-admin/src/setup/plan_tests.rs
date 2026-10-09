@@ -19,6 +19,7 @@ fn args(components: &[Component], hostname: &str, sans: &[&str]) -> PlanArgs {
         console_port: None,
         ingest_port: None,
         distribution_port: None,
+        model: None,
     }
 }
 
@@ -226,4 +227,18 @@ fn saved_ports_win_and_a_proxied_console_keeps_its_default() {
     let (plan, filled) = Plan::load_filled(&root).unwrap();
     assert!(!filled);
     assert_eq!((plan.console_port, plan.ingest_port), (9443, 18423));
+}
+
+#[test]
+fn the_model_is_fetched_by_default_with_the_assistant_and_skip_leaves_it_out() {
+    use Component::*;
+    let plan = args(&[Ingest, Assistant], "p.example.com", &[])
+        .plan(None)
+        .unwrap();
+    assert_eq!(plan.model, ModelChoice::Fetch);
+    let mut skip = args(&[Ingest, Assistant], "p.example.com", &[]);
+    skip.model = Some(ModelChoice::Skip);
+    assert_eq!(skip.plan(None).unwrap().model, ModelChoice::Skip);
+    let none = args(&[Ingest], "p.example.com", &[]).plan(None).unwrap();
+    assert_eq!(none.model, ModelChoice::Skip);
 }
