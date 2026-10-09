@@ -530,7 +530,8 @@ fn auto_tree(name: &str, port: u16) -> PathBuf {
     fs::write(&model, "gguf").unwrap();
     fs::write(
         root.join("var/lib/openvibes-llm/model.conf"),
-        format!("OPENVIBES_LLM_MODEL={}\n", model.display()),
+        // As on a host: absolute, resolved under --root by the helper.
+        "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/m.gguf\n",
     )
     .unwrap();
     root
