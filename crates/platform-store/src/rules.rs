@@ -465,3 +465,42 @@ pub async fn serve(client: &Client, set: &str, current: Option<i64>) -> Result<S
             .map_or(Served::UpToDate, Served::Envelope),
     })
 }
+
+/// The test-trigger rules (spec `2026-10-09-test-triggers-design.md`):
+/// harmless, info-level, raised on purpose by `openvibes-test`. Only these
+/// exact (set, rule) pairs from the baseline sets count; an operator's own
+/// rule with the same id does not.
+pub const TEST_RULES: [(&str, &str); 2] = [
+    ("baseline-alarms", "alarm.openvibes.test"),
+    ("baseline", "test.openvibes.running"),
+];
+
+/// Whether `(set, rule)` is one of the test triggers.
+#[must_use]
+pub fn is_test_rule(set: &str, rule: &str) -> bool {
+    TEST_RULES.contains(&(set, rule))
+}
+
+/// When the host last raised each test trigger: (alarm, finding).
+pub async fn last_tests(
+    client: &Client,
+    agent_id: &str,
+) -> Result<(Option<DateTime<Utc>>, Option<DateTime<Utc>>), StoreError> {
+    let [(alarm_set, alarm_rule), (finding_set, finding_rule)] = TEST_RULES;
+    let row = client
+        .query_one(
+            "SELECT (SELECT max(last_seen) FROM alarms
+                     WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3),
+                    (SELECT max(last_observed_at) FROM current_findings
+                     WHERE agent_id = $1 AND rule_set_id = $4 AND rule_id = $5)",
+            &[
+                &agent_id,
+                &alarm_set,
+                &alarm_rule,
+                &finding_set,
+                &finding_rule,
+            ],
+        )
+        .await?;
+    Ok((row.get(0), row.get(1)))
+}

@@ -3436,11 +3436,22 @@ pub(crate) async fn authenticated_agent_detail(
         Ok(page) => page.items.into_iter().map(certificate_view).collect(),
         Err(_) => return unavailable_auth(),
     };
+    let rfc = |at: Option<chrono::DateTime<Utc>>| {
+        at.map(|at| at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true))
+    };
+    let last_test = match platform_store::rules::last_tests(&client, &agent_id).await {
+        Ok((alarm, finding)) => crate::api::LastTest {
+            alarm_at: rfc(alarm),
+            finding_at: rfc(finding),
+        },
+        Err(_) => return unavailable_auth(),
+    };
     (
         StatusCode::OK,
         axum::Json(crate::AgentDetail {
             agent: agent_view(agent),
             certificates,
+            last_test,
         }),
     )
         .into_response()
