@@ -311,15 +311,21 @@ test("the List editor shows filters as chips, adds and removes them, and a Trend
   await expect(panel.getByText("Severity: Critical")).toBeVisible();
   // A flag adds directly; a choice asks for its value, and replaces one removed first.
   await panel.getByRole("combobox", { name: "Add filter" }).click();
-  await expect(page.getByRole("option", { name: "Severity" })).toHaveCount(0);
+  await expect(page.getByRole("option", { name: "Severity" })).toHaveCount(1);
   await page.getByRole("option", { name: "Include resolved" }).click();
   await expect(panel.getByText("Include resolved")).toBeVisible();
-  await panel.getByRole("button", { name: "Remove filter Severity: Critical" }).click();
+  await expect(panel.getByRole("combobox", { name: "Add filter" })).toBeFocused();
+  // A used choice filter is offered again; the new value replaces the old one, and focus lands on the value Select.
   await panel.getByRole("combobox", { name: "Add filter" }).click();
   await page.getByRole("option", { name: "Severity" }).click();
+  await expect(panel.getByRole("combobox", { name: "Severity value" })).toBeFocused();
   await panel.getByRole("combobox", { name: "Severity value" }).click();
   await page.getByRole("option", { name: "High" }).click();
   await expect(panel.getByText("Severity: High")).toBeVisible();
+  await expect(panel.getByText("Severity: Critical")).toHaveCount(0);
+  await expect(panel.getByRole("combobox", { name: "Add filter" })).toBeFocused();
+  await panel.getByRole("button", { name: "Remove filter Include resolved" }).click();
+  await expect(panel.getByRole("combobox", { name: "Add filter" })).toBeFocused();
   // Changing the list drops the filters it does not support.
   await panel.getByRole("combobox", { name: "List" }).click();
   await page.getByRole("option", { name: "Hosts" }).click();
@@ -377,7 +383,7 @@ test("odd stored values show as selected extras and survive a save", async ({ pa
   await expect(inspector.getByText("bad=1")).toBeVisible();
   await expect(inspector.getByRole("radiogroup", { name: "Rows" }).getByRole("radio", { name: "7" })).toBeChecked();
   await page.locator('.tile[data-type="trend"]').getByRole("button", { name: /^Settings for/ }).click();
-  await expect(inspector.getByRole("combobox", { name: "Compliance rule" })).toContainText("gone/rule");
+  await expect(inspector.getByRole("combobox", { name: "Compliance rule" })).toContainText("gone/rule (not found)");
   await expect(inspector.getByRole("radiogroup", { name: "Days" }).getByRole("radio", { name: "10" })).toBeChecked();
   await page.locator('.tile[data-type="top-hosts"]').getByRole("button", { name: /^Settings for/ }).click();
   await expect(inspector.getByRole("radiogroup", { name: "Hosts" }).getByRole("radio", { name: "4" })).toBeChecked();
@@ -403,3 +409,17 @@ for (const scheme of ["light", "dark"] as const) {
     }
   });
 }
+
+test("a Select wrapped in a label still picks an option and stays closed", async ({ page }) => {
+  const panel = await newWidget(page, /^Number/);
+  await panel.locator(".sel").first().evaluate((sel) => {
+    const label = document.createElement("label");
+    sel.parentElement?.insertBefore(label, sel);
+    label.appendChild(sel);
+  });
+  const count = panel.getByRole("combobox", { name: "Count", exact: true });
+  await count.click();
+  await page.getByRole("option", { name: "Stale hosts" }).click();
+  await expect(page.locator(".sel__popup")).toHaveCount(0);
+  await expect(count).toContainText("Stale hosts");
+});

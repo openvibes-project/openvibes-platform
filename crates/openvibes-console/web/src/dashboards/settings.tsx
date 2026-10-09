@@ -2,11 +2,12 @@
 // Switch). A stored value outside a control's options shows as a selected
 // extra and is kept on save: editors read the raw config value, not the
 // tile's clamped one.
-import { type ReactElement, cloneElement, useMemo, useState } from "react";
+import { type ReactElement, cloneElement, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAllPages } from "../api/client";
 import type { FindingGroup } from "../api/types";
 import { useSession } from "../app/session";
+import { SelectField } from "../ui/Field";
 import { Icon } from "../ui/Icon";
 import { Segmented } from "../ui/Segmented";
 import { Select, type SelectGroup } from "../ui/Select";
@@ -24,10 +25,9 @@ import type { SettingsProps } from "./widgets";
 // also read out a select's option texts).
 const field = (label: string, control: ReactElement<{ "aria-label"?: string }>) =>
   <label className="field">{label}{cloneElement(control, { "aria-label": label })}</label>;
-// A Select never sits inside a <label>: clicking an option would re-click its button.
-const selectField = (label: string, control: ReactElement) => <div className="field"><span>{label}</span>{control}</div>;
+const selectField = (label: string, control: ReactElement) => <SelectField label={label}>{control}</SelectField>;
 const group = (label: string, control: ReactElement, hint?: string) =>
-  <div className="field" role="group" aria-label={label}><span className="field__label">{label}{hint && <em className="subtle">{hint}</em>}</span>{control}</div>;
+  <div className="field"><span className="field__label">{label}{hint && <em className="subtle">{hint}</em>}</span>{control}</div>;
 
 const rawStr = (c: Record<string, unknown>, key: string, fallback: string) => (typeof c[key] === "string" ? (c[key] as string) : fallback);
 const rawInt = (c: Record<string, unknown>, key: string, fallback: number) => (typeof c[key] === "number" && Number.isInteger(c[key]) ? (c[key] as number) : fallback);
@@ -81,15 +81,17 @@ const ATTENTION_LABELS = { alarms: "Active threat alarms (medium and above)", ex
 export function AttentionSettings({ widget, onChange }: SettingsProps) {
   const stored: unknown = widget.config.include;
   const include = Array.isArray(stored) ? stored.filter((v): v is string => typeof v === "string") : [];
-  // An empty list means every kind; the first switch turned off starts from all of them.
+  // An empty (or all-unknown) list means every kind; unknown stored entries are kept on save.
+  const known = include.filter((v) => (ATTENTION_KINDS as readonly string[]).includes(v));
+  const on = known.length ? known : [...ATTENTION_KINDS];
   const toggle = (kind: string) => {
-    const base: string[] = include.length ? include : [...ATTENTION_KINDS];
+    const base = known.length ? include : [...ATTENTION_KINDS];
     onChange({ ...widget.config, include: base.includes(kind) ? base.filter((v) => v !== kind) : [...base, kind] });
   };
   return (
     <div className="stack">
       <div className="stack stack--tight">
-        {ATTENTION_KINDS.map((kind) => <Switch key={kind} label={ATTENTION_LABELS[kind]} checked={include.length === 0 || include.includes(kind)} onChange={() => toggle(kind)} />)}
+        {ATTENTION_KINDS.map((kind) => <Switch key={kind} label={ATTENTION_LABELS[kind]} checked={on.includes(kind)} disabled={on.length === 1 && on.includes(kind)} onChange={() => toggle(kind)} />)}
       </div>
       {group("Show at most", <Segmented label="Show at most" value={rawInt(widget.config, "limit", 8)} options={nums([5, 8, 10, 15])} onChange={(limit) => onChange({ ...widget.config, limit })} />)}
     </div>
@@ -98,6 +100,17 @@ export function AttentionSettings({ widget, onChange }: SettingsProps) {
 
 export function ListSettings({ widget, onChange }: SettingsProps) {
   const [adding, setAdding] = useState<string>();
+  // Focus goes to the new value Select or back to "Add filter", never to the body when a control unmounts.
+  const want = useRef<"value" | "add">(undefined);
+  const [tick, setTick] = useState(0);
+  const setWant = (w: "value" | "add") => { want.current = w; setTick((t) => t + 1); };
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!want.current) return;
+    const el = box.current?.querySelector<HTMLElement>(want.current === "value" ? '[aria-label$=" value"]' : '[aria-label="Add filter"]') ?? box.current;
+    el?.focus();
+    want.current = undefined;
+  }, [tick]);
   const view = rawStr(widget.config, "view", "/compliance");
   const valid = (LIST_VIEWS as readonly string[]).includes(view);
   const query = rawStr(widget.config, "query", "");
@@ -105,19 +118,20 @@ export function ListSettings({ widget, onChange }: SettingsProps) {
   // An unrecognised list cannot label its filters: show them plain.
   const chips = valid ? chipsOf(view as ListView, query) : [...new URLSearchParams(query)].map(([param, value]) => ({ param, value, label: `${param}=${value}`, known: false }));
   const defs = valid ? LIST_FILTERS[view as ListView] : [];
-  const unused = defs.filter((d) => !chips.some((c) => c.known && c.param === d.param));
+  // A used choice filter stays offered: picking a value replaces the old one.
+  const unused = defs.filter((d) => d.kind === "choice" || !chips.some((c) => c.known && c.param === d.param));
   const pending = unused.find((d) => d.param === adding);
   return (
     <div className="stack">
       {selectField("List", <Select label="List" value={view} options={LIST_VIEWS.map((v) => ({ value: v as string, label: LIST_LABELS[v] }))}
         onChange={(v) => { setAdding(undefined); onChange({ ...widget.config, view: v, query: dropUnsupported(v as ListView, query) }); }} />)}
-      {group("Filters", <>
+      {group("Filters", <div ref={box} tabIndex={-1} className="stack stack--tight">
         {chips.length > 0 && (
           <ul className="fchips">
             {chips.map((c, i) => (
               <li key={`${c.param}=${c.value}#${i}`} className="fchip">
                 <span>{c.label}</span>
-                <button type="button" aria-label={`Remove filter ${c.label}`} onClick={() => setQuery(queryOf(chips.filter((x) => x !== c)))}><Icon name="close" size={12} /></button>
+                <button type="button" aria-label={`Remove filter ${c.label}`} onClick={() => { setQuery(queryOf(chips.filter((x) => x !== c))); setWant("add"); }}><Icon name="close" size={12} /></button>
               </li>
             ))}
           </ul>
@@ -125,17 +139,17 @@ export function ListSettings({ widget, onChange }: SettingsProps) {
         {pending && pending.kind === "choice" ? (
           <div className="editor-count editor-count--filter">
             <Select label={`${pending.label} value`} value="" placeholder={`${pending.label}…`} options={pending.values}
-              onChange={(v) => { setAdding(undefined); setQuery(setFilter(view as ListView, query, pending.param, v)); }} />
-            <button type="button" className="icon-button editor-count__remove" aria-label="Cancel adding filter" onClick={() => setAdding(undefined)}><Icon name="close" size={14} /></button>
+              onChange={(v) => { setAdding(undefined); setQuery(setFilter(view as ListView, query, pending.param, v)); setWant("add"); }} />
+            <button type="button" className="icon-button editor-count__remove" aria-label="Cancel adding filter" onClick={() => { setAdding(undefined); setWant("add"); }}><Icon name="close" size={14} /></button>
           </div>
         ) : unused.length > 0 && (
           <div className="link-add link-add--menu">
             <Select label="Add filter" value="" small placeholder="＋ Add filter" options={unused.map((d) => ({ value: d.param, label: d.label }))}
-              onChange={(param) => { const d = unused.find((x) => x.param === param); if (d?.kind === "flag") setQuery(setFilter(view as ListView, query, d.param, d.value)); else setAdding(param); }} />
+              onChange={(param) => { const d = unused.find((x) => x.param === param); if (d?.kind === "flag") { setQuery(setFilter(view as ListView, query, d.param, d.value)); setWant("add"); } else { setAdding(param); setWant("value"); } }} />
           </div>
         )}
         {chips.length === 0 && !pending && <span className="subtle">No filters: every row.</span>}
-      </>)}
+      </div>)}
       {group("Rows", <Segmented label="Rows" value={rawInt(widget.config, "limit", 8)} options={nums([5, 8, 10, 15])} onChange={(limit) => onChange({ ...widget.config, limit })} />)}
     </div>
   );
@@ -146,7 +160,7 @@ export function ruleGroups(groups: { rule_set_id: string; rule_id: string; lates
   const bySet = new Map<string, Map<string, string>>();
   for (const g of groups) {
     const rules = bySet.get(g.rule_set_id) ?? new Map<string, string>();
-    rules.set(`${g.rule_set_id}/${g.rule_id}`, g.latest_message || g.rule_id);
+    rules.set(`${g.rule_set_id}/${g.rule_id}`, g.latest_message ? `${g.latest_message} · ${g.rule_id}` : g.rule_id);
     bySet.set(g.rule_set_id, rules);
   }
   return [...bySet].sort(([a], [b]) => a.localeCompare(b)).map(([set, rules]) => ({

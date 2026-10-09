@@ -136,7 +136,7 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
         <Icon name="chevronDown" size={14} />
       </button>
       {open && (
-        <div className="sel__popup" style={box} onKeyDown={onKey}>
+        <div className="sel__popup" style={box} onKeyDown={onKey} onClick={(e) => e.preventDefault()}>
           {searchable && (
             <div className="search">
               <Icon name="search" size={14} />

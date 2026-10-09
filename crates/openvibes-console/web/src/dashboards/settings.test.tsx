@@ -63,8 +63,11 @@ describe("Attention editor", () => {
     expect(m.match(/role="switch"/g)).toHaveLength(5);
     expect(radios(m, "Show at most")).toEqual(["5:false", "8:false", "10:false", "15:false", "12:true"]);
   });
-  it("an include list switches the others off", () => {
-    expect(html(AttentionSettings, "attention", { include: ["alarms"] }).match(/aria-checked="true"/g)).toHaveLength(2); // one switch + one radio
+  it("an include list switches the others off; the last one on cannot be turned off", () => {
+    const m = html(AttentionSettings, "attention", { include: ["alarms", "bogus"] });
+    expect(m.match(/role="switch" aria-checked="true"/g)).toHaveLength(1);
+    expect(m.match(/<button[^>]*role="switch"[^>]*disabled/g)).toHaveLength(1);
+    expect(html(AttentionSettings, "attention", { include: ["bogus"] }).match(/role="switch" aria-checked="true"/g)).toHaveLength(5);
   });
 });
 
@@ -78,8 +81,9 @@ describe("List editor", () => {
     expect(m).toContain('aria-label="Remove filter bad=1"');
     expect(m).toContain('aria-label="Add filter"');
   });
-  it("offers no Add filter once every filter is used, and plain chips for an unknown list", () => {
-    expect(html(ListSettings, "list", { view: "/agents", query: "status=stale" })).not.toContain('aria-label="Add filter"');
+  it("still offers a used choice filter, and plain chips for an unknown list", () => {
+    expect(html(ListSettings, "list", { view: "/agents", query: "status=stale" })).toContain('aria-label="Add filter"');
+    expect(html(ListSettings, "list", { view: "/gone", query: "" })).not.toContain('aria-label="Add filter"');
     const m = html(ListSettings, "list", { view: "/gone", query: "severity=low" });
     expect(m).toContain("severity=low");
     expect(m).toContain("/gone");
@@ -93,6 +97,7 @@ describe("Trend rule", () => {
       { rule_set_id: "a", rule_id: "r3", latest_message: null },
     ]);
     expect(groups.map((g) => [g.group, g.options.map((o) => o.value)])).toEqual([["a", ["a/r1", "a/r3"]], ["b", ["b/r2"]]]);
+    expect(groups[0]?.options.map((o) => o.label)).toEqual(["First · r1", "r3"]);
     expect(ruleUnknownLabel("a/x", false, true)).toBe("a/x (not found)");
     expect(ruleUnknownLabel("a/x", true, false)).toBe("a/x (could not load)");
     expect(ruleUnknownLabel("a/x", false, false)).toBe("a/x");
