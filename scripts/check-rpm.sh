@@ -5,6 +5,27 @@ fail() { echo "FAIL: $*" >&2; exit 1; }
 expect_stat() { # PATH MODE OWNER:GROUP
     [[ "$(stat -c '%a %U:%G' "$1")" == "$2 $3" ]] || fail "$1 is $(stat -c '%a %U:%G' "$1"), want $2 $3"
 }
+# Built packages (OV_CHECK_BUILT=1, after build-rpm.sh): the model is not
+# packaged, and openvibes-llm-model keeps owning its path so upgrades from
+# 0.2.5 (which shipped it) leave the user's model alone.
+if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
+    rpms=${OV_RPM_TOPDIR:-target/rpm}/RPMS/x86_64
+    . packaging/llm/model.pin
+    for f in "$rpms"/openvibes-*.rpm; do
+        ! rpm -qlp "$f" | grep -qE '\.(gguf|part0|part1)$' || fail "$f contains model bytes"
+    done
+    ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
+    meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)
+    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$(printf '%s\n' \
+        /var/lib/openvibes-llm/model.conf "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE" | sort)" ]] ||
+        fail "openvibes-llm-model lists other files than model.conf and the model path"
+    rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part1 <' || fail "no Obsoletes part1"
+    rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part2 <' || fail "no Obsoletes part2"
+    rpm -qp --requires "$meta" | grep -q '^openvibes-llm = ' || fail "bridge does not require openvibes-llm"
+    rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
+    echo "check-rpm (built): ok"
+    exit 0
+fi
 for user in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin; do
     getent passwd "$user" >/dev/null || fail "no user $user"
 done

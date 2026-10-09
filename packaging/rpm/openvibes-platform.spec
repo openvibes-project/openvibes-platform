@@ -1,15 +1,12 @@
 # Binary packaging: scripts/build-rpm.sh builds the release binaries with
 # the pinned toolchain first; this spec only installs them.
 %global debug_package %{nil}
-# The bundled model is already compressed: skip xz on a 2.5 GB file.
-%define _binary_payload w.ufdio
 # openvibes-llm: scripts/build-llama-server.sh builds llama-server first
 # (skip with --without llm); the Vulkan variant with --with vulkan.
 %bcond llm 1
-# openvibes-llm-model: the bundled GGUF (scripts/fetch-llm-model.sh fetches it
-# first; skip with --without model). Needs --with llm.
-%bcond model 1
 %bcond vulkan 0
+# The model file name, from the pin (the only place it is written).
+%global llm_model_file %(. %{_sourcedir}/packaging/llm/model.pin; echo $LLM_MODEL_FILE)
 
 # Upgrade from openvibes_NAME service accounts (admin TUI spec §2): rename
 # the OS user and group before the new files are laid down. Inline because on
@@ -124,40 +121,21 @@ llama.cpp's llama-server from a pinned build (no subprocesses, RPC, TLS, or
 web UI), run on loopback as its own sandboxed user with a model file whose
 SHA-256 is pinned. Optional: the platform works without it.
 
-%if %{with model}
-# The model ships as two byte ranges of one file (a release asset may not
-# exceed 2 GiB); openvibes-llm-model joins and verifies them when installed.
-%package -n openvibes-llm-model-part1
-Summary:        First half of the bundled OpenVIBES model (installed with openvibes-llm-model)
-License:        Apache-2.0
-
-%description -n openvibes-llm-model-part1
-Bytes of the bundled model; installed by openvibes-llm-model, which joins it
-with part 2.
-
-%package -n openvibes-llm-model-part2
-Summary:        Second half of the bundled OpenVIBES model (installed with openvibes-llm-model)
-License:        Apache-2.0
-
-%description -n openvibes-llm-model-part2
-Bytes of the bundled model; installed by openvibes-llm-model, which joins it
-with part 1.
-
+# No model bytes: `openvibes-admin assistant model fetch` downloads the model.
+# This package only owns its path and model.conf, so upgrading from 0.2.5
+# (which shipped the model) does not delete the user's model file.
 %package -n openvibes-llm-model
-Summary:        Bundled model for the OpenVIBES local model server
-# The model's licence is Apache 2.0 (Qwen3-4B, packaging/llm/model.pin).
-License:        Apache-2.0
+Summary:        Model selection for the OpenVIBES local model server (no model bytes)
+License:        MIT
 Requires:       openvibes-llm = %{version}-%{release}
-Requires:       openvibes-llm-model-part1 = %{version}-%{release}
-Requires:       openvibes-llm-model-part2 = %{version}-%{release}
+Obsoletes:      openvibes-llm-model-part1 < %{version}-%{release}
+Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
 
 %description -n openvibes-llm-model
-A 4B-parameter quantised model (Qwen3-4B Q4_K_M) pinned by SHA-256, installed
-read-only and selected for openvibes-llm, so the console's assistant works
-after `sudo openvibes-admin helper assistant-setup` with no download. The
-two parts it is delivered in are joined and verified, then removed, when it
-is installed.
-%endif
+Selects the pinned model (Qwen3-4B Q4_K_M, packaging/llm/model.pin) for
+openvibes-llm and owns its path, so upgrades keep an installed model. The
+2.5 GB file is not packaged: fetch it with `sudo openvibes-admin assistant
+model fetch`, or install it from a file (docs: offline install).
 
 %if %{with vulkan}
 %package -n openvibes-llm-vulkan
@@ -220,25 +198,16 @@ install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
 install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
-%if %{with model}
+%define _ovm_dir %{buildroot}%{_sharedstatedir}/openvibes-llm
 . $S/packaging/llm/model.pin
-share=%{buildroot}%{_datadir}/openvibes-llm/model
-install -d -m 0755 $share
-split -n 2 -d -a 1 $S/target/llm-model/$LLM_MODEL_FILE $share/$LLM_MODEL_FILE.part
-chmod 0644 $share/*
-cat > $share/model.env <<EOF
-LLM_MODEL_FILE=$LLM_MODEL_FILE
-LLM_MODEL_SHA256=$LLM_MODEL_SHA256
-EOF
-install -D -m 0755 $S/packaging/llm/join-model.sh %{buildroot}%{_libexecdir}/openvibes-llm/join-model
-install -D -m 0644 $S/target/llm-model/LICENSE.model %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE.model
-cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
+install -D -m 0644 $S/packaging/llm/model.pin %{buildroot}%{_datadir}/openvibes-llm/model.pin
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE
+cat > %{_ovm_dir}/model.conf <<EOF
 OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
 OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
 OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
 EOF
 echo "%ghost %attr(0444, root, root) %{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
-%endif
 %if %{with vulkan}
 install -D -m 0755 $S/target/llama/vulkan/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server-vulkan
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_unitdir}/openvibes-llm.service.d/vulkan.conf
@@ -407,6 +376,8 @@ fi
 %dir %{_libexecdir}/openvibes-llm
 %{_libexecdir}/openvibes-llm/llama-server
 %{_libexecdir}/openvibes-llm/openvibes-llm-check
+%dir %{_datadir}/openvibes-llm
+%{_datadir}/openvibes-llm/model.pin
 %{_unitdir}/openvibes-llm.service
 %{_unitdir}/openvibes-llm.socket
 %{_unitdir}/openvibes-llm-proxy.service
@@ -420,30 +391,12 @@ fi
 %ghost %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/tune.json
 %ghost %attr(0600, root, root) %{_sharedstatedir}/openvibes-llm/tune.lock
 
-%if %{with model}
-%files -n openvibes-llm-model-part1
-%dir %{_datadir}/openvibes-llm
-%dir %{_datadir}/openvibes-llm/model
-%{_datadir}/openvibes-llm/model/*.part0
-
-%files -n openvibes-llm-model-part2
-%dir %{_datadir}/openvibes-llm
-%dir %{_datadir}/openvibes-llm/model
-%{_datadir}/openvibes-llm/model/*.part1
-
 %files -n openvibes-llm-model -f model-files.list
-%license %{_licensedir}/openvibes-llm-model/LICENSE.model
-%dir %{_datadir}/openvibes-llm
-%dir %{_datadir}/openvibes-llm/model
-%{_datadir}/openvibes-llm/model/model.env
-%{_libexecdir}/openvibes-llm/join-model
+%license %{_licensedir}/openvibes-llm-model/LICENSE
 %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
 
 %posttrans -n openvibes-llm-model
-# Joins the parts into the model file; a failure leaves the parts in place so
-# it can be run again: /usr/libexec/openvibes-llm/join-model
-%{_libexecdir}/openvibes-llm/join-model || echo "openvibes-llm-model: could not join the model; run %{_libexecdir}/openvibes-llm/join-model" >&2
-%endif
+[ -e %{_sharedstatedir}/openvibes-llm/models/%{llm_model_file} ] || echo "openvibes-llm-model: the assistant's model is not installed: run 'sudo openvibes-admin assistant model fetch', or install it from a file (docs: offline install)" >&2
 
 %if %{with vulkan}
 %files -n openvibes-llm-vulkan
