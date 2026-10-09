@@ -110,6 +110,31 @@ pub fn summary(hardware: &str, alias: &str, t: f64, raised: Option<u32>) -> Stri
     s
 }
 
+/// What `assistant-tune --auto` found on the host.
+pub struct AutoFacts {
+    pub socket_enabled: bool,
+    /// console.toml has an enabled [assistant] with the local backend.
+    pub console_local: bool,
+    pub model_present: bool,
+    /// tuning.conf already exists.
+    pub tuned: bool,
+}
+
+/// Why `--auto` does nothing, or `None` when it should tune.
+pub fn auto_skip(f: &AutoFacts) -> Option<&'static str> {
+    if !f.socket_enabled {
+        Some("openvibes-llm.socket is not enabled")
+    } else if !f.console_local {
+        Some("the console's assistant is not enabled with the local model")
+    } else if !f.model_present {
+        Some("the selected model file does not exist")
+    } else if f.tuned {
+        Some("already tuned")
+    } else {
+        None
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +212,43 @@ mod tests {
             "assistant: CPU (2 threads) · model qwen3-4b · ~40 s per call · deadline raised to 81 s"
         );
         assert!(summary("CPU (2 threads)", "m", 0.3, None).contains("~<1 s"));
+    }
+    #[test]
+    fn auto_skips_unless_everything_is_ready() {
+        let ready = || AutoFacts {
+            socket_enabled: true,
+            console_local: true,
+            model_present: true,
+            tuned: false,
+        };
+        assert_eq!(auto_skip(&ready()), None);
+        assert!(
+            auto_skip(&AutoFacts {
+                socket_enabled: false,
+                ..ready()
+            })
+            .is_some()
+        );
+        assert!(
+            auto_skip(&AutoFacts {
+                console_local: false,
+                ..ready()
+            })
+            .is_some()
+        );
+        assert!(
+            auto_skip(&AutoFacts {
+                model_present: false,
+                ..ready()
+            })
+            .is_some()
+        );
+        assert_eq!(
+            auto_skip(&AutoFacts {
+                tuned: true,
+                ..ready()
+            }),
+            Some("already tuned")
+        );
     }
 }

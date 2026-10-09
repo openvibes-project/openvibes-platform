@@ -195,6 +195,7 @@ install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unit
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
 install -D -m 0644 $S/packaging/rpm/openvibes-migrate.service %{buildroot}%{_unitdir}/openvibes-migrate.service
+install -D -m 0644 $S/packaging/rpm/openvibes-rules-apply.service %{buildroot}%{_unitdir}/openvibes-rules-apply.service
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.sysusers %{buildroot}%{_sysusersdir}/openvibes-ingest.conf
 install -D -m 0644 $S/packaging/rpm/openvibes-admin.sysusers %{buildroot}%{_sysusersdir}/openvibes-admin.conf
 install -D -m 0640 $S/packaging/rpm/ingest.toml %{buildroot}%{_sysconfdir}/openvibes/ingest.toml
@@ -214,6 +215,7 @@ install -D -m 0755 $S/target/release/openvibes-llm-check %{buildroot}%{_libexecd
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.service %{buildroot}%{_unitdir}/openvibes-llm.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}/openvibes-llm.socket
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
+install -D -m 0644 $S/packaging/rpm/openvibes-llm-tune.service %{buildroot}%{_unitdir}/openvibes-llm-tune.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
 install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
 install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
@@ -299,6 +301,10 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_preun openvibes-maintenance.timer
 %postun -n openvibes-admin
 %systemd_postun openvibes-maintenance.timer
+# A new or upgraded rules package is published after the whole transaction,
+# by the new admin binary (the unit skips unless Setup ran and is idle).
+%transfiletriggerin -n openvibes-admin -- %{_datadir}/openvibes/rules
+systemctl start --no-block openvibes-rules-apply.service >/dev/null 2>&1 || :
 
 %if %{with llm}
 %pre -n openvibes-llm
@@ -330,6 +336,9 @@ fi
 # is started here once; with StopWhenUnneeded= and no proxy it stops again at
 # once. Accepted: it was not meant to run at boot either.
 %restart_renamed openvibes-llm.service
+# The assistant tunes itself after an install or upgrade (the unit does
+# nothing unless the assistant uses the bundled model and is not tuned).
+systemctl start --no-block openvibes-llm-tune.service >/dev/null 2>&1 || :
 %preun -n openvibes-llm
 %systemd_preun openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 %postun -n openvibes-llm
@@ -392,6 +401,7 @@ fi
 %{_unitdir}/openvibes-maintenance.service
 %{_unitdir}/openvibes-maintenance.timer
 %{_unitdir}/openvibes-migrate.service
+%{_unitdir}/openvibes-rules-apply.service
 %{_sysusersdir}/openvibes-admin.conf
 %dir %{_libexecdir}/openvibes
 %{_libexecdir}/openvibes/rename-account-admin
@@ -410,6 +420,7 @@ fi
 %{_unitdir}/openvibes-llm.service
 %{_unitdir}/openvibes-llm.socket
 %{_unitdir}/openvibes-llm-proxy.service
+%{_unitdir}/openvibes-llm-tune.service
 %{_sysusersdir}/openvibes-llm.conf
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0644, root, root) %{_sysconfdir}/openvibes/llm.conf
