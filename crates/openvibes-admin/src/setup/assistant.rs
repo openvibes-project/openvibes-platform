@@ -28,9 +28,9 @@ fn installed<R: Runner>(ctx: &Ctx<R>) -> bool {
 
 /// The console already sends the assistant to another backend: not ours to
 /// replace (that needs `--force`).
-fn external<R: Runner>(ctx: &Ctx<R>) -> bool {
+fn external<R: Runner>(ctx: &Ctx<R>) -> Result<bool, String> {
     let Ok(console) = ctx.read("/etc/openvibes/console.toml") else {
-        return false;
+        return Ok(false);
     };
     let mut env =
         crate::assistant_setup::parse_env(&ctx.read("/etc/openvibes/llm.conf").unwrap_or_default());
@@ -38,7 +38,11 @@ fn external<R: Runner>(ctx: &Ctx<R>) -> bool {
         &crate::model::read_config(&ctx.path("/var/lib/openvibes-llm/model.conf"))
             .unwrap_or_default(),
     ));
-    crate::assistant_setup::configure(&console, &env, false).is_err()
+    match crate::assistant_setup::configure(&console, &env, false) {
+        Ok(_) => Ok(false),
+        Err(error) if error.contains("already sends the assistant to") => Ok(true),
+        Err(error) => Err(error),
+    }
 }
 
 fn remove_staged(path: &std::path::Path) {
@@ -50,7 +54,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.plan.has(Component::Assistant) {
         return Ok(StepState::Skipped("assistant not chosen".into()));
     }
-    if external(ctx) {
+    if external(ctx)? {
         return Ok(StepState::Skipped("using an external assistant".into()));
     }
     let present = installed(ctx);
@@ -102,7 +106,12 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             remove_staged(path);
         }
     }
-    ctx.ok(Admin, &["helper", "assistant-setup"])?;
+    // The command's own text is internal: only what it said is shown.
+    ctx.ok(Admin, &["helper", "assistant-setup"])
+        .map_err(|error| {
+            let prefix = format!("{} helper assistant-setup: ", Admin.path());
+            error.strip_prefix(&prefix).unwrap_or(&error).to_owned()
+        })?;
     Ok(StepState::Done(
         "assistant on: model installed, model server enabled".into(),
     ))
@@ -137,6 +146,35 @@ mod tests {
             fake.call(&["/usr/bin/openvibes-admin"]),
             ["/usr/bin/openvibes-admin", "helper", "assistant-setup"]
         );
+    }
+
+    #[test]
+    fn a_failed_assistant_setup_shows_only_what_it_said() {
+        let fake = Fake::new("model-fail-text");
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        fake.fail(
+            &["/usr/bin/openvibes-admin", "helper", "assistant-setup"],
+            "no space left",
+        );
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
+        let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+        assert_eq!(state.detail(), "no space left");
+    }
+
+    #[test]
+    fn an_unreadable_console_config_fails_the_step_instead_of_skipping_it() {
+        let fake = Fake::new("model-bad-console");
+        fake.file(
+            "/etc/openvibes/console.toml",
+            "[assistant
+",
+        );
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
+        let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
     }
 
     #[test]

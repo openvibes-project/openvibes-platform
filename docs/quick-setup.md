@@ -57,9 +57,9 @@ console's chat assistant. Setup then asks "Download the assistant's model
 (2.5 GB from Hugging Face)?" and shows the model's licence: answer **Y**
 and Setup downloads it, checks it against its pinned checksum and turns the
 assistant on. Answer **N** and the assistant stays off; the last screen
-says so. No internet on the platform host: see the offline install guide.
+says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
 
-**Adding the assistant later:** open Setup (`openvibes-admin`), turn the
+**Adding the assistant later:** open Setup (`sudo openvibes-admin`), turn the
 assistant on with `m` (change components) and answer **Y**.
 
 The last screen shows, once:
@@ -79,6 +79,17 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
 
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
 the setup command).
+
+## Offline install
+
+For a platform host with no internet. Details:
+[`offline-kit.md`](components/offline-kit.md).
+
+1. Download `openvibes-platform-<v>-offline-fedora44.tar`, and optionally the model from the Hugging Face link, in any browser.
+2. Copy both to the server, into the same folder.
+3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
+
+Then continue with step 2 (Setup); it installs the model if you copied it.
 
 ## 3. Add a second host
 

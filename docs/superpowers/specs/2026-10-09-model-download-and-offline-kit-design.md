@@ -23,7 +23,7 @@ Requirements (the user):
   - It checks free space first: about 2.6 GB for the file.
   - A wrong hash deletes the file and fails with "the downloaded file does not match the pinned SHA-256; nothing was installed".
   - Network errors name the URL and say how to install offline from a file.
-- **Setup and `assistant-setup`:** both run `model fetch` when the pinned model is not installed. Setup asks first: "Download the assistant's model (2.5 GB from Hugging Face)? [Y/n]". Saying no leaves the assistant off, with the `model install` command to use later.
+- **Setup and `assistant-setup`:** both run `model fetch` when the pinned model is not installed. Setup asks first: "Download the assistant's model (2.5 GB from Hugging Face)? [Y/n]". Saying no leaves the assistant off, and says to turn it on in Setup later. `model fetch` and `model install` refuse root and run as the `openvibes-admin` user.
 - **"Never while running" still holds:** only these admin commands download, and they run only when an admin asks.
 - **`curl` is a dependency** of `openvibes-admin`; it is on every Fedora install.
 - **Proxies:** `curl` honours `https_proxy`, which is documented.
@@ -35,7 +35,7 @@ Requirements (the user):
   - keeps owning `%ghost /var/lib/openvibes-llm/models/<LLM_MODEL_FILE>` and `%config(noreplace) /var/lib/openvibes-llm/model.conf`;
   - **why:** in 0.2.5 it owned both, and retiring it would make rpm delete the user's model and selection on upgrade;
   - carries `Obsoletes: openvibes-llm-model-part1 < 0.2.6` and `Obsoletes: openvibes-llm-model-part2 < 0.2.6`, so the empty part packages leave cleanly;
-  - in `%posttrans`, if the model file is missing, prints one line: "the assistant's model is not installed: run `sudo openvibes-admin assistant model fetch`, or install it from a file (docs: offline install)".
+  - in `%posttrans`, if the model file is missing, prints one line: "openvibes-llm-model: the assistant's model is not installed; turn the assistant on in openvibes-admin Setup to download it (offline: see the offline install guide)".
   - `join-model` goes away.
 - **`openvibes-llm`** keeps `Recommends: openvibes-llm-model = %{version}-%{release}`, now a tiny package.
 - **`check-rpm.sh`** gains two tests:
@@ -82,14 +82,14 @@ sudo ./install [--model FILE] [--no-setup] [--check]
    - verify `SHA256SUMS.asc`, then `sha256sum -c SHA256SUMS`.
    - Any failure stops the install before anything changes.
 3. **Install from the kit only:**
-   - `dnf --disablerepo='*' --repofrompath=openvibes-offline,<kit>/packages --enablerepo=openvibes-offline install …` with `gpgcheck` on;
+   - `dnf --disablerepo='*' --repofrompath=openvibes-offline,<kit>/packages --enablerepo=openvibes-offline install …` with `gpgcheck` on, then `upgrade` (a newer kit upgrades what is installed);
    - the OpenVIBES key is imported for this run only;
-   - Fedora's keys are already on the host;
+   - Fedora's key is passed in `gpgkey` (the host's own copy);
    - **no network access is attempted.**
 4. **The model:**
-   - `--model FILE`, or a `*.gguf` next to the kit (one, named `LLM_MODEL_FILE`), is installed with `openvibes-admin assistant model install FILE --sha256 <pinned>`.
-   - With no file, it prints that the assistant can be added later, with the link and the SHA-256.
-5. **Setup:** unless `--no-setup`, start `openvibes-admin` (Setup) as after an online install. Setup sees the installed model and does not offer to download.
+   - `--model FILE`, or a `*.gguf` next to the kit (one, named `LLM_MODEL_FILE`), is checked against the pinned SHA-256 and staged in `/var/lib/openvibes-offline`. Setup installs it (`model install` needs the database, which exists only after Setup).
+   - With no file, it prints that the assistant can be turned on in Setup, with the link and the SHA-256.
+5. **Setup:** unless `--no-setup`, start `openvibes-admin` (Setup) as after an online install. Setup installs the staged model and does not offer to download.
 6. **Idempotent:** running it again with a newer kit upgrades, and is the documented offline update path.
 7. **`--check`** runs steps 1–2 only.
 8. **Errors** follow `install.sh`'s style: one line saying what failed and what has changed so far. dnf's log is shown only on failure.
@@ -103,7 +103,7 @@ sudo ./install [--model FILE] [--no-setup] [--check]
   1. Download `openvibes-platform-<v>-offline-fedora44.tar`, and optionally the model from the Hugging Face link, in any browser.
   2. Copy both to the server, into the same folder.
   3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
-- **Already installed online, adding the assistant later:** `sudo openvibes-admin assistant model fetch`, then `sudo openvibes-admin helper assistant-setup`.
+- **Already installed, adding the assistant later:** open Setup (`sudo openvibes-admin`) and turn on the assistant.
 
 The download page (website, owned by the release session), `docs/quick-setup.md` and `README.txt` show these steps, word for word the same.
 

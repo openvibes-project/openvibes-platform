@@ -219,10 +219,10 @@ pub fn run(force: bool, no_download: bool) -> Result<String, String> {
         &crate::tune_run::Systemd,
     )
     .unwrap_or_else(|error| {
-        format!("tuning skipped: {error}; rerun `sudo openvibes-admin helper assistant-tune`\n")
+        format!("tuning skipped: {error}; open Setup and turn the assistant on again to retry\n")
     });
     Ok(format!(
-        "the assistant now uses the bundled model ({})\n{tuned}next: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\ncheck: sudo -u openvibes-console openvibes-admin assistant check\n",
+        "the assistant now uses the bundled model ({})\n{tuned}next: sign in to the console; users with the assistant permission see the chat dock (Ctrl+J)\n",
         env.get("OPENVIBES_LLM_ALIAS")
             .map_or(DEFAULT_ALIAS, String::as_str)
     ))

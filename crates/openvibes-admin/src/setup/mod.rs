@@ -403,14 +403,15 @@ pub fn repair_all(
     let ctx = host_ctx(&plan, true);
     let states: Vec<_> = Step::ALL
         .into_iter()
-        .map(|step| (step.title(), run_step(&ctx, step)))
+        .map(|step| (step, run_step(&ctx, step)))
         .collect();
     // Old ports close only once every step worked: until then the services
     // may still listen there.
-    if states
-        .iter()
-        .all(|(_, state)| matches!(state, StepState::Done(_) | StepState::Skipped(_)))
-    {
+    // The optional assistant model (a download that may fail) does not hold
+    // the ports open.
+    if states.iter().all(|(step, state)| {
+        *step == Step::AssistantModel || matches!(state, StepState::Done(_) | StepState::Skipped(_))
+    }) {
         match ports::close_old(&ctx, &old) {
             Ok((closed, kept)) => {
                 if !closed.is_empty() {
@@ -423,7 +424,11 @@ pub fn repair_all(
             Err(error) => eprintln!("openvibes-admin: {error}"),
         }
     }
-    report(states.into_iter())
+    report(
+        states
+            .into_iter()
+            .map(|(step, state)| (step.title(), state)),
+    )
 }
 
 /// `setup --update [--backup PATH] [--repo-dir DIR]`.

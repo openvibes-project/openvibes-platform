@@ -343,6 +343,7 @@ jobs:
         run: bash scripts/build-rpm.sh
 
       - name: Build higher-release RPMs for the offline kit upgrade test
+        if: needs.changes.outputs.kit == 'true'
         env:
           OV_RELEASE: 1.2.ci${{ github.run_number }}
           CARGO_NET_OFFLINE: "true"

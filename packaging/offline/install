@@ -54,6 +54,8 @@ kit=$(cd "$(dirname "$0")" && pwd -P)
 [ "$KEY_FINGERPRINT" != unset ] || die "this copy of the installer has no package key fingerprint"
 [ "$check" = 1 ] || [ "$(id -u)" = 0 ] || die "run it as root (sudo ./openvibes-offline/install)"
 
+fedora_key=/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$KIT_FEDORA-primary
+
 # 1. The host must match the kit.
 # shellcheck source=/dev/null
 os_id=$(. /etc/os-release && printf %s "$ID")
@@ -91,6 +93,7 @@ gpg --batch --status-fd 1 --verify "$kit/SHA256SUMS.asc" "$kit/SHA256SUMS" 2>/de
 listed=$(sed 's/^[^ ]* [ *]//' "$kit/SHA256SUMS" | sort)
 found=$(cd "$kit" && find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.asc | sed 's|^\./||' | sort)
 [ "$listed" = "$found" ] || die "the kit holds files SHA256SUMS does not list; the kit is altered"
+[ -f "$fedora_key" ] || die "Fedora's package key $fedora_key is missing on this host"
 if [ "$check" = 1 ]; then
     say "the kit is genuine and matches this host (Fedora $KIT_FEDORA, $KIT_VERSION); nothing was changed"
     exit 0
@@ -99,8 +102,6 @@ fi
 # 3. Install from the kit only. The OpenVIBES packages are checked against
 # the key just verified (re-exported from the checked keyring), Fedora's
 # against the host's own Fedora key.
-fedora_key=/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-$KIT_FEDORA-primary
-[ -f "$fedora_key" ] || die "Fedora's package key $fedora_key is missing on this host"
 gpg --batch --export --export-options export-minimal "$KEY_FINGERPRINT" > "$tmp/dnf-openvibes.gpg" 2>/dev/null
 [ -s "$tmp/dnf-openvibes.gpg" ] || die "could not export the OpenVIBES package key"
 kit_dnf() {
@@ -110,17 +111,20 @@ kit_dnf() {
         --setopt=install_weak_deps=False "$@"
 }
 say "installing the platform from the kit (a few minutes, no network)"
-{
-    kit_dnf install openvibes-admin openvibes-console openvibes-ingest openvibes-distribution \
-        openvibes-vulns openvibes-signer openvibes-llm openvibes-llm-model 'openvibes-rules-*' postgresql-server &&
-        # install leaves installed packages alone: a newer kit upgrades them
-        # (and the Fedora packages they need), from the kit only.
-        kit_dnf upgrade
-} >"$tmp/dnf.log" 2>&1 || {
+set -f   # the rules pattern is for dnf, not for this shell
+set -- openvibes-admin openvibes-console openvibes-ingest openvibes-distribution openvibes-vulns openvibes-signer openvibes-llm openvibes-llm-model openvibes-rules-* postgresql-server
+kit_dnf install "$@" >"$tmp/dnf.log" 2>&1 || {
     tail -n 25 "$tmp/dnf.log" >&2
     die "dnf could not install the packages from the kit"
 }
 done_so_far="the platform packages are installed, the assistant's model is not"
+# install leaves installed packages alone: a newer kit upgrades them (and the
+# Fedora packages they need), from the kit only. Named, so nothing else moves.
+kit_dnf upgrade "$@" >>"$tmp/dnf.log" 2>&1 || {
+    tail -n 25 "$tmp/dnf.log" >&2
+    die "dnf installed the packages but could not upgrade them from the kit"
+}
+set +f
 
 # 4. The model.
 [ -f "$PIN" ] || die "$PIN is missing after the install"
