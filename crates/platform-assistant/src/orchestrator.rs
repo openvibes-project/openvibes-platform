@@ -32,6 +32,10 @@ const CHARS_PER_TOKEN: usize = 3;
 const RESERVE_CHARS: usize = 600;
 /// Smallest room given to one lookup result.
 const MIN_RESULT_CHARS: usize = 400;
+/// Largest result room. A result's size is prefill time on CPU (about 42
+/// tokens/s at 4 threads): 1,600 characters keep the overview's top findings
+/// while adding about 200 tokens, not about 480.
+const MAX_RESULT_CHARS: usize = 1_600;
 /// Longest whole-question deadline.
 const MAX_QUESTION_DEADLINE: Duration = Duration::from_secs(900);
 
@@ -349,6 +353,8 @@ struct Run<'a, R> {
     /// [`reminder`] text, sent once lookups have run.
     reminder: String,
     working: Vec<Message>,
+    /// Characters of results already produced this turn, not yet in `working`.
+    pending_chars: usize,
     allowed: BTreeSet<Citation>,
     records: Vec<LookupRecord>,
     usage: Usage,
@@ -370,6 +376,7 @@ impl<R: LookupRunner> Run<'_, R> {
             + FINAL_NOTICE.len()
             + 16
             + chars(&self.working)
+            + self.pending_chars
     }
 
     /// The messages for the next request: as much recent history as fits.
@@ -554,7 +561,9 @@ impl<R: LookupRunner> Run<'_, R> {
                     let (text, lookup) = if lookups_done < self.settings.max_lookups {
                         lookups_done += 1;
                         let left = self.settings.max_lookups.saturating_sub(lookups_done) + 1;
-                        self.lookup(&call.name, &call.arguments, left).await
+                        let done = self.lookup(&call.name, &call.arguments, left).await;
+                        self.pending_chars += done.0.len();
+                        done
                     } else {
                         ("error: lookup limit reached".to_owned(), None)
                     };
@@ -578,6 +587,7 @@ impl<R: LookupRunner> Run<'_, R> {
                     tool_calls: calls,
                 });
                 self.working.extend(results);
+                self.pending_chars = 0;
                 continue;
             }
             match parse_action(&response.content) {
@@ -658,6 +668,7 @@ pub async fn answer<R: LookupRunner>(
         question: Message::User(question.to_owned()),
         reminder: reminder(question),
         working: Vec::new(),
+        pending_chars: 0,
         allowed: BTreeSet::new(),
         records: Vec::new(),
         usage: Usage {
@@ -681,11 +692,16 @@ pub fn history_text(answer: &Answer) -> String {
 }
 
 /// Room for the current lookup's result: what is left, minus the minimum
-/// kept for each lookup still allowed after it.
+/// kept for each lookup still allowed after it, capped at `MAX_RESULT_CHARS`
+/// and never below `MIN_RESULT_CHARS`. `base` must include results already
+/// produced this turn. `shrink_to` only drops `items`, so a result without
+/// an items array can exceed its room.
 fn result_room(limit: usize, base: usize, lookups_left: u32) -> usize {
     let available = limit.saturating_sub(base + RESERVE_CHARS + RESULT_PREFIX.len());
     let later = lookups_left.saturating_sub(1) as usize * MIN_RESULT_CHARS;
-    available.saturating_sub(later).max(MIN_RESULT_CHARS)
+    available
+        .saturating_sub(later)
+        .clamp(MIN_RESULT_CHARS, MAX_RESULT_CHARS)
 }
 
 #[cfg(test)]
@@ -694,12 +710,22 @@ mod tests {
 
     #[test]
     fn the_current_lookup_gets_the_room_and_later_ones_keep_the_minimum() {
-        let available = 9_000 - (3_200 + RESERVE_CHARS + RESULT_PREFIX.len());
-        assert_eq!(result_room(9_000, 3_200, 1), available);
-        assert_eq!(
-            result_room(9_000, 3_200, 4),
-            available - 3 * MIN_RESULT_CHARS
-        );
+        let available = 9_000 - (7_000 + RESERVE_CHARS + RESULT_PREFIX.len());
+        assert!(available < MAX_RESULT_CHARS);
+        assert_eq!(result_room(9_000, 7_000, 1), available);
         assert_eq!(result_room(9_000, 8_900, 4), MIN_RESULT_CHARS);
+    }
+
+    #[test]
+    fn the_room_is_capped_and_later_lookups_keep_the_minimum() {
+        // A roomy prompt does not buy a bigger result (prefill time).
+        assert_eq!(result_room(30_000, 3_000, 1), MAX_RESULT_CHARS);
+        let tight = |left| result_room(9_000, 5_000, left);
+        let available = 9_000 - (5_000 + RESERVE_CHARS + RESULT_PREFIX.len());
+        assert_eq!(tight(1), MAX_RESULT_CHARS.min(available));
+        assert_eq!(
+            tight(3),
+            (available - 2 * MIN_RESULT_CHARS).min(MAX_RESULT_CHARS)
+        );
     }
 }
