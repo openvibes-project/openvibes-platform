@@ -651,4 +651,4 @@ decision is `auto_migrate::decide`; tests use the fake runner. Not built: a
 Health line for a failed upgrade migration, and a free-space check before
 the dump.
 
-`assistant-tune` waits (up to 60 s) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.
+`assistant-tune` waits (up to 300 s, before it writes the new tuning) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.
