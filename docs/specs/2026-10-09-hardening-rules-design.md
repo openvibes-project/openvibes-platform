@@ -68,23 +68,47 @@ evaluates to `Unavailable` and raises no finding (existing behaviour).
   release that collects these facts (AGENTS.md: the baseline's pin stays
   at the oldest agent).
 
-## 4. Privilege: root-only files (decision needed)
+## 4. Privilege: root-only files
 
 Some sources are readable only by root: `/etc/ssh/sshd_config` is `0600` on
 Fedora/RHEL, `/etc/audit/*` and `/etc/security/faillock.conf` often too.
-The agent runs unprivileged. Options:
+The agent runs unprivileged and must stay so.
 
-- **A (recommended): an opt-in drop-in**, as for port owners (decision
-  2026-10-01): a documented `hardening.conf` drop-in that grants only
-  `CAP_DAC_READ_SEARCH`. Without it, those facts are unavailable and the
-  host page says "Hardening checks need read access: install the
-  drop-in" with the command. Everything else (sysctls, file modes via
-  `stat`, mounts, services, login.defs on most systems) works without it.
-- B: the package grants the agent's group read access to the few files
-  (ACLs set at install). Changes host security settings; against "never
-  mutate audited host state".
-- C: a tiny root helper that reads the fixed list and hands facts to the
-  agent. A second privileged component to maintain and secure.
+**Rule (user, 2026-10-09): nobody ever types a command.** It works after
+install, or it is a switch in the console. So no opt-in drop-in and no
+host-side step.
+
+Chosen: **a small root helper that the agent package installs and
+enables** (`openvibes-agent-facts.service`, plus a timer):
+
+- It reads only the fixed list of root-only sources from §3, parses them
+  with the same code as the agent (a second binary from the same crates),
+  and writes one bounded JSON file,
+  `/run/openvibes-agent/root-facts.json`, mode `0640 root:openvibes_agent`.
+  The agent reads it as one more collector and checks size, age and shape;
+  a missing, stale or malformed file makes those facts unavailable.
+- It takes **no input**: no network, no rules, no arguments, no config. The
+  network-facing agent, which evaluates rules from the platform, never
+  gains a capability.
+- Locked down by systemd: `User=root` with
+  `CapabilityBoundingSet=CAP_DAC_READ_SEARCH` only, `NoNewPrivileges=yes`,
+  `PrivateNetwork=yes`, `ProtectSystem=strict` with
+  `ReadWritePaths=/run/openvibes-agent`, `ProtectHome=yes`, no devices,
+  `SystemCallFilter=@system-service`, `MemoryMax` and `RuntimeMaxSec`
+  small.
+- It runs at boot and then on the scan interval (timer), so facts are as
+  fresh as a scan. `check-rpm.sh` and the systemd test check the unit's
+  sandbox like the agent's.
+
+Rejected: an opt-in `CAP_DAC_READ_SEARCH` drop-in on the agent (a manual
+step, and a capability on the network-facing process); package-set ACLs on
+the files (changes the host's security settings).
+
+**Console switches, not commands:** hardening L1 and L2 are turned on or off
+per asset group on the console's rule-set pages; the platform writes the
+choice into the agent configuration it serves. The host page shows
+"Hardening: L1 on · L2 off" and, if the helper is missing or failing,
+"Hardening facts unavailable" with the cause (as for alarms).
 
 ## 5. Rules repository
 
@@ -101,7 +125,8 @@ The agent runs unprivileged. Options:
 - Setup and Update trust and publish both sets; L2 is published but not
   assigned.
 - Enrollment and the agent configuration name the OS family's sets
-  (L1 always; L2 when the host's asset group has it on).
+  (L1 on by default; L2 when the host's asset group has it on), switched
+  in the console only.
 - Console: hardening results are compliance findings (existing pages),
   grouped by set; the Coverage page includes them; the host page shows
   "Hardening: L1 · L2 off" and the read-access hint when facts are
@@ -112,9 +137,10 @@ The agent runs unprivileged. Options:
 1. Protocol P19: facts, encodings, limits, fixtures.
 2. Agent: collectors (sshd parser with includes, sysctl, stat list,
    mountinfo, login.defs, pwquality/faillock, modules, audit, LSM), the
-   opt-in drop-in if option A, docs.
+   root-facts helper, its unit and timer in every agent package, docs.
 3. Rules: L1 set and cases, new checker pin; then L2.
-4. Platform: Setup/Update publishing, per-group L2 assignment, host page.
+4. Platform: Setup/Update publishing, per-group L1/L2 switches that reach
+   agents without host-side steps, host page.
 
 ## 8. Out of scope
 
