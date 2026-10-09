@@ -39,16 +39,21 @@ test("a case closes only once every alarm has an outcome", async ({ page }) => {
   await expect(closing.getByRole("button", { name: "Close case" })).toBeDisabled();
   // "Resolved" is not offered while the alarm is still happening.
   const items = inspector.getByRole("list", { name: "Items" }).locator("li");
-  await expect(items.first().locator("option", { hasText: "Resolved" })).toBeDisabled();
+  await items.first().getByRole("combobox", { name: /^Outcome for/ }).click();
+  await expect(page.getByRole("option", { name: /^Resolved/ })).toHaveAttribute("aria-disabled", "true");
+  await page.keyboard.press("Escape");
   for (let index = 0; index < 2; index += 1) {
     const item = items.nth(index);
-    await item.getByRole("combobox", { name: /^Outcome for/ }).selectOption("false_positive");
+    await item.getByRole("combobox", { name: /^Outcome for/ }).click();
+    await page.getByRole("option", { name: "False positive" }).click();
     await item.getByRole("textbox", { name: /^Note for/ }).fill("Our health check script.");
+    // The demo has no network, so the request body is checked in e2e/live/console.spec.ts.
     await item.getByRole("button", { name: "Save outcome" }).click();
     await expect(item.getByRole("button", { name: "Save outcome" })).toBeDisabled();
   }
   await expect(inspector.locator(".panel-header")).not.toContainText("unresolved");
-  await closing.getByLabel("Resolution").selectOption("false_positive");
+  await closing.getByRole("combobox", { name: "Resolution" }).click();
+  await page.getByRole("option", { name: "False positive" }).click();
   await closing.getByLabel("Note").fill("Both are the same health check.");
   await closing.getByRole("button", { name: "Close case" }).click();
   await expect(inspector.locator(".panel-header")).toContainText("Closed · false positive");
@@ -88,7 +93,8 @@ test("Add to case from an alarm opens a case, and then points at it", async ({ p
   await expect(page.locator(".panel-header__kind")).toContainText("C-106");
   await page.locator(".inspector").getByRole("button", { name: "Add item" }).click();
   await page.getByLabel("Id").fill("9002");
-  await page.getByRole("combobox", { name: "Kind" }).selectOption("alarm");
+  await page.getByRole("combobox", { name: "Kind" }).click();
+  await page.getByRole("option", { name: "Alarm", exact: true }).click();
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("already in another open case: C-105");
 });

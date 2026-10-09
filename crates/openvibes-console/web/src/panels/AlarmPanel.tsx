@@ -9,6 +9,7 @@ import { useProvideTitle } from "../app/titles";
 import { Ago, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
 import { date, triageLabel } from "../ui/format";
 import { PanelHeader, Section } from "../ui/panel";
+import { Select } from "../ui/Select";
 import { toast } from "../ui/toast";
 import { DetectionEvidence } from "./DetectionEvidence";
 import { quiet, quietScopes } from "../views/Alarms";
@@ -101,17 +102,13 @@ export function AlarmPanel({ id }: { id: string }) {
       </div>
       {can("alarms.triage") && options.length > 0 && (
         <form className="bulk-bar" onSubmit={(event) => { event.preventDefault(); void save(); }}>
-          <select className="select" value={choice} onChange={(event) => setState(event.target.value)} aria-label="New triage state">
-            {options.map((value) => <option key={value} value={value}>{triageLabel[value]}</option>)}
-          </select>
+          <Select label="New triage state" value={choice} onChange={setState} options={options.map((value) => ({ value, label: triageLabel[value] ?? value }))} />
           {choice === "accepted_risk" && (
             <input className="input" type="date" required value={acceptedUntil} onChange={(event) => setAcceptedUntil(event.target.value)} aria-label="Accepted until" />
           )}
           {choice === "false_positive" && scopes.length > 0 && (
-            <select className="select" value={scope} onChange={(event) => setScope(event.target.value)} aria-label="Don't alarm on this again">
-              <option value="">Keep alarming on it</option>
-              {scopes.map((s) => <option key={s.scope} value={s.scope}>Don't alarm again: {s.label.toLowerCase()}</option>)}
-            </select>
+            <Select label="Don't alarm on this again" value={scope} onChange={setScope}
+              options={[{ value: "", label: "Keep alarming on it" }, ...scopes.map((s) => ({ value: s.scope, label: `Don't alarm again: ${s.label.toLowerCase()}` }))]} />
           )}
           <input className="input" value={assignee} onChange={(event) => setAssignee(event.target.value)} placeholder="Assignee (username)" aria-label="Assignee" autoComplete="off" spellCheck={false} />
           <input className="input grow" value={note} onChange={(event) => setNote(event.target.value)} required={noteRequired.has(choice)}

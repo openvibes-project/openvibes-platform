@@ -161,9 +161,7 @@ export function FindingPanel({ id }: { id: string }) {
         <form className="bulk-bar" onSubmit={(event) => { event.preventDefault(); void apply([...selected]); }}>
           <strong className="num">{selected.size} selected</strong>
           {options.length === 0 && <span className="subtle">These hosts have no next state in common; select fewer.</span>}
-          <select className="select" disabled={filling || options.length === 0} value={choice} onChange={(event) => setState(event.target.value)} aria-label="New triage state">
-            {options.map((value) => <option key={value} value={value}>{triageLabel[value]}</option>)}
-          </select>
+          <Select label="New triage state" disabled={filling || options.length === 0} value={choice} onChange={setState} options={options.map((value) => ({ value, label: triageLabel[value] ?? value }))} />
           {choice === "accepted_risk" && (
             <label className="row">
               <span className="subtle">until</span>
@@ -183,7 +181,7 @@ export function FindingPanel({ id }: { id: string }) {
           <table className="table table--compact">
             <thead>
               <tr>
-                {canTriage && <th className="check"><input type="checkbox" aria-label="Select all hosts" checked={items.length > 0 && items.every((item) => selected.has(item.agent_id))}
+                {canTriage && <th className="check"><input type="checkbox" className="checkbox" aria-label="Select all hosts" checked={items.length > 0 && items.every((item) => selected.has(item.agent_id))}
                   onChange={(event) => setSelected(event.target.checked ? new Set(items.map((item) => item.agent_id)) : new Set())} /></th>}
                 <th>Host</th><th>Evidence</th><th>State</th><th className="hide-narrow">Assignee</th><th>Last seen</th>
               </tr>
@@ -191,7 +189,7 @@ export function FindingPanel({ id }: { id: string }) {
             <tbody>
               {items.map((item) => (
                 <tr key={item.agent_id} aria-selected={selected.has(item.agent_id) || undefined}>
-                  {canTriage && <td className="check"><input type="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
+                  {canTriage && <td className="check"><input type="checkbox" className="checkbox" aria-label={`Select ${item.hostname ?? item.agent_id}`} checked={selected.has(item.agent_id)}
                     onChange={() => setSelected((current) => { const next = new Set(current); if (next.has(item.agent_id)) next.delete(item.agent_id); else next.add(item.agent_id); return next; })} /></td>}
                   <td><span className="row"><ObjectLink to={{ kind: "agent", id: item.agent_id }}>{item.hostname ?? item.agent_id}</ObjectLink>{canCase && <AddToCase compact kind="compliance_finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${item.hostname ?? item.agent_id}`} />}</span>{item.origin === "import" && <span className="badge badge--info badge--plain gap-start">imported</span>}</td>
                   <td><button type="button" className="link-button" onClick={() => showEvidence(item.agent_id)}>View evidence</button></td>

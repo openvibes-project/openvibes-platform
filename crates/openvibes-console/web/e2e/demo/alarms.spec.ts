@@ -23,8 +23,10 @@ test("an alarm shows its process tree and is triaged and quieted", async ({ page
 
   await inspector.getByRole("button", { name: "Apply" }).click();
   await expect(inspector.locator(".panel-header")).toContainText("Investigating");
-  await inspector.getByRole("combobox", { name: "New triage state" }).selectOption("false_positive");
-  await inspector.getByRole("combobox", { name: "Don't alarm on this again" }).selectOption("host");
+  await inspector.getByRole("combobox", { name: "New triage state" }).click();
+  await page.getByRole("option", { name: "False positive" }).click();
+  await inspector.getByRole("combobox", { name: "Don't alarm on this again" }).click();
+  await page.getByRole("option", { name: /alarm again: on this host/i }).click();
   await inspector.getByRole("textbox", { name: "Triage note" }).fill("our backup job");
   await inspector.getByRole("button", { name: "Apply" }).click();
   await expect(inspector.locator(".panel-header")).toContainText("False positive");
@@ -46,7 +48,8 @@ test("quieting from the list asks first, closes the alarm and records why", asyn
   const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
   // Choosing a scope (as arrow keys on a closed select do) changes nothing yet.
   // (The demo keeps its data in memory, so this test never reloads.)
-  await row.getByRole("combobox", { name: /Quiet/ }).selectOption("program");
+  await row.getByRole("combobox", { name: /Quiet/ }).click();
+  await page.getByRole("option", { name: "For this program, any host" }).click();
   await expect(page.locator(".toast")).toHaveCount(0);
   await expect(row.getByRole("button", { name: "Confirm" })).toHaveCount(0);
   await row.getByRole("button", { name: "Quiet" }).click();

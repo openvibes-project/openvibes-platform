@@ -8,6 +8,8 @@ import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
+import { Select } from "../ui/Select";
+import { SelectField } from "../ui/Field";
 import { toast } from "../ui/toast";
 
 const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
@@ -66,12 +68,10 @@ function RuleTest({ set, ruleId, input, enabled }: { set: string; ruleId: string
     <Section title="Test against a host">
       <p className="subtle">Runs the rule on what the platform holds for a host: its package names and listening ports. A rule over anything else shows as unavailable here; the agent evaluates it.</p>
       <div className="row">
-        <label className="field grow">Host
-          <select className="select" value={agent} onChange={(e) => { setAgent(e.target.value); setResult(undefined); }}>
-            <option value="">Choose a host</option>
-            {(hosts.data?.items ?? []).map((host) => <option key={host.id} value={host.id}>{host.hostname ?? host.id}</option>)}
-          </select>
-        </label>
+        <SelectField label="Host" className="grow">
+          <Select label="Host" value={agent} onChange={(v) => { setAgent(v); setResult(undefined); }}
+            options={[{ value: "", label: "Choose a host" }, ...(hosts.data?.items ?? []).map((host) => ({ value: host.id, label: host.hostname ?? host.id }))]} />
+        </SelectField>
         <button type="button" className="button" disabled={busy || agent === "" || !enabled} onClick={run}>Test</button>
       </div>
       {error && <p className="confirm__error" role="alert">{error}</p>}
@@ -156,7 +156,7 @@ export function SiteRulePanel({ id }: { id: string }) {
           {isNew && field("id", "Rule id", <input className="input mono" required value={typedId} onChange={(e) => setTypedId(e.target.value)} placeholder={alarm ? "alarm.nginx.shell" : "port.redis.exposed"} />)}
           {field("title", "Title", <input className="input" required value={current.title} onChange={(e) => update({ title: e.target.value })} disabled={!write} />)}
           <div className="grid--stacked">
-            {field("severity", "Severity", <select className="select" value={current.severity} onChange={(e) => update({ severity: e.target.value })} disabled={!write}>{SEVERITIES.map((s) => <option key={s} value={s}>{s}</option>)}</select>)}
+            {field("severity", "Severity", <Select label="Severity" value={current.severity} onChange={(v) => update({ severity: v })} disabled={!write} options={SEVERITIES.map((s) => ({ value: s, label: s }))} />)}
             {field("confidence", "Confidence (0 to 100)", <input className="input" type="number" min={0} max={100} value={current.confidence} onChange={(e) => update({ confidence: e.target.value })} disabled={!write} />)}
           </div>
           {alarm && field("programs", "Programs (one to eight, space or comma separated)", <input className="input mono" value={current.programs} onChange={(e) => update({ programs: e.target.value })} placeholder="nginx httpd" disabled={!write} />)}

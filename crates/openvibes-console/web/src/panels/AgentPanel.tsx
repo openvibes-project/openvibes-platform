@@ -36,7 +36,7 @@ function SoftwareTab({ id }: { id: string }) {
     <div className="panel-body stack">
       <div className="row row--wrap">
         <input className="input grow" value={q} onChange={(event) => { setQ(event.target.value); setMax(200); }} placeholder="Filter by package name…" aria-label="Filter installed software" />
-        <label className="row"><input type="checkbox" checked={fixable} onChange={(event) => setFixable(event.target.checked)} /> Fix available</label>
+        <label className="row"><input type="checkbox" className="checkbox" checked={fixable} onChange={(event) => setFixable(event.target.checked)} /> Fix available</label>
       </div>
       {packages.error ? <ErrorBox error={packages.error} /> : packages.loading && !packages.data ? <Loading rows={4} /> : items.length === 0 ? (
         <Empty title={q || fixable ? "Nothing matches" : "No software reported"}>{q || fixable ? null : "The agent reports its packages shortly after it enrolls."}</Empty>

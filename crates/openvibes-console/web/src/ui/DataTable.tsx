@@ -88,7 +88,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
           <tr>
             {selection && (
               <th className="check">
-                <input type="checkbox" aria-label="Select all" checked={allSelected}
+                <input type="checkbox" className="checkbox" aria-label="Select all" checked={allSelected}
                   onChange={() => selection.onChange(allSelected ? new Set() : new Set(sorted.map(rowKey)))} />
               </th>
             )}
@@ -111,10 +111,10 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
             return (
               <tr key={key} data-index={index} data-cursor={index === cursor || undefined}
                 aria-selected={isOpen?.(row) || selection?.selected.has(key) || undefined}
-                onClick={(event) => { if (!(event.target as HTMLElement).closest("a,button,input,select,form")) { setCursor(index); onOpen(row); } }}>
+                onClick={(event) => { if (!(event.target as HTMLElement).closest("a,button,input,select,form,[role=listbox]")) { setCursor(index); onOpen(row); } }}>
                 {selection && (
                   <td className="check">
-                    <input type="checkbox" aria-label="Select row" checked={selection.selected.has(key)} onChange={() => toggle(key)} />
+                    <input type="checkbox" className="checkbox" aria-label="Select row" checked={selection.selected.has(key)} onChange={() => toggle(key)} />
                   </td>
                 )}
                 {visibleColumns.map((candidate) => (

@@ -77,7 +77,8 @@ test("a rule is tested against a host", async ({ page }) => {
   await expect(inspector.getByText("Hosts would accept this rule.")).toBeVisible();
   await inspector.getByRole("button", { name: "Save draft" }).click();
   await expect(inspector.getByRole("button", { name: "Test", exact: true })).toBeDisabled();
-  await inspector.getByLabel("Host").selectOption({ index: 1 });
+  await inspector.getByRole("combobox", { name: "Host" }).click();
+  await page.getByRole("option").nth(1).click();
   await inspector.getByRole("button", { name: "Test", exact: true }).click();
   await expect(inspector.getByRole("status")).toContainText("Matches: the rule would raise a compliance finding");
   await inspector.getByLabel("Expression").fill("'sshd' in facts['process.names']");

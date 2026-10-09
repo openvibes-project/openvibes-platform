@@ -11,6 +11,8 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { auditSince, date, isPast, when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
+import { Select } from "../ui/Select";
+import { Segmented } from "../ui/Segmented";
 import { toast } from "../ui/toast";
 import { IssueServiceToken, NewServiceAccount } from "./AdminPanels";
 
@@ -137,9 +139,9 @@ function NewEnrollmentToken() {
             <label className="field">Label<input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Office laptops" /></label>
             <div className="row">
               <label className="field grow">Hosts it may enroll<input className="input" type="number" min={1} max={1000} value={uses} onChange={(e) => setUses(Number(e.target.value))} /></label>
-              <label className="field grow">Valid for<select className="select" value={hours} onChange={(e) => setHours(Number(e.target.value))}>
-                <option value={1}>1 hour</option><option value={24}>1 day</option><option value={168}>7 days</option><option value={720}>30 days</option>
-              </select></label>
+              <div className="field grow"><span>Valid for</span>
+                <Segmented label="Valid for" value={hours} onChange={setHours} options={[{ value: 1, label: "1 hour" }, { value: 24, label: "1 day" }, { value: 168, label: "7 days" }, { value: 720, label: "30 days" }]} />
+              </div>
             </div>
             {error && <p className="confirm__error" role="alert">{error}</p>}
             <div><button className="button button--primary" type="submit"><Icon name="plus" size={15} /> Create token</button></div>
@@ -269,10 +271,9 @@ export function UserPanel({ id }: { id: string }) {
               request("POST", "/api/v1/access-control/bindings", { user_id: id, role_id: role, asset_group_id: group || null })
                 .then(() => { invalidate("/api/v1/access-control"); toast("Role granted"); }, (e: unknown) => toast(e instanceof ApiError ? e.message : "Failed", true));
             }}>
-              <select className="select" value={role} onChange={(e) => setRole(e.target.value)} aria-label="Role">{data.roles.map((r) => <option key={r.role_id} value={r.role_id}>{r.display_name}</option>)}</select>
-              <select className="select grow" value={group} onChange={(e) => setGroup(e.target.value)} aria-label="Scope">
-                <option value="">Everywhere</option>{data.asset_groups.map((g) => <option key={g.asset_group_id} value={g.asset_group_id}>{g.name}</option>)}
-              </select>
+              <Select label="Role" value={role} onChange={setRole} options={data.roles.map((r) => ({ value: r.role_id, label: r.display_name }))} />
+              <div className="grow"><Select label="Scope" value={group} onChange={setGroup}
+                options={[{ value: "", label: "Everywhere" }, ...data.asset_groups.map((g) => ({ value: g.asset_group_id, label: g.name }))]} /></div>
               <button className="button button--small" type="submit"><Icon name="plus" size={14} /> Grant</button>
             </form>
           )}

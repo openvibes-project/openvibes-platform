@@ -14,6 +14,8 @@ import { Ago, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
 import { when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
+import { Select } from "../ui/Select";
+import { SelectField } from "../ui/Field";
 import { toast } from "../ui/toast";
 import {
   CASE_KINDS, type CaseFields, type CaseKind, type CloseForm, caseErrorText, caseNumber, blockingItems, closeProblems, endingOf, eventText, isStale,
@@ -50,11 +52,8 @@ function AssigneeSelect({ value, onChange, assignees }: { value: string; onChang
   const me = useMe(assignees);
   return (
     <div className="row row--wrap">
-      <select className="select grow" value={value} onChange={(event) => onChange(event.target.value)} aria-label="Assignee">
-        <option value="">Unassigned</option>
-        {assignees.map((user) => <option key={user.user_id} value={user.user_id}>{user.display_name} ({user.username})</option>)}
-        {value !== "" && !assignees.some((user) => user.user_id === value) && <option value={value}>Current assignee</option>}
-      </select>
+      <div className="grow"><Select label="Assignee" value={value} onChange={onChange} unknownLabel={() => "Current assignee"}
+        options={[{ value: "", label: "Unassigned" }, ...assignees.map((user) => ({ value: user.user_id, label: `${user.display_name} (${user.username})` }))]} /></div>
       {me && me.user_id !== value && <button type="button" className="button button--small" onClick={() => onChange(me.user_id)}><Icon name="user" size={14} /> Assign to me</button>}
     </div>
   );
@@ -82,12 +81,10 @@ export function NewCasePanel() {
       <PanelHeader icon="cases" kind="Case" title="New case" subtitle="Add what belongs to it afterwards, or use Add to case on an alarm, compliance finding, vulnerability, host or software." />
       <form className="panel-body stack" onSubmit={submit}>
         <label className="field">Title<input className="input" required maxLength={120} autoFocus value={title} onChange={(event) => setTitle(event.target.value)} placeholder="e.g. Suspicious shell on web-02" /></label>
-        <label className="field">Severity
-          <select className="select" value={severity} onChange={(event) => setSeverity(event.target.value)}>
-            <option value="">Automatic: the highest item, medium without items</option>
-            {severities.map((s) => <option key={s} value={s}>{s[0]?.toUpperCase() + s.slice(1)}</option>)}
-          </select>
-        </label>
+        <SelectField label="Severity">
+          <Select label="Severity" value={severity} onChange={setSeverity}
+            options={[{ value: "", label: "Automatic: the highest item, medium without items" }, ...severities.map((s) => ({ value: s, label: s[0]?.toUpperCase() + s.slice(1) }))]} />
+        </SelectField>
         <div className="field">Assignee<AssigneeSelect value={assignee} onChange={setAssignee} assignees={assignees} /></div>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy || title.trim() === ""}><Icon name="plus" size={15} /> {busy ? "Opening…" : "Open case"}</button></div>
@@ -157,11 +154,9 @@ function Details({ c, manage }: { c: CaseDetail; manage: boolean }) {
           <form className="stack" onSubmit={(event) => { event.preventDefault(); if (dirty && !busy) void send(c.status, ending, "Case saved"); }}>
             <label className="field">Title<input className="input" required maxLength={120} value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
             <div className="row row--wrap">
-              <label className="field">Severity
-                <select className="select" value={draft.severity} onChange={(event) => setDraft({ ...draft, severity: event.target.value })}>
-                  {severities.map((s) => <option key={s} value={s}>{s[0]?.toUpperCase() + s.slice(1)}</option>)}
-                </select>
-              </label>
+              <SelectField label="Severity">
+                <Select label="Severity" value={draft.severity} onChange={(severity) => setDraft({ ...draft, severity })} options={severities.map((s) => ({ value: s, label: s[0]?.toUpperCase() + s.slice(1) }))} />
+              </SelectField>
               <div className="field grow">Assignee<AssigneeSelect value={draft.assignee} onChange={(assignee) => setDraft({ ...draft, assignee })} assignees={assignees} /></div>
             </div>
             <div className="row row--wrap">
@@ -197,12 +192,10 @@ function CloseCase({ c, busy, onClose, onCancel }: { c: CaseDetail; busy: boolea
   return (
     <div className="confirm" role="group" aria-label="Close this case">
       <p className="confirm__text"><strong>Close {caseNumber(c.number)}</strong>: say how it ended. Its items are freed for other cases.</p>
-      <label className="field">Resolution
-        <select className="select" value={form.resolution} onChange={(event) => setForm({ ...form, resolution: event.target.value })}>
-          <option value="">Choose…</option>
-          {Object.entries(resolutionLabel).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </label>
+      <SelectField label="Resolution">
+        <Select label="Resolution" value={form.resolution} onChange={(resolution) => setForm({ ...form, resolution })}
+          options={[{ value: "", label: "Choose…" }, ...Object.entries(resolutionLabel).map(([value, label]) => ({ value, label }))]} />
+      </SelectField>
       {form.resolution === "accepted_risk" && (
         <label className="field">Accepted until<input className="input" type="date" min={tomorrow} value={form.acceptedUntil} onChange={(event) => setForm({ ...form, acceptedUntil: event.target.value })} /></label>
       )}
@@ -248,14 +241,12 @@ function OutcomeControl({ c, item, label }: { c: CaseDetail; item: CaseItem; lab
   };
   return (
     <form className="row row--wrap grow" onSubmit={(event) => void save(event)}>
-      <select className="select select--small" value={outcome} aria-label={`Outcome for ${label}`} onChange={(event) => setOutcome(event.target.value)}>
-        <option value="">No outcome</option>
-        {outcomeChoices(item).map((choice) => (
-          <option key={choice.value} value={choice.value} disabled={choice.disabled && choice.value !== item.outcome} title={choice.hint}>
-            {choice.label}{choice.disabled ? " (evidence still there)" : ""}
-          </option>
-        ))}
-      </select>
+      <Select small label={`Outcome for ${label}`} value={outcome} onChange={setOutcome}
+        options={[{ value: "", label: "No outcome" }, ...outcomeChoices(item).map((choice) => ({
+          value: choice.value,
+          label: `${choice.label}${choice.disabled ? " (evidence still there)" : ""}`,
+          disabled: choice.disabled && choice.value !== item.outcome,
+        }))]} />
       {outcome !== "" && (
         <input className="input grow" value={note} onChange={(event) => setNote(event.target.value)} required={outcomeNeedsNote(outcome)} maxLength={4000}
           placeholder={outcomeNeedsNote(outcome) ? "Why (required)" : "Note (optional)"} aria-label={`Note for ${label}`} />
@@ -325,11 +316,9 @@ function AddItem({ c }: { c: CaseDetail }) {
   return (
     <form className="confirm" onSubmit={submit} aria-label="Add an item">
       <p className="confirm__text">Paste the item's id. Each page's <strong>Add to case</strong> button does this for you.</p>
-      <label className="field">Kind
-        <select className="select" value={kind} onChange={(event) => setKind(event.target.value as CaseKind)}>
-          {CASE_KINDS.map((k) => <option key={k} value={k}>{kindLabel[k]}</option>)}
-        </select>
-      </label>
+      <SelectField label="Kind">
+        <Select label="Kind" value={kind} onChange={(k) => setKind(k as CaseKind)} options={CASE_KINDS.map((k) => ({ value: k, label: kindLabel[k] }))} />
+      </SelectField>
       <label className="field">Id<input className="input mono" required autoFocus autoComplete="off" spellCheck={false} value={ref} onChange={(event) => setRef(event.target.value)} placeholder={refHint[kind]} /></label>
       {error && <p className="confirm__error" role="alert">{error}</p>}
       <div className="row">

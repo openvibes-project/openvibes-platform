@@ -151,7 +151,8 @@ test("imported findings are triaged in bulk from the panel", async ({ page }, in
   // Hosts that can all move to investigating: the open ones, else those already there.
   await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
   await page.getByRole("checkbox", { name: "Select all hosts" }).check();
-  await page.getByLabel("New triage state").selectOption("investigating");
+  await page.getByRole("combobox", { name: "New triage state" }).click();
+  await page.getByRole("option", { name: "Investigating" }).click();
   await page.getByLabel("Triage note").fill(`e2e ${info.project.name}`);
   await page.locator(".bulk-bar button[type=submit]").click();
   await expect(page.locator(".toast")).toContainText("set to investigating");
@@ -171,16 +172,19 @@ test("one host's risk is accepted until a date with an assignee, and the form sh
   const host = page.getByRole("checkbox", { name: label ?? "", exact: true });
   await host.check();
   // The workflow: an open host is investigated before its risk is accepted.
-  await expect(page.getByLabel("New triage state")).toBeEnabled();
-  if (await page.getByLabel("New triage state").inputValue() === "open") {
-    await expect(page.getByLabel("New triage state").locator("option")).toHaveText(["Open", "Investigating"]);
-    await page.getByLabel("New triage state").selectOption("investigating");
+  await expect(page.getByRole("combobox", { name: "New triage state" })).toBeEnabled();
+  const state = page.getByRole("combobox", { name: "New triage state" });
+  if ((await state.textContent())?.trim() === "Open") {
+    await state.click();
+    await expect(page.getByRole("option")).toHaveText(["Open", "Investigating"]);
+    await page.getByRole("option", { name: "Investigating" }).click();
     await page.locator(".bulk-bar button[type=submit]").click();
     await expect(page.locator(".toast").last()).toContainText("set to investigating");
     await host.check();
-    await expect(page.getByLabel("New triage state")).toHaveValue("investigating");
+    await expect(state).toHaveText("Investigating");
   }
-  await page.getByLabel("New triage state").selectOption("accepted_risk");
+  await state.click();
+  await page.getByRole("option", { name: "Accepted risk" }).click();
   await page.getByLabel("Accepted until").fill("2099-06-30");
   await page.getByLabel("Assignee").fill("nobody");
   await page.getByLabel("Triage note").fill("vendor fix due");
@@ -190,7 +194,7 @@ test("one host's risk is accepted until a date with an assignee, and the form sh
   await page.locator(".bulk-bar button[type=submit]").click();
   await expect(page.locator(".toast").last()).toContainText("set to accepted risk");
   await host.check();
-  await expect(page.getByLabel("New triage state")).toHaveValue("accepted_risk");
+  await expect(state).toHaveText("Accepted risk");
   await expect(page.getByLabel("Assignee")).toHaveValue("sam");
   await expect(page.getByLabel("Accepted until")).toHaveValue("2099-06-30");
 });
@@ -202,7 +206,8 @@ test("a dashboard is created, saved, shared and seen read-only by an analyst", a
   await page.getByRole("button", { name: "Dashboards" }).click();
   await page.getByRole("menuitem", { name: "New dashboard" }).click();
   await page.getByRole("button", { name: /^Number/ }).click();
-  await page.getByLabel("Count", { exact: true }).selectOption("compliance.open.critical");
+  await page.getByRole("combobox", { name: "Count", exact: true }).click();
+  await page.getByRole("option", { name: "Open critical compliance findings", exact: true }).click();
   await page.getByLabel("Dashboard name").fill(name);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(name);
@@ -244,7 +249,8 @@ test("a new user signs in with a one-time password and must set their own first 
   const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
   await page.getByLabel("Username").fill(username);
   await page.getByLabel("Display name").fill("E2E Person");
-  await page.getByLabel("Role").selectOption("viewer");
+  await page.getByRole("combobox", { name: "Role" }).click();
+  await page.getByRole("option", { name: /viewer/i }).click();
   await page.getByRole("button", { name: "Create user" }).click();
   const oneTime = (await page.locator(".secret .grow").innerText()).trim();
   expect(oneTime.length).toBeGreaterThanOrEqual(15);
