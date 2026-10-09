@@ -1117,3 +1117,34 @@ async fn the_repaired_text_counts_against_the_result_room() {
     let (clean, junk) = (size(false).await, size(true).await);
     assert!(junk < clean, "{junk} !< {clean}");
 }
+
+#[tokio::test]
+async fn the_time_rides_with_the_question_not_the_system_prompt() {
+    let mut seen = Vec::new();
+    for (mode, minutes) in [(ResolvedMode::Native, 0), (ResolvedMode::Native, 90)] {
+        let script = Script::new(vec![text("fine.")]);
+        let mut s = settings(mode);
+        s.now = chrono::DateTime::parse_from_rfc3339("2026-10-09T08:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc)
+            + chrono::Duration::minutes(minutes);
+        ask(&script, &Fake::default(), s, "Which hosts expose SSH?")
+            .await
+            .unwrap();
+        seen.push(script.requests().remove(0));
+    }
+    assert_eq!(
+        format!("{:?}", seen[0].messages[0]),
+        format!("{:?}", seen[1].messages[0])
+    );
+    assert_eq!(
+        format!("{:?}", seen[0].tools),
+        format!("{:?}", seen[1].tools)
+    );
+    assert!(!format!("{:?}", seen[0].messages[0]).contains("The time"));
+    assert_eq!(
+        last_user(&seen[0]),
+        "The time is 2026-10-09T08:00:00Z (UTC).\nWhich hosts expose SSH?"
+    );
+    assert!(last_user(&seen[1]).contains("09:30:00Z"));
+}
