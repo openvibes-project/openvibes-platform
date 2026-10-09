@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { Agent, RuleCheck, RuleDraft, RuleDraftInput, RuleTestResult } from "../api/types";
+import type { Agent, AttackCatalog, AttackPairInput, RuleCheck, RuleDraft, RuleDraftInput, RuleTestResult } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { Empty, ErrorBox, Loading } from "../ui/bits";
+import { Icon } from "../ui/Icon";
+import { Picker } from "../ui/Picker";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
 import { Select } from "../ui/Select";
 import { SelectField } from "../ui/Field";
@@ -16,8 +18,8 @@ const SEVERITIES = ["info", "low", "medium", "high", "critical"] as const;
 const FACTS = "process.names, process.count, package.names, package.count, port.tcp.exposed, port.tcp.local, port.udp.exposed, port.udp.local";
 const EVENT_KEYS = "process.exe, process.name, process.cmdline, process.cwd, process.uid, process.euid, parent.exe, parent.name, parent.cmdline, ancestors.names, ancestors.exes";
 
-type Form = { title: string; severity: string; confidence: string; expression: string; finding_message: string; programs: string };
-const BLANK: Form = { title: "", severity: "medium", confidence: "80", expression: "", finding_message: "", programs: "" };
+type Form = { title: string; severity: string; confidence: string; expression: string; finding_message: string; programs: string; attack: AttackPairInput[] };
+const BLANK: Form = { title: "", severity: "medium", confidence: "80", expression: "", finding_message: "", programs: "", attack: [] };
 
 const toInput = (form: Form, alarm: boolean): RuleDraftInput => ({
   title: form.title,
@@ -26,6 +28,7 @@ const toInput = (form: Form, alarm: boolean): RuleDraftInput => ({
   expression: form.expression,
   finding_message: form.finding_message,
   programs: alarm ? form.programs.split(/[\s,]+/).filter(Boolean) : null,
+  attack: form.attack.length > 0 ? form.attack : null,
 });
 
 const fromDraft = (draft: RuleDraft): Form => ({
@@ -35,7 +38,39 @@ const fromDraft = (draft: RuleDraft): Form => ({
   expression: draft.expression,
   finding_message: draft.finding_message,
   programs: (draft.programs ?? []).join(" "),
+  attack: draft.attack.map((p) => ({ tactic: p.tactic, technique: p.technique ?? null })),
 });
+
+const pairKey = (p: AttackPairInput) => `${p.tactic}|${p.technique ?? ""}`;
+
+// The rule's MITRE ATT&CK pairs (P18): chips to remove, a picker to add.
+// A technique under several tactics is offered once per tactic.
+function AttackField({ value, onChange, disabled }: { value: AttackPairInput[]; onChange: (next: AttackPairInput[]) => void; disabled: boolean }) {
+  const catalog = useResource<AttackCatalog>("/api/v1/attack");
+  const data = catalog.data;
+  const tactic = (id: string) => data?.tactics.find((t) => t.id === id)?.name ?? id;
+  const options = data ? [
+    ...data.tactics.map((t) => ({ value: `${t.id}|`, label: `${t.name} (${t.id}), tactic only` })),
+    ...data.techniques.flatMap((t) => t.tactics.map((ta) => ({ value: `${ta}|${t.id}`, label: `${t.id} ${t.name} · ${tactic(ta)}` }))),
+  ].filter((o) => !value.some((p) => pairKey(p) === o.value)) : [];
+  const name = (p: AttackPairInput) => data?.techniques.find((t) => t.id === p.technique)?.name;
+  return (
+    <div className="stack">
+      {value.length > 0 && <span className="attack-chips">
+        {value.map((p, i) => (
+          <span key={pairKey(p)} className="attack-chip" title={`${p.technique ? `${name(p) ?? p.technique} · ` : ""}${tactic(p.tactic)}${i === 0 ? " (primary)" : ""}`}>
+            {p.technique ?? p.tactic}
+            {!disabled && <button type="button" className="link-button" aria-label={`Remove ${p.technique ?? p.tactic}`} onClick={() => onChange(value.filter((q) => pairKey(q) !== pairKey(p)))}><Icon name="close" size={11} /></button>}
+          </span>
+        ))}
+      </span>}
+      {catalog.error ? <ErrorBox error={catalog.error} /> : !disabled && value.length < 16 && (
+        <Picker label="Add an ATT&CK technique" placeholder={data ? "Add a technique or tactic…" : "Loading ATT&CK…"} value="" options={options}
+          onChange={(v) => { const [ta = "", te = ""] = v.split("|"); onChange([...value, { tactic: ta, technique: te || null }]); }} />
+      )}
+    </div>
+  );
+}
 
 
 const OUTCOMES: Record<string, string> = {
@@ -167,6 +202,7 @@ export function SiteRulePanel({ id }: { id: string }) {
           {field("expression", "Expression", <textarea className="textarea mono" rows={4} required value={current.expression} onChange={(e) => update({ expression: e.target.value })} disabled={!write} spellCheck={false}
             placeholder={alarm ? "event['process.name'] in ['sh', 'bash']" : "'6379' in facts['port.tcp.exposed']"} />)}
           <p className="subtle">{alarm ? `Keys: ${EVENT_KEYS}.` : `Facts: ${FACTS}.`}</p>
+          {field("attack", "MITRE ATT&CK (first is primary)", <AttackField value={current.attack} onChange={(attack) => update({ attack })} disabled={!write} />)}
           {field("finding_message", alarm ? "Alarm message" : "Compliance finding message", <textarea className="textarea" rows={3} required value={current.finding_message} onChange={(e) => update({ finding_message: e.target.value })} disabled={!write} />)}
           {problem("rule") && <p className="confirm__error" role="alert">{problem("rule")}</p>}
           {check?.ok && <p className="subtle">Hosts would accept this rule.</p>}

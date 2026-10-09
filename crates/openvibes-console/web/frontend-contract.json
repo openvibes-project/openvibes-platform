@@ -7,6 +7,7 @@
     "/cases",
     "/alarms",
     "/alarm-suppressions",
+    "/coverage",
     "/vulnerabilities",
     "/agents",
     "/software",

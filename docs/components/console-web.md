@@ -266,6 +266,16 @@ an existing agent's `agent.toml`.
   working directory, pid), rule and versions, first/last seen, count, and
   the triage bar (findings workflow). Choosing false positive offers
   "Don't alarm on this again" with the same scopes.
+- **Coverage** (`/coverage`, `g t`, global `rules.read`): an ATT&CK
+  matrix (tactics as columns, covered techniques with rule counts; empty
+  tactics stay as visible gaps) above the rule list. Chips: Kill chain
+  (the same cells grouped into the seven phases), Findings, Alarms, Include
+  drafts. A cell or tactic filters the list; "N rules are not mapped"
+  lists the unmapped. The matrix scrolls sideways inside its own box on
+  narrow screens. Logic in `views/coverage.ts` (tested).
+- Rule panels show a rule's ATT&CK pairs as chips that open Coverage
+  filtered to them; the site-rule editor adds pairs with a searchable
+  picker (one option per technique and tactic).
 - **Alarm suppressions** (`/alarm-suppressions`, `g q`): who, when and
   why, Remove (kept as history on the server); a row opens the matching
   alarms.
