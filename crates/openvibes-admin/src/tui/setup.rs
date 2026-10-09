@@ -102,7 +102,7 @@ impl Setup {
         let mut components: BTreeSet<Component> =
             [Ingest, Console, Distribution, Vulns, Rules].into();
         // Tests run on any host: the full default there.
-        if cfg!(test) || agent_by_default(std::path::Path::new("/")) {
+        if cfg!(test) || crate::setup::agent_by_default(std::path::Path::new("/")) {
             components.insert(Agent);
         }
         Setup {
@@ -674,20 +674,6 @@ impl<H: Host> App<H> {
     }
 }
 
-/// Whether the form ticks "agent on this host": only when the agent package
-/// is installed or an OpenVIBES repository could supply it (an offline kit
-/// carries neither; agents are added from the console).
-fn agent_by_default(root: &std::path::Path) -> bool {
-    root.join("usr/bin/openvibes-agent").exists()
-        || std::fs::read_dir(root.join("etc/yum.repos.d")).is_ok_and(|dir| {
-            dir.flatten().any(|entry| {
-                let name = entry.file_name();
-                let name = name.to_string_lossy();
-                name.starts_with("openvibes") && name.ends_with(".repo")
-            })
-        })
-}
-
 /// The free default root key file in `home`, or empty without a home.
 fn default_root_key(home: Option<&str>) -> String {
     home.map(|home| free_root_key(home, |path| std::path::Path::new(path).exists()))
@@ -713,13 +699,13 @@ mod root_key_tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("etc/yum.repos.d")).unwrap();
         std::fs::write(dir.join("etc/yum.repos.d/fedora.repo"), "").unwrap();
-        assert!(!super::agent_by_default(&dir));
+        assert!(!crate::setup::agent_by_default(&dir));
         std::fs::write(dir.join("etc/yum.repos.d/openvibes.repo"), "").unwrap();
-        assert!(super::agent_by_default(&dir));
+        assert!(crate::setup::agent_by_default(&dir));
         std::fs::remove_file(dir.join("etc/yum.repos.d/openvibes.repo")).unwrap();
         std::fs::create_dir_all(dir.join("usr/bin")).unwrap();
         std::fs::write(dir.join("usr/bin/openvibes-agent"), "").unwrap();
-        assert!(super::agent_by_default(&dir));
+        assert!(crate::setup::agent_by_default(&dir));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

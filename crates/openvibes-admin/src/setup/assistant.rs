@@ -122,14 +122,19 @@ pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         }
     }
     // The command's own text is internal: only what it said is shown.
-    ctx.ok(Admin, &["helper", "assistant-setup"])
+    let out = ctx
+        .ok(Admin, &["helper", "assistant-setup"])
         .map_err(|error| {
             let prefix = format!("{} helper assistant-setup: ", Admin.path());
             error.strip_prefix(&prefix).unwrap_or(&error).to_owned()
         })?;
-    Ok(StepState::Done(
-        "assistant on: model installed, model server enabled".into(),
-    ))
+    let mut done = String::from("assistant on: model installed, model server enabled");
+    // On, but not tuned: say why, here and in Status.
+    if let Some(line) = out.lines().find(|line| line.starts_with("tuning skipped")) {
+        done.push_str("; ");
+        done.push_str(line);
+    }
+    Ok(StepState::Done(done))
 }
 
 #[cfg(test)]
@@ -218,6 +223,22 @@ mod tests {
         let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
         assert!(!fake.called(&["/usr/bin/openvibes-admin"]));
+    }
+
+    #[test]
+    fn a_skipped_tuning_is_named_in_the_done_detail() {
+        let fake = Fake::new("model-tune-skipped");
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        fake.answer(
+            &["/usr/bin/openvibes-admin", "helper", "assistant-setup"],
+            0,
+            "the assistant now uses the pinned model (m)\ntuning skipped: boom; open Setup and turn the assistant on again to retry\n",
+        );
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
+        let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(state.detail().contains("tuning skipped: boom"));
     }
 
     #[test]
