@@ -685,6 +685,11 @@ impl<R: LookupRunner> Run<'_, R> {
                         repair.push_str(REPAIR_AFTER_RESULTS_NOTE);
                     }
                     self.working.push(Message::User(repair));
+                    // The malformed reply may have used up the room. Results
+                    // keep their minimum by design; a repair does not.
+                    if self.base_chars() + RESERVE_CHARS > self.limit_chars {
+                        return Err(AnswerError::NoAnswer);
+                    }
                 }
                 // Prose instead of an action: take it as the answer.
                 Action::Prose => return self.finish(&response.content, false),

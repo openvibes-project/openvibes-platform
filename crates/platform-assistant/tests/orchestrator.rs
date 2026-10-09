@@ -1148,3 +1148,22 @@ async fn the_time_rides_with_the_question_not_the_system_prompt() {
     );
     assert!(last_user(&seen[1]).contains("09:30:00Z"));
 }
+
+#[tokio::test]
+async fn no_request_is_sent_over_the_budget() {
+    // The tightest budget that admits the question; the malformed reply
+    // then fills it, so the repair request would be over budget.
+    let junk = format!("{{\"foo\":\"{}\"}}", "x".repeat(3_000));
+    for prompt_tokens in (100..).step_by(10) {
+        let script = Script::new(vec![text(&junk), text("fine.")]);
+        let mut s = settings(ResolvedMode::Prompted);
+        s.budget.prompt_tokens = prompt_tokens;
+        let result = ask(&script, &Fake::default(), s, "Is web-01 up?").await;
+        if matches!(result, Err(AnswerError::QuestionTooLong)) {
+            continue;
+        }
+        assert_eq!(result.unwrap_err(), AnswerError::NoAnswer);
+        assert_eq!(script.requests().len(), 1, "no repair request");
+        return;
+    }
+}
