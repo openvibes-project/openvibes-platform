@@ -7,8 +7,10 @@
 #        OUT_DIR/fingerprint); unset: the installer's built-in release key
 #      PODMAN, FEDORA (default 44), OLD_FEDORA (default 43)
 # Checks, in one container: --check, then a first install whose --model file
-# has the wrong SHA-256 (must fail at the model step, packages installed),
-# then a second install (the upgrade path) that succeeds. Separate containers:
+# has the wrong SHA-256 (must fail at the model step, packages installed, nothing
+# staged), then a second install (the upgrade path) that succeeds, then a model
+# file matching a test pin (written into the container's model.pin) that must
+# be staged for Setup, mode 0444 root. Separate containers:
 # a tampered SHA256SUMS, a tampered package and an extra file each fail
 # --check, and a Fedora OLD_FEDORA host refuses with the right kit's name.
 set -euo pipefail
@@ -16,7 +18,11 @@ PODMAN=${PODMAN:-podman}
 FEDORA=${FEDORA:-44}
 OLD_FEDORA=${OLD_FEDORA:-43}
 [[ $# == 1 && -f $1 ]] || { echo "usage: $0 KIT_TAR" >&2; exit 2; }
-tar_path=$(realpath "$1") kit_dir=$(dirname "$tar_path") tar_name=$(basename "$tar_path")
+tar_name=$(basename "$1")
+# The containers mount a private copy of the tar, relabelled for SELinux: the
+# checkout is never relabelled.
+kit_dir=$(mktemp -d); trap 'rm -rf "$kit_dir"' EXIT
+cp "$1" "$kit_dir/$tar_name"
 image() { echo "registry.fedoraproject.org/fedora:$1"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 ok() { echo "ok: $*"; }
@@ -24,7 +30,7 @@ env_args=()
 [[ -n ${OPENVIBES_KEY_FINGERPRINT:-} ]] && env_args=(-e "OPENVIBES_KEY_FINGERPRINT=$OPENVIBES_KEY_FINGERPRINT")
 # run FEDORA SCRIPT: SCRIPT in a network-less container, the kit's tar at /kit.
 run() {
-    "$PODMAN" run --rm --network none -v "$kit_dir:/kit:ro,z" "${env_args[@]}" \
+    "$PODMAN" run --rm --network none -v "$kit_dir:/kit:ro,Z" "${env_args[@]}" \
         -e "TAR=/kit/$tar_name" \
         "$(image "$1")" bash -c "$2"
 }
@@ -57,13 +63,23 @@ echo "ok: --check"
 # openvibes-admin): the packages install, the model step fails clearly.
 echo not-the-model > /root/wrong.gguf
 if out=$(./openvibes-offline/install --no-setup --model /root/wrong.gguf 2>&1); then fail "a wrong model was accepted: $out"; fi
-case $out in *"the model was not installed"*"the platform packages are installed"*) ;; *) fail "unclear model error: $out" ;; esac
+case $out in *"the platform packages are installed, but the model file does not match the pinned SHA-256"*) ;; *) fail "unclear model error: $out" ;; esac
 rpm -q openvibes-admin >/dev/null || fail "packages missing after the model step failed"
-ls -d /var/tmp/openvibes-model.* 2>/dev/null && fail "the temporary model copy was left behind"
+ls /var/lib/openvibes-offline/*.gguf /var/lib/openvibes-offline/.*.part 2>/dev/null && fail "a wrong model was left staged"
 echo "ok: wrong model refused after the packages were installed: ${out##*openvibes offline install: }"
 # 2. The same kit again (the update path), no model.
 ./openvibes-offline/install --no-setup
 . /usr/share/openvibes-llm/model.pin
+# 3. A model matching the pin (a test pin: the container'"'"'s model.pin is edited): staged.
+. /usr/share/openvibes-llm/model.pin
+echo tiny-model > /root/tiny.gguf
+sed -i "s/^LLM_MODEL_SHA256=.*/LLM_MODEL_SHA256=$(sha256sum /root/tiny.gguf | cut -d" " -f1)/" /usr/share/openvibes-llm/model.pin
+./openvibes-offline/install --no-setup --model /root/tiny.gguf
+staged=/var/lib/openvibes-offline/$LLM_MODEL_FILE
+[[ $(stat -c "%a %U %G" "$staged") == "444 root root" ]] || fail "staged model has the wrong mode or owner"
+[[ $(sha256sum < "$staged") == $(sha256sum < /root/tiny.gguf) ]] || fail "staged model differs"
+[[ -f /root/tiny.gguf ]] || fail "the original was removed"
+echo "ok: a model matching the pin is staged for Setup"
 for p in openvibes-admin openvibes-console openvibes-ingest openvibes-distribution openvibes-vulns \
          openvibes-signer openvibes-llm openvibes-llm-model postgresql-server; do
     rpm -q "$p" >/dev/null || fail "$p is not installed"

@@ -544,6 +544,7 @@ jobs:
           cp dist/openvibes-*-"$version"-*.rpm dist/llm-model/*.rpm kit-rpms/
           rm -f kit-rpms/openvibes-agent-*
           gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir kit-rpms
+          ls kit-rpms/openvibes-rules-*.rpm > /dev/null || { echo 'no openvibes-rules RPM in the latest rules release' >&2; exit 1; }
           bash scripts/offline-kit-test-kit.sh kit-rpms target/offline 44
       - name: Install from the kit with no network
         run: |

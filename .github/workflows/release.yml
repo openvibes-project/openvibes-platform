@@ -86,6 +86,7 @@ jobs:
           rm -f rpms/*-debuginfo-* rpms/*-debugsource-* rpms/openvibes-agent-*
           # The rule sets: the latest rules release (signed with the same key).
           gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir rpms
+          ls rpms/openvibes-rules-*.rpm > /dev/null || { echo 'no openvibes-rules RPM in the latest rules release' >&2; exit 1; }
       - name: Build the kit
         run: |
           mkdir -p target/offline

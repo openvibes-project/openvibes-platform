@@ -22,14 +22,14 @@ PIN=/usr/share/openvibes-llm/model.pin
 
 done_so_far="nothing changed"
 tmp=''
-model_copy=''
+stage_part=''
 
 die() {
     printf 'openvibes offline install: %s (%s)\n' "$1" "$done_so_far" >&2
     exit 1
 }
 say() { printf 'openvibes offline install: %s\n' "$1"; }
-cleanup() { rm -rf "${tmp:-}" "${model_copy:-}"; }
+cleanup() { rm -rf "${tmp:-}" "${stage_part:-}"; }
 usage() {
     echo 'usage: install [--model FILE] [--no-setup] [--check]' >&2
     exit 2
@@ -113,34 +113,33 @@ if [ -z "$model" ] && [ -f "$kit/../$LLM_MODEL_FILE" ]; then
 fi
 if [ -n "$model" ]; then
     [ -f "$model" ] || die "--model: $model is not a file"
-    # The model is installed as the openvibes-admin user (never root), so
-    # that user must be able to read the file. If it cannot (a file under
-    # /root, say), install from a private copy that is removed on every exit.
-    if ! runuser -u openvibes-admin -- test -r "$model" 2>/dev/null; then
-        need=$(stat -c %s "$model")
-        free=$(df -B1 --output=avail /var/tmp | tail -n 1 | tr -d ' ')
-        [ "$free" -gt $((need + 268435456)) ] ||
-            die "not enough free space in /var/tmp for a temporary copy of the model ($((need / 1000000000 + 1)) GB needed)"
-        model_copy=$(mktemp -d /var/tmp/openvibes-model.XXXXXX)
-        chmod 0755 "$model_copy"
-        cp "$model" "$model_copy/$LLM_MODEL_FILE" || die "could not copy the model file into $model_copy"
-        chmod 0444 "$model_copy/$LLM_MODEL_FILE"
-        chgrp openvibes-admin "$model_copy" "$model_copy/$LLM_MODEL_FILE"
-        model=$model_copy/$LLM_MODEL_FILE
+    # Stage it for Setup, which installs it as openvibes-admin (the model
+    # install needs the database Setup creates, and refuses root). Checked
+    # against the pin right away; a wrong file is not left behind.
+    stage=/var/lib/openvibes-offline
+    need=$(stat -c %s "$model")
+    install -d -m 0755 -o root -g root "$stage"
+    free=$(df -B1 --output=avail "$stage" | tail -n 1 | tr -d ' ')
+    [ "$free" -gt $((need + 268435456)) ] ||
+        die "not enough free space in $stage for the model file ($((need / 1000000000 + 1)) GB needed)"
+    stage_part=$stage/.$LLM_MODEL_FILE.part
+    rm -f "$stage_part"
+    (umask 077 && cp "$model" "$stage_part") || die "could not copy the model file into $stage"
+    got=$(sha256sum "$stage_part" | cut -d ' ' -f 1)
+    if [ "$got" != "$LLM_MODEL_SHA256" ]; then
+        rm -f "$stage_part"
+        die "the platform packages are installed, but the model file does not match the pinned SHA-256 $LLM_MODEL_SHA256 (it must be $LLM_MODEL_FILE from $LLM_MODEL_URL)"
     fi
-    say "installing the assistant's model (checking it against the pinned SHA-256)"
-    openvibes-admin assistant model install "$model" --sha256 "$LLM_MODEL_SHA256" >"$tmp/model.log" 2>&1 || {
-        tail -n 10 "$tmp/model.log" >&2
-        die "the model was not installed (see the line above; the file must be $LLM_MODEL_FILE with SHA-256 $LLM_MODEL_SHA256, from $LLM_MODEL_URL)"
-    }
-    done_so_far="the platform and the assistant's model are installed"
+    chmod 0444 "$stage_part"
+    mv -f "$stage_part" "$stage/$LLM_MODEL_FILE"
+    done_so_far="the platform packages are installed and the model is staged for Setup"
+    say "the assistant's model is checked and staged; Setup installs it, with no download."
 else
     say "the platform is installed. The assistant has no model yet: turn it on in Setup (it downloads the model)."
     say "With no network: download $LLM_MODEL_URL (SHA-256 $LLM_MODEL_SHA256) into the folder that holds this kit and run this installer again."
 fi
 
 # 5. Setup, as after an online install.
-rm -rf "$model_copy"
 user=${SUDO_USER:-}
 if [ "$setup" = 1 ] && [ -n "$user" ] && [ "$user" != root ] && [ -t 0 ]; then
     say "opening the administration TUI (Setup)"

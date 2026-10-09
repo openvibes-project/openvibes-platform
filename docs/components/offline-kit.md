@@ -13,21 +13,19 @@ and Fedora version, `openvibes-platform-<version>-offline-fedora<N>.tar` (today
 | `install` | the POSIX sh installer (`packaging/offline/install`, version and Fedora number filled in at build time) |
 | `README.txt` | the steps, the model's link, SHA-256 and licence, the key fingerprint, a note on Fedora sources (`packaging/offline/README.txt.in`) |
 | `openvibes.gpg` | the OpenVIBES package key (`packaging/rpm/openvibes-packages.gpg`) |
-| `packages/` | the signed OpenVIBES packages (admin, console, ingest, distribution, vulns, signer, llm, llm-model), the `openvibes-rules-*` packages, `postgresql-server`, and every Fedora package they need that a minimal fedora image lacks; `repodata/` from `createrepo_c` |
+| `packages/` | the signed OpenVIBES packages (admin, console, ingest, distribution, vulns, signer, llm, llm-model), the `openvibes-rules-*` packages, `postgresql-server`, and the full `--alldeps` closure of Fedora packages (base-image packages included, so an older Fedora 44 point release gets the newer libraries it needs); `repodata/` from `createrepo_c` |
 | `SHA256SUMS`, `SHA256SUMS.asc` | every file in the kit; a detached signature by the package key |
 | `LICENSES/fedora-packages.txt` | name, licence, source RPM and `https://src.fedoraproject.org/rpms/<source>` of each bundled Fedora package (GPL source offer) |
 
 The model is not in the kit (2.5 GB, a Hugging Face link in `README.txt`).
-Typical size: about 55 MB.
+Size: about 92 MB.
 
 ## Building
 
 `scripts/build-offline-kit.sh RPM_DIR OUT_DIR FEDORA` runs as root in a clean
-`fedora:<N>` container with network access and the checkout mounted. It takes
-the package list of the image first (the "base"), builds a local repository of
+`fedora:<N>` container with network access and the checkout mounted. It builds a local repository of
 the OpenVIBES packages, runs `dnf download --resolve --alldeps` for them and
-`postgresql-server`, drops every non-OpenVIBES package whose name the base has,
-runs `createrepo_c`, and writes `README.txt`, `LICENSES/` and `SHA256SUMS`.
+`postgresql-server` (nothing is dropped), runs `createrepo_c`, and writes `README.txt`, `LICENSES/` and `SHA256SUMS`.
 Signing is the caller's job: put `SHA256SUMS.asc` into `OUT_DIR/openvibes-offline/`
 and run `build-offline-kit.sh --pack OUT_DIR FEDORA` to write the tar. The
 release workflow's `offline-kit` job does this after the `release` job
@@ -49,15 +47,16 @@ root):
 3. `dnf` installs the packages from the kit's repository only
    (`--disablerepo='*'`, `gpgcheck=1`, the OpenVIBES key imported from a copy
    made after step 2; it stays in the rpm database, as with an online install).
-4. The model: `--model FILE` or `<kit>/../<LLM_MODEL_FILE>` goes to
-   `openvibes-admin assistant model install FILE --sha256 <pin>` (pin read from
-   `/usr/share/openvibes-llm/model.pin`). That command refuses root, so the
-   file must be readable by `openvibes-admin`; if it is not (a file under
-   `/root`), the installer copies it into a fresh `/var/tmp/openvibes-model.*`
-   (mode 0755 directory, 0444 file, group `openvibes-admin`, free space checked
-   first) and removes the copy on every exit. The original is never changed.
+4. The model: `--model FILE` or `<kit>/../<LLM_MODEL_FILE>` is **staged**, not
+   installed. The installer checks free space, copies the file as root to
+   `/var/lib/openvibes-offline/<LLM_MODEL_FILE>` (directory 0755, file 0444,
+   root:root) and verifies its SHA-256 against `/usr/share/openvibes-llm/model.pin`
+   at once; on a mismatch it deletes the copy and stops ("the platform packages
+   are installed, but the model file does not match the pinned SHA-256"). Setup
+   installs the staged file (see [openvibes-admin.md](openvibes-admin.md)), because
+   `assistant model install` refuses root and needs the database that Setup creates.
    With no file it says the assistant can be turned on in Setup, or the model
-   added later (link and SHA-256).
+   added later (link and SHA-256). The original file is never changed.
 5. Unless `--no-setup`, and when a person ran it under sudo on a terminal,
    Setup opens.
 
@@ -72,7 +71,7 @@ newer kit upgrades (the update path for an offline host).
 | Other Fedora version or architecture | refused, naming `openvibes-platform-<v>-offline-fedora<M>.tar`; nothing changed |
 | Altered key, signature, checksum, extra or special files | refused before anything changes |
 | dnf cannot install | dnf's last lines and "nothing changed" or what did |
-| Model step fails (wrong file, admin error) | the packages stay installed; the message says the model is not |
+| Model file does not match the pin | the packages stay installed, nothing is staged, the message says so |
 
 ## Testing
 
@@ -83,11 +82,11 @@ newer kit upgrades (the update path for an offline host).
   runs the checks with `--network none` containers: a tampered `SHA256SUMS`, a
   tampered package and an extra file each fail `--check`; a `fedora:43`
   container refuses with the kit's name; in a `fedora:44` container `--check`
-  passes, a wrong `--model` file fails at the model step with the packages
-  installed, a second install succeeds, and every OpenVIBES package,
+  passes, a wrong `--model` file is refused with the packages installed and
+  nothing staged, a second install succeeds, a small file whose hash is written
+  into the container's `model.pin` is staged (0444 root), and every OpenVIBES package,
   `postgresql-server`, a rule set and `model.pin` are present.
 - CI runs the same on pull requests that touch `packaging/offline/`,
   `scripts/*offline*` or the spec (job `offline-kit`), with the PR's unsigned
   RPMs; the release job runs it with the real key before uploading.
-- Not covered yet: a successful model install (`assistant
-  model install` needs the database, which does not exist before Setup).
+- Setup's install of the staged file is covered by Rust unit tests (`setup/assistant.rs`), not by the e2e.

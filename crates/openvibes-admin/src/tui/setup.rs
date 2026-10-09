@@ -106,7 +106,8 @@ impl Setup {
             sans: String::new(),
             ca: CaMode::Quick,
             model: ModelChoice::Fetch,
-            model_present: crate::assistant_setup::model_installed(),
+            model_present: crate::assistant_setup::model_installed()
+                || crate::model_fetch::staged_in(std::path::Path::new("/")).is_some(),
             root_key_out: default_root_key(home.as_deref()),
             console_port: ports::CONSOLE_DEFAULT.to_string(),
             agent_ports: format!("{}, {}", ports::INGEST_DEFAULT, ports::DISTRIBUTION_DEFAULT),

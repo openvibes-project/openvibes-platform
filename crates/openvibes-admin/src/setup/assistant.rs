@@ -49,6 +49,10 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("using an external assistant".into()));
     }
     let present = installed(ctx);
+    // A model the offline installer staged is installed whatever was chosen.
+    if !present && crate::model_fetch::staged_in(ctx.root).is_some() {
+        return Ok(StepState::Todo);
+    }
     let on = present
         && ctx.succeeds(
             Systemctl,
@@ -68,7 +72,27 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
+    // The offline kit's staged model: installed as openvibes-admin (never
+    // root), checked against the pin, and removed once installed. A failure
+    // keeps the file.
+    let staged = crate::model_fetch::staged_in(ctx.root).filter(|_| !installed(ctx));
+    if let Some((abs, _)) = &staged {
+        let pin = crate::model_fetch::pin_or_embedded()?;
+        ctx.as_admin(&[
+            "assistant",
+            "model",
+            "install",
+            abs,
+            "--sha256",
+            &pin.sha256,
+        ])
+        .map_err(|error| format!("the staged model was not installed ({error})"))?;
+    }
     ctx.ok(Admin, &["helper", "assistant-setup"])?;
+    if let Some((_, path)) = staged {
+        let _ = std::fs::remove_file(&path);
+        let _ = std::fs::remove_dir(path.parent().unwrap_or(&path));
+    }
     Ok(StepState::Done(
         "assistant on: model installed, model server enabled".into(),
     ))
@@ -168,5 +192,51 @@ mod tests {
         fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
         let state = run_step(&fake.ctx(&plan(&[Ingest, Assistant])), Step::AssistantModel);
         assert_eq!(state.detail(), "assistant: off (turn it on in Setup)");
+    }
+
+    fn staged_name() -> String {
+        crate::model_fetch::pin_or_embedded().unwrap().file
+    }
+
+    #[test]
+    fn a_staged_model_is_installed_as_the_admin_user_and_removed() {
+        let fake = Fake::new("model-staged");
+        let staged = format!("/var/lib/openvibes-offline/{}", staged_name());
+        fake.file(&staged, "x");
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        fake.answer(&["/usr/sbin/runuser"], 0, "");
+        fake.answer(
+            &["/usr/bin/openvibes-admin", "helper", "assistant-setup"],
+            0,
+            "",
+        );
+        let plan = plan(&[Ingest, Assistant]); // Skip: staged overrides it
+        let ctx = fake.ctx(&plan);
+        assert!(matches!(super::check(&ctx), Ok(StepState::Todo)));
+        let state = run_step(&ctx, Step::AssistantModel);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        let install = fake.call(&["/usr/sbin/runuser"]);
+        assert!(install.join(" ").contains(&format!(
+            "assistant model install {staged} --sha256 {}",
+            crate::model_fetch::pin_or_embedded().unwrap().sha256
+        )));
+        assert!(fake.called(&["/usr/bin/openvibes-admin", "helper", "assistant-setup"]));
+        assert!(!fake.root.join(staged.trim_start_matches('/')).exists());
+    }
+
+    #[test]
+    fn a_staged_model_that_fails_the_install_is_kept_and_reported() {
+        let fake = Fake::new("model-staged-bad");
+        let staged = format!("/var/lib/openvibes-offline/{}", staged_name());
+        fake.file(&staged, "x");
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        fake.fail(&["/usr/sbin/runuser"], "sha256 mismatch");
+        let mut plan = plan(&[Ingest, Assistant]);
+        plan.model = ModelChoice::Fetch;
+        let state = run_step(&fake.ctx(&plan), Step::AssistantModel);
+        assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+        assert!(state.detail().contains("staged model was not installed"));
+        assert!(!fake.called(&["/usr/bin/openvibes-admin", "helper"]));
+        assert!(fake.root.join(staged.trim_start_matches('/')).exists());
     }
 }

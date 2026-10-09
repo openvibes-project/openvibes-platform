@@ -34,6 +34,19 @@ const STAT: &str = "/usr/bin/stat";
 /// Where the `openvibes-llm` package installs the pin.
 pub const PIN_PATH: &str = "/usr/share/openvibes-llm/model.pin";
 
+/// Where the offline kit's installer stages the model file for Setup.
+pub const STAGED_DIR: &str = "/var/lib/openvibes-offline";
+
+/// The staged copy of the pinned model under `root` (a plain file, not a link).
+pub fn staged_in(root: &Path) -> Option<(String, PathBuf)> {
+    let pin = pin_or_embedded().ok()?;
+    let abs = format!("{STAGED_DIR}/{}", pin.file);
+    let path = root.join(abs.trim_start_matches('/'));
+    fs::symlink_metadata(&path)
+        .is_ok_and(|meta| meta.is_file())
+        .then_some((abs, path))
+}
+
 /// The pin as installed, or the one this build shipped with (Setup shows
 /// the licence before the package is installed).
 pub fn pin_or_embedded() -> Result<Pin, String> {

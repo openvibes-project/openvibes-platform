@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Builds the offline platform kit. Run it as root inside a clean fedora:N
-# container (the container's own packages are the "minimal base" the kit
-# leaves out), with network access to Fedora's repositories and the
+# container (a minimal base image), with network access to Fedora's repositories and the
 # repository checkout at ../ (mounted).
 # Usage: build-offline-kit.sh RPM_DIR OUT_DIR FEDORA
 #        build-offline-kit.sh --pack OUT_DIR FEDORA     (after signing)
@@ -33,8 +32,6 @@ rpm_dir=$(realpath "$1") out=$(realpath -m "$2") fedora=$3
 [[ $fedora =~ ^[0-9]+$ ]] || { echo "FEDORA must be a number" >&2; exit 2; }
 [[ $(. /etc/os-release && echo "$VERSION_ID") == "$fedora" ]] || { echo "this is not a fedora:$fedora container" >&2; exit 1; }
 
-# Before anything is installed: what the base image already has.
-base=$(rpm -qa --qf '%{NAME}\n' | sort -u)
 
 kit=$out/openvibes-offline
 rm -rf "$kit"
@@ -57,7 +54,7 @@ version=$(rpm -qp --nosignature --qf '%{VERSION}' "$rpm_dir"/openvibes-admin-[0-
 
 # 2. Their dependency closure from Fedora (no weak dependencies). dnf cannot
 # download from local files, so they form a repository first. --alldeps
-# ignores what is installed, and "base" was taken before createrepo_c came.
+# ignores what is installed.
 dnf -y install createrepo_c >/dev/null
 createrepo_c --quiet "$kit/packages"
 # PostgreSQL is not a dependency of the packages: Setup installs it on demand,
@@ -68,11 +65,8 @@ dnf -y --repofrompath=ovlocal,"$kit/packages" --setopt=ovlocal.gpgcheck=0 downlo
     --exclude='*.i686' --destdir "$kit/packages" --setopt=install_weak_deps=False "${names[@]}"
 rm -rf "$kit/packages/repodata"
 
-# 3. Leave out what the base image has.
-for f in "$kit"/packages/*.rpm; do
-    name=$(rpm -qp --nosignature --qf '%{NAME}' "$f")
-    if [[ $name != openvibes-* ]] && grep -qxF "$name" <<<"$base"; then rm -f "$f"; fi
-done
+# 3. The whole closure stays, base-image packages included: a host on an
+# older Fedora point release gets the newer libraries it needs from the kit.
 for p in postgresql-server openvibes-admin; do
     ls "$kit"/packages/"$p"-[0-9]*.rpm >/dev/null || { echo "build-offline-kit: $p is not in the kit" >&2; exit 1; }
 done
