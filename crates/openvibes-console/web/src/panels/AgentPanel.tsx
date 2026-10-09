@@ -300,7 +300,7 @@ function ThreatAlarms({ alarms }: { alarms: NonNullable<Agent["alarms"]> }) {
 
 // The harmless pipeline test (spec 2026-10-09-test-triggers-design.md): run
 // `openvibes-test alarm|finding` on the host and watch this line change.
-function LastTestSection({ test }: { test: LastTest | undefined }) {
+function LastTestSection({ test }: Readonly<{ test: LastTest | undefined }>) {
   const seen = (at: string | null | undefined) => at ? <span className="badge badge--ok">OK <Ago value={at} /></span> : <span className="subtle">Not seen yet</span>;
   return (
     <Section title="Last test">
