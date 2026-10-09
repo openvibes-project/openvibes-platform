@@ -47,6 +47,7 @@ pub fn pin_or_embedded() -> Result<Pin, String> {
 #[allow(clippy::disallowed_types)]
 pub fn fetch_as_admin() -> Result<(), String> {
     let status = Command::new("/usr/sbin/runuser")
+        .current_dir("/")
         .args([
             "-u",
             "openvibes-admin",
@@ -61,7 +62,9 @@ pub fn fetch_as_admin() -> Result<(), String> {
     if status.success() {
         Ok(())
     } else {
-        Err(format!("the model download failed ({status})"))
+        Err(format!(
+            "the model download failed ({status}; offline: see the offline install guide)"
+        ))
     }
 }
 
@@ -121,8 +124,14 @@ pub struct Curl;
 impl Downloader for Curl {
     #[allow(clippy::disallowed_types)]
     fn download(&self, url: &str, dest: &Path) -> Result<(), String> {
+        let mut args = curl_args(url, dest);
+        // The failure detail is captured by callers: no progress meter
+        // unless a person is watching. `-q` stays first.
+        if !std::io::IsTerminal::is_terminal(&io::stderr()) {
+            args.insert(1, "--no-progress-meter".into());
+        }
         let status = Command::new(CURL)
-            .args(curl_args(url, dest))
+            .args(args)
             .status()
             .map_err(|_| "curl is not installed".to_owned())?;
         if status.success() {

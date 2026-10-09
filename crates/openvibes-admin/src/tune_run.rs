@@ -52,10 +52,7 @@ const STOP_LLM: [&str; 3] = [
 /// listen there and receive the server's key.
 pub fn socket_holds(show: &str, port: &str) -> Result<(), String> {
     if !show.lines().any(|line| line == "ActiveState=active") {
-        return Err(
-            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
-                .into(),
-        );
+        return Err("openvibes-llm.socket is not active; turn the assistant on in Setup".into());
     }
     let listen = format!("Listen=127.0.0.1:{port} (Stream)");
     if !show.lines().any(|line| line == listen) {
@@ -534,7 +531,7 @@ mod tests {
         )
         .unwrap_err();
         assert!(
-            inactive.contains("openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"),
+            inactive.contains("openvibes-llm.socket is not active; turn the assistant on in Setup"),
             "{inactive}"
         );
         // Not found, failed, another port, or a port that merely starts the same.

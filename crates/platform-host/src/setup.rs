@@ -23,8 +23,9 @@ pub enum Step {
     Firewall,
     Rules,
     Agent,
-    AssistantModel,
     Ready,
+    /// Last: a failed download must not hide the end of the install.
+    AssistantModel,
 }
 
 impl Step {
@@ -42,8 +43,8 @@ impl Step {
         Step::Firewall,
         Step::Rules,
         Step::Agent,
-        Step::AssistantModel,
         Step::Ready,
+        Step::AssistantModel,
     ];
 
     /// The name the helper takes.

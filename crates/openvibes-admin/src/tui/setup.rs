@@ -643,7 +643,11 @@ impl<H: Host> App<H> {
         self.setup.prompt.failures = 0;
         let finished = state.finished();
         self.setup.states[next] = Some(state);
-        self.setup.phase = if !finished {
+        // The model step is last and optional: its failure still ends on
+        // the Finished screen, which shows the URL and password.
+        let optional_last = matches!(self.setup.job, Job::Install | Job::Repair)
+            && Step::ALL.get(next) == Some(&Step::AssistantModel);
+        self.setup.phase = if !finished && !optional_last {
             self.setup.password = None;
             Phase::Stopped(next)
         } else if next + 1 == self.setup.job.steps() {

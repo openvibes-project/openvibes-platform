@@ -1016,3 +1016,47 @@ fn y_downloads_the_model_and_no_assistant_means_no_question() {
     plain.key(Key::Enter);
     assert!(matches!(plain.setup.phase, Phase::Password(_)));
 }
+
+#[test]
+fn a_failed_model_download_still_ends_on_the_finished_screen_with_the_login() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::Console => "done\thttps://platform.example.com · console admin: admin, password Abc123 (shown only now; change it after logging in)\n".into(),
+            Step::AssistantModel => "failed\tthe model download failed (offline: see the offline install guide)\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    let text = screen(&app);
+    assert!(
+        text.contains("Abc123") && text.contains("https://platform.example.com"),
+        "{text}"
+    );
+    assert!(text.contains("model download failed"), "{text}");
+}
+
+#[test]
+fn a_declined_model_is_named_on_the_finished_screen() {
+    let mut app = app(false, vec![]);
+    let mut answers: Vec<Result<String, HostError>> = vec![Ok("written\n".into())];
+    for step in Step::ALL {
+        answers.push(Ok(match step {
+            Step::AssistantModel => "skipped\tassistant: off until its model is installed; turn the assistant on in Setup again to download it\n".into(),
+            _ => "done\tok\n".into(),
+        }));
+    }
+    *app.host.answers.borrow_mut() = answers.into();
+    start(&mut app, "pw");
+    for _ in Step::ALL {
+        app.setup_tick();
+    }
+    assert_eq!(app.setup.phase, Phase::Finished);
+    assert!(screen(&app).contains("assistant: off until its model is installed"));
+}

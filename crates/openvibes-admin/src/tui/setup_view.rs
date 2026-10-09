@@ -260,6 +260,17 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
             Style::default().add_modifier(Modifier::DIM),
         ));
     }
+    if let Phase::Running(next) = app.setup.phase
+        && matches!(app.setup.job, Job::Install | Job::Repair)
+        && Step::ALL.get(next) == Some(&Step::AssistantModel)
+        && app.setup.components.contains(&Component::Assistant)
+    {
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            "Downloading the assistant's model (2.5 GB) can take a while.",
+            Style::default().add_modifier(Modifier::DIM),
+        ));
+    }
     if let Phase::Stopped(at) = app.setup.phase
         && let Some(Some(state)) = app.setup.states.get(at)
     {
@@ -390,10 +401,14 @@ fn install_finished(states: &[Option<StepState>]) -> Vec<Line<'static>> {
         .iter()
         .position(|s| *s == Step::AssistantModel)
         .and_then(|index| states.get(index)?.as_ref());
-    if let Some(StepState::Skipped(detail)) = model
-        && detail.starts_with("assistant: off")
-    {
-        lines.push(Line::raw(detail.clone()));
+    match model {
+        Some(StepState::Skipped(detail)) if detail.starts_with("assistant: off") => {
+            lines.push(Line::raw(detail.clone()));
+        }
+        Some(StepState::Failed(detail)) => {
+            lines.push(Line::raw(format!("assistant: not set up ({detail})")));
+        }
+        _ => {}
     }
     if url.is_some() {
         lines.push(Line::raw(if password.is_some() {

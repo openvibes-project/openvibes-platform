@@ -479,9 +479,7 @@ fn an_inactive_llm_socket_is_refused_before_anything_is_sent() {
     assert_eq!(out.status.code(), Some(1), "{out:?}");
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains(
-            "openvibes-llm.socket is not active; run sudo openvibes-admin helper assistant-setup"
-        ),
+        stderr.contains("openvibes-llm.socket is not active; turn the assistant on in Setup"),
         "{stderr}"
     );
     assert!(!stderr.contains("systemctl stop"), "{stderr}");
