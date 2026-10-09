@@ -78,3 +78,4 @@ Task 5: phase A eff73c8 + bd294de (unbuilt); review dispatched; phase B waits fo
 Task 5 review: Needs fixes — README.txt.in not §6 verbatim; database.rs:188 + run_as.rs:71 name commands; quick-setup:19 no sudo; fixture newline
 Follow-up (out of scope): quick-setup.md:38/137/143 show CLI commands (setup --repair --console-port, agent list, import) — review against the no-commands rule later
 Task 5: fix round 1 dispatched (edits only)
+Task 5: fix round 1 8455943 (mechanical; verified by phase B gate instead of re-review)
