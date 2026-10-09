@@ -53,7 +53,10 @@ above a rule list, with a kill-chain toggle.
 ## 3. Kill chain, derived
 
 One fixed table in the console, from ATT&CK tactic to Lockheed Martin
-Cyber Kill Chain phase:
+Cyber Kill Chain phase (ATT&CK 19.2: 15 tactics; v19 renamed Defense
+Evasion to Stealth and added Defense Impairment). A tactic the table does
+not know (a later ATT&CK release) shows under "Unmapped phase" until the
+table is updated with the data file:
 
 | Kill-chain phase | ATT&CK tactics |
 |---|---|
@@ -61,7 +64,7 @@ Cyber Kill Chain phase:
 | Weaponization | Resource Development (TA0042) |
 | Delivery | Initial Access (TA0001) |
 | Exploitation | Execution (TA0002) |
-| Installation | Persistence (TA0003), Privilege Escalation (TA0004), Defense Evasion (TA0005) |
+| Installation | Persistence (TA0003), Privilege Escalation (TA0004), Stealth (TA0005), Defense Impairment (TA0112) |
 | Command and Control | Command and Control (TA0011) |
 | Actions on Objectives | Credential Access (TA0006), Discovery (TA0007), Lateral Movement (TA0008), Collection (TA0009), Exfiltration (TA0010), Impact (TA0040) |
 
