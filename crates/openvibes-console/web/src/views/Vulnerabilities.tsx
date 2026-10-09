@@ -11,6 +11,7 @@ import { pct, severityOrder } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { ViewHeader } from "../ui/ViewHeader";
 import { groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "./rows";
+import { filterChips } from "./filters";
 
 export function Vulnerabilities() {
   const { params, panels } = useLocation();
@@ -23,11 +24,7 @@ export function Vulnerabilities() {
     <div className="view">
       <ViewHeader title="Vulnerabilities" count={rows.length} refresh="/api/v1/vulnerabilities" placeholder="Filter by package, advisory or CVE…"
         chips={[
-          { label: "Known exploited", param: "exploited", value: "true" },
-          { label: "Reboot needed", param: "reboot", value: "true" },
-          { label: "No fix yet", param: "nofix", value: "true" },
-          { label: "Lower confidence", param: "lowconf", value: "true" },
-          ...(["critical", "important", "moderate", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s })),
+          ...filterChips("/vulnerabilities"),
         ]} />
       {list.data?.more_available && <p className="view-note"><Icon name="alert" size={14} /> Showing the first results only; narrow the filters to see the rest.</p>}
       {list.error ? <div className="view-pad"><ErrorBox error={list.error} /></div> : list.loading && !list.data ? <Loading /> : rows.length === 0 ? (

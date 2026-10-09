@@ -16,6 +16,7 @@ import { matches } from "../ui/table";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
 import { selectAudit } from "./rows";
+import { filterChips } from "./filters";
 
 /** The demo has no server to export from: build the same columns in the browser. */
 function downloadCsv(events: readonly AuditEvent[]) {
@@ -208,8 +209,7 @@ export function Audit() {
     <div className="view">
       <ViewHeader title="Audit log" count={rows.length} refresh="/api/v1/audit" placeholder="Filter by action, person or target…"
         chips={[
-          { label: "Failures", param: "result", value: "failure" },
-          ...[1, 7, 365].map((days) => ({ label: days === 1 ? "Last day" : `Last ${days} days`, param: "range", value: String(days) })),
+          ...filterChips("/audit"),
         ]}
         actions={<>
           {retention.data && <button type="button" className="button button--ghost" onClick={() => nav.open({ kind: "audit-retention", id: "policy" }, true)} title="Retention policy"><Icon name="clock" size={15} /> Kept {retention.data.retention_days} days</button>}
