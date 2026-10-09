@@ -147,7 +147,7 @@ pub fn specs() -> Vec<ToolSpec> {
     vec![
         spec(
             "search_findings",
-            "Findings (rule matches) across endpoints, one row per rule, most severe and widespread first.",
+            "Search compliance findings by words, such as firewall, auditd or root login, one row per rule, most severe and widespread first.",
             object(
                 json!({
                     "text": text_schema("Words in the rule or message, e.g. ssh."),
@@ -172,7 +172,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "agent_summary",
-            "One endpoint by agent ID or host name: status, last contact, OS, counts of findings and vulnerabilities.",
+            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, collectors, counts of findings and vulnerabilities.",
             object(
                 json!({ "agent": text_schema("Agent ID or host name.") }),
                 &["agent"],
@@ -180,7 +180,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one endpoint, highest priority first (exploited, then EPSS, then severity).",
+            "Open vulnerabilities on one named endpoint, never all, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
@@ -191,7 +191,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "vulnerability_hosts",
-            "Endpoints with an open vulnerability for a CVE or advisory.",
+            "Endpoints with an open vulnerability for a CVE or advisory ID taken from a result.",
             object(
                 json!({ "id": text_schema("CVE ID or advisory ID.") }),
                 &["id"],
@@ -199,7 +199,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "Agent counts by state, open vulnerabilities, top findings, and top advisories.",
+            "For fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open and exploited vulnerabilities, top findings and advisories.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(

@@ -196,3 +196,35 @@ fn shrinking_drops_items_and_counts_them() {
     tiny.shrink_to(1);
     assert_eq!(tiny.data["items"], json!([]));
 }
+
+#[test]
+fn descriptions_name_the_fields_the_results_carry() {
+    let specs = specs();
+    let d = |n: &str| {
+        specs
+            .iter()
+            .find(|s| s.name == n)
+            .unwrap()
+            .description
+            .to_lowercase()
+    };
+    for word in ["kernel", "collectors", "os", "last contact"] {
+        assert!(d("agent_summary").contains(word), "{word}");
+    }
+    for word in ["reboot", "exploited"] {
+        assert!(d("host_vulnerabilities").contains(word), "{word}");
+    }
+    for word in ["revoked", "never seen", "fleet-wide", "exploited"] {
+        assert!(d("fleet_overview").contains(word), "{word}");
+    }
+    for word in ["firewall", "auditd", "root login"] {
+        assert!(d("search_findings").contains(word), "{word}");
+    }
+    let total: usize = specs
+        .iter()
+        .map(|s| {
+            serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
+        })
+        .sum();
+    assert!(total <= 3_100, "{total}");
+}
