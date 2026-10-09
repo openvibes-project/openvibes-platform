@@ -21,6 +21,7 @@ mod auth;
 mod auth_first;
 mod cases;
 mod config;
+mod coverage;
 mod dashboards;
 mod detection;
 mod error;

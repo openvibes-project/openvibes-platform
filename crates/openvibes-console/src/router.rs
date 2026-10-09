@@ -675,6 +675,8 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/alarm-suppressions/{suppression_id}",
             axum::routing::delete(crate::alarm_suppressions::remove_suppression),
         )
+        .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
+        .route("/v1/attack", get(crate::coverage::attack_catalog))
         .route(
             "/v1/rule-drafts/{rule_set_id}",
             get(crate::rule_drafts::list_drafts),
@@ -1587,7 +1589,7 @@ pub(crate) async fn authenticated_agent_command(
     }
 }
 
-fn no_store(mut response: Response) -> Response {
+pub(crate) fn no_store(mut response: Response) -> Response {
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));

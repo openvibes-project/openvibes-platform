@@ -454,6 +454,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/attack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["attack_catalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/audit-events": {
         parameters: {
             query?: never;
@@ -1126,6 +1142,22 @@ export interface paths {
         };
         /** Lists a rule set's published bundle metadata. */
         get: operations["authenticated_rule_bundles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rules/coverage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["rule_coverage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1895,6 +1927,48 @@ export interface components {
             location: string;
             model: string;
         };
+        /** @description The bundled ATT&CK release, for the rule editor's picker. */
+        AttackCatalog: {
+            /** @description MITRE's attribution, shown wherever ATT&CK content is. */
+            notice: string;
+            /** @description Tactics in matrix order. */
+            tactics: components["schemas"]["TacticView"][];
+            /** @description Live techniques, by id. */
+            techniques: components["schemas"]["TechniqueView"][];
+            /** @description ATT&CK release, e.g. 19.2. */
+            version: string;
+        };
+        /** @description The coverage page's data; the browser builds the matrix. */
+        AttackCoverage: {
+            /** @description ATT&CK release the names come from. */
+            attack_version: string;
+            /** @description MITRE's attribution. */
+            notice: string;
+            /** @description Current rules of every live set, then the site's drafts. */
+            rules: components["schemas"]["CoverageRule"][];
+            /** @description Tactics in matrix order, with their kill-chain phase. */
+            tactics: components["schemas"]["TacticView"][];
+            /** @description Sets whose current bundle could not be verified (left out). */
+            unverified_sets: string[];
+        };
+        /** @description One pair as the rule editor sends it. */
+        AttackPairInput: {
+            /** @description Tactic id, `TA0002`. */
+            tactic: string;
+            /** @description Technique id, `T1059` or `T1059.004`; optional. */
+            technique?: string | null;
+        };
+        /** @description One pair a rule claims, resolved against the bundled release. */
+        AttackPairView: {
+            /** @description Whether the pair is in the bundled release. */
+            known: boolean;
+            /** @description Tactic id. */
+            tactic: string;
+            /** @description Technique id, when the rule names one. */
+            technique?: string | null;
+            /** @description Technique name; absent when unnamed or not in this release. */
+            technique_name?: string | null;
+        };
         /** @description Bounded audit-event page with an opaque continuation cursor. */
         AuditEventPage: {
             /** @description Events in descending timestamp order. */
@@ -2198,6 +2272,23 @@ export interface components {
         ClientTurn: {
             answer: string;
             question: string;
+        };
+        /** @description One rule and what it covers. */
+        CoverageRule: {
+            /** @description Its pairs; empty when the rule is not mapped. */
+            attack: components["schemas"]["AttackPairView"][];
+            /** @description A site draft, not yet published. */
+            draft: boolean;
+            /** @description `snapshot` (findings) or `process_event` (alarms). */
+            kind: string;
+            /** @description Rule id. */
+            rule_id: string;
+            /** @description Rule set id. */
+            rule_set_id: string;
+            /** @description Severity name. */
+            severity: string;
+            /** @description Title. */
+            title: string;
         };
         /** @description Request to assign a role to one local user with optional asset-group scope. */
         CreateAccessBindingRequest: {
@@ -2758,6 +2849,8 @@ export interface components {
         };
         /** @description Complete historical rule definition, read-only. */
         HistoricalRuleView: {
+            /** @description MITRE ATT&CK pairs (P18); empty when the rule has none. */
+            attack: components["schemas"]["AttackPairView"][];
             /**
              * Format: int32
              * @description Confidence percentage.
@@ -3112,6 +3205,8 @@ export interface components {
         };
         /** @description What the editor sends for one rule: everything but its id and version. */
         RuleDraftInput: {
+            /** @description MITRE ATT&CK pairs the rule covers (P18), primary first. */
+            attack?: components["schemas"]["AttackPairInput"][] | null;
             /**
              * Format: int32
              * @description Confidence in a match, 0 to 100.
@@ -3138,6 +3233,8 @@ export interface components {
         };
         /** @description One saved draft rule. */
         RuleDraftView: {
+            /** @description Its ATT&CK pairs, resolved against the bundled release. */
+            attack: components["schemas"]["AttackPairView"][];
             /**
              * Format: int32
              * @description Confidence, 0 to 100.
@@ -3171,7 +3268,7 @@ export interface components {
         RuleProblem: {
             /**
              * @description The field it concerns: `id`, `title`, `severity`, `confidence`,
-             *     `expression`, `finding_message`, `programs` or `rule`.
+             *     `expression`, `finding_message`, `programs`, `attack` or `rule`.
              */
             field: string;
             /** @description What is wrong. */
@@ -3590,6 +3687,24 @@ export interface components {
             expression: string;
             /** @description Original result. */
             result: boolean;
+        };
+        /** @description One ATT&CK tactic, in matrix order. */
+        TacticView: {
+            /** @description `TA` id. */
+            id: string;
+            /** @description Name, e.g. Initial Access. */
+            name: string;
+            /** @description Derived kill-chain phase. */
+            phase: string;
+        };
+        /** @description One ATT&CK technique or sub-technique. */
+        TechniqueView: {
+            /** @description `T` id, `T1059.004` for a sub-technique. */
+            id: string;
+            /** @description Name. */
+            name: string;
+            /** @description The tactics it belongs to. */
+            tactics: string[];
         };
         /** @description One host in the ranking. */
         TopHostItem: {
@@ -5113,6 +5228,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    attack_catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The bundled MITRE ATT&CK release */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackCatalog"];
                 };
             };
         };
@@ -7935,6 +8070,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    rule_coverage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Which ATT&CK tactics and techniques the rules cover */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttackCoverage"];
+                };
+            };
+            /** @description Global rules.read needed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

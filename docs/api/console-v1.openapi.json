@@ -1623,6 +1623,26 @@
         }
       }
     },
+    "/api/v1/attack": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "attack_catalog",
+        "responses": {
+          "200": {
+            "description": "The bundled MITRE ATT&CK release",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttackCatalog"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/audit-events": {
       "get": {
         "tags": [
@@ -5489,6 +5509,36 @@
         }
       }
     },
+    "/api/v1/rules/coverage": {
+      "get": {
+        "tags": [
+          "rules"
+        ],
+        "operationId": "rule_coverage",
+        "responses": {
+          "200": {
+            "description": "Which ATT&CK tactics and techniques the rules cover",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttackCoverage"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Global rules.read needed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/service-accounts": {
       "get": {
         "tags": [
@@ -7886,6 +7936,135 @@
           }
         }
       },
+      "AttackCatalog": {
+        "type": "object",
+        "description": "The bundled ATT&CK release, for the rule editor's picker.",
+        "required": [
+          "version",
+          "notice",
+          "tactics",
+          "techniques"
+        ],
+        "properties": {
+          "notice": {
+            "type": "string",
+            "description": "MITRE's attribution, shown wherever ATT&CK content is."
+          },
+          "tactics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TacticView"
+            },
+            "description": "Tactics in matrix order."
+          },
+          "techniques": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TechniqueView"
+            },
+            "description": "Live techniques, by id."
+          },
+          "version": {
+            "type": "string",
+            "description": "ATT&CK release, e.g. 19.2."
+          }
+        }
+      },
+      "AttackCoverage": {
+        "type": "object",
+        "description": "The coverage page's data; the browser builds the matrix.",
+        "required": [
+          "attack_version",
+          "notice",
+          "tactics",
+          "rules",
+          "unverified_sets"
+        ],
+        "properties": {
+          "attack_version": {
+            "type": "string",
+            "description": "ATT&CK release the names come from."
+          },
+          "notice": {
+            "type": "string",
+            "description": "MITRE's attribution."
+          },
+          "rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverageRule"
+            },
+            "description": "Current rules of every live set, then the site's drafts."
+          },
+          "tactics": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TacticView"
+            },
+            "description": "Tactics in matrix order, with their kill-chain phase."
+          },
+          "unverified_sets": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Sets whose current bundle could not be verified (left out)."
+          }
+        }
+      },
+      "AttackPairInput": {
+        "type": "object",
+        "description": "One pair as the rule editor sends it.",
+        "required": [
+          "tactic"
+        ],
+        "properties": {
+          "tactic": {
+            "type": "string",
+            "description": "Tactic id, `TA0002`."
+          },
+          "technique": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Technique id, `T1059` or `T1059.004`; optional."
+          }
+        },
+        "additionalProperties": false
+      },
+      "AttackPairView": {
+        "type": "object",
+        "description": "One pair a rule claims, resolved against the bundled release.",
+        "required": [
+          "tactic",
+          "known"
+        ],
+        "properties": {
+          "known": {
+            "type": "boolean",
+            "description": "Whether the pair is in the bundled release."
+          },
+          "tactic": {
+            "type": "string",
+            "description": "Tactic id."
+          },
+          "technique": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Technique id, when the rule names one."
+          },
+          "technique_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Technique name; absent when unnamed or not in this release."
+          }
+        }
+      },
       "AuditEventPage": {
         "type": "object",
         "description": "Bounded audit-event page with an opaque continuation cursor.",
@@ -8626,6 +8805,52 @@
           }
         },
         "additionalProperties": false
+      },
+      "CoverageRule": {
+        "type": "object",
+        "description": "One rule and what it covers.",
+        "required": [
+          "rule_set_id",
+          "rule_id",
+          "title",
+          "kind",
+          "severity",
+          "draft",
+          "attack"
+        ],
+        "properties": {
+          "attack": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttackPairView"
+            },
+            "description": "Its pairs; empty when the rule is not mapped."
+          },
+          "draft": {
+            "type": "boolean",
+            "description": "A site draft, not yet published."
+          },
+          "kind": {
+            "type": "string",
+            "description": "`snapshot` (findings) or `process_event` (alarms)."
+          },
+          "rule_id": {
+            "type": "string",
+            "description": "Rule id."
+          },
+          "rule_set_id": {
+            "type": "string",
+            "description": "Rule set id."
+          },
+          "severity": {
+            "type": "string",
+            "description": "Severity name."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title."
+          }
+        }
       },
       "CreateAccessBindingRequest": {
         "type": "object",
@@ -9953,9 +10178,17 @@
           "finding_message",
           "severity",
           "confidence",
-          "kind"
+          "kind",
+          "attack"
         ],
         "properties": {
+          "attack": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttackPairView"
+            },
+            "description": "MITRE ATT&CK pairs (P18); empty when the rule has none."
+          },
           "confidence": {
             "type": "integer",
             "format": "int32",
@@ -10801,6 +11034,16 @@
           "finding_message"
         ],
         "properties": {
+          "attack": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/AttackPairInput"
+            },
+            "description": "MITRE ATT&CK pairs the rule covers (P18), primary first."
+          },
           "confidence": {
             "type": "integer",
             "format": "int32",
@@ -10864,10 +11107,18 @@
           "confidence",
           "expression",
           "finding_message",
+          "attack",
           "updated_by",
           "updated_at"
         ],
         "properties": {
+          "attack": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttackPairView"
+            },
+            "description": "Its ATT&CK pairs, resolved against the bundled release."
+          },
           "confidence": {
             "type": "integer",
             "format": "int32",
@@ -10934,7 +11185,7 @@
         "properties": {
           "field": {
             "type": "string",
-            "description": "The field it concerns: `id`, `title`, `severity`, `confidence`,\n`expression`, `finding_message`, `programs` or `rule`."
+            "description": "The field it concerns: `id`, `title`, `severity`, `confidence`,\n`expression`, `finding_message`, `programs`, `attack` or `rule`."
           },
           "message": {
             "type": "string",
@@ -11890,6 +12141,55 @@
           "result": {
             "type": "boolean",
             "description": "Original result."
+          }
+        }
+      },
+      "TacticView": {
+        "type": "object",
+        "description": "One ATT&CK tactic, in matrix order.",
+        "required": [
+          "id",
+          "name",
+          "phase"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`TA` id."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name, e.g. Initial Access."
+          },
+          "phase": {
+            "type": "string",
+            "description": "Derived kill-chain phase."
+          }
+        }
+      },
+      "TechniqueView": {
+        "type": "object",
+        "description": "One ATT&CK technique or sub-technique.",
+        "required": [
+          "id",
+          "name",
+          "tactics"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "`T` id, `T1059.004` for a sub-technique."
+          },
+          "name": {
+            "type": "string",
+            "description": "Name."
+          },
+          "tactics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The tactics it belongs to."
           }
         }
       },
