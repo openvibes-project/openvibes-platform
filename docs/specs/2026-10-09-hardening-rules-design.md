@@ -106,18 +106,20 @@ behind a listening port (protocol P15 `owners`) today needs the opt-in
 `CAP_SYS_PTRACE` and has to be installed by hand. That breaks the
 no-commands rule, so the drop-in is retired:
 
-- The helper also maps listening socket inodes (from `/proc/net/*`) to the
-  owning process by reading `/proc/<pid>/fd` links, and writes
-  `owners: [{protocol, address, port, exe, unit}]` into the same file;
-  executable paths only, never command lines or environments. For this it
-  also needs `CAP_SYS_PTRACE` in its bounding set (reading other users'
-  fd links), still with no input and no network.
-- The agent merges these owners into its P15 report and marks `owners`
-  `complete` when the file is fresh, `partial` otherwise (as today without
-  the drop-in). No protocol change.
-- `owners.conf` and its docs are removed from the agent packages; an
-  existing drop-in is left in place but no longer needed (the release
-  note says it can go; the console never asks for it).
+- The helper runs the agent's own services collector as root: it maps
+  listening socket inodes (from `/proc/net/*`) to the owning process by
+  reading `/proc/<pid>/fd` links, and writes the whole P15 services scan
+  (listeners with their unit and **process name**, the kernel's short
+  name such as `python3`) into the same file; never command lines or
+  environments. For this it also needs `CAP_SYS_PTRACE` in its bounding
+  set (reading other users' fd links), still with no input and no network.
+- The agent sends that scan as its P15 report when the file is fresh
+  (`owners` `complete`), else its own unprivileged scan (`partial`, as
+  without the drop-in). No protocol change.
+- `owners.conf` and its docs are removed from the agent packages. On
+  upgrade, every package removes a drop-in byte-identical to the shipped
+  one (an edited one is left, with one line saying why), so no admin step
+  remains (agent #63).
 - Port owners ship first: the helper with only this collector is useful on
   its own and proves the unit, the sandbox and the file hand-off before
   the hardening facts arrive.
