@@ -111,8 +111,15 @@ export function addWidget(layout: Layout, type: WidgetType, size: { w: number; h
   let n = 1;
   while (layout.widgets.some((w) => w.id === `${type}-${n}`)) n += 1;
   const id = `${type}-${n}`;
-  const bottom = layout.widgets.reduce((max, w) => Math.max(max, w.y + w.h), 0);
-  const widget: Widget = { id, type, x: 0, y: Math.min(bottom, 199), w: Math.min(size.w, COLUMNS), h: size.h, config };
+  const w = Math.min(size.w, COLUMNS);
+  const bottom = layout.widgets.reduce((max, o) => Math.max(max, o.y + o.h), 0);
+  let spot = { x: 0, y: Math.min(bottom, 199) };
+  scan: for (let y = 0; y < bottom; y += 1) {
+    for (let x = 0; x <= COLUMNS - w; x += 1) {
+      if (!layout.widgets.some((o) => overlaps(o, { ...o, id, x, y, w, h: size.h }))) { spot = { x, y }; break scan; }
+    }
+  }
+  const widget: Widget = { id, type, ...spot, w, h: size.h, config };
   return { layout: { ...layout, widgets: [...layout.widgets, widget] }, id };
 }
 

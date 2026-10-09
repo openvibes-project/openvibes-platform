@@ -46,6 +46,13 @@ const paths = {
   activity: ["M22 12h-4l-3 9L9 3l-3 9H2"],
   cases: ["M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16", rr(2, 6, 20, 14, 2)],
   alarm: ["M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.9 1.9 0 0 0 3.4 0"],
+  pencil: ["M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z", "m15 5 4 4"],
+  hash: ["M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"],
+  chartBar: ["M3 3v18h18", "M18 17V9M13 17V5M8 17v-3"],
+  chartLine: ["M3 3v18h18", "m19 9-5 5-4-4-3 3"],
+  list: ["M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"],
+  barStacked: ["M15 12H3M17 18H3M21 6H3"],
+  note: ["M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5z", "M15 3v6h6"],
   filter: ["M22 3H2l8 9.5V19l4 2v-8.5z"],
   tag: ["M12.6 2.6A2 2 0 0 0 11.2 2H4a2 2 0 0 0-2 2v7.2a2 2 0 0 0 .6 1.4l8.7 8.7a2.4 2.4 0 0 0 3.4 0l6.6-6.6a2.4 2.4 0 0 0 0-3.4z", "M7.5 7.5h.01"],
   external: ["M15 3h6v6M10 14 21 3"],
@@ -59,7 +66,7 @@ export type IconName = keyof typeof paths;
 export function Icon({ name, size = 18, className }: { name: IconName; size?: number; className?: string }) {
   return (
     <svg className={className} width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-      strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" data-icon={name} aria-hidden="true" focusable="false">
       {paths[name].map((d) => <path key={d} d={d} />)}
     </svg>
   );

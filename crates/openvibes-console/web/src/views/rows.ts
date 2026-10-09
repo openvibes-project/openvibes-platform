@@ -5,7 +5,7 @@ import { useMemo } from "react";
 import { type ApiError, useAllPages, useResource } from "../api/client";
 import type { Agent, AuditEvent, FindingGroup, Vulnerability, VulnerabilityPage } from "../api/types";
 import type { PanelRef } from "../app/location";
-import { auditSince, severityOrder } from "../ui/format";
+import { auditSince, capitalise, severityOrder } from "../ui/format";
 import { matches } from "../ui/table";
 
 export const LIST_VIEWS = ["/compliance", "/vulnerabilities", "/agents", "/audit"] as const;
@@ -109,6 +109,7 @@ export function selectAudit(all: readonly AuditEvent[], params: URLSearchParams)
   return all.filter((e) => (!failed || e.result !== "success") && matches([e.action, e.actor, e.target], params.get("q") ?? ""));
 }
 
+export const severityBadge = (s: string) => ({ label: capitalise(s), tone: s });
 const sev = (s: string) => severityOrder[s] ?? 9;
 
 /** The first rows of a list view for a query, ready for a compact list. */
@@ -123,7 +124,7 @@ export function useListRows(view: ListView | null, params: URLSearchParams): { r
     if (view === "/compliance") {
       rows = selectFindings(groups.data ?? [], params).sort((a, b) => sev(a.severity) - sev(b.severity) || activeCount(b) - activeCount(a))
         .map((g) => ({ key: `${g.rule_set_id}/${g.rule_id}`, open: { kind: "finding", id: `${g.rule_set_id}/${g.rule_id}` }, title: g.latest_message,
-          meta: `${g.rule_id} · ${activeCount(g)} active`, badge: { label: g.severity, tone: g.severity } }));
+          meta: `${g.rule_id} · ${activeCount(g)} active`, badge: severityBadge(g.severity) }));
     } else if (view === "/agents") {
       rows = selectAgents(agents.data ?? [], params).map((a) => ({ key: a.id, open: { kind: "agent", id: a.id }, title: a.hostname ?? a.id,
         meta: a.id, badge: { label: a.status, tone: a.status === "active" ? "ok" : a.status === "stale" ? "warn" : a.status === "revoked" ? "bad" : "info" } }));
@@ -134,7 +135,7 @@ export function useListRows(view: ListView | null, params: URLSearchParams): { r
       rows = selectAdvisories(groupByAdvisory(vulns.data?.items ?? []), params)
         .sort((a, b) => Number(b.exploited) - Number(a.exploited) || sev(a.severity) - sev(b.severity) || (b.epss ?? 0) - (a.epss ?? 0))
         .map((r) => ({ key: r.id, open: { kind: "advisory", id: r.id }, title: r.title, meta: `${r.hosts} hosts${r.exploited ? " · exploited" : ""}`,
-          badge: { label: r.severity, tone: r.severity } }));
+          badge: severityBadge(r.severity) }));
     }
     const data = "data" in status ? status.data : undefined;
     return { rows, total: rows.length, loading: status.loading && data === undefined, error: status.error };

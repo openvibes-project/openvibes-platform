@@ -423,3 +423,19 @@ test("a Select wrapped in a label still picks an option and stays closed", async
   await expect(page.locator(".sel__popup")).toHaveCount(0);
   await expect(count).toContainText("Stale hosts");
 });
+
+test("Edit shows a pencil, and new widgets fill the first free spot", async ({ page }) => {
+  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
+  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("button", { name: "Edit", exact: true }).locator("[data-icon=pencil]")).toHaveCount(1);
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await page.getByRole("menuitem", { name: "New dashboard" }).click();
+  await page.getByRole("button", { name: /^Number/ }).click();
+  await page.getByRole("button", { name: "Add widget" }).click();
+  await page.getByRole("button", { name: /^Number/ }).click();
+  const [a, b] = [page.locator(".tile").nth(0), page.locator(".tile").nth(1)];
+  const [boxA, boxB] = [await a.boundingBox(), await b.boundingBox()];
+  expect(boxA?.y).toBe(boxB?.y);
+  expect(boxB?.x).toBeGreaterThan(boxA?.x ?? 0);
+});

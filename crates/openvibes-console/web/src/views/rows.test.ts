@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { activeCount, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings } from "./rows";
+import { activeCount, alarmsOff, olderThan, selectAgents, selectAudit, selectFindings, severityBadge } from "./rows";
 
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
@@ -60,4 +60,8 @@ describe("agent versions", () => {
   it("an agent claiming a far newer version flags nothing (board #54)", () => {
     expect(olderThan("999.0.0", "0.1.2")).toBe(false);
   });
+});
+
+it("List badges are capitalised, tone unchanged", () => {
+  expect(severityBadge("critical")).toEqual({ label: "Critical", tone: "critical" });
 });
