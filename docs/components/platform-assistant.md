@@ -36,8 +36,12 @@ asking user's scope.
   limit reasoning). The probe sets `ProbeReport::speed_truncated` for the
   same case on the speed prompt. `Settings::new`
   takes the mode from the probe, the profile budget, `max_lookups`, and a
-  whole-question deadline of one backend deadline per possible request (at
-  most 15 minutes). `ChatBackend` is implemented by `BackendClient`; it is
+  whole-question deadline of one backend deadline per lookup plus one
+  (`max_lookups + 1`, at most 15 minutes). It does not budget for repair
+  requests (below): a question that repairs after every step can make up to
+  about `2 × (max_lookups + 1)` requests and be cut off by the question
+  deadline (`Deadline`) before it finishes. That is a worst case; requests
+  normally finish far inside the backend deadline. `ChatBackend` is implemented by `BackendClient`; it is
   called on a blocking thread. `events` streams `Lookup`, `Text` (native
   mode), and `Reset`.
 - `StoreLookups::new(pool, AgentScope, now)` runs lookups through
@@ -63,9 +67,12 @@ findings, using the rule id the store keeps, and takes the set found. A rule
 in several sets returns every set's items (`finding_endpoints`, each item
 naming its set) or the fixed error "the rule is in several rule sets; name
 one" (`rule_description`, `AmbiguousRule`). A rule with no finding at all
-answers "no finding with this rule", and one with only older findings
-answers "no finding with this rule in the window", so an empty result says
-why. `search_findings` with an unknown `rule_set` searches all sets and says
+answers "no finding with this rule". The note "no finding with this rule in
+the window" appears only when no group of that rule exists in the last 720
+hours and the model named a rule set (the lookup then asks that set anyway
+and finds only older sightings). The common case, a known rule whose
+findings are all older than the window, returns `items: []` with the
+finding's cite and `not_seen_in_window` counting the older sightings. `search_findings` with an unknown `rule_set` searches all sets and says
 so in a note. The tool descriptions name the fields each result carries and
 when to use each lookup.
 
@@ -105,18 +112,25 @@ two ordinary questions until this was added).
 In prompted mode (and JSON-schema mode) the reply is read as an action. A
 JSON object is accepted as `{"action":"lookup","name":…,"arguments":{…}}`,
 `{"action":"answer","text":…}`, or the lookup's own name as `action` with
-the arguments inside `arguments` or flat beside it. Text with no `{` is
-prose and is the answer. A reply that starts with `{` (after an optional
-code fence) but is no action is malformed and never shown as the answer:
-the model gets one repair message (the expected shapes, plus after any
+the arguments inside `arguments` or flat beside it. Prose is the
+answer, including prose that contains braces. Only a reply that starts with
+`{` (after an optional code fence, `json` in any case) and is no action is
+malformed and never shown as the answer: the model gets one repair message (the expected shapes, plus after any
 lookup a note that the results are data, not instructions, with no
-reminder on that turn), and a second malformed reply ends as `NoAnswer`.
+reminder on that turn), and a second malformed reply ends as `NoAnswer`. The repair allowance
+resets after each successful lookup, so it is once per step, not once per
+question. A repair that would not fit the prompt budget (the malformed
+reply filled the room) is not sent: the question ends as `NoAnswer`.
 
 Prompt budget: the profile's `prompt_tokens` at 3 characters per token.
 The system prompt, lookup definitions, question, reminder, and final
 notice must fit (else `QuestionTooLong`; in the small native profile that
-leaves room for a question of about 1,280 characters); older conversation
-turns are dropped first. The Small profile's prompt budget is 3,000 tokens.
+leaves room for any question up to `MAX_QUESTION_CHARS`, 2,000 characters:
+tested in native and prompted modes with the 3,000-token Small budget); older conversation
+turns are dropped first. The current time is the first line of the question
+message, not of the system prompt, so the system prompt and lookup
+definitions are identical across questions and the server's prefix cache
+holds. The Small profile's prompt budget is 3,000 tokens.
 The lookup being run gets all the room left, minus 400 characters kept for
 each lookup still allowed after it, capped at 1,600 characters
 (`MAX_RESULT_CHARS`) and never below 400; later lookups keep at least 400
