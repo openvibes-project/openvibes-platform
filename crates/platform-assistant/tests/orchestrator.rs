@@ -1028,6 +1028,7 @@ async fn braces_in_prose_are_an_answer_but_fenced_junk_is_malformed() {
     );
     for junk in [
         "```json\n{\"foo\":1}\n```",
+        "```JSON\n{\"foo\":1}\n```",
         r#"{"action":"bogus"}"#,
         r#"{"action":"answer"}"#,
         r#"{"action":"lookup","name":5}"#,

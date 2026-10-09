@@ -306,7 +306,12 @@ fn parse_action(content: &str) -> Action {
             // Not an action: JSON-looking replies are malformed, prose
             // (even with braces in it) is the answer.
             let t = content.trim();
-            let t = t.strip_prefix("```json").or_else(|| t.strip_prefix("```"));
+            let lower = t.to_ascii_lowercase();
+            let t = if lower.starts_with("```json") {
+                Some(&t[7..])
+            } else {
+                t.strip_prefix("```")
+            };
             if t.is_some_and(|t| t.trim_start().starts_with('{'))
                 || content.trim_start().starts_with('{')
             {
