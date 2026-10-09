@@ -119,15 +119,13 @@ facts = ["no|none|0|not"]
 [[cases]]
 id = "findings-firewall-older"
 question = "Has db-02 reported the firewall finding recently?"
-lookups = ["finding_endpoints", "search_findings", "agent_summary"]
-empty = true
+lookups = ["finding_endpoints", "search_findings"]
 facts = ["no|not|older|48|two days|2 days"]
 
 [[cases]]
 id = "findings-not-resolved"
 question = "Is the firewall problem on db-02 resolved?"
-lookups = ["finding_endpoints", "search_findings", "agent_summary"]
-empty = true
+lookups = ["finding_endpoints", "search_findings"]
 facts = ["not|cannot|can't|unknown|no "]
 forbid = ["yes, it is resolved", "yes, it has been resolved"]
 

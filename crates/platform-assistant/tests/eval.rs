@@ -495,8 +495,7 @@ async fn a_lookup_counts_only_when_it_found_something() {
         "finding_endpoints",
         r#"{"rule_set":"baseline","rule":"no.such"}"#,
     );
-    // web-03 is a known host; its vulnerabilities at critical severity or
-    // higher may be none, so find a host with none.
+    // Search for a host with no vulnerabilities.
     let mut quiet = None;
     for host in ["db-02", "kiosk-07", "old-02", "web-03", "build-01"] {
         let out = run("host_vulnerabilities", &format!(r#"{{"agent":"{host}"}}"#)).await;
