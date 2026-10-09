@@ -625,5 +625,9 @@ fn auto_reports_a_failure_and_still_exits_zero() {
     let root = auto_tree("auto-fail", port);
     let line = auto(&root, &[]);
     assert!(line.contains("not tuned"), "{line}");
+    assert!(
+        line.contains("retried at the next upgrade, or from Setup"),
+        "{line}"
+    );
     assert!(!root.join(TUNING).exists());
 }
