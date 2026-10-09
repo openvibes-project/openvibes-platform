@@ -62,6 +62,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
   position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 12px; padding: 8px 10px;
   border-radius: var(--r-2); background: var(--accent-soft); border: 1px solid var(--accent); animation: rise var(--fast);
 }
+.bulk-bar .input { min-width: 140px; } /* wrap onto a new line before the note shrinks to a sliver (phone) */
 .confirm { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-2); border: 1px solid var(--line-strong); background: var(--surface-2); width: 100%; animation: rise var(--fast); }
 .confirm__text { font-size: 13px; }
 .confirm__error { color: var(--bad); font-size: 13px; }
