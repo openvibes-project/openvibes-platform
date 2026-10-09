@@ -630,18 +630,23 @@ it uses the new binary. A skipped or failed automatic publish is not retried
 until the next rules or admin package transaction; Setup's Update publishes
 it. Test: `setup/auto_rules.rs` unit tests.
 
-`helper upgrade-migrate` (root; `setup/auto_migrate.rs`) is what
-`openvibes-migrate.service` runs after the additive attempt. It takes
-Setup's lock (held: "Setup is running; it migrates the database itself", exit
-0), does nothing before Setup ran, and tries `migrate --additive` again: done
-means exit 0. A "changes stored data" refusal (the compliance rename,
-migration 43, is one) makes it back up the database like Update does
-(`/var/backups/openvibes/upgrade-<time>.dump`, 0600, never overwritten), then
-run Update's migrate step (migrate, maintenance, publish a newer rules
-package). A failed backup migrates nothing. Every step is a journal line;
-failures start "upgrade migration failed" and exit 1, so the unit shows as
-failed (`journalctl -u openvibes-migrate`) and the services keep refusing
-the old schema until Update runs. The decision is `auto_migrate::decide`;
-tests use the fake runner. Not built: a Health line for a failed upgrade
-migration. It does not stop the running services (the restart that follows
-the upgrade waits behind the unit).
+`helper upgrade-migrate` (root; `setup/auto_migrate.rs`) is the only
+`ExecStart` of `openvibes-migrate.service`. It takes Setup's lock (held:
+"Setup or Update is running; if the services then refuse the schema, run
+Update in Setup", exit 0), does nothing before Setup ran or while an update
+or uninstall is half done, and runs `migrate --additive`: done means exit 0.
+The store's "changes stored data" refusal (the compliance rename, migration
+43, is one) makes it, like Update: stop the active ingest, distribution,
+vulns, signer, console and maintenance units; back up the database
+(`/var/backups/openvibes/upgrade-<time>.dump`, 0600, never overwritten, never
+pruned, about twice the dump's size free during the copy); run Update's
+migrate step (migrate, maintenance, publish a newer rules package); and
+queue the stopped units to start (`start --no-block`) on every exit path. A
+failed backup migrates nothing; a failed migration keeps the backup. Either
+failure logs "upgrade migration failed", exits 1 (the unit shows as failed:
+`journalctl -u openvibes-migrate`) and writes the half-done-update mark, so
+later runs (the console's restarts, the maintenance timer) skip until Update
+clears it (the mark is in `/run`: at most one retry per boot). The
+decision is `auto_migrate::decide`; tests use the fake runner. Not built: a
+Health line for a failed upgrade migration, and a free-space check before
+the dump.

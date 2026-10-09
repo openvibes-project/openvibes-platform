@@ -30,8 +30,6 @@ for unit in ingest distribution vulns maintenance; do
         && grep -q '^Wants=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-$unit.service \
         || fail "openvibes-$unit.service does not start after openvibes-migrate.service"
 done
-grep -qx 'ExecStart=-/usr/bin/openvibes-admin migrate --additive' /usr/lib/systemd/system/openvibes-migrate.service \
-    || fail "openvibes-migrate.service does not try the additive migrations first"
 grep -qx 'ExecStart=+/usr/bin/openvibes-admin helper upgrade-migrate' /usr/lib/systemd/system/openvibes-migrate.service \
     || fail "openvibes-migrate.service does not run helper upgrade-migrate (backup, then migrate)"
 # Rules publish themselves after the rules package installs or upgrades: a

@@ -8,7 +8,7 @@
 
 use std::{fs, os::unix::fs::DirBuilderExt, path::Path};
 
-use platform_host::runner::Runner;
+use platform_host::runner::{Program::Systemctl, Runner};
 
 use super::{Ctx, backup, plan::Plan, system, update};
 
@@ -24,11 +24,19 @@ pub enum Next {
     Fail(String),
 }
 
+/// The refusal's fixed start, from the store's own message (no separate
+/// copy of the wording to drift).
+fn needs_backup_text() -> String {
+    let full = platform_store::StoreError::NeedsBackup(0).to_string();
+    full.split_once("(migration")
+        .map_or(full.clone(), |(head, _)| format!("{head}(migration"))
+}
+
 /// Decides from `openvibes-admin migrate --additive`'s result.
 pub fn decide(additive: Result<String, String>) -> Next {
     match additive {
         Ok(out) => Next::Done(out.trim().to_owned()),
-        Err(error) if error.contains("changes stored data") => Next::BackupThenMigrate,
+        Err(error) if error.contains(&needs_backup_text()) => Next::BackupThenMigrate,
         Err(error) => Next::Fail(error),
     }
 }
@@ -40,7 +48,7 @@ pub fn run<R: Runner>(root: &Path, runner: &R, stamp: &str) -> (Vec<String>, boo
     let _lock = match system::lock(root) {
         Ok(lock) => lock,
         Err(error) if error.contains("another Setup run") => {
-            log.push("Setup is running; it migrates the database itself".into());
+            log.push("Setup or Update is running; if the services then refuse the schema, run Update in Setup".into());
             return (log, true);
         }
         Err(error) => return (vec![format!("upgrade migration failed: {error}")], false),
@@ -71,35 +79,80 @@ pub fn run<R: Runner>(root: &Path, runner: &R, stamp: &str) -> (Vec<String>, boo
             (log, false)
         }
         Next::BackupThenMigrate => {
-            log.push("this upgrade changes stored data: backing up first".into());
-            let file = format!("{BACKUPS}/upgrade-{stamp}.dump");
-            let backed = fs::DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(ctx.path(BACKUPS))
-                .map_err(|error| format!("{BACKUPS}: {error}"))
-                .and_then(|()| backup::dump(&ctx, Path::new(&file)));
-            match backed {
-                Err(error) => {
-                    log.push(format!(
-                        "upgrade migration failed: backup failed, nothing migrated: {error}"
-                    ));
-                    return (log, false);
-                }
-                Ok(done) => log.push(done),
+            let ok = data_migration(&ctx, stamp, &mut log);
+            if !ok {
+                // Later runs (the console's restarts, the maintenance
+                // timer) skip with "an update is half done" instead of
+                // dumping the database again each time; Update clears it.
+                let _ = ctx.job_begin("update");
             }
-            match update::migrate(&ctx) {
-                Ok(state) => {
-                    log.push(format!("migrated: {}", state.detail()));
-                    (log, true)
-                }
-                Err(error) => {
-                    log.push(format!(
-                        "upgrade migration failed: {error}; the backup {file} is kept; run Update in openvibes-admin"
-                    ));
-                    (log, false)
-                }
-            }
+            (log, ok)
+        }
+    }
+}
+
+/// Services that must not run while stored data changes (Update stops the
+/// same ones, plus the agent, which stays up here).
+const STOP: [&str; 7] = [
+    "openvibes-ingest.service",
+    "openvibes-distribution.service",
+    "openvibes-vulns.service",
+    "openvibes-signer.service",
+    "openvibes-console.service",
+    "openvibes-maintenance.timer",
+    "openvibes-maintenance.service",
+];
+
+/// Stops what runs, backs up, migrates; whatever happens, queues the
+/// stopped units to start again (they wait for this unit to finish).
+fn data_migration<R: Runner>(ctx: &Ctx<R>, stamp: &str, log: &mut Vec<String>) -> bool {
+    let running: Vec<&str> = STOP
+        .into_iter()
+        .filter(|unit| ctx.succeeds(Systemctl, &["is-active", "--quiet", unit]))
+        .collect();
+    log.push(format!(
+        "this upgrade changes stored data: stopping {} and backing up first",
+        if running.is_empty() {
+            "nothing".to_owned()
+        } else {
+            running.join(" ")
+        }
+    ));
+    let result = (|| {
+        if !running.is_empty() {
+            let mut args = vec!["stop"];
+            args.extend(&running);
+            ctx.ok(Systemctl, &args).map_err(|error| {
+                format!("could not stop the services, nothing migrated: {error}")
+            })?;
+        }
+        let file = format!("{BACKUPS}/upgrade-{stamp}.dump");
+        fs::DirBuilder::new()
+            .recursive(true)
+            .mode(0o700)
+            .create(ctx.path(BACKUPS))
+            .map_err(|error| format!("{BACKUPS}: {error}"))
+            .and_then(|()| backup::dump(ctx, Path::new(&file)))
+            .map(|done| log.push(done))
+            .map_err(|error| format!("backup failed, nothing migrated: {error}"))?;
+        update::migrate(ctx)
+            .map(|state| log.push(format!("migrated: {}", state.detail())))
+            .map_err(|error| {
+                format!("{error}; the backup {file} is kept; run Update in openvibes-admin")
+            })
+    })();
+    if !running.is_empty() {
+        let mut args = vec!["start", "--no-block"];
+        args.extend(&running);
+        if let Err(error) = ctx.ok(Systemctl, &args) {
+            log.push(format!("could not queue the services to start: {error}"));
+        }
+    }
+    match result {
+        Ok(()) => true,
+        Err(error) => {
+            log.push(format!("upgrade migration failed: {error}"));
+            false
         }
     }
 }
@@ -120,7 +173,31 @@ mod tests {
         "--",
         "/usr/bin/openvibes-admin",
     ];
-    const NEEDS: &str = "openvibes-admin: this upgrade changes stored data (migration 43): run `openvibes-admin` → Update";
+
+    fn needs() -> String {
+        platform_store::StoreError::NeedsBackup(43).to_string()
+    }
+
+    const SYSTEMCTL: &str = "/usr/bin/systemctl";
+
+    /// Only the console is running.
+    fn console_only(fake: &Fake) {
+        fake.answer(
+            &[
+                SYSTEMCTL,
+                "is-active",
+                "--quiet",
+                "openvibes-console.service",
+            ],
+            0,
+            "",
+        );
+        fake.fail(&[SYSTEMCTL, "is-active"], "inactive");
+    }
+
+    fn position(fake: &Fake, matches: impl Fn(&[String]) -> bool) -> Option<usize> {
+        fake.calls.borrow().iter().position(|call| matches(call))
+    }
 
     fn admin(rest: &[&'static str]) -> Vec<&'static str> {
         ADMIN.iter().chain(rest).copied().collect()
@@ -143,7 +220,7 @@ mod tests {
             decide(Ok("schema version 43\n".into())),
             Next::Done("schema version 43".into())
         );
-        assert_eq!(decide(Err(NEEDS.into())), Next::BackupThenMigrate);
+        assert_eq!(decide(Err(needs())), Next::BackupThenMigrate);
         assert_eq!(
             decide(Err("database unavailable".into())),
             Next::Fail("database unavailable".into())
@@ -160,12 +237,8 @@ mod tests {
         assert!(!fake.called(&["/usr/sbin/runuser", "-u", "postgres"]));
     }
 
-    #[test]
-    fn a_data_changing_migration_backs_up_then_migrates() {
-        let fake = host("mig-backup");
-        fake.fail(&admin(&["migrate", "--additive"]), NEEDS);
-        fake.answer(&admin(&["migrate"]), 0, "schema version 43\n");
-        fake.answer(&admin(&["maintenance"]), 0, "created 0 partitions\n");
+    /// The pg_dump effect: the dump lands in the staging directory.
+    fn dumping(fake: &Fake) {
         fake.effect(
             &[
                 "/usr/sbin/runuser",
@@ -175,34 +248,67 @@ mod tests {
                 "/usr/bin/pg_dump",
             ],
             |root| {
-                // The dump lands in the staging directory the helper made.
                 for entry in std::fs::read_dir(root.join("var/tmp")).unwrap().flatten() {
                     std::fs::write(entry.path().join("openvibes.dump"), "dump").unwrap();
                 }
             },
         );
         fake.answer(&["/usr/sbin/runuser", "-u", "postgres"], 0, "-- roles\n");
+    }
+
+    fn is_dump(call: &[String]) -> bool {
+        call.iter().any(|arg| arg == "/usr/bin/pg_dump")
+    }
+
+    fn is_stop(call: &[String]) -> bool {
+        call.get(..2) == Some(&[SYSTEMCTL.to_owned(), "stop".to_owned()])
+    }
+
+    fn is_start(call: &[String]) -> bool {
+        call.get(..3)
+            == Some(&[
+                SYSTEMCTL.to_owned(),
+                "start".to_owned(),
+                "--no-block".to_owned(),
+            ])
+    }
+
+    #[test]
+    fn a_data_changing_migration_stops_backs_up_then_migrates_and_restarts() {
+        let fake = host("mig-backup");
+        console_only(&fake);
+        fake.fail(&admin(&["migrate", "--additive"]), &needs());
+        fake.answer(&admin(&["migrate"]), 0, "schema version 43\n");
+        fake.answer(&admin(&["maintenance"]), 0, "created 0 partitions\n");
+        dumping(&fake);
         let (log, ok) = run(&fake.root, &fake, "t");
         assert!(ok, "{log:?}");
-        let calls = fake.calls.borrow();
-        let at = |argv: &[&str]| calls.iter().position(|call| call == argv);
-        let dump = calls
-            .iter()
-            .position(|call| call.iter().any(|arg| arg == "/usr/bin/pg_dump"))
-            .expect("no backup");
-        let migrate = at(&admin(&["migrate"])).expect("no migrate");
-        assert!(dump < migrate, "{calls:?}");
+        let migrate = position(&fake, |c| c == admin(&["migrate"])).expect("no migrate");
+        let stop = position(&fake, is_stop).expect("no stop");
+        let dump = position(&fake, is_dump).expect("no backup");
+        let start = position(&fake, is_start).expect("no start");
+        assert!(
+            stop < dump && dump < migrate && migrate < start,
+            "{:?}",
+            fake.calls
+        );
+        assert_eq!(
+            fake.calls.borrow()[stop],
+            [SYSTEMCTL, "stop", "openvibes-console.service"]
+        );
         assert!(
             fake.root
                 .join("var/backups/openvibes/upgrade-t.dump")
                 .exists()
         );
+        assert!(!fake.root.join("run/openvibes-admin/job").exists());
     }
 
     #[test]
-    fn a_failed_backup_migrates_nothing() {
+    fn a_failed_backup_migrates_nothing_restarts_and_blocks_retries() {
         let fake = host("mig-nobackup");
-        fake.fail(&admin(&["migrate", "--additive"]), NEEDS);
+        console_only(&fake);
+        fake.fail(&admin(&["migrate", "--additive"]), &needs());
         fake.fail(
             &["/usr/sbin/runuser", "-u", "postgres"],
             "pg_dump: no space left",
@@ -210,7 +316,46 @@ mod tests {
         let (log, ok) = run(&fake.root, &fake, "t");
         assert!(!ok, "{log:?}");
         assert!(log.join("\n").contains("nothing migrated"), "{log:?}");
-        assert!(!exact(&fake, &admin(&["migrate"])));
+        assert!(position(&fake, |c| c == admin(&["migrate"])).is_none());
+        assert!(position(&fake, is_start).is_some(), "services left off");
+        // The next run (a restarting console, the timer) does not dump again.
+        let before = fake.calls.borrow().len();
+        let (log, ok) = run(&fake.root, &fake, "u");
+        assert!(ok && log[0].contains("half done"), "{log:?}");
+        assert_eq!(fake.calls.borrow().len(), before);
+    }
+
+    #[test]
+    fn a_failed_migration_keeps_the_backup_restarts_and_blocks_retries() {
+        let fake = host("mig-migfail");
+        console_only(&fake);
+        fake.fail(&admin(&["migrate", "--additive"]), &needs());
+        fake.fail(&admin(&["migrate"]), "database query failed");
+        dumping(&fake);
+        let (log, ok) = run(&fake.root, &fake, "t");
+        assert!(!ok, "{log:?}");
+        assert!(
+            fake.root
+                .join("var/backups/openvibes/upgrade-t.dump")
+                .exists()
+        );
+        assert!(log.join("\n").contains("is kept"), "{log:?}");
+        assert!(position(&fake, is_start).is_some(), "services left off");
+        let (log, ok) = run(&fake.root, &fake, "u");
+        assert!(ok && log[0].contains("half done"), "{log:?}");
+    }
+
+    #[test]
+    fn nothing_is_stopped_when_nothing_runs() {
+        let fake = host("mig-idle");
+        fake.fail(&[SYSTEMCTL, "is-active"], "inactive");
+        fake.fail(&admin(&["migrate", "--additive"]), &needs());
+        fake.answer(&admin(&["migrate"]), 0, "schema version 43\n");
+        fake.answer(&admin(&["maintenance"]), 0, "created 0 partitions\n");
+        dumping(&fake);
+        let (log, ok) = run(&fake.root, &fake, "t");
+        assert!(ok, "{log:?}");
+        assert!(position(&fake, is_stop).is_none() && position(&fake, is_start).is_none());
     }
 
     #[test]
@@ -227,7 +372,10 @@ mod tests {
         let fake = host("mig-locked");
         let _held = system::lock(&fake.root).unwrap();
         let (log, ok) = run(&fake.root, &fake, "t");
-        assert!(ok && log[0].contains("Setup is running"), "{log:?}");
+        assert!(
+            ok && log[0].contains("Setup or Update is running"),
+            "{log:?}"
+        );
         assert!(fake.calls.borrow().is_empty());
     }
 

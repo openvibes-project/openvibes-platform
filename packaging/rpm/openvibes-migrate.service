@@ -11,13 +11,12 @@ User=openvibes-admin
 Group=openvibes-admin
 # A backup and a data migration can take a while; the services wait for it.
 TimeoutStartSec=30min
-# After a plain `dnf upgrade` (board #77): additive migrations as the
-# service account. A migration that changes stored data (Update's case) makes the first line
-# fail; the second, run with full privileges ("+"), then does Update's path:
-# backup to /var/backups/openvibes, migrate, publish newer rules. It also
-# repeats the additive attempt, so a current database costs nothing, and it
-# fails the unit only when the migration really failed.
-ExecStart=-/usr/bin/openvibes-admin migrate --additive
+# After a plain `dnf upgrade` (board #77). Run with full privileges ("+"):
+# applies additive migrations as the service account; for one that changes
+# stored data (Update's case) it stops the running services, backs up to
+# /var/backups/openvibes, migrates, publishes newer rules and queues the
+# services to start again. A current database costs nothing; the unit fails
+# only when a migration failed.
 ExecStart=+/usr/bin/openvibes-admin helper upgrade-migrate
 UMask=0077
 NoNewPrivileges=yes
