@@ -113,7 +113,7 @@ pub fn summary(hardware: &str, alias: &str, t: f64, raised: Option<u32>) -> Stri
 /// What `assistant-tune --auto` found on the host.
 pub struct AutoFacts {
     pub socket_enabled: bool,
-    /// console.toml has an enabled [assistant] with the local backend.
+    /// console.toml has an enabled `[assistant]` with the local backend.
     pub console_local: bool,
     pub model_present: bool,
     /// tuning.conf already exists.
