@@ -119,7 +119,7 @@ llama.cpp's llama-server from a pinned build (no subprocesses, RPC, TLS, or
 web UI), run on loopback as its own sandboxed user with a model file whose
 SHA-256 is pinned. Optional: the platform works without it.
 
-# No model bytes: `openvibes-admin assistant model fetch` downloads the model.
+# No model bytes: openvibes-admin Setup downloads the model (model fetch).
 # This package only owns its path and model.conf, so upgrading from 0.2.5
 # (which shipped the model) does not delete the user's model file.
 %package -n openvibes-llm-model
@@ -132,8 +132,9 @@ Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
 %description -n openvibes-llm-model
 Selects the pinned model (Qwen3-4B Q4_K_M, packaging/llm/model.pin) for
 openvibes-llm and owns its path, so upgrades keep an installed model. The
-2.5 GB file is not packaged: fetch it with `sudo openvibes-admin assistant
-model fetch`, or install it from a file (docs: offline install).
+2.5 GB file is not packaged: openvibes-admin
+Setup downloads it when the assistant is turned on (offline: see the
+offline install guide).
 
 %if %{with vulkan}
 %package -n openvibes-llm-vulkan
@@ -394,7 +395,7 @@ fi
 
 %posttrans -n openvibes-llm-model
 . %{_datadir}/openvibes-llm/model.pin
-[ -e %{_sharedstatedir}/openvibes-llm/models/"$LLM_MODEL_FILE" ] || echo "openvibes-llm-model: the assistant's model is not installed: run 'sudo openvibes-admin assistant model fetch', or install it from a file (docs: offline install)" >&2
+[ -e %{_sharedstatedir}/openvibes-llm/models/"$LLM_MODEL_FILE" ] || echo "openvibes-llm-model: the assistant's model is not installed; turn the assistant on in openvibes-admin Setup to download it (offline: see the offline install guide)" >&2
 
 %if %{with vulkan}
 %files -n openvibes-llm-vulkan

@@ -176,7 +176,19 @@ pub(crate) fn install(
         }
         Err(_) => return Err("cannot inspect the models directory".into()),
     };
-    let updated = update_config(&config, &destination, &expected, alias);
+    select(&config, &destination, size, &expected, alias, model_config)
+}
+
+/// Selects the installed `destination` in `model.conf`; returns the report.
+pub(crate) fn select(
+    config: &str,
+    destination: &Path,
+    size: u64,
+    expected: &str,
+    alias: Option<&str>,
+    model_config: &Path,
+) -> Result<String, String> {
+    let updated = update_config(config, destination, expected, alias);
     write_replacing(model_config, &updated, 0o644)?;
     Ok(format!(
         "installed {} ({} MiB, sha256 {expected})\nupdated {}\nnext: systemctl restart openvibes-llm.socket (the next question loads the new model)\n",
@@ -186,7 +198,7 @@ pub(crate) fn install(
     ))
 }
 
-fn digest(mut reader: impl Read) -> Result<String, String> {
+pub(crate) fn digest(mut reader: impl Read) -> Result<String, String> {
     openvibes_llm::sha256_hex(&mut reader, MAX_MODEL_BYTES)
         .map_err(|_| "cannot read the model file, or it exceeds 256 GiB".to_owned())
 }
@@ -251,7 +263,7 @@ fn copy_verified(source: &Path, dir: &Path, name: &str, expected: &str) -> Resul
     copied
 }
 
-fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
+pub(crate) fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -265,7 +277,7 @@ fn set_mode(path: &Path, mode: u32) -> Result<(), String> {
     }
 }
 
-fn read_config(path: &Path) -> Result<String, String> {
+pub(crate) fn read_config(path: &Path) -> Result<String, String> {
     let mut text = String::new();
     match File::open(path)
         .and_then(|file| file.take(MAX_CONFIG_BYTES + 1).read_to_string(&mut text))

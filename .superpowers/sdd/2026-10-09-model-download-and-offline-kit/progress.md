@@ -28,3 +28,9 @@ Task 2: phase A bda32ce (fmt only)
 Ruling: file present but not selected → re-run install (re-hash + select) — Setup must end with a working assistant — cost if wrong: one extra hash (~10 s)
 Ruling: free_bytes via `stat -f` (unsafe forbidden), unknown = 0 = refuse — cost: refusal on odd filesystems
 Task 2: phase B dispatched (waits while lab VMs run)
+Task 2: phase B 0ee9a75 (tests 233+7 fetch, clippy, doc green)
+Task 2 review: Needs fixes (double copy vs 2.7 GB check; no drop guard; wrong-contents pinned file unrecoverable; proto-redir + tests; package msgs tell users commands)
+Ruling: fetch moves the verified temp in place (no 2nd copy) instead of raising the check to 5.3 GB — spec says 2.7 GB — cost: a second install path to maintain
+Ruling: fetch replaces a wrong-contents file at the pinned name (verified bytes only) — users can't type rm — cost: overwrites a hand-placed foreign file of that exact name
+Ruling: package messages say "turn the assistant on in Setup" — user rule no commands
+Task 2: fix round 1 dispatched (resume implementer)

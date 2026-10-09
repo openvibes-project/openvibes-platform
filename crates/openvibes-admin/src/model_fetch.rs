@@ -6,7 +6,10 @@
 // curl and stat run with fixed argument lists, no shell.
 #[allow(clippy::disallowed_types)]
 use std::process::Command;
-use std::{fs, path::Path};
+use std::{
+    fs, io,
+    path::{Path, PathBuf},
+};
 
 use openvibes_llm::{is_model_name, is_sha256_hex};
 
@@ -71,7 +74,8 @@ impl Downloader for Curl {
     #[allow(clippy::disallowed_types)]
     fn download(&self, url: &str, dest: &Path) -> Result<(), String> {
         let status = Command::new("curl")
-            .args(["--proto", "=https", "--tlsv1.2", "--fail", "--location"])
+            .args(["--proto", "=https", "--proto-redir", "=https", "--tlsv1.2"])
+            .args(["--fail", "--location"])
             .args(["--retry", "3", "--output"])
             .arg(dest)
             .arg(url)
@@ -104,7 +108,18 @@ pub fn free_bytes(dir: &Path) -> u64 {
         .unwrap_or(0)
 }
 
-/// Downloads and installs the pinned model unless it is already installed.
+/// Removes the path on drop: every return and panic leaves no download.
+struct Temp(PathBuf);
+
+impl Drop for Temp {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+/// Downloads and installs the pinned model unless it is already installed
+/// and selected. Only verified bytes ever reach the pinned name: the
+/// download is hashed in place and renamed over it (no second copy).
 pub fn fetch(
     pin: &Pin,
     downloader: &dyn Downloader,
@@ -118,28 +133,44 @@ pub fn fetch(
             models_dir.display()
         ));
     }
-    let installed = models_dir.join(&pin.file);
-    if installed.exists() {
-        let config = fs::read_to_string(model_config).unwrap_or_default();
-        let has = |line: String| config.lines().any(|l| l.trim() == line);
-        // ponytail: "selected" is read from model.conf, not re-hashed.
-        if has(format!("OPENVIBES_LLM_MODEL={}", installed.display()))
-            && has(format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256))
-        {
-            return Ok(format!(
-                "already installed: {} (pinned sha256 {}); nothing downloaded\n",
-                pin.file, pin.sha256
+    let config = crate::model::read_config(model_config)?;
+    let destination = models_dir.join(&pin.file);
+    let has = |line: String| config.lines().any(|l| l.trim() == line);
+    let selected = has(format!("OPENVIBES_LLM_MODEL={}", destination.display()))
+        && has(format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256));
+    match fs::symlink_metadata(&destination) {
+        Ok(metadata) if metadata.is_file() => {
+            // ponytail: "selected" is read from model.conf, not re-hashed.
+            if selected {
+                return Ok(format!(
+                    "already installed: {} (pinned sha256 {}); nothing downloaded\n",
+                    pin.file, pin.sha256
+                ));
+            }
+            let matches = fs::File::open(&destination)
+                .map_err(|_| "cannot read the installed model".to_owned())
+                .and_then(crate::model::digest)
+                .is_ok_and(|digest| digest == pin.sha256);
+            if matches {
+                return crate::model::select(
+                    &config,
+                    &destination,
+                    metadata.len(),
+                    &pin.sha256,
+                    Some(&pin.alias),
+                    model_config,
+                );
+            }
+            // Corrupt or foreign: replaced below by the verified download.
+        }
+        Ok(_) => {
+            return Err(format!(
+                "{} exists and is not a file",
+                destination.display()
             ));
         }
-        // Present but not selected: verify it and select it, no download.
-        return crate::model::install(
-            &installed,
-            &pin.sha256,
-            &pin.file,
-            Some(&pin.alias),
-            models_dir,
-            model_config,
-        );
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => return Err("cannot inspect the models directory".into()),
     }
     let free = free_bytes(models_dir);
     if free < NEEDED_BYTES {
@@ -149,38 +180,37 @@ pub fn fetch(
             free as f64 / 1e9
         ));
     }
-    let temporary = models_dir.join(format!(".{}.download", pin.file));
-    let _ = fs::remove_file(&temporary);
-    let result = downloader
-        .download(&pin.url, &temporary)
-        .map_err(|error| {
-            format!(
-                "cannot download {}: {error}\noffline: download it elsewhere, then `openvibes-admin assistant model install FILE --sha256 {}`",
-                pin.url, pin.sha256
-            )
-        })
-        .and_then(|()| {
-            crate::model::install(
-                &temporary,
-                &pin.sha256,
-                &pin.file,
-                Some(&pin.alias),
-                models_dir,
-                model_config,
-            )
-            .map_err(|error| {
-                if error.starts_with("SHA-256 mismatch") {
-                    format!(
-                        "the downloaded file does not match the pinned SHA-256 ({}); nothing was installed",
-                        pin.url
-                    )
-                } else {
-                    error
-                }
-            })
-        });
-    let _ = fs::remove_file(&temporary);
-    result
+    let temporary = Temp(models_dir.join(format!(".{}.download", pin.file)));
+    // A leftover from a killed run.
+    let _ = fs::remove_file(&temporary.0);
+    downloader.download(&pin.url, &temporary.0).map_err(|error| {
+        format!(
+            "cannot download {}: {error}\noffline: download it elsewhere, then `openvibes-admin assistant model install FILE --sha256 {}`",
+            pin.url, pin.sha256
+        )
+    })?;
+    let file = fs::File::open(&temporary.0).map_err(|_| "cannot read the download".to_owned())?;
+    let size = file
+        .metadata()
+        .map_err(|_| "cannot read the download".to_owned())?
+        .len();
+    let digest = crate::model::digest(file)?;
+    if digest != pin.sha256 {
+        return Err(format!(
+            "the downloaded file does not match the pinned SHA-256 ({}); nothing was installed",
+            pin.url
+        ));
+    }
+    crate::model::set_mode(&temporary.0, 0o444)?;
+    fs::rename(&temporary.0, &destination).map_err(|_| "cannot install the model".to_owned())?;
+    crate::model::select(
+        &config,
+        &destination,
+        size,
+        &pin.sha256,
+        Some(&pin.alias),
+        model_config,
+    )
 }
 
 #[cfg(test)]
@@ -285,6 +315,42 @@ mod tests {
         assert_eq!(downloader.calls.get(), 0);
         let conf = fs::read_to_string(&config).unwrap();
         assert!(conf.contains(&format!("OPENVIBES_LLM_MODEL_SHA256={}", pin.sha256)));
+    }
+
+    #[test]
+    fn http_url_is_rejected() {
+        let text = include_str!("../../../packaging/llm/model.pin")
+            .replace("LLM_MODEL_URL=https://", "LLM_MODEL_URL=http://");
+        assert!(parse_pin(&text).unwrap_err().contains("https://"));
+    }
+
+    #[test]
+    fn missing_models_dir_is_refused() {
+        let (models, config) = dirs("nodir");
+        let gone = models.join("absent");
+        let downloader = fake(BYTES);
+        let error = fetch(&pin(), &downloader, &gone, &config, |_| u64::MAX).unwrap_err();
+        assert!(error.contains("does not exist"), "{error}");
+        assert_eq!(downloader.calls.get(), 0);
+    }
+
+    #[test]
+    fn wrong_contents_under_the_pinned_name_are_replaced() {
+        let (models, config) = dirs("foreign");
+        fs::write(models.join("m.gguf"), b"foreign").unwrap();
+        let downloader = fake(BYTES);
+        fetch(&pin(), &downloader, &models, &config, |_| u64::MAX).unwrap();
+        assert_eq!(fs::read(models.join("m.gguf")).unwrap(), BYTES);
+        assert_eq!(downloader.calls.get(), 1);
+        assert_eq!(names(&models), ["m.gguf"]);
+    }
+
+    #[test]
+    fn bad_config_leaves_no_temp_file() {
+        let (models, config) = dirs("badconf");
+        fs::create_dir(&config).unwrap();
+        assert!(fetch(&pin(), &fake(BYTES), &models, &config, |_| u64::MAX).is_err());
+        assert!(names(&models).is_empty());
     }
 
     #[test]
