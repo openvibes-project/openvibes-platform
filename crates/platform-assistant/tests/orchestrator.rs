@@ -905,12 +905,39 @@ async fn parallel_native_calls_share_the_room() {
         items: 12,
         ..Fake::default()
     };
-    let s = settings(ResolvedMode::Native);
+    // A small budget keeps every room under MAX_RESULT_CHARS, so only the
+    // characters already produced this turn keep the sum within the limit.
+    let mut s = settings(ResolvedMode::Native);
+    s.budget.prompt_tokens = 2_200;
     ask(&script, &fake, s, "q").await.unwrap();
-    let last = script.requests().pop().unwrap();
-    let total: usize = last.messages.iter().map(|m| format!("{m:?}").len()).sum();
+    let requests = script.requests();
+    let tools: usize = requests[0]
+        .tools
+        .iter()
+        .map(|t| t.name.len() + t.description.len() + t.parameters.to_string().len())
+        .sum();
+    let total: usize = tools
+        + requests
+            .last()
+            .unwrap()
+            .messages
+            .iter()
+            .map(|m| match m {
+                Message::System(t) | Message::User(t) => t.len(),
+                Message::Tool { content, .. } => content.len(),
+                Message::Assistant {
+                    content,
+                    tool_calls,
+                } => {
+                    content.as_ref().map_or(0, String::len)
+                        + tool_calls
+                            .iter()
+                            .map(|c| c.name.len() + c.arguments.len())
+                            .sum::<usize>()
+                }
+            })
+            .sum::<usize>();
     let limit = s.budget.prompt_tokens as usize * 3;
     assert!(tool_sizes(&script).iter().all(|n| *n >= 400));
-    // Debug framing adds a little per message; the old code overshot by thousands.
-    assert!(total <= limit + 600, "{total} vs {limit}");
+    assert!(total <= limit, "{total} vs {limit}");
 }
