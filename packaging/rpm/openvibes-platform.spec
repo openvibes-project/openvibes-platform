@@ -341,7 +341,7 @@ if [ "$(systemctl is-enabled openvibes-llm.service 2>/dev/null)" = enabled ]; th
     systemctl stop openvibes-llm.service || :
     systemctl enable -q --now openvibes-llm.socket || :
     systemctl is-active -q openvibes-llm.socket ||
-        echo "openvibes-llm: openvibes-llm.socket did not start; see systemctl status openvibes-llm.socket, then: systemctl enable --now openvibes-llm.socket" >&2
+        echo "openvibes-llm: openvibes-llm.socket did not start, so the assistant is unavailable; the reason is in the journal (openvibes-llm.socket) and on the Health screen of openvibes-admin" >&2
 fi
 # An old server that ran but was not enabled (and whose account was renamed)
 # is started here once; with StopWhenUnneeded= and no proxy it stops again at
