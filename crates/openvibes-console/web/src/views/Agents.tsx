@@ -8,6 +8,7 @@ import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
 import { alarmsOff, olderThan, selectAgents } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
+import { filterChips } from "./filters";
 
 export function Agents() {
   const { params, panels } = useLocation();
@@ -23,10 +24,7 @@ export function Agents() {
     <div className="view">
       <ViewHeader title="Hosts" count={rows.length} total={all.length} refresh="/api/v1/agents" placeholder="Filter by host name, ID or version…"
         chips={[
-          { label: "Online", param: "status", value: "active", count: summary.data?.active },
-          { label: "Stale", param: "status", value: "stale", count: summary.data?.stale },
-          { label: "Imported", param: "status", value: "imported", count: summary.data?.imported },
-          { label: "Revoked", param: "status", value: "revoked", count: summary.data?.revoked },
+          ...filterChips("/agents").map((c) => ({ ...c, count: summary.data?.[c.value as "active" | "stale" | "imported" | "revoked"] })),
         ]} />
       {agents.error ? <div className="view-pad"><ErrorBox error={agents.error} /></div> : agents.loading && !agents.data ? <Loading /> : rows.length === 0 ? (
         <Empty icon="agents" title={all.length === 0 ? "No hosts yet" : "Nothing matches these filters"}>

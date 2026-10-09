@@ -58,8 +58,6 @@
   height: 32px; padding: 0 10px; border-radius: var(--r-2); border: 1px solid var(--line-strong);
   background: var(--surface); color: var(--text); min-width: 0; transition: border-color var(--fast), box-shadow var(--fast);
 }
-.select option { background: var(--surface); color: var(--text); }
-.select option:checked { background: var(--accent-soft); color: var(--text); }
 .textarea { height: auto; padding: 8px 10px; resize: vertical; }
 .input:focus, .select:focus, .textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .field { display: grid; gap: 5px; font-size: 12.5px; color: var(--text-2); font-weight: 500; }
@@ -160,19 +158,23 @@
 :root[data-density="compact"] .table .cell-two > :last-child { display: none; }
 :root[data-density="compact"] .list__row { min-height: 32px; padding-top: 3px; padding-bottom: 3px; }
 
-/* Picker: a themed, searchable replacement for long native selects */
-.picker { position: relative; }
-.picker__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
-.picker__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.picker__popup {
-  position: absolute; z-index: 20; inset-inline: 0; top: calc(100% + 4px); display: grid; gap: 6px; padding: 6px;
+/* Select (ui/Select.tsx): the console's own dropdown; the popup is position: fixed so no scroll container clips it */
+.sel { position: relative; }
+.sel__button { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; text-align: left; cursor: pointer; }
+.sel__button:disabled { cursor: not-allowed; opacity: .6; }
+.sel__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sel__popup {
+  z-index: 60; display: grid; gap: 6px; padding: 6px; overflow: hidden;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-2); box-shadow: var(--shadow-2);
 }
-.picker__list { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
-.picker__option, .picker__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
-.picker__option--active { background: var(--accent-soft); }
-.picker__option[aria-selected="true"] { font-weight: 600; }
-.picker__empty { cursor: default; }
+.sel__list { max-height: 300px; overflow-y: auto; outline: none; }
+.sel__group { padding: 8px 8px 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
+.sel__option, .sel__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
+.sel__option--active { background: var(--accent-soft); }
+.sel__option[aria-selected="true"] { font-weight: 600; }
+.sel__option[aria-selected="true"] svg { color: var(--accent); }
+.sel__option[aria-disabled="true"] { color: var(--text-3); cursor: not-allowed; }
+.sel__empty { cursor: default; }
 
 /* Line chart (ui/LineChart.tsx): drawn at pixel size; text never takes a series colour. */
 .linechart { position: relative; width: 100%; --c: var(--accent); }
@@ -201,3 +203,43 @@
 .linechart__table th, .linechart__table td { padding: 2px 8px 2px 0; text-align: left; font-weight: 400; color: var(--text-2); }
 .linechart__table thead th { position: sticky; top: 0; background: var(--surface); color: var(--text-3); }
 .linechart--empty { font-size: 11px; }
+
+/* Button row, switch, checkbox, number input */
+.seg { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-2); }
+.seg__opt {
+  appearance: none; background: none; border: 0; font: inherit; cursor: pointer;
+  flex: 1; padding: 5px 8px; border-radius: var(--r-1); color: var(--text-2); text-align: center; white-space: nowrap;
+  transition: background var(--fast), color var(--fast);
+}
+.seg__opt:hover { color: var(--text); }
+.seg__opt[aria-checked="true"] { background: var(--accent-soft); color: var(--text); font-weight: 600; box-shadow: inset 0 0 0 1px var(--accent); }
+.seg__opt:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.switch { appearance: none; background: none; border: 0; font: inherit; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 5px 0; text-align: left; color: var(--text); }
+.switch:disabled { opacity: 0.5; cursor: not-allowed; }
+.switch__track { position: relative; flex: none; width: 30px; height: 17px; border-radius: 9px; background: var(--surface-3); transition: background var(--fast); }
+.switch__knob { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--text-3); transition: left var(--fast), background var(--fast); }
+.switch[aria-checked="true"] .switch__track { background: var(--accent); }
+.switch[aria-checked="true"] .switch__knob { left: 15px; background: var(--accent-text); }
+.checkbox {
+  appearance: none; flex: none; width: 16px; height: 16px; margin: 0; border-radius: 4px; border: 1.5px solid var(--line-strong);
+  background: var(--surface); display: inline-grid; place-items: center; cursor: pointer; transition: background var(--fast), border-color var(--fast);
+}
+.checkbox:checked { background: var(--accent); border-color: var(--accent); }
+.checkbox:checked::after { content: ""; width: 4px; height: 8px; margin-top: -2px; border: solid var(--accent-text); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.checkbox:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.checkbox:disabled { opacity: 0.5; cursor: not-allowed; }
+input.input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+input.input[type="number"]::-webkit-inner-spin-button, input.input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+@media (forced-colors: active) {
+  .checkbox:focus-visible, .seg__opt:focus-visible { outline: 2px solid Highlight; outline-offset: 1px; }
+  .sel__option--active { forced-color-adjust: none; background: Highlight; color: HighlightText; }
+  .sel__option[aria-disabled="true"] { color: GrayText; }
+  .sel__button:focus-visible, .select:focus-visible { outline: 2px solid Highlight; }
+  .seg__opt { border: 1px solid ButtonText; }
+  .seg__opt[aria-checked="true"] { forced-color-adjust: none; background: Highlight; color: HighlightText; border-color: Highlight; }
+  .switch__track { border: 1px solid ButtonText; }
+  .switch__knob { forced-color-adjust: none; background: ButtonText; }
+  .switch[aria-checked="true"] .switch__track { forced-color-adjust: none; background: Highlight; }
+  .switch[aria-checked="true"] .switch__knob { background: HighlightText; }
+}

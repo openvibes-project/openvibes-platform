@@ -66,8 +66,9 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
     below are pushed down;
   - with a tile focused, arrows move it, Shift+arrows resize it, Delete
     removes it and Enter opens its settings;
-  - Add widget opens the gallery in the inspector, and widget settings open
-    there too.
+  - Add widget opens the gallery in the inspector (each widget type has its
+    own icon), and widget settings open there too (the tile's pencil, or
+    Enter). A new widget goes to the first free spot in the grid.
 - **Saving:** Save sends the version (`If-Match`). If someone else saved
   first, the editor offers "Reload theirs" or "Save as a copy" and keeps
   your edits. Leaving with unsaved changes asks first.
@@ -156,6 +157,79 @@ The console opens on a dashboard ([console-dashboards.md](console-dashboards.md)
   - Set as home.
 - **The demo** (preview and dev only) keeps dashboards and home choices in the browser's
   `localStorage` (`openvibes.v2.demo.dashboards`).
+
+## Console controls
+
+The console draws its own controls (`web/src/ui`); the browser's native
+select popups, radios, spinners and checkboxes cannot be themed, so none is
+used.
+
+- **Select** (`Select.tsx`, logic in `select.ts`): a combobox button and a
+  listbox popup. Options are flat or in groups (a group has a heading), each
+  with an optional hint and a `disabled` flag. Above 8 enabled options a
+  search box filters the list, and typing a character on the closed button
+  opens it with that search. Arrow keys, Enter, Escape and Tab work; only one
+  Select is open at a time; the popup closes when its button scrolls out of
+  view. A stored value that is not among the options is shown as a selected
+  extra at the top of the list (labelled by `unknownLabel`) and stays
+  selected until the user picks something else. Clicks inside the popup
+  never reach a wrapping `<label>`.
+- **SelectField** (`Field.tsx`): a captioned Select. It is a `div`, never a
+  `<label>` around a Select; the Select carries its own `aria-label`.
+- **Segmented** (`Segmented.tsx`): a button row for two to four choices, a
+  `radiogroup` where the arrows move and wrap. An unknown stored value is
+  added as an extra, selected segment.
+- **Switch** (`Switch.tsx`): an on/off row, label left and track right; the
+  whole row is a `role="switch"` button.
+- **Checkbox and number input:** `input.checkbox` is a drawn box (the tables'
+  selection columns use it); `input.input[type=number]` has no spinner.
+  Under `forced-colors: active` the segments, switch track, checkbox and
+  focus ring use system colours with visible borders.
+- **The guard** (`ui/no-native-controls.test.ts`): a vitest scan of every
+  `.tsx` under `src` that fails on a native `<select>`, a radio, a checkbox
+  without `className="checkbox"` or a number input without `className="input"`.
+  Its documented exception list is empty; an exception is a
+  `"file:line reason"` entry.
+
+### Filter catalogue
+
+`views/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
+Hosts, Audit log): each filter is a flag (one fixed value) or a choice (a
+list of values), and each parameter holds one value. The list views build
+their chip bars from it and the List widget editor offers the same filters,
+so the two cannot drift. Runtime extras (compliance rule sets, counts) stay
+in the views.
+
+### Widget editors
+
+The inspector's editors (`dashboards/settings.tsx`) use only those controls:
+
+- **Number:** Count (grouped Select with search), Trend (Segmented: Off, 7,
+  30, 90 d) and, with a trend, Line.
+- **Graph:** one Select per count (a dot shows its line colour; counts
+  already chosen are disabled in the others), "Add a count" up to four,
+  Period and Line as Segmented.
+- **Breakdown:** the source as Segmented (Alarms, Vulnerabilities,
+  Compliance, Hosts).
+- **Needs attention:** one Switch per kind (the last one on cannot be
+  switched off) and "Show at most" (5, 8, 10, 15).
+- **List:** the list, its filters as removable chips with an "Add filter"
+  Select (a choice filter then asks for its value; picking a value for a
+  used filter replaces the old one), and Rows (5, 8, 10, 15). Only the
+  catalogue's filters are offered: runtime rule-set filters are not, but a
+  stored `set=` parameter shows as a chip and is kept. Changing the list
+  drops the filters the new list does not support, or whose value it does not offer.
+- **Trend:** the compliance rule, grouped by rule set and labelled
+  "<latest message> · <rule id>" (the API has no rule title), and Days (7,
+  14, 30). Without `compliance.read` the list is empty.
+- **Most exposed hosts:** Count (All kinds, Vulnerabilities only) and Hosts
+  (3, 6, 10).
+- **Note:** plain text.
+- **Unknown stored values** (a day count, a rule, a list, an attention kind
+  the editor does not offer) are shown as selected extras and saved back
+  unchanged, never silently replaced. A stored rule missing from the loaded
+  rules reads "<id> (not found)", or "<id> (could not load)" if loading
+  failed.
 
 ## Threat alarms (P14)
 

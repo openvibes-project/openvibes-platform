@@ -62,6 +62,7 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
   position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 12px; padding: 8px 10px;
   border-radius: var(--r-2); background: var(--accent-soft); border: 1px solid var(--accent); animation: rise var(--fast);
 }
+.bulk-bar .input { min-width: 140px; } /* wrap onto a new line before the note shrinks to a sliver (phone) */
 .confirm { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-2); border: 1px solid var(--line-strong); background: var(--surface-2); width: 100%; animation: rise var(--fast); }
 .confirm__text { font-size: 13px; }
 .confirm__error { color: var(--bad); font-size: 13px; }
@@ -343,3 +344,24 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .detection-sub { margin: 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--text-2); }
 .detection-rule-line { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; justify-content: space-between; padding-top: 10px; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
 .detection-raw summary { cursor: pointer; }
+
+/* Widget editors */
+.field__label { display: flex; justify-content: space-between; }
+.field__label em { font-style: normal; font-weight: 400; }
+.stack--tight { gap: 2px; }
+.editor-count { display: grid; grid-template-columns: 10px 1fr 32px; gap: 6px; align-items: center; }
+.editor-count--filter { grid-template-columns: 1fr 32px; }
+.editor-count__dot { width: 10px; height: 10px; border-radius: 50%; }
+.editor-count__remove { width: 32px; height: 32px; grid-column: 3; color: var(--text-3); }
+.editor-count--filter .editor-count__remove { grid-column: 2; }
+.link-add { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 6px; padding: 6px 2px; color: var(--accent); font-weight: 600; cursor: pointer; justify-self: start; }
+.link-add:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; border-radius: var(--r-2); }
+.link-add--menu { cursor: default; padding: 0; }
+.link-add--menu .select { border-color: transparent; background: transparent; color: var(--accent); font-weight: 600; padding-left: 2px; }
+.link-add--menu .sel__button > svg { display: none; }
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.fchip { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 4px 0 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; }
+.fchip button { all: unset; cursor: pointer; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; }
+.fchip button:hover { background: var(--accent); color: var(--accent-text); }
+.fchip button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.link-add--menu .sel__button .sel__value { color: var(--accent); font-weight: 600; }

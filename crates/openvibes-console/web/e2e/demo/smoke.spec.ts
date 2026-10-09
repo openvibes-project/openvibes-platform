@@ -139,7 +139,8 @@ test("a finding set to Investigating stays in the default Findings list (board #
   const inspector = page.locator(".inspector");
   await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ }).click();
   await inspector.getByRole("checkbox", { name: "Select all hosts" }).check();
-  await inspector.getByRole("combobox", { name: "New triage state" }).selectOption("investigating");
+  await inspector.getByRole("combobox", { name: "New triage state" }).click();
+  await page.getByRole("option", { name: "Investigating" }).click();
   await inspector.getByRole("button", { name: "Apply" }).click();
   await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);
   // Not page.goto: the demo keeps its data in memory and a reload resets it.

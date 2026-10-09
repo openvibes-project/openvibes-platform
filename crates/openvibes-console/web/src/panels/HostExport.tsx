@@ -104,7 +104,7 @@ export function HostExport({ agent }: { agent: Agent }) {
   return (
     <div className="stack export-picker" role="group" aria-label="Export this host">
       {allowed.map((s) => (
-        <label key={s} className="row"><input type="checkbox" checked={picked.includes(s)} onChange={() => setPicked((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s])} /> {LABELS[s]}</label>
+        <label key={s} className="row"><input type="checkbox" className="checkbox" checked={picked.includes(s)} onChange={() => setPicked((p) => p.includes(s) ? p.filter((x) => x !== s) : [...p, s])} /> {LABELS[s]}</label>
       ))}
       <div className="row">
         <button type="button" className="button button--primary" disabled={busy || picked.length === 0} onClick={() => void save()}>{busy ? "Exporting…" : "Download CSV"}</button>

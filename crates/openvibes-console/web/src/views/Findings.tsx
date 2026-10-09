@@ -9,6 +9,7 @@ import { DataTable } from "../ui/DataTable";
 import { severityOrder } from "../ui/format";
 import { activeCount, selectFindings } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
+import { filterChips } from "./filters";
 
 export function Findings() {
   const { params, panels } = useLocation();
@@ -27,8 +28,7 @@ export function Findings() {
     <div className="view">
       <ViewHeader title="Compliance" count={rows.length} total={all.length} refresh="/api/v1/compliance" placeholder="Filter by message, rule or rule set…"
         chips={[
-          { label: "Include resolved", param: "state", value: "all", count: resolved },
-          ...(["critical", "high", "medium", "low"] as const).map((s) => ({ label: s[0]?.toUpperCase() + s.slice(1), param: "severity", value: s, count: bySeverity(s) })),
+          ...filterChips("/compliance").map((c) => ({ ...c, count: c.param === "state" ? resolved : bySeverity(c.value) })),
           ...sets.map((set) => ({ label: set, param: "set", value: set })),
         ]} />
       {groups.error ? <div className="view-pad"><ErrorBox error={groups.error} /></div> : groups.loading && !groups.data ? <Loading /> : rows.length === 0 ? (

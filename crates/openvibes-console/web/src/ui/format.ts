@@ -6,6 +6,8 @@ const relative = new Intl.RelativeTimeFormat(undefined, { numeric: "auto", style
 const absolute = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 const day = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
+export const capitalise = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** "4 min ago", "in 3 days"; "just now" under a minute. */
 export function ago(value: string | number | null | undefined, now = Date.now()): string {
   if (value == null) return "never";

@@ -11,6 +11,7 @@ import { DataTable } from "../ui/DataTable";
 import { severityOrder } from "../ui/format";
 import { Confirm } from "../ui/panel";
 import { matches } from "../ui/table";
+import { Select } from "../ui/Select";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
 
@@ -82,10 +83,8 @@ function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
   // select); only the confirmation acts, and it names what it quiets.
   return (
     <div className="row">
-      <select className="select select--small" aria-label={`Quiet ${alarm.message}`} value={scope} onChange={(event) => setScope(event.target.value)}>
-        <option value="">Quiet…</option>
-        {scopes.map((s) => <option key={s.scope} value={s.scope}>{s.label}</option>)}
-      </select>
+      <Select small label={`Quiet ${alarm.message}`} value={scope} onChange={setScope}
+        options={[{ value: "", label: "Quiet…" }, ...scopes.map((s) => ({ value: s.scope, label: s.label }))]} />
       {chosen && (
         <Confirm danger label={`Close this alarm as a false positive and quiet ${what}?`} reason="Why (saved as the note)"
           onConfirm={async (note) => { await closeAndQuiet(alarm.id, scope, note); setScope(""); }}>Quiet</Confirm>

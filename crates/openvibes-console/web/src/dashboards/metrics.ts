@@ -3,6 +3,7 @@
 // No DOM imports here so tests can read it.
 // A cross-kind entry has no view of its own: only its parts navigate.
 import { count } from "../ui/format";
+import type { SelectGroup } from "../ui/select";
 type Entry = {
   label: string; permissions: string[]; view?: [string, Record<string, string>]; parts?: [string, string][];
 };
@@ -34,6 +35,10 @@ export const graphLabel = (id: Metric) => id.startsWith("all.") ? `${METRICS[id]
 export const METRICS: Record<keyof typeof defs, Entry> = defs;
 export type Metric = keyof typeof defs;
 export const METRIC_KEYS = Object.keys(defs) as Metric[];
+
+/** The count picker's groups, by id prefix (hosts are `agents.*`). */
+export const METRIC_GROUPS: SelectGroup[] = ([["all.", "All kinds"], ["alarms.", "Alarms"], ["vulns.", "Vulnerabilities"], ["compliance.", "Compliance"], ["agents.", "Hosts"]] as const)
+  .map(([prefix, group]) => ({ group, options: METRIC_KEYS.filter((k) => k.startsWith(prefix)).map((k) => ({ value: k, label: graphLabel(k) })) }));
 
 /** Fine print for one part of a cross-kind count: "1 vulnerability", "0 alarms". */
 export function partText(kind: string, n: number): string {

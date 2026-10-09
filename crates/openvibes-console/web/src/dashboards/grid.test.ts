@@ -35,12 +35,18 @@ describe("grid", () => {
     expect(at(resized, "b")?.y).toBe(5);
   });
 
-  it("adds at the bottom with a unique id and removes", () => {
+  it("adds at the first free spot with a unique id and removes", () => {
     const layout: Layout = { schema: 1, widgets: [tile("number-1", 0, 0, 4, 3)] };
     const { layout: added, id } = addWidget(layout, "number", { w: 3, h: 2 }, { metric: "agents.active" });
     expect(id).toBe("number-2");
-    expect(at(added, id)).toMatchObject({ x: 0, y: 3, w: 3, h: 2 });
+    expect(at(added, id)).toMatchObject({ x: 4, y: 0, w: 3, h: 2 });
     expect(removeWidget(added, id).widgets).toHaveLength(1);
+  });
+
+  it("places a 3 x 4 beside a 3 x 4, and a full-width one below", () => {
+    const layout: Layout = { schema: 1, widgets: [tile("number-1", 0, 0, 3, 4)] };
+    expect(at(addWidget(layout, "number", { w: 3, h: 4 }, {}).layout, "number-2")).toMatchObject({ x: 3, y: 0 });
+    expect(at(addWidget(layout, "list", { w: 12, h: 4 }, {}).layout, "list-1")).toMatchObject({ x: 0, y: 4 });
   });
 
   it("reads tiles row by row for phones", () => {

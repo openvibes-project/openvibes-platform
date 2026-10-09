@@ -11,6 +11,8 @@ import { Empty, ErrorBox, Loading } from "../ui/bits";
 import { date, when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { PanelHeader, Section } from "../ui/panel";
+import { Select } from "../ui/Select";
+import { SelectField } from "../ui/Field";
 import { toast } from "../ui/toast";
 
 const message = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback);
@@ -61,13 +63,15 @@ export function NewServiceAccount() {
             (e: unknown) => setError(message(e, "Could not create the account")));
       }}>
         <label className="field">Name<input className="input" required maxLength={128} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. SIEM export" /></label>
-        <label className="field">Role<select className="select" value={role} onChange={(e) => setRole(e.target.value)}>{roles.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map(([id, label]) => ({ value: id, label }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit"><Icon name="plus" size={15} /> Create account</button></div>
       </form>
     </>
   );
 }
+
+const TOKEN_LIFETIMES = [{ value: "24", label: "1 day" }, { value: "168", label: "7 days" }, { value: "720", label: "30 days" }, { value: "2160", label: "90 days" }, { value: "8760", label: "1 year" }];
 
 export function IssueServiceToken({ accountId }: { accountId: string }) {
   const [label, setLabel] = useState("");
@@ -93,9 +97,8 @@ export function IssueServiceToken({ accountId }: { accountId: string }) {
           .then((created) => { idempotency.done(); setSecret(created); setLabel(""); invalidate("/api/v1/service-accounts"); }, (e: unknown) => setError(message(e, "Could not issue the token")));
       }}>
         <input className="input grow" required maxLength={128} value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Label, e.g. splunk forwarder" aria-label="Token label" />
-        <select className="select" value={hours} onChange={(e) => setHours(Number(e.target.value))} aria-label="Valid for">
-          <option value={24}>1 day</option><option value={168}>7 days</option><option value={720}>30 days</option><option value={2160}>90 days</option><option value={8760}>1 year</option>
-        </select>
+        <Select label="Valid for" value={String(hours)} onChange={(v) => setHours(Number(v))}
+          options={TOKEN_LIFETIMES} />
         <button className="button button--small button--primary" type="submit">Issue</button>
       </form>
       {error && <p className="confirm__error" role="alert">{error}</p>}
@@ -301,7 +304,7 @@ export function NewUser() {
       }}>
         <label className="field">Username<input className="input mono" required maxLength={64} pattern="[A-Za-z0-9._@+\-]+" autoComplete="off" spellCheck={false} value={username} onChange={(e) => setUsername(e.target.value)} placeholder="e.g. jdoe" /></label>
         <label className="field">Display name<input className="input" required maxLength={160} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="e.g. Jane Doe" /></label>
-        <label className="field">Role<select className="select" value={role} onChange={(e) => setRole(e.target.value)}>{roles.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></label>
+        <SelectField label="Role"><Select label="Role" value={role} onChange={setRole} options={roles.map(([id, label]) => ({ value: id, label }))} /></SelectField>
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div><button className="button button--primary" type="submit" disabled={busy}><Icon name="plus" size={15} /> {busy ? "Creating…" : "Create user"}</button></div>
       </form>

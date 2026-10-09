@@ -86,7 +86,7 @@ export function Grid({ layout, editing }: { layout: Layout; editing: boolean }) 
               <h2 className="tile__title truncate" title={title}>{title}</h2>
               {canEdit && (
                 <span className="row">
-                  <button type="button" className="icon-button" aria-label={`Settings for ${title}`} onClick={() => nav.open({ kind: "widget", id: widget.id }, true)}><Icon name="filter" size={14} /></button>
+                  <button type="button" className="icon-button" aria-label={`Settings for ${title}`} onClick={() => nav.open({ kind: "widget", id: widget.id }, true)}><Icon name="pencil" size={14} /></button>
                   <button type="button" className="icon-button" aria-label={`Remove ${title}`} onClick={() => editor.remove(widget.id)}><Icon name="close" size={14} /></button>
                 </span>
               )}
