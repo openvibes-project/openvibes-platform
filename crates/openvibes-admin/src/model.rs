@@ -2,7 +2,8 @@
 //! against the SHA-256 the operator got from its publisher, installs it
 //! read-only for `openvibes-llm`, and selects it in
 //! `/var/lib/openvibes-llm/model.conf` (assistant spec §6, §9). The platform
-//! never downloads models itself. Runs as `openvibes-admin`, whose group owns
+//! downloads a model only when an admin runs `model fetch` (see
+//! `model_fetch.rs`; Setup and assistant-setup call it). Runs as `openvibes-admin`, whose group owns
 //! `/var/lib/openvibes-llm`; the service's own settings stay root's in
 //! `/etc/openvibes/llm.conf`.
 
@@ -46,18 +47,52 @@ pub enum ModelCommand {
         #[arg(long, default_value = MODEL_CONFIG)]
         model_config: PathBuf,
     },
+    /// Download the model named by model.pin from its publisher (HTTPS),
+    /// then install it as `install` does; a no-op if already installed.
+    Fetch {
+        /// The pin file (`LLM_MODEL_*` values).
+        #[arg(long, default_value = "/usr/share/openvibes-llm/model.pin")]
+        pin: PathBuf,
+        /// Models directory.
+        #[arg(long, default_value = MODELS_DIR)]
+        models_dir: PathBuf,
+        /// The model selection file.
+        #[arg(long, default_value = MODEL_CONFIG)]
+        model_config: PathBuf,
+    },
 }
 
 /// Runs a model command; the audit target is the installed file name.
 pub fn run(command: &ModelCommand) -> (Result<String, String>, Option<String>) {
-    let ModelCommand::Install {
-        file,
-        sha256,
-        name,
-        alias,
-        models_dir,
-        model_config,
-    } = command;
+    let (file, sha256, name, alias, models_dir, model_config) = match command {
+        ModelCommand::Install {
+            file,
+            sha256,
+            name,
+            alias,
+            models_dir,
+            model_config,
+        } => (file, sha256, name, alias, models_dir, model_config),
+        ModelCommand::Fetch {
+            pin,
+            models_dir,
+            model_config,
+        } => {
+            return match crate::model_fetch::read_pin(pin) {
+                Ok(pin) => (
+                    crate::model_fetch::fetch(
+                        &pin,
+                        &crate::model_fetch::Curl,
+                        models_dir,
+                        model_config,
+                        crate::model_fetch::free_bytes,
+                    ),
+                    Some(pin.file),
+                ),
+                Err(error) => (Err(error), None),
+            };
+        }
+    };
     let name = name.clone().or_else(|| {
         file.file_name()
             .and_then(|name| name.to_str())
@@ -81,7 +116,7 @@ pub fn run(command: &ModelCommand) -> (Result<String, String>, Option<String>) {
     (result, target)
 }
 
-fn install(
+pub(crate) fn install(
     source: &Path,
     sha256: &str,
     name: &str,

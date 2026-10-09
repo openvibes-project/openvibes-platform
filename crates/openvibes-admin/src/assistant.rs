@@ -53,6 +53,9 @@ impl AssistantCommand {
         match self {
             Self::Check { .. } => "assistant check",
             Self::Eval { .. } => "assistant eval",
+            Self::Model {
+                command: crate::model::ModelCommand::Fetch { .. },
+            } => "assistant model fetch",
             Self::Model { .. } => "assistant model install",
         }
     }
