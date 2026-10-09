@@ -1,0 +1,151 @@
+#!/bin/sh
+# OpenVIBES offline installer: installs the platform from this kit only, with
+# no network access.
+#   tar xf openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar && sudo ./openvibes-offline/install
+# Options: --model FILE   the assistant's model file (default: the pinned file
+#                         next to the kit, if there is one)
+#          --no-setup     do not open Setup afterwards
+#          --check        only check the host and the kit; change nothing
+# Running it again with a newer kit upgrades. Stops at the first failure and
+# says what it did.
+set -eu
+
+# The OpenVIBES package key (gpg --show-keys openvibes.gpg).
+KEY_FINGERPRINT=710AD8AFB7AFE6E864C0CDC4E134BAF37786DA36
+# Test hook (the kit's own container test); sudo drops it from a user's
+# environment unless passed explicitly.
+KEY_FINGERPRINT=${OPENVIBES_KEY_FINGERPRINT:-$KEY_FINGERPRINT}
+# Filled in when the kit is built.
+KIT_VERSION=@VERSION@
+KIT_FEDORA=@FEDORA@
+PIN=/usr/share/openvibes-llm/model.pin
+
+done_so_far="nothing changed"
+tmp=''
+model_copy=''
+
+die() {
+    printf 'openvibes offline install: %s (%s)\n' "$1" "$done_so_far" >&2
+    exit 1
+}
+say() { printf 'openvibes offline install: %s\n' "$1"; }
+cleanup() { rm -rf "${tmp:-}" "${model_copy:-}"; }
+usage() {
+    echo 'usage: install [--model FILE] [--no-setup] [--check]' >&2
+    exit 2
+}
+
+model='' setup=1 check=0
+while [ $# -gt 0 ]; do
+    case $1 in
+        --model) [ $# -ge 2 ] || usage; model=$2; shift ;;
+        --no-setup) setup=0 ;;
+        --check) check=1 ;;
+        *) usage ;;
+    esac
+    shift
+done
+
+kit=$(cd "$(dirname "$0")" && pwd -P)
+[ "$KEY_FINGERPRINT" != unset ] || die "this copy of the installer has no package key fingerprint"
+[ "$check" = 1 ] || [ "$(id -u)" = 0 ] || die "run it as root (sudo ./openvibes-offline/install)"
+
+# 1. The host must match the kit.
+# shellcheck source=/dev/null
+os_id=$(. /etc/os-release && printf %s "$ID")
+# shellcheck source=/dev/null
+os_version=$(. /etc/os-release && printf %s "${VERSION_ID:-}")
+arch=$(uname -m)
+if [ "$os_id" != fedora ] || [ "$os_version" != "$KIT_FEDORA" ] || [ "$arch" != x86_64 ]; then
+    if [ "$os_id" = fedora ] && [ "$arch" = x86_64 ]; then
+        die "this kit is for Fedora $KIT_FEDORA; download openvibes-platform-$KIT_VERSION-offline-fedora$os_version.tar"
+    fi
+    die "this kit is for Fedora $KIT_FEDORA on x86_64 (this is $os_id $os_version $arch)"
+fi
+
+# 2. The kit must be the one OpenVIBES signed. Nothing has changed yet.
+tmp=$(mktemp -d)
+trap cleanup EXIT
+export GNUPGHOME="$tmp/gnupg"
+mkdir -m 0700 "$GNUPGHOME"
+for f in openvibes.gpg SHA256SUMS SHA256SUMS.asc; do
+    [ -f "$kit/$f" ] || die "the kit is incomplete: $f is missing"
+done
+# Keep our own copy of the key: it is the one dnf imports below.
+cp "$kit/openvibes.gpg" "$tmp/openvibes.gpg"
+gpg --batch --quiet --import "$tmp/openvibes.gpg" 2>/dev/null || die "openvibes.gpg is not a key"
+keys=$(gpg --batch --with-colons --list-keys | awk -F: '$1=="pub"{p=1;next} p&&$1=="fpr"{print $10;p=0}')
+[ "$keys" = "$KEY_FINGERPRINT" ] || die "openvibes.gpg is not the OpenVIBES package key (fingerprint $keys); the kit was altered"
+gpg --batch --status-fd 1 --verify "$kit/SHA256SUMS.asc" "$kit/SHA256SUMS" 2>/dev/null |
+    awk -v fp="$KEY_FINGERPRINT" '$2=="VALIDSIG" && ($3==fp || $12==fp){ok=1} END{exit !ok}' ||
+    die "SHA256SUMS is not signed by the OpenVIBES package key; the kit is corrupted or altered"
+(cd "$kit" && sha256sum --check --quiet SHA256SUMS >/dev/null 2>&1) ||
+    die "a file in the kit does not match SHA256SUMS; the kit is corrupted or altered"
+# Nothing may sit in the kit that the signature does not cover.
+listed=$(sed 's/^[^ ]* [ *]//' "$kit/SHA256SUMS" | sort)
+found=$(cd "$kit" && find . -type f ! -name SHA256SUMS ! -name SHA256SUMS.asc | sed 's|^\./||' | sort)
+[ "$listed" = "$found" ] || die "the kit holds files SHA256SUMS does not list; the kit is altered"
+[ -z "$(cd "$kit" && find . ! -type f ! -type d)" ] || die "the kit holds links or special files; the kit is altered"
+if [ "$check" = 1 ]; then
+    say "the kit is genuine and matches this host (Fedora $KIT_FEDORA, $KIT_VERSION); nothing was changed"
+    exit 0
+fi
+
+# 3. Install from the kit only.
+say "installing the platform from the kit (a few minutes, no network)"
+dnf -y --disablerepo='*' --repofrompath=openvibes-offline,"$kit/packages" \
+    --enablerepo=openvibes-offline --setopt=openvibes-offline.gpgcheck=1 \
+    --setopt=openvibes-offline.gpgkey="file://$tmp/openvibes.gpg" --setopt=install_weak_deps=False \
+    install openvibes-admin openvibes-console openvibes-ingest openvibes-distribution \
+    openvibes-vulns openvibes-signer openvibes-llm openvibes-llm-model 'openvibes-rules-*' postgresql-server \
+    >"$tmp/dnf.log" 2>&1 || {
+    tail -n 25 "$tmp/dnf.log" >&2
+    die "dnf could not install the packages from the kit"
+}
+done_so_far="the platform packages are installed, the assistant's model is not"
+
+# 4. The model.
+[ -f "$PIN" ] || die "$PIN is missing after the install"
+# shellcheck source=/dev/null
+. "$PIN"
+if [ -z "$model" ] && [ -f "$kit/../$LLM_MODEL_FILE" ]; then
+    model=$kit/../$LLM_MODEL_FILE
+fi
+if [ -n "$model" ]; then
+    [ -f "$model" ] || die "--model: $model is not a file"
+    # The model is installed as the openvibes-admin user (never root), so
+    # that user must be able to read the file. If it cannot (a file under
+    # /root, say), install from a private copy that is removed on every exit.
+    if ! runuser -u openvibes-admin -- test -r "$model" 2>/dev/null; then
+        need=$(stat -c %s "$model")
+        free=$(df -B1 --output=avail /var/tmp | tail -n 1 | tr -d ' ')
+        [ "$free" -gt $((need + 268435456)) ] ||
+            die "not enough free space in /var/tmp for a temporary copy of the model ($((need / 1000000000 + 1)) GB needed)"
+        model_copy=$(mktemp -d /var/tmp/openvibes-model.XXXXXX)
+        chmod 0755 "$model_copy"
+        cp "$model" "$model_copy/$LLM_MODEL_FILE" || die "could not copy the model file into $model_copy"
+        chmod 0444 "$model_copy/$LLM_MODEL_FILE"
+        chgrp openvibes-admin "$model_copy" "$model_copy/$LLM_MODEL_FILE"
+        model=$model_copy/$LLM_MODEL_FILE
+    fi
+    say "installing the assistant's model (checking it against the pinned SHA-256)"
+    openvibes-admin assistant model install "$model" --sha256 "$LLM_MODEL_SHA256" >"$tmp/model.log" 2>&1 || {
+        tail -n 10 "$tmp/model.log" >&2
+        die "the model was not installed (see the line above; the file must be $LLM_MODEL_FILE with SHA-256 $LLM_MODEL_SHA256, from $LLM_MODEL_URL)"
+    }
+    done_so_far="the platform and the assistant's model are installed"
+else
+    say "the platform is installed. The assistant has no model yet: turn it on in Setup (it downloads the model)."
+    say "With no network: download $LLM_MODEL_URL (SHA-256 $LLM_MODEL_SHA256) into the folder that holds this kit and run this installer again."
+fi
+
+# 5. Setup, as after an online install.
+rm -rf "$model_copy"
+user=${SUDO_USER:-}
+if [ "$setup" = 1 ] && [ -n "$user" ] && [ "$user" != root ] && [ -t 0 ]; then
+    say "opening the administration TUI (Setup)"
+    home=$(getent passwd "$user" | cut -d: -f6)
+    rm -rf "$tmp"   # exec replaces this shell: the EXIT trap will not run
+    exec env HOME="$home" SUDO_USER="$user" /usr/bin/openvibes-admin
+fi
+say "installed. Open Setup (the administration tool) to finish."

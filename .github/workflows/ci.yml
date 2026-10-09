@@ -38,6 +38,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       heavy: ${{ steps.pick.outputs.heavy }}
+      kit: ${{ steps.pick.outputs.kit }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,12 +56,16 @@ jobs:
         shell: bash
         run: |
           heavy=true
+          # The offline kit test: always off pull requests; on them only when
+          # the kit, its scripts or the spec changed (or with full-ci).
+          kit=true
           if [ "$EVENT" = pull_request ]; then
             case ",$LABELS," in
               *,full-ci,*) ;;
               *)
                 # Heavy unless every changed file is frontend source or docs.
                 changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+                grep -qE '^(packaging/offline/|scripts/[^/]*offline[^/]*$|packaging/rpm/openvibes-platform\.spec$)' <<<"$changed" || kit=false
                 if ! grep -qvE '^(crates/openvibes-console/web/(src|tests|e2e|public)/|docs/|[^/]+\.md$)' <<<"$changed"; then
                   heavy=false
                 fi
@@ -68,6 +73,7 @@ jobs:
             esac
           fi
           echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
+          echo "kit=$kit" >> "$GITHUB_OUTPUT"
           echo "heavy tier: $heavy"
 
   rust:
@@ -367,6 +373,9 @@ jobs:
           cp $(ls target/rpm/RPMS/x86_64/*.rpm | grep -v openvibes-llm-model) /opt/agent-src/target/rpm/RPMS/x86_64/openvibes-agent-*.rpm \
             /opt/agent-src/target/release/examples/sign_bundle dist/
           cp target/rpm-console/RPMS/x86_64/openvibes-console-*.rpm dist/
+          # The offline kit carries the bridge package (no model bytes in it).
+          mkdir dist/llm-model
+          cp target/rpm/RPMS/x86_64/openvibes-llm-model-*.rpm dist/llm-model/
           cp target/release/openvibes-load target/release/examples/integration_bundle tools/
 
       - name: Upload RPMs for the end to end jobs
@@ -508,6 +517,38 @@ jobs:
           console_rpm=$(find dist -maxdepth 1 -name "openvibes-console-${console_version}-*.rpm" -type f -print -quit)
           bash scripts/systemd-e2e.sh dist dist/sign_bundle \
             "$console_old_rpm" "$console_rpm"
+
+  offline-kit:
+    name: Offline kit (installs with no network)
+    needs: [changes, fedora]
+    if: needs.changes.outputs.heavy == 'true' && needs.changes.outputs.kit == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download RPMs
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: rpms
+          path: dist
+      - name: Build a kit signed with a test key
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir kit-rpms
+          # The newest console package (dist also holds the older one for the upgrade test).
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml | head -n 1)
+          cp dist/openvibes-*-"$version"-*.rpm dist/llm-model/*.rpm kit-rpms/
+          rm -f kit-rpms/openvibes-agent-*
+          gh release download --repo openvibes-project/openvibes-rules --pattern 'openvibes-rules-*.rpm' --dir kit-rpms
+          bash scripts/offline-kit-test-kit.sh kit-rpms target/offline 44
+      - name: Install from the kit with no network
+        run: |
+          OPENVIBES_KEY_FINGERPRINT=$(cat target/offline/fingerprint) \
+            bash scripts/offline-kit-e2e.sh target/offline/openvibes-platform-*-offline-fedora44.tar
 
   setup-lifecycle:
     name: Setup life cycle under systemd (install, repair, update, uninstall)
