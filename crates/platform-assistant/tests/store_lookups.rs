@@ -90,6 +90,7 @@ fn envelope(encoding: PayloadEncoding) -> Vec<u8> {
                 finding_message: "SSH listens on a non-loopback address".into(),
                 kind: openvibes_core::RuleKind::Snapshot,
                 programs: None,
+                attack: None,
             })
             .collect(),
     };

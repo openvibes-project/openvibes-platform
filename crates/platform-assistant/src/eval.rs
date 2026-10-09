@@ -257,6 +257,7 @@ impl Fleet {
                     finding_message: r.message.clone(),
                     kind: RuleKind::Snapshot,
                     programs: None,
+                    attack: None,
                 })
             })
             .collect::<Result<Vec<_>, &str>>()?;

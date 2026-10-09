@@ -43,6 +43,7 @@ fn signed_rule_envelope(version: u64) -> (Vec<u8>, [u8; 32]) {
             finding_message: format!("version {version}"),
             kind: openvibes_core::RuleKind::Snapshot,
             programs: None,
+            attack: None,
         }],
     })
     .unwrap();

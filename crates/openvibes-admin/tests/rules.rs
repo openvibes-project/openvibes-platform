@@ -48,6 +48,7 @@ fn sign(version: u64, seed: u8, expires_in_ms: i64) -> Vec<u8> {
             finding_message: format!("version {version}"),
             kind: openvibes_core::RuleKind::Snapshot,
             programs: None,
+            attack: None,
         }],
     })
     .unwrap();
