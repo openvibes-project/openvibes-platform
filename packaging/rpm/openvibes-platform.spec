@@ -312,11 +312,14 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 # Before any unit (re)start below, in %%posttrans or in the old package's
 # %%postun: without it the socket cannot bind 18430 and the proxy cannot
 # reach the server under enforcing SELinux. Priority 200: Fedora's for
-# modules shipped by packages. Not fatal: the platform works without the
-# assistant, and the message says what to run.
-if command -v selinuxenabled >/dev/null && selinuxenabled; then
-    semodule -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil ||
-        echo "openvibes-llm: could not load the SELinux module; the assistant will not start under enforcing SELinux. Run: semodule -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil" >&2
+# modules shipped by packages. As Fedora's %%selinux_modules_install: into
+# the targeted store whenever it is the configured policy, enabled or not
+# (a host that enables SELinux later has it), and loaded only if enabled.
+# Not fatal: the platform works without the assistant.
+if [ -e /etc/selinux/config ] && (. /etc/selinux/config && [ "$SELINUXTYPE" = targeted ]); then
+    { semodule -n -s targeted -X 200 -i %{_datadir}/selinux/packages/targeted/openvibes-llm.cil &&
+        { ! selinuxenabled || load_policy; }; } ||
+        echo "openvibes-llm: the SELinux module openvibes-llm could not be installed or loaded; under enforcing SELinux the assistant cannot start" >&2
 fi
 %systemd_post openvibes-llm.socket openvibes-llm-proxy.service openvibes-llm.service
 # The API key the console sends: generated once, root's only. The console
@@ -354,8 +357,9 @@ fi
 %systemd_postun openvibes-llm.socket
 %systemd_postun_with_restart openvibes-llm-proxy.service openvibes-llm.service
 # Erase only: an upgrade keeps (and its %%post reloads) the module.
-if [ $1 -eq 0 ] && command -v semodule >/dev/null; then
-    semodule -X 200 -r openvibes-llm 2>/dev/null || :
+if [ $1 -eq 0 ] && [ -e /etc/selinux/config ] && (. /etc/selinux/config && [ "$SELINUXTYPE" = targeted ]); then
+    semodule -n -s targeted -X 200 -r openvibes-llm >/dev/null 2>&1 || :
+    selinuxenabled && load_policy || :
 fi
 %endif
 

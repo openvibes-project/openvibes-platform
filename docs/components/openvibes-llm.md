@@ -237,8 +237,11 @@ Fedora confines `systemd-socket-proxyd` (domain
 under enforcing SELinux the socket could not bind 18430 and the proxy
 could not reach the server. The package ships a small policy module,
 `packaging/llm/openvibes-llm.cil`, keeps the proxy confined, and loads the
-module with `semodule -X 200 -i` in `%post` when SELinux is enabled,
-before any unit starts; erasing the package removes it. It allows only:
+module with `semodule -X 200 -i` in `%post`, before any unit starts. Like
+Fedora's own packages, it installs it whenever the targeted policy is
+configured, even with SELinux disabled (so enabling SELinux later needs no
+step), and loads it only when SELinux is enabled. Erasing the package
+removes it. It allows only:
 
 | Rule | Why |
 |---|---|

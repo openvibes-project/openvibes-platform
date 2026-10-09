@@ -101,7 +101,7 @@ out=$(runuser -u openvibes-llm -- env -i $(grep -E '^OPENVIBES_LLM_' /etc/openvi
 # disabled, as in this container. Needs selinux-policy-targeted.
 llm_cil=/usr/share/selinux/packages/targeted/openvibes-llm.cil
 [[ -f "$llm_cil" ]] || fail "no $llm_cil"
-rpm -q --scripts openvibes-llm | grep -q "semodule -X 200 -i $llm_cil" || fail "openvibes-llm does not load its SELinux module"
+rpm -q --scripts openvibes-llm | grep -q "semodule -n -s targeted -X 200 -i $llm_cil" || fail "openvibes-llm does not load its SELinux module"
 rpm -q selinux-policy-targeted >/dev/null || fail "install selinux-policy-targeted to check the SELinux module"
 semodule -n -X 200 -i "$llm_cil" || fail "the SELinux module does not compile"
 semodule -l | grep -qx openvibes-llm || fail "the SELinux module is not in the store"
