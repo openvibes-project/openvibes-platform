@@ -72,7 +72,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
   const allSelected = selection !== undefined && sorted.length > 0 && sorted.every((row) => selection.selected.has(rowKey(row)));
 
   const onKeyDown = (event: KeyboardEvent) => {
-    if (event.target instanceof HTMLInputElement) return;
+    if (event.target instanceof HTMLInputElement || (event.target as HTMLElement).closest(".sel")) return;
     const max = Math.min(sorted.length, shown) - 1;
     keyboard.current = true;
     if (event.key === "j" || event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => Math.min(max, c + 1)); }
@@ -111,7 +111,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
             return (
               <tr key={key} data-index={index} data-cursor={index === cursor || undefined}
                 aria-selected={isOpen?.(row) || selection?.selected.has(key) || undefined}
-                onClick={(event) => { if (!(event.target as HTMLElement).closest("a,button,input,select,form,[role=listbox]")) { setCursor(index); onOpen(row); } }}>
+                onClick={(event) => { if (!(event.target as HTMLElement).closest("a,button,input,select,form,.sel")) { setCursor(index); onOpen(row); } }}>
                 {selection && (
                   <td className="check">
                     <input type="checkbox" className="checkbox" aria-label="Select row" checked={selection.selected.has(key)} onChange={() => toggle(key)} />

@@ -154,10 +154,10 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
                 const i = (starts[s] ?? 0) + k;
                 const selected = option.value === value;
                 return (
-                  <div key={option.value} id={`${listId}-${i}`} data-index={i} role="option" aria-selected={selected} aria-disabled={option.disabled || undefined}
+                  <div key={option.value} id={`${listId}-${i}`} data-index={i} role="option" aria-selected={selected} aria-disabled={option.disabled || undefined} title={option.hint}
                     className={i === active ? "sel__option sel__option--active" : "sel__option"}
                     onPointerEnter={() => { if (!option.disabled) setActive(i); }} onClick={() => choose(option)}>
-                    <span>{option.label}</span>
+                    <span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}</span>
                     {selected && <Icon name="check" size={14} />}
                   </div>
                 );

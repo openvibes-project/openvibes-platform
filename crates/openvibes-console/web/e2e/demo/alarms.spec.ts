@@ -43,6 +43,18 @@ test("resolved alarms are hidden by default and counted in the empty state", asy
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
 });
 
+test("Enter in a row's Select picks, never opens the inspector or moves the table cursor", async ({ page }) => {
+  await page.goto("/alarms");
+  const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });
+  const quiet = row.getByRole("combobox", { name: /Quiet/ });
+  await quiet.focus();
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("ArrowDown");
+  await page.keyboard.press("Enter");
+  await expect(quiet).toContainText("On this host");
+  await expect(page.locator(".inspector .panel-header")).toHaveCount(0);
+});
+
 test("quieting from the list asks first, closes the alarm and records why", async ({ page }) => {
   await page.goto("/alarms");
   const row = page.locator(".view tbody tr").filter({ hasText: "A shell downloaded a program and ran it" });

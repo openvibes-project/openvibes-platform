@@ -12,13 +12,14 @@ const classes = (tag: string) => /className="([^"]*)"/.exec(tag)?.[1]?.split(/\s
 
 it("uses no native select, radio, bare checkbox or bare number input", () => {
   const bad: string[] = [];
+  const exceptions: string[] = []; // documented exceptions, "file:line reason" (spec 2.4); starts empty
   for (const file of files("src")) {
     const text = readFileSync(file, "utf8").replace(/^\s*\/\/.*$/gm, (c) => c.replace(/\S/g, " ")); // comments blanked, lines kept
     const at = (re: RegExp, why: string, ok: (m: string) => boolean = () => false) => {
       for (const m of text.matchAll(re)) if (!ok(m[0])) bad.push(`${file}:${line(text, m.index ?? 0)} ${why}`);
     };
     at(/<select[\s>]/g, "native <select>: use Select or Segmented");
-    for (const m of text.matchAll(/<input\b[^>]*>/g)) {
+    for (const m of text.matchAll(/<input\b(?:[^>]|=>)*>/g)) {
       const tag = m[0];
       const where = `${file}:${line(text, m.index ?? 0)}`;
       if (/type="radio"/.test(tag)) bad.push(`${where} native radio: use Segmented`);
@@ -26,5 +27,5 @@ it("uses no native select, radio, bare checkbox or bare number input", () => {
       if (/type="number"/.test(tag) && !classes(tag).includes("input")) bad.push(`${where} number input without className="input"`);
     }
   }
-  expect(bad).toEqual([]);
+  expect(bad.filter((b) => !exceptions.some((e) => b.startsWith(e)))).toEqual([]);
 });

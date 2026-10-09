@@ -41,13 +41,14 @@ test("a case closes only once every alarm has an outcome", async ({ page }) => {
   const items = inspector.getByRole("list", { name: "Items" }).locator("li");
   await items.first().getByRole("combobox", { name: /^Outcome for/ }).click();
   await expect(page.getByRole("option", { name: /^Resolved/ })).toHaveAttribute("aria-disabled", "true");
+  await expect(page.getByRole("option", { name: /^Resolved/ })).toContainText("Only when the evidence is gone");
   await page.keyboard.press("Escape");
   for (let index = 0; index < 2; index += 1) {
     const item = items.nth(index);
     await item.getByRole("combobox", { name: /^Outcome for/ }).click();
     await page.getByRole("option", { name: "False positive" }).click();
     await item.getByRole("textbox", { name: /^Note for/ }).fill("Our health check script.");
-    // The demo has no network, so the request body is checked in e2e/live/console.spec.ts.
+    // The demo has no network; the outcome PUT body is unchanged by construction (CasePanel is untouched there).
     await item.getByRole("button", { name: "Save outcome" }).click();
     await expect(item.getByRole("button", { name: "Save outcome" })).toBeDisabled();
   }

@@ -246,6 +246,7 @@ function OutcomeControl({ c, item, label }: { c: CaseDetail; item: CaseItem; lab
           value: choice.value,
           label: `${choice.label}${choice.disabled ? " (evidence still there)" : ""}`,
           disabled: choice.disabled && choice.value !== item.outcome,
+          hint: choice.hint,
         }))]} />
       {outcome !== "" && (
         <input className="input grow" value={note} onChange={(event) => setNote(event.target.value)} required={outcomeNeedsNote(outcome)} maxLength={4000}

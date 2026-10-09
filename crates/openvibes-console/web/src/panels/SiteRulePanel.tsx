@@ -128,12 +128,16 @@ export function SiteRulePanel({ id }: { id: string }) {
 
   const update = (patch: Partial<Form>) => setForm({ ...current, ...patch });
   const problem = (field: string) => check?.problems.filter((p) => p.field === field).map((p) => p.message).join("; ");
-  const field = (name: string, label: string, control: React.ReactNode) => (
-    <label className="field">{label}
-      {control}
-      {problem(name) && <span className="confirm__error" role="alert">{problem(name)}</span>}
-    </label>
-  );
+  // A Select never sits in a <label> (invalid HTML): `box` renders a div + span instead.
+  const field = (name: string, label: string, control: React.ReactNode, box = false) => {
+    const Tag = box ? "div" : "label";
+    return (
+      <Tag className="field">{box ? <span>{label}</span> : label}
+        {control}
+        {problem(name) && <span className="confirm__error" role="alert">{problem(name)}</span>}
+      </Tag>
+    );
+  };
   const save = () => {
     setBusy(true);
     setError(undefined);
@@ -156,7 +160,7 @@ export function SiteRulePanel({ id }: { id: string }) {
           {isNew && field("id", "Rule id", <input className="input mono" required value={typedId} onChange={(e) => setTypedId(e.target.value)} placeholder={alarm ? "alarm.nginx.shell" : "port.redis.exposed"} />)}
           {field("title", "Title", <input className="input" required value={current.title} onChange={(e) => update({ title: e.target.value })} disabled={!write} />)}
           <div className="grid--stacked">
-            {field("severity", "Severity", <Select label="Severity" value={current.severity} onChange={(v) => update({ severity: v })} disabled={!write} options={SEVERITIES.map((s) => ({ value: s, label: s }))} />)}
+            {field("severity", "Severity", <Select label="Severity" value={current.severity} onChange={(v) => update({ severity: v })} disabled={!write} options={SEVERITIES.map((s) => ({ value: s, label: s }))} />, true)}
             {field("confidence", "Confidence (0 to 100)", <input className="input" type="number" min={0} max={100} value={current.confidence} onChange={(e) => update({ confidence: e.target.value })} disabled={!write} />)}
           </div>
           {alarm && field("programs", "Programs (one to eight, space or comma separated)", <input className="input mono" value={current.programs} onChange={(e) => update({ programs: e.target.value })} placeholder="nginx httpd" disabled={!write} />)}

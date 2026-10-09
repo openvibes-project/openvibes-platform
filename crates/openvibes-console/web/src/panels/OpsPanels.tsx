@@ -11,6 +11,7 @@ import { Ago, Empty, ErrorBox, Loading, ObjectLink } from "../ui/bits";
 import { auditSince, date, isPast, when } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Confirm, PanelHeader, Section } from "../ui/panel";
+import { SelectField } from "../ui/Field";
 import { Select } from "../ui/Select";
 import { Segmented } from "../ui/Segmented";
 import { toast } from "../ui/toast";
@@ -139,9 +140,9 @@ function NewEnrollmentToken() {
             <label className="field">Label<input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. Office laptops" /></label>
             <div className="row">
               <label className="field grow">Hosts it may enroll<input className="input" type="number" min={1} max={1000} value={uses} onChange={(e) => setUses(Number(e.target.value))} /></label>
-              <div className="field grow"><span>Valid for</span>
+              <SelectField label="Valid for" className="grow">
                 <Segmented label="Valid for" value={hours} onChange={setHours} options={[{ value: 1, label: "1 hour" }, { value: 24, label: "1 day" }, { value: 168, label: "7 days" }, { value: 720, label: "30 days" }]} />
-              </div>
+              </SelectField>
             </div>
             {error && <p className="confirm__error" role="alert">{error}</p>}
             <div><button className="button button--primary" type="submit"><Icon name="plus" size={15} /> Create token</button></div>
