@@ -74,3 +74,7 @@ Task 4 re-review: Approved (N1 upgrade-failure "nothing changed" wrong; N2 CI hi
 Task 4: complete (d1b6d64..f3ea40e)
 Ruling: N1-N4 go into Task 5's round (N4: upgrade names the OpenVIBES packages + postgresql-server)
 Task 5: dispatched (sonnet) phase A edits: spec update, quick-setup offline section, N1-N4, Task 3 parked fixes; phase B gate after #231 gate
+Task 5: phase A eff73c8 + bd294de (unbuilt); review dispatched; phase B waits for #231 gate
+Task 5 review: Needs fixes — README.txt.in not §6 verbatim; database.rs:188 + run_as.rs:71 name commands; quick-setup:19 no sudo; fixture newline
+Follow-up (out of scope): quick-setup.md:38/137/143 show CLI commands (setup --repair --console-port, agent list, import) — review against the no-commands rule later
+Task 5: fix round 1 dispatched (edits only)

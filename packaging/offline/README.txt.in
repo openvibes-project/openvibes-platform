@@ -6,10 +6,9 @@ the platform packages, the rule sets, and every Fedora package they need
 
 Install
 
-  1. Copy this kit (openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar) to
-     the server. To add the assistant, also copy the model file (below) into
-     the same folder.
-  2. Run:  tar xf openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar && sudo ./openvibes-offline/install
+  1. Download openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar, and optionally the model from the Hugging Face link (below), in any browser.
+  2. Copy both to the server, into the same folder.
+  3. Run `tar xf openvibes-platform-@VERSION@-offline-fedora@FEDORA@.tar && sudo ./openvibes-offline/install`.
 
 The installer first checks that the host is Fedora @FEDORA@ on x86_64 and that
 the kit is genuine, then installs from the kit only. Nothing changes if a

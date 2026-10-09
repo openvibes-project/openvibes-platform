@@ -185,7 +185,7 @@ pub fn tune_check(model_installed: bool, tune_json: Option<String>) -> Option<Ch
         None => model_installed.then(|| {
             check(
                 false,
-                "assistant: not tuned for this host: run `sudo openvibes-admin helper assistant-tune`"
+                "assistant: not tuned for this host; turn the assistant on in Setup again to tune it"
                     .into(),
             )
         }),

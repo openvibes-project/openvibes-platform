@@ -173,11 +173,7 @@ mod tests {
     #[test]
     fn an_unreadable_console_config_fails_the_step_instead_of_skipping_it() {
         let fake = Fake::new("model-bad-console");
-        fake.file(
-            "/etc/openvibes/console.toml",
-            "[assistant
-",
-        );
+        fake.file("/etc/openvibes/console.toml", "[assistant\n");
         let mut plan = plan(&[Ingest, Assistant]);
         plan.model = ModelChoice::Fetch;
         let state = run_step(&fake.ctx(&plan), Step::AssistantModel);

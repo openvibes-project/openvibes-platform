@@ -16,7 +16,7 @@ sudo sh -c "$(curl -fsSL https://openvibes-project.github.io/install.sh)"
 ```
 
 (Piped as `curl … | sudo sh`, it installs but cannot open Setup, because a
-pipe is not a terminal; it then tells you to run `openvibes-admin`.)
+pipe is not a terminal; it then tells you to run `sudo openvibes-admin`.)
 
 Prefer to read it first: `curl -fsSLO https://openvibes-project.github.io/install.sh`,
 read it, then `sudo sh install.sh`.
@@ -80,16 +80,16 @@ sudo openvibes-admin setup --quick --components ingest,console,distribution,vuln
 Details: [`openvibes-admin.md`](components/openvibes-admin.md) (Setup and
 the setup command).
 
-## Offline install
+## Step 1 (offline): install from the kit
 
-For a platform host with no internet. Details:
+Instead of step 1, for a platform host with no internet. Details:
 [`offline-kit.md`](components/offline-kit.md).
 
 1. Download `openvibes-platform-<v>-offline-fedora44.tar`, and optionally the model from the Hugging Face link, in any browser.
 2. Copy both to the server, into the same folder.
 3. Run `tar xf openvibes-platform-<v>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
 
-Then continue with step 2 (Setup); it installs the model if you copied it.
+Setup opens at the end; continue with step 2. If you copied the model, Setup installs it.
 
 ## 3. Add a second host
 

@@ -82,7 +82,7 @@ sudo ./install [--model FILE] [--no-setup] [--check]
    - verify `SHA256SUMS.asc`, then `sha256sum -c SHA256SUMS`.
    - Any failure stops the install before anything changes.
 3. **Install from the kit only:**
-   - `dnf --disablerepo='*' --repofrompath=openvibes-offline,<kit>/packages --enablerepo=openvibes-offline install …` with `gpgcheck` on, then `upgrade` (a newer kit upgrades what is installed);
+   - `dnf --disablerepo='*' --repofrompath=openvibes-offline,<kit>/packages --enablerepo=openvibes-offline install …` with `gpgcheck` on, then `upgrade`, naming the platform packages (a newer kit upgrades what is installed);
    - the OpenVIBES key is imported for this run only;
    - Fedora's key is passed in `gpgkey` (the host's own copy);
    - **no network access is attempted.**

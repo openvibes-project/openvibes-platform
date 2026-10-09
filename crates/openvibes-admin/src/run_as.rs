@@ -67,10 +67,9 @@ pub fn rerun(how: &RunAs) -> ExitCode {
                 .is_ok_and(|status| status.success());
             if !allowed {
                 eprintln!(
-                    "openvibes-admin: {DEFAULT_CONFIG}: permission denied. Database commands run \
-                     as the openvibes-admin account: `sudo -u openvibes-admin openvibes-admin …`. \
-                     Members of openvibes-operators need no password (just added? log out and \
-                     in again)."
+                    "openvibes-admin: {DEFAULT_CONFIG}: permission denied. Members of \
+                     openvibes-operators have access (just added? log out and in again); \
+                     otherwise open Setup with `sudo openvibes-admin`."
                 );
                 return ExitCode::FAILURE;
             }
