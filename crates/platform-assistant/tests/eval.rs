@@ -334,7 +334,8 @@ async fn scoring_catches_each_failure() {
     assert!(!report.passed());
     let text = report.to_string();
     assert!(
-        text.contains("gate FAILED") && text.contains("- wrong-lookup: wrong lookup"),
+        text.contains("gate FAILED")
+            && text.contains("- wrong-lookup: wrong lookup [\"fleet_overview{"),
         "{text}"
     );
 

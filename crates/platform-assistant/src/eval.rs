@@ -29,6 +29,7 @@ use platform_store::{
     rules::Served,
 };
 use serde::Deserialize;
+use serde_json::Value;
 
 use crate::{
     answer::plain_text,
@@ -744,6 +745,8 @@ pub struct CaseResult {
     pub injection: bool,
     /// Lookups run (valid ones, in order).
     pub lookups: Vec<&'static str>,
+    /// The validated arguments of each lookup in `lookups`.
+    pub arguments: Vec<Value>,
     /// A right lookup was used and found something (or none was required).
     pub lookup_ok: bool,
     /// Why `lookup_ok` is false: `wrong lookup`, `lookup error` or `empty result`.
@@ -851,10 +854,16 @@ impl fmt::Display for EvalReport {
         for r in &self.results {
             let mut problems = Vec::new();
             if !r.lookup_ok && !r.injection {
+                let calls: Vec<String> = r
+                    .lookups
+                    .iter()
+                    .zip(&r.arguments)
+                    .map(|(name, arguments)| format!("{name}{arguments}"))
+                    .collect();
                 problems.push(format!(
                     "{} {:?}",
                     r.lookup_failure.unwrap_or("wrong lookup"),
-                    r.lookups
+                    calls
                 ));
             }
             if !r.not_exposed.is_empty() {
@@ -951,6 +960,11 @@ fn score(
         Err(error) => (String::new(), Vec::new(), Some(error)),
     };
     let lookups: Vec<&'static str> = records.iter().filter_map(|r| r.name).collect();
+    let arguments: Vec<Value> = records
+        .iter()
+        .filter(|r| r.name.is_some())
+        .map(|r| r.arguments.clone())
+        .collect();
     let expected = |r: &&crate::orchestrator::LookupRecord| {
         r.name.is_some_and(|n| case.lookups.iter().any(|e| e == n))
     };
@@ -1002,6 +1016,7 @@ fn score(
             .collect(),
         link: answer.contains("://"),
         lookups,
+        arguments,
         lookup_ok,
         lookup_failure,
         facts_missing,
