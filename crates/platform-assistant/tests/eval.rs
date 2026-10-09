@@ -85,6 +85,16 @@ async fn the_fleet_answers_like_the_database() {
         "exploited first"
     );
     assert_eq!(web_01["items"][1]["reboot_needed"], true);
+    assert!(web_01["min_severity"].is_null());
+    let none = run(
+        "host_vulnerabilities",
+        r#"{"agent":"web-01","min_severity":"critical"}"#,
+    )
+    .await;
+    assert_eq!(
+        none["min_severity"], "critical",
+        "a filtered empty result says so"
+    );
     let cve = run("vulnerability_hosts", r#"{"id":"CVE-2026-1111"}"#).await;
     assert_eq!(cve["items"].as_array().unwrap().len(), 3);
     let rule = run(

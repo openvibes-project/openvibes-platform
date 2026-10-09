@@ -122,6 +122,11 @@ fn severity_schema(values: &[&str]) -> Value {
     json!({ "type": "string", "enum": values })
 }
 
+fn with_description(mut schema: Value, description: &str) -> Value {
+    schema["description"] = json!(description);
+    schema
+}
+
 fn text_schema(description: &str) -> Value {
     json!({ "type": "string", "maxLength": MAX_ARGUMENT, "description": description })
 }
@@ -172,7 +177,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "agent_summary",
-            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), findings in the last 24 hours, open vulnerabilities.",
+            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), counts of findings in the last 24 hours and of open vulnerabilities.",
             object(
                 json!({ "agent": text_schema("Agent ID or host name.") }),
                 &["agent"],
@@ -184,7 +189,10 @@ pub fn specs() -> Vec<ToolSpec> {
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
-                    "min_severity": severity_schema(&ADVISORY_SEVERITIES),
+                    "min_severity": with_description(
+                        severity_schema(&ADVISORY_SEVERITIES),
+                        "Lowest severity; leave out unless the user asks for one.",
+                    ),
                 }),
                 &["agent"],
             ),
@@ -858,6 +866,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .await
                     .map_err(store_error)?;
                 summary.insert("agent".into(), json!(agent_cite(&agent_id)));
+                summary.insert("min_severity".into(), json!(min_severity));
                 let vulns = page
                     .items
                     .iter()

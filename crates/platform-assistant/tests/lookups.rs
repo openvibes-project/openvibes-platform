@@ -208,7 +208,13 @@ fn descriptions_name_the_fields_the_results_carry() {
             .description
             .to_lowercase()
     };
-    for word in ["kernel", "collectors", "last contact", "last 24 hours"] {
+    for word in [
+        "kernel",
+        "collectors",
+        "last contact",
+        "counts of findings",
+        "last 24 hours",
+    ] {
         assert!(d("agent_summary").contains(word), "{word}");
     }
     for word in ["reboot", "named endpoint"] {
