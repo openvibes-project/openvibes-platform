@@ -34,3 +34,6 @@ Ruling: fetch moves the verified temp in place (no 2nd copy) instead of raising 
 Ruling: fetch replaces a wrong-contents file at the pinned name (verified bytes only) — users can't type rm — cost: overwrites a hand-placed foreign file of that exact name
 Ruling: package messages say "turn the assistant on in Setup" — user rule no commands
 Task 2: fix round 1 dispatched (resume implementer)
+Task 2: fix round 1 f3b82ab (237 tests green)
+Task 2 re-review: approve; round 2 (sync_all before rename, real post-download guard test, llm.md typed commands) dispatched
+Ruling (Task 3 vs user rule): no message tells users to type a command. --no-download error and Setup's "skipped" final text say "turn the assistant on in Setup to download its model (offline: see the offline install guide)"; spec §6 "adding later" = Setup's switch — cost: admins scripting must read the admin reference

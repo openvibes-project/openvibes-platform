@@ -238,15 +238,10 @@ is a small bridge package with no model bytes: it selects the pinned model
 and owns the model path as a `%ghost` file, so upgrading from 0.2.5 (which
 shipped the model) does not delete an installed model. It replaces
 `openvibes-llm-model-part1` and `-part2`. If the model is missing after
-install, the package prints how to get it. If a future release changes `LLM_MODEL_FILE`, the old ghost path is no longer owned, so rpm removes the old GGUF on upgrade and Setup fetches the new model (the internal `assistant model fetch` step; changing the pin is a release-note item):
+install, the package prints how to get it. If a future release changes `LLM_MODEL_FILE`, the old ghost path is no longer owned, so rpm removes the old GGUF on upgrade and Setup fetches the new model (the internal `assistant model fetch` step; changing the pin is a release-note item).
 
-```sh
-dnf install openvibes-llm
-sudo openvibes-admin assistant model fetch   # internal step that Setup runs: downloads and verifies the pinned model
-sudo openvibes-admin helper assistant-setup
-```
-
-`assistant-setup` hands the generated API key to the console's account
+After `dnf install openvibes-llm`, Setup's assistant switch downloads and
+verifies the pinned model and then runs `assistant-setup`, which hands the generated API key to the console's account
 (owner-only, as the console requires), writes `[assistant]` into
 `console.toml` (an enabled assistant on the `small` profile whose backend is
 `http://127.0.0.1:18430/v1`; other keys and comments stay), stops a running

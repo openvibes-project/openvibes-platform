@@ -190,6 +190,10 @@ pub fn fetch(
         )
     })?;
     let file = fs::File::open(&temporary.0).map_err(|_| "cannot read the download".to_owned())?;
+    // Flushed before the rename: a power loss must not leave a truncated file
+    // at the pinned name, which "selected" trusts without a re-hash.
+    file.sync_all()
+        .map_err(|_| "cannot write the model (disk full?)".to_owned())?;
     let size = file
         .metadata()
         .map_err(|_| "cannot read the download".to_owned())?
@@ -346,11 +350,18 @@ mod tests {
     }
 
     #[test]
-    fn bad_config_leaves_no_temp_file() {
-        let (models, config) = dirs("badconf");
-        fs::create_dir(&config).unwrap();
-        assert!(fetch(&pin(), &fake(BYTES), &models, &config, |_| u64::MAX).is_err());
-        assert!(names(&models).is_empty());
+    fn failure_after_download_leaves_no_temp_file_and_a_rerun_selects() {
+        let (models, config) = dirs("late");
+        // read_config tolerates a missing file; writing it then fails.
+        let unwritable = models.join("no-such-dir").join("model.conf");
+        let downloader = fake(BYTES);
+        let pin = pin();
+        assert!(fetch(&pin, &downloader, &models, &unwritable, |_| u64::MAX).is_err());
+        // The verified model stays in place; only the temp file is gone.
+        assert_eq!(names(&models), ["m.gguf"]);
+        let message = fetch(&pin, &downloader, &models, &config, |_| 0).unwrap();
+        assert!(message.starts_with("installed "), "{message}");
+        assert_eq!(downloader.calls.get(), 1);
     }
 
     #[test]
