@@ -169,7 +169,7 @@
   z-index: 60; display: grid; gap: 6px; padding: 6px; overflow: hidden;
   background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-2); box-shadow: var(--shadow-2);
 }
-.sel__list { max-height: 260px; overflow-y: auto; outline: none; }
+.sel__list { max-height: 300px; overflow-y: auto; outline: none; }
 .sel__group { padding: 8px 8px 3px; font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .sel__option, .sel__empty { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border-radius: var(--r-1); font-size: 13px; cursor: pointer; }
 .sel__option--active { background: var(--accent-soft); }

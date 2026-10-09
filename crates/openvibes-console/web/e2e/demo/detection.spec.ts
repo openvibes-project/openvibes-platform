@@ -61,3 +61,14 @@ test("the host Select opens by keyboard, never clipped at 390 px", async ({ page
   await expect(popup).toHaveCount(0);
   await expect(host).not.toContainText("Choose a host");
 });
+
+test("a typed letter opens the Select with the search filled and a row active", async ({ page }) => {
+  await page.goto("/compliance");
+  await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(1).click();
+  const panel = page.locator(".inspector");
+  await panel.getByRole("combobox", { name: "Host", exact: true }).focus();
+  await page.keyboard.press("d");
+  await expect(panel.getByRole("textbox", { name: "Filter Host" })).toHaveValue("d");
+  await expect(panel.locator(".sel__option--active")).toHaveCount(1);
+  await expect(panel.getByRole("textbox", { name: "Filter Host" })).toBeFocused();
+});

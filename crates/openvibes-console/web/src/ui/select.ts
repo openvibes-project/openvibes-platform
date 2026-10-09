@@ -39,6 +39,6 @@ export function placement(rect: { left: number; right: number; top: number; bott
   const width = Math.min(rect.right - rect.left, viewport.width - 2 * edge);
   const left = Math.min(Math.max(edge, rect.left), viewport.width - edge - width);
   return up
-    ? { left, width, bottom: viewport.height - rect.top + gap, maxHeight: above }
-    : { left, width, top: rect.bottom + gap, maxHeight: below };
+    ? { left, width, bottom: viewport.height - rect.top + gap, maxHeight: Math.max(120, above) }
+    : { left, width, top: rect.bottom + gap, maxHeight: Math.max(120, below) };
 }
