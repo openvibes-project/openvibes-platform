@@ -19,6 +19,7 @@
     "/access",
     "/service-accounts",
     "/audit",
+    "/assistant-settings",
     "/about",
     "/dashboards/{dashboard_id}"
   ],

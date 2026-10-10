@@ -207,6 +207,16 @@ describe("demo server", () => {
     expect(updated.retention_days).toBe(400);
   });
 
+  it("changes the assistant internet setting only with If-Match and a URL at level 2", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+    const body = { level: 2, searxng_url: null, internal_domains: [] };
+    expect((await server.handle("PUT", "/api/v1/assistant-internet", body)).status).toBe(428);
+    expect((await server.handle("PUT", "/api/v1/assistant-internet", body, { "if-match": `"${String(setting.version)}"` })).status).toBe(400);
+    const ok = await json(await server.handle("PUT", "/api/v1/assistant-internet", { ...body, searxng_url: "https://s.example.test" }, { "if-match": `"${String(setting.version)}"` }));
+    expect(ok.level).toBe(2);
+  });
+
   it("previews a signed bundle and publishes it with the preview token", async () => {
     const server = createDemoServer({ persona: "admin" });
     const envelope = { rule_set_id: "site", rule_set_version: 99, issuer_key_id: "ops-2026", expires_at_unix_ms: Date.now() + 86_400_000 };

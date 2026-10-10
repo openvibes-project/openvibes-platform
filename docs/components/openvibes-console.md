@@ -54,6 +54,15 @@ loopback or a private address; level 2 requires it. Domains must be lowercase
 names (at most 50). Each change writes an `assistant.internet.changed` audit
 row; `platform_domain` (the public origin's host) is always filtered. An
 unreadable setting counts as level 0.
+The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)
+switches the two levels: "Look up security references" and "Search the web"
+(enabled only while level 1 is on). Turning a level on opens a confirmation
+dialog repeating its risk text; level 2 also asks for the SearXNG URL and
+stays disabled until it is an http(s) URL. Turning off needs no confirmation.
+A textarea holds the internal domains, one per line, beside the always-included
+platform domain. When `/api/v1/assistant/status` says the assistant is
+unavailable the page says so and the switches are off. The Test connection
+button is not built yet. The demo serves the setting from memory.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, Findings, Audit, and

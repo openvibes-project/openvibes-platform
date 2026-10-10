@@ -1,0 +1,26 @@
+import { expect, test } from "@playwright/test";
+
+test.beforeEach(async ({ page }) => { await page.goto("/assistant-settings"); });
+
+test("level 1 is confirmed with its risk text, and level 2 needs level 1 and a URL", async ({ page }) => {
+  const level1 = page.getByRole("switch", { name: "Look up security references" });
+  const level2 = page.getByRole("switch", { name: "Search the web" });
+  await expect(level1).not.toBeChecked();
+  await expect(level2).toBeDisabled();
+  await level1.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("api.osv.dev");
+  await expect(dialog).toContainText("No host data leaves your network");
+  await dialog.getByRole("button", { name: "Turn on" }).click();
+  await expect(level1).toBeChecked();
+  await expect(level2).toBeEnabled();
+  await level2.click();
+  await expect(page.getByRole("dialog")).toContainText("SearXNG URL");
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Turn on" })).toBeDisabled();
+});
+
+test("a viewer does not see the page", async ({ page }) => {
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitemradio", { name: "viewer" }).click();
+  await expect(page.getByRole("link", { name: "Assistant" })).toHaveCount(0);
+});

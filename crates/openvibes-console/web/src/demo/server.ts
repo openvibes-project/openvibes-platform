@@ -621,6 +621,19 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");
     return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
   });
+  route("GET", "/api/v1/assistant-internet", "assistant.admin", () => json(data.assistantInternet));
+  route("PUT", "/api/v1/assistant-internet", "assistant.admin", (_, __, body, headers) => {
+    const match = headers["if-match"];
+    if (match === undefined) return problem(428, "precondition_required", "If-Match is required");
+    if (match !== `"${data.assistantInternet.version}"`) return problem(412, "stale_setting", "The setting changed; reload and try again");
+    const level = Number(body.level);
+    const url = typeof body.searxng_url === "string" && body.searxng_url !== "" ? body.searxng_url : null;
+    const domains = Array.isArray(body.internal_domains) ? body.internal_domains.map(String) : [];
+    if (![0, 1, 2].includes(level) || (level === 2 && !url) || domains.length > 50) return problem(400, "invalid_setting", "The assistant internet setting is invalid");
+    data.assistantInternet = { ...data.assistantInternet, level, searxng_url: url, internal_domains: domains, version: data.assistantInternet.version + 1, updated_at: iso(), updated_by: actor };
+    audit("assistant.internet.changed", "assistant", "internet");
+    return json(data.assistantInternet);
+  });
   route("GET", "/api/v1/audit-retention", "audit.read", () => json(data.retention));
   route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body, headers) => {
     const match = headers["if-match"];
