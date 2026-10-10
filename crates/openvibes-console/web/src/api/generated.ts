@@ -2077,7 +2077,10 @@ export interface components {
          *     built from its ID; a result's text is its link's host, never fetched text.
          */
         AssistantInternetSource: {
-            /** @description `reference`, `search`, `result` or `unavailable`. */
+            /**
+             * @description `reference`, `search`, `result`, `blocked` (a query kept on the
+             *     host) or `unavailable` (a lookup failed).
+             */
             kind: string;
             /**
              * Format: int32

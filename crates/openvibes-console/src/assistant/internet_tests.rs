@@ -204,7 +204,7 @@ async fn failures_become_notes() {
     let lookups = runner(&db, &blocked.path, true).await;
     let out = lookups.run(&reference(), 5).await.unwrap();
     assert_eq!(note(&out), "blocked: the query contained internal data");
-    assert!(lookups.internet_failed());
+    assert!(!lookups.internet_failed(), "a blocked query is no failure");
     // Web search needs level 2.
     let search = Lookup::parse("web_search", r#"{"query":"x"}"#).unwrap();
     let out = lookups.run(&search, 5).await.unwrap();
@@ -293,25 +293,40 @@ async fn the_sources_line_lists_what_went_out_and_numbers_result_links_by_host()
 }
 
 #[tokio::test]
-async fn a_search_that_went_out_is_listed_even_without_results_a_blocked_one_never() {
+async fn a_search_that_went_out_is_listed_even_without_results_a_blocked_one_as_blocked() {
     let (db, _) = seed().await;
     level(&db, 2).await;
     let search = Lookup::parse("web_search", r#"{"query":"rare thing"}"#).unwrap();
-    for (reply, listed) in [
-        (r#"{"result":"ok","source":"s.example","items":[]}"#, true),
-        (r#"{"result":"refused","code":"unavailable"}"#, true),
-        (r#"{"result":"refused","code":"blocked"}"#, false),
+    let went_out = ("search", "Searched the web for: rare thing", None, None);
+    // A blocked query never left the host: not a search, not a failure.
+    let blocked = (
+        "blocked",
+        "Web search blocked: the query contained internal data",
+        None,
+        None,
+    );
+    let unavailable = (
+        "unavailable",
+        "Internet lookup unavailable; this answer uses local data only",
+        None,
+        None,
+    );
+    for (reply, expected) in [
+        (
+            r#"{"result":"ok","source":"s.example","items":[]}"#,
+            vec![went_out],
+        ),
+        (
+            r#"{"result":"refused","code":"unavailable"}"#,
+            vec![went_out, unavailable],
+        ),
+        (r#"{"result":"refused","code":"blocked"}"#, vec![blocked]),
     ] {
         let fake = Fake::start(reply);
         let lookups = runner(&db, &fake.path, true).await;
         lookups.run(&search, 5).await.unwrap();
-        let sources = super::internet_sources(false, &lookups.internet_sent());
-        assert_eq!(
-            shown(&sources) == [("search", "Searched the web for: rare thing", None, None)],
-            listed,
-            "{reply}: {:?}",
-            shown(&sources)
-        );
+        let sources = super::internet_sources(lookups.internet_failed(), &lookups.internet_sent());
+        assert_eq!(shown(&sources), expected, "{reply}");
     }
     db.drop().await;
 }

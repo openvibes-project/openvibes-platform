@@ -8533,7 +8533,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`reference`, `search`, `result` or `unavailable`."
+            "description": "`reference`, `search`, `result`, `blocked` (a query kept on the\nhost) or `unavailable` (a lookup failed)."
           },
           "number": {
             "type": [

@@ -38,3 +38,14 @@ test("a failed internet lookup says the answer uses local data only", async ({ p
   await expect(dock.getByText("Internet lookup unavailable; this answer uses local data only")).toBeVisible();
   await expect(dock.getByRole("link")).toHaveCount(0);
 });
+
+test("a blocked web search says so and is not shown as a failure", async ({ page }) => {
+  const dock = page.getByRole("complementary", { name: "Assistant" });
+  await page.keyboard.press("Control+j");
+  await dock.getByLabel("Question").fill("Search the web for platform.lab problem");
+  await dock.getByRole("button", { name: "Send" }).click();
+  await expect(dock.getByText("Web search blocked: the query contained internal data")).toBeVisible();
+  await expect(dock.getByText("Internet lookup unavailable")).toHaveCount(0);
+  await expect(dock.getByText("Searched the web for")).toHaveCount(0);
+  await expect(dock.getByRole("link")).toHaveCount(0);
+});

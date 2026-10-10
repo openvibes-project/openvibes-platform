@@ -140,6 +140,12 @@ describe("demo server", () => {
     expect(citations[0]?.target_kind).toBe("agent");
   });
 
+  it("shows a blocked web search as blocked, not as a failed lookup", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const reply = await json(await server.handle("POST", "/api/v1/assistant/messages", { question: "Search the web for platform.lab problem" }));
+    expect(reply.internet).toEqual([{ kind: "blocked", text: "Web search blocked: the query contained internal data", url: null, number: null }]);
+  });
+
   it("quotes the finding's own message when asked what to fix first", async () => {
     // The rule messages are whole sentences (the shipped baseline): lowercased
     // into brackets they read "(the unencrypted docker api … 2376., 4 hosts open)".

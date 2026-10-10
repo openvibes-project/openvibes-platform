@@ -87,10 +87,13 @@ own page as `url`, built from the ID); every `web_search` that went out, even
 with no results or a failed source, but never an off or blocked one
 ("Searched the web for: …", no link); and each `result` link of an answer,
 `text` its host only (never the outside title), `url` the result's http(s)
-URL and `number` its `[web:N]`. One `unavailable` entry ("Internet lookup
-unavailable; this answer uses local data only", no link) follows when an
-internet lookup was attempted and failed (unreachable, blocked, too large,
-rate-limited; not the off or invalid-ID note). The assistant dock lists them
+URL and `number` its `[web:N]`. A query the fetch service's filter refused
+(`Refused{Blocked}`) never left the host and is no failure: it gets one
+`blocked` entry ("Web search blocked: the query contained internal data", no
+link). One `unavailable` entry ("Internet lookup unavailable; this answer
+uses local data only", no link) follows when an internet lookup was
+attempted and failed (unreachable, too large, rate-limited; not the off,
+invalid-ID or blocked note). The assistant dock lists them
 under the answer; links open in a new tab with
 `rel="noopener noreferrer nofollow"`.
 The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)

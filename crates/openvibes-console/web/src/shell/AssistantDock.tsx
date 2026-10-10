@@ -39,7 +39,7 @@ function Sources({ sources }: { sources: AssistantInternetSource[] | undefined }
     <ul className="assistant__sources subtle" aria-label="Sources">
       {sources.map((source, index) => (
         <li key={index}>
-          <Icon name={source.kind === "search" ? "search" : source.kind === "unavailable" ? "alert" : "external"} size={11} />
+          <Icon name={source.kind === "search" ? "search" : source.kind === "unavailable" ? "alert" : source.kind === "blocked" ? "ban" : "external"} size={11} />
           {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer nofollow">{label(source)}</a> : source.text}
         </li>
       ))}

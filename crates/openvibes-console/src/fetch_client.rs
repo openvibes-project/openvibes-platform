@@ -59,10 +59,12 @@ pub(crate) struct Internet {
     pub(crate) sent: Mutex<Vec<Sent>>,
 }
 
-/// One lookup that went out, for the sources line under the answer.
+/// One lookup that went out (or was blocked), for the sources line under
+/// the answer.
 #[derive(Clone, Debug)]
 pub(crate) struct Sent {
-    /// `reference` (answered) or `search` (sent, whatever came back).
+    /// `reference` (answered), `search` (sent, whatever came back) or
+    /// `blocked` (a query the filter kept on the host).
     pub(crate) kind: &'static str,
     /// The ID or query as sent.
     pub(crate) subject: String,
@@ -79,13 +81,14 @@ fn note(text: &str) -> LookupOutput {
 }
 
 /// Whether `output` is a note for a lookup that was attempted and failed
-/// (not the off note, which is no failure).
+/// (not the off, invalid-ID or blocked note: none of those is a failure,
+/// and a blocked query never left the host).
 pub(crate) fn is_failure(output: &LookupOutput) -> bool {
     output
         .data
         .get("note")
         .and_then(Value::as_str)
-        .is_some_and(|text| text != NOTE_OFF && text != NOTE_INVALID)
+        .is_some_and(|text| ![NOTE_OFF, NOTE_INVALID, NOTE_BLOCKED].contains(&text))
 }
 
 /// One exchange with the fetch service; `None` when it cannot be reached
@@ -182,21 +185,26 @@ impl Internet {
         })
     }
 
-    /// Keeps an answered reference, or a search that went out (answered,
-    /// or failed at the source), for the sources line. Returns the first
-    /// `[web:N]` number for this lookup's results.
+    /// Keeps an answered reference, a search that went out (answered, or
+    /// failed at the source), or a blocked query, for the sources line.
+    /// Returns the first `[web:N]` number for this lookup's results.
     fn record(&self, kind: &'static str, subject: String, response: Option<&Response>) -> usize {
         let mut sent = self
             .sent
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let first = sent.last().map_or(1, |s| s.first + s.links.len());
-        let links = match response {
-            Some(Response::Ok { items, .. }) => Some(items.iter().map(|i| i.url.clone()).collect()),
+        let (kind, links) = match response {
+            Some(Response::Ok { items, .. }) => {
+                (kind, Some(items.iter().map(|i| i.url.clone()).collect()))
+            }
             Some(Response::Refused {
                 code: Refusal::Unavailable | Refusal::TooLarge,
-            }) if kind == "search" => Some(Vec::new()),
-            _ => None,
+            }) if kind == "search" => (kind, Some(Vec::new())),
+            Some(Response::Refused {
+                code: Refusal::Blocked,
+            }) => ("blocked", Some(Vec::new())),
+            _ => (kind, None),
         };
         if let Some(links) = links {
             sent.push(Sent {
@@ -251,7 +259,8 @@ fn code_name(code: Refusal) -> &'static str {
 /// The sources line under an answer: each reference looked up (its link
 /// built here from the ID), each search that went out, each result link
 /// shown by host only (never its outside title) with its `[web:N]` number,
-/// each link once; then one line if any lookup failed.
+/// each link once; one line if a query was blocked (it never left the
+/// host); then one line if any lookup failed.
 pub(crate) fn internet_sources(failed: bool, sent: &[Sent]) -> Vec<AssistantInternetSource> {
     let unavailable = failed.then(|| AssistantInternetSource {
         kind: "unavailable",
@@ -261,7 +270,14 @@ pub(crate) fn internet_sources(failed: bool, sent: &[Sent]) -> Vec<AssistantInte
     });
     let mut out: Vec<AssistantInternetSource> = Vec::new();
     for s in sent {
-        let head = if s.kind == "reference" {
+        let head = if s.kind == "blocked" {
+            AssistantInternetSource {
+                kind: "blocked",
+                text: "Web search blocked: the query contained internal data".to_owned(),
+                url: None,
+                number: None,
+            }
+        } else if s.kind == "reference" {
             let id = &s.subject;
             let (source, url) = if id.starts_with("FEDORA-") {
                 (

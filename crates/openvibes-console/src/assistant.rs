@@ -201,7 +201,8 @@ pub(crate) struct ConsoleReadLookups {
     overview: bool,
     rules: bool,
     internet: Option<crate::fetch_client::Internet>,
-    /// An internet lookup was attempted and did not succeed (not "off").
+    /// An internet lookup was attempted and did not succeed (not "off",
+    /// not blocked).
     internet_failed: std::sync::atomic::AtomicBool,
     pool: Pool,
     scope: console_read::AgentScope,
@@ -252,7 +253,7 @@ impl ConsoleReadLookups {
 
 impl ConsoleReadLookups {
     /// An internet lookup was attempted for this answer and failed
-    /// (unreachable, blocked, too large, rate-limited).
+    /// (unreachable, too large, rate-limited; a blocked query is no failure).
     pub(crate) fn internet_failed(&self) -> bool {
         self.internet_failed
             .load(std::sync::atomic::Ordering::Relaxed)
@@ -393,7 +394,8 @@ pub(crate) struct AssistantLookup {
 /// built from its ID; a result's text is its link's host, never fetched text.
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 pub(crate) struct AssistantInternetSource {
-    /// `reference`, `search`, `result` or `unavailable`.
+    /// `reference`, `search`, `result`, `blocked` (a query kept on the
+    /// host) or `unavailable` (a lookup failed).
     pub(crate) kind: &'static str,
     pub(crate) text: String,
     pub(crate) url: Option<String>,

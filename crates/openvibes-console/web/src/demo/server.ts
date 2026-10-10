@@ -144,7 +144,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const assistant = (question: string): AssistantSegment[] => {
     const q = question.toLowerCase();
     const text = (value: string): AssistantSegment => ({ kind: "text", text: value });
-    if (internetSources(question).length > 0) {
+    const sources = internetSources(question);
+    if (sources[0]?.kind === "blocked") {
+      return [text("I could not search the web: the query named an internal host, so it was not sent. This is the demo assistant; it answers from synthetic data only.")];
+    }
+    if (sources.length > 0) {
       return [text("Update OpenSSH to the fixed version and restart sshd; until then, set LoginGraceTime 0 to limit exposure. This is the demo assistant; it answers from synthetic data only.")];
     }
     const cite = (target_kind: string, id: string): AssistantSegment => ({ kind: "citation", target_kind, id, path: "" });
@@ -174,6 +178,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   // A mitigation question about a CVE shows the sources line, as the real
   // assistant does when internet lookups are on.
   const internetSources = (question: string): AssistantInternetSource[] => {
+    // A search naming an internal host: the filter keeps it on the platform.
+    if (/search the web for .*\.lab\b/i.test(question)) return [{ kind: "blocked", text: "Web search blocked: the query contained internal data", url: null, number: null }];
     const id = /CVE-\d{4}-\d{4,}/.exec(question)?.[0];
     if (id === undefined || !/mitigat|fix|patch|workaround|remediat|protect against/i.test(question)) return [];
     // The demo's unreachable ID: the lookup failed, the answer is local only.
