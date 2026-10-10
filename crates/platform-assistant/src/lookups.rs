@@ -15,7 +15,7 @@ use platform_store::{
     assistant::{
         self as store, ADVISORY_SEVERITIES, AgentScope, FINDING_SEVERITIES, GroupFilter, Page,
     },
-    assistant_inventory::{self as inv, HostRows, InstalledPackage, PortListener},
+    assistant_inventory::{self as inv, HostReport, HostRows, Installed, PortListener},
     host_services::{Listener, Service},
     rules::{self, Served},
 };
@@ -644,6 +644,11 @@ pub trait Source: Send + Sync {
         &self,
         rule_set: &str,
     ) -> impl Future<Output = Result<Served, StoreError>> + Send;
+    /// See [`inv::host_report`].
+    fn host_report(
+        &self,
+        agent_id: &str,
+    ) -> impl Future<Output = Result<Option<HostReport>, StoreError>> + Send;
     /// See [`inv::host_listeners`].
     fn host_listeners(
         &self,
@@ -669,7 +674,7 @@ pub trait Source: Send + Sync {
         name: &str,
         agent_id: Option<&str>,
         limit: u32,
-    ) -> impl Future<Output = Result<HostRows<InstalledPackage>, StoreError>> + Send;
+    ) -> impl Future<Output = Result<Installed, StoreError>> + Send;
 }
 
 /// `platform-store`, limited to one user's scope.
@@ -751,31 +756,48 @@ impl Source for StoreSource {
     async fn rule_envelope(&self, rule_set: &str) -> Result<Served, StoreError> {
         rules::serve(&self.client().await?, rule_set, None).await
     }
+    async fn host_report(&self, agent_id: &str) -> Result<Option<HostReport>, StoreError> {
+        inv::host_report(&mut self.client().await?, &self.scope, agent_id).await
+    }
     async fn host_listeners(
         &self,
         agent_id: &str,
         port: Option<i32>,
         limit: u32,
     ) -> Result<Page<Listener>, StoreError> {
-        inv::host_listeners(&self.client().await?, &self.scope, agent_id, port, limit).await
+        inv::host_listeners(
+            &mut self.client().await?,
+            &self.scope,
+            agent_id,
+            port,
+            limit,
+        )
+        .await
     }
     async fn host_services(&self, agent_id: &str, limit: u32) -> Result<Page<Service>, StoreError> {
-        inv::host_services(&self.client().await?, &self.scope, agent_id, limit).await
+        inv::host_services(&mut self.client().await?, &self.scope, agent_id, limit).await
     }
     async fn port_listeners(
         &self,
         port: i32,
         limit: u32,
     ) -> Result<HostRows<PortListener>, StoreError> {
-        inv::port_listeners(&self.client().await?, &self.scope, port, limit).await
+        inv::port_listeners(&mut self.client().await?, &self.scope, port, limit).await
     }
     async fn installed_packages(
         &self,
         name: &str,
         agent_id: Option<&str>,
         limit: u32,
-    ) -> Result<HostRows<InstalledPackage>, StoreError> {
-        inv::installed_packages(&self.client().await?, &self.scope, name, agent_id, limit).await
+    ) -> Result<Installed, StoreError> {
+        inv::installed_packages(
+            &mut self.client().await?,
+            &self.scope,
+            name,
+            agent_id,
+            limit,
+        )
+        .await
     }
 }
 

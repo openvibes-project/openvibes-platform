@@ -26,7 +26,7 @@ use platform_store::{
         FINDING_SEVERITIES, FindingEndpoint, FindingGroup, GroupFilter, HostVulnerability,
         Overview, Page, VulnerableHost,
     },
-    assistant_inventory::{HostRows, InstalledPackage, PortListener},
+    assistant_inventory::{HostReport, HostRows, Installed, PortListener},
     host_services::{Listener, Service},
     rules::Served,
 };
@@ -653,6 +653,10 @@ impl Source for FleetSource {
         })
     }
 
+    async fn host_report(&self, agent_id: &str) -> Result<Option<HostReport>, StoreError> {
+        self.0.host_report(agent_id)
+    }
+
     async fn host_listeners(
         &self,
         agent_id: &str,
@@ -679,7 +683,7 @@ impl Source for FleetSource {
         name: &str,
         agent_id: Option<&str>,
         limit: u32,
-    ) -> Result<HostRows<InstalledPackage>, StoreError> {
+    ) -> Result<Installed, StoreError> {
         self.0.installed_packages(name, agent_id, limit)
     }
 }

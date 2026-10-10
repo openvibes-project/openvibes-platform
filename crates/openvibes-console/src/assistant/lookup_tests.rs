@@ -338,7 +338,12 @@ async fn ports_and_software_use_the_agent_scope() {
             .await
             .unwrap();
         assert_eq!(hosts(&scoped), ["web-01"], "{name}");
-        assert_eq!(scoped.data["hosts"], 1, "{name}: db-01 is not counted");
+        let hosts = &scoped.data[if name == "software" {
+            "hosts_with_these_names"
+        } else {
+            "hosts"
+        }];
+        assert_eq!(*hosts, 1, "{name}: db-01 is not counted");
     }
     db.drop().await;
 }

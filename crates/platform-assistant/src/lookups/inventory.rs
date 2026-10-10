@@ -12,8 +12,13 @@ use super::{
 };
 use crate::client::ToolSpec;
 
-// Result note when a host has no port or service rows.
-const NOTE_NOTHING_REPORTED: &str = "nothing reported for this host; it may not run the ports collector (see agent_summary capabilities)";
+// Result notes (fixed text).
+const NOTE_NEVER_REPORTED: &str = "this host has never reported ports or services: it does not run the ports collector or has not reported yet, so nothing is known about its ports";
+const NOTE_PARTIAL_OWNERS: &str = "some owning services or programs were not visible to the agent";
+const NOTE_TRUNCATED: &str = "the agent cut its lists to the protocol limits";
+const NOTE_MORE_NAMES: &str = "more package names match; ask with a longer name";
+/// Shortest `software` name: one character matches nearly every package.
+const MIN_NAME: usize = 2;
 
 pub(super) fn specs() -> Vec<ToolSpec> {
     vec![
@@ -31,10 +36,10 @@ pub(super) fn specs() -> Vec<ToolSpec> {
         },
         ToolSpec {
             name: "software".into(),
-            description: "Installed software: is a program installed, on which hosts, which version. Matches part of the package name, e.g. chrome or openssh.".into(),
+            description: "Installed software: is a program installed, on which hosts, which version.".into(),
             parameters: object(
                 json!({
-                    "name": text_schema("Part of the package name."),
+                    "name": text_schema("A short package name, one word, e.g. chrome or openssh, not the product's full name."),
                     "agent": text_schema("Agent ID or host name."),
                 }),
                 &["name"],
@@ -70,8 +75,12 @@ pub(super) fn parse(name: &str, arguments: &str) -> Result<Lookup, LookupError> 
         }
         "software" => {
             let a: Software = args(arguments)?;
+            let name = required(a.name)?;
+            if name.chars().count() < MIN_NAME {
+                return Err(LookupError::InvalidArguments);
+            }
             Ok(Lookup::Software {
-                name: required(a.name)?,
+                name,
                 agent: text_arg(a.agent)?,
             })
         }
@@ -79,9 +88,16 @@ pub(super) fn parse(name: &str, arguments: &str) -> Result<Lookup, LookupError> 
     }
 }
 
+/// How many of `items` go to listeners and services: about half each, the
+/// rest to whichever has more.
+fn split(items: usize, listeners: usize, services: usize) -> (usize, usize) {
+    let services = services.min((items / 2).max(items.saturating_sub(listeners)));
+    (listeners.min(items - services), services)
+}
+
 impl<S: Source> Lookups<S> {
     /// `host_services`: one host's listeners (and, without a port, its
-    /// services) in one list, or every host on `port`.
+    /// services) in one list with its report state, or every host on `port`.
     pub(super) async fn host_services_lookup(
         &self,
         mut summary: Map<String, Value>,
@@ -117,20 +133,64 @@ impl<S: Source> Lookups<S> {
                 .collect();
             return Ok(LookupOutput::page(summary, listeners, rows.total));
         };
-        let Some(agent_id) = self.resolve_agent(agent).await? else {
+        let report = match self.resolve_agent(agent).await? {
+            Some(id) => self
+                .source
+                .host_report(&id)
+                .await
+                .map_err(store_error)?
+                .map(|report| (id, report)),
+            None => None,
+        };
+        let Some((agent_id, report)) = report else {
             summary.insert("agent".into(), Value::Null);
             return Ok(LookupOutput::page(summary, Vec::new(), 0));
         };
         summary.insert("agent".into(), json!(agent_cite(&agent_id)));
+        if report.status == "revoked" {
+            summary.insert("state".into(), json!("revoked"));
+        }
+        summary.insert(
+            "reported_at".into(),
+            json!(report.reported_at.map(super::time)),
+        );
+        let mut notes = Vec::new();
+        match report.reported_at {
+            None => notes.push(NOTE_NEVER_REPORTED),
+            Some(_) => {
+                if report.owners.as_deref() == Some("partial") {
+                    notes.push(NOTE_PARTIAL_OWNERS);
+                }
+                if report.truncated {
+                    notes.push(NOTE_TRUNCATED);
+                }
+            }
+        }
+        if !notes.is_empty() {
+            summary.insert("notes".into(), json!(notes));
+        }
         let listeners = self
             .source
             .host_listeners(&agent_id, port, items)
             .await
             .map_err(store_error)?;
-        let mut total = listeners.total;
-        let mut list: Vec<Value> = listeners
+        let services = match port {
+            Some(_) => None,
+            None => Some(
+                self.source
+                    .host_services(&agent_id, items)
+                    .await
+                    .map_err(store_error)?,
+            ),
+        };
+        let (services, services_total) =
+            services.map_or((Vec::new(), 0), |page| (page.items, page.total));
+        let (take_listeners, take_services) =
+            split(items as usize, listeners.items.len(), services.len());
+        let list = listeners
             .items
             .iter()
+            .take(take_listeners)
             .map(|l| {
                 json!({
                     "kind": "listening port",
@@ -142,15 +202,7 @@ impl<S: Source> Lookups<S> {
                     "program": l.program,
                 })
             })
-            .collect();
-        if port.is_none() {
-            let services = self
-                .source
-                .host_services(&agent_id, items)
-                .await
-                .map_err(store_error)?;
-            total += services.total;
-            list.extend(services.items.iter().map(|s| {
+            .chain(services.iter().take(take_services).map(|s| {
                 json!({
                     "kind": "running service",
                     "service": s.unit,
@@ -158,13 +210,13 @@ impl<S: Source> Lookups<S> {
                     "processes": s.processes,
                     "run_as": s.run_as,
                 })
-            }));
-            if total == 0 {
-                summary.insert("note".into(), json!(NOTE_NOTHING_REPORTED));
-            }
-        }
-        list.truncate(items as usize);
-        Ok(LookupOutput::page(summary, list, total))
+            }))
+            .collect();
+        Ok(LookupOutput::page(
+            summary,
+            list,
+            listeners.total + services_total,
+        ))
     }
 
     /// `software`: installed packages matching `name`, on every host in
@@ -187,13 +239,19 @@ impl<S: Source> Lookups<S> {
                 Some(agent_id)
             }
         };
-        let rows = self
+        let found = self
             .source
             .installed_packages(name, agent_id.as_deref(), items)
             .await
             .map_err(|_| LookupError::Store)?;
-        summary.insert("hosts".into(), json!(rows.hosts));
-        let packages = rows
+        // Counts cover the package names read, not every name that matches.
+        summary.insert("package_names".into(), json!(found.names));
+        summary.insert("hosts_with_these_names".into(), json!(found.rows.hosts));
+        if found.more_names {
+            summary.insert("note".into(), json!(NOTE_MORE_NAMES));
+        }
+        let packages = found
+            .rows
             .items
             .iter()
             .map(|p| {
@@ -207,7 +265,7 @@ impl<S: Source> Lookups<S> {
                 })
             })
             .collect();
-        Ok(LookupOutput::page(summary, packages, rows.total))
+        Ok(LookupOutput::page(summary, packages, found.rows.total))
     }
 }
 
@@ -249,8 +307,22 @@ mod tests {
     }
 
     #[test]
+    fn items_are_split_between_listeners_and_services() {
+        assert_eq!(split(10, 30, 30), (5, 5));
+        assert_eq!(split(10, 2, 30), (2, 8));
+        assert_eq!(split(10, 30, 2), (8, 2));
+        assert_eq!(split(10, 3, 4), (3, 4));
+        assert_eq!(split(1, 5, 5), (1, 0));
+    }
+
+    #[test]
     fn software_needs_a_name() {
-        for bad in ["{}", r#"{"name":""}"#, r#"{"name":"x","host":"y"}"#] {
+        for bad in [
+            "{}",
+            r#"{"name":""}"#,
+            r#"{"name":"x"}"#,
+            r#"{"name":"xy","host":"y"}"#,
+        ] {
             assert_eq!(
                 parse("software", bad),
                 Err(LookupError::InvalidArguments),

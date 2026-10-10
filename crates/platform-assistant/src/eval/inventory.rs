@@ -8,7 +8,7 @@ use std::{collections::BTreeSet, net::IpAddr};
 use platform_store::{
     StoreError,
     assistant::Page,
-    assistant_inventory::{HostRows, InstalledPackage, PortListener},
+    assistant_inventory::{HostReport, HostRows, Installed, InstalledPackage, PortListener},
     host_services::{Listener, Service},
 };
 use serde::Deserialize;
@@ -152,6 +152,23 @@ impl Fleet {
         self.agents.iter().any(|a| a.id == agent && !a.revoked)
     }
 
+    /// A host has reported when it has any listener or service row (the
+    /// fleet file has no separate report time); owners are complete.
+    pub(super) fn host_report(&self, agent_id: &str) -> Result<Option<HostReport>, StoreError> {
+        let reported = self.inventory.listeners.iter().any(|(a, _)| a == agent_id)
+            || self.inventory.services.iter().any(|(a, _)| a == agent_id);
+        Ok(self
+            .agents
+            .iter()
+            .find(|a| a.id == agent_id)
+            .map(|a| HostReport {
+                status: if a.revoked { "revoked" } else { "active" }.into(),
+                reported_at: a.last_seen.filter(|_| reported),
+                owners: reported.then(|| "complete".into()),
+                truncated: false,
+            }))
+    }
+
     pub(super) fn host_listeners(
         &self,
         agent_id: &str,
@@ -229,20 +246,30 @@ impl Fleet {
         name: &str,
         agent_id: Option<&str>,
         limit: u32,
-    ) -> Result<HostRows<InstalledPackage>, StoreError> {
-        let name = name.to_lowercase();
+    ) -> Result<Installed, StoreError> {
+        let text = name.to_lowercase();
+        let visible = |a: &str| agent_id.map_or_else(|| self.active(a), |id| id == a);
+        let names: BTreeSet<&str> = self
+            .inventory
+            .packages
+            .iter()
+            .filter(|(a, p)| p.name.to_lowercase().contains(&text) && visible(a))
+            .map(|(_, p)| p.name.as_str())
+            .collect();
+        let limit = limit.clamp(1, 100) as usize;
+        let page: BTreeSet<&str> = names.iter().take(limit).copied().collect();
         let mut found: Vec<InstalledPackage> = self
             .inventory
             .packages
             .iter()
-            .filter(|(a, p)| {
-                p.name.to_lowercase().contains(&name)
-                    && self.active(a)
-                    && agent_id.is_none_or(|id| id == a)
-            })
+            .filter(|(a, p)| page.contains(p.name.as_str()) && visible(a))
             .map(|(_, p)| p.clone())
             .collect();
         found.sort_by(|a, b| (&a.name, &a.hostname).cmp(&(&b.name, &b.hostname)));
-        Ok(host_rows(found, |p| &p.agent_id, limit))
+        Ok(Installed {
+            names: count(page.len()),
+            more_names: names.len() > page.len(),
+            rows: host_rows(found, |p| &p.agent_id, limit as u32),
+        })
     }
 }

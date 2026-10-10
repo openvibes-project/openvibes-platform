@@ -397,36 +397,69 @@ async fn resolution_stays_in_scope_and_never_picks_silently() {
     db.drop().await;
 }
 
+const REVOKED: &str = "agent.00000000-0000-4000-8000-00000000000d";
+
 #[tokio::test]
 async fn ports_services_and_software_stay_in_scope() {
     let (db, now) = seed().await;
-    let client = db.pool.get().await.unwrap();
-    // OTHER (outside the scope) has the same port and package as WEB.
+    let mut client = db.pool.get().await.unwrap();
+    // OTHER (outside the scope) and REVOKED have the same port and package
+    // as WEB. `a_b%` and `axbyc` check that `_` and `%` match literally.
     client
         .batch_execute(&format!(
-            "INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname)
+             VALUES ('{REVOKED}', 'revoked', now(), now(), 'old-01');
+             UPDATE agents SET services_at = now(), services_owners = 'partial',
+                 services_truncated = false WHERE agent_id = '{WEB}';
+             INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
              VALUES ('{WEB}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd'),
                     ('{WEB}', 'tcp', '::', 22, true, 'sshd.service', 'sshd'),
                     ('{WEB}', 'tcp', '127.0.0.1', 5432, false, NULL, 'postgres'),
-                    ('{OTHER}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd');
+                    ('{OTHER}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd'),
+                    ('{REVOKED}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd');
              INSERT INTO host_services (agent_id, unit, programs, processes, run_as)
              VALUES ('{WEB}', 'sshd.service', '{{sshd}}', 1, 'root'),
                     ('{OTHER}', 'sshd.service', '{{sshd}}', 1, 'root');
              INSERT INTO package_versions (id, manager, name, epoch, version, release, arch)
              VALUES (1, 'rpm', 'google-chrome-stable', 0, '141.0', '1', 'x86_64'),
-                    (2, 'rpm', 'openssh-server', 0, '9.9p1', '3.fc44', 'x86_64');
-             INSERT INTO host_packages VALUES ('{WEB}', 1), ('{WEB}', 2), ('{OTHER}', 1);"
+                    (2, 'rpm', 'openssh-server', 0, '9.9p1', '3.fc44', 'x86_64'),
+                    (3, 'rpm', 'a_b%', 0, '1', '', 'x86_64'),
+                    (4, 'rpm', 'axbyc', 0, '1', '', 'x86_64');
+             INSERT INTO host_packages VALUES ('{WEB}', 1), ('{WEB}', 2), ('{WEB}', 3),
+                 ('{WEB}', 4), ('{OTHER}', 1), ('{REVOKED}', 1);"
         ))
         .await
         .unwrap();
+    // The store reads themselves never return a host outside the scope.
+    let only_web = AgentScope::Only(vec![WEB.into()]);
+    use platform_store::assistant_inventory as inv;
+    let listeners = inv::host_listeners(&mut client, &only_web, OTHER, None, 10)
+        .await
+        .unwrap();
+    assert_eq!((listeners.items.len(), listeners.total), (0, 0));
+    let services = inv::host_services(&mut client, &only_web, OTHER, 10)
+        .await
+        .unwrap();
+    assert_eq!((services.items.len(), services.total), (0, 0));
+    assert!(
+        inv::host_report(&mut client, &only_web, OTHER)
+            .await
+            .unwrap()
+            .is_none()
+    );
+
     let lookups = scoped(&db, now);
-    let run = |name: &str, arguments: &str| {
+    let everyone = StoreLookups::new(db.pool.clone(), AgentScope::All, now);
+    let ask = |all: bool, name: &str, arguments: &str| {
         let lookup = Lookup::parse(name, arguments).unwrap();
-        let lookups = &lookups;
-        async move { lookups.run(&lookup, 10).await.unwrap() }
+        let lookups = if all { &everyone } else { &lookups };
+        async move {
+            let out = lookups.run(&lookup, 10).await;
+            out.unwrap_or_else(|e| panic!("{lookup:?}: {e:?}"))
+        }
     };
 
-    let port = run("host_services", r#"{"port":22}"#).await;
+    let port = ask(false, "host_services", r#"{"port":22}"#).await;
     assert_eq!(
         port.data["items"].as_array().unwrap().len(),
         2,
@@ -436,34 +469,70 @@ async fn ports_services_and_software_stay_in_scope() {
     assert_eq!(port.data["omitted"], 0);
     assert_eq!(port.data["items"][0]["cite"], format!("[agent:{WEB}]"));
     assert_eq!(port.data["items"][0]["service"], "sshd.service");
+    let port = ask(true, "host_services", r#"{"port":22}"#).await;
+    assert_eq!(port.data["hosts"], 2, "WEB and OTHER, not the revoked host");
 
-    let host = run("host_services", r#"{"agent":"web-01"}"#).await;
+    let host = ask(false, "host_services", r#"{"agent":"web-01"}"#).await;
     let items = host.data["items"].as_array().unwrap();
     assert_eq!(items.len(), 4, "three listeners and one service");
     assert_eq!(items[2]["port"], 5432, "loopback after exposed");
     assert_eq!(items[2]["exposed"], false);
     assert_eq!(items[3]["kind"], "running service");
-    let one = run("host_services", r#"{"agent":"web-01","port":5432}"#).await;
+    assert!(host.data["reported_at"].is_string());
+    assert!(
+        host.data["notes"][0]
+            .as_str()
+            .unwrap()
+            .contains("not visible")
+    );
+    let one = ask(false, "host_services", r#"{"agent":"web-01","port":5432}"#).await;
     assert_eq!(one.data["items"].as_array().unwrap().len(), 1);
     // Out of scope looks exactly like unknown.
-    let hidden = run("host_services", &format!(r#"{{"agent":"{OTHER}"}}"#)).await;
+    let hidden = ask(false, "host_services", &format!(r#"{{"agent":"{OTHER}"}}"#)).await;
     assert_eq!(hidden.data["agent"], Value::Null);
     assert_eq!(hidden.data["items"], Value::Array(Vec::new()));
-    let quiet = run("host_services", r#"{"agent":"twin"}"#).await;
-    assert!(quiet.data["note"].is_string(), "in scope, nothing reported");
+    // In scope but never reported: said so, also when asking for a port.
+    for arguments in [r#"{"agent":"twin"}"#, r#"{"agent":"twin","port":5432}"#] {
+        let quiet = ask(false, "host_services", arguments).await;
+        assert!(quiet.data["reported_at"].is_null(), "{arguments}");
+        assert!(
+            quiet.data["notes"][0]
+                .as_str()
+                .unwrap()
+                .contains("never reported"),
+            "{arguments}"
+        );
+    }
+    // A named revoked host is still read, and marked.
+    let old = ask(true, "host_services", r#"{"agent":"old-01"}"#).await;
+    assert_eq!(old.data["state"], "revoked");
+    assert_eq!(old.data["items"][0]["port"], 22);
 
-    let chrome = run("software", r#"{"name":"CHROME"}"#).await;
-    assert_eq!(chrome.data["hosts"], 1);
+    let chrome = ask(false, "software", r#"{"name":"CHROME"}"#).await;
+    assert_eq!(chrome.data["hosts_with_these_names"], 1);
+    assert_eq!(chrome.data["package_names"], 1);
     assert_eq!(chrome.data["items"][0]["cite"], format!("[agent:{WEB}]"));
     assert_eq!(chrome.data["items"][0]["version"], "141.0-1");
     assert!(!chrome.citations().contains(&Citation::Agent(OTHER.into())));
-    let on_web = run("software", r#"{"name":"openssh","agent":"web-01"}"#).await;
+    let chrome = ask(true, "software", r#"{"name":"chrome"}"#).await;
+    assert_eq!(
+        chrome.data["hosts_with_these_names"], 2,
+        "not the revoked host"
+    );
+    let old = ask(true, "software", r#"{"name":"chrome","agent":"old-01"}"#).await;
+    assert_eq!(old.data["items"][0]["package"], "google-chrome-stable");
+    let on_web = ask(false, "software", r#"{"name":"openssh","agent":"web-01"}"#).await;
     assert_eq!(on_web.data["items"][0]["package"], "openssh-server");
     assert_eq!(on_web.data["items"][0]["version"], "9.9p1-3.fc44");
-    let on_twin = run("software", r#"{"name":"chrome","agent":"twin"}"#).await;
+    for (text, found) in [("a_b", 1), ("_b%", 1), ("b%", 1), ("x_", 0), ("%c", 0)] {
+        let out = ask(false, "software", &format!(r#"{{"name":"{text}"}}"#)).await;
+        assert_eq!(out.data["package_names"], found, "{text}");
+    }
+    let on_twin = ask(false, "software", r#"{"name":"chrome","agent":"twin"}"#).await;
     assert_eq!(on_twin.data["items"], Value::Array(Vec::new()));
     assert_eq!(on_twin.data["agent"], format!("[agent:{WEB_TWIN}]"));
-    let hidden = run(
+    let hidden = ask(
+        false,
         "software",
         &format!(r#"{{"name":"chrome","agent":"{OTHER}"}}"#),
     )

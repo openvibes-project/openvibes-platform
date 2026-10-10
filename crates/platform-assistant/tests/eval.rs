@@ -150,13 +150,28 @@ async fn the_fleet_answers_ports_services_and_software() {
     assert_eq!(db["items"].as_array().unwrap().len(), 1);
     assert_eq!(db["items"][0]["program"], "postgres");
     let build = run("host_services", r#"{"agent":"build-01"}"#).await;
-    assert!(build["note"].as_str().unwrap().contains("ports collector"));
+    assert!(build["reported_at"].is_null());
+    assert!(
+        build["notes"][0]
+            .as_str()
+            .unwrap()
+            .contains("never reported")
+    );
+    let build_22 = run("host_services", r#"{"agent":"build-01","port":22}"#).await;
+    assert!(
+        build_22["notes"][0]
+            .as_str()
+            .unwrap()
+            .contains("never reported")
+    );
+    assert!(web["reported_at"].is_string() && web.get("notes").is_none());
     let chrome = run("software", r#"{"name":"Chrome"}"#).await;
     assert_eq!(hosts(&chrome), ["dev-laptop-17"], "revoked old-02 left out");
     assert_eq!(chrome["items"][0]["version"], "141.0.7390.65-1");
     let openssh = run("software", r#"{"name":"openssh"}"#).await;
     assert_eq!(hosts(&openssh), ["db-01", "web-01", "web-02", "web-03"]);
-    assert_eq!(openssh["hosts"], 4);
+    assert_eq!(openssh["hosts_with_these_names"], 4);
+    assert_eq!(openssh["package_names"], 1);
     let none = run("software", r#"{"name":"nginx","agent":"web-02"}"#).await;
     assert_eq!(none["items"], Value::Array(Vec::new()));
     assert!(
