@@ -266,6 +266,7 @@ pub async fn insert_batch(
                     "open",
                     "recurred",
                     now,
+                    INGEST,
                 )
                 .await?;
             }
@@ -328,7 +329,7 @@ pub async fn insert_batch(
         done.stored += 1;
         if let Some(note) = &note {
             let day = alarm.first_seen.date_naive();
-            history(&transaction, id, day, None, state, note, now).await?;
+            history(&transaction, id, day, None, state, note, now, INGEST).await?;
             if suppression.is_some() {
                 done.suppressed += 1;
             }
@@ -338,7 +339,8 @@ pub async fn insert_batch(
     Ok(done)
 }
 
-async fn history(
+#[allow(clippy::too_many_arguments, reason = "one history row's columns")]
+pub(crate) async fn history(
     transaction: &deadpool_postgres::Transaction<'_>,
     alarm_row_id: i64,
     day: NaiveDate,
@@ -346,13 +348,14 @@ async fn history(
     to: &str,
     note: &str,
     now: DateTime<Utc>,
+    by: &str,
 ) -> Result<(), StoreError> {
     transaction
         .execute(
             "INSERT INTO alarm_triage_history (first_seen_day, alarm_row_id, from_state,
                 to_state, note, changed_at, changed_by)
              VALUES ($1, $2, $3, $4, $5, $6, $7)",
-            &[&day, &alarm_row_id, &from, &to, &note, &now, &INGEST],
+            &[&day, &alarm_row_id, &from, &to, &note, &now, &by],
         )
         .await?;
     Ok(())

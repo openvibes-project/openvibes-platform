@@ -31,6 +31,7 @@ fn chosen_services_are_enabled_and_started() {
             "--now",
             "openvibes-ingest.service",
             "openvibes-maintenance.timer",
+            "openvibes-netlog.service",
             "openvibes-vulns.service"
         ]
     );
@@ -240,5 +241,150 @@ fn an_update_quotes_why_a_service_is_not_ready() {
              ingest listener failed: Address already in use (os error 98)"
                 .into()
         )
+    );
+}
+
+#[test]
+fn readiness_warns_when_udp_514_is_closed_and_firewalld_runs() {
+    let fake = Fake::new("netlog-port");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        1,
+        "no\n",
+    );
+    let note = super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest])));
+    assert!(
+        note.as_deref()
+            .is_some_and(|n| n.contains("UDP 514 is not open")),
+        "{note:?}"
+    );
+
+    let fake = Fake::new("netlog-port-open");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        0,
+        "yes\n",
+    );
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest]))),
+        None
+    );
+
+    let fake = Fake::new("netlog-no-firewalld");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 252, "not running\n");
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest]))),
+        None
+    );
+
+    // Not planned (no Ingest component): nothing to say.
+    let fake = Fake::new("netlog-not-planned");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        1,
+        "no\n",
+    );
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Console]))),
+        None
+    );
+}
+
+/// Review (Important): a host whose UDP 514 is already taken (rsyslog,
+/// syslog-ng) must not fail Setup for a feature it may never use.
+fn netlog_port_taken(test: &str) -> Fake {
+    let fake = Fake::new(test);
+    fake.answer(
+        &[
+            "/usr/bin/curl",
+            "--silent",
+            "--fail",
+            "--max-time",
+            "2",
+            "--output",
+            "/dev/null",
+            "http://127.0.0.1:18484/ready",
+        ],
+        7,
+        "",
+    );
+    fake.answer(&["/usr/bin/curl"], 0, "");
+    fake.answer(
+        &[
+            "/usr/bin/journalctl",
+            "_SYSTEMD_UNIT=openvibes-netlog.service",
+        ],
+        0,
+        "openvibes-netlog: cannot bind 0.0.0.0:514: Address in use (os error 98)\n",
+    );
+    fake
+}
+
+#[test]
+fn setup_readiness_only_warns_when_netlog_is_not_ready() {
+    let fake = netlog_port_taken("ready-netlog-taken");
+    fake.answer(
+        &[
+            "/usr/sbin/runuser",
+            "-u",
+            "openvibes-admin",
+            "--",
+            "/usr/bin/openvibes-admin",
+            "token",
+            "fleet",
+        ],
+        0,
+        &format!("token id 7\ntoken {TOKEN}\n"),
+    );
+    let root = platform_pki::generate_root(chrono::Utc::now()).unwrap();
+    fake.file("/etc/openvibes/pki/root.crt", &root.cert_pem);
+    let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Ready);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(
+        state
+            .detail()
+            .contains("heads-up: openvibes-netlog.service is not ready")
+            && state.detail().contains("cannot bind 0.0.0.0:514"),
+        "{state:?}"
+    );
+}
+
+#[test]
+fn update_readiness_only_warns_when_netlog_is_not_ready() {
+    let fake = netlog_port_taken("update-netlog-taken");
+    for unit in ["openvibes-ingest.service", "openvibes-netlog.service"] {
+        fake.answer(&["/usr/bin/systemctl", "is-active", "--quiet", unit], 0, "");
+    }
+    fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+    let plan = plan(&[Ingest]);
+    let state = crate::setup::update::run(
+        &fake.ctx(&plan),
+        platform_host::UpdateStep::Ready,
+        &crate::setup::update::UpdateArgs::default(),
+    );
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(
+        state
+            .detail()
+            .contains("heads-up: openvibes-netlog.service is not ready"),
+        "{state:?}"
     );
 }

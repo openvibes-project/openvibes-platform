@@ -144,7 +144,10 @@ fn every_component_names_its_packages() {
         Component::Ingest.packages(),
         ["openvibes-ingest", "openvibes-admin"]
     );
-    assert_eq!(Component::Ingest.units(), [Unit::Ingest, Unit::Maintenance]);
+    assert_eq!(
+        Component::Ingest.units(),
+        [Unit::Ingest, Unit::Maintenance, Unit::Netlog]
+    );
 }
 
 #[test]

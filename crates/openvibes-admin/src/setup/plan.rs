@@ -93,7 +93,7 @@ impl Component {
     /// server is left stopped: it refuses to start without a model.
     pub fn units(self) -> &'static [Unit] {
         match self {
-            Component::Ingest => &[Unit::Ingest, Unit::Maintenance],
+            Component::Ingest => &[Unit::Ingest, Unit::Maintenance, Unit::Netlog],
             Component::Console => &[Unit::Console],
             Component::Distribution => &[Unit::Distribution],
             Component::Vulns => &[Unit::Vulns],

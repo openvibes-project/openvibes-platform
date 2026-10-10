@@ -93,8 +93,9 @@ pub fn run<R: Runner>(root: &Path, runner: &R, stamp: &str) -> (Vec<String>, boo
 
 /// Services that must not run while stored data changes (Update stops the
 /// same ones, plus the agent, which stays up here).
-const STOP: [&str; 7] = [
+const STOP: [&str; 8] = [
     "openvibes-ingest.service",
+    "openvibes-netlog.service",
     "openvibes-distribution.service",
     "openvibes-vulns.service",
     "openvibes-signer.service",
@@ -160,6 +161,21 @@ fn data_migration<R: Runner>(ctx: &Ctx<R>, stamp: &str, log: &mut Vec<String>) -
 #[cfg(test)]
 mod tests {
     use super::{Next, decide, run};
+
+    /// Every platform service that touches the database is stopped while
+    /// its tables change (the model server has no database).
+    #[test]
+    fn every_database_unit_stops_for_a_migration() {
+        for unit in platform_host::Unit::ALL {
+            if unit != platform_host::Unit::Llm {
+                assert!(
+                    super::STOP.contains(&unit.name()),
+                    "{} keeps running",
+                    unit.name()
+                );
+            }
+        }
+    }
     use crate::setup::{
         fake::{Fake, plan},
         plan::Component::*,

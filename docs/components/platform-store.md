@@ -773,3 +773,41 @@ risk, when the vulnerability is fixed.
   caller can see, with the case number.
 - Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
   `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`.
+
+## Network devices (schema 46)
+
+Spec `docs/specs/2026-10-10-network-device-alarms-design.md`. Additive
+migration 46:
+
+- `devices`: name (1–64), kind (`unifi`), address (`inet`, unique among
+  active devices), created/removed by and at, `last_seen`, the counters
+  `received`, `alarms`, `not_cef`, `unparsed`, `dropped_other`,
+  `mismatch`, and `dropped_classes` (jsonb, at most 64 keys). A removed
+  device keeps its row because alarms point at it.
+- `alarms`: `source` (`agent` default, or `device`), `device_id`,
+  `network` (jsonb). `agent_id`, `process` and `ancestors` became
+  nullable, and `alarms_source_fields_check` requires each source's own
+  fields. `alarms_device_alarm_key` is unique on `(device_id, alarm_id,
+  first_seen_day)`.
+- `alarm_suppressions`: `device_id`; scopes `device` (one device) and
+  `signature` (any device), allowed only for `device-*` rule sets.
+- Role `openvibes-netlog`: SELECT on `devices`, UPDATE on its counter
+  columns; **column** SELECT, INSERT and UPDATE on `alarms` (never
+  `process`, `ancestors`, `note`, `assigned_to`, `agent_id`, `detection`);
+  INSERT on `alarm_triage_history`; SELECT on `alarm_suppressions` and
+  `schema_version`.
+
+Functions:
+
+- `devices`: `add` (name, kind and duplicate checks), `remove`, `list`,
+  `active` (netlog's sender filter), `flush` (adds counters, caps
+  `dropped_classes`), `heads_up` (`NO_EVENTS` 10 minutes after adding with
+  nothing received, `SILENT` after a day without a packet).
+- `device_alarms::insert_batch`: one transaction. A resend raises `count` and
+  `last_seen`. A recurrence reopens a mitigated alarm or an expired accepted
+  risk. A suppression closes a new alarm as a false positive, with one history
+  row by `netlog`. An alarm whose day has no partition is skipped and counted
+  (`unstorable`).
+- Console reads stay agent-only until the device screens exist: list,
+  detail, triage and cases inner-join `agents`, and `HOST_COUNTS_SQL`, case
+  item titles and bulk suppressions filter `source = 'agent'`.

@@ -48,7 +48,7 @@ rpm -qc openvibes-ingest | grep -qx /etc/openvibes/ingest.toml || fail "ingest.t
 rpm -qc openvibes-admin | grep -qx /etc/openvibes/admin.toml || fail "admin.toml not %config"
 rpm -qc openvibes-distribution | grep -qx /etc/openvibes/distribution.toml || fail "distribution.toml not %config"
 rpm -qc openvibes-vulns | grep -qx /etc/openvibes/vulns.toml || fail "vulns.toml not %config"
-[[ "$(rpm -q --qf '[%{FILENAMES} %{FILEFLAGS:fflags}\n]' openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin | grep -c '\.toml cn')" == 4 ]] || fail "configs not noreplace"
+[[ "$(rpm -q --qf '[%{FILENAMES} %{FILEFLAGS:fflags}\n]' openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin | grep -c '\.toml cn')" == 5 ]] || fail "configs not noreplace"
 systemd-analyze verify /usr/lib/systemd/system/openvibes-ingest.service \
     /usr/lib/systemd/system/openvibes-distribution.service \
     /usr/lib/systemd/system/openvibes-vulns.service \
@@ -104,6 +104,17 @@ out=$(/usr/bin/openvibes-distribution --config /nonexistent 2>&1) && fail "distr
 [[ "$out" == *"invalid distribution configuration"* ]] || fail "distribution error: $out"
 out=$(/usr/bin/openvibes-vulns --config /nonexistent 2>&1) && fail "vulns started without config"
 [[ "$out" == *"invalid vulns configuration"* ]] || fail "vulns error: $out"
+getent passwd openvibes-netlog >/dev/null || fail "no user openvibes-netlog"
+expect_stat /etc/openvibes/netlog.toml 640 root:openvibes-netlog
+rpm -qc openvibes-ingest | grep -qx /etc/openvibes/netlog.toml || fail "netlog.toml not %config"
+systemd-analyze verify /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog unit verification"
+grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog unit lacks KillSignal=SIGINT"
+grep -qx 'AmbientCapabilities=CAP_NET_BIND_SERVICE' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog cannot bind 514"
+grep -q '^After=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog starts before migrate"
+# An upgraded host gets netlog with ingest (review: %systemd_post enables nothing on upgrade).
+grep -q '^Wants=.*openvibes-netlog.service' /usr/lib/systemd/system/openvibes-ingest.service || fail "ingest does not pull in netlog"
+out=$(/usr/bin/openvibes-netlog --config /nonexistent 2>&1) && fail "netlog started without config"
+[[ "$out" == *"invalid netlog configuration"* ]] || fail "netlog error: $out"
 
 # openvibes-llm: files, the generated API key, the unit, and the pre-start
 # check (which refuses root and a missing model).

@@ -204,12 +204,18 @@ fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         .filter(|unit| ctx.succeeds(Systemctl, &["is-active", "--quiet", unit.name()]))
         .collect();
     let mut not_ready = None;
+    let mut notes = String::new();
     'units: for unit in &running {
         let mut attempts = 0;
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == super::run::READY_ATTEMPTS {
-                not_ready = Some(super::run::not_ready(ctx, *unit));
+                let why = super::run::not_ready(ctx, *unit);
+                if super::run::optional(*unit) {
+                    notes.push_str(&format!("; heads-up: {why}"));
+                    continue 'units;
+                }
+                not_ready = Some(why);
                 break 'units;
             }
             ctx.pause();
@@ -227,7 +233,7 @@ fn wait_ready<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     }
     let names: Vec<&str> = running.iter().map(|unit| unit.name()).collect();
     Ok(StepState::Done(format!(
-        "ready: {}{}",
+        "ready: {}{}{notes}",
         names.join(" "),
         if agent { "; agent started" } else { "" }
     )))

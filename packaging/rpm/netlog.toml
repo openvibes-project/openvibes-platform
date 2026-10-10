@@ -1,0 +1,10 @@
+# openvibes-netlog: UniFi IPS/IDS events (CEF over UDP syslog) become
+# alarms; see docs/components/openvibes-netlog.md. Devices are added in the
+# console (or `openvibes-admin device add`); open UDP 514 in this host's
+# firewall yourself.
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-netlog"
+listen = "0.0.0.0:514"                     # the router's SIEM server port
+health_listen = "127.0.0.1:18484"          # /health, /ready; loopback only
+batch_seconds = 5                          # 1 to 60
+collapse_minutes = 10                      # 1 to 1440; quiet window per signature and source
+max_collapse_keys = 2000                   # 1 to 5000 (fits the unit's 64 MB); also bounds alarms kept while the database is down

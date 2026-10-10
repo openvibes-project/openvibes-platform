@@ -10,6 +10,7 @@ mod assistant_setup;
 mod ca;
 mod config_file;
 mod configs;
+mod device;
 mod fields;
 mod files;
 mod helper;
@@ -85,6 +86,11 @@ enum Command {
     Token {
         #[command(subcommand)]
         command: token::TokenCommand,
+    },
+    /// Network devices (routers, firewalls) that send events to openvibes-netlog.
+    Device {
+        #[command(subcommand)]
+        command: device::DeviceCommand,
     },
     /// Rule sets: trusted keys and signed bundles for distribution.
     Rules {
@@ -209,6 +215,7 @@ impl Command {
             Self::Maintenance { .. } => "maintenance",
             Self::Ca { command } => command.name(),
             Self::Token { command } => command.name(),
+            Self::Device { command } => command.name(),
             Self::Agent { command } => command.name(),
             Self::Rules { command } => command.name(),
             Self::User { command } => command.name(),
@@ -385,6 +392,10 @@ async fn main() -> ExitCode {
             Ok(()) => token::run(command, &client, &actor).await,
             Err(error) => (Err(error), None),
         },
+        Command::Device { command } => match require_current_schema(&client).await {
+            Ok(()) => device::run(command, &mut client, &actor).await,
+            Err(error) => (Err(error), None),
+        },
         Command::Agent { command } => match require_current_schema(&client).await {
             Ok(()) => agent::run(command, &client, &actor).await,
             Err(error) => (Err(error), None),
@@ -534,6 +545,7 @@ async fn run(command: &Command, client: &mut platform_store::Client) -> Result<S
         Command::Migrate { .. }
         | Command::Ca { .. }
         | Command::Token { .. }
+        | Command::Device { .. }
         | Command::Agent { .. }
         | Command::Rules { .. }
         | Command::User { .. }

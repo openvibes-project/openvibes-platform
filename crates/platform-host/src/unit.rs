@@ -10,6 +10,8 @@ pub enum Unit {
     Distribution,
     /// `openvibes-vulns.service`.
     Vulns,
+    /// `openvibes-netlog.service` (network device events, UDP 514).
+    Netlog,
     /// `openvibes-console.service`.
     Console,
     /// `openvibes-llm.socket`: what is enabled; it starts the model server
@@ -23,10 +25,11 @@ pub enum Unit {
 
 impl Unit {
     /// Every unit, in display order.
-    pub const ALL: [Unit; 7] = [
+    pub const ALL: [Unit; 8] = [
         Unit::Ingest,
         Unit::Distribution,
         Unit::Vulns,
+        Unit::Netlog,
         Unit::Console,
         Unit::Llm,
         Unit::Maintenance,
@@ -40,6 +43,7 @@ impl Unit {
             Unit::Ingest => "openvibes-ingest.service",
             Unit::Distribution => "openvibes-distribution.service",
             Unit::Vulns => "openvibes-vulns.service",
+            Unit::Netlog => "openvibes-netlog.service",
             Unit::Console => "openvibes-console.service",
             Unit::Llm => "openvibes-llm.socket",
             Unit::Maintenance => "openvibes-maintenance.timer",
@@ -54,6 +58,7 @@ impl Unit {
             Unit::Ingest => "ingest",
             Unit::Distribution => "distribution",
             Unit::Vulns => "vulns",
+            Unit::Netlog => "netlog",
             Unit::Console => "console",
             Unit::Llm => "llm",
             Unit::Maintenance => "maintenance",
@@ -69,6 +74,7 @@ impl Unit {
             Unit::Ingest => Some("http://127.0.0.1:18480/ready"),
             Unit::Distribution => Some("http://127.0.0.1:18481/ready"),
             Unit::Vulns => Some("http://127.0.0.1:18483/ready"),
+            Unit::Netlog => Some("http://127.0.0.1:18484/ready"),
             Unit::Console => Some("http://127.0.0.1:18482/ready"),
             Unit::Llm | Unit::Maintenance | Unit::Signer => None,
         }

@@ -137,6 +137,13 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("open: {}", ports.join(" "))))
 }
 
+/// Units whose not being ready is a heads-up, not a failed step: netlog
+/// serves an optional feature (network devices), and UDP 514 may belong to
+/// another syslog collector on this host (review, 2026-10-10).
+pub(super) fn optional(unit: Unit) -> bool {
+    unit == Unit::Netlog
+}
+
 pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
     let healthy = unit.ready_url().is_none_or(|url| {
         ctx.succeeds(
@@ -176,6 +183,26 @@ fn listening<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
     ctx.runner
         .run(Curl, &args)
         .is_ok_and(|out| !matches!(out.status, 7 | 28))
+}
+
+/// Spec §6: OpenVIBES does not open 514/udp (how ports are opened differs
+/// per installation); when firewalld runs and it is closed, say so.
+// ponytail: checks the default 514; a moved `listen` in netlog.toml is the
+// admin's own change and is not re-read here.
+pub(super) fn netlog_port_note<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
+    let planned = units(ctx).contains(&Unit::Netlog);
+    if !planned || !ctx.succeeds(FirewallCmd, &["--state"]) {
+        return None;
+    }
+    if ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", "514/udp"]) {
+        return None;
+    }
+    Some(
+        "heads-up: UDP 514 is not open in firewalld, so network devices cannot reach \
+         openvibes-netlog; open it the way this host manages its firewall \
+         (docs/quick-setup.md, Ports)"
+            .into(),
+    )
 }
 
 pub fn ready_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -222,11 +249,16 @@ pub(super) fn not_ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> String {
 
 pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
+    let mut notes = Vec::new();
     for unit in &units {
         let mut attempts = 0;
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == READY_ATTEMPTS {
+                if optional(*unit) {
+                    notes.push(format!("heads-up: {}", not_ready(ctx, *unit)));
+                    break;
+                }
                 return Err(not_ready(ctx, *unit));
             }
             ctx.pause();
@@ -242,7 +274,12 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         firewall.push_str("; ");
         firewall.push_str(&line);
     }
-    let closed = firewall;
+    let mut closed = firewall;
+    notes.extend(netlog_port_note(ctx));
+    for note in notes {
+        closed.push_str("; ");
+        closed.push_str(&note);
+    }
     // A Repair shows no install line (it may be stale after an agent port
     // move); it is one command away.
     if ctx.repair {

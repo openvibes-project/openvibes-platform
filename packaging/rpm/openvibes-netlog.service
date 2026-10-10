@@ -1,23 +1,21 @@
 [Unit]
-Description=OpenVIBES ingest service
-Documentation=https://github.com/openvibes-project/openvibes-platform
+Description=OpenVIBES network device events (UniFi IPS/IDS over syslog)
+Documentation=https://github.com/openvibes-project/openvibes-platform/blob/main/docs/components/openvibes-netlog.md
 After=network-online.target postgresql.service openvibes-migrate.service
-# Network device events come with ingest, also on hosts set up before
-# netlog existed (an upgrade enables no new unit).
-Wants=network-online.target openvibes-migrate.service openvibes-netlog.service
+Wants=network-online.target openvibes-migrate.service
 
 [Service]
 Type=exec
-User=openvibes-ingest
-Group=openvibes-ingest
-ExecStart=/usr/bin/openvibes-ingest --config /etc/openvibes/ingest.toml
-# On SIGINT ingest stops accepting and drains requests in flight
-# (bounded by request_timeout_seconds) before exiting.
+User=openvibes-netlog
+Group=openvibes-netlog
+ExecStart=/usr/bin/openvibes-netlog --config /etc/openvibes/netlog.toml
+ExecReload=/bin/kill -HUP $MAINPID
 KillSignal=SIGINT
 Restart=on-failure
 RestartSec=5s
-LimitNOFILE=65536
 UMask=0077
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
@@ -38,7 +36,7 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallFilter=~@privileged @resources
-CapabilityBoundingSet=
+MemoryMax=64M
 
 [Install]
 WantedBy=multi-user.target

@@ -284,6 +284,29 @@ page); an agent before P12 shows `unknown`.
 
 The audit target is the token id, never the token.
 
+## Device commands
+
+Network devices that send events to `openvibes-netlog`
+([openvibes-netlog.md](openvibes-netlog.md)). These are database work only:
+netlog reloads devices every 30 seconds, so nothing needs root. They are for
+the lab and tests; end users will add devices in the console.
+
+| Command | Does |
+|---|---|
+| `device add --name NAME --address IP [--kind unifi]` | Adds a device. A mapped IPv6 address (`::ffff:192.168.1.1`) is stored as IPv4. A second active device at the same address is refused. Prints where to point its SIEM server (this host, UDP 514). |
+| `device list` | Lists each device with its id, name, address, kind, last packet and counters. When nothing arrived in the 10 minutes after adding, or nothing in a day, it adds a line: check the router's SIEM setting and that UDP 514 is open. |
+| `device remove ID` | Removes the device. Its alarms stay. An unknown or already removed id is an error. |
+| `device suppress ALARM --scope device\|signature --note TEXT` | Quiets a device alarm's rule from now on: on its device (`device`) or on every device (`signature`). New matches arrive closed as false positives, with one history row. |
+| `device suppressions` | Lists active device suppressions: id, scope, rule, device, note. |
+| `device unsuppress ID` | Removes a suppression. It stays as history. |
+
+The audit target is the device id.
+
+**Readiness heads-up:** when ingest is planned, firewalld runs and
+514/udp is not open permanently, Setup's Readiness step ends with
+"heads-up: UDP 514 is not open in firewalld, …". It never opens the port
+itself (spec 2026-10-10 §6).
+
 ## Rules commands
 
 Rule sets for the distribution service. Keys and bundles are signed
@@ -447,7 +470,7 @@ absolute. Without `--quick` the command refuses and points to the TUI.
 Ports (boards #45, #48, #61, `src/setup/ports.rs`): the console listens on
 `--console-port` (default 443), ingest on `--ingest-port` (18423) and
 distribution on `--distribution-port` (18424). The three must differ and
-may not be 18430 or 18480-18483 (the assistant's and the health
+may not be 18430 or 18480-18484 (the assistant's and the health
 listeners). Before anything changes, and again in `services` just before
 the units start, Setup asks `ss -ltnpH` who listens on each chosen port.
 Any listener counts, on any address, IPv4 or IPv6, except the unit that
