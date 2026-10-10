@@ -72,6 +72,15 @@ GRANT SELECT ON schema_version TO "openvibes-netlog";
 GRANT SELECT ON devices TO "openvibes-netlog";
 GRANT UPDATE (last_seen, received, alarms, not_cef, unparsed, dropped_other, mismatch, dropped_classes)
     ON devices TO "openvibes-netlog";
-GRANT SELECT, INSERT, UPDATE ON alarms TO "openvibes-netlog";
+-- Column grants: netlog never reads an agent alarm's process, notes or
+-- assignee, and only changes what collapse and reopening need.
+GRANT SELECT (id, first_seen_day, device_id, alarm_id, count, last_seen, network, state,
+    accepted_until, triage_version) ON alarms TO "openvibes-netlog";
+GRANT INSERT (first_seen_day, source, device_id, alarm_id, rule_set_id, rule_set_version,
+    rule_id, rule_version, severity, confidence, message, first_seen, last_seen, count,
+    network, received_at, suppressed_by, state, note, triage_updated_at, triage_updated_by)
+    ON alarms TO "openvibes-netlog";
+GRANT UPDATE (count, last_seen, network, state, accepted_until, triage_version,
+    triage_updated_at, triage_updated_by) ON alarms TO "openvibes-netlog";
 GRANT INSERT ON alarm_triage_history TO "openvibes-netlog";
 GRANT SELECT ON alarm_suppressions TO "openvibes-netlog";
