@@ -357,6 +357,25 @@ mod tests {
     }
 
     #[test]
+    fn removing_the_console_also_stops_the_fetch_socket() {
+        let fake = Fake::new("remove-console-fetch");
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-console"],
+            0,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "disable", "--now"], 0, "");
+        let plan = plan(&[Ingest, Console]);
+        let state = run(&fake.ctx(&plan), RemoveStep::Stop, &args(&[Console], None));
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        let call = fake.call(&["/usr/bin/systemctl", "disable"]);
+        assert!(
+            call.contains(&"openvibes-fetch.socket".to_owned()),
+            "{call:?}"
+        );
+    }
+
+    #[test]
     fn the_admin_package_is_left_for_last() {
         let fake = Fake::new("remove-admin");
         fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
@@ -451,6 +470,7 @@ mod tests {
             assert!(!fake.root.join(gone).exists(), "{gone}");
         }
         assert!(fake.called(&["/usr/sbin/userdel", "openvibes-ingest"]));
+        assert!(fake.called(&["/usr/sbin/userdel", "openvibes-fetch"]));
         assert!(fake.called(&["/usr/sbin/groupdel", "openvibes-operators"]));
         assert!(
             state.detail().contains("PostgreSQL itself stays"),

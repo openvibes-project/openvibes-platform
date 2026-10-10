@@ -14,13 +14,38 @@ use super::{
 };
 
 /// The platform packages; the rules and agent packages have their own steps.
-fn platform_packages(plan: &Plan) -> Vec<&'static str> {
-    plan.components
+fn platform_packages<R: Runner>(ctx: &Ctx<R>) -> Vec<&'static str> {
+    let mut names: Vec<&'static str> = ctx
+        .plan
+        .components
         .iter()
         .filter(|c| !matches!(c, Component::Rules | Component::Agent))
         .flat_map(|c| c.packages())
         .copied()
-        .collect()
+        .collect();
+    if skipped_fetch(ctx) {
+        names.retain(|name| *name != OPTIONAL);
+    }
+    names
+}
+
+/// Internet lookups need internet: an offline kit (`repo_dir`) without this
+/// package installs the platform without it.
+const OPTIONAL: &str = "openvibes-fetch";
+
+fn skipped_fetch<R: Runner>(ctx: &Ctx<R>) -> bool {
+    ctx.plan
+        .repo_dir
+        .as_ref()
+        .is_some_and(|dir| local_rpm(ctx, dir, OPTIONAL).is_err())
+}
+
+fn skip_note<R: Runner>(ctx: &Ctx<R>) -> &'static str {
+    if skipped_fetch(ctx) {
+        "; openvibes-fetch skipped: not in the package directory (internet lookups need internet)"
+    } else {
+        ""
+    }
 }
 
 /// The one file for package `name` in `dir` (`NAME-VERSION-….rpm`, not a
@@ -76,12 +101,12 @@ fn dnf<R: Runner>(ctx: &Ctx<R>, verb: &str, names: &[&str]) -> Result<(), String
 }
 
 pub fn packages_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let names = platform_packages(ctx.plan);
+    let names = platform_packages(ctx);
     let mut args = vec!["-q", "--quiet"];
     args.extend(&names);
     Ok(
         if ctx.succeeds(Rpm, &args) && missing_config(ctx, &names).is_empty() {
-            StepState::Done(format!("installed: {}", names.join(" ")))
+            StepState::Done(format!("installed: {}{}", names.join(" "), skip_note(ctx)))
         } else {
             StepState::Todo
         },
@@ -89,7 +114,7 @@ pub fn packages_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 }
 
 pub fn packages_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
-    let names = platform_packages(ctx.plan);
+    let names = platform_packages(ctx);
     install(ctx, &names)?;
     // #82: a configuration file deleted while its package stayed installed
     // (an interrupted Remove everything) is not put back by `install`;
@@ -100,7 +125,11 @@ pub fn packages_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !missing.is_empty() && dnf(ctx, "reinstall", &missing).is_err() {
         dnf(ctx, "upgrade", &missing)?;
     }
-    Ok(StepState::Done(format!("installed: {}", names.join(" "))))
+    Ok(StepState::Done(format!(
+        "installed: {}{}",
+        names.join(" "),
+        skip_note(ctx)
+    )))
 }
 
 /// The installed `names` whose packaged configuration file is missing
@@ -277,6 +306,36 @@ mod tests {
                 "openvibes-vulns"
             ]
         );
+    }
+
+    #[test]
+    fn an_offline_kit_without_fetch_installs_the_console_and_notes_the_skip() {
+        for (with_fetch, want) in [(false, 5), (true, 6)] {
+            let fake = Fake::new(&format!("packages-kit-{with_fetch}"));
+            let mut files = vec!["openvibes-console-0.1.0-1.fc44.x86_64.rpm"];
+            if with_fetch {
+                files.push("openvibes-fetch-0.1.0-1.fc44.x86_64.rpm");
+            }
+            for file in files {
+                fake.file(&format!("/srv/rpms/{file}"), "");
+            }
+            fake.answer(&["/usr/bin/rpm"], 1, "");
+            fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+            let mut plan = plan(&[Console]);
+            plan.repo_dir = Some("/srv/rpms".into());
+            let state = run_step(&fake.ctx(&plan), Step::Packages);
+            assert!(matches!(state, StepState::Done(_)), "{state:?}");
+            let call = fake.call(&["/usr/bin/dnf"]);
+            assert_eq!(call.len(), want, "{call:?}");
+            assert_eq!(
+                call.iter().any(|a| a.contains("openvibes-fetch")),
+                with_fetch
+            );
+            assert_eq!(
+                state.detail().contains("openvibes-fetch skipped"),
+                !with_fetch
+            );
+        }
     }
 
     /// #82: Setup after an interrupted Remove everything finds admin.toml

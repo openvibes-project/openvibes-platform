@@ -23,6 +23,13 @@ ProtectKernelLogs=yes
 ProtectControlGroups=yes
 ProtectClock=yes
 ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+PrivateIPC=yes
+RemoveIPC=yes
+# Loopback stays open (a local proxy or SearXNG); link-local blocks the cloud
+# metadata address 169.254.169.254.
+IPAddressDeny=link-local multicast
 # The network is its job; the database is a Unix socket.
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 RestrictNamespaces=yes

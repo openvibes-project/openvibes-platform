@@ -4,7 +4,7 @@
 use platform_host::{
     StepState, Unit,
     runner::{
-        Program::{Curl, FirewallCmd, Journalctl, Systemctl},
+        Program::{Curl, FirewallCmd, Journalctl, Rpm, Systemctl},
         Runner,
     },
 };
@@ -26,25 +26,40 @@ fn names(units: &[Unit]) -> Vec<&'static str> {
     units.iter().map(|u| u.name()).collect()
 }
 
+const FETCH_SOCKET: &str = "openvibes-fetch.socket";
+
+/// Units that are not a [`Unit`]: the internet fetcher's socket comes with
+/// the console when its package is installed (an offline kit has none).
+fn extra<R: Runner>(ctx: &Ctx<R>) -> Vec<&'static str> {
+    if ctx.plan.has(Component::Console) && ctx.succeeds(Rpm, &["-q", "--quiet", "openvibes-fetch"])
+    {
+        vec![FETCH_SOCKET]
+    } else {
+        vec![]
+    }
+}
+
 pub fn services_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
-    let running = units.iter().all(|unit| {
-        ctx.succeeds(Systemctl, &["is-enabled", "--quiet", unit.name()])
-            && ctx.succeeds(Systemctl, &["is-active", "--quiet", unit.name()])
+    let mut all = names(&units);
+    all.extend(extra(ctx));
+    let running = all.iter().all(|unit| {
+        ctx.succeeds(Systemctl, &["is-enabled", "--quiet", unit])
+            && ctx.succeeds(Systemctl, &["is-active", "--quiet", unit])
     });
     // Running but not on a planned port (a Repair after a move), or a
     // listen address to rewrite (#72): not done.
     Ok(
         if running && super::ports::check(ctx)?.is_empty() && !super::ports::listen_stale(ctx)? {
-            StepState::Done(done_text(&units))
+            StepState::Done(done_text(&all))
         } else {
             StepState::Todo
         },
     )
 }
 
-fn done_text(units: &[Unit]) -> String {
-    format!("enabled and started: {}", names(units).join(" "))
+fn done_text(units: &[&str]) -> String {
+    format!("enabled and started: {}", units.join(" "))
 }
 
 pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -56,15 +71,17 @@ pub fn services_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         }
     }
     let units = units(ctx);
+    let mut all = names(&units);
+    all.extend(extra(ctx));
     let mut args = vec!["enable", "--now"];
-    args.extend(names(&units));
+    args.extend(&all);
     ctx.ok(Systemctl, &args)?;
     // Running on an old port or address: its configuration now says the
     // new one (try-restart leaves a stopped unit alone).
     for unit in restart {
         ctx.ok(Systemctl, &["try-restart", unit])?;
     }
-    Ok(StepState::Done(done_text(&units)))
+    Ok(StepState::Done(done_text(&all)))
 }
 
 fn console_port<R: Runner>(ctx: &Ctx<R>) -> Result<Option<String>, String> {

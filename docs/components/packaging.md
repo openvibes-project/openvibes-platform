@@ -69,7 +69,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
 | `/usr/bin/openvibes-fetch` | 0755 root | fetch |
 | `/usr/lib/systemd/system/openvibes-fetch.socket`, `openvibes-fetch@.service` | 0644 root | fetch |
-| `/usr/lib/systemd/system-preset/90-openvibes-fetch.preset` | 0644 root (enables the socket) | fetch |
+| `/usr/lib/systemd/system-preset/80-openvibes-fetch.preset` | 0644 root (enables the socket) | fetch |
 | `/usr/lib/sysusers.d/openvibes-fetch.conf` | user `openvibes-fetch`; group `openvibes-console` (the socket's) | fetch |
 | `/etc/openvibes/fetch.toml` | 0640 root:openvibes-fetch, `%config(noreplace)` | fetch |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |

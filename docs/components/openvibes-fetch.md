@@ -65,7 +65,7 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 
 - `openvibes-fetch.socket`: `/run/openvibes-fetch/fetch.sock`, 0660
   `root:openvibes-console`, `Accept=yes`, `MaxConnections=8` (the ninth
-  concurrent connection waits). Enabled by a preset.
+  concurrent connection waits). Enabled by a preset (`80-`, before Fedora's `90-default` disable-all).
 - `openvibes-fetch@.service`: one instance per connection as user
   `openvibes-fetch`, stdin/stdout on the socket, stderr to the journal,
   `RuntimeMaxSec=30`, no capabilities, `ProtectSystem=strict`, seccomp,
@@ -74,7 +74,16 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
   missing `fetch.toml` exits non-zero with one stderr line.
 - Test: `scripts/check-rpm.sh` (units, modes); `scripts/systemd-e2e.sh`
   (level 1 with no outbound answers `unavailable` within 15 s, level 0
-  answers `off`, no SELinux denial when enforcing).
+  answers `off`). SELinux behaviour is not tested in CI (the container is
+  not enforcing): it is verified in the lab on a real host (Task 11).
+- Hardening beyond the signer's: `ProtectProc=invisible`, `ProcSubset=pid`,
+  `PrivateIPC=yes`, `RemoveIPC=yes`, `IPAddressDeny=link-local multicast`
+  (blocks the cloud metadata address; loopback stays open for a proxy).
+- Setup enables and starts the socket with the console when the package is
+  installed; an offline kit without the package skips it with a note.
+- A client must keep reading until the reply (`socat -t 25`): the default
+  0.5 s linger drops a reply that takes longer, and the process then ends on
+  a broken pipe.
 
 ## Level 1 (`serve.rs`, `http.rs`, `osv.rs`, `bodhi.rs`)
 

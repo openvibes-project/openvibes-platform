@@ -186,7 +186,7 @@ install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-signer/LICENS
 install -D -m 0755 $S/target/release/openvibes-fetch %{buildroot}%{_bindir}/openvibes-fetch
 install -D -m 0644 $S/packaging/rpm/openvibes-fetch.socket %{buildroot}%{_unitdir}/openvibes-fetch.socket
 install -D -m 0644 $S/packaging/rpm/openvibes-fetch@.service %{buildroot}%{_unitdir}/openvibes-fetch@.service
-install -D -m 0644 $S/packaging/rpm/openvibes-fetch.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/90-openvibes-fetch.preset
+install -D -m 0644 $S/packaging/rpm/openvibes-fetch.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/80-openvibes-fetch.preset
 install -D -m 0644 $S/packaging/rpm/openvibes-fetch.sysusers %{buildroot}%{_sysusersdir}/openvibes-fetch.conf
 install -D -m 0640 $S/packaging/rpm/fetch.toml %{buildroot}%{_sysconfdir}/openvibes/fetch.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-fetch/LICENSE
@@ -418,7 +418,7 @@ fi
 %{_bindir}/openvibes-fetch
 %{_unitdir}/openvibes-fetch.socket
 %{_unitdir}/openvibes-fetch@.service
-%{_prefix}/lib/systemd/system-preset/90-openvibes-fetch.preset
+%{_prefix}/lib/systemd/system-preset/80-openvibes-fetch.preset
 %{_sysusersdir}/openvibes-fetch.conf
 %dir %{_sysconfdir}/openvibes
 %config(noreplace) %attr(0640, root, openvibes-fetch) %{_sysconfdir}/openvibes/fetch.toml

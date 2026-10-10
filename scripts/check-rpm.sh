@@ -198,9 +198,11 @@ for line in 'ListenStream=/run/openvibes-fetch/fetch.sock' 'SocketUser=root' 'So
 done
 for line in 'User=openvibes-fetch' 'StandardInput=socket' 'StandardOutput=socket' 'StandardError=journal' \
     'RuntimeMaxSec=30' 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' 'CapabilityBoundingSet=' \
-    'NoNewPrivileges=yes' 'ProtectSystem=strict' 'MemoryDenyWriteExecute=yes'; do
+    'NoNewPrivileges=yes' 'ProtectSystem=strict' 'MemoryDenyWriteExecute=yes' 'ProtectProc=invisible' \
+    'ProcSubset=pid' 'PrivateIPC=yes' 'RemoveIPC=yes' 'IPAddressDeny=link-local multicast'; do
     grep -qx "$line" /usr/lib/systemd/system/openvibes-fetch@.service || fail "fetch unit lacks $line"
 done
-out=$(/usr/bin/openvibes-fetch --config /nonexistent </dev/null 2>&1) || true
-[[ "$out" == *'"unavailable"'* || "$out" == *openvibes-fetch* ]] || fail "fetch without config: $out"
+systemctl is-enabled openvibes-fetch.socket >/dev/null || fail "openvibes-fetch.socket is not enabled after install"
+out=$(/usr/bin/openvibes-fetch --config /nonexistent </dev/null 2>&1) && fail "fetch started without config"
+[[ "$out" == *"openvibes-fetch:"* ]] || fail "fetch error: $out"
 echo "check-rpm: ok"
