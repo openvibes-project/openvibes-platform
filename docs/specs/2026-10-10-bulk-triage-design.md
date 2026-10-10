@@ -20,7 +20,7 @@ native controls; `Select`, `Segmented`, `Switch`, `SelectField` only.
 | State | Meaning | Note required |
 |---|---|---|
 | `open` | needs attention | — |
-| `mitigated` | handled (fixed, removed, compensating control) | in bulk; optional for one item |
+| `mitigated` | handled (fixed, removed, compensating control) | always |
 | `accepted_risk` | known and accepted until a date | always |
 | `false_positive` | not a real problem here | always |
 
@@ -39,10 +39,10 @@ native controls; `Select`, `Segmented`, `Switch`, `SelectField` only.
   needs an expiry date (default 90 days, at most 1 year).
 - **Assign** is separate from state: any item can be assigned or
   unassigned in one step, alone or in bulk.
-- A bulk **state change** (more than one item) **always requires a note**,
-  which goes on every item's history. Bulk assign and add-to-case need
-  none. One item: the note is optional for `mitigated` and `open`, as
-  today.
+- **Closing always requires a note** (`mitigated`, `accepted_risk`,
+  `false_positive`), one item or many, as the server already enforces for
+  one item; in bulk it goes on every item's history. Reopening, assigning
+  and adding to a case need none.
 
 ## 2. Vulnerability triage (new, #240)
 
@@ -68,21 +68,19 @@ native controls; `Select`, `Segmented`, `Switch`, `SelectField` only.
   row to open it, click its box to select it; shift-click selects a range;
   `x` toggles the row under the keyboard cursor.
 - **The header box** selects the visible page. Then a bar offers **"Select
-  all 1,284 matching this filter"**, which switches to filter selection:
-  the server applies the action to everything the current filter matches
-  (in the caller's scope), up to **10,000 items**. Above that, the bar says
-  so and asks to narrow the filter.
+  all 1,284 matching this filter"**: every row the list shows under the
+  current filter, up to **10,000 items** (above that, the bar asks to
+  narrow the filter). The lists filter in the browser, so the browser
+  sends exactly those rows' ids: what you see is what changes, and
+  nothing that arrives later is included (no second, server-side filter
+  that could disagree). Where a list holds only its first results
+  (vulnerabilities over the page bound), the bar says so.
 - **The bulk bar** appears at the bottom of the view while anything is
   selected: "**12 selected** · Mitigate · Accept risk… · False positive… ·
   Assign… · Add to case… · (alarms) Suppress… · Clear".
   - Each action opens one small dialog: the note (required), plus the
     expiry for Accept risk, the person for Assign, the case for Add to
     case. The confirm button names the count: "Mitigate 12 alarms".
-  - For a filter selection the dialog first shows the server's count
-    ("1,284 alarms match now") and a snapshot time. The change then
-    applies to the items matching the filter **that existed at that
-    time**: anything that arrives while the dialog is open is never
-    changed by surprise.
   - After the action: a toast with the result ("1,280 mitigated, 4
     skipped: already in another case"). History records every change,
     so a mistake is reopened from the list like any other item.
@@ -134,16 +132,15 @@ hosts) and a vulnerability (an advisory across its hosts):
 
 ## 6. API
 
-- `POST /api/v1/{alarms|compliance|vulnerabilities}/bulk/preview` with
-  `{filter}`: `{count, snapshot_at}` (count capped at 10,001).
 - `POST /api/v1/{alarms|compliance|vulnerabilities}/bulk` with
-  `{action, ids[] | {filter, snapshot_at}, note, accepted_until?,
-  assignee?, case_id? | new_case?}`. `action` is `state:<state>`,
+  `{action, items[], note, accepted_until?, assignee?, case_id? |
+  new_case?}`, at most 10,000 items: alarm ids; compliance `{rule_set_id,
+  rule_id, agent_id?}` (without `agent_id`: every host of that rule in
+  the caller's scope); vulnerabilities `{advisory_id, agent_id?}` (the
+  same). `action` is `state:<state>`,
   `assign`, `case` or (alarms) `suppress`. CSRF, idempotency key, the
   kind's triage permission (and `cases.write` for case actions), scope
   enforced in SQL. Returns `{changed, skipped: [{id, reason}]}`.
-- `filter` is the list endpoint's own query (the same parser), so "what
-  you see" and "what changes" are one definition.
 - Single-item triage endpoints stay; they accept the new state model.
 - One audit event per bulk action (`*.bulk_triage`, count, filter or ids),
   plus each item's history row.
