@@ -14,17 +14,19 @@ test.beforeEach(async ({ page }) => {
 test("alarms are selected with a shift-click range and closed only with a note", async ({ page }) => {
   await page.goto("/alarms");
   const rows = page.locator(".view tbody tr");
+  await expect(rows.first()).toBeVisible(); // count once the list has loaded
   const count = await rows.count();
   await rows.nth(0).getByRole("checkbox", { name: "Select row" }).check();
   await rows.nth(1).getByRole("checkbox", { name: "Select row" }).click({ modifiers: ["Shift"] });
   const bar = page.getByRole("region", { name: "Bulk actions" });
   await expect(bar).toContainText("2 selected");
-  await bar.getByRole("button", { name: "False positive…" }).click();
+  await bar.getByRole("button", { name: /^Set state/ }).click();
+  await page.getByRole("menuitem", { name: /^False positive/ }).click();
   const dialog = page.getByRole("dialog", { name: "False positive" });
   await dialog.getByRole("button", { name: "Mark as false positive: 2 alarms" }).click();
   await expect(dialog.getByRole("alert")).toContainText("note");
   expect((await new AxeBuilder({ page }).include(".bulk-dialog").analyze()).violations).toEqual([]);
-  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("lab noise");
+  await dialog.getByRole("textbox", { name: "Why (required)" }).fill("lab noise");
   await dialog.getByRole("button", { name: "Mark as false positive: 2 alarms" }).click();
   await expect(page.locator(".toast")).toContainText("2 changed");
   // Closed alarms leave the default list; the selection is gone.
@@ -37,7 +39,7 @@ test("selected alarms go into a new case and the row shows it", async ({ page })
   const free = page.locator(".view tbody tr").filter({ hasNot: page.locator(".badge--info") }).first();
   const message = (await free.locator(".truncate").first().innerText()).trim();
   await free.getByRole("checkbox", { name: "Select row" }).check();
-  await page.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: "Add to case…" }).click();
+  await page.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: "Add to case" }).click();
   const dialog = page.getByRole("dialog", { name: "Add to case" });
   await dialog.getByRole("combobox", { name: "Case" }).click();
   await page.getByRole("option", { name: "New case…" }).click();
@@ -50,8 +52,9 @@ test("selected alarms go into a new case and the row shows it", async ({ page })
 test("a finding's Hosts tab lists every host, never cut off, and selects them for the bulk bar", async ({ page }) => {
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
   const inspector = page.locator(".inspector");
-  await expect(inspector.getByRole("radio", { name: /^Hosts \(\d+\)$/ })).toBeChecked();
-  const total = Number((await inspector.getByRole("radio", { name: /^Hosts/ }).innerText()).replace(/\D/g, ""));
+  const hostsTab = inspector.getByRole("tab", { name: /^Hosts/ });
+  await expect(hostsTab).toHaveAttribute("aria-selected", "true");
+  const total = Number((await hostsTab.innerText()).replace(/\D/g, ""));
   const hosts = inspector.locator("tbody tr");
   await expect(hosts).toHaveCount(total);
   const last = hosts.last();
@@ -68,6 +71,6 @@ test("on a phone the bulk bar and the detail tabs fit the width", async ({ page 
   await expect(page.getByRole("region", { name: "Bulk actions" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
-  await expect(page.getByRole("radiogroup", { name: "Detail" })).toBeVisible();
+  await expect(page.getByRole("tablist")).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBeTruthy();
 });

@@ -763,7 +763,8 @@ risk, when the vulnerability is fixed.
 - `bulk_triage`: one state or assignee change on up to 10,000 alarms,
   findings or vulnerabilities (`expand_compliance` and
   `expand_vulnerabilities` turn a rule or advisory into its hosts in
-  scope; a close skips expanded hosts already closed); each item goes
+  scope; a close skips expanded hosts already closed, a reopen the ones
+  already open); each item goes
   through its single-item update, skipped items come back with a reason,
   one audit row per action.
 - `triage_history::events`: the newest 200 changes of an alarm, or of a

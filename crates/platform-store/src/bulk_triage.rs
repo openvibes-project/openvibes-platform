@@ -53,14 +53,21 @@ pub enum BulkRefusal {
     Fields,
 }
 
-/// A host reached through its rule or advisory (not named) that is already
-/// closed keeps its decision when the change closes: "mitigate this
-/// finding" must not turn its false positives into mitigated. Reopening
-/// and named hosts change as asked.
-fn spared(change: BulkChange<'_>, named: bool, current: &str) -> bool {
-    matches!(change, BulkChange::State { state, .. } if state != "open")
-        && !named
-        && current != "open"
+/// Why a host reached through its rule or advisory (not named) is left
+/// alone, if it is: an already closed one keeps its decision when the change
+/// closes ("mitigate this finding" must not turn its false positives into
+/// mitigated), and reopening skips the ones already open (no empty history
+/// rows). Named hosts change as asked.
+fn spared(change: BulkChange<'_>, named: bool, current: &str) -> Option<&'static str> {
+    let BulkChange::State { state, .. } = change else {
+        return None;
+    };
+    match (named, state == "open", current == "open") {
+        (true, _, _) => None,
+        (false, false, false) => Some("already closed"),
+        (false, true, true) => Some("already open"),
+        _ => None,
+    }
 }
 
 fn check(change: BulkChange<'_>, count: usize, now: DateTime<Utc>) -> Result<(), BulkRefusal> {
@@ -197,8 +204,8 @@ pub async fn compliance(
         let named = items
             .iter()
             .any(|(s, r, a)| *s == set && *r == rule && a.as_deref() == Some(agent.as_str()));
-        if spared(change, named, &current.state) {
-            result.skipped.push((id, "already closed"));
+        if let Some(why) = spared(change, named, &current.state) {
+            result.skipped.push((id, why));
             continue;
         }
         let (state, assignee, note, until) = match change {
@@ -287,10 +294,8 @@ pub async fn vulnerabilities(
         let named = items
             .iter()
             .any(|(adv, a)| adv == advisory && a.as_deref() == Some(agent.as_str()));
-        if spared(change, named, &now_state.state) {
-            result
-                .skipped
-                .push((format!("{agent}/{advisory}"), "already closed"));
+        if let Some(why) = spared(change, named, &now_state.state) {
+            result.skipped.push((format!("{agent}/{advisory}"), why));
             continue;
         }
         let (state, assignee, note, until) = match change {

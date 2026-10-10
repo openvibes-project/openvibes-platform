@@ -26,7 +26,8 @@ function place(rect: DOMRect): Where {
     : { bottom: window.innerHeight - rect.top + 6, left, width, maxHeight: Math.max(160, rect.top - 14) };
 }
 
-export function AddToCase({ kind, id, label, compact }: { kind: CaseKind; id: string; label: string; compact?: boolean }) {
+/** `inCase`: the number of the open case already holding it; the button names it. */
+export function AddToCase({ kind, id, label, compact, inCase }: { kind: CaseKind; id: string; label: string; compact?: boolean; inCase?: number | undefined }) {
   const { can } = useSession();
   const [where, setWhere] = useState<Where | null>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -37,7 +38,7 @@ export function AddToCase({ kind, id, label, compact }: { kind: CaseKind; id: st
       <button ref={button} type="button" className={compact ? "button button--small button--ghost button--icon" : "button"} aria-haspopup="dialog" aria-expanded={where !== null}
         aria-label={compact ? `Add ${label} to a case` : undefined} title={compact ? "Add to case" : undefined}
         onClick={(event) => setWhere(where === null ? place(event.currentTarget.getBoundingClientRect()) : null)}>
-        <Icon name="cases" size={14} />{compact ? <Icon name="plus" size={12} /> : " Add to case"}
+        <Icon name="cases" size={compact ? 14 : 15} />{compact ? <Icon name="plus" size={12} /> : inCase !== undefined ? caseNumber(inCase) : "Add to case"}
       </button>
       {where !== null && createPortal(
         <Menu kind={kind} id={id} label={label} where={where} anchor={button} onClose={close} />, document.body)}

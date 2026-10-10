@@ -1,7 +1,9 @@
 // Pure helpers behind Select (ui/Select.tsx): grouping, filtering, stepping, placement.
+import type { ReactNode } from "react";
+
 import { matches } from "./table";
 
-export type SelectOption = { value: string; label: string; disabled?: boolean; hint?: string | undefined };
+export type SelectOption = { value: string; label: string; disabled?: boolean; hint?: string | undefined; icon?: ReactNode };
 export type SelectGroup = { group: string; options: SelectOption[] };
 export type Section = { group?: string; options: SelectOption[] };
 

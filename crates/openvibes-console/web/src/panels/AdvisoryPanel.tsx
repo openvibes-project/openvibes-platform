@@ -81,11 +81,6 @@ export function AdvisoryPanel({ id }: { id: string }) {
         </ul>
       </Section>
     )}
-    {triageable && open.length > 0 && (
-      <BulkBar inline kind="vulnerabilities" noun={open.length === 1 ? "open host" : "open hosts"} count={open.length} onClear={() => undefined}
-        items={() => open.map((host) => ({ advisory_id: id, agent_id: host.agent_id }))}
-        newCase={() => ({ title, severity: first?.severity })} />
-    )}
   </>;
 
   const evidence = (
@@ -135,10 +130,18 @@ export function AdvisoryPanel({ id }: { id: string }) {
           <span className="badge badge--plain">{all.length} hosts</span>
         </>}
         askAbout={{ ref: { kind: "advisory", id }, label: title }}
-        actions={first?.url && <a className="button button--small" href={first.url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={14} /> Vendor advisory</a>}
+        actions={<>
+          {triageable && open.length > 0 && (
+            <BulkBar inline kind="vulnerabilities" noun={open.length === 1 ? "open host" : "open hosts"} count={open.length} onClear={() => undefined}
+              stateLabel={`Set state: ${open.length.toLocaleString()} open`}
+              items={() => open.map((host) => ({ advisory_id: id, agent_id: host.agent_id }))}
+              newCase={() => ({ title, severity: first?.severity })} />
+          )}
+          {first?.url && <a className="button button--small" href={first.url} target="_blank" rel="noreferrer noopener"><Icon name="external" size={14} /> Vendor advisory</a>}
+        </>}
       />
       <TriageDetail summary={summary} tabs={[
-        { key: "hosts", label: `Hosts (${all.length.toLocaleString()})`, body: <>
+        { key: "hosts", label: "Hosts", count: all.length, body: <>
           {detail.data.hosts.more_available && <p className="view-note">Showing the first {all.length.toLocaleString()} hosts.</p>}
           <HostsTab key={id} kind="vulnerabilities" hosts={hosts} cases={cases} title={title} severity={first?.severity ?? "low"}
             item={(agentId) => ({ advisory_id: id, agent_id: agentId })} />

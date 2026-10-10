@@ -23,12 +23,12 @@ export function PanelHeader({ icon, kind, title, subtitle, badges, actions, askA
       {badges && <div className="row row--wrap panel-header__badges">{badges}</div>}
       {(actions || (askAbout && can("assistant.use"))) && (
         <div className="row row--wrap panel-header__actions">
+          {actions}
           {askAbout && can("assistant.use") && (
             <button type="button" className="button button--small" onClick={() => assistant.askAbout(askAbout.ref, askAbout.label)}>
               <Icon name="sparkles" size={14} /> Ask about this
             </button>
           )}
-          {actions}
         </div>
       )}
     </header>
@@ -47,8 +47,14 @@ export function Section({ title, action, children, flush }: { title: string; act
   );
 }
 
-export function Tabs<T extends string>({ tabs, children }: { tabs: readonly { id: T; label: string; count?: number | undefined }[]; children: (active: T) => ReactNode }) {
-  const [active, setActive] = useState<T>(tabs[0]?.id as T);
+/** `active` and `onActive` let the parent switch tabs itself (a host's "View evidence"). */
+export function Tabs<T extends string>({ tabs, children, active: shown, onActive }: {
+  tabs: readonly { id: T; label: string; count?: number | undefined }[]; children: (active: T) => ReactNode;
+  active?: T; onActive?: (tab: T) => void;
+}) {
+  const [own, setOwn] = useState<T>(tabs[0]?.id as T);
+  const active = shown ?? own;
+  const setActive = onActive ?? setOwn;
   return (
     <>
       <div className="tabs" role="tablist">

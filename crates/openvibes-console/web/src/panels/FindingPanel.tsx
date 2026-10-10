@@ -86,11 +86,6 @@ export function FindingPanel({ id }: { id: string }) {
     <TriageBar counts={group.triage_counts} />
     <p className="subtle">{open.length.toLocaleString()} open of {group.endpoint_count.toLocaleString()} hosts · first seen {date(group.first_observed_at)} · last seen <Ago value={group.last_observed_at} /></p>
     {history.data && history.data.length > 0 && history.data.length < 3000 && <Section title="Hosts reporting it, last 14 days"><Trend counts={trend} label="hosts per day" /></Section>}
-    {open.length > 0 && (
-      <BulkBar inline kind="compliance" noun={open.length === 1 ? "open host" : "open hosts"} count={open.length} onClear={() => undefined}
-        items={() => open.map((item) => ({ rule_set_id: ruleSetId, rule_id: ruleId, agent_id: item.agent_id }))}
-        newCase={() => ({ title: group.latest_message, severity: highest([group.severity]) })} />
-    )}
   </>;
 
   const evidence = (
@@ -115,9 +110,15 @@ export function FindingPanel({ id }: { id: string }) {
         subtitle={<span className="mono subtle">{ruleId} · rule version {group.rule_versions.join(", ")}</span>}
         badges={<><SeverityBadge severity={group.severity} /><span className="badge badge--plain">{group.endpoint_count} hosts</span></>}
         askAbout={{ ref: { kind: "finding", id }, label: `${ruleId} ${group.latest_message}` }}
+        actions={open.length > 0 && (
+          <BulkBar inline kind="compliance" noun={open.length === 1 ? "open host" : "open hosts"} count={open.length} onClear={() => undefined}
+            stateLabel={`Set state: ${open.length.toLocaleString()} open`}
+            items={() => open.map((item) => ({ rule_set_id: ruleSetId, rule_id: ruleId, agent_id: item.agent_id }))}
+            newCase={() => ({ title: group.latest_message, severity: highest([group.severity]) })} />
+        )}
       />
       <TriageDetail summary={summary} tab={tab} onTab={setTab} tabs={[
-        { key: "hosts", label: `Hosts (${all.length.toLocaleString()})`, body: endpoints.loading && !endpoints.data ? <Loading rows={4} />
+        { key: "hosts", label: "Hosts", count: all.length, body: endpoints.loading && !endpoints.data ? <Loading rows={4} />
           : <HostsTab key={id} kind="compliance" hosts={hosts} cases={cases} title={group.latest_message} severity={group.severity}
               item={(agentId) => ({ rule_set_id: ruleSetId, rule_id: ruleId, agent_id: agentId })} /> },
         { key: "evidence", label: "Evidence", body: evidence },

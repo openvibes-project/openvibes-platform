@@ -152,15 +152,16 @@ test("open hosts of a finding are mitigated in bulk from the Hosts tab, with a n
   const inspector = page.locator(".inspector");
   await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open \d/ }).click();
   await inspector.getByRole("checkbox", { name: "Select the rows on screen" }).check();
-  await inspector.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: "Mitigate…" }).click();
+  await inspector.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: /^Set state/ }).click();
+  await page.getByRole("menuitem", { name: /^Mitigate/ }).click();
   const dialog = page.getByRole("dialog", { name: "Mitigate" });
   const confirm = dialog.getByRole("button", { name: /^Mitigate \d+ hosts?$/ });
   await confirm.click();
   await expect(dialog.getByRole("alert")).toContainText("note");
-  await dialog.getByRole("textbox", { name: "Note (required)" }).fill(`e2e ${info.project.name}`);
+  await dialog.getByRole("textbox", { name: "Why (required)" }).fill(`e2e ${info.project.name}`);
   await confirm.click();
   await expect(page.locator(".toast")).toContainText("changed");
-  await inspector.getByRole("radio", { name: "History" }).click();
+  await inspector.getByRole("tab", { name: /^History/ }).click();
   await expect(inspector.locator(".detail-history")).toContainText(`e2e ${info.project.name}`);
 });
 
@@ -174,21 +175,21 @@ test("one host's risk is accepted until a date, then assigned", async ({ page })
   const name = (await host.locator("a").first().innerText()).trim();
   await host.getByRole("checkbox", { name: "Select row" }).check();
   const bar = inspector.getByRole("region", { name: "Bulk actions" });
-  await bar.getByRole("button", { name: "Accept risk…" }).click();
+  await bar.getByRole("button", { name: /^Set state/ }).click();
+  await page.getByRole("menuitem", { name: /^Accept risk/ }).click();
   const until = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
-  let dialog = page.getByRole("dialog", { name: "Accept risk" });
+  const dialog = page.getByRole("dialog", { name: "Accept risk" });
   await dialog.getByLabel("Accepted until").fill(until);
-  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("vendor fix due");
+  await dialog.getByRole("textbox", { name: "Why (required)" }).fill("vendor fix due");
   await dialog.getByRole("button", { name: "Accept risk for 1 host" }).click();
   await expect(page.locator(".toast").last()).toContainText("1 changed");
   const row = inspector.locator("tbody tr").filter({ hasText: name });
   await expect(row).toContainText("Accepted risk");
   await row.getByRole("checkbox", { name: "Select row" }).check();
-  await bar.getByRole("button", { name: "Assign…" }).click();
-  dialog = page.getByRole("dialog", { name: "Assign" });
-  await dialog.getByRole("combobox", { name: "Assignee" }).click();
+  // Picking a person applies at once (#253): no dialog.
+  await bar.getByRole("combobox", { name: /^Assign/ }).click();
+  await page.getByRole("combobox", { name: /^Filter Assign/ }).fill("sam");
   await page.getByRole("option", { name: /sam/i }).first().click();
-  await dialog.getByRole("button", { name: "Assign 1 host" }).click();
   await expect(page.locator(".toast").last()).toContainText("1 changed");
   await expect(inspector.locator("tbody tr").filter({ hasText: name })).toContainText(/sam/i);
 });

@@ -138,9 +138,10 @@ test("a finding mitigated on every open host leaves the default Findings list (b
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.docker_api.exposed");
   const inspector = page.locator(".inspector");
   // The summary acts on every open host in one step; a close needs a note.
-  await inspector.getByRole("region", { name: "Triage actions" }).getByRole("button", { name: "Mitigate…" }).click();
+  await inspector.locator(".panel-header__actions").getByRole("button", { name: /^Set state/ }).click();
+  await page.getByRole("menuitem", { name: /^Mitigate/ }).click();
   const dialog = page.getByRole("dialog", { name: "Mitigate" });
-  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("firewalled at the edge");
+  await dialog.getByRole("textbox", { name: "Why (required)" }).fill("firewalled at the edge");
   await dialog.getByRole("button", { name: /^Mitigate \d+ open hosts?$/ }).click();
   await expect(page.locator(".toast")).toContainText("changed");
   await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);

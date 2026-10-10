@@ -37,6 +37,10 @@ describe("bulk actions", () => {
     expect(confirmLabel(form({ action: "assign" }), 2, "findings")).toBe("Unassign 2 findings");
   });
 
+  it("counts items already in that state as unchanged, not skipped", () => {
+    expect(resultText({ changed: 2, skipped: [{ id: "a", reason: "already closed" }] })).toBe("2 changed, 1 unchanged");
+  });
+
   it("says what changed and why the rest was skipped", () => {
     expect(resultText({ changed: 3, skipped: [] })).toBe("3 changed");
     expect(resultText({ changed: 1, skipped: [{ id: "a", reason: "in another open case" }, { id: "b", reason: "in another open case" }, { id: "c", reason: "not found or out of scope" }] }))

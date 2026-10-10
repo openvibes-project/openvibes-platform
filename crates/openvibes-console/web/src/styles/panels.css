@@ -372,7 +372,6 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .bulk-bar--bottom { top: auto; bottom: 12px; margin: 8px 12px; box-shadow: var(--shadow-3); }
 /* The detail view's tabs (triage v2): a segmented control under the
    summary; the tab's table scrolls with the panel, never cut off (#239). */
-.detail-tabs { padding: 8px 16px; border-top: 1px solid var(--line); }
 .detail-tab__filters { padding: 8px 16px; }
 .detail-history { padding: 0 8px 16px; }
 /* A fieldset of filter chips: no browser frame. */
@@ -381,3 +380,23 @@ fieldset.detail-tab__filters { border: 0; margin: 0; min-width: 0; }
    palette's look and the same backdrop. */
 dialog.bulk-modal { padding: 0; margin: 12vh auto auto; color: var(--text); }
 dialog.bulk-modal::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }
+
+/* Triage actions (#253): Set state (a menu button), the assignee (a
+   picker drawn as a button), Add to case; the same in the bulk bar. */
+.menu-button svg { color: var(--text-2); }
+.menu-button svg:last-child { color: var(--text-3); margin-left: 2px; }
+.button.sel__button { width: auto; justify-content: flex-start; }
+.button.sel__button .sel__value { max-width: 16ch; }
+.panel-header__actions .push, .bulk-bar .push { margin-left: auto; }
+.sel__label { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
+.initials { width: 20px; height: 20px; border-radius: 50%; display: inline-grid; place-items: center; flex: none; font-size: 9.5px; font-weight: 700; background: var(--accent-soft); color: var(--accent-strong); }
+.initials--none { background: var(--surface-3); color: var(--text-3); }
+.menu-option { display: grid; grid-template-columns: 16px 1fr; align-items: start; justify-content: start; gap: 8px; }
+.menu-option__dot { width: 8px; height: 8px; border-radius: 50%; margin: 6px 0 0 4px; background: var(--text-3); }
+.menu-option__text { display: grid; gap: 1px; }
+.menu-option__text .subtle { font-size: 12px; }
+/* A closed item's decision: the note, who and when, and Reopen. */
+.decision { display: grid; gap: 8px; padding: 12px; border-radius: var(--r-2); background: var(--surface-2); border: 1px solid var(--line); font-size: 13px; }
+.decision__foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+/* A tab's content starts clear of the tab strip. */
+.detail-tab > .panel-body:first-child { padding-top: 14px; }

@@ -74,6 +74,8 @@ function AdvisoryBulkBar({ rows, selected, onClear, partial }: Readonly<{ rows: 
   return (
     <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory" : "advisories"} count={selected.size} partial={partial} onClear={onClear}
       items={() => chosen().map((r) => ({ advisory_id: r.id }))}
+      closed={chosen().filter((r) => r.hosts > r.open).length}
+      reopenItems={() => chosen().filter((r) => r.hosts > r.open).map((r) => ({ advisory_id: r.id }))}
       newCase={() => { const c = chosen(); return { title: `${c.length} advisories: ${c[0]?.title ?? ""}`, severity: highest(c.map((r) => r.severity)) }; }} />
   );
 }
