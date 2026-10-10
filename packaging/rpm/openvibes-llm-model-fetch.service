@@ -1,0 +1,39 @@
+[Unit]
+Description=OpenVIBES assistant model download (a newly pinned model after an upgrade)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+
+[Service]
+Type=oneshot
+# Started and waited for by openvibes-llm-tune.service when a host on an
+# earlier pinned model should switch (#264); not started otherwise (no
+# [Install]). `assistant model fetch` downloads model.pin's file over HTTPS,
+# checks its SHA-256 and only then selects it in model.conf; the model in
+# use keeps serving until then. Not root: the models directory is the
+# openvibes-admin group's.
+User=openvibes-admin
+Group=openvibes-admin
+ExecStart=/usr/bin/openvibes-admin assistant model fetch
+# 2.7 GB on a slow line.
+TimeoutStartSec=2h
+UMask=0022
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/openvibes-llm
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+CapabilityBoundingSet=

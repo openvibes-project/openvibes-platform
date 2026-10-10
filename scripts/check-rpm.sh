@@ -18,16 +18,21 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
     done
     ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
     meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)
-    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$(printf '%s\n' \
-        /var/lib/openvibes-llm/model.conf "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE" | sort)" ]] ||
-        fail "openvibes-llm-model lists other files than model.conf and the model path"
+    # The pinned path and every earlier one (#264: an upgrade never deletes
+    # the model in use), all %ghost, and model.conf.
+    want=$( { echo /var/lib/openvibes-llm/model.conf; echo "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
+        grep -v '^#' packaging/llm/past-models | sed '/^$/d; s|^|/var/lib/openvibes-llm/models/|'; } | sort)
+    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$want" ]] ||
+        fail "openvibes-llm-model lists other files than model.conf and the model paths"
     rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part1 <' || fail "no Obsoletes part1"
     rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part2 <' || fail "no Obsoletes part2"
     rpm -qp --requires "$meta" | grep -q '^openvibes-llm = ' || fail "bridge does not require openvibes-llm"
     rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
     rpm -qp --recommends "$rpms"/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = ' || fail "openvibes-llm does not recommend the bridge"
-    rpm2cpio "$meta" | cpio -i --quiet --to-stdout ./var/lib/openvibes-llm/model.conf |
-        grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256" || fail "model.conf lacks the pinned SHA-256"
+    # model.conf is written by %post on a fresh install, never by an upgrade.
+    rpm -qp --qf '[%{FILEFLAGS:fflags} %{FILENAMES}\n]' "$meta" | grep -qx 'cgn /var/lib/openvibes-llm/model.conf' ||
+        fail "model.conf is not a %ghost %config(noreplace) file"
+    rpm -qp --scripts "$meta" | grep -q 'OPENVIBES_LLM_MODEL_SHA256=%s' || fail "%post does not write model.conf"
     echo "check-rpm (built): ok"
     exit 0
 fi

@@ -414,7 +414,7 @@ impl<H: Host> App<H> {
             );
             return;
         }
-        // The model is a 2.5 GB download: asked first, unless it is there.
+        // The model is a 2.7 GB download: asked first, unless it is there.
         if self.setup.components.contains(&Component::Assistant) && !self.setup.model_present {
             self.setup.phase = Phase::Model;
             return;

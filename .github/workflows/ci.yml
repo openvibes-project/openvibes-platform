@@ -575,7 +575,7 @@ jobs:
     name: Setup life cycle under systemd (install, repair, update, uninstall)
     needs: fedora
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -590,3 +590,14 @@ jobs:
         run: |
           cp dist/openvibes-agent-*.rpm dist/old/
           bash scripts/setup-lifecycle-e2e.sh dist/old dist
+      - name: Model switch on upgrade (#264)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # v0.2.8 pinned Qwen3-4B (in packaging/llm/past-models): upgrading
+          # from it must keep the model in use until the new one is fetched.
+          mkdir -p dist/model-old dist/model-new
+          gh release download v0.2.8 -R "$GITHUB_REPOSITORY" -D dist/model-old \
+            -p 'openvibes-admin-*.rpm' -p 'openvibes-llm-0*.rpm' -p 'openvibes-llm-model-*.rpm'
+          cp dist/openvibes-admin-[0-9]*.rpm dist/openvibes-llm-[0-9]*.rpm dist/llm-model/openvibes-llm-model-*.rpm dist/model-new/
+          bash scripts/model-switch-e2e.sh dist/model-old dist/model-new
