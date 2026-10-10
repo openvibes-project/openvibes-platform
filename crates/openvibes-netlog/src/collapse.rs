@@ -1,7 +1,8 @@
 //! Same device + signature + source within `window` of the last event is
 //! one alarm (sliding: a scan that keeps going stays one alarm, quiet by
 //! default). The map is also the retry buffer: a dirty entry (not yet
-//! stored) never expires, and a full map drops new keys.
+//! stored) never expires; a full map evicts its oldest stored entry, and
+//! drops new keys only when every entry is still unstored.
 
 use std::{
     collections::{HashMap, HashSet},
@@ -61,7 +62,23 @@ impl Collapser {
             return true;
         }
         if self.open.len() >= self.max_keys {
-            return false;
+            // Full: the oldest stored entry makes room, so a flood of
+            // spoofed sources cannot hide a new alarm while the database is
+            // up (a repeat of the evicted one starts a new alarm). Unstored
+            // entries are never evicted: with the database down, new keys
+            // are dropped.
+            let oldest = self
+                .open
+                .iter()
+                .filter(|(_, e)| !e.dirty)
+                .min_by_key(|(_, e)| e.alarm.last_seen)
+                .map(|(k, _)| k.clone());
+            match oldest {
+                Some(oldest) => {
+                    self.open.remove(&oldest);
+                }
+                None => return false,
+            }
         }
         let alarm = DeviceAlarm {
             device_id,

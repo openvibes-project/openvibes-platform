@@ -164,6 +164,27 @@ mod tests {
     }
 
     #[test]
+    fn a_spoofed_flood_of_sources_cannot_crowd_out_a_real_alarm() {
+        // Map full of alarms already stored (database up): the oldest
+        // stored one makes room, so a new signature is still raised.
+        let mut w = World::new(3);
+        let now = Utc::now();
+        for n in 0..3 {
+            let line = REAL.replace("src=192.168.1.10", &format!("src=10.0.0.{n}"));
+            w.send(&line, "192.168.1.1", now + Duration::seconds(n));
+        }
+        let batch = w.collapser.dirty();
+        w.collapser.stored(&batch);
+        let real = REAL.replace("SignatureId=2008983", "SignatureId=2402000");
+        w.send(&real, "192.168.1.1", now + Duration::seconds(5));
+        assert_eq!(w.host.collapse_full, 0);
+        let dirty = w.collapser.dirty();
+        assert_eq!(dirty.len(), 1);
+        assert_eq!(dirty[0].rule_id, "ips.2402000");
+        assert_eq!(w.collapser.len(), 3);
+    }
+
+    #[test]
     fn class_keys_per_flush_are_capped() {
         let mut w = World::new(100);
         for n in 0..200 {
