@@ -193,3 +193,6 @@ Pushes to `main`, the nightly run, manual runs and the `full-ci` label run
 everything. The required check "Lint, audit, and tests" accepts the skips
 these rules make (and runs the old-account-name check itself when Rust is
 skipped). Skipped required checks count as passing on GitHub.
+
+On a pull request the rules are taken from the **base branch**, so a PR
+cannot change its own gating; a change to them takes effect once merged.

@@ -58,9 +58,18 @@ jobs:
         shell: bash
         run: |
           bash scripts/test-ci-tiers.sh
+          # The rules come from the base branch, never from the pull request:
+          # a PR could otherwise edit them to skip its own required checks
+          # (security review). A base without them runs everything.
           if [ "$EVENT" = pull_request ]; then
-            git diff --name-only "$BASE_SHA...$HEAD_SHA"
-          fi | bash scripts/ci-tiers.sh | tee -a "$GITHUB_OUTPUT"
+            if git show "$BASE_SHA:scripts/ci-tiers.sh" > "$RUNNER_TEMP/ci-tiers.sh" 2>/dev/null; then
+              git diff --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
+            else
+              printf 'heavy=true\nkit=true\nlight=false\ndocs=false\n'
+            fi
+          else
+            bash scripts/ci-tiers.sh < /dev/null
+          fi | tee -a "$GITHUB_OUTPUT"
 
   rust:
     name: Rust lint and tests
