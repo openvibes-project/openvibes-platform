@@ -375,3 +375,9 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .detail-tabs { padding: 8px 16px; border-top: 1px solid var(--line); }
 .detail-tab__filters { padding: 8px 16px; }
 .detail-history { padding: 0 8px 16px; }
+/* A fieldset of filter chips: no browser frame. */
+fieldset.detail-tab__filters { border: 0; margin: 0; min-width: 0; }
+/* The bulk dialog is a native <dialog> (focus trap, Escape); it keeps the
+   palette's look and the same backdrop. */
+dialog.bulk-modal { padding: 0; margin: 12vh auto auto; color: var(--text); }
+dialog.bulk-modal::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }

@@ -25,7 +25,7 @@ export function useHostCaseBadges(kind: Exclude<Kind, "alarm">, subject: string)
   return useMemo(() => caseBadges((active.data?.items ?? []).filter((i) => afterAgent(i.ref) === subject), (ref) => ref.slice(0, ref.indexOf("/"))), [active.data, subject]);
 }
 
-export function CaseBadge({ numbers }: { numbers: number[] | undefined }) {
+export function CaseBadge({ numbers }: Readonly<{ numbers: number[] | undefined }>) {
   const [first, ...rest] = numbers ?? [];
   if (first === undefined) return null;
   return (

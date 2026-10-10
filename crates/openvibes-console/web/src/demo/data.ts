@@ -159,8 +159,8 @@ export function buildDemoData(now = Date.now()) {
       triage.set(`${agent.id}|${rule.ruleSetId}|${rule.ruleId}`, {
         state, version: 1, rule_version: 3,
         assigned_to: drawn === "assigned" ? "analyst" : null,
-        note: state === "accepted_risk" ? "Isolated lab network; revisit next quarter."
-          : state === "open" ? null : "Handled outside the console.",
+        note: ({ accepted_risk: "Isolated lab network; revisit next quarter.", open: null } as Record<string, string | null>)[state]
+          ?? "Handled outside the console.",
         accepted_until: state === "accepted_risk" ? iso(now + 60 * DAY) : null,
       });
     }

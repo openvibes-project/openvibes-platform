@@ -19,7 +19,7 @@ export type Tab = { key: string; label: string; body: ReactNode };
 
 /** The summary (with its actions) stays; one tab shows below it. `tab`
  * and `onTab` let the panel switch tabs itself (a host's "Evidence"). */
-export function TriageDetail({ summary, tabs, tab: shown, onTab }: { summary: ReactNode; tabs: Tab[]; tab?: string; onTab?: (tab: string) => void }) {
+export function TriageDetail({ summary, tabs, tab: shown, onTab }: Readonly<{ summary: ReactNode; tabs: Tab[]; tab?: string; onTab?: (tab: string) => void }>) {
   const [own, setOwn] = useState(tabs[0]?.key ?? "");
   const tab = shown ?? own;
   const setTab = onTab ?? setOwn;
@@ -42,17 +42,17 @@ export type HostRow = {
 
 /** The hosts, filterable by state, selectable, with the bulk bar for the
  * selected ones; it pages ("Show more") and is never cut off (#239). */
-export function HostsTab({ kind, hosts, item, cases, title, severity }: {
+export function HostsTab({ kind, hosts, item, cases, title, severity }: Readonly<{
   kind: BulkKind; hosts: HostRow[]; item: (agentId: string) => BulkItem; cases: Map<string, number[]>;
   title: string; severity: string;
-}) {
+}>) {
   const [filter, setFilter] = useState("all");
   const rows = useMemo(() => hosts.filter((h) => filter === "all" || h.triage_state === filter), [hosts, filter]);
   const [selected, setSelected] = useSelection(filter);
   const counts = (state: string) => hosts.filter((h) => h.triage_state === state).length;
   return (
     <>
-      <div className="row row--wrap detail-tab__filters" role="group" aria-label="Show hosts by triage state">
+      <fieldset className="row row--wrap detail-tab__filters" aria-label="Show hosts by triage state">
         {(["all", ...triageStates] as const).map((value) => {
           const n = value === "all" ? hosts.length : counts(value);
           if (value !== "all" && n === 0) return null;
@@ -62,7 +62,7 @@ export function HostsTab({ kind, hosts, item, cases, title, severity }: {
             </button>
           );
         })}
-      </div>
+      </fieldset>
       {rows.length === 0 ? <Empty title="No hosts in this state" /> : (
         <DataTable compact label="Hosts" rows={rows} rowKey={(h) => h.agent_id} selection={{ selected, onChange: setSelected }}
           onOpen={() => undefined} defaultSort={{ key: "state", direction: "asc" }}
@@ -84,7 +84,7 @@ export function HostsTab({ kind, hosts, item, cases, title, severity }: {
 type Event = { agent_id: string; hostname?: string | null; from_state?: string | null; to_state: string; note?: string | null; changed_at: string; changed_by: string };
 
 /** The triage changes, newest first: who, when, from and to, the note. */
-export function HistoryTab({ query, showHost }: { query: string; showHost: boolean }) {
+export function HistoryTab({ query, showHost }: Readonly<{ query: string; showHost: boolean }>) {
   const history = useResource<{ items: Event[] }>(`/api/v1/triage-history?${query}`);
   if (history.error) return <div className="panel-body"><ErrorBox error={history.error} /></div>;
   if (!history.data) return <Loading rows={3} />;

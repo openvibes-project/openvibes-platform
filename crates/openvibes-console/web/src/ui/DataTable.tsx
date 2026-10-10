@@ -96,7 +96,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
   return (
     <div className="table-wrap" ref={wrap}>
       {selection && pageSelected && sorted.length > onScreen.length && (
-        <div className="select-all-bar" role="status">
+        <output className="select-all-bar">
           {everySelected
             ? <>All {Math.min(sorted.length, MAX_SELECTION).toLocaleString()} matching this filter are selected{sorted.length > MAX_SELECTION && ` (the first ${MAX_SELECTION.toLocaleString()}; narrow the filter for the rest)`}. </>
             : <>{onScreen.length.toLocaleString()} on screen selected. </>}
@@ -104,7 +104,7 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
             ? <button type="button" className="link-button" onClick={() => selection.onChange(new Set())}>Clear</button>
             : <button type="button" className="link-button" onClick={() => selection.onChange(selectAll(sorted.map(rowKey)))}>
                 Select all {Math.min(sorted.length, MAX_SELECTION).toLocaleString()} matching this filter</button>}
-        </div>
+        </output>
       )}
       <table className={compact ? "table table--compact" : "table"} aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
         <thead>

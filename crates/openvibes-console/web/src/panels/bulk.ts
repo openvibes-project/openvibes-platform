@@ -27,20 +27,28 @@ export const NEW_CASE = "__new";
 
 export type BulkResult = { changed: number; skipped: { id: string; reason: string }[]; case_id?: string | null; case_number?: number | null };
 
+function stateProblem(form: BulkForm, note: string): string | null {
+  if (!form.state) return "Choose a state";
+  if (noteRequired.has(form.state) && !note) return "Closing needs a note: say why";
+  if (form.state === "accepted_risk" && !form.acceptedUntil) return "Choose until when the risk is accepted";
+  return null;
+}
+
+function caseProblem(form: BulkForm): string | null {
+  if (!form.caseId) return "Choose a case";
+  if (form.caseId === NEW_CASE && !form.newCaseTitle.trim()) return "Give the new case a title";
+  return null;
+}
+
 /** Why the server would refuse this form, or null. */
 export function bulkProblem(form: BulkForm): string | null {
   const note = form.note.trim();
-  if (form.action === "state") {
-    if (!form.state) return "Choose a state";
-    if (noteRequired.has(form.state) && !note) return "Closing needs a note: say why";
-    if (form.state === "accepted_risk" && !form.acceptedUntil) return "Choose until when the risk is accepted";
+  switch (form.action) {
+    case "state": return stateProblem(form, note);
+    case "suppress": return note ? null : "Quieting needs a note: say why";
+    case "case": return caseProblem(form);
+    case "assign": return null;
   }
-  if (form.action === "suppress" && !note) return "Quieting needs a note: say why";
-  if (form.action === "case") {
-    if (!form.caseId) return "Choose a case";
-    if (form.caseId === NEW_CASE && !form.newCaseTitle.trim()) return "Give the new case a title";
-  }
-  return null;
 }
 
 export function bulkBody(form: BulkForm, items: BulkItem[]) {

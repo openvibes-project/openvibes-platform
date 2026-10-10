@@ -31,5 +31,5 @@ export function useSelection(reset: string): [Set<string>, (next: Set<string>) =
 
 /** The list's filter, without its sort: a selection survives re-sorting. */
 export function filterKey(params: URLSearchParams): string {
-  return [...params].filter(([key]) => key !== "sort" && key !== "dir").map(([k, v]) => `${k}=${v}`).sort().join("&");
+  return [...params].filter(([key]) => key !== "sort" && key !== "dir").map(([k, v]) => `${k}=${v}`).sort((a, b) => a.localeCompare(b)).join("&");
 }

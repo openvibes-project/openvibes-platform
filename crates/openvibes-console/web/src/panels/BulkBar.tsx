@@ -3,7 +3,7 @@
 // (the note, the expiry, the person, or the case) whose confirm button
 // names the count; the result says what changed and why anything was
 // skipped (spec 2026-10-10-bulk-triage §3, §4).
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { CaseSummary, CaseUser } from "../api/types";
@@ -33,11 +33,11 @@ const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISO
  * list holds only its first results. `inline`: the detail view's action
  * row, acting on every open host, with no count or Clear; `without`
  * leaves out actions the panel offers elsewhere. */
-export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, inline, without = [] }: {
+export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, inline, without = [] }: Readonly<{
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined }; partial?: boolean; onClear: () => void; inline?: boolean;
   without?: BulkAction[];
-}) {
+}>) {
   const { can } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
   if (count === 0 || !can(triagePermission[kind])) return null;
@@ -46,7 +46,7 @@ export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, i
     ...(kind === "alarms" && can("alarms.suppress", true) ? [{ action: "suppress" as const, label: "Suppress…" }] : [])];
   const choices = offered.filter((c) => !without.includes(c.action));
   return (
-    <div className={inline ? "row row--wrap" : "bulk-bar bulk-bar--bottom"} role="region" aria-label={inline ? "Triage actions" : "Bulk actions"}>
+    <section className={inline ? "row row--wrap" : "bulk-bar bulk-bar--bottom"} aria-label={inline ? "Triage actions" : "Bulk actions"}>
       {!inline && <strong className="num">{count.toLocaleString()} selected</strong>}
       {partial && <span className="subtle">(of the first results only)</span>}
       {choices.map((c) => (
@@ -55,14 +55,14 @@ export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, i
       {!inline && <button type="button" className="button button--small button--ghost" onClick={onClear}>Clear</button>}
       {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase}
         onClose={() => setChoice(null)} onDone={onClear} />}
-    </div>
+    </section>
   );
 }
 
-function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone }: {
+function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone }: Readonly<{
   kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number;
   newCase: () => { title: string; severity?: string | undefined }; onClose: () => void; onDone: () => void;
-}) {
+}>) {
   const { session } = useSession();
   const { action } = choice;
   const [form, setForm] = useState<BulkForm>(() => {
@@ -71,17 +71,19 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       newCaseTitle: suggested.title.slice(0, 120), newCaseSeverity: suggested.severity };
   });
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
+  const [problemText, setProblemText] = useState<string>();
+  const dialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => { if (!dialog.current?.open) dialog.current?.showModal(); }, []);
   const assignees = useResource<{ items: CaseUser[] }>(action === "assign" ? "/api/v1/cases/assignees" : null).data?.items;
   const cases = useAllPages<CaseSummary>(action === "case" ? "/api/v1/cases" : null);
-  const set = (patch: Partial<BulkForm>) => { setForm((current) => ({ ...current, ...patch })); setError(undefined); };
+  const set = (patch: Partial<BulkForm>) => { setForm((current) => ({ ...current, ...patch })); setProblemText(undefined); };
   const me = session?.principal?.username;
   const people = assignees ?? (me ? [{ username: me, display_name: me }] : []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const problem = bulkProblem(form);
-    if (problem) { setError(problem); return; }
+    if (problem) { setProblemText(problem); return; }
     setBusy(true);
     try {
       const result = await request<BulkResult>("POST", `/api/v1/${kind}/bulk`, bulkBody(form, items()));
@@ -92,8 +94,8 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       if (kind === "alarms") invalidate("/api/v1/alarm-suppressions");
       onClose();
       onDone();
-    } catch (failure) {
-      setError(failure instanceof ApiError ? failure.message : "The bulk action failed");
+    } catch (error) {
+      setProblemText(error instanceof ApiError ? error.message : "The bulk action failed");
     } finally {
       setBusy(false);
     }
@@ -102,9 +104,8 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
   const needsNote = (action === "state" && noteRequired.has(form.state)) || action === "suppress";
   const title = choice.label.replace(/…$/, "");
   return (
-    <div className="palette-backdrop" onMouseDown={onClose}>
-      <div className="palette" role="dialog" aria-modal="true" aria-label={title}
-        onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+    // A native modal dialog: focus trapped, Escape closes it (onClose).
+    <dialog ref={dialog} className="palette bulk-modal" aria-label={title} onClose={onClose}>
       <form className="bulk-dialog stack" onSubmit={(event) => void submit(event)}>
         <div className="row row--between"><h2>{title}: {count.toLocaleString()} {noun}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></div>
@@ -139,13 +140,12 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
               placeholder={needsNote ? "Why: goes on every item's history" : undefined} />
           </label>
         )}
-        {error && <p className="confirm__error" role="alert">{error}</p>}
+        {problemText && <p className="confirm__error" role="alert">{problemText}</p>}
         <div className="row row--end">
           <button type="button" className="button" onClick={onClose}>Cancel</button>
           <button type="submit" className="button button--primary" disabled={busy}>{busy ? "Applying…" : confirmLabel(form, count, noun)}</button>
         </div>
       </form>
-      </div>
-    </div>
+    </dialog>
   );
 }

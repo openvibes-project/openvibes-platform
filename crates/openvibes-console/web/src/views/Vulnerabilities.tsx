@@ -14,7 +14,7 @@ import { filterKey, useSelection } from "../ui/selection";
 import { pct, severityOrder } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { ViewHeader } from "../ui/ViewHeader";
-import { groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "./rows";
+import { type AdvisoryRow, groupByAdvisory, selectAdvisories, vulnerabilityQuery } from "./rows";
 import { filterChips } from "./filters";
 
 export function Vulnerabilities() {
@@ -23,7 +23,6 @@ export function Vulnerabilities() {
   const all = useMemo(() => groupByAdvisory(list.data?.items ?? []), [list.data]);
   const rows = useMemo(() => selectAdvisories(all, params), [all, params]);
   const [selected, setSelected] = useSelection(filterKey(params));
-  const chosen = () => rows.filter((r) => selected.has(r.id));
   const cases = useCaseBadges("vulnerability");
   const top = panels[panels.length - 1];
 
@@ -63,12 +62,18 @@ export function Vulnerabilities() {
             { key: "reboot", header: "Reboot", numeric: true, width: "80px", hideBelow: 950, sort: (r) => r.reboot, render: (r) => r.reboot > 0 ? <span className="num">{r.reboot}</span> : <span className="subtle">—</span> },
           ]} />
       )}
-      {/* A selected advisory acts on its hosts in scope; a close leaves the
-          ones already closed alone. */}
-      <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory" : "advisories"} count={selected.size}
-        partial={list.data?.more_available === true} onClear={() => setSelected(new Set())}
-        items={() => chosen().map((r) => ({ advisory_id: r.id }))}
-        newCase={() => { const c = chosen(); return { title: `${c.length} advisories: ${c[0]?.title ?? ""}`, severity: highest(c.map((r) => r.severity)) }; }} />
+      <AdvisoryBulkBar rows={rows} selected={selected} onClear={() => setSelected(new Set())} partial={list.data?.more_available === true} />
     </div>
+  );
+}
+
+/** The bulk bar for selected advisories: each acts on its hosts in scope;
+ * a close leaves the ones already closed alone. */
+function AdvisoryBulkBar({ rows, selected, onClear, partial }: Readonly<{ rows: AdvisoryRow[]; selected: Set<string>; onClear: () => void; partial: boolean }>) {
+  const chosen = () => rows.filter((r) => selected.has(r.id));
+  return (
+    <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory" : "advisories"} count={selected.size} partial={partial} onClear={onClear}
+      items={() => chosen().map((r) => ({ advisory_id: r.id }))}
+      newCase={() => { const c = chosen(); return { title: `${c.length} advisories: ${c[0]?.title ?? ""}`, severity: highest(c.map((r) => r.severity)) }; }} />
   );
 }
