@@ -35,6 +35,10 @@ pub enum AssistantCommand {
         /// A question set instead of the built-in one.
         #[arg(long)]
         cases: Option<PathBuf>,
+        /// Internet lookups offered, answered from recorded data (no
+        /// network): 0 off (default), 1 reference, 2 reference and search.
+        #[arg(long, default_value_t = 0, value_parser = clap::value_parser!(u8).range(0..=2))]
+        internet_level: u8,
     },
     /// Model files for the local openvibes-llm service.
     Model {
@@ -224,7 +228,11 @@ pub async fn run(command: &AssistantCommand) -> (Result<String, String>, Option<
     match command {
         AssistantCommand::Check { .. } => (Ok(format!("{described}{}", models_text())), target),
         AssistantCommand::Model { .. } => unreachable!("handled above"),
-        AssistantCommand::Eval { cases, .. } => {
+        AssistantCommand::Eval {
+            cases,
+            internet_level,
+            ..
+        } => {
             let set = match cases {
                 Some(path) => read_cases(path),
                 None => CaseSet::builtin(),
@@ -240,7 +248,7 @@ pub async fn run(command: &AssistantCommand) -> (Result<String, String>, Option<
             };
             let settings = Settings::new(&loaded.assistant, &loaded.backend, report.selected, now);
             let backend: Arc<dyn ChatBackend> = loaded.client.clone();
-            let result = evaluate(backend, settings, &set, fleet).await;
+            let result = evaluate(backend, settings, &set, fleet, *internet_level).await;
             let text = format!("{described}{result}");
             if result.passed() {
                 (Ok(text), target)

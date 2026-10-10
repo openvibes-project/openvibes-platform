@@ -2161,6 +2161,7 @@ version = "0.2.8"
 dependencies = [
  "chrono",
  "openvibes-core",
+ "openvibes-fetch",
  "platform-pki",
  "platform-store",
  "rcgen",

@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 chrono.workspace = true
 openvibes-core.workspace = true
+openvibes-fetch = { path = "../openvibes-fetch" }
 platform-store = { path = "../platform-store" }
 rustls.workspace = true
 serde.workspace = true
