@@ -17,7 +17,7 @@ use serde_json::{Value, json};
 /// Most lookups run before the model's first turn.
 pub const MAX_PREFETCH: usize = 2;
 /// A mitigation question may run one more: local hosts, reference, search.
-const MAX_MITIGATION_PREFETCH: usize = 3;
+pub(crate) const MAX_MITIGATION_PREFETCH: usize = 3;
 
 /// Whether `lower` (lowercase) asks how to mitigate or fix: whole words, so
 /// "fixed" (a status) and "prefix" do not count.

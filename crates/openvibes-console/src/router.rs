@@ -34,16 +34,17 @@ use crate::{
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
 const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
-// The orchestrator bounds each question by the configured backend deadline
-// (at most 15 minutes) and answers 504 itself; this is only a backstop.
-const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(960);
+// The orchestrator bounds each question (`Settings::longest`: at most 15
+// minutes for the model plus 30 s per internet lookup, 20.5 minutes in all)
+// and answers 504 itself; this is only a backstop.
+const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(1_260);
 /// Time past the orchestrator's own question deadline before the console
 /// gives up, so the orchestrator ends the answer first.
 const ASSISTANT_ANSWER_MARGIN: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// The console's backstop for one answer: the question deadline (from the
-/// tuned `deadline_seconds`, at most 15 minutes) plus a margin, never a
-/// fixed cap that would cut off a slow host's answer.
+/// The console's backstop for one answer: the question's hard bound (the
+/// tuned deadline plus its internet lookups, `Settings::longest`) plus a
+/// margin, never a fixed cap that would cut off a slow host's answer.
 fn assistant_answer_timeout(question_deadline: std::time::Duration) -> std::time::Duration {
     question_deadline + ASSISTANT_ANSWER_MARGIN
 }
@@ -3187,7 +3188,7 @@ pub(crate) async fn authenticated_assistant_message(
     let started = Instant::now();
     let request_id = next_request_id();
     let answer = tokio::time::timeout(
-        assistant_answer_timeout(settings.deadline),
+        assistant_answer_timeout(settings.longest()),
         platform_assistant::answer(
             backend,
             &lookups,
@@ -7044,9 +7045,18 @@ mod request_deadline_tests {
         // A 4-vCPU host tuned to 72 s per call, 7 calls: far past 30 s.
         let tuned = Duration::from_secs(72 * 7);
         assert!(assistant_answer_timeout(tuned) > tuned);
-        // The longest question deadline (15 minutes) still ends inside the
-        // request deadline, so the orchestrator answers before either cap.
-        let longest = Duration::from_secs(900);
+        // The longest question (15 minutes, 8 lookups, each one an internet
+        // lookup) still ends inside the request deadline, so the
+        // orchestrator answers before either cap.
+        let longest = platform_assistant::Settings {
+            mode: platform_assistant::probe::ResolvedMode::Native,
+            budget: platform_assistant::Profile::Small.budget(),
+            max_lookups: 8,
+            deadline: Duration::from_secs(900),
+            now: chrono::Utc::now(),
+        }
+        .longest();
+        assert_eq!(longest, Duration::from_secs(900 + 11 * 30));
         assert!(assistant_answer_timeout(longest) <= ASSISTANT_REQUEST_DEADLINE);
     }
 

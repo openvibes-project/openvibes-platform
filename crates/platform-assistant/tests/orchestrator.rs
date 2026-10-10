@@ -1296,3 +1296,48 @@ async fn a_long_reference_as_the_second_prefetch_is_cut_not_dropped() {
         "{reference}"
     );
 }
+
+/// Internet lookups that take longer than the model's whole budget.
+struct SlowInternet;
+
+impl LookupRunner for SlowInternet {
+    async fn run(&self, lookup: &Lookup, _items: u32) -> Result<LookupOutput, LookupError> {
+        if matches!(lookup, Lookup::Reference { .. } | Lookup::WebSearch { .. }) {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        Ok(LookupOutput {
+            data: json!({ "items": [], "omitted": 0 }),
+        })
+    }
+}
+
+#[tokio::test]
+async fn internet_lookup_time_does_not_count_against_the_model_budget() {
+    // Spec §6: the assistant never fails because of the internet. The model
+    // gets 300 ms and uses 100; each internet lookup takes 500.
+    let tools = platform_assistant::lookups::internet_specs(2);
+    for (question, replies) in [
+        // Prefetched: a reference and a search before the first turn.
+        ("How do I mitigate CVE-2024-6387?", vec![text("Update.")]),
+        // Requested by the model.
+        (
+            "hi",
+            vec![
+                tool_turn(vec![call("1", "web_search", r#"{"query":"x"}"#)]),
+                text("Done."),
+            ],
+        ),
+    ] {
+        let script = Arc::new(Script {
+            replies: Mutex::new(replies.into_iter().map(Ok).collect()),
+            seen: Mutex::new(Vec::new()),
+            stream: Vec::new(),
+            delay: Duration::from_millis(50),
+        });
+        let mut quick = settings(ResolvedMode::Native);
+        quick.deadline = Duration::from_millis(300);
+        let backend: Arc<dyn ChatBackend> = script.clone();
+        let result = answer(backend, &SlowInternet, quick, &[], question, None, &tools).await;
+        assert!(result.is_ok(), "{question}: {result:?}");
+    }
+}

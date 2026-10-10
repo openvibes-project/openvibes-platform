@@ -41,7 +41,17 @@ asking user's scope.
   requests (below): a question that repairs after every step can make up to
   about `2 × (max_lookups + 1)` requests and be cut off by the question
   deadline (`Deadline`) before it finishes. That is a worst case; requests
-  normally finish far inside the backend deadline. `ChatBackend` is implemented by `BackendClient`; it is
+  normally finish far inside the backend deadline. Internet lookups
+  (`reference`, `web_search`, prefetched or requested) never count against
+  that deadline (spec §6): each is cut off after `INTERNET_LOOKUP_LIMIT`
+  (30 s; the console's fetch client gives up after 25 s) and the deadline
+  moves back by the time it took, because `assistant-tune` measures a call
+  without internet context (the lab's 2-vCPU host hit a tuned 74 s deadline
+  with a lookup, 2026-10-10). The model's deadline is checked on every
+  backend request. The hard bound on a question is `Settings::longest()`:
+  the deadline plus 30 s for each lookup it can run (`max_lookups` + 3
+  prefetched), at most 15 + 5.5 minutes; the console's own answer timeout
+  is that plus 5 s. `ChatBackend` is implemented by `BackendClient`; it is
   called on a blocking thread. `events` streams `Lookup`, `Text` (native
   mode), and `Reset`.
 - `StoreLookups::new(pool, AgentScope, now)` runs lookups through
