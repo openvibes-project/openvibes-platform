@@ -2,8 +2,8 @@
 
 Purpose: the one component that makes outbound requests for the console
 assistant's opt-in internet lookups (one process per request). This page
-covers what exists so far: the wire protocol and the query filter (pure, no
-I/O). The network, limits and unit are added later.
+covers the wire protocol, the query filter, and level 1 (OSV and Bodhi
+references). Web search and the systemd units are added later.
 
 ## Protocol (`protocol.rs`)
 
@@ -46,6 +46,37 @@ Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
   a deny term is a word; a Windows path `c:\\dir` is not a URL.
   Plain words such as `www.example.org` or `std::vector` are not refused.
 
+## Process contract (`main.rs`)
+
+`openvibes-fetch [--config /etc/openvibes/fetch.toml]` serves one connection
+(systemd `Accept=yes`): reads one JSON request from stdin (at most 8 KiB;
+more or malformed is `invalid`), reads the setting and deny list from
+PostgreSQL, writes one JSON response to stdout, exits 0. One journal line to
+stderr: user, kind and ID or query, outcome; never response text. A database
+or proxy failure answers `unavailable`.
+
+Config `fetch.toml` (unknown keys rejected): `database_url`, optional
+`proxy_url`.
+
+## Level 1 (`serve.rs`, `http.rs`, `osv.rs`, `bodhi.rs`)
+
+- Level 0: `off`, no request made. An ID failing `is_public_id`: `invalid`.
+  `search` is `off` below level 2 and `unavailable` at level 2 until web
+  search is built.
+- `FEDORA-...` goes to `https://bodhi.fedoraproject.org/updates/{id}`, every
+  other ID to `https://api.osv.dev/v1/vulns/{id}`. The URL is built only from
+  a checked ID and its host must be on the allowlist, else `unavailable`.
+- Limits: connect 5 s, total 10 s, no redirects (a 3xx or any non-200 is
+  `unavailable`), body over 256 KiB `too_large`, non-JSON or unexpected JSON
+  `unavailable`. Proxy from `proxy_url`.
+- Extraction is by JSON path only. OSV: one item (title `id: first summary
+  line`; snippet: summary, else details, cut to 1,000 characters, plus
+  `package: fixed in a, b` per affected package with a `package.name`; git
+  commit ranges give no versions here), then up to 5 `https://` reference
+  URLs as further items titled `reference`. Bodhi: `update.title`,
+  `update.notes` cut to 1,000 characters plus `fixed in` the `builds[].nvr`.
+  Cuts fall on character boundaries.
+
 ## Residual risks
 
 A lexical filter cannot catch integer or hex IPv4 notations (`167772165`,
@@ -56,4 +87,5 @@ against a model told to smuggle data out.
 
 ## Test
 
-`cargo test -p openvibes-fetch`
+`cargo test -p openvibes-fetch`. `tests/serve.rs` drives `serve::handle` with a
+fake `Http` and real OSV/Bodhi responses saved in `tests/fixtures/`.

@@ -1778,8 +1778,13 @@ dependencies = [
 name = "openvibes-fetch"
 version = "0.2.8"
 dependencies = [
+ "chrono",
+ "platform-config",
+ "platform-store",
  "serde",
  "serde_json",
+ "tokio",
+ "ureq",
 ]
 
 [[package]]
