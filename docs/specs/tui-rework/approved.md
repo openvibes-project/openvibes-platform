@@ -174,3 +174,9 @@
     this host". Uninstall: (•) Keep the data / ( ) Remove everything
     (type the host name to confirm, ✓ when it matches; nothing left
     behind), Back up first, Uninstall with the standard question.
+38. No backup location is shown or assumed by default (user: it differs
+    per environment). Ticking Back up first (or opening Back up) asks for
+    a folder: type it, or Tab to browse, checked as you type (exists,
+    writable, free space). The chosen folder is remembered and shown next
+    time; every backup gets its own file name inside it.
+    Folder-choice backup flow approved (LGTM).
