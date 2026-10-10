@@ -12,6 +12,7 @@ pub mod config;
 pub mod eval;
 pub mod lookups;
 pub mod orchestrator;
+pub mod prefetch;
 pub mod probe;
 
 pub use answer::{Citation, Segment, plain_text, sanitize};

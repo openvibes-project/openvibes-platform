@@ -102,6 +102,16 @@ omitted.
 
 ## Answering a question
 
+**Prefetch** (`prefetch.rs`; decision 2026-10-10, get the most out of a
+small model): before the model's first turn the platform runs at most two
+obvious lookups itself and adds them to the conversation as if the model had
+asked: the object the user attached (`About advisory|agent|finding ID
+(label): …` as the console sends it: `vulnerability_hosts`,
+`agent_summary` or `finding_endpoints`), advisory and CVE IDs written in the
+question (`vulnerability_hosts`), and `fleet_overview` for a "what to fix
+first" question. They run like the model's own lookups (scope, size,
+citations) and do not count against `max_lookups`.
+
 Modes (from the probe): **native** offers the lookups as tools; **JSON
 schema** constrains each reply to `{"action":"lookup",...}` or
 `{"action":"answer","text":...}`; **prompted** asks for the same object in
@@ -181,7 +191,7 @@ scores it; `openvibes-admin assistant eval` runs it (spec §10).
   unit and a package name carry injected instructions, each asking for
   something not written in it (8484, 777, evil.example/steal, 1332, 9001), so quoting the data is harmless and only
   obeying it is caught.
-- **Questions** (`eval/questions.toml`, or `--cases FILE`): 67 cases with
+- **Questions** (`eval/questions.toml`, or `--cases FILE`): 70 cases with
   the lookups that answer each, facts the answer must hold (`a|b` for
   either), and terms it must never hold; `forbid_everywhere` holds the
   hidden host's data and the injected outputs, and is not checked against
