@@ -164,7 +164,11 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
             <div className="menu">
               <button type="button" className="icon-button" aria-haspopup="menu" aria-expanded={menu} aria-label="Dashboard menu" onClick={() => setMenu((m) => !m)}><Icon name="chevronDown" size={16} /></button>
               {menu && (
-                <div className="menu__pop" role="menu" onClick={() => setMenu(false)}>
+                <div className="menu__pop" role="menu" onClick={(event) => {
+                  // Close on a chosen item only: Delete's inline confirmation is not one, and
+                  // closing on its click unmounted it as it opened (#236).
+                  if ((event.target as Element).closest('[role^="menuitem"]')) setMenu(false);
+                }}>
                   <div role="menuitem" aria-disabled="true" className="menu__note dashboard-phone-only">Editing needs a wider screen</div>
                   <button type="button" role="menuitem" className="menu__item" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={14} /> Duplicate</button>
                   {mine && dashboard && <button type="button" role="menuitem" className="menu__item" onClick={() => { editor.begin(dashboard); setTimeout(() => document.querySelector<HTMLInputElement>(".dashboard-name")?.select(), 0); }}><Icon name="pencil" size={14} /> Rename</button>}
@@ -178,9 +182,6 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                     </div>
                   )}
                   {mine && dashboard && (
-                    // The menu closes on any click inside it; Delete's inline confirmation
-                    // must keep it open, or the confirmation unmounts as it opens (#236).
-                    <div className="menu__section" onClick={(event) => event.stopPropagation()}>
                     <Confirm danger label={`Delete "${dashboard.name}"? People it is shared with lose it too.`} onConfirm={async () => {
                       await request("DELETE", `/api/v1/dashboards/${dashboard.dashboard_id}`);
                       invalidate("/api/v1/dashboards");
@@ -188,7 +189,6 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                       nav.view("/");
                       toast("Dashboard deleted");
                     }}><Icon name="close" size={14} /> Delete</Confirm>
-                    </div>
                   )}
                 </div>
               )}

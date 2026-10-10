@@ -83,11 +83,13 @@ test("Most exposed hosts ranks hosts across all kinds even before any feed impor
   await expect(tile.getByText("No host has an open")).toHaveCount(0);
 });
 
-test("the Overview's Active alarms tile says it is collecting, and the Critical tile adds up and links", async ({ page }) => {
+test("the Overview's Active alarms tile draws a line from its first value, and the Critical tile adds up and links", async ({ page }) => {
   await signIn(page, "alex");
   const tileOf = (title: RegExp) => page.locator(".tile", { has: page.locator(".tile__title", { hasText: title }) });
-  // One history point so far: no line to draw, and it says since when.
-  await expect(tileOf(/^Active alarms$/).getByText(/^Collecting since/)).toBeVisible();
+  // One history point so far (today's live value): a flat line, not an empty tile (#238).
+  // (A flat path has a zero-height box, so count it rather than ask if it is visible.)
+  await expect(tileOf(/^Active alarms$/).locator("svg .linechart__line")).toHaveCount(1);
+  await expect(tileOf(/^Active alarms$/).getByText(/^(No data yet|Collecting since)/)).toHaveCount(0);
   const tile = tileOf(/^Critical$/);
   // Every number loaded before they are added up.
   await expect(tile.locator(".stat__value")).toHaveText(/^\d[\d,]*$/);
