@@ -9,7 +9,7 @@ Version:        %{ov_version}
 # install never looks identical to the published package (board #88).
 Release:        %{?ov_release}%{!?ov_release:1}%{?dist}
 Summary:        OpenVIBES web console
-License:        MIT
+License:        Apache-2.0
 URL:            https://github.com/openvibes-project/openvibes-platform
 BuildRequires:  systemd-rpm-macros
 %{?systemd_requires}
@@ -34,6 +34,7 @@ install -D -m 0644 $S/packaging/rpm/openvibes-console.sysusers %{buildroot}%{_sy
 install -D -m 0644 $S/packaging/rpm/openvibes-console.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/90-openvibes-console.preset
 install -D -m 0640 $S/packaging/rpm/console.toml %{buildroot}%{_sysconfdir}/openvibes/console.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-console/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-console/NOTICE
 install -d -m 0700 %{buildroot}%{_sharedstatedir}/openvibes-console
 install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 
@@ -46,6 +47,7 @@ install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 
 %files
 %license %{_licensedir}/openvibes-console/LICENSE
+%license %{_licensedir}/openvibes-console/NOTICE
 %{_bindir}/openvibes-console
 %{_unitdir}/openvibes-console.service
 %{_sysusersdir}/openvibes-console.conf

@@ -45,7 +45,7 @@ Version:        %{ov_version}
 # install never looks identical to the published package (board #88).
 Release:        %{?ov_release}%{!?ov_release:1}%{?dist}
 Summary:        OpenVIBES platform services
-License:        MIT
+License:        Apache-2.0
 URL:            https://github.com/openvibes-project/openvibes-platform
 BuildRequires:  systemd-rpm-macros
 
@@ -94,7 +94,7 @@ Schema migration, built-in CA, tokens, agents, and daily partition maintenance.
 
 %package -n openvibes-signer
 Summary:        OpenVIBES rule signer for the site's own rules
-License:        MIT
+License:        Apache-2.0
 # Its state directory's group is openvibes-operators, from openvibes-admin.
 Requires:       openvibes-admin = %{version}-%{release}
 Requires(pre):  openvibes-admin = %{version}-%{release}
@@ -109,7 +109,7 @@ itself. Listens on a Unix socket only the console can reach.
 %package -n openvibes-llm
 Requires(pre):  shadow-utils procps-ng systemd
 Summary:        OpenVIBES local model server for the console's assistant
-License:        MIT
+License:        Apache-2.0 AND MIT
 # Models are installed with openvibes-admin, whose group owns the model store.
 Requires:       openvibes-admin = %{version}-%{release}
 # The model store's group is openvibes-admin, renamed in that package's %%pre.
@@ -132,7 +132,7 @@ SHA-256 is pinned. Optional: the platform works without it.
 # (which shipped the model) does not delete the user's model file.
 %package -n openvibes-llm-model
 Summary:        Model selection for the OpenVIBES local model server (no model bytes)
-License:        MIT
+License:        Apache-2.0
 Requires:       openvibes-llm = %{version}-%{release}
 Obsoletes:      openvibes-llm-model-part1 < %{version}-%{release}
 Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
@@ -147,7 +147,7 @@ offline install guide).
 %if %{with vulkan}
 %package -n openvibes-llm-vulkan
 Summary:        GPU (Vulkan) build of the OpenVIBES local model server
-License:        MIT
+License:        Apache-2.0 AND MIT
 Requires:       openvibes-llm = %{version}-%{release}
 
 %description -n openvibes-llm-vulkan
@@ -165,17 +165,20 @@ install -D -m 0644 $S/packaging/rpm/openvibes-distribution.service %{buildroot}%
 install -D -m 0644 $S/packaging/rpm/openvibes-distribution.sysusers %{buildroot}%{_sysusersdir}/openvibes-distribution.conf
 install -D -m 0640 $S/packaging/rpm/distribution.toml %{buildroot}%{_sysconfdir}/openvibes/distribution.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-distribution/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-distribution/NOTICE
 install -D -m 0755 $S/target/release/openvibes-signer %{buildroot}%{_bindir}/openvibes-signer
 install -D -m 0644 $S/packaging/rpm/openvibes-signer.service %{buildroot}%{_unitdir}/openvibes-signer.service
 install -D -m 0644 $S/packaging/rpm/openvibes-signer.sysusers %{buildroot}%{_sysusersdir}/openvibes-signer.conf
 install -D -m 0640 $S/packaging/rpm/signer.toml %{buildroot}%{_sysconfdir}/openvibes/signer.toml
 install -d -m 2750 %{buildroot}%{_sharedstatedir}/openvibes-signer
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-signer/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-signer/NOTICE
 install -D -m 0755 $S/target/release/openvibes-vulns %{buildroot}%{_bindir}/openvibes-vulns
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.service %{buildroot}%{_unitdir}/openvibes-vulns.service
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.sysusers %{buildroot}%{_sysusersdir}/openvibes-vulns.conf
 install -D -m 0640 $S/packaging/rpm/vulns.toml %{buildroot}%{_sysconfdir}/openvibes/vulns.toml
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-vulns/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-vulns/NOTICE
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.service %{buildroot}%{_unitdir}/openvibes-ingest.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.service %{buildroot}%{_unitdir}/openvibes-maintenance.service
 install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_unitdir}/openvibes-maintenance.timer
@@ -193,7 +196,9 @@ for n in admin ingest distribution vulns; do
 done
 install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls %{buildroot}%{_sysconfdir}/openvibes/pki
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-ingest/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-ingest/NOTICE
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-admin/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-admin/NOTICE
 %if %{with llm}
 install -D -m 0755 $S/target/llama/cpu/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server
 install -D -m 0755 $S/target/release/openvibes-llm-check %{buildroot}%{_libexecdir}/openvibes-llm/openvibes-llm-check
@@ -208,10 +213,12 @@ install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibe
 install -d -m 0755 %{buildroot}%{_sharedstatedir}/openvibes-llm/models
 touch %{buildroot}%{_sysconfdir}/openvibes/llm-api-key
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-llm/NOTICE
 install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/openvibes-llm/LICENSE.llama.cpp
 . $S/packaging/llm/model.pin
 install -D -m 0644 $S/packaging/llm/model.pin %{buildroot}%{_datadir}/openvibes-llm/model.pin
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE
+install -D -m 0644 $S/NOTICE %{buildroot}%{_licensedir}/openvibes-llm-model/NOTICE
 # model.conf is written by %%post on a fresh install, then only by Setup and
 # the model switch (#264): a package never rewrites it under a running model.
 touch %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf
@@ -358,6 +365,7 @@ fi
 
 %files -n openvibes-ingest
 %license %{_licensedir}/openvibes-ingest/LICENSE
+%license %{_licensedir}/openvibes-ingest/NOTICE
 %{_bindir}/openvibes-ingest
 %{_unitdir}/openvibes-ingest.service
 %{_sysusersdir}/openvibes-ingest.conf
@@ -371,6 +379,7 @@ fi
 
 %files -n openvibes-distribution
 %license %{_licensedir}/openvibes-distribution/LICENSE
+%license %{_licensedir}/openvibes-distribution/NOTICE
 %{_bindir}/openvibes-distribution
 %{_unitdir}/openvibes-distribution.service
 %{_sysusersdir}/openvibes-distribution.conf
@@ -383,6 +392,7 @@ fi
 
 %files -n openvibes-signer
 %license %{_licensedir}/openvibes-signer/LICENSE
+%license %{_licensedir}/openvibes-signer/NOTICE
 %{_bindir}/openvibes-signer
 %{_unitdir}/openvibes-signer.service
 %{_sysusersdir}/openvibes-signer.conf
@@ -393,6 +403,7 @@ fi
 
 %files -n openvibes-vulns
 %license %{_licensedir}/openvibes-vulns/LICENSE
+%license %{_licensedir}/openvibes-vulns/NOTICE
 %{_bindir}/openvibes-vulns
 %{_unitdir}/openvibes-vulns.service
 %{_sysusersdir}/openvibes-vulns.conf
@@ -403,6 +414,7 @@ fi
 
 %files -n openvibes-admin
 %license %{_licensedir}/openvibes-admin/LICENSE
+%license %{_licensedir}/openvibes-admin/NOTICE
 %{_bindir}/openvibes-admin
 %{_unitdir}/openvibes-maintenance.service
 %{_unitdir}/openvibes-maintenance.timer
@@ -419,6 +431,7 @@ fi
 %if %{with llm}
 %files -n openvibes-llm
 %license %{_licensedir}/openvibes-llm/LICENSE
+%license %{_licensedir}/openvibes-llm/NOTICE
 %license %{_licensedir}/openvibes-llm/LICENSE.llama.cpp
 %dir %{_libexecdir}/openvibes-llm
 %{_libexecdir}/openvibes-llm/llama-server
@@ -443,6 +456,7 @@ fi
 
 %files -n openvibes-llm-model -f model-files.list
 %license %{_licensedir}/openvibes-llm-model/LICENSE
+%license %{_licensedir}/openvibes-llm-model/NOTICE
 %ghost %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
 
 %post -n openvibes-llm-model

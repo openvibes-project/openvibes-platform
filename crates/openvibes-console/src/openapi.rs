@@ -28,7 +28,7 @@ use crate::{
         title = "OpenVIBES Console API",
         version = "1.0.0",
         description = "Versioned human and service-account API for the OpenVIBES console.",
-        license(name = "MIT")
+        license(name = "Apache-2.0")
     ),
     paths(
         crate::detection::finding_rule,
