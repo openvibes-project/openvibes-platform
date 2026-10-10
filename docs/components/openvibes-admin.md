@@ -284,6 +284,26 @@ page); an agent before P12 shows `unknown`.
 
 The audit target is the token id, never the token.
 
+## Device commands
+
+Network devices that send events to `openvibes-netlog`
+([openvibes-netlog.md](openvibes-netlog.md)). These are database work only:
+netlog reloads devices every 30 seconds, so nothing needs root. They are for
+the lab and tests; end users will add devices in the console.
+
+| Command | Does |
+|---|---|
+| `device add --name NAME --address IP [--kind unifi]` | Adds a device. A mapped IPv6 address (`::ffff:192.168.1.1`) is stored as IPv4. A second active device at the same address is refused. Prints where to point its SIEM server (this host, UDP 514). |
+| `device list` | Lists each device with its id, name, address, kind, last packet and counters. When nothing arrived in the 10 minutes after adding, or nothing in a day, it adds a line: check the router's SIEM setting and that UDP 514 is open. |
+| `device remove ID` | Removes the device. Its alarms stay. An unknown or already removed id is an error. |
+
+The audit target is the device id.
+
+**Readiness heads-up:** when ingest is planned, firewalld runs and
+514/udp is not open permanently, Setup's Readiness step ends with
+"heads-up: UDP 514 is not open in firewalld, …". It never opens the port
+itself (spec 2026-10-10 §6).
+
 ## Rules commands
 
 Rule sets for the distribution service. Keys and bundles are signed
