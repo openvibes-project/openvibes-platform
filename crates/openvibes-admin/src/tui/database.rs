@@ -368,11 +368,12 @@ impl<H: Host> App<H> {
         self.load_health();
     }
 
-    fn load_health(&mut self) {
+    pub(super) fn load_health(&mut self) {
         self.refresh();
         let certificates = self.host.certificates();
+        // The unit lines are built by Status, not here.
         self.database.health = checks(
-            &self.services,
+            &[],
             &certificates,
             self.host.database(Database::FeedsStatus),
             self.host.disk(),

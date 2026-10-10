@@ -41,31 +41,6 @@ fn a_refused_database_command_names_the_group() {
 }
 
 #[test]
-#[ignore = "replaced in Task 7/8"]
-fn health_lists_problems_first() {
-    let mut app = app(false);
-    app.open(Tab::Health);
-    assert_eq!(app.tab, Tab::Health);
-    let text = screen(&app, 80, 24);
-    let rows: Vec<&str> = text.lines().collect();
-    let first = rows.iter().position(|r| r.contains("problem  ")).unwrap();
-    let last_problem = rows.iter().rposition(|r| r.contains("problem  ")).unwrap();
-    let first_ok = rows.iter().position(|r| r.contains("ok       ")).unwrap();
-    assert!(first < first_ok && last_problem < first_ok, "{text}");
-    // Fake host: vulns failed, llm inactive, the certificate unreadable, one feed error.
-    assert!(text.contains("health: 4 problems"), "{text}");
-    for want in [
-        "vulns: failed",
-        "ingest.crt: failed: permission denied",
-        "feed osv-rocky",
-        "ingest: active, ready",
-        "/var/lib/pgsql: 40% used, 20G free",
-    ] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
-    }
-}
-
-#[test]
 fn certificates_disk_and_feeds_become_problems_at_their_thresholds() {
     let pem = platform_pki::generate_root(Utc::now()).unwrap().cert_pem;
     let expires = platform_pki::not_after(&pem).unwrap();

@@ -173,26 +173,6 @@ fn select(app: &mut App<FakeHost>, unit: Unit) {
 
 #[test]
 #[ignore = "replaced in Task 7/8"]
-fn renders_services_at_80x24() {
-    let app = app(false);
-    let text = screen(&app, 80, 24);
-    for want in [
-        "ingest",
-        "active",
-        "ready",
-        "distribution",
-        "not installed",
-        "vulns",
-        "failed",
-        "s start  t stop  r restart  e/d boot  R refresh  q quit",
-        "first log line of ingest",
-    ] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
-    }
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
 fn restart_asks_first() {
     let mut app = app(false);
     select(&mut app, Unit::Vulns);
@@ -234,21 +214,6 @@ fn periodic_refresh_does_not_read_logs() {
 
 #[test]
 #[ignore = "replaced in Task 7/8"]
-fn not_installed_offers_nothing() {
-    let mut app = app(false);
-    select(&mut app, Unit::Distribution);
-    app.key(Key::Char('s'));
-    assert_eq!(app.confirm, None);
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("not installed")
-    );
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
 fn not_an_operator_is_explained() {
     let mut app = app(true);
     app.key(Key::Char('r'));
@@ -261,12 +226,6 @@ fn not_an_operator_is_explained() {
         "{:?}",
         app.message
     );
-}
-
-#[test]
-fn too_small_asks_for_more_room() {
-    let app = app(false);
-    assert!(screen(&app, 60, 20).contains("needs at least 80×24"));
 }
 
 #[test]

@@ -49,7 +49,18 @@ letters). Home, Maintenance and Help show the block logo ("OPEN" in white,
 are, the version and any available update), and a key bar; today's
 screens show only the location line. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
-Home, Maintenance and Help, `ui/` the shared frame).
+Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
+
+**Status** (from Home): "Needs attention" first, then "Services" (installed
+units only: name, state, ready, since), then `● N checks ok`. A problem is an
+installed unit that is failed or inactive (`■ NAME is stopped`; not the
+model server or the maintenance timer, which idle by design), a unit not
+enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
+or a health check (certificates, disk, feeds, signer, audit, tuning). `Enter`
+on a service opens it; on a stopped or not-enabled unit it starts or enables
+it (a question, or the password; the prompts arrive with the service
+screens); on a health problem it does nothing. Home's summary line counts
+the problems. Test: `src/tui/status_tests.rs`.
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,

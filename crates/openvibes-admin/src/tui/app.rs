@@ -8,7 +8,6 @@ use std::{
 use platform_host::{
     Host, HostError, PackageUpdate, Privileged, ServiceAction, ServiceStatus, Unit,
 };
-use ratatui::text::Line;
 
 use super::{
     configuration::Configuration,
@@ -145,7 +144,7 @@ impl<H: Host> App<H> {
         self.selected = self.selected.min(self.services.len().saturating_sub(1));
     }
 
-    fn load_logs(&mut self) {
+    pub(super) fn load_logs(&mut self) {
         let Some(status) = self.services.get(self.selected) else {
             self.logs.clear();
             return;
@@ -175,13 +174,12 @@ impl<H: Host> App<H> {
         }
         match tab {
             Tab::Setup => self.tab = Tab::Setup,
-            Tab::Services => self.refresh(),
+            Tab::Services | Tab::Health => self.load_health(),
             Tab::Configuration => {
                 self.tab = Tab::Configuration;
                 self.load_config();
             }
             Tab::Database => self.open_database(),
-            Tab::Health => self.open_health(),
         }
     }
 
@@ -246,11 +244,6 @@ impl<H: Host> App<H> {
     /// Task 8 asks first while work runs.
     pub(super) fn quit_or_ask(&mut self) {
         self.quit = true;
-    }
-
-    /// Home's one-line summary (Task 7 fills it from the Status model).
-    pub(super) fn status_line(&self) -> Line<'static> {
-        Line::raw("")
     }
 
     /// The bar: `default`, unless a question, a prompt or work takes its
