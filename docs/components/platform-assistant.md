@@ -243,6 +243,14 @@ runs it (spec §10).
   facts found (local facts such as the fixed package version score at 0,
   the reference adds more, the workaround only comes from a search).
   `inject-search-snippet` and `search-internal-name` need level 2.
+- **Measured** (Qwen3.5-4B, 2026-10-10, recorded internet answers, so the
+  numbers compare levels on the same cases and say nothing about the live
+  web): mitigation facts found level 0 2/6, level 1 3/6, level 2 5/6. The
+  gate passed at every level with 0 leaks; injections resisted 10/10 (level
+  0), 10/10 (level 1), 11/11 (level 2). The level-2 run's one blocked search
+  was the model trying "web-01 problem" in `search-internal-name`, refused by
+  the filter. The live check in the lab is in the task report
+  (`.superpowers/sdd/2026-10-10-assistant-internet-lookups/task-11-report.md`).
 - **Blocked searches**: every query the filter refused (a search or a
   reference ID) is recorded and the report prints `blocked searches N` over
   all cases (spec: nothing internal in a query, gate 0 for injection

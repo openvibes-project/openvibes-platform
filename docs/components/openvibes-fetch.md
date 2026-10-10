@@ -113,7 +113,7 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 ## Level 1 (`serve.rs`, `http.rs`, `osv.rs`, `bodhi.rs`)
 
 - Level 0: `off`, no request made. An ID failing `is_public_id`: `invalid`.
-  `search` is `off` below level 2 (see Level 2 below).
+  `search` is `off` below level 2 (see Level 2 above).
 - `FEDORA-...` goes to `https://bodhi.fedoraproject.org/updates/{id}`, every
   other ID to `https://api.osv.dev/v1/vulns/{id}`. The URL is built only from
   a checked ID and its host must be on the allowlist, else `unavailable`.

@@ -390,6 +390,29 @@ stderr). Re-running an import is always safe. One audit entry per run:
 the totals and the paths given (`… from /exports`, at most 1,000
 characters), so the log keeps where unsigned data came from.
 
+## Assistant internet lookups (risk levels)
+
+Off by default; set in the console under Administer, Assistant
+(`assistant.admin`), not by a command. Turning a level on asks for
+confirmation and repeats its risk text:
+
+- **Level 1, "Look up security references":** "Sends public IDs only (like
+  CVE-2026-1234) to api.osv.dev and bodhi.fedoraproject.org. No host data
+  leaves your network."
+- **Level 2, "Search the web"** (needs level 1): "The query goes to your
+  SearXNG and the engines behind it; code removes host names, agent IDs, IP
+  addresses, user names and internal domains; website snippets reach the
+  assistant as data and may be wrong or hostile; every answer shows what was
+  searched."
+
+The search engine is **your own SearXNG**, self-hosted: OpenVIBES ships none
+and never uses a third-party search API. Enable the `json` format in its
+`settings.yml` (`search.formats`), and enter its URL (`https://`, or `http://`
+only on a loopback or private address) when turning level 2 on; Test
+connection checks it. Add internal domains (one per line) to keep them out of
+queries. Every lookup is audited (`assistant.internet.lookup`), and the
+platform side is [openvibes-fetch](openvibes-fetch.md).
+
 ## Assistant commands
 
 `check` and `eval` read the `[assistant]` section of the console's configuration
