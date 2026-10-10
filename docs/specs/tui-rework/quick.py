@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 import gen  # noqa: E402
-from gen import bar, header, pad, page, screen  # noqa: E402
+from gen import bar, checkbar, header, pad, page, screen  # noqa: E402
 
 gen.UPDATE = None
 ROWS = [("Host name", "limebox.lan", "The name agents and your browser use to reach this host."),
@@ -24,7 +24,7 @@ def quick(sel, editing=None):
         body.append("")
     body[-1] = "    {d}" + ROWS[sel][2] + "{/}"
     return screen("limebox · Install › Quick install", body,
-                  bar("{k} Space {/} Select" if sel == 3 else "{k} Enter {/} " + ("Install" if sel == 4 else "Change")))
+                  checkbar() if sel == 3 else bar( "{k} Enter {/} " + ("Install" if sel == 4 else "Change")))
 
 
 print(page("Quick install: the settings only you know",

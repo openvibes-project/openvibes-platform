@@ -160,8 +160,21 @@ def menu(items, sel, name_w=20):
     body = []
     for i, (name, desc) in enumerate(items):
         if i == sel:
-            body.append(f"  {{s}}▸ {name:<{name_w}} {desc:<{69 - name_w}}{{/}}")
+            body.append(f"  {{s}}▸ {pad(name, name_w)} {pad(desc, 69 - name_w)}{{/}}")
         else:
-            body.append(f"    {name:<{name_w}} {{d}}{desc}{{/}}")
+            body.append(f"    {pad(name, name_w)} {{d}}{desc}{{/}}")
         body.append("")
     return body[:-1]
+
+
+def ask(question, detail="", yes=True):
+    """Every question in the bar (rule 30): the question, Yes / No buttons,
+    ←→ to choose and Enter to confirm."""
+    left = "{b}" + question + "{/}" + (f" {{d}}{detail}{{/}}" if detail else "")
+    buttons = "{s} Yes {/} {d}[ No ]{/}" if yes else "{d}[ Yes ]{/} {s} No {/}"
+    return bar(left, buttons + "  {k} ←→ {/} {k} Enter {/} Confirm", nav=False)
+
+
+def checkbar():
+    """Every checkbox row (rule 31): Space selects or deselects, Enter confirms."""
+    return bar("{k} Space {/} Select/deselect  {k} Enter {/} Confirm")

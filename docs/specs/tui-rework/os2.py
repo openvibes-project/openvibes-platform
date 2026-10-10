@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, header, menu, page, screen  # noqa: E402
+from gen import ask, bar, header, menu, page, screen  # noqa: E402
 
 INFO = [header("Operating system"), "",
         "    AlmaLinux 9.6 (Sage Margay) · kernel 5.14.0-570 · checked 10 min ago",
@@ -20,5 +20,5 @@ print(page("Operating system: arrows instead of letters",
     ("Press ↓", "The highlight moves to Check again; the bar follows.",
      os_screen(1, bar("{k} Enter {/} Check again"))),
     ("↑ back, Enter on Update everything", "The bar asks first, as before.",
-     os_screen(0, bar("{b}Install 23 updates?{/} {d}A restart is needed after.{/}", "{k} y {/} Yes  {k} n {/} No", nav=False))),
+     os_screen(0, ask("Install 23 updates?", "A restart is needed after"))),
 ]))

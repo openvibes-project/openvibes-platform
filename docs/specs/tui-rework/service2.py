@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, header, menu, page, screen  # noqa: E402
+from gen import ask, bar, header, menu, page, screen  # noqa: E402
 
 ACTS = [("Restart", "agents reconnect within a minute"),
         ("Stop", "agents keep their findings until it runs"),
@@ -36,5 +36,5 @@ print(page("A service's actions on its own screen",
      svc(0, bar("{k} Enter {/} Restart ingest"))),
     ("↓ once: Stop", "The bar follows the highlight.", svc(1, bar("{k} Enter {/} Stop ingest"))),
     ("Enter on Restart: the question", "←→ Yes / No, Enter to answer.",
-     svc(0, bar("{b}Restart ingest?{/}   {s} Yes {/}   {d}[ No ]{/}", "{k} ←→ {/} Choose  {k} Enter {/}", nav=False))),
+     svc(0, ask("Restart ingest?", "agents reconnect"))),
 ]))

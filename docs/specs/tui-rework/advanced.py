@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 import gen  # noqa: E402
-from gen import bar, header, pad, page, screen  # noqa: E402
+from gen import bar, checkbar, header, pad, page, screen  # noqa: E402
 
 gen.UPDATE = None
 STEPS = ["Optional", "Names", "Certificates", "Ports", "Review"]
@@ -53,7 +53,7 @@ def comp(sel, top=0):
     helps = {0: "Untick only if this server must not run an agent.",
              1: "Answers questions about your findings, on this host, no cloud. Needs 4 GB.",
              2: "Go on to the names this host is reached by."}
-    b = bar("{k} Enter {/} Next") if sel == 2 else bar("{k} Space {/} Select")
+    b = bar("{k} Enter {/} Next") if sel == 2 else checkbar()
     return step(0, items, sel, helps.get(sel, ""), b, top, 4, 26)
 
 

@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, header, menu, page, screen  # noqa: E402
+from gen import ask, bar, header, menu, page, screen  # noqa: E402
 
 SERVICES = ["ingest", "console", "vulns", "netlog", "distribution"]
 
@@ -47,7 +47,7 @@ shots = [
     ("↓ once: Restart", "The bar says what Enter will do.",
      screen("limebox · Status", status(0, ACTS, 1), bar("{k} Enter {/} Restart ingest", "{k} Esc {/} Close  {k} ? {/}"))),
     ("Enter: the question, with arrow buttons", "←→ between Yes and No, Enter to answer. (y and n still work for fast typists.)",
-     screen("limebox · Status", status(0), bar("{b}Restart ingest?{/}   {s} Yes {/}   {d}[ No ]{/}", "{k} ←→ {/} Choose  {k} Enter {/}", nav=False))),
+     screen("limebox · Status", status(0), ask("Restart ingest?", "agents reconnect"))),
 ]
 print(page("Actions and questions with the arrows",
            "Your rule applied to Status and to Yes/No questions. Reply per number: yes, or what to change.", shots))

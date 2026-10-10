@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, page, screen  # noqa: E402
+from gen import ask, bar, page, screen  # noqa: E402
 
 
 def status(sel):
@@ -26,8 +26,7 @@ status_cert = screen("limebox · Status", status(0), bar("{k} Enter {/} Renew ce
 status_ingest = screen("limebox · Status", status(1),
                        bar("{k} Enter {/} Open  {k} r {/} Restart  {k} s {/} Stop"))
 status_stop = screen("limebox · Status", status(1),
-                     bar("{b}Stop ingest?{/} {d}Agents keep their findings until it runs.{/}",
-                         "{k} y {/} Yes  {k} n {/} No", nav=False))
+                     ask("Stop ingest?", "Agents keep their findings until it runs"))
 status_stopped = screen("limebox · Status", [
     "", "   {b}Needs attention{/}",
     " {s}▸ {r}■{/}{s} ingest is stopped · agents cannot deliver                      {/}",
