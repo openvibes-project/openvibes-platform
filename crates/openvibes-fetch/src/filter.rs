@@ -26,53 +26,137 @@ pub fn is_public_id(id: &str) -> bool {
         && rest[digits..].starts_with(['-', ':'])
 }
 
-/// Refuses (`Blocked`) a query that is too long, contains a URL scheme, an
-/// IP address, a MAC address or any `deny` term (already lowercase: agent
-/// IDs, host and user names, internal domains). Matching is case-insensitive
-/// and by substring, so a FQDN or a host name inside a longer word is caught.
+/// Refuses (`Blocked`) a query that is too long, contains a URL (`://`,
+/// `scheme:/`, `scheme:\`, any `%XX`), full-width or non-ASCII-digit
+/// look-alikes, an IPv4/IPv6/MAC address in any surroundings, or any `deny`
+/// term (agent IDs, host and user names, internal domains) as a whole word.
+/// Matching is case-insensitive; deny terms are lowercased here.
 pub fn check_query(query: &str, deny: &[String]) -> Result<(), Refusal> {
     let q = query.to_lowercase();
     if q.chars().count() > MAX_QUERY
         || q.contains("://")
-        || deny.iter().any(|d| !d.is_empty() && q.contains(d.as_str()))
-        || q.split(|c: char| c.is_whitespace() || ",;()\"'[]<>=/".contains(c))
-            .map(|t| t.trim_end_matches(['.', ':']))
-            .any(|t| is_ipv4(t) || is_ipv6(t) || is_mac(t))
+        || q.chars()
+            .any(|c| ('\u{ff00}'..='\u{ffef}').contains(&c) || (!c.is_ascii() && c.is_numeric()))
+        || has_scheme_slash(&q)
+        || q.as_bytes()
+            .windows(3)
+            .any(|w| w[0] == b'%' && w[1].is_ascii_hexdigit() && w[2].is_ascii_hexdigit())
+        || deny.iter().any(|d| has_word(&q, &d.to_lowercase()))
+        || runs(&q, |c| c.is_ascii_digit() || c == '.').any(|(_, r)| is_ipv4(r))
+        || runs(&q, |c| c.is_ascii_hexdigit() || c == ':' || c == '.')
+            .any(|(i, r)| is_ipv6(&q, i, r))
+        || runs(&q, |c| {
+            c.is_ascii_hexdigit() || matches!(c, ':' | '.' | '-')
+        })
+        .any(|(_, r)| is_mac(r))
     {
         return Err(Refusal::Blocked);
     }
     Ok(())
 }
 
-fn is_ipv4(t: &str) -> bool {
-    let host = t.rsplit_once(':').map_or(t, |(h, p)| {
-        if !p.is_empty() && p.bytes().all(|b| b.is_ascii_digit()) {
-            h
-        } else {
-            t
+/// Maximal runs of characters satisfying `f`, with their byte offsets.
+fn runs(q: &str, f: impl Fn(char) -> bool) -> impl Iterator<Item = (usize, &str)> {
+    let mut start = None;
+    let mut out = Vec::new();
+    for (i, c) in q.char_indices() {
+        match (f(c), start) {
+            (true, None) => start = Some(i),
+            (false, Some(s)) => {
+                out.push((s, &q[s..i]));
+                start = None;
+            }
+            _ => {}
         }
-    });
-    let parts: Vec<&str> = host.split('.').collect();
-    parts.len() == 4
-        && parts.iter().all(|p| {
-            !p.is_empty()
-                && p.len() <= 3
+    }
+    if let Some(s) = start {
+        out.push((s, &q[s..]));
+    }
+    out.into_iter()
+}
+
+/// `scheme:/` or `scheme:\`: a URL without `://`.
+fn has_scheme_slash(q: &str) -> bool {
+    q.match_indices([':'].as_slice()).any(|(i, _)| {
+        matches!(q[i + 1..].chars().next(), Some('/' | '\\'))
+            && q[..i]
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_ascii_alphabetic())
+    })
+}
+
+fn is_word_char(c: char) -> bool {
+    c.is_ascii_alphanumeric() || c == '_'
+}
+
+/// `term` occurs in `q` not embedded in a longer word.
+fn has_word(q: &str, term: &str) -> bool {
+    if term.is_empty() {
+        return false;
+    }
+    let mut from = 0;
+    while let Some(p) = q[from..].find(term) {
+        let (s, e) = (from + p, from + p + term.len());
+        if !q[..s].chars().next_back().is_some_and(is_word_char)
+            && !q[e..].chars().next().is_some_and(is_word_char)
+        {
+            return true;
+        }
+        from = s + q[s..].chars().next().map_or(1, char::len_utf8);
+    }
+    false
+}
+
+/// Four consecutive dot-separated parts of 1-3 digits, each at most 255.
+fn is_ipv4(run: &str) -> bool {
+    let parts: Vec<&str> = run.split('.').collect();
+    parts.windows(4).any(|w| {
+        w.iter().all(|p| {
+            (1..=3).contains(&p.len())
                 && p.bytes().all(|b| b.is_ascii_digit())
                 && p.parse::<u8>().is_ok()
         })
-}
-
-fn is_ipv6(t: &str) -> bool {
-    t.matches(':').count() >= 2 && t.parse::<Ipv6Addr>().is_ok()
-}
-
-fn is_mac(t: &str) -> bool {
-    [':', '-'].iter().any(|&sep| {
-        let g: Vec<&str> = t.split(sep).collect();
-        g.len() == 6
-            && g.iter()
-                .all(|x| x.len() == 2 && x.bytes().all(|b| b.is_ascii_hexdigit()))
     })
+}
+
+/// Any sub-run of a hex/colon/dot run, starting at the run start or at/after
+/// a colon and not glued to a preceding letter, that parses as IPv6
+/// (so `ip:fe80::1`, `fe80::` and `::1` are caught, `std::vector` is not).
+fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
+    if run.matches(':').count() < 2 {
+        return false;
+    }
+    let glued = |at: usize| {
+        q[..at]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric())
+    };
+    (0..run.len())
+        .filter(|&s| {
+            (s == 0 || run.as_bytes()[s - 1] == b':' || run.as_bytes()[s] == b':')
+                && !glued(off + s)
+        })
+        .any(|s| {
+            (s + 1..=run.len()).any(|e| {
+                let c = &run[s..e];
+                c.bytes().any(|b| b.is_ascii_hexdigit())
+                    && c.matches(':').count() >= 2
+                    && c.parse::<Ipv6Addr>().is_ok()
+            })
+        })
+}
+
+/// Six 2-hex groups joined by `:` or `-`, or three 4-hex groups joined by `.`.
+fn is_mac(run: &str) -> bool {
+    let hex = |g: &&str, n: usize| g.len() == n && g.bytes().all(|b| b.is_ascii_hexdigit());
+    [(':', 6, 2), ('-', 6, 2), ('.', 3, 4)]
+        .iter()
+        .any(|&(sep, count, n)| {
+            let g: Vec<&str> = run.split(sep).collect();
+            g.windows(count).any(|w| w.iter().all(|x| hex(x, n)))
+        })
 }
 
 #[cfg(test)]
@@ -118,9 +202,79 @@ mod tests {
         assert_eq!(check_query("openssh 9.8 regression", &deny()), Ok(()));
         for q in [
             "openssh 9.8.1 regression",
-            "version 1.2.3.4.5 notes",
             "www.example.org docs",
             "256.1.1.1 bad",
+        ] {
+            assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
+        }
+    }
+    fn blocked(qs: &[&str], deny: &[String]) {
+        for q in qs {
+            assert_eq!(check_query(q, deny), Err(Refusal::Blocked), "{q}");
+        }
+    }
+    #[test]
+    fn addresses_are_found_whatever_surrounds_them() {
+        blocked(
+            &[
+                "ssh root@10.0.0.5 denied",
+                "ip:10.0.0.5",
+                "10.0.0.5-10.0.0.9",
+                "10.0.0.5?",
+                "mac=aa:bb:cc:dd:ee:ff!",
+                "ip:fe80::1",
+                "x@2001:db8::1!",
+                "999.10.0.0.5",
+            ],
+            &deny(),
+        );
+    }
+    #[test]
+    fn ipv6_zone_trailing_colons_and_cisco_mac() {
+        blocked(
+            &[
+                "2001:db8::",
+                "fe80::",
+                "fe80::1%eth0",
+                "aabb.ccdd.eeff",
+                "mac aa-bb-cc-dd-ee-ff!",
+                "::1",
+            ],
+            &deny(),
+        );
+    }
+    #[test]
+    fn deny_terms_are_lowercased_here_and_match_whole_words() {
+        let up = vec!["WEB-01".to_string(), "Corp.Example".to_string()];
+        blocked(&["web-01 crash", "mail.corp.example"], &up);
+        let d: Vec<String> = ["al", "db", "admin"].map(String::from).to_vec();
+        blocked(&["admin panel exploit", "the db crashed", "al, hi"], &d);
+        for q in ["algorithm choice", "mongodb index", "xadmin"] {
+            assert_eq!(check_query(q, &d), Ok(()), "{q}");
+        }
+    }
+    #[test]
+    fn lookalikes_and_url_forms_without_scheme_separator() {
+        blocked(
+            &[
+                "\u{ff37}\u{ff25}\u{ff22}-01 bug",
+                "10.0.0.\u{ff15} x",
+                "ip \u{0665}.1.1.1",
+                "file:/etc/passwd",
+                "https:\\\\x",
+                "a%2e%2e b",
+                "%41",
+            ],
+            &deny(),
+        );
+    }
+    #[test]
+    fn ordinary_queries_still_pass() {
+        for q in [
+            "ssh -o setting",
+            "chrome 126.0.6478.126",
+            "apache 2.4.62 fix",
+            "std::vector push",
         ] {
             assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
         }
