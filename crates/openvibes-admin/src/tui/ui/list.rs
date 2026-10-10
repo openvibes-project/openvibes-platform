@@ -43,6 +43,28 @@ fn width(spans: &[Span]) -> usize {
     spans.iter().map(|s| s.content.chars().count()).sum()
 }
 
+/// Cut a line to `max` columns, ending in "…" instead of running off the frame.
+fn clip(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
+    if width(&spans) <= max {
+        return spans;
+    }
+    let mut left = max - 1;
+    let mut out = Vec::new();
+    for s in spans {
+        let n = s.content.chars().count();
+        if n <= left {
+            left -= n;
+            out.push(s);
+        } else {
+            let cut: String = s.content.chars().take(left).collect();
+            out.push(Span::styled(cut, s.style));
+            break;
+        }
+    }
+    out.push(Span::raw("…"));
+    out
+}
+
 type Laid = Vec<(Line<'static>, Option<usize>)>;
 
 /// Every row laid out: the line, and which entry it is (if one); also, per
@@ -104,7 +126,7 @@ fn layout(
                     );
                 }
                 heads.push(if last_was_entry { None } else { heading_line });
-                out.push((Line::from(spans), Some(entry)));
+                out.push((Line::from(clip(spans, 76)), Some(entry)));
                 entry += 1;
                 last_was_entry = true;
             }
@@ -191,6 +213,15 @@ mod tests {
         (0..n)
             .map(|i| Row::entry(&format!("item{i}"), &format!("value {i}")))
             .collect()
+    }
+
+    #[test]
+    fn a_long_entry_ends_in_an_ellipsis_inside_the_frame() {
+        let long = vec![Row::entry("x", &"y".repeat(100))];
+        let mut scroll = Scroll::default();
+        let t = text(&lines(&theme(), &long, 0, &mut scroll, 13, 15));
+        assert_eq!(t[1].chars().count(), 76, "{:?}", t[1]);
+        assert!(t[1].ends_with('…'), "{:?}", t[1]);
     }
 
     #[test]
