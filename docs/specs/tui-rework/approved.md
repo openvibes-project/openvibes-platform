@@ -137,3 +137,40 @@
     Yes / No buttons, ←→ and "Enter Confirm".
 31. Every checkbox row's bar (user): "Space Select/deselect  Enter Confirm".
     Rules 30 and 31 are standard on all pages (user).
+    Optional parts + Ports and addresses approved.
+32. On one screen, information rows and entries share one value column.
+33. Nothing the platform does automatically gets a button (user: "why
+    should we even have the clean up option? That should happen
+    automatically"). Database is a report: schema, size, data kept (set in
+    the console), automatic nightly clean-up with last run and what it
+    removed. Back up stays its own Maintenance entry.
+34. Certificates (user): web and agent certificates are renewed
+    automatically under OpenVIBES's intermediate (no Renew button, rule 33;
+    Status warns only if a renewal fails). Entries: Names, Replace the
+    intermediate. With your own CA, replacing uses the install flow (show
+    the request, paste or pick the signed certificate, checked at once).
+    With the OpenVIBES-made CA it needs the offline root key file.
+    Superseded in part by 36; approved.
+35. SAML sign-in is a console feature for the whole console, mapped to the
+    platform's existing users, roles and permissions (user): its own spec.
+    The TUI only gets a place under Console sign-in (single sign-on on/off,
+    the local admin as break-glass).
+36. Certificates must cover homelabs, normal companies and strict
+    segmented networks (user: "huge aspirations"). Two questions:
+    Agent certificates — (•) Your CA signs our request (default; key made
+    here) / ( ) Import from your PKI (cert + key, or .p12 with password) /
+    ( ) OpenVIBES makes its own CA. Web address certificate — (•) From the
+    intermediate (renewed automatically) / ( ) Your own certificate (e.g.
+    wildcard; you renew it; Status warns before expiry) / ( ) Automatic via
+    ACME (Let's Encrypt, or step-ca/Vault/EJBCA inside; ACME server,
+    e-mail, HTTP-01 or DNS-01). Maintenance › Certificates shows both parts
+    and changes either. ACME explained to and kept by the user. Approved.
+37. Every "Back up first" checkbox (Update, Uninstall) is off by default
+    and then remembers the user's last choice; the help line says
+    "Ticked because you backed up last time" or "Off unless you chose it
+    last time"
+    (user). Supersedes "default on" in 29. Back up: what is in it, a new
+    file name every time, progress, result with size and "copy it off
+    this host". Uninstall: (•) Keep the data / ( ) Remove everything
+    (type the host name to confirm, ✓ when it matches; nothing left
+    behind), Back up first, Uninstall with the standard question.
