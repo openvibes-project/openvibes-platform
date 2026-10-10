@@ -15,10 +15,11 @@ UPD = [("{g}[x]{/} Back up first", "~/openvibes-0.2.9-2026-10-10-2041.dump"), ("
        ("What's new", "the release notes")]
 
 
-def update(sel, b):
+def update(sel, b, hint=None):
     items = [(n.replace("{g}", "").replace("{/}", "") if i == sel else n, v) for i, (n, v) in enumerate(UPD)]
+    tail = ["", hint] if hint else []
     return screen("limebox · Maintenance › Update OpenVIBES",
-                  [header("Update OpenVIBES"), ""] + UPD_INFO + entries(items, sel), b)
+                  [header("Update OpenVIBES"), ""] + UPD_INFO + entries(items, sel) + tail, b)
 
 
 USTEPS = ["Back up", "Stop services", "Install packages", "Update the database", "Start services", "Ready"]
