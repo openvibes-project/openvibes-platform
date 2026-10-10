@@ -3,9 +3,6 @@
 //! `platform_host::Host`.
 
 pub mod app;
-mod banner;
-#[cfg(test)]
-mod banner_tests;
 mod config_view;
 mod configuration;
 mod database;
@@ -13,17 +10,23 @@ mod database;
 mod database_tests;
 mod database_view;
 pub mod form;
+mod home;
 mod jobs;
 mod maintain;
 #[cfg(test)]
 mod maintain_tests;
 mod maintain_view;
+mod nav;
+#[cfg(test)]
+mod nav_tests;
 mod password;
+mod service;
 mod services;
 mod setup;
 #[cfg(test)]
 mod setup_tests;
 mod setup_view;
+mod status;
 #[cfg(test)]
 mod tests;
 mod ui;
@@ -35,40 +38,25 @@ use std::{
 };
 
 use app::{App, Key, Tab};
+use nav::Screen;
 use platform_host::{Host, native::Native, runner::SystemRunner};
 use ratatui::{
     Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Layout},
-    widgets::Paragraph,
+    layout::Rect,
 };
 
-/// The smallest terminal the screens are laid out for (spec §5).
-pub const MIN_WIDTH: u16 = 80;
-pub const MIN_HEIGHT: u16 = 24;
-
 pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
-    let area = frame.area();
-    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-        let text = format!(
-            "openvibes-admin needs at least {MIN_WIDTH}×{MIN_HEIGHT} (now {}×{}); enlarge the window",
-            area.width, area.height
-        );
-        frame.render_widget(Paragraph::new(text), area);
-        return;
-    }
-    let [title, body] = Layout::vertical([
-        Constraint::Length(banner::height(area.height)),
-        Constraint::Min(0),
-    ])
-    .areas(area);
-    banner::draw(frame, title, app);
+    nav::render(frame, app);
+}
+
+/// Today's Setup, Configuration and Database screens, under the location line.
+pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
-        Tab::Setup => setup_view::draw(frame, body, app),
-        Tab::Services => services::draw(frame, body, app),
-        Tab::Configuration => config_view::draw(frame, body, app),
-        Tab::Database => database_view::draw_database(frame, body, app),
-        Tab::Health => database_view::draw_health(frame, body, app),
+        Tab::Setup => setup_view::draw(frame, area, app),
+        Tab::Configuration => config_view::draw(frame, area, app),
+        Tab::Database => database_view::draw_database(frame, area, app),
+        Tab::Services | Tab::Health => {}
     }
 }
 
@@ -145,9 +133,10 @@ pub fn run() -> ExitCode {
         // between steps (a step blocks while it runs, e.g. dnf), and before
         // the first step of a run the key just started.
         app.key_then_tick(pressed);
-        if app.tab == Tab::Services
-            && app.confirm.is_none()
-            && app.boot.is_none()
+        app.tick(Instant::now());
+        if matches!(app.nav.screen, Screen::Status | Screen::Service(_))
+            && app.question.is_none()
+            && app.prompt.is_none()
             && refreshed.elapsed() >= REFRESH
         {
             app.refresh();

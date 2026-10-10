@@ -317,13 +317,13 @@ impl<H: Host> App<H> {
             Phase::Stopped(at) => match key {
                 Key::Char('r') => self.ask_password(After::Run(at)),
                 Key::Esc => self.setup.phase = Phase::Status,
-                _ => self.status_key(key),
+                _ => self.setup_status_key(key),
             },
-            Phase::Finished | Phase::Status => self.status_key(key),
+            Phase::Finished | Phase::Status => self.setup_status_key(key),
         }
     }
 
-    fn status_key(&mut self, key: Key) {
+    fn setup_status_key(&mut self, key: Key) {
         match key {
             Key::Char('c') => self.ask_password(After::Status),
             Key::Char('r') => {
@@ -507,6 +507,8 @@ impl<H: Host> App<H> {
             }
             Key::Enter if self.setup.row == START_ROW => self.start_plan(),
             Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
+            // A set-up host's change-components form: back to Setup's status.
+            Key::Esc if self.setup.previous.is_some() => self.setup.phase = Phase::Status,
             Key::Tab => self.leave_setup(),
             Key::BackTab => self.open(super::app::Tab::Health),
             Key::Char('q') => self.quit = true,

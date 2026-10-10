@@ -38,6 +38,7 @@ fn cells(status: &ServiceStatus) -> [String; 5] {
     ]
 }
 
+#[allow(dead_code, reason = "Task 8 replaces the Services tab")]
 pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let [table, logs, status, keys] = Layout::vertical([
         Constraint::Length(u16::try_from(app.services.len()).unwrap_or(5) + 3),
@@ -115,6 +116,7 @@ fn capitalised(action: ServiceAction) -> &'static str {
 /// A journal line (`short-iso`) as `HH:MM:SS LEVEL message key=value…`
 /// (fields in key order) when the service logged tracing JSON (board #78: the raw JSON was hard
 /// to read); any other line as it is.
+#[allow(dead_code, reason = "used in Task 8")]
 pub(super) fn readable(line: &str) -> String {
     let Some(start) = line.find(": {") else {
         return line.to_owned();
@@ -156,6 +158,7 @@ pub(super) fn readable(line: &str) -> String {
 
 /// `text` with control characters escaped (`\u{1b}`), as the journal
 /// reader does for the raw line.
+#[allow(dead_code, reason = "used in Task 8")]
 fn safe(text: &str) -> String {
     text.chars()
         .map(|c| {

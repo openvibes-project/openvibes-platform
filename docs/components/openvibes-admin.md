@@ -36,14 +36,20 @@ Who can use it: members of `openvibes-operators` (created by the RPM; add a
 person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
-without a password. `Tab` switches between the screens (Setup, Services,
-Configuration, Database, Health), `Shift+Tab` back. In any field being edited,
-`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters).
-Every screen starts with the OpenVIBES wordmark (one line, `OpenVIBES`, the
-tabs and the version, on a terminal under 30 rows, #78; otherwise six rows,
-figlet's standard font: "Open" in white, "VIBES" in the brand teal
-`#36b9e0`), the tabs on its last row (the current one highlighted), and the
-version on the right; with `NO_COLOR` set it is plain text.
+without a password. A set-up host opens on Home (Status, Maintenance,
+Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
+shows the keys, and `q` quits from Home. Maintenance (interim, until it is
+reworked) holds today's Setup, Settings files (Configuration) and Database
+screens: they keep their own keys, and `Esc` leaves them only when nothing
+is being typed or asked (unsaved settings ask first). A host not set up
+opens on the install form, which `Esc` does not leave. In any field being
+edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
+letters). Home, Maintenance and Help show the block logo ("OPEN" in white,
+"VIBES" in the brand teal `#36b9e0`), a location line (host, where you
+are, the version and any available update), and a key bar; today's
+screens show only the location line. With `NO_COLOR` set there is no
+colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
+Home, Maintenance and Help, `ui/` the shared frame).
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,

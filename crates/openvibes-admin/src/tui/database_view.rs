@@ -45,6 +45,7 @@ pub fn draw_database<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     frame.render_widget(Paragraph::new(DATABASE_KEYS), keys);
 }
 
+#[allow(dead_code, reason = "Task 7 shows health on Status")]
 pub fn draw_health<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let [body, status, keys] = areas(area);
     let health = &app.database.health;

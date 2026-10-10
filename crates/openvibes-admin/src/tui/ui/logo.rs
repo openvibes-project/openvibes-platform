@@ -70,6 +70,7 @@ pub fn lines(theme: &Theme, header: &Header) -> Vec<Line<'static>> {
 }
 
 /// The plain text of `lines` (tests).
+#[cfg(test)]
 pub fn text(lines: &[Line]) -> Vec<String> {
     lines
         .iter()

@@ -17,6 +17,7 @@ pub enum Bar {
         nav: bool,
         home: bool,
     },
+    #[allow(dead_code, reason = "used in Task 8")]
     Ask {
         question: String,
         detail: String,
@@ -24,19 +25,16 @@ pub enum Bar {
     },
     /// A value being typed: what it is, how it shows (masked for a
     /// password), what Enter does.
+    #[allow(dead_code, reason = "used in Task 8")]
     Typing {
         label: String,
         shown: String,
         done: String,
     },
-    Busy {
-        text: String,
-        tick: usize,
-    },
-    Done {
-        ok: bool,
-        text: String,
-    },
+    #[allow(dead_code, reason = "used in Task 8")]
+    Busy { text: String, tick: usize },
+    #[allow(dead_code, reason = "used in Task 8")]
+    Done { ok: bool, text: String },
 }
 
 impl Bar {

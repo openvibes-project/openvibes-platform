@@ -12,7 +12,7 @@ use super::{
 /// A Repair whose first step fails: the run stops there.
 fn after_a_failed_repair() -> super::app::App<super::setup_tests::SetupHost> {
     let mut app = set_up(vec![Ok("failed\tport 443 is taken\n".into())]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('r'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -50,7 +50,7 @@ fn keep_data_goes_straight_from_the_choice_to_the_button() {
     // everything; j used to land on them, invisible, and the button was
     // three presses away.
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('x'));
     assert_eq!(app.setup.row2, 0);
     app.key(Key::Char('j'));
@@ -67,7 +67,7 @@ fn keep_data_goes_straight_from_the_choice_to_the_button() {
 #[test]
 fn remove_everything_visits_its_two_fields() {
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('x'));
     app.key(Key::Char(' ')); // Remove everything
     let rows: Vec<usize> = (0..3)
@@ -82,7 +82,7 @@ fn remove_everything_visits_its_two_fields() {
 #[test]
 fn switching_to_keep_data_on_a_field_moves_to_a_visible_row() {
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('x'));
     app.key(Key::Char(' ')); // Remove everything
     app.key(Key::Down); // row 1

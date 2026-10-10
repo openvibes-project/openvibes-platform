@@ -9,10 +9,8 @@ use super::theme::Theme;
 
 #[derive(Clone, Debug)]
 pub enum Row {
-    Heading {
-        text: String,
-        right: String,
-    },
+    #[allow(dead_code, reason = "used in Task 7/8")]
+    Heading { text: String, right: String },
     Entry {
         name: Vec<Span<'static>>,
         value: Vec<Span<'static>>,
@@ -34,6 +32,7 @@ pub struct Scroll {
     pub top: usize,
 }
 
+#[allow(dead_code, reason = "used in Task 7/8")]
 pub fn entries(rows: &[Row]) -> usize {
     rows.iter()
         .filter(|r| matches!(r, Row::Entry { .. }))

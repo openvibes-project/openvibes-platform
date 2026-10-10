@@ -10,6 +10,7 @@ use ratatui::{Terminal, backend::TestBackend};
 
 use super::{
     app::{App, Key, Tab},
+    nav::Screen,
     render,
     setup::Phase,
 };
@@ -92,6 +93,11 @@ fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<SetupHost> 
     app_taken(set_up, answers, vec![])
 }
 
+/// A host not set up yet, as the other fresh-host tests build it.
+pub(super) fn fresh_app() -> App<SetupHost> {
+    app(false, vec![])
+}
+
 fn app_taken(
     set_up: bool,
     answers: Vec<Result<String, HostError>>,
@@ -148,7 +154,7 @@ fn a_new_host_opens_on_setup_with_the_components() {
     assert_eq!(app.tab, Tab::Setup);
     let text = screen(&app);
     for want in [
-        "[Setup]",
+        "· Install",
         "[•] ingest",
         "[x] agent",
         "[ ] assistant",
@@ -161,7 +167,7 @@ fn a_new_host_opens_on_setup_with_the_components() {
 
 #[test]
 fn a_set_up_host_opens_on_services() {
-    assert_eq!(app(true, vec![]).tab, Tab::Services);
+    assert_eq!(app(true, vec![]).nav.screen, Screen::Home);
 }
 
 #[test]
@@ -314,9 +320,7 @@ pub(super) fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> 
 #[test]
 fn a_set_up_host_offers_the_maintenance_actions() {
     let mut app = set_up(vec![]);
-    for _ in 0..4 {
-        app.key(Key::Tab); // Services → Configuration → Database → Health → Setup
-    }
+    app.open(Tab::Setup);
     let text = screen(&app);
     for want in [
         "c check",
@@ -333,7 +337,7 @@ fn a_set_up_host_offers_the_maintenance_actions() {
 #[test]
 fn repair_runs_every_step_in_repair_mode() {
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('r'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
@@ -352,7 +356,7 @@ fn components_after_a_stopped_first_install_install_again() {
     std::fs::create_dir_all(&home).unwrap();
     std::fs::write(home.join("openvibes-root-ca.key"), "x").unwrap();
     app.setup.home = Some(home.display().to_string());
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('m'));
     assert_eq!(app.setup.phase, Phase::Form);
     assert!(app.setup.previous.is_none(), "install, not repair");
@@ -367,7 +371,7 @@ fn components_after_a_stopped_first_install_install_again() {
 #[test]
 fn changing_components_installs_then_removes_the_unticked_ones() {
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('m'));
     assert_eq!(app.setup.phase, Phase::Form);
     assert_eq!(app.setup.hostname, "platform.example.com");
@@ -412,7 +416,7 @@ fn update_lists_the_packages_then_runs_the_update_job() {
         },
     ];
     app.setup.home = Some("/home/alice".into());
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('u'));
     let text = screen(&app);
     assert!(
@@ -439,7 +443,7 @@ fn remove_everything_needs_this_hosts_name() {
     }
     let mut app = set_up(answers);
     app.setup.home = Some("/home/alice".into());
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('x'));
     app.key(Key::Char(' ')); // Remove everything
     while app.setup.row2 != 3 {
@@ -475,7 +479,7 @@ fn remove_everything_needs_this_hosts_name() {
 #[test]
 fn keep_data_uninstall_sends_no_confirmation() {
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.key(Key::Char('x'));
     while app.setup.row2 != 3 {
         app.key(Key::Down);
@@ -544,7 +548,7 @@ fn set_up_on_8443() -> App<SetupHost> {
     let mut app = set_up(vec![]);
     app.host.plan =
         format!("{PLAN}console_port = 8443\ningest_port = 18423\ndistribution_port = 18424\n");
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app
 }
 
@@ -660,7 +664,7 @@ fn a_default_port_held_while_our_unit_is_down_is_named() {
             format!("{PLAN}console_port = 443\ningest_port = 18423\ndistribution_port = 18424\n");
         app.host.taken = vec![443];
         app.services = vec![status(active)];
-        app.tab = Tab::Setup;
+        app.open(Tab::Setup);
         app.key(Key::Char('p'));
         let text = screen(&app);
         assert_eq!(
@@ -678,7 +682,7 @@ fn a_default_port_held_while_our_unit_is_down_is_named() {
 fn every_step_fits_and_the_failure_is_in_full() {
     use platform_host::StepState;
     let mut app = set_up(vec![]);
-    app.tab = Tab::Setup;
+    app.open(Tab::Setup);
     app.setup.job = super::jobs::Job::Repair;
     let steps = app.setup.job.titles().len();
     let long = "a detail long enough to wrap twice on a wide terminal, ".repeat(4);
