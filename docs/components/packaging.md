@@ -133,11 +133,13 @@ directory itself, so no tmpfiles.d entry is needed.
   (`--no-block`) after any transaction that installs or upgrades files
   there, so new rules are published with no Update or Repair. It skips
   when Setup never ran or is running.
-- openvibes-admin's `%posttrans` runs `openvibes-admin helper
-  agent-config-upgrade || :`: on a host Setup configured before v0.2.7 it
-  adds `services` to the local agent's `collectors` line (only the exact
-  line Setup wrote) and try-restarts the agent; it never fails the
-  transaction.
+- openvibes-admin's `%posttrans`, and its `%transfiletriggerin` on
+  `/usr/bin/openvibes-agent` (an agent installed or upgraded later), run
+  `openvibes-admin helper agent-config-upgrade || :`: on a host Setup
+  configured before v0.2.7 it adds `services` to the local agent's
+  `collectors` line (only the exact line Setup wrote, only for an agent
+  rpm reports as 0.2.2 or later) and queues a try-restart of the agent; it
+  never fails the transaction.
 - `openvibes-llm-tune.service` (llm package): a oneshot as root, running
   `openvibes-admin helper assistant-tune --auto`; no `[Install]`; the
   llm package's `%transfiletriggerin -P 900000` on `/usr/libexec/openvibes-llm` starts it (`--no-block`, after the `%posttrans` scriptlets and the restart). It tunes only an

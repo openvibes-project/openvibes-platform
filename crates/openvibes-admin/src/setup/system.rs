@@ -208,16 +208,19 @@ impl<R: Runner> Ctx<'_, R> {
             Some(_) => Some(self.ids(owner)?),
             None => None,
         };
-        self.put_ids(abs, contents, ids, mode)
+        self.put_ids(abs, contents, ids, mode, "setup")
     }
 
-    /// As `put`, with a numeric (uid, gid): keeps an existing file's owner.
+    /// As `put`, with a numeric (uid, gid) (keeps an existing file's owner)
+    /// and the temp file's suffix: `.NAME.TAG` (writers that may run at the
+    /// same time must not share one).
     pub fn put_ids(
         &self,
         abs: &str,
         contents: &[u8],
         ids: Option<(u32, u32)>,
         mode: u32,
+        tag: &str,
     ) -> Result<(), String> {
         let path = self.path(abs);
         let fail = |error: std::io::Error| format!("{abs}: {error}");
@@ -227,7 +230,7 @@ impl<R: Runner> Ctx<'_, R> {
         fs::create_dir_all(dir).map_err(fail)?;
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
         let temp_abs = format!(
-            "{}/.{name}.setup",
+            "{}/.{name}.{tag}",
             abs.rsplit_once('/').map_or("", |(d, _)| d)
         );
         let temp = self.path(&temp_abs);

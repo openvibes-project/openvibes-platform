@@ -506,8 +506,11 @@ agent #57, its template `/usr/share/openvibes-agent/openvibes-agent.rules`
 the alarm rule set; an older agent never gets either, since it would refuse
 the collector name. That explicit list replaces the agent's default, so it
 also names `services` (open ports and services, P15) when the agent knows
-it: agents 0.2.2 to 0.2.5 ship `/usr/share/doc/openvibes-agent/owners.conf`,
-0.2.6 on the rule template; agents 0.2.0 and 0.2.1 would refuse the name.
+it: `rpm -q --qf '%{VERSION}' openvibes-agent` says 0.2.2 or later (agents
+0.2.0 and 0.2.1 would refuse the name and not start; an rpm error or a
+version that does not parse counts as older). Only when rpm itself is
+missing do files decide (`/usr/share/doc/openvibes-agent/owners.conf` in
+0.2.2 to 0.2.5, the rule template from 0.2.6).
 Before v0.2.7 the list never had `services`: Check sees that file as
 different, so Repair rewrites it. When the host's agent reads kernel audit (the exec rule
 is in `/etc/audit/rules.d`; an eBPF host has none there) and
@@ -668,19 +671,24 @@ Health line for a failed upgrade migration, and a free-space check before
 the dump.
 
 `helper agent-config-upgrade` (root; `setup/auto_agent.rs`) runs from
-openvibes-admin's `%posttrans`, so a plain `dnf upgrade` turns services on
-for the local agent of a host set up before v0.2.7. Only when Setup ran,
+openvibes-admin's `%posttrans` and from its file trigger on
+`/usr/bin/openvibes-agent` (an agent installed or upgraded in a later
+transaction), so a plain `dnf upgrade` turns services on for the local
+agent of a host set up before v0.2.7. Only when Setup ran,
 `/usr/bin/openvibes-agent` exists and `/etc/openvibes-agent/agent.toml` is a
 regular file (a symlink is not followed) holding exactly the line Setup
 wrote, `collectors = ["processes", "packages", "ports", "process_events"]`,
-does it replace that line with the same list plus `"services"` (atomic
-write, owner and mode kept) and run `systemctl try-restart
-openvibes-agent.service`. Any other `collectors` line without `services`
-(extra spaces, another order, another collector) is left alone with one
-line saying the agent does not report open ports and services and why;
-so is an agent too old for the name. No `collectors` line, or one with
-`services`, prints nothing. It takes no lock (one atomic rename, the same
-content Setup's Agent step writes) and always exits 0. Test:
-`setup/auto_agent.rs` unit tests.
+and the agent knows `services` (as above), does it replace that line with
+the same list plus `"services"` (atomic write through its own temp file
+`.agent.toml.upgrade`, owner and mode kept) and run `systemctl --no-block
+try-restart openvibes-agent.service`. Any other `collectors` line without
+`services` (extra spaces, another order, another collector, CRLF) is left
+alone with one line saying the agent does not report open ports and
+services and why; so is an agent too old for the name. That line is kept
+in `/var/lib/openvibes-admin/agent-services-note` and not printed again
+while it stays the same. No `collectors` line, or one with `services`,
+prints nothing. It takes no lock (one atomic rename, the same content
+Setup's Agent step writes) and always exits 0. Test: `setup/auto_agent.rs`
+unit tests.
 
 `assistant-tune` waits (up to 300 s, before it writes the new tuning) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.

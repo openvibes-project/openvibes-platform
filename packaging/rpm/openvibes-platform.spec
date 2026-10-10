@@ -285,6 +285,10 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 # Priority below systemd's restart trigger; the unit also waits for migrate.
 %transfiletriggerin -P 900000 -n openvibes-admin -- %{_datadir}/openvibes/rules
 systemctl start --no-block openvibes-rules-apply.service >/dev/null 2>&1 || :
+# The same for an agent installed or upgraded in a later transaction (it
+# may only now know the services collector).
+%transfiletriggerin -n openvibes-admin -- %{_bindir}/openvibes-agent
+%{_bindir}/openvibes-admin helper agent-config-upgrade || :
 
 %if %{with llm}
 %pre -n openvibes-llm
