@@ -152,10 +152,13 @@ export function buildDemoData(now = Date.now()) {
         last_observed_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
         received_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
       });
-      const state = random() < 0.72 ? "open" : pick(["mitigated", "accepted_risk", "false_positive"]);
+      // The same draws as before triage v2 (so the rest of the demo stays
+      // put): what was "investigating" is now an open finding with an assignee.
+      const drawn = random() < 0.72 ? "open" : pick(["assigned", "mitigated", "accepted_risk", "false_positive"]);
+      const state = drawn === "assigned" ? "open" : drawn;
       triage.set(`${agent.id}|${rule.ruleSetId}|${rule.ruleId}`, {
         state, version: 1, rule_version: 3,
-        assigned_to: null,
+        assigned_to: drawn === "assigned" ? "analyst" : null,
         note: state === "accepted_risk" ? "Isolated lab network; revisit next quarter."
           : state === "open" ? null : "Handled outside the console.",
         accepted_until: state === "accepted_risk" ? iso(now + 60 * DAY) : null,

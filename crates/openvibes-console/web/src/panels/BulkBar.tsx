@@ -31,17 +31,20 @@ const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISO
 /** `items` builds the request's rows when an action is confirmed; `noun`
  * names them ("alarms"); `newCase` prefills a new case; `partial` says the
  * list holds only its first results. `inline`: the detail view's action
- * row, acting on every open host, with no count or Clear. */
-export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, inline }: {
+ * row, acting on every open host, with no count or Clear; `without`
+ * leaves out actions the panel offers elsewhere. */
+export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, inline, without = [] }: {
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
   newCase: () => { title: string; severity?: string | undefined }; partial?: boolean; onClear: () => void; inline?: boolean;
+  without?: BulkAction[];
 }) {
   const { can } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
   if (count === 0 || !can(triagePermission[kind])) return null;
-  const choices: Choice[] = [...stateChoices, { action: "assign", label: "Assign…" },
+  const offered: Choice[] = [...stateChoices, { action: "assign", label: "Assign…" },
     ...(can("cases.manage") ? [{ action: "case" as const, label: "Add to case…" }] : []),
     ...(kind === "alarms" && can("alarms.suppress", true) ? [{ action: "suppress" as const, label: "Suppress…" }] : [])];
+  const choices = offered.filter((c) => !without.includes(c.action));
   return (
     <div className={inline ? "row row--wrap" : "bulk-bar bulk-bar--bottom"} role="region" aria-label={inline ? "Triage actions" : "Bulk actions"}>
       {!inline && <strong className="num">{count.toLocaleString()} selected</strong>}
@@ -100,8 +103,9 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
   const title = choice.label.replace(/…$/, "");
   return (
     <div className="palette-backdrop" onMouseDown={onClose}>
-      <form className="palette bulk-dialog" role="dialog" aria-modal="true" aria-label={title} onSubmit={(event) => void submit(event)}
+      <div className="palette" role="dialog" aria-modal="true" aria-label={title}
         onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
+      <form className="bulk-dialog stack" onSubmit={(event) => void submit(event)}>
         <div className="row row--between"><h2>{title}: {count.toLocaleString()} {noun}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></div>
         {action === "state" && form.state === "accepted_risk" && (
@@ -141,6 +145,7 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
           <button type="submit" className="button button--primary" disabled={busy}>{busy ? "Applying…" : confirmLabel(form, count, noun)}</button>
         </div>
       </form>
+      </div>
     </div>
   );
 }

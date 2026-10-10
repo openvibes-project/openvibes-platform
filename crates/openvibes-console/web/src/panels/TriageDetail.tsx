@@ -70,9 +70,9 @@ export function HostsTab({ kind, hosts, item, cases, title, severity }: {
             { key: "host", header: "Host", sort: (h) => h.hostname ?? h.agent_id, render: (h) => (
               <span className="row"><ObjectLink to={{ kind: "agent", id: h.agent_id }}>{h.hostname ?? h.agent_id}</ObjectLink>{h.extra}</span>) },
             { key: "state", header: "State", width: "130px", sort: (h) => triageStates.indexOf(h.triage_state as never), render: (h) => <TriageBadge state={h.triage_state} /> },
-            { key: "case", header: "Case", width: "80px", hideBelow: 520, render: (h) => <CaseBadge numbers={cases.get(h.agent_id)} /> },
-            { key: "assignee", header: "Assignee", width: "110px", hideBelow: 620, sort: (h) => h.assigned_to ?? "", render: (h) => <span className={h.assigned_to ? "truncate" : "subtle"}>{h.assigned_to ?? "—"}</span> },
-            { key: "seen", header: "Last seen", width: "110px", hideBelow: 420, sort: (h) => h.seen, render: (h) => <span className="subtle"><Ago value={h.seen} /></span> },
+            { key: "assignee", header: "Assignee", width: "110px", hideBelow: 380, sort: (h) => h.assigned_to ?? "", render: (h) => <span className={h.assigned_to ? "truncate" : "subtle"}>{h.assigned_to ?? "—"}</span> },
+            { key: "case", header: "Case", width: "80px", hideBelow: 560, render: (h) => <CaseBadge numbers={cases.get(h.agent_id)} /> },
+            { key: "seen", header: "Last seen", width: "110px", hideBelow: 640, sort: (h) => h.seen, render: (h) => <span className="subtle"><Ago value={h.seen} /></span> },
           ]} />
       )}
       <BulkBar kind={kind} noun={selected.size === 1 ? "host" : "hosts"} count={selected.size} onClear={() => setSelected(new Set())}

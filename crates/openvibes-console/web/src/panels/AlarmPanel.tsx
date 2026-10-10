@@ -51,7 +51,7 @@ export function AlarmPanel({ id }: { id: string }) {
       {a.triage.note && <><dt>Note</dt><dd>{a.triage.note}</dd></>}
       {a.triage.updated_by && <><dt>Changed by</dt><dd>{a.triage.updated_by}{a.triage.updated_at && <>, <Ago value={a.triage.updated_at} /></>}</dd></>}
     </dl>
-    <BulkBar inline kind="alarms" noun="alarm" count={1} onClear={() => undefined} items={() => [{ id: a.id }]}
+    <BulkBar inline kind="alarms" noun="alarm" count={1} onClear={() => undefined} items={() => [{ id: a.id }]} without={["case", "suppress"]}
       newCase={() => ({ title: a.message, severity: a.severity })} />
     <QuietMenu alarm={a} />
   </>;

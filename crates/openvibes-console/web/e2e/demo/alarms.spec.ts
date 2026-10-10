@@ -14,24 +14,30 @@ test("an alarm shows its process tree and is triaged and quieted", async ({ page
   const before = Number((await badge.textContent())?.replace("+", ""));
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await expect(row).toContainText("postgres → bash");
-  await row.locator("td").nth(1).click();
+  await row.locator("td").nth(2).click();
   const inspector = page.locator(".inspector");
   const tree = inspector.getByRole("list", { name: /Process tree/ });
   await expect(tree.locator("li")).toHaveCount(2);
   await expect(tree.locator("li").last()).toContainText("/usr/bin/bash");
   await expect(tree.locator("li").first()).toContainText("postgres: checkpointer");
 
-  await inspector.getByRole("button", { name: "Apply" }).click();
-  await expect(inspector.locator(".panel-header")).toContainText("Investigating");
-  await inspector.getByRole("combobox", { name: "New triage state" }).click();
-  await page.getByRole("option", { name: "False positive" }).click();
-  await inspector.getByRole("combobox", { name: "Don't alarm on this again" }).click();
-  await page.getByRole("option", { name: /alarm again: on this host/i }).click();
-  await inspector.getByRole("textbox", { name: "Triage note" }).fill("our backup job");
-  await inspector.getByRole("button", { name: "Apply" }).click();
+  // One step to a closing state, and it needs a note (triage v2).
+  await inspector.getByRole("region", { name: "Triage actions" }).getByRole("button", { name: "False positive…" }).click();
+  const dialog = page.getByRole("dialog", { name: "False positive" });
+  await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("note");
+  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("our backup job");
+  await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
+  await expect(page.locator(".toast")).toContainText("1 changed");
   await expect(inspector.locator(".panel-header")).toContainText("False positive");
   // Closing an alarm that isn't the newest still lowers the menu count (#164).
   if (before < 99) await expect(badge).toHaveText(String(before - 1));
+  // Then quiet it on this host, from the panel.
+  await inspector.getByRole("combobox", { name: /Quiet/ }).click();
+  await page.getByRole("option", { name: /On this host/i }).click();
+  await inspector.getByRole("button", { name: "Quiet" }).click();
+  await inspector.getByRole("textbox", { name: "Why (saved as the note)" }).fill("our backup job");
+  await inspector.getByRole("button", { name: "Confirm" }).click();
 
   await page.getByRole("link", { name: "Alarm suppressions" }).click();
   await expect(page.locator(".view tbody tr").filter({ hasText: "shell-from-database" })).toContainText("our backup job");

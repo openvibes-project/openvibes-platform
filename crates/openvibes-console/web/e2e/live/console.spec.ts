@@ -143,62 +143,54 @@ test("an old /findings link lands on /compliance with its filters", async ({ pag
   await expect(page.locator(".view")).toBeVisible();
 });
 
-test("imported findings are triaged in bulk from the panel", async ({ page }, info) => {
+test("open hosts of a finding are mitigated in bulk from the Hosts tab, with a note", async ({ page }, info) => {
   await signIn(page, "alex");
   await page.goto("/compliance");
   const row = page.locator(".view tbody tr").first();
-  const message = await row.locator(".truncate").first().innerText();
-  await row.locator("td").nth(1).click();
+  await row.locator("td").nth(2).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
-  // Hosts that can all move to investigating: the open ones, else those already there.
-  await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
-  await page.getByRole("checkbox", { name: "Select all hosts" }).check();
-  await page.getByRole("combobox", { name: "New triage state" }).click();
-  await page.getByRole("option", { name: "Investigating" }).click();
-  await page.getByLabel("Triage note").fill(`e2e ${info.project.name}`);
-  await page.locator(".bulk-bar button[type=submit]").click();
-  await expect(page.locator(".toast")).toContainText("set to investigating");
-  // Investigating is active work: the default list still shows it (#83).
-  await page.goto("/compliance");
-  await expect(page.locator(".view tbody tr").filter({ hasText: message })).toBeVisible();
+  const inspector = page.locator(".inspector");
+  await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open \d/ }).click();
+  await inspector.getByRole("checkbox", { name: "Select the rows on screen" }).check();
+  await inspector.getByRole("region", { name: "Bulk actions" }).getByRole("button", { name: "Mitigate…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Mitigate" });
+  const confirm = dialog.getByRole("button", { name: /^Mitigate \d+ hosts?$/ });
+  await confirm.click();
+  await expect(dialog.getByRole("alert")).toContainText("note");
+  await dialog.getByRole("textbox", { name: "Note (required)" }).fill(`e2e ${info.project.name}`);
+  await confirm.click();
+  await expect(page.locator(".toast")).toContainText("changed");
+  await inspector.getByRole("radio", { name: "History" }).click();
+  await expect(inspector.locator(".detail-history")).toContainText(`e2e ${info.project.name}`);
 });
 
-test("one host's risk is accepted until a date with an assignee, and the form shows it again", async ({ page }) => {
+test("one host's risk is accepted until a date, then assigned", async ({ page }) => {
   await signIn(page, "alex");
   await page.goto("/compliance");
-  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
-  await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^(Open|Investigating) \d/ }).first().click();
-  const label = await page.locator(".inspector tbody input[type=checkbox]").first().getAttribute("aria-label");
-  await page.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^All \d/ }).click();
-  const host = page.getByRole("checkbox", { name: label ?? "", exact: true });
-  await host.check();
-  // The workflow: an open host is investigated before its risk is accepted.
-  await expect(page.getByRole("combobox", { name: "New triage state" })).toBeEnabled();
-  const state = page.getByRole("combobox", { name: "New triage state" });
-  if ((await state.textContent())?.trim() === "Open") {
-    await state.click();
-    await expect(page.getByRole("option")).toHaveText(["Open", "Investigating"]);
-    await page.getByRole("option", { name: "Investigating" }).click();
-    await page.locator(".bulk-bar button[type=submit]").click();
-    await expect(page.locator(".toast").last()).toContainText("set to investigating");
-    await host.check();
-    await expect(state).toHaveText("Investigating");
-  }
-  await state.click();
-  await page.getByRole("option", { name: "Accepted risk" }).click();
-  await page.getByLabel("Accepted until").fill("2099-06-30");
-  await page.getByLabel("Assignee").fill("nobody");
-  await page.getByLabel("Triage note").fill("vendor fix due");
-  await page.locator(".bulk-bar button[type=submit]").click();
-  await expect(page.locator(".toast").last()).toContainText("Assignee must be an enabled analyst or admin");
-  await page.getByLabel("Assignee").fill("sam");
-  await page.locator(".bulk-bar button[type=submit]").click();
-  await expect(page.locator(".toast").last()).toContainText("set to accepted risk");
-  await host.check();
-  await expect(state).toHaveText("Accepted risk");
-  await expect(page.getByLabel("Assignee")).toHaveValue("sam");
-  await expect(page.getByLabel("Accepted until")).toHaveValue("2099-06-30");
+  const inspector = page.locator(".inspector");
+  const host = inspector.locator("tbody tr").first();
+  const name = (await host.locator("a").first().innerText()).trim();
+  await host.getByRole("checkbox", { name: "Select row" }).check();
+  const bar = inspector.getByRole("region", { name: "Bulk actions" });
+  await bar.getByRole("button", { name: "Accept risk…" }).click();
+  const until = new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10);
+  let dialog = page.getByRole("dialog", { name: "Accept risk" });
+  await dialog.getByLabel("Accepted until").fill(until);
+  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("vendor fix due");
+  await dialog.getByRole("button", { name: "Accept risk for 1 host" }).click();
+  await expect(page.locator(".toast").last()).toContainText("1 changed");
+  const row = inspector.locator("tbody tr").filter({ hasText: name });
+  await expect(row).toContainText("Accepted risk");
+  await row.getByRole("checkbox", { name: "Select row" }).check();
+  await bar.getByRole("button", { name: "Assign…" }).click();
+  dialog = page.getByRole("dialog", { name: "Assign" });
+  await dialog.getByRole("combobox", { name: "Assignee" }).click();
+  await page.getByRole("option", { name: /sam/i }).first().click();
+  await dialog.getByRole("button", { name: "Assign 1 host" }).click();
+  await expect(page.locator(".toast").last()).toContainText("1 changed");
+  await expect(inspector.locator("tbody tr").filter({ hasText: name })).toContainText(/sam/i);
 });
 
 test("a dashboard is created, saved, shared and seen read-only by an analyst", async ({ page, browser }, info) => {

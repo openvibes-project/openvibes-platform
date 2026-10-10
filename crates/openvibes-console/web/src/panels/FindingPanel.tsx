@@ -77,7 +77,7 @@ export function FindingPanel({ id }: { id: string }) {
         ? <span className="badge badge--bad badge--plain">expired {date(item.accepted_until)}</span>
         : <span className="subtle">until {date(item.accepted_until)}</span>)}
       {item.ended_at && <span className="badge badge--ok badge--plain" title="The agent reported this match ended">fixed {item.end_approximate ? "about " : ""}{date(item.ended_at)}</span>}
-      <button type="button" className="link-button" onClick={() => { setEvidenceHost(item.agent_id); setTab("evidence"); }}>Evidence</button>
+      <button type="button" className="link-button" onClick={() => { setEvidenceHost(item.agent_id); setTab("evidence"); }}>View evidence</button>
       {canCase && <AddToCase compact kind="compliance_finding" id={findingRef(item.agent_id, ruleSetId, ruleId)} label={`${group.latest_message} on ${label(item)}`} />}
     </>,
   }));
