@@ -1,7 +1,7 @@
 // Row selection for bulk actions (triage v2, spec 2026-10-10-bulk-triage
 // §3): single rows, a shift-click range, the rows on screen, or every row
 // the current filter matches, up to MAX_SELECTION.
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 /** Most rows one bulk action takes (the server's limit). */
 export const MAX_SELECTION = 10_000;
@@ -25,9 +25,6 @@ export function selectAll(keys: readonly string[]): Set<string> {
 /** A selection that empties whenever `reset` changes (the filter). */
 export function useSelection(reset: string): [Set<string>, (next: Set<string>) => void] {
   const [state, setState] = useState<{ reset: string; selected: Set<string> }>({ reset, selected: new Set() });
-  useEffect(() => {
-    if (state.reset !== reset) setState({ reset, selected: new Set() });
-  }, [reset, state.reset]);
   const selected = state.reset === reset ? state.selected : new Set<string>();
   return [selected, (next) => setState({ reset, selected: next })];
 }
