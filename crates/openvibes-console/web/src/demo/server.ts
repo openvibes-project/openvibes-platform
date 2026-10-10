@@ -131,7 +131,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   // accepted, and an assignee who is an analyst or admin.
   const triageProblem = (body: Record<string, unknown>) => {
     const until = typeof body.accepted_until === "string" ? Date.parse(body.accepted_until) : null;
-    if ((body.state === "accepted_risk") !== (until !== null) || (until !== null && !(until > Date.now()))) {
+    if ((body.state === "accepted_risk") !== (until !== null) || (until !== null && !(until > Date.now() && until <= Date.now() + 366 * 86_400_000))) {
       return problem(400, "invalid_triage", "Triage state, note, expiry, or selection is invalid");
     }
     if (typeof body.assigned_to === "string" && !data.access.bindings.some((b) => b.username === body.assigned_to && ["analyst", "admin"].includes(b.role_id))) {

@@ -376,7 +376,8 @@ pub(crate) fn fields_valid(
         "open" | "mitigated" | "accepted_risk" | "false_positive"
     ) && note.is_none_or(|value| !value.trim().is_empty() && value.chars().count() <= 4000)
         && ((state == "accepted_risk") == accepted_until.is_some())
-        && accepted_until.is_none_or(|value| value > now)
+        // An accepted risk runs out within a year (triage v2 spec §1).
+        && accepted_until.is_none_or(|value| value > now && value <= now + chrono::Duration::days(366))
 }
 
 /// An enabled analyst or admin by username: (user id, username).

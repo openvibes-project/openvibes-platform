@@ -1290,12 +1290,16 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
                 && item["assigned_to"] == "alice"
                 && item["accepted_until"].is_null())
     );
+    // Within the year an accepted risk may run (triage v2).
+    let until = (chrono::Utc::now() + chrono::Duration::days(30))
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
     let accept = router.clone().oneshot(Request::builder().method("POST")
         .uri("/api/v1/compliance/groups/base/credential/triage")
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":1}],"state":"accepted_risk","assigned_to":null,"note":"Compensating control","accepted_until":"2099-01-01T00:00:00Z"}"#)).unwrap()).await.unwrap();
+        .body(Body::from(format!(r#"{{"changes":[{{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":1}}],"state":"accepted_risk","assigned_to":null,"note":"Compensating control","accepted_until":"{until}"}}"#))).unwrap()).await.unwrap();
     assert_eq!(accept.status(), StatusCode::OK);
     let after_accept = router
         .clone()
@@ -1318,7 +1322,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .unwrap();
     assert_eq!(accepted["triage_state"], "accepted_risk");
     assert!(accepted["assigned_to"].is_null());
-    assert_eq!(accepted["accepted_until"], "2099-01-01T00:00:00+00:00");
+    assert_eq!(accepted["accepted_until"], until.replace('Z', "+00:00"));
     assert!(accepted["ended_at"].is_null(), "an open match");
     assert_eq!(accepted["end_approximate"], false);
     // A P13 agent reported the other host's match ended (approximately).
