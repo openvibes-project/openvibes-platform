@@ -186,3 +186,10 @@
     them in their own terminal: "⭡⭣ looks best"). Fallback: on the Linux
     text console (TERM=linux, e.g. the appliance's local screen) and any
     terminal without them, plain ↑↓ ←→.
+41. General screens approved: Help (? anywhere: keys as buttons in two
+    spaced columns + what keys do on the screen you came from); a failed
+    step (red ✗, what failed, why, what to do, that nothing broke, Enter
+    Try again); wrong password in the bar with tries left; q while work
+    runs asks, the work carries on; Console sign-in (Reset the admin
+    password; Single sign-on on/off, set up in the console; local admin is
+    the break-glass account); a too-small window shows one sentence.
