@@ -179,3 +179,30 @@ fn q_on_home_while_work_runs_asks_first() {
     app.key(Key::Enter);
     assert!(app.quit);
 }
+
+#[test]
+fn a_second_yes_while_work_runs_starts_nothing() {
+    let mut app = app(false);
+    open_service(&mut app, Unit::Ingest);
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    assert!(app.pending.is_some());
+    app.key(Key::Enter);
+    assert!(app.question.is_none(), "no second question while work runs");
+    app.key(Key::Char('y'));
+    assert_eq!(app.host.actions.borrow().len(), 1);
+}
+
+#[test]
+fn tab_in_setup_keeps_a_drawn_screen() {
+    let mut app = app(false);
+    app.open(Tab::Setup);
+    app.key(Key::Tab);
+    app.key(Key::BackTab);
+    assert_eq!(app.nav.screen, Screen::Legacy);
+    assert!(
+        screen(&app, 80, 24).contains("Setup"),
+        "{}",
+        screen(&app, 80, 24)
+    );
+}

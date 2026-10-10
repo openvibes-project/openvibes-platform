@@ -67,7 +67,7 @@ fn status_renders_problems_then_services_with_the_frame() {
     assert!(
         screen(&app, 80, 24)
             .lines()
-            .any(|l| l.contains("ingest") && l.contains("active") && !l.contains(".crt")),
+            .any(|l| l.contains("ingest") && l.contains("running") && !l.contains(".crt")),
         "{}",
         screen(&app, 80, 24)
     );
@@ -174,4 +174,12 @@ fn the_row_is_clamped_when_the_list_shrinks() {
     app.nav.row = 99;
     app.refresh();
     assert_eq!(app.nav.row, app.status_items().len() - 1);
+}
+
+#[test]
+fn states_read_as_running_stopped_or_as_they_are() {
+    use super::status::state_word;
+    assert_eq!(state_word("active"), "running");
+    assert_eq!(state_word("inactive"), "stopped");
+    assert_eq!(state_word("failed"), "failed");
 }

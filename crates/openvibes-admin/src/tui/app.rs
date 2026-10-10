@@ -5,15 +5,13 @@ use std::{
     time::Instant,
 };
 
-use platform_host::{
-    Host, HostError, PackageUpdate, Privileged, ServiceAction, ServiceStatus, Unit,
-};
+use platform_host::{Host, HostError, PackageUpdate, ServiceStatus, Unit};
 
 use super::{
     configuration::Configuration,
     database::DatabaseScreen,
     nav::{Nav, Screen},
-    password::{PasswordPrompt, Typed},
+    password::PasswordPrompt,
     setup::Setup,
     ui::theme::Theme,
 };
@@ -45,7 +43,6 @@ pub enum Key {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Tab {
     Setup,
-    Services,
     Configuration,
     Database,
     Health,
@@ -61,10 +58,6 @@ pub struct App<H: Host> {
     pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
     pub selected: usize,
-    /// An action waiting for y/n.
-    pub confirm: Option<(Unit, ServiceAction)>,
-    /// Enable (true) or disable at boot, waiting for the password.
-    pub boot: Option<(Unit, bool, PasswordPrompt)>,
     /// The last outcome or error, shown above the key help.
     pub message: Option<String>,
     pub logs: Vec<String>,
@@ -113,8 +106,6 @@ impl<H: Host> App<H> {
             database: DatabaseScreen::default(),
             services: Vec::new(),
             selected: 0,
-            confirm: None,
-            boot: None,
             message: None,
             logs: Vec::new(),
             quit: false,
@@ -171,18 +162,18 @@ impl<H: Host> App<H> {
         self.setup.previous.is_some() || self.host.is_set_up()
     }
 
-    /// Opens `tab`, loading what it shows: Services and Health open Status,
+    /// Opens `tab`, loading what it shows: Health opens Status,
     /// the others today's screen behind Maintenance.
     pub(super) fn open(&mut self, tab: Tab) {
         self.message = None;
-        if matches!(tab, Tab::Services | Tab::Health) {
+        if matches!(tab, Tab::Health) {
             self.nav.go(Screen::Status);
         } else if self.nav.screen != Screen::Legacy {
             self.nav.go(Screen::Legacy);
         }
         match tab {
             Tab::Setup => self.tab = Tab::Setup,
-            Tab::Services | Tab::Health => self.load_health(),
+            Tab::Health => self.load_health(),
             Tab::Configuration => {
                 self.tab = Tab::Configuration;
                 self.load_config();
@@ -250,94 +241,9 @@ impl<H: Host> App<H> {
     pub(super) fn legacy_dispatch(&mut self, key: Key) {
         match self.tab {
             Tab::Setup => self.setup_key(key),
-            Tab::Services => self.services_key(key),
             Tab::Configuration => self.config_key(key),
             Tab::Database => self.database_key(key),
-            Tab::Health => self.health_key(key),
-        }
-    }
-
-    /// j/k (arrows) move, s/t/r ask to start/stop/restart, y answers, R
-    /// refreshes, Tab opens Configuration, q quits.
-    fn services_key(&mut self, key: Key) {
-        if let Some((unit, enable, mut prompt)) = self.boot.take() {
-            match prompt.key(key) {
-                Typed::Pending => self.boot = Some((unit, enable, prompt)),
-                Typed::Cancelled => {}
-                Typed::Entered(secret) => {
-                    let verb = if enable {
-                        Privileged::UnitEnable(unit)
-                    } else {
-                        Privileged::UnitDisable(unit)
-                    };
-                    let done = if enable { "enabled" } else { "disabled" };
-                    self.message = Some(match self.host.privileged(verb, &secret) {
-                        Ok(_) => format!("{done} {} at boot", unit.name()),
-                        Err(error) => error.to_string(),
-                    });
-                    self.refresh();
-                }
-            }
-            return;
-        }
-        if let Some((unit, action)) = self.confirm.take() {
-            if key == Key::Char('y') {
-                self.message = Some(match self.host.service_action(unit, action) {
-                    Ok(()) => format!("{} requested for {}", action.verb(), unit.name()),
-                    Err(error) => error.to_string(),
-                });
-                self.refresh();
-                self.load_logs();
-            }
-            return;
-        }
-        match key {
-            Key::Char('j') | Key::Down if self.selected + 1 < self.services.len() => {
-                self.selected += 1;
-                self.load_logs();
-            }
-            Key::Char('k') | Key::Up if self.selected > 0 => {
-                self.selected -= 1;
-                self.load_logs();
-            }
-            Key::Char('s') => self.ask(ServiceAction::Start),
-            Key::Char('t') => self.ask(ServiceAction::Stop),
-            Key::Char('r') => self.ask(ServiceAction::Restart),
-            Key::Char('e') => self.ask_boot(true),
-            Key::Char('d') => self.ask_boot(false),
-            Key::Char('R') => {
-                self.message = None;
-                self.refresh();
-                self.load_logs();
-            }
-            Key::Tab => self.open(Tab::Configuration),
-            Key::BackTab => self.open(Tab::Setup),
-            Key::Char('q') => self.quit = true,
-            _ => {}
-        }
-    }
-
-    fn ask(&mut self, action: ServiceAction) {
-        let Some(status) = self.services.get(self.selected) else {
-            return;
-        };
-        if status.installed {
-            self.confirm = Some((status.unit, action));
-            self.message = None;
-        } else {
-            self.message = Some(format!("{} is not installed", status.unit.name()));
-        }
-    }
-
-    fn ask_boot(&mut self, enable: bool) {
-        let Some(status) = self.services.get(self.selected) else {
-            return;
-        };
-        if status.installed {
-            self.boot = Some((status.unit, enable, PasswordPrompt::default()));
-            self.message = None;
-        } else {
-            self.message = Some(format!("{} is not installed", status.unit.name()));
+            Tab::Health => {}
         }
     }
 }

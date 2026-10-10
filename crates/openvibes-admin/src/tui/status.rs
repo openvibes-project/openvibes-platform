@@ -65,6 +65,15 @@ pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
     out
 }
 
+/// How a unit's state reads on Status and Service.
+pub fn state_word(active: &str) -> &str {
+    match active {
+        "active" => "running",
+        "inactive" => "stopped",
+        other => other,
+    }
+}
+
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let items = app.status_items();
     let enter = match items.get(app.nav.row) {
@@ -133,7 +142,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             name: vec![dot, Span::raw(s.unit.label().to_owned())],
             value: vec![Span::raw(format!(
                 "{:<9} {:<9} {}",
-                s.active,
+                state_word(&s.active),
                 ready,
                 s.since.clone().unwrap_or_default()
             ))],

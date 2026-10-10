@@ -355,17 +355,8 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_database();
             }
-            Key::Tab => self.open_health(),
-            Key::BackTab => self.open(Tab::Configuration),
-            Key::Char('q') => self.quit = true,
             _ => {}
         }
-    }
-
-    pub(super) fn open_health(&mut self) {
-        self.tab = Tab::Health;
-        self.message = None;
-        self.load_health();
     }
 
     pub(super) fn load_health(&mut self) {
@@ -399,19 +390,5 @@ impl<H: Host> App<H> {
             std::fs::read_to_string("/var/lib/openvibes-llm/tune.json").ok(),
         ));
         self.database.health.sort_by_key(|check| !check.problem);
-    }
-
-    /// R reloads, Tab opens Setup, q quits.
-    pub(super) fn health_key(&mut self, key: Key) {
-        match key {
-            Key::Char('R') => {
-                self.message = None;
-                self.load_health();
-            }
-            Key::Tab => self.open(Tab::Setup),
-            Key::BackTab => self.open(Tab::Database),
-            Key::Char('q') => self.quit = true,
-            _ => {}
-        }
     }
 }

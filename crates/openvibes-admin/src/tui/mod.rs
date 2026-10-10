@@ -61,7 +61,7 @@ pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) 
         Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
         Tab::Database => database_view::draw_database(frame, area, app),
-        Tab::Services | Tab::Health => {}
+        Tab::Health => {}
     }
 }
 

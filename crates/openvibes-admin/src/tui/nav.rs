@@ -117,7 +117,7 @@ impl<H: Host> App<H> {
             Tab::Setup => matches!(self.setup.phase, Phase::Status | Phase::Finished),
             Tab::Configuration => self.config.editing.is_none() && self.config.prompt.is_none(),
             Tab::Database => self.database.confirm.is_none(),
-            Tab::Services | Tab::Health => true,
+            Tab::Health => true,
         }
     }
 
@@ -142,7 +142,7 @@ impl<H: Host> App<H> {
         match self.tab {
             Tab::Setup => self.setup.editing || matches!(self.setup.phase, Phase::Password(_)),
             Tab::Configuration => self.config.editing.is_some(),
-            Tab::Database | Tab::Services | Tab::Health => false,
+            Tab::Database | Tab::Health => false,
         }
     }
 

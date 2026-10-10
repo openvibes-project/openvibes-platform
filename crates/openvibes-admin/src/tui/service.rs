@@ -13,6 +13,7 @@ use super::{
     app::{App, Key, Question},
     nav::Screen,
     services_text::readable,
+    status::state_word,
     ui::{
         bar::Bar,
         frame,
@@ -88,7 +89,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: Unit)
             None => "",
         };
         let since = s.since.as_ref().map(|x| format!(" · since {x}"));
-        let active = if up { "running" } else { s.active.as_str() };
+        let active = state_word(&s.active);
         format!("{active}{ready}{}", since.unwrap_or_default())
     });
     let dot = if up {
@@ -153,6 +154,10 @@ pub fn draw_log<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: U
 impl<H: Host> App<H> {
     pub(super) fn service_key(&mut self, unit: Unit, key: Key) {
         let acts = actions(self, unit);
+        // Work is running: the bar shows it; Enter starts nothing else.
+        if self.pending.is_some() && key == Key::Enter {
+            return;
+        }
         if self.move_row(key, acts.len()) || key != Key::Enter {
             return;
         }

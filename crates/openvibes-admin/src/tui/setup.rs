@@ -334,8 +334,6 @@ impl<H: Host> App<H> {
             Key::Char('p') => self.change_ports(),
             Key::Char('u') => self.open_update(),
             Key::Char('x') => self.open_uninstall(),
-            Key::Tab => self.leave_setup(),
-            Key::BackTab => self.open(super::app::Tab::Health),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
@@ -445,12 +443,6 @@ impl<H: Host> App<H> {
         self.setup.phase = Phase::Running(0);
     }
 
-    fn leave_setup(&mut self) {
-        self.tab = super::app::Tab::Services;
-        self.message = None;
-        self.refresh();
-    }
-
     /// Asks for the sudo password before `after`, or goes straight on as
     /// root, which sudo lets through without one (#82).
     pub(super) fn ask_password(&mut self, after: After) {
@@ -509,8 +501,6 @@ impl<H: Host> App<H> {
             Key::Enter if self.setup.field().is_some() => self.setup.editing = true,
             // A set-up host's change-components form: back to Setup's status.
             Key::Esc if self.setup.previous.is_some() => self.setup.phase = Phase::Status,
-            Key::Tab => self.leave_setup(),
-            Key::BackTab => self.open(super::app::Tab::Health),
             Key::Char('q') => self.quit = true,
             _ => {}
         }

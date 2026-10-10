@@ -149,6 +149,9 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn ask_fix(&mut self, fix: Fix) {
+        if self.pending.is_some() {
+            return;
+        }
         match fix {
             Fix::Start(unit) => {
                 self.question = Some((Question::Service(unit, ServiceAction::Start), true));
