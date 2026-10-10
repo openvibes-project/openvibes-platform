@@ -2,7 +2,7 @@ import sys
 
 sys.path.insert(0, sys.argv[1])
 import gen  # noqa: E402
-from gen import bar, header, menu, page, screen  # noqa: E402
+from gen import bar, checkbar, header, menu, page, screen  # noqa: E402
 
 gen.UPDATE = None  # a fresh install is the newest version
 
@@ -91,7 +91,7 @@ shots = [
     ("First start: Welcome", "A fresh host opens here instead of Home; choosing comes first.", welcome(0)),
     ("↓ once: Quick install", "Says what it does: installs everything with the defaults.", welcome(1)),
     ("↑ back, Enter: the choices", "Components as checkboxes: Space selects. Then names and ports: Enter edits.",
-     screen("limebox · Install", options(4), bar("{k} Space {/} Select"))),
+     screen("limebox · Install", options(4), checkbar())),
     ("↓ to Host name, Enter: edit in place", "The line under the list explains each entry.",
      screen("limebox · Install", options(5, top=2, editing=5),
             bar("{b}Host name:{/} type the name  {k} Enter {/} Done", "{k} Esc {/} Cancel", nav=False))),

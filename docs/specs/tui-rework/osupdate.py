@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, header, menu, page, screen  # noqa: E402
+from gen import ask, bar, header, menu, page, screen  # noqa: E402
 
 MAINT = [("Update OpenVIBES", "0.2.9 is available"),
          ("Operating system", "AlmaLinux 9.6 · 23 updates, 4 for security"),
@@ -46,8 +46,7 @@ shots = [
     ("Enter: Operating system", "What is installed, what is waiting, and what will happen.",
      os_screen(bar("{k} u {/} Update everything  {k} c {/} Check again"))),
     ("Press u", "The bar asks, and says what it means.",
-     os_screen(bar("{b}Install 23 updates?{/} {d}A restart is needed after.{/}", "{k} y {/} Yes  {k} n {/} No",
-                   nav=False))),
+     os_screen(ask("Install 23 updates?", "restart after"))),
     ("While it updates", "Progress on the screen and in the bar; leaving the screen does not stop it.",
      os_screen(bar("{t}⠹{/} Updating the operating system…"), "running")),
     ("Done: restart needed", "The bar offers the restart; Home keeps showing it until you do.",

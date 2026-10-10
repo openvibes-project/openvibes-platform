@@ -118,3 +118,22 @@
     steps is wrong). Review shows "your own CA · ✓ signed by …"; the
     install then runs start to finish without pausing.
     Whole advanced install flow (16 screens, tui-advanced-full3) approved.
+28. Agents leave the TUI (user): the agent appears only at install ("Agent
+    on this host"); handling agents — list, adding hosts, tokens, network
+    devices — is the console's. Home: Status, Maintenance, Quit.
+    Maintenance gains "Optional parts" (agent on this host, assistant) for
+    changing them after install. Maintenance list of ten (Update OpenVIBES,
+    Operating system, Repair, Optional parts, Ports and addresses,
+    Certificates, Database, Console sign-in, Back up, Uninstall) approved.
+29. Update OpenVIBES screen: version line + one line of what's new;
+    [x] Back up first (default on), Update now, What's new; question in
+    the bar; six progress steps; one result line. Repair: checks first,
+    lists results (read-only report), Fix N problems / Check again.
+    Backup file names are unique per update (user: today it complains the
+    backup name already exists): ~/openvibes-<target version>-<date>-<time>.dump.
+    Update + Repair mockups approved ("the mockup looks amazing").
+30. Every question in the bar has one form (user: "make sure it says
+    enter to confirm"): question + short detail on the left; on the right
+    Yes / No buttons, ←→ and "Enter Confirm".
+31. Every checkbox row's bar (user): "Space Select/deselect  Enter Confirm".
+    Rules 30 and 31 are standard on all pages (user).

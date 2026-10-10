@@ -1,7 +1,7 @@
 import sys
 
 sys.path.insert(0, sys.argv[1])
-from gen import bar, page, screen  # noqa: E402
+from gen import ask, bar, page, screen  # noqa: E402
 
 home = screen("limebox · v0.2.8", [
     "",
@@ -57,8 +57,7 @@ ingest_confirm = screen("Status › ingest", [
     "   {d}18:40:02{/}  INFO  database ready, schema 46",
     "   {d}19:12:44{/}  {y}WARN{/}  agent web-02: certificate renewal refused",
     "   {d}20:14:09{/}  INFO  delivered 340 findings from 12 agents",
-], bar("{b}Restart ingest?{/} {d}Agents reconnect within a minute.{/}",
-       "{k} y {/} Yes  {k} n {/} No", nav=False))
+], ask("Restart ingest?", "Agents reconnect within a minute"))
 
 settings = screen("Settings", [
     "",
