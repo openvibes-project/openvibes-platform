@@ -39,6 +39,27 @@ UNIFIipsSignature=ET DROP Dshield Block Listed Source group 1
 UNIFIipsSignatureId=2402000 msg=A network intrusion attempt has been detected and blocked.
 ```
 
+**Real line from the user's UCG Max** (UniFi Network 10.6.106, gateway
+5.1.33; `curl -A "BlackSun" http://www.example.com`, 2026-10-10; MAC and
+hostname replaced; fixture `crates/openvibes-netlog/tests/fixtures/ucgmax-ips-blacksun.cef`):
+
+```
+Oct 10 17:36:00 gateway CEF:0|Ubiquiti|UniFi Network|10.6.106|201|Threat Detected and Blocked|9|
+UNIFIcategory=Security UNIFIhost=gateway proto=TCP spt=36216 dpt=80 act=blocked app=HTTP
+UNIFIrisk=high UNIFIpolicyName=Malicious User Agents UNIFIpolicyType=IDS/IPS
+UNIFIdirection=outgoing ... UNIFIdeviceModel=UCG-Max UNIFIdeviceIp=192.168.1.1
+src=192.168.1.10 dst=172.66.147.243 UNIFIsrcZone=Internal UNIFIdstDomain=www.example.com
+... UNIFIflowStartTime=Oct 10, 2026 at 5:36:00.239 PM ...
+UNIFIipsSignature=ET USER_AGENTS Suspicious User Agent (BlackSun) UNIFIipsSignatureId=2008983
+UNIFIutcTime=2026-10-10T15:36:00.493Z msg=A network intrusion attempt from 192.168.1.10 to ...
+```
+
+Differences from the Graylog example that the design follows: **no
+`UNIFIsubCategory`** (the IPS marker is `UNIFIpolicyType=IDS/IPS` and the
+signature id), the syslog header has no `<PRI>`, the action is CEF's
+standard `act`, and there are `UNIFIpolicyName`, `UNIFIdirection` and
+`UNIFIdstDomain`. Values contain spaces and commas.
+
 (One line on the wire, preceded by a syslog header.) Captured from the
 user's UCG Max (2026-10-10, all categories and Debug Logs on): most
 traffic is **plain RFC 3164 syslog** from the gateway OS (syslog-ng,
@@ -54,18 +75,23 @@ UCG Max ──UDP 514, CEF──▶ openvibes-netlog
   1. sender IP is an enabled device?      no → count unknown_sender, drop
   2. no "CEF:0|" in the message?           → count not_cef, drop
   3. parse syslog + CEF (≤ 8 KiB, strict)  bad → count unparsed, drop
-  4. Ubiquiti Security / Intrusion *?     no → count per (class, subCategory), drop
+  4. Ubiquiti, UNIFIcategory=Security and a UNIFIipsSignatureId?
+                                          no → count per (class, policyType), drop
   5. UNIFIdeviceIp, when present, = device IP?  no → count mismatch, drop
   6. collapse in memory: device + signature_id + src within 10 min
   7. every ~5 s: one transaction inserts new alarms, updates count/last_seen
 ```
 
+- **The socket is never connected** to a sender: a router that restarts
+  its log daemon sends from a new source port (seen with `nc -ul`, which
+  locks onto the first port and went silent, 2026-10-10).
 - **Bounded everywhere.** Fixed receive buffer (8 KiB; longer datagrams are
   truncated by the kernel and counted unparsed). One task reads the socket;
-  parsing is synchronous and cheap. The collapse map holds at most 10,000
+  parsing is synchronous and cheap. The collapse map holds at most 2,000
   keys; beyond it, new keys are dropped and counted (`collapse_full`).
-- **Database down:** pending alarms stay in memory up to 1,000 (oldest
-  dropped and counted), retried every 5 s. UDP cannot ask the sender to
+- **Database down:** unstored alarms stay in the collapse map (at most
+  `max_collapse_keys`; new keys beyond it are dropped and counted),
+  retried every batch. UDP cannot ask the sender to
   resend, so nothing more durable is promised.
 - **Counters** are kept per device in memory and flushed with each batch to
   `devices` (section 4): `received`, `alarms`, `not_cef`, `unparsed`, `dropped_other`,
@@ -87,13 +113,11 @@ UCG Max ──UDP 514, CEF──▶ openvibes-netlog
 | `severity` | `UNIFIrisk` through a fixed table (low, medium, high, critical 1:1; `suspicious` → medium; further values added from captured fixtures); absent or unknown → CEF severity 0–3 low, 4–6 medium, 7–8 high, 9–10 critical, and an unknown value is counted in `dropped_classes` as `risk:<value>` |
 | `confidence` | 80 |
 | `message` | `<UNIFIipsSignature>: <msg>` |
-| `network` (jsonb) | `action` (`blocked` if the CEF name contains "Blocked", else `detected`), `proto`, `src`, `spt`, `dst`, `dpt`, `signature`, `signature_id`, `device_model` |
+| `network` (jsonb) | `action` (`act`, else `blocked` if the CEF name contains "Blocked", else `detected`), `proto`, `app`, `src`, `spt`, `dst`, `dpt`, `dst_domain`, `direction`, `policy`, `policy_type`, `signature`, `signature_id`, `device_model` (each text ≤ 256, ports optional for ICMP) |
 | `first_seen` / `last_seen` / `count` | from collapsing; time is the receive time (device clocks are not trusted) |
 
-The raw line is not stored. The UniFi console also shows policy (e.g.
-"CINS Army Reputation List"), direction and the internal client's
-hostname for an IPS hit (user's screenshot, 2026-10-10); their CEF keys
-are added to `network` once a captured line shows them.
+The raw line is not stored. `UNIFIutcTime` is ignored: the receive time
+is used (device clocks are not trusted).
 
 **All fields are hostile input** (anyone can send UDP):
 
@@ -133,7 +157,9 @@ are added to `network` once a captured line shows them.
   `/etc/openvibes/netlog.toml` (strict TOML): `listen` (default
   `0.0.0.0:514`), `health_listen` (loopback), `database_url`,
   `batch_seconds` (5, 1–60), `collapse_minutes` (10, 1–1440),
-  `max_pending` (1,000), `max_collapse_keys` (10,000).
+  `max_collapse_keys` (2,000). The collapse map is also the retry
+  buffer: alarms not yet stored stay in it, so the database being down
+  is bounded by the same limit (no separate `max_pending`).
 - Port 514 needs `AmbientCapabilities=CAP_NET_BIND_SERVICE` only; the unit
   is otherwise hardened like ingest.
 - Devices are re-read every 30 s and on SIGHUP, so a newly added device
