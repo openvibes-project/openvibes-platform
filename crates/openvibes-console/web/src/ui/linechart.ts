@@ -107,13 +107,26 @@ export const fmtDay = (day: string, year = false) => new Date(Date.parse(day)).t
 export const dayLabel = (day: string, today: string, year = false) => (day === today ? "Today" : fmtDay(day, year));
 /** True when the axis crosses a year boundary, so labels need the year. */
 export const spansYears = (days: string[]) => days.length > 1 && days[0]?.slice(0, 4) !== days.at(-1)?.slice(0, 4);
-/** What to show instead of a chart when there is not yet a line to draw, else null. */
+/** What to show instead of a chart: only when there is no point at all. One point
+ *  (the live value minutes after install) already draws, as a flat line (#238). */
 export function emptyNote(series: Series[]): string | null {
-  const days = axisDays(series);
-  const [first] = days;
-  if (first === undefined) return "No data yet";
-  const counts = series.map((s) => s.points.length);
-  return Math.max(...counts) < 2 ? `Collecting since ${fmtDay(first)}` : null;
+  return axisDays(series).length === 0 ? "No data yet" : null;
+}
+/** A caption under the chart while history is under two days, else null. */
+export function collectingNote(series: Series[]): string | null {
+  const [first] = axisDays(series);
+  if (first === undefined) return null;
+  return Math.max(...series.map((s) => s.points.length)) < 2 ? `Collecting since ${fmtDay(first)}` : null;
+}
+/** Pixel points of one run of consecutive days. On a single-day axis there is no
+ *  width to span, so the one point becomes a flat line across the plot. */
+export function runPoints(run: { day: string; value: number }[], index: Map<string, number>, n: number, max: number, l: Layout): Pt[] {
+  const [only] = run;
+  if (n < 2 && only) {
+    const y = yAt(only.value, max, l);
+    return [{ x: l.padL, y }, { x: l.W - l.padR, y }];
+  }
+  return run.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l) }));
 }
 /** A hover index that still points at a day after the series shrank. */
 export const clampIndex = (i: number | null, n: number) => (i === null || n === 0 ? null : Math.min(i, n - 1));

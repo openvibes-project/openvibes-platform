@@ -178,6 +178,9 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                     </div>
                   )}
                   {mine && dashboard && (
+                    // The menu closes on any click inside it; Delete's inline confirmation
+                    // must keep it open, or the confirmation unmounts as it opens (#236).
+                    <div className="menu__section" onClick={(event) => event.stopPropagation()}>
                     <Confirm danger label={`Delete "${dashboard.name}"? People it is shared with lose it too.`} onConfirm={async () => {
                       await request("DELETE", `/api/v1/dashboards/${dashboard.dashboard_id}`);
                       invalidate("/api/v1/dashboards");
@@ -185,6 +188,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                       nav.view("/");
                       toast("Dashboard deleted");
                     }}><Icon name="close" size={14} /> Delete</Confirm>
+                    </div>
                   )}
                 </div>
               )}
