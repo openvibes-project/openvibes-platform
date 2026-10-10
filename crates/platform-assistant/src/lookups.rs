@@ -216,7 +216,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one named endpoint, highest priority first (exploited, then EPSS, then severity), with the reboot flag.",
+            "Open vulnerabilities on one named endpoint only, highest priority first (exploited, then EPSS, then severity), with the reboot flag; for the whole fleet use fleet_overview or vulnerability_hosts.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
@@ -238,7 +238,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "For fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
+            "Start here for broad questions such as what to fix first, the most critical problems, or the worst vulnerabilities across all hosts. Fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(
@@ -288,6 +288,44 @@ fn text_arg(value: Option<String>) -> Result<Option<String>, LookupError> {
 
 fn required(value: String) -> Result<String, LookupError> {
     text_arg(Some(value))?.ok_or(LookupError::InvalidArguments)
+}
+
+/// What a small model writes as `agent` when it means no host in
+/// particular (#241 lab: qwen3-4b sent "unknown" and "all"). Compared
+/// trimmed and case-insensitively.
+// ponytail: a host literally named one of these cannot be asked for by
+// name; its agent ID still works.
+const AGENT_PLACEHOLDERS: [&str; 15] = [
+    "all",
+    "any",
+    "every",
+    "everything",
+    "unknown",
+    "none",
+    "null",
+    "n/a",
+    "*",
+    "fleet",
+    "all hosts",
+    "any host",
+    "every host",
+    "all agents",
+    "everywhere",
+];
+
+/// An optional `agent`: empty or a placeholder means every host.
+pub(crate) fn agent_arg(value: Option<String>) -> Result<Option<String>, LookupError> {
+    Ok(text_arg(value)?.filter(|agent| {
+        !AGENT_PLACEHOLDERS
+            .iter()
+            .any(|p| p.eq_ignore_ascii_case(agent))
+    }))
+}
+
+/// A required `agent`: a placeholder is refused, so the model is told to
+/// fix its arguments instead of hearing that no such host exists.
+fn required_agent(value: String) -> Result<String, LookupError> {
+    agent_arg(Some(value))?.ok_or(LookupError::InvalidArguments)
 }
 
 /// A rule set argument: `~unknown` or empty means findings from before P6.
@@ -398,13 +436,13 @@ impl Lookup {
             "agent_summary" => {
                 let a: Agent = args(arguments)?;
                 Ok(Self::AgentSummary {
-                    agent: required(a.agent)?,
+                    agent: required_agent(a.agent)?,
                 })
             }
             "host_vulnerabilities" => {
                 let a: HostVulns = args(arguments)?;
                 Ok(Self::HostVulnerabilities {
-                    agent: required(a.agent)?,
+                    agent: required_agent(a.agent)?,
                     min_severity: severity(a.min_severity, &ADVISORY_SEVERITIES)?,
                 })
             }

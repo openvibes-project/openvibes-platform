@@ -7,8 +7,8 @@ use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use super::{
-    Lookup, LookupError, LookupOutput, Lookups, Source, agent_cite, args, object, required,
-    text_arg, text_schema,
+    Lookup, LookupError, LookupOutput, Lookups, Source, agent_arg, agent_cite, args, object,
+    required, text_schema,
 };
 use crate::client::ToolSpec;
 
@@ -27,7 +27,7 @@ pub(super) fn specs() -> Vec<ToolSpec> {
             description: "Open ports and running services: what listens on a port (and its service or program) across hosts, or which ports and services one host has. Give agent, port, or both.".into(),
             parameters: object(
                 json!({
-                    "agent": text_schema("Agent ID or host name."),
+                    "agent": text_schema("Agent ID or host name. Omit to search every host; never put a placeholder like all or unknown here."),
                     "port": { "type": "integer", "minimum": 1, "maximum": 65535,
                               "description": "Port number, e.g. 22." },
                 }),
@@ -40,7 +40,7 @@ pub(super) fn specs() -> Vec<ToolSpec> {
             parameters: object(
                 json!({
                     "name": text_schema("A short package name, one word, e.g. chrome or openssh, not the product's full name."),
-                    "agent": text_schema("Agent ID or host name."),
+                    "agent": text_schema("Agent ID or host name. Omit to search every host; never put a placeholder like all or unknown here."),
                 }),
                 &["name"],
             ),
@@ -64,7 +64,7 @@ pub(super) fn parse(name: &str, arguments: &str) -> Result<Lookup, LookupError> 
     match name {
         "host_services" => {
             let a: Services = args(arguments)?;
-            let agent = text_arg(a.agent)?;
+            let agent = agent_arg(a.agent)?;
             if a.port == Some(0) || (agent.is_none() && a.port.is_none()) {
                 return Err(LookupError::InvalidArguments);
             }
@@ -81,7 +81,7 @@ pub(super) fn parse(name: &str, arguments: &str) -> Result<Lookup, LookupError> 
             }
             Ok(Lookup::Software {
                 name,
-                agent: text_arg(a.agent)?,
+                agent: agent_arg(a.agent)?,
             })
         }
         _ => Err(LookupError::Unknown),
@@ -312,6 +312,50 @@ mod tests {
                 port: Some(443)
             })
         );
+    }
+
+    #[test]
+    fn placeholder_agents_mean_every_host() {
+        // The calls qwen3-4b made in the #241 lab run.
+        assert_eq!(
+            parse("host_services", r#"{"agent":"unknown","port":22}"#),
+            Ok(Lookup::HostServices {
+                agent: None,
+                port: Some(22)
+            })
+        );
+        assert_eq!(
+            parse("software", r#"{"name":"openssh","agent":"all"}"#),
+            Ok(Lookup::Software {
+                name: "openssh".into(),
+                agent: None
+            })
+        );
+        for placeholder in [" ALL HOSTS ", "Any", "*", "n/a", "everywhere", "null"] {
+            let arguments = format!(r#"{{"agent":"{placeholder}","port":443}}"#);
+            assert_eq!(
+                parse("host_services", &arguments),
+                Ok(Lookup::HostServices {
+                    agent: None,
+                    port: Some(443)
+                }),
+                "{placeholder}"
+            );
+        }
+        // Without a port there is nothing left to ask.
+        assert_eq!(
+            parse("host_services", r#"{"agent":"unknown"}"#),
+            Err(LookupError::InvalidArguments)
+        );
+        // A required agent refuses a placeholder rather than finding nothing.
+        for name in ["agent_summary", "host_vulnerabilities"] {
+            assert_eq!(
+                Lookup::parse(name, r#"{"agent":"all"}"#),
+                Err(LookupError::InvalidArguments),
+                "{name}"
+            );
+        }
+        assert!(parse("software", r#"{"name":"x1","agent":"web-01"}"#).is_ok());
     }
 
     #[test]

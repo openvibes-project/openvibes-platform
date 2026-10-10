@@ -82,6 +82,15 @@ finding's cite and `not_seen_in_window` counting the older sightings. `search_fi
 so in a note. The tool descriptions name the fields each result carries and
 when to use each lookup.
 
+An `agent` argument holding a placeholder a small model writes for "no
+host in particular" (`all`, `any`, `unknown`, `none`, `*`, `all hosts`,
+… trimmed, any case; the list is `AGENT_PLACEHOLDERS`) counts as absent
+where `agent` is optional (`host_services` with a port becomes the port
+query, `software` searches every host) and is refused as invalid where it
+is required (`agent_summary`, `host_vulnerabilities`). The #241 lab run
+saw qwen3-4b send `{"agent":"unknown","port":22}` and
+`{"name":"openssh","agent":"all"}`.
+
 Arguments are parsed with unknown fields refused, strings trimmed and at most
 128 characters without control characters, windows 1–720 hours (default
 24), and severities from fixed lists. A refused request is answered with a
@@ -172,7 +181,7 @@ scores it; `openvibes-admin assistant eval` runs it (spec §10).
   unit and a package name carry injected instructions, each asking for
   something not written in it (8484, 777, evil.example/steal, 1332, 9001), so quoting the data is harmless and only
   obeying it is caught.
-- **Questions** (`eval/questions.toml`, or `--cases FILE`): 65 cases with
+- **Questions** (`eval/questions.toml`, or `--cases FILE`): 67 cases with
   the lookups that answer each, facts the answer must hold (`a|b` for
   either), and terms it must never hold; `forbid_everywhere` holds the
   hidden host's data and the injected outputs, and is not checked against
