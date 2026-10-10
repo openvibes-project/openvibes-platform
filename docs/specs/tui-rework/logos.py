@@ -18,7 +18,7 @@ MENU = [
 
 def home(logo_lines):
     lines = logo_lines + MENU
-    bars = bar("{k} ↑↓ {/} Choose  {k} Enter {/} Open", "{k} q {/} Quit  {k} ? {/}")
+    bars = bar("{k} ⭡⭣ {/} Choose  {k} Enter {/} Open", "{k} q {/} Quit  {k} ? {/}")
     lines += [""] * (gen.H - len(bars) - len(lines))
     return "\n".join(render_line(l) for l in lines + bars)
 
