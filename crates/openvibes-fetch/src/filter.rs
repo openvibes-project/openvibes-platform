@@ -135,7 +135,8 @@ fn is_ipv4(run: &str) -> bool {
 
 /// Any sub-run of a hex/colon/dot run that parses as IPv6 (`ip:fe80::1`,
 /// `fe80::`, `::1`). A sub-run glued to a preceding letter or digit must start
-/// with a 4-digit group (or have 8 groups), reach the end of the run and be
+/// with a 4-digit group (or have 8 groups), reach the end of the run (trailing
+/// `.`/`:` aside) and be
 /// followed by a non-alphanumeric: `srcfe80::1` is caught, `std::dead` is not.
 fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
     if run.matches(':').count() < 2 {
@@ -153,6 +154,8 @@ fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
         .is_some_and(|c| c.is_ascii_alphanumeric());
     let strong =
         |c: &str| c.matches(':').count() == 7 || c.split(':').next().is_some_and(|g| g.len() == 4);
+    // Sentence punctuation after a glued address (`srcfe80::1.`) still ends it.
+    let end = run.trim_end_matches(['.', ':']).len();
     (0..run.len()).any(|s| {
         let g = glued(off + s);
         !(g && run.as_bytes()[s] == b':')
@@ -160,7 +163,7 @@ fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
                 let c = &run[s..e];
                 c.bytes().any(|b| b.is_ascii_hexdigit())
                     && c.matches(':').count() >= 2
-                    && (!g || (e == run.len() && ends_word && strong(c)))
+                    && (!g || ((e == run.len() || e == end) && ends_word && strong(c)))
                     && c.parse::<Ipv6Addr>().is_ok()
             })
     })
@@ -344,6 +347,23 @@ mod tests {
         );
         let d = vec!["corp.example".to_string()];
         blocked(&["mail[.]corp[.]example", "corp[dot]example"], &d);
+    }
+    #[test]
+    fn round_four_sentence_final_glued_ipv6() {
+        blocked(
+            &[
+                "hostfe80::1.",
+                "srcfe80::1.",
+                "srcfd00::1.",
+                "x2001:db8:1:2:3:4:5:6.",
+                "srcfe80::1:",
+                "fe80::1.",
+            ],
+            &deny(),
+        );
+        for q in ["Self::default.", "std::vector."] {
+            assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
+        }
     }
     #[test]
     fn only_public_ids_go_to_level_one() {
