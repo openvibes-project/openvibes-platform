@@ -30,8 +30,8 @@ jobs:
   # Decides which tiers run: scripts/ci-tiers.sh (rules there, cases in
   # scripts/test-ci-tiers.sh). Main, nightly, manual runs and the full-ci
   # label run everything; a pull request of only docs skips Rust and the
-  # console job, of only frontend and docs skips Rust, and either skips the
-  # heavy tier. Skipped jobs count as passing for required checks.
+  # console job, and one of only docs and frontend sources skips the heavy
+  # tier. Skipped jobs count as passing for required checks.
   changes:
     name: Choose test tiers
     runs-on: ubuntu-24.04
@@ -39,7 +39,6 @@ jobs:
     outputs:
       heavy: ${{ steps.pick.outputs.heavy }}
       kit: ${{ steps.pick.outputs.kit }}
-      light: ${{ steps.pick.outputs.light }}
       docs: ${{ steps.pick.outputs.docs }}
     steps:
       - name: Checkout repository
@@ -65,7 +64,7 @@ jobs:
             if git show "$BASE_SHA:scripts/ci-tiers.sh" > "$RUNNER_TEMP/ci-tiers.sh" 2>/dev/null; then
               git diff --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
             else
-              printf 'heavy=true\nkit=true\nlight=false\ndocs=false\n'
+              printf 'heavy=true\nkit=true\ndocs=false\n'
             fi
           else
             bash scripts/ci-tiers.sh < /dev/null
@@ -74,7 +73,7 @@ jobs:
   rust:
     name: Rust lint and tests
     needs: changes
-    if: needs.changes.outputs.light != 'true'
+    if: needs.changes.outputs.docs != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -256,15 +255,14 @@ jobs:
           TIERS: ${{ needs.changes.result }}
           RUST: ${{ needs.rust.result }}
           CONSOLE: ${{ needs.console.result }}
-          LIGHT: ${{ needs.changes.outputs.light }}
           DOCS: ${{ needs.changes.outputs.docs }}
         run: |
-          echo "tiers $TIERS (light $LIGHT, docs $DOCS); rust $RUST; console $CONSOLE"
+          echo "tiers $TIERS (docs $DOCS); rust $RUST; console $CONSOLE"
           [ "$TIERS" = success ]
-          [ "$RUST" = success ] || { [ "$LIGHT" = true ] && [ "$RUST" = skipped ]; }
+          [ "$RUST" = success ] || { [ "$DOCS" = true ] && [ "$RUST" = skipped ]; }
           [ "$CONSOLE" = success ] || { [ "$DOCS" = true ] && [ "$CONSOLE" = skipped ]; }
 
-      # The Rust job runs this; docs-only and frontend-only runs skip it.
+      # The Rust job runs this; docs-only runs skip it.
       - name: Checkout repository
         if: needs.rust.result == 'skipped'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

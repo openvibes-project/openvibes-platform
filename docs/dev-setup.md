@@ -183,7 +183,7 @@ the real console is `scripts/test-console-e2e.sh`.
 | Pull request changes | Rust (fmt, clippy, docs, tests, audit) | Console (frontend, npm audit, Chromium) | Heavy tier |
 |---|---|---|---|
 | only `docs/` and top-level `*.md` | skipped | skipped | skipped |
-| only frontend sources (`web/src`, `tests`, `e2e`, `public`) and docs | skipped | runs | skipped |
+| only frontend sources (`web/src`, `tests`, `e2e`, `public`) and docs | runs (Rust compiles `web/public` in and checks the built frontend) | runs | skipped |
 | `docs/api/` (the OpenAPI snapshot a console test compiles in) | runs | runs | skipped |
 | anything else | runs | runs | runs |
 
