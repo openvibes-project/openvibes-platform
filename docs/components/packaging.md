@@ -65,7 +65,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
-| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+| `/var/lib/openvibes-llm/models/Qwen3.5-4B-Q4_K_M.gguf` and every earlier pinned file in `packaging/llm/past-models` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` (%ghost %config noreplace, written by `%post` on a fresh install) | 0444 root; 0644 root | llm-model |
 | `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |
 | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |

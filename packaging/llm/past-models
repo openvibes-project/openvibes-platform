@@ -1,0 +1,6 @@
+# Model files earlier releases pinned (one file name per line). The
+# openvibes-llm-model package keeps owning them (%ghost), so an upgrade never
+# deletes the model in use; `helper assistant-tune --auto` switches a host
+# from one of these to model.pin's and removes it (#264). Add the old
+# LLM_MODEL_FILE here whenever model.pin changes.
+Qwen3-4B-Q4_K_M.gguf

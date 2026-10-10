@@ -58,7 +58,7 @@ pub fn check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("using an external assistant".into()));
     }
     let present = installed(ctx);
-    // Status only reads: a staged copy of an installed model (2.5 GB in the
+    // Status only reads: a staged copy of an installed model (2.7 GB in the
     // way) is removed by apply, which this makes Setup run.
     if crate::model_fetch::staged_in(ctx.root).is_some() && ctx.plan.model != ModelChoice::Skip {
         // Staged by the offline installer: installed unless declined.

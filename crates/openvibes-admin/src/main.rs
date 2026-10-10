@@ -16,6 +16,7 @@ mod helper;
 mod import;
 mod model;
 mod model_fetch;
+mod model_upgrade;
 mod rules;
 mod rules_sign;
 mod rules_site;

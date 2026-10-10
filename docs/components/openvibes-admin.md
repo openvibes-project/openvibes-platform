@@ -421,7 +421,7 @@ failure, 2 on bad arguments (checked before the root check).
 "Assistant model" step downloads the pinned model; `skip` leaves the
 assistant off ("assistant: off until its model is installed; turn the
 assistant on in Setup again to download it"). The Setup screen asks first
-("Download the assistant's model (2.5 GB from Hugging Face)? [Y/n]", with the
+("Download the assistant's model (2.7 GB from Hugging Face)? [Y/n]", with the
 model's licence URL from `model.pin`) unless the model is installed. The step
 runs `helper assistant-setup` as root; the download itself always runs as
 `openvibes-admin` (`runuser`), never in the root process.

@@ -981,7 +981,7 @@ fn the_assistant_asks_before_downloading_its_model_and_n_skips_it() {
     assert_eq!(app.setup.phase, Phase::Model);
     let text = screen(&app);
     assert!(
-        text.contains("Download the assistant's model (2.5 GB from Hugging Face)?"),
+        text.contains("Download the assistant's model (2.7 GB from Hugging Face)?"),
         "{text}"
     );
     assert!(
