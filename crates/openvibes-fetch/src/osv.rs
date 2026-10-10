@@ -1,6 +1,6 @@
 //! Extracts an OSV record (`https://api.osv.dev/v1/vulns/{id}`) by JSON path.
 
-use crate::{cut, protocol::Item};
+use crate::{cut, protocol::Item, snippet};
 use serde_json::Value;
 
 /// One item for the record (title: id and first summary line; snippet: the
@@ -17,8 +17,13 @@ pub fn extract(id: &str, v: &Value) -> Option<Vec<Item>> {
         Some(l) => format!("{id}: {}", cut(l, 200)),
         None => id.to_owned(),
     };
-    let mut snippet = cut(summary.or(text("details")).unwrap_or(""), 1000);
-    for a in v.get("affected").and_then(Value::as_array)? {
+    let mut fixed_text = String::new();
+    for a in v
+        .get("affected")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+    {
         let Some(name) = a.pointer("/package/name").and_then(Value::as_str) else {
             continue; // git-only ranges carry commit hashes, not versions
         };
@@ -44,7 +49,8 @@ pub fn extract(id: &str, v: &Value) -> Option<Vec<Item>> {
             }
         }
         if !fixed.is_empty() {
-            snippet.push_str(&format!(
+            let fixed: Vec<String> = fixed.iter().map(|f| cut(f, 100)).collect();
+            fixed_text.push_str(&format!(
                 "\n{}: fixed in {}",
                 cut(name, 100),
                 fixed.join(", ")
@@ -53,7 +59,7 @@ pub fn extract(id: &str, v: &Value) -> Option<Vec<Item>> {
     }
     let mut items = vec![Item {
         title,
-        snippet,
+        snippet: snippet(summary.or(text("details")).unwrap_or(""), &fixed_text),
         url: format!("https://osv.dev/vulnerability/{id}"),
     }];
     for r in v

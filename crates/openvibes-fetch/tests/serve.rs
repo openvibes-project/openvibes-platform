@@ -101,10 +101,8 @@ fn osv_fixed_versions_per_package_and_long_text_cut() {
     let h = fake(body.as_bytes());
     let it = items(handle(&reference("CVE-2024-0001"), &setting(1), &[], &h));
     assert!(it[0].snippet.starts_with("éé"));
-    assert_eq!(
-        it[0].snippet.chars().count(),
-        1000 + "\nopenssh: fixed in 9.8p1".len()
-    );
+    assert_eq!(it[0].snippet.chars().count(), 1000);
+    assert!(it[0].snippet.ends_with("\nopenssh: fixed in 9.8p1"));
 }
 
 #[test]
@@ -176,6 +174,37 @@ fn invalid_ids_and_search() {
         handle(&search, &setting(2), &[], &h),
         Response::Refused {
             code: Refusal::Unavailable
+        }
+    );
+    assert!(h.seen.borrow().is_empty());
+}
+
+#[test]
+fn record_without_affected_and_long_fixed_versions() {
+    let h = fake(br#"{"id":"CVE-2024-0002","summary":"only a summary"}"#);
+    let it = items(handle(&reference("CVE-2024-0002"), &setting(1), &[], &h));
+    assert_eq!(it[0].snippet, "only a summary");
+    let v = "9".repeat(300);
+    let body = format!(
+        r#"{{"id":"CVE-2024-0003","summary":"s","affected":[{{"package":{{"name":"p"}},"ranges":[{{"type":"SEMVER","events":[{{"fixed":"{v}"}}]}}]}}]}}"#
+    );
+    let it = items(handle(
+        &reference("CVE-2024-0003"),
+        &setting(1),
+        &[],
+        &fake(body.as_bytes()),
+    ));
+    assert_eq!(it[0].snippet, format!("s\np: fixed in {}", "9".repeat(100)));
+}
+
+#[test]
+fn reference_ids_are_checked_against_the_deny_list() {
+    let h = fake(OSV.as_bytes());
+    let deny = vec!["web01".to_string()];
+    assert_eq!(
+        handle(&reference("HOST-2026-web01"), &setting(1), &deny, &h),
+        Response::Refused {
+            code: Refusal::Blocked
         }
     );
     assert!(h.seen.borrow().is_empty());

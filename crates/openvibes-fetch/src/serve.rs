@@ -3,16 +3,17 @@
 
 use crate::{
     bodhi,
-    filter::is_public_id,
+    filter::{check_query, is_public_id},
     http::{Http, MAX_BODY, allowed},
     osv,
     protocol::{Kind, Refusal, Request, Response},
 };
 use platform_store::assistant_internet::Setting;
 
-/// Answers one request under `setting`. `_deny` is for the query filter,
-/// used by web search (level 2).
-pub fn handle(req: &Request, setting: &Setting, _deny: &[String], http: &dyn Http) -> Response {
+/// Answers one request under `setting`. `deny` (host and user names, internal
+/// domains) is checked against reference IDs too, since a well-formed ID can
+/// still carry a host name.
+pub fn handle(req: &Request, setting: &Setting, deny: &[String], http: &dyn Http) -> Response {
     let refuse = |code| Response::Refused { code };
     if setting.level < 1 {
         return refuse(Refusal::Off);
@@ -25,6 +26,9 @@ pub fn handle(req: &Request, setting: &Setting, _deny: &[String], http: &dyn Htt
         Kind::Search { .. } if setting.level >= 2 => return refuse(Refusal::Unavailable),
         Kind::Search { .. } => return refuse(Refusal::Off),
     };
+    if let Err(code) = check_query(id, deny) {
+        return refuse(code);
+    }
     let fedora = id.starts_with("FEDORA-");
     let (url, source) = if fedora {
         (

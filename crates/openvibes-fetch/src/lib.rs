@@ -15,3 +15,11 @@ pub mod serve;
 pub fn cut(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
+
+/// `text` followed by `tail` (the fixed versions, itself cut to 400
+/// characters), the whole at most 1,000 characters: the text gives way.
+pub fn snippet(text: &str, tail: &str) -> String {
+    let tail = cut(tail, 400);
+    let room = 1000 - tail.chars().count();
+    format!("{}{tail}", cut(text, room))
+}

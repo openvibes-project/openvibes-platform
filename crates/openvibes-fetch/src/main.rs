@@ -13,6 +13,8 @@ use openvibes_fetch::{
 };
 
 const DEFAULT_CONFIG: &str = "/etc/openvibes/fetch.toml";
+/// Longest wait for the request and for the whole answer.
+const DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 const MAX_REQUEST: u64 = 8 * 1024;
 
 fn fail(message: &str) -> ExitCode {
@@ -35,14 +37,25 @@ async fn main() -> ExitCode {
         Ok(c) => c,
         Err(e) => return fail(&e.to_string()),
     };
-    let mut raw = Vec::new();
-    if std::io::stdin()
-        .take(MAX_REQUEST + 1)
-        .read_to_end(&mut raw)
-        .is_err()
-    {
-        return fail("cannot read stdin");
-    }
+    // A client that never half-closes must not hang us: the read runs on a
+    // blocking task with its own deadline (the unit also sets RuntimeMaxSec).
+    let read = tokio::task::spawn_blocking(|| {
+        let mut raw = Vec::new();
+        std::io::stdin()
+            .take(MAX_REQUEST + 1)
+            .read_to_end(&mut raw)
+            .map(|_| raw)
+    });
+    let raw = match tokio::time::timeout(DEADLINE, read).await {
+        Ok(Ok(Ok(raw))) => raw,
+        Ok(_) => return fail("cannot read stdin"),
+        Err(_) => {
+            println!(r#"{{"result":"refused","code":"invalid"}}"#);
+            eprintln!("openvibes-fetch: stdin timed out");
+            // The blocked read cannot be cancelled; leave without waiting.
+            std::process::exit(0);
+        }
+    };
     let request: Option<Request> = if raw.len() as u64 > MAX_REQUEST {
         None
     } else {
@@ -61,7 +74,12 @@ async fn main() -> ExitCode {
                 Kind::Reference { id } => format!("reference {id}"),
                 Kind::Search { query } => format!("search {query}"),
             };
-            let response = answer(&config, &req).await;
+            // ureq's own 10 s timeout bounds the blocking HTTP call.
+            let response = tokio::time::timeout(DEADLINE, answer(&config, &req))
+                .await
+                .unwrap_or(Response::Refused {
+                    code: Refusal::Unavailable,
+                });
             (req.user, what, response)
         }
     };
