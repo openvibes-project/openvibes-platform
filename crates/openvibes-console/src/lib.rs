@@ -17,6 +17,7 @@ mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;
 mod assistant;
+mod assistant_internet;
 mod auth;
 mod auth_first;
 mod bulk;
@@ -50,7 +51,7 @@ pub use api::{
     AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary,
     AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
     AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
+    AssistantInternet, AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
     AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
     BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
     CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
@@ -64,10 +65,10 @@ pub use api::{
     PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
     RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
     ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
-    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest,
-    UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail, VulnerabilityPage,
-    VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost,
-    VulnerabilityView,
+    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAssistantInternetRequest,
+    UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
+    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
+    VulnerabilityTopHost, VulnerabilityView,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,

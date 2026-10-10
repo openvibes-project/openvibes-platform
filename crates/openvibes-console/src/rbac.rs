@@ -188,6 +188,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::ServiceAccountsRead,
     Permission::ServiceAccountsManage,
     Permission::AssistantUse,
+    Permission::AssistantAdmin,
     Permission::DashboardsShare,
     Permission::CasesRead,
     Permission::CasesManage,

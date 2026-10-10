@@ -62,7 +62,7 @@ pub struct Readiness(Arc<AtomicBool>);
 #[derive(Clone)]
 pub(crate) struct AuthHttpState {
     pub(crate) pool: Pool,
-    public_origin: Arc<str>,
+    pub(crate) public_origin: Arc<str>,
     public_origin_valid: bool,
     /// Lowercase `Host` values served: `public_origin`'s authority and every
     /// name the certificate covers at the console's port (board #71).
@@ -542,6 +542,11 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/audit-retention",
             get(authenticated_audit_retention).put(update_authenticated_audit_retention),
+        )
+        .route(
+            "/v1/assistant-internet",
+            get(crate::assistant_internet::get_assistant_internet)
+                .put(crate::assistant_internet::update_assistant_internet),
         )
         .route("/v1/audit-events", get(authenticated_audit_events))
         .route("/v1/audit-export.csv", get(authenticated_audit_export))

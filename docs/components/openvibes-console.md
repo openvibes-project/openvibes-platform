@@ -46,6 +46,14 @@ reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
 Global `audit.export` users can download the exact visible filters as bounded
 CSV; the export audit event records only filters, row count, and digest.
+`GET`/`PUT /api/v1/assistant-internet` (permission `assistant.admin`, global
+scope, `If-Match`, Origin and CSRF on writes) read and change the assistant's
+internet-lookup setting: level 0 off, 1 fetch pages, 2 fetch pages and search
+through SearXNG. The SearXNG URL must be `https://`, or `http://` only on
+loopback or a private address; level 2 requires it. Domains must be lowercase
+names (at most 50). Each change writes an `assistant.internet.changed` audit
+row; `platform_domain` (the public origin's host) is always filtered. An
+unreadable setting counts as level 0.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, Findings, Audit, and
