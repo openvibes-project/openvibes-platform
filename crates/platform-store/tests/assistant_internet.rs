@@ -153,13 +153,17 @@ async fn denylist_holds_the_short_name_of_every_fqdn() {
         .batch_execute(
             "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname)
                VALUES ('agent.00000000-0000-0000-0000-000000000001', 'active', now(), now(),
-                       'web-01.corp.example')",
+                       'web-01.corp.example'),
+                      ('agent.00000000-0000-0000-0000-000000000002', 'active', now(), now(),
+                       'a.corp.example')",
         )
         .await
         .unwrap();
     let got = assistant_internet::denylist(&client).await.unwrap();
-    for name in ["web-01.corp.example", "web-01"] {
+    for name in ["web-01.corp.example", "web-01", "a.corp.example"] {
         assert!(got.contains(&name.to_owned()), "{name} missing: {got:?}");
     }
+    // A derived label under three characters would block ordinary searches.
+    assert!(!got.contains(&"a".to_owned()), "{got:?}");
     db.drop().await;
 }

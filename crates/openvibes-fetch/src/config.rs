@@ -17,9 +17,10 @@ pub struct FetchConfig {
 }
 
 impl FetchConfig {
-    /// Deny-list terms for the platform's own name: the host and, when it
-    /// is itself a domain (has a dot), its parent (`example.com` for
-    /// `vibes.example.com`).
+    /// Deny-list terms for the platform's own name: the host, its parent
+    /// when that is itself a domain (`example.com` for `vibes.example.com`)
+    /// and its first label (`vibes`) when that has at least three characters,
+    /// the same rule as the agents' short names.
     pub fn platform_names(&self) -> Vec<String> {
         let Some(host) = self.platform_domain.as_deref().map(str::to_lowercase) else {
             return Vec::new();
@@ -28,7 +29,11 @@ impl FetchConfig {
             .split_once('.')
             .map(|(_, p)| p.to_owned())
             .filter(|p| p.contains('.'));
-        std::iter::once(host).chain(parent).collect()
+        let label = host
+            .split_once('.')
+            .map(|(l, _)| l.to_owned())
+            .filter(|l| l.chars().count() >= 3);
+        std::iter::once(host).chain(parent).chain(label).collect()
     }
 }
 
@@ -47,11 +52,15 @@ mod tests {
         .unwrap();
         assert_eq!(
             set.platform_names(),
-            ["platform.example.com", "example.com"]
+            ["platform.example.com", "example.com", "platform"]
         );
         let short: FetchConfig =
             toml::from_str("database_url = \"x\"\nplatform_domain = \"vibes.lan\"\n").unwrap();
         // A bare top-level label (`lan`) is no domain of ours.
-        assert_eq!(short.platform_names(), ["vibes.lan"]);
+        assert_eq!(short.platform_names(), ["vibes.lan", "vibes"]);
+        // A first label under three characters is too common a word to deny.
+        let tiny: FetchConfig =
+            toml::from_str("database_url = \"x\"\nplatform_domain = \"ov.lan\"\n").unwrap();
+        assert_eq!(tiny.platform_names(), ["ov.lan"]);
     }
 }

@@ -834,7 +834,8 @@ and `schema_version`. `openvibes-console` can `SELECT` the table and
   (253 characters at most; a single label such as `intranet` is allowed).
 - `assistant_internet::denylist`: lowercase, de-duplicated agent ids,
   hostnames (not empty) and the first label of every dotted one (`web-01`
-  for `web-01.corp.example`), console usernames and the internal domains, for
+  for `web-01.corp.example`; only when it has at least three characters, so
+  `a.corp.example` adds no `a`), console usernames and the internal domains, for
   the fetch service's outbound filter.
 - Tests: `tests/assistant_internet.rs` (including the denylist and the
   console write path under their own roles).

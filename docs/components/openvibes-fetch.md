@@ -68,11 +68,17 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 `proxy_url` (set by hand), optional `platform_domain` (written by Setup's
 console step: the public origin's host). That host, and its parent when the
 parent still has a dot (`example.com` for `vibes.example.com`, not `lan` for
-`vibes.lan`), join the deny list (`FetchConfig::platform_names`).
+`vibes.lan`), and its first label (`vibes`), join the deny list
+(`FetchConfig::platform_names`).
 
 The deny list from PostgreSQL holds agent IDs, host names and the first
 label of every dotted host name (`web-01` for `web-01.corp.example`),
 console user names and the internal domains.
+
+A derived first label (an agent's or the platform's) joins only when it has
+at least three characters: `a` of `a.corp.example` would block most web
+searches. Full host names, agent IDs, user names and internal domains are
+always denied, whatever their length.
 
 `outside.rs` holds what the model sees of a lookup (the `[web:N]` data
 shape and the fixed notes), shared by the console and the evaluation.

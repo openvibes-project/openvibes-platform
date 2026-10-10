@@ -133,8 +133,9 @@ pub async fn update(
 }
 
 /// Names the outbound filter must never let through: agent ids and hostnames
-/// (and the first label of every dotted one, as `web-01` for `web-01.corp`),
-/// console usernames and the configured internal domains, all lowercase.
+/// (and the first label of every dotted one, as `web-01` for `web-01.corp`,
+/// when it has at least three characters: `a` of `a.corp` would block most
+/// searches), console usernames and the configured internal domains, all lowercase.
 pub async fn denylist(client: &Client) -> Result<Vec<String>, StoreError> {
     let rows = client
         .query(
@@ -143,6 +144,7 @@ pub async fn denylist(client: &Client) -> Result<Vec<String>, StoreError> {
                    WHERE hostname IS NOT NULL AND hostname <> ''
              UNION SELECT split_part(lower(hostname), '.', 1) FROM agents
                    WHERE hostname LIKE '%.%'
+                     AND length(split_part(hostname, '.', 1)) >= 3
              UNION SELECT lower(username) FROM console_users
              UNION SELECT lower(d) FROM assistant_internet, unnest(internal_domains) d",
             &[],

@@ -308,7 +308,11 @@ fn a_search_naming_the_platform_domain_is_blocked() {
     let config: openvibes_fetch::config::FetchConfig =
         toml::from_str("database_url = \"x\"\nplatform_domain = \"vibes.corp.example\"\n").unwrap();
     let deny = config.platform_names();
-    for q in ["vibes.corp.example login error", "corp.example sso"] {
+    for q in [
+        "vibes.corp.example login error",
+        "corp.example sso",
+        "vibes console login",
+    ] {
         assert_eq!(
             handle(
                 &search(q),
