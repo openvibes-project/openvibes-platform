@@ -26,7 +26,7 @@ request = screen("limebox · Install › Request", [
     "    BgNVBAMMIk9wZW5WSUJFUyBpbnRlcm1lZGlhdGUgKGxpbWVib3gubGFuKTBZMBMG",
     "    {d}… 5 more lines{/}",
     "    -----END CERTIFICATE REQUEST-----",
-], bar("{k} ↑↓ {/} Scroll", nav=False))
+], bar("{k} ⭡⭣ {/} Scroll", nav=False))
 
 HOW = [("Paste it", "paste the PEM text into this terminal"),
        ("From a file on this host", "copied here with scp or a USB stick")]

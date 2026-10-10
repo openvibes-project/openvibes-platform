@@ -100,7 +100,7 @@ def bar(content, right="{k} Esc {/} Back  {k} ? {/}", nav=True):
     # User (2026-10-10): ↑↓ Move first on every screen with a list; not
     # while the bar asks a question.
     inner = W - 4
-    body = ("{k} ↑↓ {/} Move  " + content) if nav else content
+    body = ("{k} ⭡⭣ {/} Move  " + content) if nav else content
     gap = inner - visible(body) - visible(right)
     if gap < 1:
         right = ""
@@ -172,7 +172,7 @@ def ask(question, detail="", yes=True):
     ←→ to choose and Enter to confirm."""
     left = "{b}" + question + "{/}" + (f" {{d}}{detail}{{/}}" if detail else "")
     buttons = "{s} Yes {/} {d}[ No ]{/}" if yes else "{d}[ Yes ]{/} {s} No {/}"
-    return bar(left, buttons + "  {k} ←→ {/} {k} Enter {/} Confirm", nav=False)
+    return bar(left, buttons + "  {k} ⭠⭢ {/} {k} Enter {/} Confirm", nav=False)
 
 
 def checkbar():

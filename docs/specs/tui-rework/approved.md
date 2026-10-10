@@ -180,3 +180,9 @@
     writable, free space). The chosen folder is remembered and shown next
     time; every backup gets its own file name inside it.
     Folder-choice backup flow approved (LGTM).
+39. Keys look the same everywhere: shown as key buttons (as in the bar),
+    arrows as one button "↑↓" / "←→", never spaced-out text (user).
+40. Arrow keys are drawn ⭡⭣ and ⭠⭢, bold, in key buttons (user picked
+    them in their own terminal: "⭡⭣ looks best"). Fallback: on the Linux
+    text console (TERM=linux, e.g. the appliance's local screen) and any
+    terminal without them, plain ↑↓ ←→.
