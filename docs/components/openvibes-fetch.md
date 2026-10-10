@@ -87,7 +87,7 @@ shape and the fixed notes), shared by the console and the evaluation.
 
 - `openvibes-fetch.socket`: `/run/openvibes-fetch/fetch.sock`, 0660
   `root:openvibes-console`, `Accept=yes`, `MaxConnections=8` (systemd refuses a ninth concurrent
-  connection; the console then answers with the unreachable note). Enabled by a preset (`80-`, before Fedora's `90-default` disable-all).
+  connection; the console then answers with the unreachable note). Enabled by a preset (`80-`, before Fedora's `90-default` disable-all). `openvibes-console.service` `Wants=` it, so a host upgraded from a release without fetch gets the socket when the upgrade restarts the console (`%systemd_post` only enables).
 - `openvibes-fetch@.service`: one instance per connection as user
   `openvibes-fetch`, stdin/stdout on the socket, stderr to the journal,
   `RuntimeMaxSec=30`, `CollectMode=inactive-or-failed`, no capabilities, `ProtectSystem=strict`, seccomp,
