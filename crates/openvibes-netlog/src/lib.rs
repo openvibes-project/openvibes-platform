@@ -5,5 +5,7 @@
 
 pub mod cef;
 pub mod collapse;
+pub mod config;
 pub mod handle;
+pub mod service;
 pub mod unifi;
