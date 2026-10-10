@@ -59,6 +59,8 @@ Summary:        OpenVIBES agent-facing ingest service
 
 %description -n openvibes-ingest
 Receives enrollments, renewals, heartbeats, and findings from OpenVIBES agents over mTLS.
+Also ships openvibes-netlog: UniFi IPS/IDS events (CEF over UDP syslog,
+port 514) from registered network devices become alarms.
 
 %package -n openvibes-distribution
 Requires(pre):  shadow-utils procps-ng systemd
@@ -182,6 +184,10 @@ install -D -m 0644 $S/packaging/rpm/openvibes-maintenance.timer %{buildroot}%{_u
 install -D -m 0644 $S/packaging/rpm/openvibes-migrate.service %{buildroot}%{_unitdir}/openvibes-migrate.service
 install -D -m 0644 $S/packaging/rpm/openvibes-rules-apply.service %{buildroot}%{_unitdir}/openvibes-rules-apply.service
 install -D -m 0644 $S/packaging/rpm/openvibes-ingest.sysusers %{buildroot}%{_sysusersdir}/openvibes-ingest.conf
+install -D -m 0755 $S/target/release/openvibes-netlog %{buildroot}%{_bindir}/openvibes-netlog
+install -D -m 0644 $S/packaging/rpm/openvibes-netlog.service %{buildroot}%{_unitdir}/openvibes-netlog.service
+install -D -m 0644 $S/packaging/rpm/openvibes-netlog.sysusers %{buildroot}%{_sysusersdir}/openvibes-netlog.conf
+install -D -m 0640 $S/packaging/rpm/netlog.toml %{buildroot}%{_sysconfdir}/openvibes/netlog.toml
 install -D -m 0644 $S/packaging/rpm/openvibes-admin.sysusers %{buildroot}%{_sysusersdir}/openvibes-admin.conf
 install -D -m 0640 $S/packaging/rpm/ingest.toml %{buildroot}%{_sysconfdir}/openvibes/ingest.toml
 install -D -m 0640 $S/packaging/rpm/admin.toml %{buildroot}%{_sysconfdir}/openvibes/admin.toml
@@ -227,13 +233,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %rename_pre ingest openvibes-ingest.service
 %post -n openvibes-ingest
 %{_libexecdir}/openvibes/rename-account-ingest post ingest %{_sysconfdir}/openvibes/ingest.toml
-%systemd_post openvibes-ingest.service
+%systemd_post openvibes-ingest.service openvibes-netlog.service
 %posttrans -n openvibes-ingest
 %restart_renamed openvibes-ingest.service
 %preun -n openvibes-ingest
-%systemd_preun openvibes-ingest.service
+%systemd_preun openvibes-ingest.service openvibes-netlog.service
 %postun -n openvibes-ingest
-%systemd_postun_with_restart openvibes-ingest.service
+%systemd_postun_with_restart openvibes-ingest.service openvibes-netlog.service
 
 %pre -n openvibes-distribution
 %rename_pre distribution openvibes-distribution.service
@@ -363,6 +369,10 @@ fi
 %dir %{_sysconfdir}/openvibes/tls
 %dir %{_sysconfdir}/openvibes/pki
 %config(noreplace) %attr(0640, root, openvibes-ingest) %{_sysconfdir}/openvibes/ingest.toml
+%{_bindir}/openvibes-netlog
+%{_unitdir}/openvibes-netlog.service
+%{_sysusersdir}/openvibes-netlog.conf
+%config(noreplace) %attr(0640, root, openvibes-netlog) %{_sysconfdir}/openvibes/netlog.toml
 %dir %attr(0700, openvibes-ingest, openvibes-ingest) %{_sharedstatedir}/openvibes-ingest
 
 %files -n openvibes-distribution
