@@ -34,6 +34,11 @@ def visible(line):
     return len(TAG.sub("", line))
 
 
+def pad(text, width):
+    """Pad marked-up text to `width` visible columns."""
+    return text + " " * max(0, width - visible(text))
+
+
 def cells(text):
     return "".join(c if ord(c) < 128 else f'<span class="g1">{c}</span>' for c in html.escape(text))
 
