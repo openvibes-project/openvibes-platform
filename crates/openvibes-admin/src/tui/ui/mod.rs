@@ -3,3 +3,4 @@
 //! logo and location line, one bar, one list, one frame.
 
 pub mod theme;
+pub mod logo;
