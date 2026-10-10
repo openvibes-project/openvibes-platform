@@ -184,9 +184,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (id === undefined || !/mitigat|fix|patch|workaround|remediat|protect against/i.test(question)) return [];
     // The demo's unreachable ID: the lookup failed, the answer is local only.
     if (id === "CVE-2099-0001") return [{ kind: "unavailable", text: "Internet lookup unavailable; this answer uses local data only", url: null, number: null }];
-    // [web:1] is the OSV page itself, shown once as the reference.
+    // [web:1] is the OSV page itself, shown once as the reference with its number.
     return [
-      { kind: "reference", text: `Looked up ${id} on osv.dev`, url: `https://osv.dev/vulnerability/${id}`, number: null },
+      { kind: "reference", text: `Looked up ${id} on osv.dev`, url: `https://osv.dev/vulnerability/${id}`, number: 1 },
       { kind: "search", text: `Searched the web for: ${id} mitigation workaround`, url: null, number: null },
       { kind: "result", text: "www.openssh.com", url: "https://www.openssh.com/txt/release-9.8", number: 2 },
     ];

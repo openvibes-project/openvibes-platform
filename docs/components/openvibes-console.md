@@ -71,7 +71,9 @@ service's own 20 s deadline). A `reference` ID's prefix is uppercased before
 sending (`cve-2024-6387` becomes `CVE-2024-6387`). Each user gets 20 lookups
 per hour (in console memory, reset on restart). Every outbound request writes
 an `assistant.internet.lookup` audit row (user, kind, ID or query,
-destination, result or refusal code). Failures never fail the answer: the model
+destination, result or refusal code) under the request ID of the question
+it serves, the same as that question's `assistant.question` row, prefetched
+and model lookups alike (Test connection gets its own). Failures never fail the answer: the model
 gets a fixed note ("internet lookups are off", "blocked: the query contained
 internal data", "the internet lookup limit is reached; try again later", "OSV
 could not be reached; this answer uses local data only", "not a public
@@ -87,7 +89,9 @@ own page as `url`, built from the ID); every `web_search` that went out, even
 with no results or a failed source, but never an off or blocked one
 ("Searched the web for: …", no link); and each `result` link of an answer,
 `text` its host only (never the outside title), `url` the result's http(s)
-URL and `number` its `[web:N]`. A query the fetch service's filter refused
+URL and `number` its `[web:N]`; a result whose URL is the reference's own
+page is not listed twice, and the reference row takes its `number`, so every
+number the model was given has a row. A query the fetch service's filter refused
 (`Refused{Blocked}`) never left the host and is no failure: it gets one
 `blocked` entry ("Web search blocked: the query contained internal data", no
 link). One `unavailable` entry ("Internet lookup unavailable; this answer

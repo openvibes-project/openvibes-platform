@@ -3152,6 +3152,8 @@ pub(crate) async fn authenticated_assistant_message(
             answer: turn.answer,
         })
         .collect::<Vec<_>>();
+    // One ID for the question's audit row and every internet lookup it makes.
+    let request_id = next_request_id();
     let access = crate::assistant::Access {
         agents: agent_scope,
         vulnerabilities,
@@ -3159,6 +3161,7 @@ pub(crate) async fn authenticated_assistant_message(
         // The handler requires assistant.use (analysts, administrators).
         internet: Some(crate::fetch_client::Internet {
             user: actor.clone(),
+            request_id: request_id.clone(),
             socket: state.fetch_socket.clone(),
             limits: state.internet_limits.clone(),
             sent: std::sync::Mutex::default(),
@@ -3186,7 +3189,6 @@ pub(crate) async fn authenticated_assistant_message(
         crate::assistant_internet::current_level(&state.pool).await,
     );
     let started = Instant::now();
-    let request_id = next_request_id();
     let answer = tokio::time::timeout(
         assistant_answer_timeout(settings.longest()),
         platform_assistant::answer(

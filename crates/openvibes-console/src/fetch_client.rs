@@ -53,6 +53,9 @@ impl Limits {
 /// What a runner needs to make internet lookups for one user.
 pub(crate) struct Internet {
     pub(crate) user: String,
+    /// The request ID of the question (or Test connection) the lookups
+    /// serve: every lookup audit row carries it, so it joins the question.
+    pub(crate) request_id: String,
     pub(crate) socket: Arc<Path>,
     pub(crate) limits: Arc<Limits>,
     /// What went out so far for this answer.
@@ -164,7 +167,7 @@ impl Internet {
             "assistant.internet.lookup",
             "assistant",
             &result,
-            &crate::problem::next_request_id(),
+            &self.request_id,
             &detail,
         )
         .await
@@ -228,6 +231,7 @@ pub(crate) async fn test_search(
 ) -> Result<(bool, String), LookupError> {
     let internet = Internet {
         user,
+        request_id: crate::problem::next_request_id(),
         socket: socket.clone(),
         limits: limits.clone(),
         sent: Mutex::default(),
@@ -259,7 +263,8 @@ fn code_name(code: Refusal) -> &'static str {
 /// The sources line under an answer: each reference looked up (its link
 /// built here from the ID), each search that went out, each result link
 /// shown by host only (never its outside title) with its `[web:N]` number,
-/// each link once; one line if a query was blocked (it never left the
+/// each link once (a reference whose own page came back as a result carries
+/// that result's number); one line if a query was blocked (it never left the
 /// host); then one line if any lookup failed.
 pub(crate) fn internet_sources(failed: bool, sent: &[Sent]) -> Vec<AssistantInternetSource> {
     let unavailable = failed.then(|| AssistantInternetSource {
@@ -316,13 +321,16 @@ pub(crate) fn internet_sources(failed: bool, sent: &[Sent]) -> Vec<AssistantInte
             })
         });
         for entry in std::iter::once(head).chain(results) {
-            let seen = out.iter().any(|o| match (&o.url, &entry.url) {
+            let seen = out.iter_mut().find(|o| match (&o.url, &entry.url) {
                 (Some(a), Some(b)) => a == b,
                 (None, None) => o.text == entry.text,
                 _ => false,
             });
-            if !seen {
-                out.push(entry);
+            match seen {
+                // A result absorbed by an unnumbered row (the reference's own
+                // page) lends it its number, so the cited `[web:N]` has a row.
+                Some(row) => row.number = row.number.or(entry.number),
+                None => out.push(entry),
             }
         }
     }

@@ -10,7 +10,8 @@ test("a mitigation answer shows where outside information came from", async ({ p
   const dock = page.getByRole("complementary", { name: "Assistant" });
   await dock.getByLabel("Question").fill("How do I mitigate CVE-2024-6387?");
   await dock.getByRole("button", { name: "Send" }).click();
-  const source = dock.getByRole("link", { name: "Looked up CVE-2024-6387 on osv.dev" });
+  // The OSV page came back as [web:1]: the reference line carries that number.
+  const source = dock.getByRole("link", { name: "[web:1] Looked up CVE-2024-6387 on osv.dev", exact: true });
   await expect(source).toHaveAttribute("href", "https://osv.dev/vulnerability/CVE-2024-6387");
   await expect(source).toHaveAttribute("target", "_blank");
   await expect(source).toHaveAttribute("rel", "noopener noreferrer nofollow");
