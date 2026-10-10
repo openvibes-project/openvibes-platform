@@ -1,4 +1,4 @@
-//! Service: <name> (spec §4): which service, its state, its actions as
+//! Service: `<name>` (spec §4): which service, its state, its actions as
 //! entries (the bar names what Enter does), and its latest log lines;
 //! Full log shows every line.
 
