@@ -14,6 +14,7 @@ test.beforeEach(async ({ page }) => {
 test("alarms are selected with a shift-click range and closed only with a note", async ({ page }) => {
   await page.goto("/alarms");
   const rows = page.locator(".view tbody tr");
+  await expect(rows.first()).toBeVisible(); // count once the list has loaded
   const count = await rows.count();
   await rows.nth(0).getByRole("checkbox", { name: "Select row" }).check();
   await rows.nth(1).getByRole("checkbox", { name: "Select row" }).click({ modifiers: ["Shift"] });
