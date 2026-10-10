@@ -11,8 +11,8 @@ use ratatui::{
 
 use super::app::App;
 
-const DATABASE_KEYS: &str = "Tab screens  m migrate  n maintenance now  R refresh  q quit";
-const HEALTH_KEYS: &str = "Tab screens  R refresh  q quit";
+const DATABASE_KEYS: &str = "m migrate  n maintenance now  R refresh  Esc back";
+const HEALTH_KEYS: &str = "R refresh  Esc back";
 
 fn areas(area: Rect) -> [Rect; 3] {
     Layout::vertical([

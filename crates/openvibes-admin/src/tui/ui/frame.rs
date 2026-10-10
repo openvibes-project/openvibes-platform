@@ -1,6 +1,8 @@
 //! One frame for every screen (spec §2): logo, location line, exactly one
-//! empty line, an optional title rule and one more empty line, the
-//! content, and the bar. Legacy screens get only the location line.
+//! empty line, an optional title rule, the content, and the bar. The
+//! content starts on the line right after the rule (or the gap): a list's
+//! top line is the one empty line (or its scroll hint); screens that start
+//! with anything else add their own blank first. Legacy screens get only the location line.
 
 use ratatui::{
     Frame,
@@ -48,7 +50,7 @@ pub fn draw(
     bar: &Bar,
 ) -> Rect {
     let area = frame.area();
-    let heading = if title.is_some() { 2 } else { 0 };
+    let heading = u16::from(title.is_some());
     let [top, _gap, head, content, bottom] = Layout::vertical([
         Constraint::Length(logo::ROWS),
         Constraint::Length(1),
@@ -66,7 +68,7 @@ pub fn draw(
             Span::styled(title.to_owned(), theme.bold()),
             Span::styled(format!(" {rule}"), theme.rule()),
         ]);
-        frame.render_widget(Paragraph::new(vec![line, Line::raw("")]), head);
+        frame.render_widget(Paragraph::new(line), head);
     }
     frame.render_widget(
         Paragraph::new(bar.lines(theme, area.width).to_vec()),
@@ -122,7 +124,7 @@ mod tests {
     }
 
     #[test]
-    fn logo_location_one_empty_line_then_the_title_and_one_more() {
+    fn logo_location_one_empty_line_then_the_title_then_content() {
         let (rows, area) = render(80, 24, Some("Status"));
         assert!(rows[6].starts_with("    limebox · Status"));
         assert_eq!(
@@ -131,9 +133,8 @@ mod tests {
             "exactly one empty line under the location line"
         );
         assert!(rows[8].starts_with("    ━━ Status ━━"), "{:?}", rows[8]);
-        assert_eq!(rows[9].trim(), "");
-        assert_eq!(area.y, 10);
-        assert_eq!(area.height, 24 - 10 - 3);
+        assert_eq!(area.y, 9, "content starts right after the rule");
+        assert_eq!(area.height, 24 - 9 - 3);
         assert!(rows[22].contains("Move"));
     }
 

@@ -54,7 +54,7 @@ fn status_renders_problems_then_services_with_the_frame() {
     }
     // At 80x24 three problems leave no room for the service rows: the
     // hint says so (select a service to see them, see the scroll test).
-    assert!(text.contains("⭣ 4 more"), "{text}");
+    assert!(text.contains("⭣ 3 more"), "{text}");
     let mut app = app;
     while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
         app.key(Key::Down);
@@ -182,4 +182,18 @@ fn states_read_as_running_stopped_or_as_they_are() {
     assert_eq!(state_word("active"), "running");
     assert_eq!(state_word("inactive"), "stopped");
     assert_eq!(state_word("failed"), "failed");
+}
+
+#[test]
+fn since_shows_the_time_today_the_date_otherwise_and_odd_text_as_it_is() {
+    use super::status::since_on;
+    let day = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let raw = "Sat 2026-10-10 12:56:13 CEST";
+    assert_eq!(since_on(raw, day("2026-10-10")), "12:56");
+    assert_eq!(since_on(raw, day("2026-10-11")), "2026-10-10");
+    assert_eq!(
+        since_on("yesterday-ish", day("2026-10-11")),
+        "yesterday-ish"
+    );
+    assert_eq!(since_on("", day("2026-10-11")), "");
 }

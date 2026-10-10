@@ -189,3 +189,66 @@ fn the_update_notice_arrives_from_the_background_without_blocking() {
     app.tick(std::time::Instant::now());
     assert_eq!(app.update.as_deref(), Some("0.3.0"));
 }
+
+/// The line after `anchor` is the one empty line, then content follows.
+fn one_gap_after(text: &str, anchor: impl Fn(&str) -> bool, what: &str) {
+    let lines: Vec<&str> = text.lines().collect();
+    let i = lines
+        .iter()
+        .position(|l| anchor(l))
+        .unwrap_or_else(|| panic!("{what}: no anchor in\n{text}"));
+    assert_eq!(lines[i + 1].trim(), "", "{what}: one empty line\n{text}");
+    assert_ne!(
+        lines[i + 2].trim(),
+        "",
+        "{what}: not two empty lines\n{text}"
+    );
+}
+
+#[test]
+fn every_screen_has_exactly_one_empty_line_under_its_title() {
+    let rule = |l: &str| l.starts_with("    ━━ ");
+    let mut app = app(false);
+    one_gap_after(
+        &screen(&app, 80, 24),
+        |l| l.starts_with("    ●") || l.starts_with("    ▲"),
+        "Home",
+    );
+    app.key(Key::Char('?'));
+    one_gap_after(&screen(&app, 80, 24), rule, "Help");
+    app.key(Key::Esc);
+    app.key(Key::Enter);
+    one_gap_after(&screen(&app, 80, 24), rule, "Status");
+    while !matches!(
+        app.status_items()[app.nav.row],
+        super::status::Item::Service(_)
+    ) {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    one_gap_after(&screen(&app, 80, 24), rule, "Service");
+    app.key(Key::Esc);
+    app.key(Key::Esc);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    one_gap_after(&screen(&app, 80, 24), rule, "Maintenance");
+}
+
+#[test]
+fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
+    for tab in [Tab::Setup, Tab::Configuration, Tab::Database] {
+        let mut app = app(false);
+        app.open(tab);
+        let text = screen(&app, 80, 24);
+        let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
+        assert!(!footer.contains("Tab"), "{tab:?}: {footer}");
+        assert!(
+            !footer.contains("q quit"),
+            "{tab:?} on a set-up host: {footer}"
+        );
+        assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
+    }
+    let fresh = super::setup_tests::fresh_app();
+    let text = super::setup_tests::screen(&fresh);
+    assert!(text.contains("q quit") && !text.contains("Tab"), "{text}");
+}

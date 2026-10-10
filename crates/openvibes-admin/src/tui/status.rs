@@ -144,7 +144,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 "{:<9} {:<9} {}",
                 state_word(&s.active),
                 ready,
-                s.since.clone().unwrap_or_default()
+                s.since.as_deref().map(since).unwrap_or_default()
             ))],
         });
     }
@@ -161,6 +161,30 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     lines.push(Line::styled(format!("    ● {ok} checks ok"), t.dim()));
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// systemd's `Sat 2026-10-10 12:56:13 CEST` as `12:56` when that day is
+/// today, else `2026-10-10`; text that does not parse is returned as it is.
+pub fn since(raw: &str) -> String {
+    since_on(raw, chrono::Local::now().date_naive())
+}
+
+pub(super) fn since_on(raw: &str, today: chrono::NaiveDate) -> String {
+    let mut parts = raw.split_whitespace();
+    let parsed = parts
+        .by_ref()
+        .find_map(|p| chrono::NaiveDate::parse_from_str(p, "%Y-%m-%d").ok())
+        .zip(
+            parts
+                .next()
+                .and_then(|t| t.get(..5))
+                .filter(|t| t.as_bytes()[2] == b':'),
+        );
+    match parsed {
+        Some((day, time)) if day == today => time.to_owned(),
+        Some((day, _)) => day.to_string(),
+        None => raw.to_owned(),
+    }
 }
 
 impl<H: Host> App<H> {

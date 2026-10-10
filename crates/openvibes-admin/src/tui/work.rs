@@ -8,7 +8,7 @@ use platform_host::{Host, Privileged, ServiceAction, Unit};
 use super::{
     app::{App, Key},
     password::{PasswordPrompt, Typed},
-    service::detail,
+    service::question_detail,
     services_text::readable,
     status::Fix,
     ui::bar::Bar,
@@ -176,7 +176,7 @@ impl<H: Host> App<H> {
             let (question, detail) = match question {
                 Question::Service(unit, action) => (
                     format!("{} {}?", capitalised(*action), unit.label()),
-                    detail(*unit, *action).to_owned(),
+                    question_detail(*unit, *action).to_owned(),
                 ),
                 Question::Quit => (
                     "Quit while it runs?".to_owned(),

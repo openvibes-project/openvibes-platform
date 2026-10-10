@@ -18,13 +18,22 @@ use super::{
 };
 use crate::setup::plan::{CaMode, Component};
 
-const FORM_KEYS: &str = "Tab screens  j/k move  space toggle  Enter edit/start  q quit";
+const FORM_KEYS: &str = "j/k move  space toggle  Enter edit/start";
 /// After a failed step: retry it, or any other action (#73). Fits 80 columns.
 const RUN_KEYS: &str = "r retry  c check  u update  x uninstall  m components  p ports  Esc  q";
 /// While a step runs, keys wait for it (the loop runs one step per turn).
 const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
 /// Fits 80 columns.
-const DONE_KEYS: &str = "c check  r repair  u update  m components  p ports  x uninstall  Tab  q";
+const DONE_KEYS: &str = "c check  r repair  u update  m components  p ports  x uninstall";
+
+/// How to leave: `Esc` goes back on a set-up host; `q` quits the fresh-install form.
+fn leave<H: Host>(app: &App<H>) -> &'static str {
+    if app.setup_done() {
+        "Esc back"
+    } else {
+        "q quit"
+    }
+}
 
 pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     let [body, status, keys] = Layout::vertical([
@@ -34,8 +43,8 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     ])
     .areas(area);
     let setup = &app.setup;
-    let (lines, help): (Vec<Line>, &str) = match setup.phase {
-        Phase::Form => (form(app), FORM_KEYS),
+    let (lines, help): (Vec<Line>, String) = match setup.phase {
+        Phase::Form => (form(app), format!("{FORM_KEYS}  {}", leave(app))),
         Phase::Password(_) => (
             vec![
                 Line::raw(format!(
@@ -49,27 +58,27 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
                     Style::default().add_modifier(Modifier::DIM),
                 ),
             ],
-            "Enter confirm  Esc cancel",
+            "Enter confirm  Esc cancel".into(),
         ),
-        Phase::Model => (model_prompt(), "Y download  N skip  Esc back"),
+        Phase::Model => (model_prompt(), "Y download  N skip  Esc back".into()),
         Phase::Running(_) | Phase::Stopped(_) | Phase::Status => (
             checklist(app, usize::from(body.width.saturating_sub(2))),
             if matches!(setup.phase, Phase::Stopped(_)) {
-                RUN_KEYS
+                RUN_KEYS.into()
             } else if matches!(setup.phase, Phase::Running(_)) {
-                RUNNING_KEYS
+                RUNNING_KEYS.into()
             } else {
-                DONE_KEYS
+                format!("{DONE_KEYS}  {}", leave(app))
             },
         ),
-        Phase::Finished => (finished(app), DONE_KEYS),
+        Phase::Finished => (finished(app), format!("{DONE_KEYS}  {}", leave(app))),
         Phase::Update => (
             maintain_view::update_lines(app),
-            maintain_view::keys(Phase::Update),
+            maintain_view::keys(Phase::Update).into(),
         ),
         Phase::Uninstall => (
             maintain_view::uninstall_lines(app),
-            maintain_view::keys(Phase::Uninstall),
+            maintain_view::keys(Phase::Uninstall).into(),
         ),
     };
     frame.render_widget(

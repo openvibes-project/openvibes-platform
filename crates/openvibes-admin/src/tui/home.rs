@@ -39,14 +39,14 @@ fn rows(items: &[(&str, &str)]) -> Vec<Row> {
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let bar = app.bar(Bar::home(&[("Enter", "Open")]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
-    let mut lines = vec![app.status_line(), Line::raw("")];
+    let mut lines = vec![app.status_line()];
     let mut scroll = app.nav.scroll.get();
     lines.extend(list::lines(
         &app.theme,
         &rows(&HOME),
         app.nav.row,
         &mut scroll,
-        area.height.saturating_sub(2),
+        area.height.saturating_sub(1),
         15,
     ));
     app.nav.scroll.set(scroll);
@@ -93,6 +93,7 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         Line::from(spans)
     };
     let lines = vec![
+        Line::raw(""),
         pair(t.up_down(), "move · lists scroll", "Esc", "back, or cancel"),
         Line::raw(""),
         pair("Enter", "open, change, confirm", "?", "this help"),

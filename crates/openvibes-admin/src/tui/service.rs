@@ -22,7 +22,7 @@ use super::{
     },
 };
 
-/// What an action means for this unit (entry description and question detail).
+/// What an action means for this unit (the entry description).
 pub fn detail(unit: Unit, action: ServiceAction) -> &'static str {
     match (unit, action) {
         (Unit::Ingest, ServiceAction::Restart) => "agents reconnect within a minute",
@@ -30,6 +30,15 @@ pub fn detail(unit: Unit, action: ServiceAction) -> &'static str {
         (_, ServiceAction::Restart) => "about a minute",
         (_, ServiceAction::Stop) => "until you start it",
         (_, ServiceAction::Start) => "starts it now",
+    }
+}
+
+/// The short sentence in the question, which must fit the bar at 80 columns.
+pub fn question_detail(unit: Unit, action: ServiceAction) -> &'static str {
+    match (unit, action) {
+        (Unit::Ingest, ServiceAction::Restart) => "agents reconnect",
+        (Unit::Ingest, ServiceAction::Stop) => "agents hold their findings",
+        _ => detail(unit, action),
     }
 }
 
@@ -88,7 +97,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: Unit)
             Some(false) => " · not ready",
             None => "",
         };
-        let since = s.since.as_ref().map(|x| format!(" · since {x}"));
+        let since = s
+            .since
+            .as_ref()
+            .map(|x| format!(" · since {}", super::status::since(x)));
         let active = state_word(&s.active);
         format!("{active}{ready}{}", since.unwrap_or_default())
     });
@@ -97,7 +109,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: Unit)
     } else {
         Span::styled("■ ", t.red())
     };
-    let mut lines = vec![Line::from(vec![Span::raw("    "), dot, Span::raw(state)])];
+    let mut lines = vec![
+        Line::raw(""),
+        Line::from(vec![Span::raw("    "), dot, Span::raw(state)]),
+    ];
     let rows: Vec<Row> = acts
         .iter()
         .map(|a| {

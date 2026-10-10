@@ -206,3 +206,20 @@ fn tab_in_setup_keeps_a_drawn_screen() {
         screen(&app, 80, 24)
     );
 }
+
+#[test]
+fn every_question_fits_the_bar_at_80_columns_without_a_cut() {
+    for (unit, action) in [
+        (Unit::Ingest, ServiceAction::Restart),
+        (Unit::Ingest, ServiceAction::Stop),
+        (Unit::Console, ServiceAction::Restart),
+        (Unit::Console, ServiceAction::Stop),
+        (Unit::Vulns, ServiceAction::Start),
+    ] {
+        let mut app = app(false);
+        app.question = Some((Question::Service(unit, action), true));
+        let text = screen(&app, 80, 24);
+        assert!(!text.contains('…'), "{unit:?} {action:?}:\n{text}");
+        assert!(text.contains("Enter  Confirm"), "{text}");
+    }
+}
