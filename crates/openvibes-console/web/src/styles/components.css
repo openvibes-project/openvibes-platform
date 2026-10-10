@@ -203,6 +203,7 @@
 .linechart__table th, .linechart__table td { padding: 2px 8px 2px 0; text-align: left; font-weight: 400; color: var(--text-2); }
 .linechart__table thead th { position: sticky; top: 0; background: var(--surface); color: var(--text-3); }
 .linechart--empty { font-size: 11px; }
+.linechart__note { font-size: 11px; margin: 2px 0 0; }
 
 /* Button row, switch, checkbox, number input */
 .seg { display: flex; gap: 2px; padding: 2px; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: var(--r-2); }
