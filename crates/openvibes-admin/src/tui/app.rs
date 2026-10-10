@@ -1,8 +1,13 @@
 //! TUI state and key handling, free of terminal code so it can be tested.
 
-use std::time::Instant;
+use std::{
+    sync::mpsc::{Receiver, TryRecvError},
+    time::Instant,
+};
 
-use platform_host::{Host, Privileged, ServiceAction, ServiceStatus, Unit};
+use platform_host::{
+    Host, HostError, PackageUpdate, Privileged, ServiceAction, ServiceStatus, Unit,
+};
 use ratatui::text::Line;
 
 use super::{
@@ -70,6 +75,9 @@ pub struct App<H: Host> {
     /// A newer `openvibes-admin` version, shown on the location line.
     pub update: Option<String>,
     versions_loaded: bool,
+    /// The update notice, looked up on another thread (`run`): dnf may
+    /// take long offline. Without it, `tick` asks the host itself (tests).
+    pub updates: Option<Receiver<Option<String>>>,
     /// A question in the bar (Task 8 gives it its type).
     pub question: Option<()>,
     /// A value typed in the bar (Task 8 gives it its type).
@@ -115,6 +123,7 @@ impl<H: Host> App<H> {
             hostname,
             update: None,
             versions_loaded: false,
+            updates: None,
             question: None,
             prompt: None,
             pending: None,
@@ -212,14 +221,18 @@ impl<H: Host> App<H> {
     /// Loads the update notice once, then polls running work (Task 8).
     pub fn tick(&mut self, now: Instant) {
         if !self.versions_loaded {
-            self.versions_loaded = true;
-            self.update = self.host.packages().ok().and_then(|packages| {
-                packages
-                    .iter()
-                    .find(|p| p.name == "openvibes-admin")
-                    .and_then(|p| p.available.as_deref())
-                    .map(|v| v.split('-').next().unwrap_or(v).to_owned())
-            });
+            match self.updates.as_ref().map(Receiver::try_recv) {
+                Some(Err(TryRecvError::Empty)) => {}
+                Some(found) => {
+                    self.update = found.ok().flatten();
+                    self.versions_loaded = true;
+                    self.updates = None;
+                }
+                None => {
+                    self.update = newer_admin(self.host.packages());
+                    self.versions_loaded = true;
+                }
+            }
         }
         self.poll(now);
     }
@@ -340,4 +353,12 @@ impl<H: Host> App<H> {
             self.message = Some(format!("{} is not installed", status.unit.name()));
         }
     }
+}
+
+/// The newer `openvibes-admin` version (without its release), if any.
+pub fn newer_admin(packages: Result<Vec<PackageUpdate>, HostError>) -> Option<String> {
+    packages.ok()?.into_iter().find_map(|p| {
+        let v = p.available.filter(|_| p.name == "openvibes-admin")?;
+        Some(v.split('-').next().unwrap_or(&v).to_owned())
+    })
 }

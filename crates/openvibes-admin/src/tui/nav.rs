@@ -124,7 +124,8 @@ impl<H: Host> App<H> {
     pub(super) fn legacy_key(&mut self, key: Key) {
         match key {
             Key::Tab | Key::BackTab => {}
-            Key::Char('q') if self.setup_done() || self.tab != Tab::Setup => {}
+            // q quits from Home only, but is typed into a value.
+            Key::Char('q') if (self.setup_done() || self.tab != Tab::Setup) && !self.typing() => {}
             Key::Esc if self.legacy_at_rest() && self.setup_done() => {
                 if self.tab == Tab::Configuration && self.config_dirty() {
                     self.config.prompt = Some(Prompt::Discard(Then::Back));
@@ -133,6 +134,15 @@ impl<H: Host> App<H> {
                 }
             }
             _ => self.legacy_dispatch(key),
+        }
+    }
+
+    /// A value or password is being typed on the legacy screen.
+    fn typing(&self) -> bool {
+        match self.tab {
+            Tab::Setup => self.setup.editing || matches!(self.setup.phase, Phase::Password(_)),
+            Tab::Configuration => self.config.editing.is_some(),
+            Tab::Database | Tab::Services | Tab::Health => false,
         }
     }
 

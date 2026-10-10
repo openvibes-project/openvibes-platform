@@ -83,6 +83,18 @@ pub fn run() -> ExitCode {
     let mut app = App::new(Native {
         runner: SystemRunner,
     });
+    // dnf refreshes its metadata: on another thread, so a slow mirror or
+    // no network never holds the first screen.
+    let (send, updates) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let packages = Native {
+            runner: SystemRunner,
+        }
+        .packages();
+        // The TUI may have quit meanwhile; nobody to tell then.
+        let _ = send.send(app::newer_admin(packages));
+    });
+    app.updates = Some(updates);
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();
