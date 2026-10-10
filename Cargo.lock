@@ -1673,7 +1673,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "openvibes-admin"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -1708,7 +1708,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-console"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "argon2",
  "axum",
@@ -1755,7 +1755,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-distribution"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "axum",
  "chrono",
@@ -1776,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-ingest"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "axum",
  "base64 0.23.1",
@@ -1803,14 +1803,14 @@ dependencies = [
 
 [[package]]
 name = "openvibes-llm"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "sha2 0.11.0",
 ]
 
 [[package]]
 name = "openvibes-load"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "clap",
  "openvibes-core",
@@ -1835,7 +1835,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-signer"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -1871,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "openvibes-vulns"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "axum",
  "chrono",
@@ -2121,7 +2121,7 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
 name = "platform-agent-server"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "axum",
  "chrono",
@@ -2143,7 +2143,7 @@ dependencies = [
 
 [[package]]
 name = "platform-assistant"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "chrono",
  "openvibes-core",
@@ -2160,7 +2160,7 @@ dependencies = [
 
 [[package]]
 name = "platform-config"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "serde",
  "toml",
@@ -2168,14 +2168,14 @@ dependencies = [
 
 [[package]]
 name = "platform-host"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "zeroize",
 ]
 
 [[package]]
 name = "platform-password"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "argon2",
  "unicode-normalization",
@@ -2184,7 +2184,7 @@ dependencies = [
 
 [[package]]
 name = "platform-pki"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "base64 0.23.1",
  "chrono",
@@ -2196,7 +2196,7 @@ dependencies = [
 
 [[package]]
 name = "platform-store"
-version = "0.2.6"
+version = "0.2.7"
 dependencies = [
  "chrono",
  "deadpool-postgres",
