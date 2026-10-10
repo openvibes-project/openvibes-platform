@@ -1775,6 +1775,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "openvibes-fetch"
+version = "0.2.8"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "openvibes-ingest"
 version = "0.2.8"
 dependencies = [
