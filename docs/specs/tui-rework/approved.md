@@ -83,3 +83,18 @@
     names what Enter does), then the latest log lines. Log lines stay
     compact (text, not a list). Questions in the bar have Yes / No buttons
     chosen with ←→ and Enter (y/n still work, not shown). Approved.
+21. First install Welcome (user): "Choose what to install" first;
+    "Quick install" second, its description saying what it does
+    ("everything, with default names and ports"; user: describe what it
+    does, not who it is for) — the user sees it as suited to homelabs ("not for
+    real environments; it works for homelabs only"), then Quit.
+22. Checkboxes are selected with Space; the bar on a checkbox row says
+    "Space Select" (user). Enter opens, edits or starts.
+23. Quick install opens "Quick install: only what OpenVIBES cannot know":
+    Host name (filled in), Other names, Root key file, then Install
+    (everything else default). Help line explains the highlighted entry.
+    Approved.
+24. Quick install also has "[x] Agent on this host — watch this host too",
+    ticked by default (user: some people want no agent on the console
+    server; not the default). Space selects.
+    Approved.
