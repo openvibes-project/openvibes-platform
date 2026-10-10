@@ -456,3 +456,23 @@ test("the Graph editor keeps focus when a count is removed or the last one is ad
   await panel.getByRole("button", { name: "Remove count 4" }).click();
   await expect(panel.getByRole("button", { name: "Add a count" })).toBeFocused();
 });
+
+// #236: Delete sat in the dashboard menu as an inline Confirm, and the menu
+// closed on the click that opened it, so the confirmation never showed.
+test("a copied dashboard can be deleted from its menu", async ({ page }) => {
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await page.getByRole("menuitem", { name: "Duplicate" }).click();
+  // A copy opens for editing; save it as it is, like a user keeping a copy.
+  await expect(page.getByLabel("Dashboard name")).toHaveValue(/^Copy of /);
+  await page.getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(/^Copy of /);
+  const url = page.url();
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await page.getByRole("button", { name: "Delete" }).click();
+  await expect(page.getByText(/^Delete "Copy of .*"\? People it is shared with lose it too\.$/)).toBeVisible();
+  await page.getByRole("button", { name: "Confirm" }).click();
+  await expect(page.getByText("Dashboard deleted")).toBeVisible();
+  await expect(page).not.toHaveURL(url);
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await expect(page.getByRole("menuitemradio", { name: /^Copy of / })).toHaveCount(0);
+});

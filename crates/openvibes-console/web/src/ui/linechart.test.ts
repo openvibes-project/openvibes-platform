@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ariaLabel, clampIndex, emptyNote, spansYears, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
+import { ariaLabel, clampIndex, collectingNote, emptyNote, runPoints, spansYears, axisDays, dayLabel, indexAt, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt } from "./linechart";
 
 const ys = (d: string) => [...d.matchAll(/[ -]?\d+(?:\.\d+)?,(-?\d+(?:\.\d+)?)/g)].map((m) => Number(m[1]));
 
@@ -113,11 +113,26 @@ describe("chart layout helpers", () => {
     expect(spansYears(["2025-10-09", "2026-10-07"])).toBe(true);
     expect(spansYears(["2026-01-09", "2026-10-07"])).toBe(false);
   });
-  it("emptyNote: no data, collecting with one point, nothing once a line exists", () => {
+  it("emptyNote: only no data at all replaces the chart; one point draws (#238)", () => {
     expect(emptyNote([])).toBe("No data yet");
     expect(emptyNote([{ label: "X", points: [] }])).toBe("No data yet");
-    expect(emptyNote([{ label: "X", points: [{ day: "2026-10-07", value: 1 }] }])).toBe("Collecting since 7 Oct");
+    expect(emptyNote([{ label: "X", points: [{ day: "2026-10-07", value: 1 }] }])).toBeNull();
     expect(emptyNote([a])).toBeNull();
+  });
+  it("collectingNote: a caption under the chart while there is under two days of history", () => {
+    expect(collectingNote([{ label: "X", points: [{ day: "2026-10-07", value: 1 }] }])).toBe("Collecting since 7 Oct");
+    expect(collectingNote([a])).toBeNull();
+    expect(collectingNote([])).toBeNull();
+  });
+  it("runPoints: a single day is a flat line across the plot, at its value (#238)", () => {
+    const l = layout("full", 300);
+    const flat = runPoints([{ day: "2026-10-07", value: 4 }], new Map([["2026-10-07", 0]]), 1, 8, l);
+    expect(flat).toHaveLength(2);
+    expect(flat[0]).toEqual({ x: l.padL, y: yAt(4, 8, l) });
+    expect(flat[1]).toEqual({ x: l.W - l.padR, y: yAt(4, 8, l) });
+    // With more days, each point keeps its own day's position.
+    const two = runPoints([{ day: "2026-10-06", value: 1 }, { day: "2026-10-07", value: 2 }], new Map([["2026-10-06", 0], ["2026-10-07", 1]]), 2, 8, l);
+    expect(two.map((p) => p.x)).toEqual([xAt(0, 2, l), xAt(1, 2, l)]);
   });
   it("clampIndex follows a shrinking series", () => {
     expect(clampIndex(29, 10)).toBe(9);

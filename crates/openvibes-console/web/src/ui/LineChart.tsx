@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 
-import { axisDays, clampIndex, dayLabel, emptyNote, indexAt, spansYears, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
+import { axisDays, clampIndex, collectingNote, dayLabel, emptyNote, indexAt, runPoints, spansYears, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
 
 export type { Series };
 
@@ -15,6 +15,7 @@ export function LineChart({ series, variant, smooth }: Props) {
   const [table, setTable] = useState(false);
 
   const note = emptyNote(series);
+  const collecting = collectingNote(series);
   const empty = note !== null;
   useLayoutEffect(() => {
     const el = box.current;
@@ -81,7 +82,7 @@ export function LineChart({ series, variant, smooth }: Props) {
           {series.map((s, si) => (
             <g key={s.label} data-s={si}>
               {segments(s.points).map((run) => {
-                const pts = run.map((p) => ({ x: xAt(index.get(p.day) ?? 0, n, l), y: yAt(p.value, max, l) }));
+                const pts = runPoints(run, index, n, max, l);
                 const a = pts[0];
                 const z = pts[pts.length - 1];
                 if (!a || !z) return null;
@@ -125,6 +126,7 @@ export function LineChart({ series, variant, smooth }: Props) {
           })}
         </div>
       )}
+      {full && collecting && <p className="linechart__note subtle">{collecting}</p>}
       {multi && <ul className="linechart__legend">{series.map((s, si) => <li key={s.label} data-s={si}><i className="linechart__swatch" />{s.label}</li>)}</ul>}
       {full && <button type="button" className="linechart__toggle" onClick={() => setTable(true)}>Show as table</button>}
     </div>
