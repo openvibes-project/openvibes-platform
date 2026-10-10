@@ -31,6 +31,7 @@ fn chosen_services_are_enabled_and_started() {
             "--now",
             "openvibes-ingest.service",
             "openvibes-maintenance.timer",
+            "openvibes-netlog.service",
             "openvibes-vulns.service"
         ]
     );
@@ -240,5 +241,69 @@ fn an_update_quotes_why_a_service_is_not_ready() {
              ingest listener failed: Address already in use (os error 98)"
                 .into()
         )
+    );
+}
+
+#[test]
+fn readiness_warns_when_udp_514_is_closed_and_firewalld_runs() {
+    let fake = Fake::new("netlog-port");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        1,
+        "no\n",
+    );
+    let note = super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest])));
+    assert!(
+        note.as_deref()
+            .is_some_and(|n| n.contains("UDP 514 is not open")),
+        "{note:?}"
+    );
+
+    let fake = Fake::new("netlog-port-open");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        0,
+        "yes\n",
+    );
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest]))),
+        None
+    );
+
+    let fake = Fake::new("netlog-no-firewalld");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 252, "not running\n");
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Ingest]))),
+        None
+    );
+
+    // Not planned (no Ingest component): nothing to say.
+    let fake = Fake::new("netlog-not-planned");
+    fake.answer(&["/usr/bin/firewall-cmd", "--state"], 0, "running\n");
+    fake.answer(
+        &[
+            "/usr/bin/firewall-cmd",
+            "--permanent",
+            "--query-port",
+            "514/udp",
+        ],
+        1,
+        "no\n",
+    );
+    assert_eq!(
+        super::run::netlog_port_note(&fake.ctx(&plan(&[Console]))),
+        None
     );
 }

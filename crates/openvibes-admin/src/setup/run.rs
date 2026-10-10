@@ -178,6 +178,26 @@ fn listening<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
         .is_ok_and(|out| !matches!(out.status, 7 | 28))
 }
 
+/// Spec §6: OpenVIBES does not open 514/udp (how ports are opened differs
+/// per installation); when firewalld runs and it is closed, say so.
+// ponytail: checks the default 514; a moved `listen` in netlog.toml is the
+// admin's own change and is not re-read here.
+pub(super) fn netlog_port_note<R: Runner>(ctx: &Ctx<R>) -> Option<String> {
+    let planned = units(ctx).contains(&Unit::Netlog);
+    if !planned || !ctx.succeeds(FirewallCmd, &["--state"]) {
+        return None;
+    }
+    if ctx.succeeds(FirewallCmd, &["--permanent", "--query-port", "514/udp"]) {
+        return None;
+    }
+    Some(
+        "heads-up: UDP 514 is not open in firewalld, so network devices cannot reach \
+         openvibes-netlog; open it the way this host manages its firewall \
+         (docs/quick-setup.md, Ports)"
+            .into(),
+    )
+}
+
 pub fn ready_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
     Ok(if units.iter().all(|unit| ready(ctx, *unit)) {
@@ -242,7 +262,11 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         firewall.push_str("; ");
         firewall.push_str(&line);
     }
-    let closed = firewall;
+    let mut closed = firewall;
+    if let Some(note) = netlog_port_note(ctx) {
+        closed.push_str("; ");
+        closed.push_str(&note);
+    }
     // A Repair shows no install line (it may be stale after an agent port
     // move); it is one command away.
     if ctx.repair {
