@@ -27,7 +27,8 @@ use std::{
 use openvibes_llm::{is_model_name, is_sha256_hex};
 
 /// Space the 4B model needs, with headroom for the temporary copy's peak.
-const NEEDED_BYTES: u64 = 2_700_000_000;
+// The pinned file (2.74 GB for Qwen3.5-4B Q4_K_M) and a little room.
+const NEEDED_BYTES: u64 = 2_800_000_000;
 const CURL: &str = "/usr/bin/curl";
 const STAT: &str = "/usr/bin/stat";
 
@@ -50,8 +51,12 @@ pub fn staged_in(root: &Path) -> Option<(String, PathBuf)> {
 /// The pin as installed, or the one this build shipped with (Setup shows
 /// the licence before the package is installed).
 pub fn pin_or_embedded() -> Result<Pin, String> {
-    read_pin(Path::new(PIN_PATH))
-        .or_else(|_| parse_pin(include_str!("../../../packaging/llm/model.pin")))
+    read_pin(Path::new(PIN_PATH)).or_else(|_| embedded_pin())
+}
+
+/// The pin this build shipped with.
+pub fn embedded_pin() -> Result<Pin, String> {
+    parse_pin(include_str!("../../../packaging/llm/model.pin"))
 }
 
 /// Runs `assistant model fetch` as `openvibes-admin` (never in this process:
@@ -295,7 +300,7 @@ pub fn fetch(
     let free = free_bytes(models_dir);
     if free < NEEDED_BYTES {
         return Err(format!(
-            "need about 2.7 GB free in {}, have {:.1} GB",
+            "need about 2.8 GB free in {}, have {:.1} GB",
             models_dir.display(),
             free as f64 / 1e9
         ));

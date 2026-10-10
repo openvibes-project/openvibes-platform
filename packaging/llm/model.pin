@@ -6,9 +6,15 @@
 # and the SHA-256 (the file's published LFS id, re-checked on download) pins
 # its bytes. To update: pick a model, check its
 # licence allows redistribution, set all values, and run
-# `openvibes-admin assistant eval` against it before merging.
-LLM_MODEL_FILE=Qwen3-4B-Q4_K_M.gguf
-LLM_MODEL_URL=https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/Qwen3-4B-Q4_K_M.gguf
-LLM_MODEL_SHA256=7485fe6f11af29433bc51cab58009521f205840f5b4ae3a32fa7f92e8534fdf5
-LLM_MODEL_ALIAS=qwen3-4b
-LLM_MODEL_LICENSE_URL=https://huggingface.co/Qwen/Qwen3-4B-GGUF/resolve/bc640142c66e1fdd12af0bd68f40445458f3869b/LICENSE
+# `openvibes-admin assistant eval` against it before merging, and add the
+# old LLM_MODEL_FILE to past-models (updates switch hosts over, #264).
+#
+# Qwen3.5-4B (Apache 2.0): Qwen publishes no GGUF of it, so this is
+# unsloth's Q4_K_M of Qwen/Qwen3.5-4B, the exact file the eval passed on
+# twice (2026-10-10; Qwen3-4B and Gemma-4-E4B failed the gate). The licence
+# is the original model's.
+LLM_MODEL_FILE=Qwen3.5-4B-Q4_K_M.gguf
+LLM_MODEL_URL=https://huggingface.co/unsloth/Qwen3.5-4B-GGUF/resolve/e87f176479d0855a907a41277aca2f8ee7a09523/Qwen3.5-4B-Q4_K_M.gguf
+LLM_MODEL_SHA256=00fe7986ff5f6b463e62455821146049db6f9313603938a70800d1fb69ef11a4
+LLM_MODEL_ALIAS=qwen3.5-4b
+LLM_MODEL_LICENSE_URL=https://huggingface.co/Qwen/Qwen3.5-4B/resolve/851bf6e806efd8d0a36b00ddf55e13ccb7b8cd0a/LICENSE

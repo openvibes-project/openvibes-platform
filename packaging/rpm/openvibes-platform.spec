@@ -140,9 +140,9 @@ Obsoletes:      openvibes-llm-model-part1 < %{version}-%{release}
 Obsoletes:      openvibes-llm-model-part2 < %{version}-%{release}
 
 %description -n openvibes-llm-model
-Selects the pinned model (Qwen3-4B Q4_K_M, packaging/llm/model.pin) for
+Selects the pinned model (Qwen3.5-4B Q4_K_M, packaging/llm/model.pin) for
 openvibes-llm and owns its path, so upgrades keep an installed model. The
-2.5 GB file is not packaged: openvibes-admin
+2.7 GB file is not packaged: openvibes-admin
 Setup downloads it when the assistant is turned on (offline: see the
 offline install guide).
 
@@ -207,6 +207,7 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm.service %{buildroot}%{_unitdir
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.socket %{buildroot}%{_unitdir}/openvibes-llm.socket
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-proxy.service %{buildroot}%{_unitdir}/openvibes-llm-proxy.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-tune.service %{buildroot}%{_unitdir}/openvibes-llm-tune.service
+install -D -m 0644 $S/packaging/rpm/openvibes-llm-model-fetch.service %{buildroot}%{_unitdir}/openvibes-llm-model-fetch.service
 install -D -m 0644 $S/packaging/rpm/openvibes-llm.sysusers %{buildroot}%{_sysusersdir}/openvibes-llm.conf
 install -D -m 0644 $S/packaging/llm/openvibes-llm.cil %{buildroot}%{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 install -D -m 0644 $S/packaging/rpm/llm.conf %{buildroot}%{_sysconfdir}/openvibes/llm.conf
@@ -217,12 +218,15 @@ install -D -m 0644 $S/target/llama/LICENSE.llama.cpp %{buildroot}%{_licensedir}/
 . $S/packaging/llm/model.pin
 install -D -m 0644 $S/packaging/llm/model.pin %{buildroot}%{_datadir}/openvibes-llm/model.pin
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-llm-model/LICENSE
-cat > %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf <<EOF
-OPENVIBES_LLM_MODEL=%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE
-OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256
-OPENVIBES_LLM_ALIAS=$LLM_MODEL_ALIAS
-EOF
+# model.conf is written by %%post on a fresh install, then only by Setup and
+# the model switch (#264): a package never rewrites it under a running model.
+touch %{buildroot}%{_sharedstatedir}/openvibes-llm/model.conf
+# The pinned file and every earlier one stay owned, so an upgrade never
+# deletes the model in use; the switch removes the old one after.
 echo "%ghost %attr(0444, root, root) %{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" > model-files.list
+grep -v '^#' $S/packaging/llm/past-models | while read -r past; do
+    [ -n "$past" ] && echo "%ghost %attr(0444, root, root) %{_sharedstatedir}/openvibes-llm/models/$past"
+done >> model-files.list
 %if %{with vulkan}
 install -D -m 0755 $S/target/llama/vulkan/llama-server %{buildroot}%{_libexecdir}/openvibes-llm/llama-server-vulkan
 install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_unitdir}/openvibes-llm.service.d/vulkan.conf
@@ -435,6 +439,7 @@ fi
 %{_unitdir}/openvibes-llm.socket
 %{_unitdir}/openvibes-llm-proxy.service
 %{_unitdir}/openvibes-llm-tune.service
+%{_unitdir}/openvibes-llm-model-fetch.service
 %{_sysusersdir}/openvibes-llm.conf
 %{_datadir}/selinux/packages/targeted/openvibes-llm.cil
 %dir %{_sysconfdir}/openvibes
@@ -448,7 +453,16 @@ fi
 
 %files -n openvibes-llm-model -f model-files.list
 %license %{_licensedir}/openvibes-llm-model/LICENSE
-%config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
+%ghost %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf
+
+%post -n openvibes-llm-model
+if [ ! -e %{_sharedstatedir}/openvibes-llm/model.conf ]; then
+    . %{_datadir}/openvibes-llm/model.pin
+    printf 'OPENVIBES_LLM_MODEL=%s\nOPENVIBES_LLM_MODEL_SHA256=%s\nOPENVIBES_LLM_ALIAS=%s\n' \
+        "%{_sharedstatedir}/openvibes-llm/models/$LLM_MODEL_FILE" "$LLM_MODEL_SHA256" "$LLM_MODEL_ALIAS" \
+        > %{_sharedstatedir}/openvibes-llm/model.conf
+    chmod 0644 %{_sharedstatedir}/openvibes-llm/model.conf
+fi
 
 %posttrans -n openvibes-llm-model
 . %{_datadir}/openvibes-llm/model.pin

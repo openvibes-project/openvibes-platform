@@ -54,7 +54,7 @@ re-enrolling every agent.
 
 **The assistant (optional).** Tick `assistant` in the form to have the
 console's chat assistant. Setup then asks "Download the assistant's model
-(2.5 GB from Hugging Face)?" and shows the model's licence: answer **Y**
+(2.7 GB from Hugging Face)?" and shows the model's licence: answer **Y**
 and Setup downloads it, checks it against its pinned checksum and turns the
 assistant on. Answer **N** and the assistant stays off; the last screen
 says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).

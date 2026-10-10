@@ -608,7 +608,8 @@ fn auto_tunes_an_untuned_host() {
     let root = auto_tree("auto-run", port);
     let line = auto(&root, &[]);
     assert!(
-        line.starts_with("assistant-tune --auto: assistant:"),
+        line.starts_with("assistant-model: nothing to do: an admin's own model")
+            && line.contains(" / assistant-tune --auto: assistant:"),
         "{line}"
     );
     assert!(read(&root, TUNING).contains("OPENVIBES_LLM_THREADS"));
@@ -630,4 +631,26 @@ fn auto_reports_a_failure_and_still_exits_zero() {
         "{line}"
     );
     assert!(!root.join(TUNING).exists());
+}
+
+/// #264: a host on an earlier pinned model whose new model cannot be
+/// downloaded keeps its model, and is still tuned in the same run.
+#[test]
+fn auto_keeps_the_old_pinned_model_when_the_new_one_cannot_be_fetched() {
+    let port = server(Some(Duration::from_millis(50)));
+    let root = auto_tree("auto-pin", port);
+    let models = root.join("var/lib/openvibes-llm/models");
+    fs::rename(models.join("m.gguf"), models.join("Qwen3-4B-Q4_K_M.gguf")).unwrap();
+    fs::write(
+        root.join("var/lib/openvibes-llm/model.conf"),
+        "OPENVIBES_LLM_MODEL=/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf\n",
+    )
+    .unwrap();
+    let line = auto(&root, &[]);
+    assert!(
+        line.contains("keeps using Qwen3-4B-Q4_K_M.gguf")
+            && line.contains("assistant-tune --auto: assistant:"),
+        "{line}"
+    );
+    assert!(models.join("Qwen3-4B-Q4_K_M.gguf").exists());
 }

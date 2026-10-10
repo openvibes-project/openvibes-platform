@@ -85,12 +85,12 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     frame.render_widget(Paragraph::new(help), keys);
 }
 
-/// The consent for the assistant's 2.5 GB model, with its licence.
+/// The consent for the assistant's 2.7 GB model, with its licence.
 fn model_prompt() -> Vec<Line<'static>> {
     let licence =
         crate::model_fetch::pin_or_embedded().map_or_else(|_| String::new(), |pin| pin.license_url);
     vec![
-        Line::raw("Download the assistant's model (2.5 GB from Hugging Face)? [Y/n]"),
+        Line::raw("Download the assistant's model (2.7 GB from Hugging Face)? [Y/n]"),
         Line::raw(format!("Licence: {licence}")),
         Line::raw(""),
         Line::styled(
@@ -267,7 +267,7 @@ fn checklist<H: Host>(app: &App<H>, width: usize) -> Vec<Line<'static>> {
     {
         lines.push(Line::raw(""));
         lines.push(Line::styled(
-            "Downloading the assistant's model (2.5 GB) can take a while.",
+            "Downloading the assistant's model (2.7 GB) can take a while.",
             Style::default().add_modifier(Modifier::DIM),
         ));
     }

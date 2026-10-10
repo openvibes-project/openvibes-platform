@@ -1,15 +1,18 @@
 [Unit]
-Description=OpenVIBES assistant tuning after an upgrade (once per host)
+Description=OpenVIBES assistant model switch and tuning after an upgrade
 Documentation=https://github.com/openvibes-project/openvibes-platform
 
 [Service]
 Type=oneshot
-# Started by the package after an install or upgrade (no [Install]). Does
-# nothing, with one log line, unless the assistant uses the pinned model
-# and the host is not tuned yet; never fails the package transaction.
+# Started by the package after an install or upgrade (no [Install]). First
+# switches a host on an earlier pinned model to model.pin's (#264: waits for
+# openvibes-llm-model-fetch.service, the download), then tunes the model
+# if the host is not tuned yet. Does nothing otherwise; one log line; never
+# fails the package transaction.
 ExecStart=/usr/bin/openvibes-admin helper assistant-tune --auto
-# The timed call waits up to 180 s after a health wait of up to 120 s.
-TimeoutStartSec=15min
+# The download (up to 2 h) and the timed call (up to 180 s after a health
+# wait of up to 120 s).
+TimeoutStartSec=2h15min
 UMask=0022
 NoNewPrivileges=yes
 ProtectSystem=strict
