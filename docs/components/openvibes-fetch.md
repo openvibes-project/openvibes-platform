@@ -95,6 +95,14 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
   `{url}/search?` for that process (so plain `http://` works only for the
   validated private SearXNG URL); every other URL still needs the fixed hosts.
   Same limits as level 1 (no redirects, 256 KiB, 10 s).
+- The stored URL is validated again here with the console's save-time rule
+  (`searxng::valid_url`, shared): `https://` any host, `http://` only on
+  localhost, loopback, RFC 1918 or `fc00::/7` literals, no user info, `?`,
+  `#` or whitespace, valid port. Invalid: `unavailable`, no request.
+- Proxy: a SearXNG with a plain `http://` URL or a loopback/private IP
+  literal host is reached directly (a second proxy-less agent for that
+  prefix), never through `proxy_url`, so the query and the internal address
+  stay on the LAN. OSV and Bodhi keep the proxy.
 - Extraction: `results[]`, at most 5 with an `http://` or `https://` URL
   (`javascript:`, `data:` ... dropped), title cut to 200, snippet (`content`)
   to 300, URL to 500 characters. `source` is the SearXNG `host[:port]`.

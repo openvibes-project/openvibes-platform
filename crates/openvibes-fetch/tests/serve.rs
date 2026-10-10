@@ -279,3 +279,24 @@ fn search_is_filtered_gated_and_needs_a_url() {
         }
     );
 }
+
+#[test]
+fn a_stored_searxng_url_the_console_would_refuse_is_never_contacted() {
+    let h = fake(SEARX.as_bytes());
+    for url in [
+        "http://203.0.113.5",
+        "https://user@x.example",
+        "ftp://x",
+        "https://x.example/?a=b",
+        "https://x.example:0",
+    ] {
+        assert_eq!(
+            handle(&search("openvibes"), &search_setting(2, url), &[], &h),
+            Response::Refused {
+                code: Refusal::Unavailable
+            },
+            "{url}"
+        );
+    }
+    assert!(h.seen.borrow().is_empty());
+}

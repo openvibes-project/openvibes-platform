@@ -1,8 +1,6 @@
 //! `/api/v1/assistant-internet`: the administrator's switch for the
 //! assistant's internet lookups (off, fetch pages, fetch pages and search).
 
-use std::net::IpAddr;
-
 use axum::{
     Json,
     extract::{State, rejection::JsonRejection},
@@ -31,40 +29,7 @@ pub(crate) async fn current_level(pool: &Pool) -> u8 {
     }
 }
 
-/// `https://` to any host; `http://` only to loopback or a private address.
-/// No user info, query, fragment, whitespace or control characters.
-fn valid_searxng_url(url: &str) -> bool {
-    let (https, rest) = if let Some(rest) = url.strip_prefix("https://") {
-        (true, rest)
-    } else if let Some(rest) = url.strip_prefix("http://") {
-        (false, rest)
-    } else {
-        return false;
-    };
-    if url.contains(['?', '#', '@']) || url.chars().any(|c| c.is_control() || c.is_whitespace()) {
-        return false;
-    }
-    let authority = rest.split('/').next().unwrap_or("");
-    let (host, port) = match authority.strip_prefix('[') {
-        Some(v6) => match v6.split_once(']') {
-            Some((host, after)) => (host, after.strip_prefix(':')),
-            None => return false,
-        },
-        None => match authority.split_once(':') {
-            Some((host, port)) => (host, Some(port)),
-            None => (authority, None),
-        },
-    };
-    if host.is_empty() || port.is_some_and(|p| p.parse::<u16>().map_or(true, |p| p == 0)) {
-        return false;
-    }
-    https
-        || host.eq_ignore_ascii_case("localhost")
-        || host.parse::<IpAddr>().is_ok_and(|ip| match ip {
-            IpAddr::V4(ip) => ip.is_loopback() || ip.is_private(),
-            IpAddr::V6(ip) => ip.is_loopback() || (ip.segments()[0] & 0xfe00) == 0xfc00,
-        })
-}
+use openvibes_fetch::searxng::valid_url as valid_searxng_url;
 
 fn invalid(title: &'static str) -> Response {
     problem_response(ProblemDetails::new(

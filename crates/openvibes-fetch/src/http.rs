@@ -25,9 +25,13 @@ pub fn allowed(url: &str) -> bool {
 /// The real client.
 pub struct Client {
     agent: ureq::Agent,
+    /// Same settings, no proxy: for a local SearXNG.
+    direct: ureq::Agent,
     /// `{searxng_url}/search?`: the one extra URL prefix `get` allows (plain
     /// `http://` included: saving the setting limits it to private hosts).
     searxng: Option<String>,
+    /// The SearXNG is on a local address: never through the proxy.
+    local: bool,
 }
 
 impl Client {
@@ -40,21 +44,24 @@ impl Client {
             .map(ureq::Proxy::new)
             .transpose()
             .map_err(|_| "invalid proxy_url".to_owned())?;
-        let config = ureq::Agent::config_builder()
-            .timeout_connect(Some(Duration::from_secs(5)))
-            .timeout_global(Some(Duration::from_secs(10)))
-            .max_redirects(0)
-            .proxy(proxy)
-            .build();
+        let builder = || {
+            ureq::Agent::config_builder()
+                .timeout_connect(Some(Duration::from_secs(5)))
+                .timeout_global(Some(Duration::from_secs(10)))
+                .max_redirects(0)
+        };
         Ok(Self {
-            agent: config.into(),
+            agent: builder().proxy(proxy).build().into(),
+            direct: builder().proxy(None).build().into(),
             searxng: None,
+            local: false,
         })
     }
 
     /// Also allows searches against the stored SearXNG base URL.
     #[must_use]
     pub fn with_searxng(mut self, base: Option<&str>) -> Self {
+        self.local = base.is_some_and(crate::searxng::is_local);
         self.searxng = base.map(|b| format!("{}/search?", b.trim_end_matches('/')));
         self
     }
@@ -69,8 +76,8 @@ impl Client {
     /// # Errors
     /// Transport failure or a status other than 200.
     pub fn fetch(&self, url: &str) -> Result<Vec<u8>, String> {
-        let mut response = self
-            .agent
+        let local = self.local && self.searxng.as_ref().is_some_and(|p| url.starts_with(p));
+        let mut response = (if local { &self.direct } else { &self.agent })
             .get(url)
             .header("Accept", "application/json")
             .config()

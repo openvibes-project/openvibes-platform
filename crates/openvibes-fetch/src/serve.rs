@@ -69,7 +69,13 @@ fn search(query: &str, setting: &Setting, deny: &[String], http: &dyn Http) -> R
     if let Err(code) = check_query(query, deny) {
         return refuse(code);
     }
-    let Some(base) = setting.searxng_url.as_deref() else {
+    // The console checks this on save; checked again here, since the
+    // request goes wherever the stored URL says.
+    let Some(base) = setting
+        .searxng_url
+        .as_deref()
+        .filter(|u| searxng::valid_url(u))
+    else {
         return refuse(Refusal::Unavailable);
     };
     let Ok(body) = http.get(&searxng::search_url(base, query)) else {

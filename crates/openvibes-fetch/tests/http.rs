@@ -105,3 +105,19 @@ fn only_the_stored_searxng_search_url_joins_the_allowlist() {
     );
     assert_eq!(finish(), 1);
 }
+
+#[test]
+fn a_local_searxng_bypasses_the_proxy() {
+    let (url, _, finish) = serve(response("200 OK", "", b"{}"));
+    let base = url.trim_end_matches("/x");
+    // a configured proxy on a dead port: the search must not use it
+    let client = Client::new(Some("http://127.0.0.1:1"))
+        .unwrap()
+        .with_searxng(Some(base));
+    assert!(
+        client
+            .get(&format!("{base}/search?q=a&format=json"))
+            .is_ok()
+    );
+    assert_eq!(finish(), 1);
+}
