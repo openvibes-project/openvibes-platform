@@ -204,6 +204,24 @@ impl<R: Runner> Ctx<'_, R> {
         owner: Owner<'_>,
         mode: u32,
     ) -> Result<(), String> {
+        let ids = match owner {
+            Some(_) => Some(self.ids(owner)?),
+            None => None,
+        };
+        self.put_ids(abs, contents, ids, mode, "setup")
+    }
+
+    /// As `put`, with a numeric (uid, gid) (keeps an existing file's owner)
+    /// and the temp file's suffix: `.NAME.TAG` (writers that may run at the
+    /// same time must not share one).
+    pub fn put_ids(
+        &self,
+        abs: &str,
+        contents: &[u8],
+        ids: Option<(u32, u32)>,
+        mode: u32,
+        tag: &str,
+    ) -> Result<(), String> {
         let path = self.path(abs);
         let fail = |error: std::io::Error| format!("{abs}: {error}");
         let dir = path
@@ -212,7 +230,7 @@ impl<R: Runner> Ctx<'_, R> {
         fs::create_dir_all(dir).map_err(fail)?;
         let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("file");
         let temp_abs = format!(
-            "{}/.{name}.setup",
+            "{}/.{name}.{tag}",
             abs.rsplit_once('/').map_or("", |(d, _)| d)
         );
         let temp = self.path(&temp_abs);
@@ -226,21 +244,16 @@ impl<R: Runner> Ctx<'_, R> {
         // Owner and mode through the open handle, not the path: the
         // directory may belong to the service (a swapped symlink must not
         // redirect a root chown).
-        let ids = match owner {
-            Some(_) => self.ids(owner).map(Some),
-            None => Ok(None),
-        };
-        let result = ids.and_then(|ids| {
-            file.write_all(contents)
-                .and_then(|()| match ids {
-                    Some((uid, gid)) => std::os::unix::fs::fchown(&file, Some(uid), Some(gid)),
-                    None => Ok(()),
-                })
-                .and_then(|()| file.set_permissions(Permissions::from_mode(mode)))
-                .and_then(|()| file.sync_all())
-                .and_then(|()| fs::rename(&temp, &path))
-                .map_err(fail)
-        });
+        let result = file
+            .write_all(contents)
+            .and_then(|()| match ids {
+                Some((uid, gid)) => std::os::unix::fs::fchown(&file, Some(uid), Some(gid)),
+                None => Ok(()),
+            })
+            .and_then(|()| file.set_permissions(Permissions::from_mode(mode)))
+            .and_then(|()| file.sync_all())
+            .and_then(|()| fs::rename(&temp, &path))
+            .map_err(fail);
         if result.is_err() {
             let _ = fs::remove_file(&temp);
         }

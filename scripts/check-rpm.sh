@@ -71,6 +71,12 @@ rpm -q --filetriggers openvibes-admin | grep -q '/usr/share/openvibes/rules' \
     || fail "openvibes-admin lacks the rules file trigger"
 rpm -q --filetriggers openvibes-admin | grep -q 'openvibes-rules-apply.service' \
     || fail "the rules file trigger does not start openvibes-rules-apply.service"
+# Setup's pre-0.2.7 agent.toml gets the services collector on upgrade.
+rpm -q --scripts openvibes-admin | grep -q 'openvibes-admin helper agent-config-upgrade || :' \
+    || fail "openvibes-admin's %posttrans does not run helper agent-config-upgrade"
+rpm -q --filetriggers openvibes-admin | grep -q 'helper agent-config-upgrade' \
+    || fail "openvibes-admin lacks the agent file trigger that runs helper agent-config-upgrade"
+/usr/bin/openvibes-admin helper agent-config-upgrade || fail "helper agent-config-upgrade fails without Setup"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-ingest.service || fail "unit lacks KillSignal=SIGINT (the drain signal)"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-distribution.service || fail "distribution unit lacks KillSignal=SIGINT"
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-vulns.service || fail "vulns unit lacks KillSignal=SIGINT"

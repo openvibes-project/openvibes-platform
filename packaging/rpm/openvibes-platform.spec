@@ -273,6 +273,9 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_post openvibes-maintenance.timer
 %posttrans -n openvibes-admin
 %restart_renamed openvibes-maintenance.service openvibes-maintenance.timer
+# Before v0.2.7 Setup's agent.toml for the local agent listed collectors
+# without services: add it to that exact line only (one log line, never fails).
+%{_bindir}/openvibes-admin helper agent-config-upgrade || :
 %preun -n openvibes-admin
 %systemd_preun openvibes-maintenance.timer
 %postun -n openvibes-admin
@@ -282,6 +285,10 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 # Priority below systemd's restart trigger; the unit also waits for migrate.
 %transfiletriggerin -P 900000 -n openvibes-admin -- %{_datadir}/openvibes/rules
 systemctl start --no-block openvibes-rules-apply.service >/dev/null 2>&1 || :
+# The same for an agent installed or upgraded in a later transaction (it
+# may only now know the services collector).
+%transfiletriggerin -n openvibes-admin -- %{_bindir}/openvibes-agent
+%{_bindir}/openvibes-admin helper agent-config-upgrade || :
 
 %if %{with llm}
 %pre -n openvibes-llm

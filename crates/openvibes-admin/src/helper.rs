@@ -102,6 +102,9 @@ pub enum HelperCommand {
     /// Applies pending schema migrations after a package upgrade, backing up
     /// first when one changes stored data (run by openvibes-migrate.service).
     UpgradeMigrate,
+    /// Adds the services collector to the list an older Setup wrote for the
+    /// local agent (run by the package after an upgrade); exit 0.
+    AgentConfigUpgrade,
     /// Starts an OpenVIBES unit at boot.
     UnitEnable { unit: String },
     /// Stops starting an OpenVIBES unit at boot.
@@ -127,6 +130,7 @@ enum Verb {
     ),
     RulesApply,
     UpgradeMigrate,
+    AgentConfigUpgrade,
 }
 
 fn verb(command: &HelperCommand) -> Result<Verb, String> {
@@ -204,6 +208,7 @@ fn verb(command: &HelperCommand) -> Result<Verb, String> {
         ),
         HelperCommand::RulesApply => Verb::RulesApply,
         HelperCommand::UpgradeMigrate => Verb::UpgradeMigrate,
+        HelperCommand::AgentConfigUpgrade => Verb::AgentConfigUpgrade,
         HelperCommand::UnitEnable { unit } => Verb::UnitFile(
             Unit::parse(unit).ok_or_else(|| "not an OpenVIBES unit".to_owned())?,
             true,
@@ -304,6 +309,7 @@ pub fn run(command: &HelperCommand) -> ExitCode {
         }
         Verb::RulesApply => crate::setup::rules_apply(),
         Verb::UpgradeMigrate => crate::setup::upgrade_migrate(),
+        Verb::AgentConfigUpgrade => crate::setup::agent_config_upgrade(),
         Verb::AssistantTune(opts, _, true) => {
             let root = test_root.unwrap_or_else(|| "/".into());
             println!(

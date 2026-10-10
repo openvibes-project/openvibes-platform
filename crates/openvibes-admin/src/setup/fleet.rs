@@ -33,6 +33,37 @@ fn p14_agent<R: Runner>(ctx: &Ctx<R>) -> bool {
     ctx.exists(AGENT_AUDIT_RULE) || ctx.exists(AGENT_AUDIT_TEMPLATE)
 }
 
+/// The `collectors` line Setup wrote before services (P15) were listed:
+/// replacing the agent's default, it turned services off (v0.2.7 fix).
+pub(super) const OLD_COLLECTORS: &str =
+    "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]";
+pub(super) const COLLECTORS: &str =
+    "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\", \"services\"]";
+
+/// The local agent knows the `services` collector (agents 0.2.0–0.2.1 refuse
+/// the name and would not start): rpm says 0.2.2 or later. An rpm error or
+/// a version that does not parse counts as older. Only without rpm at all
+/// do files decide: 0.2.2–0.2.5 ship the owners.conf example (a %doc file),
+/// 0.2.6 on the audit rule template.
+pub(super) fn p15_agent<R: Runner>(ctx: &Ctx<R>) -> bool {
+    match ctx
+        .runner
+        .run(Rpm, &["-q", "--qf", "%{VERSION}", "openvibes-agent"])
+    {
+        Ok(out) => out.status == 0 && version_at_least(out.stdout.trim(), [0, 2, 2]),
+        Err(_) => {
+            ctx.exists(AGENT_AUDIT_TEMPLATE)
+                || ctx.exists("/usr/share/doc/openvibes-agent/owners.conf")
+        }
+    }
+}
+
+/// `MAJOR.MINOR.PATCH` (digits only) at least `min`.
+fn version_at_least(version: &str, min: [u64; 3]) -> bool {
+    let parts: Option<Vec<u64>> = version.split('.').map(|part| part.parse().ok()).collect();
+    parts.is_some_and(|parts| parts.len() == 3 && parts[..] >= min[..])
+}
+
 /// `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` from `STEM.key`.
 fn set_key<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Result<[String; 3], String> {
     let text = ctx.read(&format!("{RULES}/{stem}.key"))?;
@@ -175,10 +206,16 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
         // (A broken alarms.key already failed the rules step.)
         let alarms = alarms_key(ctx).ok().flatten().filter(|_| p14_agent(ctx));
         if alarms.is_some() {
-            text.push_str(
+            // An explicit list replaces the agent's default: keep services.
+            let collectors = if p15_agent(ctx) {
+                COLLECTORS
+            } else {
+                OLD_COLLECTORS
+            };
+            text.push_str(&format!(
                 "# Threat alarms: the agent's eBPF watcher, or kernel audit (auditd) as the fallback.\n\
-                 collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n",
-            );
+                 {collectors}\n",
+            ));
         }
         text.push_str(&format!("distribution_url = \"{distribution}\"\n"));
         for [set, issuer, key] in std::iter::once(baseline).chain(alarms) {
@@ -617,6 +654,39 @@ mod tests {
         );
     }
 
+    const AGENT_VERSION: &[&str] = &[
+        "/usr/bin/rpm",
+        "-q",
+        "--qf",
+        "%{VERSION}",
+        "openvibes-agent",
+    ];
+
+    /// rpm decides (owners.conf is %doc: a nodocs host has none);
+    /// anything unclear counts as an agent that would refuse "services".
+    #[test]
+    fn the_agent_version_decides_services() {
+        let ctx_with = |test: &str, answer: Option<(i32, &str)>| {
+            let fake = Fake::new(test);
+            if let Some((status, out)) = answer {
+                fake.answer(AGENT_VERSION, status, out);
+            }
+            let plan = plan_defaults();
+            super::p15_agent(&fake.ctx(&plan))
+        };
+        assert!(ctx_with("p15-024", Some((0, "0.2.4"))));
+        assert!(ctx_with("p15-022", Some((0, "0.2.2\n"))));
+        assert!(ctx_with("p15-100", Some((0, "1.0.0"))));
+        assert!(!ctx_with("p15-021", Some((0, "0.2.1"))));
+        assert!(!ctx_with("p15-junk", Some((0, "garbage"))));
+        assert!(!ctx_with("p15-rc", Some((0, "0.2.4~rc1"))));
+        assert!(!ctx_with(
+            "p15-missing",
+            Some((1, "package openvibes-agent is not installed"))
+        ));
+        assert!(!ctx_with("p15-none", None));
+    }
+
     fn plan_defaults() -> crate::setup::plan::Plan {
         plan(&[Ingest, Distribution, Rules, Agent])
     }
@@ -745,10 +815,21 @@ mod tests {
             "/etc/audit/rules.d/openvibes-agent.rules",
             "-a always,exit\n",
         );
+        // Agents 0.2.0–0.2.1 know process_events but refuse "services".
+        let p14 = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(
+            p14.contains(
+                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n"
+            ),
+            "{p14}"
+        );
+        // A P15 agent (rpm says 0.2.2 on, docs or not): the explicit list
+        // keeps services (v0.2.7 fix).
+        fake.answer(AGENT_VERSION, 0, "0.2.4");
         let new = super::agent_toml(&fake.ctx(&plan_defaults()));
         assert!(
             new.contains(
-                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n"
+                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\", \"services\"]\n"
             ),
             "{new}"
         );
@@ -765,6 +846,18 @@ mod tests {
         );
         let ebpf = super::agent_toml(&fake.ctx(&plan_defaults()));
         assert!(ebpf.contains("process_events"), "{ebpf}");
+        assert!(ebpf.contains("\"services\"]"), "{ebpf}");
+        // Setup's pre-0.2.7 file is not "configured": Repair rewrites it.
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
+        fake.file("/etc/openvibes-agent/agent.toml", &ebpf);
+        let plan = plan_defaults();
+        let ctx = fake.ctx(&plan);
+        assert!(matches!(super::agent_check(&ctx), Ok(StepState::Done(_))));
+        fake.file(
+            "/etc/openvibes-agent/agent.toml",
+            &ebpf.replace(super::COLLECTORS, super::OLD_COLLECTORS),
+        );
+        assert_eq!(super::agent_check(&ctx), Ok(StepState::Todo));
         assert!(ebpf.contains("id = \"baseline-alarms\""), "{ebpf}");
     }
 
