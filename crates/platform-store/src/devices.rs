@@ -72,6 +72,8 @@ pub async fn add(
     if let Err(error) = check_name(name) {
         return Ok(Err(error));
     }
+    // Netlog matches canonical senders (`::ffff:a.b.c.d` is a.b.c.d).
+    let address = address.to_canonical();
     if !KINDS.contains(&kind) {
         return Ok(Err(format!(
             "unknown device kind {kind}; known: {}",

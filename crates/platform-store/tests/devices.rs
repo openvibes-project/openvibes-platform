@@ -132,3 +132,25 @@ async fn heads_up_only_after_ten_quiet_minutes() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_mapped_ipv6_address_is_stored_as_ipv4_and_counts_as_a_duplicate() {
+    // Netlog matches canonical senders; every add path (CLI now, console
+    // later) must store the same form.
+    let db = migrated().await;
+    let c = db.pool.get().await.unwrap();
+    let now = Utc::now();
+    devices::add(&c, "r", "unifi", ip("::ffff:192.168.1.1"), "t", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(devices::active(&c).await.unwrap()[0].1, ip("192.168.1.1"));
+    let again = devices::add(&c, "r2", "unifi", ip("192.168.1.1"), "t", now)
+        .await
+        .unwrap();
+    assert_eq!(
+        again,
+        Err("a device with address 192.168.1.1 already exists".into())
+    );
+    db.drop().await;
+}
