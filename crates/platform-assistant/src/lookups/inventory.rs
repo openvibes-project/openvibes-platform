@@ -27,7 +27,7 @@ pub(super) fn specs() -> Vec<ToolSpec> {
             description: "Open ports and running services: what listens on a port (and its service or program) across hosts, or which ports and services one host has. Give agent, port, or both.".into(),
             parameters: object(
                 json!({
-                    "agent": text_schema("Agent ID or host name. Omit to search every host; never put a placeholder like all or unknown here."),
+                    "agent": text_schema("Agent ID or host name. Omit for every host; never a placeholder like all or unknown."),
                     "port": { "type": "integer", "minimum": 1, "maximum": 65535,
                               "description": "Port number, e.g. 22." },
                 }),
@@ -40,7 +40,7 @@ pub(super) fn specs() -> Vec<ToolSpec> {
             parameters: object(
                 json!({
                     "name": text_schema("A short package name, one word, e.g. chrome or openssh, not the product's full name."),
-                    "agent": text_schema("Agent ID or host name. Omit to search every host; never put a placeholder like all or unknown here."),
+                    "agent": text_schema("Agent ID or host name. Omit for every host; never a placeholder like all or unknown."),
                 }),
                 &["name"],
             ),

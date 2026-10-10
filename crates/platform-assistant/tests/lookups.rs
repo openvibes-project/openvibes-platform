@@ -259,6 +259,7 @@ fn descriptions_name_the_fields_the_results_carry() {
             serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
         })
         .sum();
-    // host_services and software (issue #241) added about 700.
-    assert!(total <= 3_800, "{total}");
+    // host_services and software (issue #241) added about 700, steering
+    // a small model away from placeholder agents about 250 more.
+    assert!(total <= 4_100, "{total}");
 }

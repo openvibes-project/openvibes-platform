@@ -216,7 +216,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "host_vulnerabilities",
-            "Open vulnerabilities on one named endpoint only, highest priority first (exploited, then EPSS, then severity), with the reboot flag; for the whole fleet use fleet_overview or vulnerability_hosts.",
+            "Open vulnerabilities on one named endpoint only, highest priority first (exploited, then EPSS, then severity), with the reboot flag; for all hosts use fleet_overview or vulnerability_hosts.",
             object(
                 json!({
                     "agent": text_schema("Agent ID or host name."),
@@ -238,7 +238,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "Start here for broad questions such as what to fix first, the most critical problems, or the worst vulnerabilities across all hosts. Fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
+            "Start here for broad questions: what to fix first, the most critical problems or vulnerabilities across all hosts. Fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(
