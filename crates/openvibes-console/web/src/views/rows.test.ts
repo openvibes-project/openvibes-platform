@@ -5,7 +5,7 @@ import { activeCount, alarmsOff, olderThan, selectAgents, selectAudit, selectFin
 const group = (rule: string, severity: "critical" | "low", open: number) => ({
   rule_set_id: "s", rule_id: rule, severity, latest_message: `msg ${rule}`, endpoint_count: open + 1, older_endpoint_count: 0,
   rule_versions: [1], first_observed_at: "2026-09-01T00:00:00Z", last_observed_at: "2026-09-02T00:00:00Z",
-  triage_counts: { open, investigating: 0, mitigated: 1, accepted_risk: 0, false_positive: 0 },
+  triage_counts: { open, mitigated: 1, accepted_risk: 0, false_positive: 0 },
 });
 
 describe("list selection matches the views", () => {
@@ -17,10 +17,9 @@ describe("list selection matches the views", () => {
     expect(selectFindings(all, new URLSearchParams("state=all&q=msg%20b")).map((g) => g.rule_id)).toEqual(["B"]);
   });
 
-  it("findings: investigating is active work, not resolved (board #83)", () => {
-    const investigating = { ...group("C", "low", 0), triage_counts: { open: 0, investigating: 1, mitigated: 0, accepted_risk: 0, false_positive: 0 } };
-    expect(selectFindings([investigating], new URLSearchParams()).map((g) => g.rule_id)).toEqual(["C"]);
-    expect(activeCount(investigating)).toBe(1);
+  it("findings: only open hosts are active work (board #83)", () => {
+    const closed = { ...group("C", "low", 0), triage_counts: { open: 0, mitigated: 2, accepted_risk: 0, false_positive: 0 } };
+    expect(activeCount(closed)).toBe(0);
   });
 
   it("agents: status and text", () => {

@@ -84,7 +84,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const byRule = new Map<string, FindingGroup>();
     for (const finding of findings()) {
       const key = `${finding.rule_set_id}/${finding.rule_id}`;
-      const counts: TriageCounts = byRule.get(key)?.triage_counts ?? { open: 0, investigating: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
+      const counts: TriageCounts = byRule.get(key)?.triage_counts ?? { open: 0, mitigated: 0, accepted_risk: 0, false_positive: 0 };
       const state = data.triage.get(triageKey(finding.agent_id, finding.rule_set_id, finding.rule_id))?.state ?? "open";
       counts[state as keyof TriageCounts] += 1;
       const existing = byRule.get(key);
@@ -309,7 +309,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const state = query.get("state");
     const severity = query.get("severity");
     const items = alarmList().filter((alarm) => (suppressed || !alarm.suppressed_by)
-        && (!state || alarm.state === state || (state === "active" && ["open", "investigating"].includes(alarm.state)))
+        && (!state || alarm.state === state || (state === "active" && alarm.state === "open"))
         && (!severity || alarm.severity === severity))
       .sort((a, b) => b.last_seen.localeCompare(a.last_seen)).map(summary);
     return json(page(items, query));
@@ -536,7 +536,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const vulnSeverity = { critical: "critical", high: "important", medium: "moderate", low: "low" } as const;
   const liveValue = (metric: string): number | undefined => {
     const [kind = "", mid = "", level = ""] = metric.split(".");
-    const alarmsOpen = alarmList().filter((a) => !a.suppressed_by && ["open", "investigating"].includes(a.state));
+    const alarmsOpen = alarmList().filter((a) => !a.suppressed_by && a.state === "open");
     const vulns = vulnerabilities();
     const openFindings = findings().filter((f) => (data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open");
     const alarmsAt = (v: string) => alarmsOpen.filter((a) => a.severity === v).length;
@@ -582,7 +582,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       if (severity === "critical" || severity === "high" || severity === "important") host.serious += 1;
       hosts.set(agent_id, host);
     };
-    for (const a of alarmList()) if (!a.suppressed_by && ["open", "investigating"].includes(a.state)) add(a.agent_id, a.severity);
+    for (const a of alarmList()) if (!a.suppressed_by && a.state === "open") add(a.agent_id, a.severity);
     for (const v of vulnerabilities()) add(v.agent_id, v.severity);
     for (const f of findings()) if ((data.triage.get(triageKey(f.agent_id, f.rule_set_id, f.rule_id))?.state ?? "open") === "open") add(f.agent_id, f.severity);
     const items = [...hosts.values()].filter((h) => visible(h.agent_id)).sort((a, b) => b.serious - a.serious || b.open - a.open || a.agent_id.localeCompare(b.agent_id));

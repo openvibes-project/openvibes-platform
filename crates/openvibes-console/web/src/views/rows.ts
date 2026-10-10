@@ -38,10 +38,10 @@ export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] 
   return [...rows.values()];
 }
 
-/** Hosts where the finding still needs work: open or investigating.
- * Only mitigated, accepted risk and false positive count as resolved (#83). */
+/** Hosts where the finding still needs work: the open ones. Mitigated,
+ * accepted risk and false positive count as resolved (#83). */
 export function activeCount(group: Pick<FindingGroup, "triage_counts">): number {
-  return group.triage_counts.open + group.triage_counts.investigating;
+  return group.triage_counts.open;
 }
 
 export function selectFindings(all: readonly FindingGroup[], params: URLSearchParams): FindingGroup[] {

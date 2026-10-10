@@ -57,7 +57,7 @@ describe("demo server", () => {
     const endpoints = await json(await server.handle("GET", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
     const open = (endpoints.items as { agent_id: string; triage_state: string; triage_version: number }[]).filter((e) => e.triage_state === "open");
     const changes = open.map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
-    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "investigating", changes });
+    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", note: "patched", changes });
     expect(response.status).toBe(200);
     const after = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=100"));
     const updated = (after.items as { rule_id: string; triage_counts: { open: number } }[]).find((g) => g.rule_id === group.rule_id);
@@ -90,16 +90,14 @@ describe("demo server", () => {
     const changes = [{ agent_id: endpoint.agent_id, version: endpoint.triage_version }];
     const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
     const post = (body: Record<string, unknown>) => server.handle("POST", `${base}/triage`, { changes, ...body });
-    if (endpoint.triage_state === "open") {
-      expect((await json(await post({ state: "mitigated", note: "skipped a step" }))).code).toBe("invalid_transition");
-    }
+    expect((await json(await post({ state: "investigating" }))).code).toBe("invalid_transition");
     expect((await post({ state: "accepted_risk" })).status).toBe(400);
     expect((await post({ state: "mitigated" })).status).toBe(400);
     expect((await post({ state: "accepted_risk", accepted_until: new Date(Date.now() - 1000).toISOString() })).status).toBe(400);
-    expect((await post({ state: "investigating", accepted_until: future })).status).toBe(400);
-    expect((await json(await post({ state: "investigating", assigned_to: "nobody" }))).code).toBe("invalid_assignee");
-    expect((await post({ state: "investigating", assigned_to: "vic" })).status).toBe(400);
-    expect((await post({ state: "investigating" })).status).toBe(200);
+    expect((await post({ state: "open", accepted_until: future })).status).toBe(400);
+    expect((await json(await post({ state: "open", assigned_to: "nobody" }))).code).toBe("invalid_assignee");
+    expect((await post({ state: "open", assigned_to: "vic" })).status).toBe(400);
+    expect((await post({ state: "open" })).status).toBe(200);
     changes[0] = { agent_id: endpoint.agent_id, version: endpoint.triage_version + 1 };
     expect((await post({ state: "accepted_risk", accepted_until: future })).status).toBe(400);
     expect((await post({ state: "accepted_risk", accepted_until: future, assigned_to: "sam", note: "vendor fix due" })).status).toBe(200);
@@ -379,10 +377,13 @@ describe("demo alarms (P14)", () => {
     const first = (list.items as { id: string; state: string }[]).find((a) => a.state === "open");
     expect(first).toBeDefined();
     const id = first?.id ?? "";
-    const skip = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
-    expect(skip.status).toBe(409);
-    const step = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "investigating" }, { "if-match": "\"1\"" });
-    expect(step.status).toBe(200);
+    // Any state to any other in one step; a close needs a note; investigating is retired.
+    const bare = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive" }, { "if-match": "\"1\"" });
+    expect(bare.status).toBe(400);
+    const retired = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "investigating" }, { "if-match": "\"1\"" });
+    expect(retired.status).toBe(409);
+    const closed = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
+    expect(closed.status).toBe(200);
     const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
     expect(created.status).toBe(201);
     const scoped = createDemoServer({ persona: "scoped_operator" });

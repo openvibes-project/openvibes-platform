@@ -34,7 +34,7 @@ export function StatusBadge({ status }: { status: string }) {
   return <span className={`badge badge--${statusTone[status] ?? "plain"}`}>{statusText[status] ?? status}</span>;
 }
 
-const triageTone: Record<string, string> = { open: "bad", investigating: "warn", mitigated: "ok", accepted_risk: "info", false_positive: "plain" };
+const triageTone: Record<string, string> = { open: "bad", mitigated: "ok", accepted_risk: "info", false_positive: "plain" };
 
 export function TriageBadge({ state }: { state: string }) {
   return <span className={`badge badge--${triageTone[state] ?? "plain"}`}>{triageLabel[state] ?? state}</span>;

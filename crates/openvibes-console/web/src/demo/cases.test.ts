@@ -243,7 +243,6 @@ describe("demo cases: outcomes and closing", () => {
     expect(cleared.body.outcome).toBeNull();
     expect((await get(server, made.case_id)).pending_item_count).toBe(2);
     // Mitigating the alarm elsewhere is the evidence that lets it be resolved.
-    expect((await triage(server, alarm.id, "investigating")).status).toBe(200);
     expect((await triage(server, alarm.id, "mitigated")).status).toBe(200);
     const detail = await get(server, made.case_id);
     expect(detail.items.find((i) => i.item_id === alarmItem.item_id)?.evidence_gone).toBe(true);
@@ -307,7 +306,6 @@ describe("demo cases: outcomes and closing", () => {
     const server = createDemoServer({ persona: "analyst" });
     const { alarm } = await freeObjects(server);
     const made = (await call<CaseDetail>(server, "POST", "/api/v1/cases", { title: "Back again", items: [{ kind: "alarm", ref: alarm.id }] })).body;
-    await triage(server, alarm.id, "investigating");
     await triage(server, alarm.id, "mitigated");
     const item = made.items[0] as CaseItem;
     expect((await call(server, "PUT", `/api/v1/cases/${made.case_id}/items/${item.item_id}/outcome`, { outcome: "resolved" })).status).toBe(200);

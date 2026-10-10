@@ -4,16 +4,14 @@
 // them must say why (the server refuses it without a note).
 export const noteRequired = new Set(["mitigated", "accepted_risk", "false_positive"]);
 
-// The server's workflow: a host keeps its state or moves one step forward.
-const next: Record<string, string[]> = {
-  open: ["investigating"],
-  investigating: ["mitigated", "accepted_risk", "false_positive"],
-};
-const order = ["open", "investigating", "mitigated", "accepted_risk", "false_positive"];
+/** The triage states in display order (triage v2: `investigating` is
+ * retired, cases cover it). */
+export const triageStates = ["open", "mitigated", "accepted_risk", "false_positive"] as const;
 
-/** States that every host in `from` may move to, in display order. */
+/** States that every host in `from` may move to: any state to any other,
+ * so every one, as long as each host is in a known state. */
 export function allowedStates(from: string[]): string[] {
-  return order.filter((to) => from.every((state) => state === to || (next[state] ?? []).includes(to)));
+  return from.every((state) => (triageStates as readonly string[]).includes(state)) ? [...triageStates] : [];
 }
 
 export type TriageForm = { state: string; assignee: string; note: string; acceptedUntil: string };

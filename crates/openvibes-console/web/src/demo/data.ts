@@ -152,11 +152,12 @@ export function buildDemoData(now = Date.now()) {
         last_observed_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
         received_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
       });
-      const state = random() < 0.72 ? "open" : pick(["investigating", "mitigated", "accepted_risk", "false_positive"]);
+      const state = random() < 0.72 ? "open" : pick(["mitigated", "accepted_risk", "false_positive"]);
       triage.set(`${agent.id}|${rule.ruleSetId}|${rule.ruleId}`, {
         state, version: 1, rule_version: 3,
-        assigned_to: state === "investigating" ? "analyst" : null,
-        note: state === "accepted_risk" ? "Isolated lab network; revisit next quarter." : null,
+        assigned_to: null,
+        note: state === "accepted_risk" ? "Isolated lab network; revisit next quarter."
+          : state === "open" ? null : "Handled outside the console.",
         accepted_until: state === "accepted_risk" ? iso(now + 60 * DAY) : null,
       });
     }
@@ -223,6 +224,7 @@ export function buildDemoData(now = Date.now()) {
         match_basis: advisory.packages[0]?.fixed == null
           ? "The Fedora tracker lists this package version as affected and has no fix yet."
           : "Fedora's own security advisory names this package; the installed version is older than the fixed one.",
+        triage_state: "open", triage_version: 0, assigned_to: null as string | null,
       });
     }
   }
@@ -338,7 +340,7 @@ export function buildDemoData(now = Date.now()) {
       rule_set_id: "baseline", rule_id: spec.rule, severity: spec.severity, message: spec.message,
       exe: spec.process.exe, parent_exe: spec.ancestors[0]?.exe ?? null, count: spec.count,
       first_seen: iso(last - spec.count * 3 * MINUTE), last_seen: iso(last),
-      state: index === 2 ? "investigating" : "open", suppressed_by: null as string | null,
+      state: "open", suppressed_by: null as string | null,
       rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
       received_at: iso(last + 2000),
       detection: {
@@ -347,7 +349,7 @@ export function buildDemoData(now = Date.now()) {
           { key: "parent.exe", status: "complete", value: spec.ancestors[0]?.exe ?? "", item_count: null }],
         steps: [{ expression: `event["process.exe"] == ${JSON.stringify(spec.process.exe)} && event["parent.exe"] == ${JSON.stringify(spec.ancestors[0]?.exe ?? "")}`, result: true }],
       },
-      triage: { state: index === 2 ? "investigating" : "open", assigned_to: null as string | null, note: null as string | null,
+      triage: { state: "open", assigned_to: (index === 2 ? "analyst" : null) as string | null, note: null as string | null,
         accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
     };
   });

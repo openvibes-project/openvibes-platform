@@ -54,18 +54,15 @@ export async function quiet(alarmId: string, scope: string, note: string): Promi
   toast("Quieted: new matches are closed as false positives");
 }
 
-/** From the list: closes this alarm as a false positive (through the
- * workflow's steps) and then quiets new ones, both with the user's note. */
+/** From the list: closes this alarm as a false positive and then quiets
+ * new ones, both with the user's note. */
 async function closeAndQuiet(alarmId: string, scope: string, note: string): Promise<void> {
   const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
-  let alarm = await request<AlarmDetail>("GET", path);
-  const step = async (state: string, withNote: boolean) => {
-    await request("PUT", `${path}/triage`, { state, note: withNote ? note : null, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
+  const alarm = await request<AlarmDetail>("GET", path);
+  if (alarm.triage.state !== "false_positive") {
+    await request("PUT", `${path}/triage`, { state: "false_positive", note, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
       { "if-match": `"${alarm.triage.version}"` });
-    alarm = await request<AlarmDetail>("GET", path);
-  };
-  if (alarm.triage.state === "open") await step("investigating", false);
-  if (alarm.triage.state === "investigating") await step("false_positive", true);
+  }
   await quiet(alarmId, scope, note);
 }
 

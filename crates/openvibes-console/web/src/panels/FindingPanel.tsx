@@ -15,9 +15,7 @@ import { toast } from "../ui/toast";
 import { AddToCase } from "./AddToCase";
 import { findingRef } from "./cases";
 import { DetectionEvidence } from "./DetectionEvidence";
-import { allowedStates, noteRequired, triageBody } from "./triage";
-
-export const triageStates = ["open", "investigating", "mitigated", "accepted_risk", "false_positive"] as const;
+import { allowedStates, noteRequired, triageBody, triageStates } from "./triage";
 
 export function splitFindingId(id: string): [string, string] {
   const split = id.indexOf("/");
@@ -26,7 +24,7 @@ export function splitFindingId(id: string): [string, string] {
 
 export function TriageBar({ counts }: { counts: FindingGroup["triage_counts"] }) {
   const total = Object.values(counts).reduce((sum, value) => sum + value, 0) || 1;
-  const tone: Record<string, string> = { open: "var(--bad)", investigating: "var(--warn)", mitigated: "var(--ok)", accepted_risk: "var(--info)", false_positive: "var(--text-3)" };
+  const tone: Record<string, string> = { open: "var(--bad)", mitigated: "var(--ok)", accepted_risk: "var(--info)", false_positive: "var(--text-3)" };
   return (
     <div className="triage-bar" role="img" aria-label={triageStates.map((s) => `${counts[s]} ${triageLabel[s]}`).join(", ")}>
       {triageStates.map((state) => counts[state] > 0 && (
@@ -61,7 +59,7 @@ export function FindingPanel({ id }: { id: string }) {
   const evidencePath = host ? `/api/v1/compliance/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
   const observation = useResource<Finding>(evidencePath);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [state, setState] = useState<string>("investigating");
+  const [state, setState] = useState<string>("mitigated");
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState("");
   const [acceptedUntil, setAcceptedUntil] = useState("");
@@ -86,7 +84,7 @@ export function FindingPanel({ id }: { id: string }) {
 
   // The server's workflow limits where the selected hosts can go together.
   const options = allowedStates((endpoints.data ?? []).filter((item) => selected.has(item.agent_id)).map((item) => item.triage_state));
-  const choice = options.includes(state) ? state : options.includes("investigating") ? "investigating" : options[0] ?? "";
+  const choice = options.includes(state) ? state : options.includes("mitigated") ? "mitigated" : options[0] ?? "";
 
   useProvideTitle({ kind: "finding", id }, group?.latest_message);
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
