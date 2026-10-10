@@ -76,9 +76,16 @@ Design principles, shared by every repository:
 - **Heartbeats:** each agent reports its host name, versions, enabled
   collectors (capabilities), and its own health; the platform rates each
   agent Healthy, Degraded, Offline, or Unknown with the reasons.
-- **Findings:** accepted or refused one by one within a batch, and stored
-  exactly once. History is partitioned by day, with a current-state table
-  per agent, rule set, and rule.
+- **Compliance findings:** agents report a match when it starts, changes or
+  ends, not on every scan. Each is accepted or refused on its own and
+  stored exactly once; history is partitioned by day, with a current-state
+  table per agent, rule set, and rule.
+- **Threat alarms:** process starts that match the signed alarm rules
+  arrive within seconds of the event, with the process tree. The platform
+  records each host's alarm source (eBPF or kernel audit) and says when
+  alarms are off and why.
+- **Services:** each host's listening ports and the services and programs
+  behind them, sent when they change.
 - **Inventory:** package reports (operating system, packages, running
   kernel) arrive only when they change, as gzip-compressed change sets
   after the first full list, and are stored compactly.
@@ -123,10 +130,14 @@ Design principles, shared by every repository:
 
 ### Administration (`openvibes-admin`)
 
-- **TUI:** `openvibes-admin` with no subcommand opens host administration
-  over SSH (keyboard only): Setup (install, repair, update, uninstall),
-  configuration, and service lifecycle, kept out of the web console by
-  design. `setup --quick` runs the same install unattended.
+- **TUI:** `sudo openvibes-admin` opens host administration over SSH
+  (keyboard only): Setup (install, repair, update, uninstall, turning the
+  assistant on), configuration, database and health screens, and service
+  lifecycle, kept out of the web console by design. `setup --quick` runs
+  the same install unattended.
+- **Upgrades run themselves:** `dnf upgrade` backs up and migrates the
+  database, upgrades the console with the platform, publishes a newer rules
+  package's rule sets, and tunes the assistant if it has not been tuned, with no command.
 - **Schema and data:** `migrate`, `status`, and daily `maintenance`
   (partitions and retention) from a systemd timer.
 - **Built-in PKI (`ca`):** an offline root, an online intermediate, and
@@ -146,7 +157,12 @@ Design principles, shared by every repository:
 
 - **Fedora RPMs:** hardened systemd units, each with its own user, no
   capabilities, a read-only system, a system-call filter, and
-  `no_new_privs`.
+  `no_new_privs`. A small SELinux policy module lets the assistant's socket
+  activation work with SELinux enforcing.
+- **Offline kit:** every release carries
+  `openvibes-platform-<version>-offline-fedora44.tar`: all platform packages
+  and their Fedora dependencies, PostgreSQL included, signed and
+  checksummed, with an installer that never goes online.
 - **CI on every change:** formatting, clippy with warnings as errors, docs,
   the RustSec audit, and unit and PostgreSQL tests.
 - **Integration test:** a real agent runs against the installed binaries,
@@ -161,10 +177,22 @@ Design principles, shared by every repository:
 - **Access:** local accounts first; OIDC, SAML, and MFA come later as
   adapters. Access is role-based and scoped by asset group, and service
   accounts get expiring tokens.
-- **Findings:** each finding is shown once however many endpoints report
-  it, and its detail lists every endpoint. Analysts can triage and assign.
-- **Dashboards:** a built-in overview plus your own grid dashboards,
-  shareable with other users.
+- **Compliance findings:** each finding is shown once however many
+  endpoints report it, and its detail lists every endpoint. Analysts can
+  triage and assign.
+- **Threat alarms:** the alarm, why it fired and the process tree, with
+  triage, suppressions, and cases to collect alarms, findings and notes
+  into an investigation.
+- **MITRE ATT&CK:** every shipped rule carries its techniques; a Coverage
+  page shows them on a kill-chain view, and the rule editor has a
+  technique picker.
+- **Test triggers:** `openvibes-test` on a host raises a harmless test
+  alarm or finding; the host page shows the last test.
+- **Hosts:** software, advisories per package, ports and services, and a
+  host compare view. Add hosts from Enrollment (Install package or Copy CLI
+  install).
+- **Dashboards:** a built-in Overview with 30-day trends, plus your own grid
+  dashboards (Graph, Trend, List and more), shareable with other users.
 - **Operations:** agents (seen recently, offline, revoked), enrollment
   tokens, previews of signed bundles, and an exportable audit log.
 - **Wording:** the console never claims more certainty than the data
@@ -178,8 +206,10 @@ Design principles, shared by every repository:
   agents and findings it is based on.
 - **Model:** runs on a local model by default. The optional
   `openvibes-llm` package runs llama.cpp's `llama-server` from a pinned
-  build: CPU or Vulkan GPU, loopback only, sandboxed, and a model file
-  with a pinned SHA-256.
+  build: CPU or Vulkan GPU, loopback only, sandboxed. Setup downloads the
+  model from its publisher, checked against a pinned SHA-256 (offline, it
+  comes as a file beside the kit). The model starts on the first question
+  and unloads when idle, and is tuned to the host's CPU.
 - **Replaceable:** both the runtime and the model can be swapped. Any
   OpenAI-compatible server on your own network works.
 - **Quality gate:** a question set, including prompt-injection cases,
@@ -187,9 +217,9 @@ Design principles, shared by every repository:
 
 ## In progress
 
-- **Admin TUI:** Database and Health screens.
-- **Baseline rules package:** a signed starter rule set from the new
-  `openvibes-rules` repository, which Setup trusts and publishes.
+- **Hardening rules per OS** (protocol P19): Level 1 and Level 2 checks on
+  sshd, sysctls, file modes, mounts, services and more, from facts the
+  agent's root helper reads; console switches per asset group.
 
 ## Planned
 
@@ -198,15 +228,26 @@ Design principles, shared by every repository:
   names and addresses pseudonymised before anything leaves the platform.
 - **Correlation** (`openvibes-correlation`) across findings and inventory.
 - **Third-party inventory and CMDB sync** (`openvibes-cmdb`).
-- **Fewer repeat findings:** a protocol change so agents report when a
-  match starts and ends, instead of on every scan.
+- **Platform on AlmaLinux and Rocky Linux.**
+- **Offline agent install from the console:** per-distribution archives and
+  updates through the platform.
 - **Trust-root rotation:** rotate rule-signing keys and the platform CA
   without reinstalling agents.
+
+## Runs on
+
+- **Platform:** Fedora 44, x86_64, online or with no internet (the offline
+  kit). 2 GB RAM and 1 vCPU served 500 simulated agents in the lab
+  ([`docs/sizing.md`](docs/sizing.md)).
+- **Agents:** Fedora 44, AlmaLinux and Rocky Linux 9+, Debian 12+, Ubuntu
+  22.04+ and Arch, x86_64.
 
 ## Getting started
 
 Install from the package repository: [`docs/quick-setup.md`](docs/quick-setup.md)
-(one script, then Setup in the admin TUI).
+(one script, then Setup in the admin TUI). Without internet: the offline
+kit from the [latest release](https://github.com/openvibes-project/openvibes-platform/releases/latest),
+`tar xf openvibes-platform-<version>-offline-fedora44.tar && sudo ./openvibes-offline/install`.
 
 Build from source and install on Fedora (details, including first-time CA and database
 setup, in [`docs/components/packaging.md`](docs/components/packaging.md)):
