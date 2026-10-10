@@ -224,3 +224,20 @@ test("Enrollment offers the install package and a CLI install command to copy (i
   await expect(page.getByText("Install command copied")).toBeVisible();
   await expect(add).toContainText("anyone with it can enroll a host");
 });
+
+// #257: a long context label is cut short; the send button stays in the dock.
+test("a long assistant context keeps the send button in view", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/compliance?open=finding%3Abaseline%2Fport.ssh.exposed");
+  await page.getByRole("button", { name: "Ask about this" }).click();
+  const dock = page.locator(".assistant");
+  await expect(dock.locator(".context-chip")).toBeVisible();
+  await page.evaluate(() => {
+    const label = document.querySelector(".context-chip .truncate");
+    if (label) label.textContent = `About ${"python3-docs-3.14.8-1.fc44 python3.14-3.14.8-1.fc44 ".repeat(3)}`;
+  });
+  const [box, send] = [await dock.boundingBox(), await dock.locator(".icon-button--send").boundingBox()];
+  expect(send && box && send.x + send.width).toBeLessThanOrEqual((box?.x ?? 0) + (box?.width ?? 0));
+  const form = await dock.locator(".assistant__form").boundingBox();
+  expect(form?.width).toBeLessThanOrEqual((box?.width ?? 0) + 1);
+});

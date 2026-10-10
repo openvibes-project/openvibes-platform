@@ -230,7 +230,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "vulnerability_hosts",
-            "Endpoints with an open vulnerability for a CVE or advisory ID taken from a result.",
+            "One advisory or CVE by ID: severity, title, and the endpoints where it is open.",
             object(
                 json!({ "id": text_schema("CVE ID or advisory ID.") }),
                 &["id"],
@@ -238,7 +238,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "fleet_overview",
-            "Start here for broad questions: what to fix first, the most critical problems or vulnerabilities across all hosts. Fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings and advisories.",
+            "Start here for broad questions: what to fix first, the most critical problems or vulnerabilities across all hosts. Fleet-wide counts: agents by state (seen recently, offline, revoked, never seen), open vulnerabilities, hosts with an exploited one, top findings, and open advisories in fix-first order.",
             object(json!({ "window_hours": window_schema() }), &[]),
         ),
         spec(
@@ -1052,6 +1052,8 @@ impl<S: Source> LookupRunner for Lookups<S> {
                             "cite": agent_cite(&h.agent_id),
                             "hostname": h.hostname,
                             "advisory": advisory_cite(&h.advisory_id),
+                            "severity": h.severity,
+                            "title": h.title,
                             "first_seen": time(h.first_seen_at),
                             "reboot_needed": h.reboot_needed,
                         })
@@ -1093,7 +1095,8 @@ impl<S: Source> LookupRunner for Lookups<S> {
                             .iter()
                             .map(|a| {
                                 json!({ "cite": advisory_cite(&a.advisory_id), "severity": a.severity,
-                                        "title": a.title, "hosts": a.hosts })
+                                        "title": a.title, "hosts": a.hosts,
+                                        "exploited": a.exploited, "epss_percentile": a.epss_percentile })
                             })
                             .collect(),
                     ),

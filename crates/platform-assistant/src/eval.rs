@@ -573,10 +573,16 @@ impl Source for FleetSource {
                         .get(&v.advisory)
                         .is_some_and(|a| a.cves.iter().any(|c| c == id))
             })
-            .map(|v| VulnerableHost {
+            .filter_map(|v| {
+                let a = fleet.advisories.get(&v.advisory)?;
+                Some((v, a))
+            })
+            .map(|(v, a)| VulnerableHost {
                 agent_id: v.agent.clone(),
                 hostname: fleet.hostname(&v.agent),
                 advisory_id: v.advisory.clone(),
+                severity: a.severity.clone(),
+                title: a.title.clone(),
                 first_seen_at: v.first,
                 reboot_needed: v.reboot_needed,
             })
@@ -626,12 +632,22 @@ impl Source for FleetSource {
                     severity: a.severity.clone(),
                     title: a.title.clone(),
                     hosts,
+                    exploited: fleet.exploited(id),
+                    epss_percentile: a.epss_percentile,
                 })
             })
             .collect();
+        // As the store: exploited, EPSS, severity, then hosts (#249).
         top.sort_by(|a, b| {
-            b.hosts
-                .cmp(&a.hosts)
+            b.exploited
+                .cmp(&a.exploited)
+                .then(
+                    b.epss_percentile
+                        .unwrap_or(-1.0)
+                        .total_cmp(&a.epss_percentile.unwrap_or(-1.0)),
+                )
+                .then(advisory_rank(&a.severity).cmp(&advisory_rank(&b.severity)))
+                .then(b.hosts.cmp(&a.hosts))
                 .then(a.advisory_id.cmp(&b.advisory_id))
         });
         Ok(Overview {

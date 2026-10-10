@@ -98,7 +98,7 @@ export function AssistantDock() {
           </div>
         ) : offer && (
           <button type="button" className="context-offer" onClick={() => assistant.askAbout(offer, objectTitle(offer))}>
-            <Icon name="plus" size={12} /> Ask about {objectTitle(offer)}
+            <Icon name="plus" size={12} /> <span className="truncate">Ask about {objectTitle(offer)}</span>
           </button>
         )}
         <div className="assistant__input">
