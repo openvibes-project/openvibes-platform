@@ -354,6 +354,32 @@ async fn add_to_case(
             }
         }
     };
+    let mut result = BulkResult::default();
+    // A new case: items already in an open case are skipped first, and no
+    // case is opened when none is left (no empty cases).
+    let mut refs = refs;
+    if request.new_case_title.is_some()
+        && let Some(kind) = refs.first().map(|(kind, _)| *kind)
+    {
+        let held: std::collections::HashSet<String> =
+            match console_cases::active_items(client, scope, user_id, kind).await {
+                Ok(Some(items)) => items.into_iter().map(|(reference, _)| reference).collect(),
+                Ok(None) => std::collections::HashSet::new(),
+                Err(_) => return unavailable_auth(),
+            };
+        refs.retain(|(_, reference)| {
+            let free = !held.contains(reference);
+            if !free {
+                result
+                    .skipped
+                    .push((reference.clone(), "in another open case"));
+            }
+            free
+        });
+        if refs.is_empty() {
+            return respond(result, None);
+        }
+    }
     let case = match (&request.case_id, &request.new_case_title) {
         (Some(id), None) => id.clone(),
         (None, Some(title)) => {
@@ -379,7 +405,6 @@ async fn add_to_case(
         }
         _ => return bad("invalid_case", "Give case_id or new_case_title"),
     };
-    let mut result = BulkResult::default();
     let mut number = None;
     for (kind, reference) in &refs {
         match console_cases::add_item(client, scope, user_id, &case, kind, reference, now).await {

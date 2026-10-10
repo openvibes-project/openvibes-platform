@@ -59,8 +59,9 @@ export function Findings() {
             { key: "last", header: "Last seen", width: "120px", hideBelow: 900, sort: (g) => g.last_observed_at, render: (g) => <span className="subtle"><Ago value={g.last_observed_at} /></span> },
           ]} />
       )}
-      {/* A selected finding acts on every host in scope where it is current. */}
-      <BulkBar kind="compliance" noun={selected.size === 1 ? "finding (all its hosts)" : "findings (all their hosts)"} count={selected.size}
+      {/* A selected finding acts on its hosts in scope; a close leaves the
+          ones already closed alone. */}
+      <BulkBar kind="compliance" noun={selected.size === 1 ? "finding" : "findings"} count={selected.size}
         onClear={() => setSelected(new Set())}
         items={() => chosen().map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id }))}
         newCase={() => { const c = chosen(); return { title: `${c.length} findings: ${c[0]?.latest_message ?? ""}`, severity: highest(c.map((g) => g.severity)) }; }} />

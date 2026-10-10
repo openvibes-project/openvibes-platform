@@ -443,6 +443,8 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
             .iter()
             .all(|s| s["reason"] == "in another open case")
     );
+    // and no empty case was opened for them.
+    assert!(body["case_number"].is_null(), "{body}");
     // An advisory expands to both hosts.
     let vulns = json!({"action": "state", "state": "false_positive", "note": "not affected", "items": [{"advisory_id": "FEDORA-1"}]});
     let (status, body, _) = call(

@@ -63,8 +63,9 @@ export function Vulnerabilities() {
             { key: "reboot", header: "Reboot", numeric: true, width: "80px", hideBelow: 950, sort: (r) => r.reboot, render: (r) => r.reboot > 0 ? <span className="num">{r.reboot}</span> : <span className="subtle">—</span> },
           ]} />
       )}
-      {/* A selected advisory acts on every host in scope where it is open. */}
-      <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory (all its hosts)" : "advisories (all their hosts)"} count={selected.size}
+      {/* A selected advisory acts on its hosts in scope; a close leaves the
+          ones already closed alone. */}
+      <BulkBar kind="vulnerabilities" noun={selected.size === 1 ? "advisory" : "advisories"} count={selected.size}
         partial={list.data?.more_available === true} onClear={() => setSelected(new Set())}
         items={() => chosen().map((r) => ({ advisory_id: r.id }))}
         newCase={() => { const c = chosen(); return { title: `${c.length} advisories: ${c[0]?.title ?? ""}`, severity: highest(c.map((r) => r.severity)) }; }} />

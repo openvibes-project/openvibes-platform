@@ -136,6 +136,53 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
     .unwrap()
     .unwrap();
     assert_eq!((done.changed, done.skipped.len()), (2, 0));
+    // A rule-wide close leaves an already closed host's decision alone; a
+    // named host changes as asked.
+    let one = [(
+        "baseline".to_owned(),
+        "port.ssh.exposed".to_owned(),
+        Some(DB.to_owned()),
+    )];
+    let fp = BulkChange::State {
+        state: "false_positive",
+        note: Some("lab"),
+        accepted_until: None,
+    };
+    assert_eq!(
+        bulk::compliance(&mut client, &all, &one, fp, "alice", now)
+            .await
+            .unwrap()
+            .unwrap()
+            .changed,
+        1
+    );
+    let again = bulk::compliance(
+        &mut client,
+        &all,
+        &rule,
+        mitigate(Some("again")),
+        "alice",
+        now,
+    )
+    .await
+    .unwrap()
+    .unwrap();
+    assert_eq!(again.changed, 0);
+    assert!(
+        again
+            .skipped
+            .iter()
+            .all(|(_, why)| *why == "already closed")
+    );
+    let db_state: String = client
+        .query_one(
+            "SELECT state FROM console_finding_triage WHERE agent_id = $1",
+            &[&DB],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(db_state, "false_positive");
     let advisory = [("FEDORA-1".to_owned(), None)];
     let done = bulk::vulnerabilities(
         &mut client,

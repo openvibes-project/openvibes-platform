@@ -53,6 +53,16 @@ pub enum BulkRefusal {
     Fields,
 }
 
+/// A host reached through its rule or advisory (not named) that is already
+/// closed keeps its decision when the change closes: "mitigate this
+/// finding" must not turn its false positives into mitigated. Reopening
+/// and named hosts change as asked.
+fn spared(change: BulkChange<'_>, named: bool, current: &str) -> bool {
+    matches!(change, BulkChange::State { state, .. } if state != "open")
+        && !named
+        && current != "open"
+}
+
 fn check(change: BulkChange<'_>, count: usize, now: DateTime<Utc>) -> Result<(), BulkRefusal> {
     if count == 0 || count > MAX_ITEMS {
         return Err(BulkRefusal::Count);
@@ -184,6 +194,13 @@ pub async fn compliance(
             result.skipped.push((id, "not found or out of scope"));
             continue;
         };
+        let named = items
+            .iter()
+            .any(|(s, r, a)| *s == set && *r == rule && a.as_deref() == Some(agent.as_str()));
+        if spared(change, named, &current.state) {
+            result.skipped.push((id, "already closed"));
+            continue;
+        }
         let (state, assignee, note, until) = match change {
             BulkChange::State {
                 state,
@@ -267,6 +284,15 @@ pub async fn vulnerabilities(
             .get(&(agent.clone(), advisory.clone()))
             .cloned()
             .unwrap_or_default();
+        let named = items
+            .iter()
+            .any(|(adv, a)| adv == advisory && a.as_deref() == Some(agent.as_str()));
+        if spared(change, named, &now_state.state) {
+            result
+                .skipped
+                .push((format!("{agent}/{advisory}"), "already closed"));
+            continue;
+        }
         let (state, assignee, note, until) = match change {
             BulkChange::State {
                 state,

@@ -48,8 +48,8 @@ Show everything, without page changes for details:
   bar at the bottom offers Mitigate, Accept risk, False positive, Reopen,
   Assign, Add to case and (alarms) Suppress; each opens one dialog whose
   confirm button names the count, and the toast says what changed and why
-  the rest was skipped. A selected finding or advisory row acts on every
-  host in scope where it is current or open. Rows in an open case show
+  the rest was skipped. A selected finding or advisory row acts on its
+  hosts in scope; a close leaves the hosts already closed alone. Rows in an open case show
   its badge (`panels/CaseBadge.tsx`). Vulnerabilities count open hosts
   and hide advisories triaged everywhere unless Include resolved is on.
 - **Detail template** (`panels/TriageDetail.tsx`): a finding, an advisory

@@ -978,7 +978,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
 
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.
-  type Target = { id: string; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
+  type Target = { id: string; named: boolean; caseKind: "alarm" | "compliance_finding" | "vulnerability"; caseRef: string;
     current: () => { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null };
     write: (next: { state: string; assigned_to: string | null; note: string | null; accepted_until: string | null }) => void };
   const targets = (kind: string, items: Record<string, unknown>[]): { found: Target[]; missing: string[] } | null => {
@@ -990,7 +990,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         if (typeof item.id !== "string") return null;
         const alarm = alarmList().find((a) => a.id === item.id);
         if (!alarm) { missing.push(item.id); continue; }
-        found.push({ id: alarm.id, caseKind: "alarm", caseRef: alarm.id, current: () => alarm.triage,
+        found.push({ id: alarm.id, named: true, caseKind: "alarm", caseRef: alarm.id, current: () => alarm.triage,
           write: (next) => { alarm.state = next.state; alarm.triage = { ...next, version: alarm.triage.version + 1, updated_at: iso(), updated_by: actor }; } });
       } else if (kind === "compliance") {
         if (typeof item.rule_set_id !== "string" || typeof item.rule_id !== "string") return null;
@@ -999,7 +999,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         if (hits.length === 0) missing.push(agent ? `${agent}/${set}/${rule}` : `${set}/${rule}`);
         for (const f of hits) {
           const current = () => { const t = data.triage.get(triageKey(f.agent_id, set, rule)); return { state: t?.state ?? "open", assigned_to: t?.assigned_to ?? null, note: t?.note ?? null, accepted_until: t?.accepted_until ?? null }; };
-          found.push({ id: `${f.agent_id}/${set}/${rule}`, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
+          found.push({ id: `${f.agent_id}/${set}/${rule}`, named: agent !== null, caseKind: "compliance_finding", caseRef: `${f.agent_id}/${set}/${rule}`, current,
             write: (next) => { setTriage(f.agent_id, set, rule, next); } });
         }
       } else {
@@ -1008,7 +1008,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
         const hits = vulnerabilities().filter((v) => v.advisory_id === advisory && (agent === null || v.agent_id === agent));
         if (hits.length === 0) missing.push(agent ? `${agent}/${advisory}` : advisory);
         for (const v of hits) {
-          found.push({ id: `${v.agent_id}/${advisory}`, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
+          found.push({ id: `${v.agent_id}/${advisory}`, named: agent !== null, caseKind: "vulnerability", caseRef: `${v.agent_id}/${advisory}`,
             current: () => ({ state: v.triage_state, assigned_to: v.assigned_to ?? null, note: null, accepted_until: null }),
             write: (next) => { v.triage_state = next.state; v.assigned_to = next.assigned_to; v.triage_version += 1; } });
         }
@@ -1037,6 +1037,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
           return problem(400, "invalid_triage", "Triage state, note, or expiry is invalid (closing needs a note)");
         }
         for (const t of picked.found) {
+          // A rule or advisory's closed hosts keep their decision (as the server).
+          if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
           t.write({ state, note, assigned_to: t.current().assigned_to, accepted_until: state === "accepted_risk" ? String(body.accepted_until) : null });
           changed += 1;
         }
@@ -1054,6 +1056,12 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
       } else if (action === "case") {
         let caseId = typeof body.case_id === "string" ? body.case_id : null;
         if (caseId === null) {
+          // No empty case: items already in an open case are skipped first.
+          const held = new Set(((cases.activeItems(new URLSearchParams({ kind: picked.found[0]?.caseKind ?? "alarm" })).body as { items: { ref: string }[] }).items).map((i) => i.ref));
+          const free = picked.found.filter((t) => !held.has(t.caseRef));
+          for (const t of picked.found) if (held.has(t.caseRef)) skipped.push({ id: t.caseRef, reason: "in another open case" });
+          picked.found = free;
+          if (free.length === 0) return json({ changed: 0, skipped, case_id: null, case_number: null });
           const made = cases.create({ title: body.new_case_title, ...(typeof body.new_case_severity === "string" ? { severity: caseSeverityOf(body.new_case_severity) } : {}) });
           if (made.status !== 201) return send(made);
           caseId = (made.body as { case_id: string }).case_id;

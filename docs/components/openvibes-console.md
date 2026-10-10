@@ -419,8 +419,10 @@ Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
   (alarms `{id}`; compliance `{rule_set_id, rule_id, agent_id?}`;
   vulnerabilities `{advisory_id, agent_id?}`; without a host, every host in
   scope). Actions: `state` (a close needs a note, accepted risk its
-  expiry), `assign`, `case` (an open case or a new one; an item in another
-  open case is skipped) and, for alarms, `suppress` (one `program`
+  expiry; a close reaching hosts through their rule or advisory skips
+  those already closed, so their decision stays), `assign`, `case` (an
+  open case or a new one; an item in another open case is skipped, and no
+  new case opens when nothing is left) and, for alarms, `suppress` (one `program`
   suppression per distinct rule and program). Needs the kind's triage
   permission (`alarms.triage`, `compliance.triage`,
   `vulnerabilities.triage`), plus `cases.manage` for `case` and
