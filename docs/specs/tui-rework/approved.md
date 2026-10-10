@@ -195,8 +195,9 @@
     the break-glass account); a too-small window shows one sentence.
 42. Both whole flows (Update OpenVIBES from Home and back; full advanced install) confirmed by the user.
 43. Appliance only (in review): Home adds System and replaces Quit with
-    Log out (the TUI is the SSH session). System: Network (DHCP / fixed
-    address, filled from DHCP, gateway, DNS), DNS (its own entry, user:
-    [x] Use the DNS from DHCP, or your own servers checked before Apply,
-    search domain), Host name, Time (NTP, time zone), Login password, SSH,
-    Restart, Shut down (standard question).
+    Log out (the TUI is the SSH session). System: Network, Time (NTP,
+    time zone), Login password, SSH, Restart, Shut down (standard
+    question). Network holds the address (DHCP / fixed, filled from DHCP,
+    gateway), DNS ([x] DNS from DHCP, or your own servers checked before
+    Apply, search domain) and the host name, one screen (user).
+    Appliance screens approved ("LGTM finally it looks like I want it"). Scroll hints stay inside the gap (rule 15).
