@@ -331,6 +331,20 @@ async fn bulk_triage_needs_the_permission_a_note_to_close_and_fitting_items() {
         ),
         (Some(2), Some(0))
     );
+    // The History tab: one event per alarm, with the note.
+    let (status, history, _) = call(
+        &router,
+        "GET",
+        &format!("/api/v1/triage-history?kind=alarm&id={}", ids[0]),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{history}");
+    assert_eq!(history["items"][0]["to_state"], "mitigated");
+    assert_eq!(history["items"][0]["note"], "test alarms");
     // An item that does not fit the list is refused, nothing done.
     let wrong = json!({"action": "state", "state": "open", "items": [{"advisory_id": "FEDORA-1"}]});
     let (status, body, _) = call(

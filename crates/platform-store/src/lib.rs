@@ -58,6 +58,7 @@ pub mod signer;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
+pub mod triage_history;
 pub mod vulnerability_triage;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;

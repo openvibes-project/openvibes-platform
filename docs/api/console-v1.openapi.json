@@ -6425,6 +6425,100 @@
         }
       }
     },
+    "/api/v1/triage-history": {
+      "get": {
+        "tags": [
+          "triage"
+        ],
+        "operationId": "triage_history",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "advisory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Triage changes on hosts in scope, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageHistoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind or subject",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing the kind's read permission",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vulnerabilities": {
       "get": {
         "tags": [
@@ -12740,6 +12834,71 @@
               "$ref": "#/components/schemas/TopHostItem"
             },
             "description": "Most exposed first."
+          }
+        }
+      },
+      "TriageEventView": {
+        "type": "object",
+        "description": "One triage change.",
+        "required": [
+          "agent_id",
+          "to_state",
+          "changed_at",
+          "changed_by"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "changed_at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who: a user id, or `migration` or `system`."
+          },
+          "from_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The state before; absent for the first triage."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name, when known."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The note given."
+          },
+          "to_state": {
+            "type": "string",
+            "description": "The state after."
+          }
+        }
+      },
+      "TriageHistoryView": {
+        "type": "object",
+        "description": "The newest triage changes, at most 200.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TriageEventView"
+            },
+            "description": "Newest first."
           }
         }
       },

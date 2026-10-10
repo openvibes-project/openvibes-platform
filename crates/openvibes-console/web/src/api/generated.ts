@@ -1402,6 +1402,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/triage-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["triage_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vulnerabilities": {
         parameters: {
             query?: never;
@@ -3897,6 +3913,28 @@ export interface components {
         TopHosts: {
             /** @description Most exposed first. */
             items: components["schemas"]["TopHostItem"][];
+        };
+        /** @description One triage change. */
+        TriageEventView: {
+            /** @description The host. */
+            agent_id: string;
+            /** @description When (RFC 3339). */
+            changed_at: string;
+            /** @description Who: a user id, or `migration` or `system`. */
+            changed_by: string;
+            /** @description The state before; absent for the first triage. */
+            from_state?: string | null;
+            /** @description Its name, when known. */
+            hostname?: string | null;
+            /** @description The note given. */
+            note?: string | null;
+            /** @description The state after. */
+            to_state: string;
+        };
+        /** @description The newest triage changes, at most 200. */
+        TriageHistoryView: {
+            /** @description Newest first. */
+            items: components["schemas"]["TriageEventView"][];
         };
         /**
          * @description One service unit across the caller's hosts: a page of the hosts
@@ -8955,6 +8993,50 @@ export interface operations {
             };
             /** @description No visible host has it */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    triage_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+                id: string | null;
+                rule_set_id: string | null;
+                rule_id: string | null;
+                advisory_id: string | null;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Triage changes on hosts in scope, newest first */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TriageHistoryView"];
+                };
+            };
+            /** @description Invalid kind or subject */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Missing the kind's read permission */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

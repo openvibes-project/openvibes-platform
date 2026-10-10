@@ -42,6 +42,7 @@ mod seeded;
 mod server;
 mod site_fleet;
 mod software;
+mod triage_detail;
 mod users;
 
 pub use api::{

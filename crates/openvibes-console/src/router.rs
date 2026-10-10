@@ -677,6 +677,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             axum::routing::delete(crate::alarm_suppressions::remove_suppression),
         )
         .route(
+            "/v1/triage-history",
+            get(crate::triage_detail::triage_history),
+        )
+        .route(
             "/v1/alarms/bulk",
             axum::routing::post(crate::bulk::bulk_alarms),
         )
@@ -690,7 +694,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
-            axum::routing::put(crate::bulk::update_vulnerability_triage),
+            axum::routing::put(crate::triage_detail::update_vulnerability_triage),
         )
         .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
         .route("/v1/attack", get(crate::coverage::attack_catalog))
