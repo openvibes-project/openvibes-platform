@@ -1,6 +1,12 @@
 import AxeBuilder from "@axe-core/playwright";
 import { type Page, expect, test } from "@playwright/test";
 
+// Duplicate lives in the dashboard menu only (#252: no "Duplicate to edit" button).
+async function duplicate(page: Page) {
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await page.getByRole("menuitem", { name: "Duplicate" }).click();
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
@@ -12,7 +18,10 @@ test("home falls back to the built-in", async ({ page }) => {
   // Most important first (#116): alarms, then every critical issue, top left.
   const titles = await page.locator(".tile .tile__title").allTextContents();
   expect(titles.join("|")).toMatch(/Active alarms.*Critical/);
-  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
+  // #252: no "Duplicate to edit" in the header; Duplicate is in the menu.
+  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
 });
 
 test("the Overview's Critical tile adds up, links to its part, and speaks of issues", async ({ page }) => {
@@ -65,7 +74,7 @@ test("a new dashboard gets a widget, is saved, and survives a reload", async ({ 
 });
 
 test("the built-in is duplicated to edit, a tile moves by keyboard, and it becomes home", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await expect(page.getByLabel("Dashboard name")).toHaveValue("Copy of Overview");
   const tile = page.locator(".tile").first();
   const before = await tile.evaluate((el) => (el as HTMLElement).style.top);
@@ -79,7 +88,7 @@ test("the built-in is duplicated to edit, a tile moves by keyboard, and it becom
 });
 
 test("asks before leaving unsaved edits", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByLabel("Dashboard name").fill("Changed");
   let asked = false;
   page.once("dialog", (dialog) => { asked = true; void dialog.dismiss(); });
@@ -95,7 +104,8 @@ test("an analyst sees the team dashboard read-only", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "Analyst triage" }).click();
   await expect(page.getByText("Shared by")).toBeVisible();
   await expect(page.getByRole("button", { name: "Edit", exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
+  await page.getByRole("button", { name: "Dashboard menu" }).click();
+  await expect(page.getByRole("menuitem", { name: "Duplicate" })).toBeVisible();
 });
 
 test("an admin shares a dashboard with a role", async ({ page }) => {
@@ -121,7 +131,7 @@ for (const scheme of ["light", "dark"] as const) {
 }
 
 test("New dashboard while editing keeps the draft when you choose to stay", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByLabel("Dashboard name").fill("Changed");
   const url = page.url();
   page.once("dialog", (dialog) => void dialog.dismiss());
@@ -136,7 +146,7 @@ test("New dashboard while editing keeps the draft when you choose to stay", asyn
 test("Back with unsaved edits asks first", async ({ page }) => {
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
   await page.getByRole("link", { name: "Dashboards" }).click();
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByLabel("Dashboard name").fill("Changed");
   let asked = false;
   page.once("dialog", (dialog) => { asked = true; void dialog.dismiss(); });
@@ -164,7 +174,7 @@ test("a dashboard with a widget type this console does not know still renders", 
 });
 
 test("a tile deleted from the keyboard comes back with Undo", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   const tiles = page.locator(".tile");
   // The duplicate opens in edit mode; count its tiles only once they are there.
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
@@ -178,7 +188,7 @@ test("a tile deleted from the keyboard comes back with Undo", async ({ page }) =
 });
 
 test("unsaved edits survive a reload and can be restored", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByRole("button", { name: "Save" }).click();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Dashboard name").fill("Half done");
@@ -425,8 +435,7 @@ test("a Select wrapped in a label still picks an option and stays closed", async
 });
 
 test("Edit shows a pencil, and new widgets fill the first free spot", async ({ page }) => {
-  await expect(page.getByRole("button", { name: "Duplicate to edit" })).toBeVisible();
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("button", { name: "Edit", exact: true }).locator("[data-icon=pencil]")).toHaveCount(1);
   await page.getByRole("button", { name: "Dashboards" }).click();
@@ -441,7 +450,7 @@ test("Edit shows a pencil, and new widgets fill the first free spot", async ({ p
 });
 
 test("an Overview copy's tile editor is named for its type, not its id", async ({ page }) => {
-  await page.getByRole("button", { name: "Duplicate to edit" }).click();
+  await duplicate(page);
   await page.getByRole("button", { name: "Settings for Critical" }).click();
   await expect(page.locator(".inspector").getByText("Edit widget · Number")).toBeVisible();
 });
@@ -475,4 +484,25 @@ test("a copied dashboard can be deleted from its menu", async ({ page }) => {
   await expect(page).not.toHaveURL(url);
   await page.getByRole("button", { name: "Dashboards" }).click();
   await expect(page.getByRole("menuitemradio", { name: /^Copy of / })).toHaveCount(0);
+});
+
+// #252: "+ New dashboard" is highlighted across the whole menu, like the other items.
+test("New dashboard spans the menu's width", async ({ page }) => {
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  const item = page.getByRole("menuitem", { name: "New dashboard" });
+  const builtin = page.getByRole("menuitemradio", { name: "Overview" });
+  const [a, b] = [await item.boundingBox(), await builtin.boundingBox()];
+  expect(a?.width).toBeGreaterThan(0);
+  expect(Math.abs((a?.width ?? 0) - (b?.width ?? 0))).toBeLessThan(1);
+});
+
+// #252: a new dashboard that is never saved is not left behind.
+test("New dashboard then Cancel leaves no dashboard behind", async ({ page }) => {
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await page.getByRole("menuitem", { name: "New dashboard" }).click();
+  await expect(page.getByLabel("Dashboard name")).toHaveValue("Untitled dashboard");
+  await page.locator(".dashboard-header").getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByLabel("Dashboard name")).toHaveCount(0);
+  await page.getByRole("button", { name: "Dashboards" }).click();
+  await expect(page.getByRole("menuitemradio", { name: "Untitled dashboard" })).toHaveCount(0);
 });

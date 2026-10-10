@@ -86,7 +86,8 @@
 .menu__section .section-title { padding: 4px 10px; }
 .menu__note { margin: 0; padding: 7px 10px; color: var(--text-3); font-size: 13px; }
 .dashboard-phone-only { display: none; }
-.menu__item { all: unset; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-1); cursor: pointer; text-transform: capitalize; }
+/* Full width outside a .menu__section too: a button sizes to its text otherwise (#252). */
+.menu__item { all: unset; box-sizing: border-box; width: 100%; display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--r-1); cursor: pointer; text-transform: capitalize; }
 .menu__item:hover, .menu__item:focus-visible { background: var(--surface-2); }
 .menu__section:last-child { border: 0; margin: 0; }
 

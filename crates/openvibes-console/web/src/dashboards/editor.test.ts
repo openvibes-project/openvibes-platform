@@ -23,6 +23,25 @@ describe("editor", () => {
     expect(validateLayout(BUILTIN_LAYOUT)).toEqual([]);
   });
 
+  it("a new dashboard that is cancelled before its first save is deleted (#252)", async () => {
+    const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Untitled dashboard", layout: { schema: 1, widgets: [] } });
+    expect(editor.begin(created, { fresh: true })).toBe(true);
+    expect(editorState().fresh).toBe(true);
+    editor.cancel();
+    await editor.settled();
+    const ids = (await request<{ items: Dashboard[] }>("GET", "/api/v1/dashboards")).items.map((d) => d.dashboard_id);
+    expect(ids).not.toContain(created.dashboard_id);
+  });
+
+  it("cancelling an existing dashboard's edit keeps it", async () => {
+    const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Keep", layout });
+    expect(editor.begin(created)).toBe(true);
+    editor.cancel();
+    await editor.settled();
+    const ids = (await request<{ items: Dashboard[] }>("GET", "/api/v1/dashboards")).items.map((d) => d.dashboard_id);
+    expect(ids).toContain(created.dashboard_id);
+  });
+
   it("refuses to edit what you do not own", async () => {
     configureDemo("analyst");
     const items = (await request<{ items: Dashboard[] }>("GET", "/api/v1/dashboards")).items;
