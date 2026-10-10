@@ -64,9 +64,9 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         "base",
         "rule-1",
         0,
-        "investigating",
+        "open",
         None,
-        None,
+        Some("looking into it"),
         None,
         "analyst",
         now,
@@ -168,9 +168,9 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
         "rule-1",
         &[(AGENT.to_owned(), reopened.version)],
         &platform_store::console_read::AgentScope::Global,
-        "investigating",
+        "mitigated",
         None,
-        None,
+        Some("patched across the fleet"),
         None,
         "analyst",
         Some("bulk-triage-request-1"),
@@ -179,6 +179,25 @@ async fn stale_writes_are_rejected_and_new_observation_reopens_mitigation() {
     .await
     .unwrap();
     assert!(matches!(bulk, console_triage::BulkTriageUpdate::Updated(_)));
+    // Triage v2: open goes straight to mitigated, and investigating is gone.
+    assert!(matches!(
+        console_triage::update(
+            &mut client,
+            AGENT,
+            "base",
+            "rule-1",
+            5,
+            "investigating",
+            None,
+            None,
+            None,
+            "analyst",
+            now + Duration::minutes(5)
+        )
+        .await
+        .unwrap(),
+        TriageUpdate::InvalidFields
+    ));
     let request_ids: Vec<String> = client
         .query(
             "SELECT request_id FROM audit_log WHERE action = 'finding.triage.changed' AND request_id = 'bulk-triage-request-1'",

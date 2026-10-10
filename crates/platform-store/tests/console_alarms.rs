@@ -157,7 +157,7 @@ async fn the_list_is_newest_first_scoped_filtered_and_paged() {
             .len(),
         1
     );
-    // `active` is open or investigating: the suppressed (false positive)
+    // `active` is open: the suppressed (false positive)
     // alarm is not active even with suppressed shown.
     let active = AlarmFilters {
         state: Some("active".into()),
@@ -233,55 +233,44 @@ async fn triage_follows_the_findings_workflow_with_versions_and_history() {
         TriageOutcome::InvalidFields,
         "a completed state needs a note"
     );
-    let with_note = TriageChange {
-        note: Some("fixed"),
-        ..change(1, "mitigated")
-    };
-    assert_eq!(
-        update(&mut client, &global, ids[0], &with_note, "alice", now)
-            .await
-            .unwrap(),
-        TriageOutcome::InvalidTransition,
-        "open goes to investigating first"
-    );
-    let TriageOutcome::Updated(triage) = update(
-        &mut client,
-        &global,
-        ids[0],
-        &change(1, "investigating"),
-        "alice",
-        now,
-    )
-    .await
-    .unwrap() else {
-        panic!("expected an update");
-    };
-    assert_eq!(triage.version, 2);
     assert_eq!(
         update(
             &mut client,
             &global,
             ids[0],
             &change(1, "investigating"),
-            "bob",
+            "alice",
             now
         )
         .await
         .unwrap(),
+        TriageOutcome::InvalidFields,
+        "triage v2: investigating is retired"
+    );
+    let with_note = TriageChange {
+        note: Some("fixed"),
+        ..change(1, "mitigated")
+    };
+    // Triage v2: open goes straight to mitigated.
+    let TriageOutcome::Updated(triage) =
+        update(&mut client, &global, ids[0], &with_note, "alice", now)
+            .await
+            .unwrap()
+    else {
+        panic!("expected an update");
+    };
+    assert_eq!(triage.version, 2);
+    assert_eq!(
+        update(&mut client, &global, ids[0], &with_note, "bob", now)
+            .await
+            .unwrap(),
         TriageOutcome::Stale
     );
     let nobody = AgentScope::AssetGroups(vec!["00000000-0000-4000-8000-00000000000f".into()]);
     assert_eq!(
-        update(
-            &mut client,
-            &nobody,
-            ids[0],
-            &change(2, "investigating"),
-            "eve",
-            now
-        )
-        .await
-        .unwrap(),
+        update(&mut client, &nobody, ids[0], &change(2, "open"), "eve", now)
+            .await
+            .unwrap(),
         TriageOutcome::NotFound
     );
     let history: i64 = client

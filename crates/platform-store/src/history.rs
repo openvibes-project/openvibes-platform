@@ -30,8 +30,8 @@ pub const COLUMNS: [&str; 18] = [
 ];
 
 /// Current counts per host; `$1` is the "seen since" threshold. Definitions
-/// match the console summaries and lists: active alarms are open or
-/// investigating, of every severity (`info` has its own column), vulnerabilities
+/// match the console summaries and lists: active alarms are open, of every
+/// severity (`info` has its own column), vulnerabilities
 /// map important to high and moderate to medium (unrated is in no count),
 /// exploited is live. Each kind is one grouped scan joined on `agent_id`: a
 /// per-agent lateral probes every daily alarm partition once per host.
@@ -57,7 +57,7 @@ LEFT JOIN (
            count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
            count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l,
            count(*) FILTER (WHERE severity = 'info') i
-    FROM alarms WHERE state IN ('open', 'investigating') GROUP BY agent_id) al ON al.agent_id = a.agent_id
+    FROM alarms WHERE state = 'open' GROUP BY agent_id) al ON al.agent_id = a.agent_id
 LEFT JOIN host_vulnerability_counts v ON v.agent_id = a.agent_id
 LEFT JOIN (
     SELECT agent_id, count(*) n FROM vulnerabilities

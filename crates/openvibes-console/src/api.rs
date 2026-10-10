@@ -121,6 +121,9 @@ pub enum Permission {
     /// Change human triage state for compliance findings.
     #[serde(rename = "compliance.triage")]
     ComplianceTriage,
+    /// Change human triage state for vulnerabilities, per host (triage v2).
+    #[serde(rename = "vulnerabilities.triage")]
+    VulnerabilitiesTriage,
     /// Read threat alarms.
     #[serde(rename = "alarms.read")]
     AlarmsRead,
@@ -1333,8 +1336,6 @@ pub struct FindingGroupView {
 pub struct FindingTriageCounts {
     /// Open endpoints.
     pub open: u64,
-    /// Endpoints being investigated.
-    pub investigating: u64,
     /// Mitigated endpoints.
     pub mitigated: u64,
     /// Endpoints accepted as risk.

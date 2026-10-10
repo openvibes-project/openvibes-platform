@@ -5655,7 +5655,6 @@ pub(crate) async fn authenticated_finding_groups(
             older_endpoint_count: g.older_endpoint_count.max(0) as u64,
             triage_counts: crate::FindingTriageCounts {
                 open: g.open.max(0) as u64,
-                investigating: g.investigating.max(0) as u64,
                 mitigated: g.mitigated.max(0) as u64,
                 accepted_risk: g.accepted_risk.max(0) as u64,
                 false_positive: g.false_positive.max(0) as u64,

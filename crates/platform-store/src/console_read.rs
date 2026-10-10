@@ -375,8 +375,6 @@ pub struct FindingGroup {
     /// Per-endpoint triage counts for the in-window endpoints.
     pub open: i64,
     /// Per-endpoint triage counts for the in-window endpoints.
-    pub investigating: i64,
-    /// Per-endpoint triage counts for the in-window endpoints.
     pub mitigated: i64,
     /// Per-endpoint triage counts for the in-window endpoints.
     pub accepted_risk: i64,
@@ -985,7 +983,6 @@ pub async fn finding_groups_in_scope(
                                 AS last_observed_at,
                            count(*) FILTER (WHERE last_observed_at < $1)::bigint AS older_endpoint_count,
                            count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'open')::bigint AS open,
-                           count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'investigating')::bigint AS investigating,
                            count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'mitigated')::bigint AS mitigated,
                            count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'accepted_risk')::bigint AS accepted_risk,
                            count(*) FILTER (WHERE last_observed_at >= $1 AND triage_state = 'false_positive')::bigint AS false_positive
@@ -994,7 +991,7 @@ pub async fn finding_groups_in_scope(
                  )
                  SELECT rule_set_id, rule_id, endpoint_count, severity, latest_message,
                         rule_versions, first_observed_at, last_observed_at,
-                        older_endpoint_count, open, investigating, mitigated,
+                        older_endpoint_count, open, mitigated,
                         accepted_risk, false_positive
                  FROM grouped
                  WHERE ($2::boolean = false OR last_observed_at < $3 OR
@@ -1027,10 +1024,9 @@ pub async fn finding_groups_in_scope(
             last_observed_at: row.get(7),
             older_endpoint_count: row.get(8),
             open: row.get(9),
-            investigating: row.get(10),
-            mitigated: row.get(11),
-            accepted_risk: row.get(12),
-            false_positive: row.get(13),
+            mitigated: row.get(10),
+            accepted_risk: row.get(11),
+            false_positive: row.get(12),
         })
         .collect();
     let next = if items.len() > usize::from(query.limit.0) {

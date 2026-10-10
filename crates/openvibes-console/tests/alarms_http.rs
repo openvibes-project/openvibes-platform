@@ -318,7 +318,8 @@ async fn alarms_are_listed_shown_and_triaged_with_permissions_and_audit() {
     assert_eq!(alarm["triage"]["state"], "open");
     assert_eq!(etag.as_deref(), Some("\"1\""));
     let triage = format!("/api/v1/alarms/{id}/triage");
-    let body = json!({"state": "investigating"});
+    // Triage v2: open goes straight to a completed state, with its note.
+    let body = json!({"state": "mitigated", "note": "test alarm, cleared"});
     // A viewer may read but not triage.
     let (status, _, _) = call(
         &router,
@@ -357,7 +358,7 @@ async fn alarms_are_listed_shown_and_triaged_with_permissions_and_audit() {
     assert_eq!(status, StatusCode::OK, "{saved}");
     assert_eq!(
         (saved["state"].as_str(), etag.as_deref()),
-        (Some("investigating"), Some("\"2\""))
+        (Some("mitigated"), Some("\"2\""))
     );
     let (status, _, _) = call(
         &router,

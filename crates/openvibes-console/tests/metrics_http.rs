@@ -406,7 +406,7 @@ async fn live_values_match_the_summaries_and_lists() {
              'm', now(), now(), 1, '{{}}', '[]', now(), t, 'n'
          FROM unnest(ARRAY['{A}', '{B}']) g,
               unnest(ARRAY['critical', 'high', 'medium', 'low', 'info']) s,
-              unnest(ARRAY['open', 'investigating', 'mitigated', 'false_positive']) t;"
+              unnest(ARRAY['open', 'mitigated', 'false_positive']) t;"
     ));
     for (i, (agent, severity)) in [
         (A, "critical"),
@@ -449,7 +449,7 @@ async fn live_values_match_the_summaries_and_lists() {
                     count(*) FILTER (WHERE l.severity = 'medium'),
                     count(*) FILTER (WHERE l.severity = 'low')
              FROM alarms l JOIN agents a USING (agent_id)
-             WHERE l.state IN ('open', 'investigating')",
+             WHERE l.state = 'open'",
             &[],
         )
         .await
@@ -492,8 +492,8 @@ async fn live_values_match_the_summaries_and_lists() {
     ];
     assert_eq!(
         alarms(""),
-        20,
-        "seed: 2 hosts x 5 severities x 2 active states"
+        10,
+        "seed: 2 hosts x 5 severities x 1 active state (triage v2: open)"
     );
     let (vera, _) = login(&router, "vera").await;
     let mut mismatches = Vec::new();

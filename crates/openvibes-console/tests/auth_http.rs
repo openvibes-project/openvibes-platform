@@ -1238,7 +1238,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
         .header(header::COOKIE, session_cookie.clone()).header(header::ORIGIN, "https://console.example")
         .header("sec-fetch-site", "same-origin").header("x-csrf-token", session["csrf_token"].as_str().unwrap())
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":0},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"investigating","assigned_to":"alice","note":null,"accepted_until":null}"#)).unwrap()).await.unwrap();
+        .body(Body::from(r#"{"changes":[{"agent_id":"agent.00000000-0000-4000-8000-000000000101","version":0},{"agent_id":"agent.00000000-0000-4000-8000-000000000102","version":0}],"state":"open","assigned_to":"alice","note":null,"accepted_until":null}"#)).unwrap()).await.unwrap();
     assert_eq!(bulk.status(), StatusCode::OK);
     let bulk_request_id = bulk
         .headers()
@@ -1285,7 +1285,7 @@ async fn local_login_uses_one_use_preauth_and_returns_an_active_session() {
             .as_array()
             .unwrap()
             .iter()
-            .all(|item| item["triage_state"] == "investigating"
+            .all(|item| item["triage_state"] == "open"
                 && item["triage_version"] == 1
                 && item["assigned_to"] == "alice"
                 && item["accepted_until"].is_null())

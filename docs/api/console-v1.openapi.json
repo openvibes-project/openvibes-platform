@@ -1259,7 +1259,7 @@
           {
             "name": "state",
             "in": "path",
-            "description": "Exact triage state, or `active` (open or investigating).",
+            "description": "Exact triage state, or `active` (open).",
             "required": true,
             "schema": {
               "type": [
@@ -9979,7 +9979,6 @@
         "description": "Number of endpoints in each current finding triage state.",
         "required": [
           "open",
-          "investigating",
           "mitigated",
           "accepted_risk",
           "false_positive"
@@ -9995,12 +9994,6 @@
             "type": "integer",
             "format": "int64",
             "description": "Findings marked as false positives.",
-            "minimum": 0
-          },
-          "investigating": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Endpoints being investigated.",
             "minimum": 0
           },
           "mitigated": {
@@ -10599,6 +10592,7 @@
           "compliance.read",
           "vulnerabilities.read",
           "compliance.triage",
+          "vulnerabilities.triage",
           "alarms.read",
           "cases.read",
           "cases.manage",
