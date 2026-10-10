@@ -118,7 +118,7 @@ export function FindingPanel({ id }: { id: string }) {
       />
       <TriageDetail summary={summary} tab={tab} onTab={setTab} tabs={[
         { key: "hosts", label: `Hosts (${all.length.toLocaleString()})`, body: endpoints.loading && !endpoints.data ? <Loading rows={4} />
-          : <HostsTab kind="compliance" hosts={hosts} cases={cases} title={group.latest_message} severity={group.severity}
+          : <HostsTab key={id} kind="compliance" hosts={hosts} cases={cases} title={group.latest_message} severity={group.severity}
               item={(agentId) => ({ rule_set_id: ruleSetId, rule_id: ruleId, agent_id: agentId })} /> },
         { key: "evidence", label: "Evidence", body: evidence },
         { key: "history", label: "History", body: <HistoryTab showHost query={`kind=compliance&rule_set_id=${encodeURIComponent(ruleSetId)}&rule_id=${encodeURIComponent(ruleId)}`} /> },

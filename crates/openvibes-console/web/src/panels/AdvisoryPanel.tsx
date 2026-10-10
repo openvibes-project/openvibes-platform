@@ -140,7 +140,7 @@ export function AdvisoryPanel({ id }: { id: string }) {
       <TriageDetail summary={summary} tabs={[
         { key: "hosts", label: `Hosts (${all.length.toLocaleString()})`, body: <>
           {detail.data.hosts.more_available && <p className="view-note">Showing the first {all.length.toLocaleString()} hosts.</p>}
-          <HostsTab kind="vulnerabilities" hosts={hosts} cases={cases} title={title} severity={first?.severity ?? "low"}
+          <HostsTab key={id} kind="vulnerabilities" hosts={hosts} cases={cases} title={title} severity={first?.severity ?? "low"}
             item={(agentId) => ({ advisory_id: id, agent_id: agentId })} />
         </> },
         { key: "evidence", label: "Evidence", body: evidence },
