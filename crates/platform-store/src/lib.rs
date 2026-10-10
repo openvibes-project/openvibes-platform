@@ -16,6 +16,7 @@ pub mod alarms_status;
 pub mod assistant;
 /// The append-only audit log.
 pub mod audit;
+pub mod bulk_triage;
 /// CA certificates the platform issues under.
 pub mod ca;
 /// Console reads and triage of threat alarms (P14).
