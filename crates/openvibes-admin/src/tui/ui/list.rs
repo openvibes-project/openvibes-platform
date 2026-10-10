@@ -44,14 +44,19 @@ fn width(spans: &[Span]) -> usize {
     spans.iter().map(|s| s.content.chars().count()).sum()
 }
 
-/// Every row laid out: the line, and which entry it is (if one).
+type Laid = Vec<(Line<'static>, Option<usize>)>;
+
+/// Every row laid out: the line, and which entry it is (if one); also, per
+/// entry, the line of the heading directly above it (if any).
 fn layout(
     theme: &Theme,
     rows: &[Row],
     selected: usize,
     name_w: usize,
-) -> Vec<(Line<'static>, Option<usize>)> {
-    let mut out = Vec::new();
+) -> (Laid, Vec<Option<usize>>) {
+    let mut out: Laid = Vec::new();
+    let mut heads = Vec::new();
+    let mut heading_line = None;
     let mut entry = 0;
     let mut last_was_entry = false;
     for (i, row) in rows.iter().enumerate() {
@@ -73,6 +78,7 @@ fn layout(
                     None,
                 ));
                 last_was_entry = false;
+                heading_line = Some(out.len() - 1);
             }
             Row::Entry { name, value } => {
                 if last_was_entry {
@@ -98,13 +104,18 @@ fn layout(
                             .map(|s| Span::styled(s.content.clone(), s.style.patch(theme.dim()))),
                     );
                 }
+                heads.push(if last_was_entry { None } else { heading_line });
                 out.push((Line::from(spans), Some(entry)));
                 entry += 1;
                 last_was_entry = true;
             }
         }
     }
-    out
+    (out, heads)
+}
+
+fn blank(line: &(Line<'static>, Option<usize>)) -> bool {
+    line.1.is_none() && width(&line.0.spans) == 0
 }
 
 pub fn lines(
@@ -115,20 +126,30 @@ pub fn lines(
     height: u16,
     name_w: usize,
 ) -> Vec<Line<'static>> {
-    let laid = layout(theme, rows, selected, name_w);
+    let (laid, heads) = layout(theme, rows, selected, name_w);
     // Two lines of the height are the hint lines above and below.
     let inner = usize::from(height).saturating_sub(2).max(1);
     let at = laid
         .iter()
         .position(|(_, e)| *e == Some(selected))
         .unwrap_or(0);
-    if at < scroll.top {
-        scroll.top = at;
+    // Scrolling up keeps the heading directly above the entry in view.
+    let first = heads.get(selected).copied().flatten().unwrap_or(at).min(at);
+    if first < scroll.top {
+        scroll.top = first;
     } else if at >= scroll.top + inner {
         scroll.top = at + 1 - inner;
     }
     scroll.top = scroll.top.min(laid.len().saturating_sub(inner));
-    let window = &laid[scroll.top..(scroll.top + inner).min(laid.len())];
+    // The hint lines take the gap lines: never start or end on a blank.
+    if scroll.top < at && blank(&laid[scroll.top]) {
+        scroll.top += 1;
+    }
+    let mut end = (scroll.top + inner).min(laid.len());
+    if end > scroll.top + 1 && blank(&laid[end - 1]) {
+        end -= 1;
+    }
+    let window = &laid[scroll.top..end];
     let above = laid[..scroll.top]
         .iter()
         .filter(|(_, e)| e.is_some())
@@ -150,6 +171,7 @@ pub fn lines(
     let mut out = vec![hint(above, theme.up())];
     out.extend(window.iter().map(|(l, _)| l.clone()));
     out.push(hint(below, theme.down()));
+    out.resize(usize::from(height), Line::raw(""));
     out
 }
 
@@ -224,5 +246,42 @@ mod tests {
             t.iter().any(|l| l.starts_with("  ▸ item2")),
             "going up scrolls back: {t:?}"
         );
+    }
+
+    #[test]
+    fn scrolling_up_keeps_the_heading_on_its_list() {
+        let mut rows = vec![Row::Heading {
+            text: "Services".into(),
+            right: String::new(),
+        }];
+        rows.extend(self::rows(8));
+        let mut scroll = Scroll::default();
+        lines(&theme(), &rows, 7, &mut scroll, 11, 15);
+        let t = text(&lines(&theme(), &rows, 0, &mut scroll, 11, 15));
+        let i = t.iter().position(|l| l.starts_with("  ▸ item0")).unwrap();
+        assert!(t[i - 1].starts_with("    Services"), "{t:?}");
+    }
+
+    #[test]
+    fn no_window_starts_or_ends_on_an_empty_line() {
+        let mut rows = vec![Row::Heading {
+            text: "A".into(),
+            right: String::new(),
+        }];
+        rows.extend(self::rows(4));
+        rows.push(Row::Heading {
+            text: "B".into(),
+            right: String::new(),
+        });
+        rows.extend(self::rows(6));
+        let mut scroll = Scroll::default();
+        for sel in (0..10).chain((0..10).rev()) {
+            let t = text(&lines(&theme(), &rows, sel, &mut scroll, 9, 15));
+            assert!(!t[1].is_empty(), "sel {sel}: {t:?}");
+            if let Some(b) = t.iter().position(|l| l.starts_with("    ⭣")) {
+                assert!(!t[b - 1].is_empty(), "sel {sel}: {t:?}");
+            }
+            assert!(t.iter().any(|l| l.starts_with("  ▸")), "sel {sel}: {t:?}");
+        }
     }
 }

@@ -58,12 +58,27 @@ impl Bar {
     pub fn lines(&self, theme: &Theme, width: u16) -> [Line<'static>; 3] {
         // " │ " + content + " │" fills the box, which is `width - 1` wide.
         let inner = usize::from(width.saturating_sub(6));
-        let (left, right) = self.parts(theme);
-        let used: usize = left
-            .iter()
-            .chain(&right)
-            .map(|s| s.content.chars().count())
-            .sum();
+        let (mut left, mut right) = self.parts(theme);
+        let len = |spans: &[Span]| {
+            spans
+                .iter()
+                .map(|s| s.content.chars().count())
+                .sum::<usize>()
+        };
+        // Too long: drop the right group, then cut the left with "…".
+        if len(&left) + len(&right) + 1 > inner {
+            right.clear();
+        }
+        if len(&left) + 1 > inner {
+            let mut room = inner.saturating_sub(2);
+            for span in &mut left {
+                let n = span.content.chars().count().min(room);
+                span.content = span.content.chars().take(n).collect::<String>().into();
+                room -= n;
+            }
+            left.push(Span::raw("…"));
+        }
+        let used = len(&left) + len(&right);
         let mut spans = vec![
             Span::raw(" "),
             Span::styled("│", theme.dim()),
@@ -268,5 +283,17 @@ mod tests {
     fn plain_arrows_on_the_linux_console() {
         let t = text(&Bar::keys(&[]).lines(&Theme::new(None, Some("linux")), 80));
         assert!(t[1].contains(" ↑↓  Move"), "{:?}", t[1]);
+    }
+
+    #[test]
+    fn an_overlong_question_stays_inside_the_box() {
+        let bar = Bar::Ask {
+            question: "Really do this very long thing?".repeat(4),
+            detail: "x".into(),
+            yes: true,
+        };
+        let t = text(&bar.lines(&plain(), 80));
+        assert_eq!(t[1].chars().count(), 79, "{:?}", t[1]);
+        assert!(t[1].ends_with('│') && t[1].contains('…'), "{:?}", t[1]);
     }
 }
