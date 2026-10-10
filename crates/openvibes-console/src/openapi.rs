@@ -293,6 +293,7 @@ use crate::{
         crate::assistant::AssistantMessageRequest,
         crate::assistant::AssistantSegment,
         crate::assistant::AssistantLookup,
+        crate::assistant::AssistantInternetSource,
         crate::assistant::AssistantMessageResponse,
         crate::assistant::AssistantStatusResponse,
         crate::about::AboutResponse,

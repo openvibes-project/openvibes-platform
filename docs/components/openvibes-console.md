@@ -67,6 +67,13 @@ internal data", "the internet lookup limit is reached; try again later", "OSV
 could not be reached; this answer uses local data only"). Results are marked
 `"outside_data": true`, items are labelled `[web:N]` with the URL as plain
 text. Test: `cargo test -p openvibes-console assistant::internet_tests`.
+An answer response also carries `internet: [{kind, text, url?}]`, one entry
+per `reference` ("Looked up ID on osv.dev" or bodhi.fedoraproject.org for
+`FEDORA-` IDs, with the source's own page as `url`) or `web_search`
+("Searched the web for: …", no link) lookup that found something; built from
+the validated lookup record, never from fetched text. The assistant dock
+lists them under the answer; links open in a new tab with
+`rel="noopener noreferrer"`.
 The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)
 switches the two levels: "Look up security references" and "Search the web"
 (enabled only while level 1 is on). Turning a level on opens a confirmation

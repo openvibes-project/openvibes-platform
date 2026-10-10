@@ -623,7 +623,15 @@ impl<R: LookupRunner> Run<'_, R> {
     /// They do not count against `max_lookups`.
     async fn prefetch(&mut self, question: &str) {
         let native = self.settings.mode == ResolvedMode::Native;
-        for (index, (name, arguments)) in prefetch::plan(question).into_iter().enumerate() {
+        // The internet level is what the console offers as tools.
+        let offered = |name: &str| self.tools.iter().any(|t| t.name == name);
+        let internet = if offered(INTERNET_NAMES[1]) {
+            2
+        } else {
+            u8::from(offered(INTERNET_NAMES[0]))
+        };
+        for (index, (name, arguments)) in prefetch::plan(question, internet).into_iter().enumerate()
+        {
             let left = self.settings.max_lookups + 1;
             let (text, lookup) = self.lookup(name, &arguments.to_string(), left).await;
             let Some(lookup) = lookup else { continue };

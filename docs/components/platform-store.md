@@ -383,7 +383,8 @@ text filter on rule, rule set, and latest message with `LIKE` wildcards
 escaped; minimum severity), `finding_endpoints` (in-window endpoints and the
 count not seen in the window), `agent_summaries` (by agent ID or
 case-insensitive host name), `host_vulnerabilities` (open, by priority),
-`vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
+`vulnerable_hosts` (by CVE or advisory; each host carries the open row's
+`packages` `{name, installed, fixed}`), and `overview`. A finding with an
 unrecognised severity reports `unknown`. Nothing writes.
 
 `assistant_inventory::…` adds the same kind of reads for ports, services

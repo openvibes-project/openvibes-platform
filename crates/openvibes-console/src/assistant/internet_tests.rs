@@ -196,3 +196,57 @@ async fn failures_become_notes() {
     assert_eq!(blocked.calls(), 1);
     db.drop().await;
 }
+
+fn record(name: &'static str, arguments: Value, found: bool) -> platform_assistant::LookupRecord {
+    platform_assistant::LookupRecord {
+        name: Some(name),
+        arguments,
+        objects: 1,
+        found,
+        error: None,
+    }
+}
+
+#[test]
+fn the_sources_line_is_built_from_ids_and_queries_only() {
+    use serde_json::json;
+    let sources = super::internet_sources(&[
+        record("reference", json!({ "id": "CVE-2024-6387" }), true),
+        record("reference", json!({ "id": "FEDORA-2026-6261b26f4e" }), true),
+        record("reference", json!({ "id": "CVE-2024-0001" }), false),
+        record(
+            "web_search",
+            json!({ "query": "CVE-2024-6387 mitigation workaround" }),
+            true,
+        ),
+        record(
+            "vulnerability_hosts",
+            json!({ "id": "CVE-2024-6387" }),
+            true,
+        ),
+    ]);
+    let shown: Vec<_> = sources
+        .iter()
+        .map(|s| (s.kind, s.text.as_str(), s.url.as_deref()))
+        .collect();
+    assert_eq!(
+        shown,
+        [
+            (
+                "reference",
+                "Looked up CVE-2024-6387 on osv.dev",
+                Some("https://osv.dev/vulnerability/CVE-2024-6387")
+            ),
+            (
+                "reference",
+                "Looked up FEDORA-2026-6261b26f4e on bodhi.fedoraproject.org",
+                Some("https://bodhi.fedoraproject.org/updates/FEDORA-2026-6261b26f4e")
+            ),
+            (
+                "search",
+                "Searched the web for: CVE-2024-6387 mitigation workaround",
+                None
+            ),
+        ]
+    );
+}

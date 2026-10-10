@@ -356,10 +356,63 @@ pub(crate) struct AssistantLookup {
     pub(crate) error: Option<String>,
 }
 
+/// One outside lookup the answer used, shown under it. The link is built
+/// here from the ID, never from fetched text.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+pub(crate) struct AssistantInternetSource {
+    /// `reference` or `search`.
+    pub(crate) kind: &'static str,
+    pub(crate) text: String,
+    pub(crate) url: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub(crate) struct AssistantMessageResponse {
     pub(crate) segments: Vec<AssistantSegment>,
     pub(crate) lookups: Vec<AssistantLookup>,
+    pub(crate) internet: Vec<AssistantInternetSource>,
+}
+
+/// The internet lookups that found something, as the sources line. The
+/// source follows the ID as `openvibes-fetch` chooses it (Fedora updates
+/// from Bodhi, everything else from OSV).
+pub(crate) fn internet_sources(
+    records: &[platform_assistant::LookupRecord],
+) -> Vec<AssistantInternetSource> {
+    records
+        .iter()
+        .filter(|r| r.found && r.error.is_none())
+        .filter_map(|r| match (r.name, r.arguments.as_object()) {
+            (Some("reference"), Some(args)) => {
+                let id = args.get("id")?.as_str()?;
+                let (source, url) = if id.starts_with("FEDORA-") {
+                    (
+                        "bodhi.fedoraproject.org",
+                        format!(
+                            "https://bodhi.fedoraproject.org/updates/{}",
+                            encode_component(id)
+                        ),
+                    )
+                } else {
+                    (
+                        "osv.dev",
+                        format!("https://osv.dev/vulnerability/{}", encode_component(id)),
+                    )
+                };
+                Some(AssistantInternetSource {
+                    kind: "reference",
+                    text: format!("Looked up {id} on {source}"),
+                    url: Some(url),
+                })
+            }
+            (Some("web_search"), Some(args)) => Some(AssistantInternetSource {
+                kind: "search",
+                text: format!("Searched the web for: {}", args.get("query")?.as_str()?),
+                url: None,
+            }),
+            _ => None,
+        })
+        .collect()
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]

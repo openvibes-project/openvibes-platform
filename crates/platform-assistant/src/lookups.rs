@@ -1078,6 +1078,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                             "title": h.title,
                             "first_seen": time(h.first_seen_at),
                             "reboot_needed": h.reboot_needed,
+                            "packages": h.packages,
                         })
                     })
                     .collect();

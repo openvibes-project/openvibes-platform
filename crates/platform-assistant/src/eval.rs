@@ -585,6 +585,7 @@ impl Source for FleetSource {
                 title: a.title.clone(),
                 first_seen_at: v.first,
                 reboot_needed: v.reboot_needed,
+                packages: serde_json::json!([]),
             })
             .collect();
         rows.sort_by(|a, b| {

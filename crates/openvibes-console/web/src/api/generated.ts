@@ -2056,6 +2056,16 @@ export interface components {
              */
             version: number;
         };
+        /**
+         * @description One outside lookup the answer used, shown under it. The link is built
+         *     here from the ID, never from fetched text.
+         */
+        AssistantInternetSource: {
+            /** @description `reference` or `search`. */
+            kind: string;
+            text: string;
+            url?: string | null;
+        };
         AssistantLookup: {
             error?: string | null;
             name?: string | null;
@@ -2066,6 +2076,7 @@ export interface components {
             question: string;
         };
         AssistantMessageResponse: {
+            internet: components["schemas"]["AssistantInternetSource"][];
             lookups: components["schemas"]["AssistantLookup"][];
             segments: components["schemas"]["AssistantSegment"][];
         };

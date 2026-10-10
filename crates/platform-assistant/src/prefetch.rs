@@ -16,6 +16,18 @@ use serde_json::{Value, json};
 
 /// Most lookups run before the model's first turn.
 pub const MAX_PREFETCH: usize = 2;
+/// A mitigation question may run one more: local hosts, reference, search.
+const MAX_MITIGATION_PREFETCH: usize = 3;
+
+/// Words of a question about how to mitigate or fix.
+const MITIGATION: [&str; 6] = [
+    "mitigat",
+    "fix",
+    "patch",
+    "workaround",
+    "remediat",
+    "protect against",
+];
 
 /// Words of a broad prioritising question.
 const PRIORITY: [&str; 6] = [
@@ -28,37 +40,57 @@ const PRIORITY: [&str; 6] = [
 ];
 
 /// The lookups to run first for `question`: `(name, arguments)`, at most
-/// [`MAX_PREFETCH`], without duplicates.
+/// [`MAX_PREFETCH`], without duplicates. `internet` is the level the user
+/// may use (0 none, 1 reference, 2 reference and search); a question about
+/// mitigating one named ID then also gets its reference and a search
+/// (`"<ID> mitigation workaround"`, built here), three lookups in all.
 #[must_use]
-pub fn plan(question: &str) -> Vec<(&'static str, Value)> {
+pub fn plan(question: &str, internet: u8) -> Vec<(&'static str, Value)> {
     let mut out: Vec<(&'static str, Value)> = Vec::new();
-    let mut add = |name: &'static str, arguments: Value| {
-        if out.len() < MAX_PREFETCH && !out.iter().any(|(n, a)| *n == name && *a == arguments) {
+    let mut max = MAX_PREFETCH;
+    let mut add = |name: &'static str, arguments: Value, max: usize| {
+        if out.len() < max && !out.iter().any(|(n, a)| *n == name && *a == arguments) {
             out.push((name, arguments));
         }
     };
     let (context, rest) = context(question);
     if let Some((kind, id)) = context {
         match kind {
-            "advisory" => add("vulnerability_hosts", json!({ "id": id })),
-            "agent" => add("agent_summary", json!({ "agent": id })),
+            "advisory" => add("vulnerability_hosts", json!({ "id": id }), max),
+            "agent" => add("agent_summary", json!({ "agent": id }), max),
             "finding" => {
                 if let Some((set, rule)) = id.split_once('/') {
                     add(
                         "finding_endpoints",
                         json!({ "rule_set": set, "rule": rule }),
+                        max,
                     );
                 }
             }
             _ => {}
         }
     }
-    for id in ids(rest) {
-        add("vulnerability_hosts", json!({ "id": id }));
+    let named = ids(rest);
+    for id in &named {
+        add("vulnerability_hosts", json!({ "id": id }), max);
     }
     let lower = rest.to_lowercase();
+    if let (Some(id), true) = (
+        named.first(),
+        internet > 0 && MITIGATION.iter().any(|w| lower.contains(w)),
+    ) {
+        max = MAX_MITIGATION_PREFETCH;
+        add("reference", json!({ "id": id }), max);
+        if internet > 1 {
+            add(
+                "web_search",
+                json!({ "query": format!("{id} mitigation workaround") }),
+                max,
+            );
+        }
+    }
     if PRIORITY.iter().any(|w| lower.contains(w)) {
-        add("fleet_overview", json!({}));
+        add("fleet_overview", json!({}), max);
     }
     out
 }
@@ -112,7 +144,7 @@ mod tests {
     fn the_attached_advisory_and_a_named_one_are_looked_up() {
         let q = "About advisory FEDORA-2026-bcdfa4c7db (chromium-154.0): Isn't FEDORA-2026-6261b26f4e critical?";
         assert_eq!(
-            plan(q),
+            plan(q, 0),
             [
                 (
                     "vulnerability_hosts",
@@ -129,25 +161,26 @@ mod tests {
     #[test]
     fn a_fix_first_question_gets_the_overview() {
         assert_eq!(
-            plan("What should I fix first?"),
+            plan("What should I fix first?", 0),
             [("fleet_overview", json!({}))]
         );
         assert_eq!(
-            plan("How do I prioritise?"),
+            plan("How do I prioritise?", 0),
             [("fleet_overview", json!({}))]
         );
-        assert!(plan("Which hosts are offline?").is_empty());
+        assert!(plan("Which hosts are offline?", 0).is_empty());
     }
 
     #[test]
     fn hosts_and_findings_attached_are_looked_up() {
         assert_eq!(
-            plan("About agent agent.1 (web-01): what is wrong?"),
+            plan("About agent agent.1 (web-01): what is wrong?", 0),
             [("agent_summary", json!({ "agent": "agent.1" }))]
         );
         assert_eq!(
             plan(
-                "About finding baseline/port.ssh.exposed (port.ssh.exposed SSH (port 22): open): fix?"
+                "About finding baseline/port.ssh.exposed (port.ssh.exposed SSH (port 22): open): fix?",
+                0
             ),
             [(
                 "finding_endpoints",
@@ -169,7 +202,7 @@ mod tests {
             ]
         );
         assert_eq!(
-            plan("CVE-2026-1234 or CVE-2026-1234?").len(),
+            plan("CVE-2026-1234 or CVE-2026-1234?", 0).len(),
             1,
             "no duplicates"
         );
@@ -179,12 +212,49 @@ mod tests {
     #[test]
     fn at_most_two_and_a_bare_about_is_a_question() {
         assert_eq!(
-            plan("Fix first: CVE-2026-0001, CVE-2026-0002, CVE-2026-0003").len(),
+            plan("Fix first: CVE-2026-0001, CVE-2026-0002, CVE-2026-0003", 0).len(),
             MAX_PREFETCH
         );
         assert_eq!(
-            plan("About my servers: what should I fix first?"),
+            plan("About my servers: what should I fix first?", 0),
             [("fleet_overview", json!({}))]
+        );
+    }
+
+    #[test]
+    fn a_mitigation_question_gathers_local_then_reference_then_search() {
+        let q = "How do I mitigate CVE-2024-6387?";
+        assert_eq!(
+            plan(q, 0),
+            [("vulnerability_hosts", json!({ "id": "CVE-2024-6387" }))]
+        );
+        assert_eq!(
+            plan(q, 1),
+            [
+                ("vulnerability_hosts", json!({ "id": "CVE-2024-6387" })),
+                ("reference", json!({ "id": "CVE-2024-6387" })),
+            ]
+        );
+        assert_eq!(
+            plan(q, 2),
+            [
+                ("vulnerability_hosts", json!({ "id": "CVE-2024-6387" })),
+                ("reference", json!({ "id": "CVE-2024-6387" })),
+                (
+                    "web_search",
+                    json!({ "query": "CVE-2024-6387 mitigation workaround" })
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn viewers_get_no_internet() {
+        // The console passes level 0 for a user without assistant internet access.
+        assert!(
+            plan("How do I patch CVE-2024-6387?", 0)
+                .iter()
+                .all(|(n, _)| *n == "vulnerability_hosts")
         );
     }
 }

@@ -3146,6 +3146,8 @@ pub(crate) async fn authenticated_assistant_message(
             user_permit,
             capacity_permit,
         ));
+    // The same level decides the offered tools and the mitigation prefetch
+    // (the orchestrator reads it from the tools).
     let extra_tools = platform_assistant::lookups::internet_specs(
         crate::assistant_internet::current_level(&state.pool).await,
     );
@@ -3265,6 +3267,7 @@ pub(crate) async fn authenticated_assistant_message(
                 error: lookup.error.map(|error| error.message().to_owned()),
             })
             .collect(),
+        internet: crate::assistant::internet_sources(&answer.lookups),
     };
     let mut response = (StatusCode::OK, Json(response)).into_response();
     response

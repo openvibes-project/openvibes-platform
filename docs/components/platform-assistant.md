@@ -119,7 +119,15 @@ asked: the object the user attached (`About advisory|agent|finding ID
 `agent_summary` or `finding_endpoints`), advisory and CVE IDs written in the
 question (`vulnerability_hosts`), and `fleet_overview` for a "what to fix
 first" question. They run like the model's own lookups (scope, size,
-citations) and do not count against `max_lookups`.
+citations) and do not count against `max_lookups`. `plan(question, internet)`
+takes the level the console offers (read from the offered tools; 0 for a user
+without internet access). A question with a mitigation word (`mitigat`, `fix`,
+`patch`, `workaround`, `remediat`, `protect against`) that names an ID, at
+level 1 or 2, also gets `reference {id}` and, at level 2, `web_search
+{"<ID> mitigation workaround"}` (built by code): three lookups instead of
+two. The internet ones go through the console runner like the model's own
+(rate limit, audit, notes). `vulnerability_hosts` lists each host's
+`packages` (`{name, installed, fixed}`) so the model sees the fixed versions.
 
 Modes (from the probe): **native** offers the lookups as tools; **JSON
 schema** constrains each reply to `{"action":"lookup",...}` or

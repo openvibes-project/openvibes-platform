@@ -497,3 +497,22 @@ async fn vulnerable_hosts_carry_the_advisory() {
     assert_eq!(hosts.items[0].title, "openssh fix");
     db.drop().await;
 }
+
+/// The open row's packages reach the assistant, so it can say which version fixes.
+#[tokio::test]
+async fn vulnerable_hosts_carry_the_packages_with_their_fixed_versions() {
+    let (db, client, _) = seed().await;
+    client
+        .execute(
+            "UPDATE vulnerabilities SET packages = '[{\"name\":\"openssh\",\"installed\":\"9.6\",\"fixed\":\"9.8\"}]'",
+            &[],
+        )
+        .await
+        .unwrap();
+    let hosts = assistant::vulnerable_hosts(&client, &in_scope(), "FEDORA-2026-1", 10)
+        .await
+        .unwrap();
+    assert_eq!(hosts.items[0].packages[0]["fixed"], "9.8");
+    assert_eq!(hosts.items[0].packages[0]["name"], "openssh");
+    db.drop().await;
+}

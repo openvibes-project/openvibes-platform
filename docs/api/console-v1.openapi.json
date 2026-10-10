@@ -8453,6 +8453,29 @@
           }
         }
       },
+      "AssistantInternetSource": {
+        "type": "object",
+        "description": "One outside lookup the answer used, shown under it. The link is built\nhere from the ID, never from fetched text.",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`reference` or `search`."
+          },
+          "text": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "AssistantLookup": {
         "type": "object",
         "required": [
@@ -8499,9 +8522,16 @@
         "type": "object",
         "required": [
           "segments",
-          "lookups"
+          "lookups",
+          "internet"
         ],
         "properties": {
+          "internet": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantInternetSource"
+            }
+          },
           "lookups": {
             "type": "array",
             "items": {

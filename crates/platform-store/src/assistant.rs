@@ -430,6 +430,8 @@ pub struct VulnerableHost {
     pub first_seen_at: DateTime<Utc>,
     /// Fix installed, reboot needed.
     pub reboot_needed: bool,
+    /// The open row's packages, each `{name, installed, fixed}`.
+    pub packages: serde_json::Value,
 }
 
 /// Hosts in scope with an open vulnerability for `cve_or_advisory` (a CVE
@@ -443,7 +445,7 @@ pub async fn vulnerable_hosts(
     let rows = client
         .query(
             "SELECT v.agent_id, g.hostname, v.advisory_id, v.first_seen_at, v.reboot_needed,
-                    count(*) OVER (), a.severity, a.title
+                    count(*) OVER (), a.severity, a.title, v.packages
              FROM vulnerabilities v JOIN agents g ON g.agent_id = v.agent_id
              JOIN advisories a ON a.advisory_id = v.advisory_id
              WHERE v.fixed_at IS NULL
@@ -467,6 +469,7 @@ pub async fn vulnerable_hosts(
                 title: row.get(7),
                 first_seen_at: row.get(3),
                 reboot_needed: row.get(4),
+                packages: row.get(8),
             })
             .collect(),
     })

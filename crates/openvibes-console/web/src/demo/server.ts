@@ -4,7 +4,7 @@
 // keeps mutations in memory for the life of the page.
 import { validDomain, validSearxngUrl } from "../views/assistantRules";
 import type {
-  Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
+  Agent, AssistantInternetSource, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
   Severity, TriageCounts, Vulnerability,
 } from "../api/types";
 import { caseSeverityOf, createCaseStore, seedCases } from "./cases";
@@ -144,6 +144,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const assistant = (question: string): AssistantSegment[] => {
     const q = question.toLowerCase();
     const text = (value: string): AssistantSegment => ({ kind: "text", text: value });
+    if (internetSources(question).length > 0) {
+      return [text("Update OpenSSH to the fixed version and restart sshd; until then, set LoginGraceTime 0 to limit exposure. This is the demo assistant; it answers from synthetic data only.")];
+    }
     const cite = (target_kind: string, id: string): AssistantSegment => ({ kind: "citation", target_kind, id, path: "" });
     if (q.includes("stale") || q.includes("offline") || q.includes("contact")) {
       const stale = data.agents.filter((agent) => agent.status === "stale" && visible(agent.id)).slice(0, 4);
@@ -166,6 +169,17 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const top = groups()[0];
     return [text("Start with the most severe open compliance finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(`. ${top.latest_message} Open on ${top.triage_counts.open} ${top.triage_counts.open === 1 ? "host" : "hosts"}.`)] : []),
       text(" This is the demo assistant; it answers from synthetic data only.")];
+  };
+
+  // A mitigation question about a CVE shows the sources line, as the real
+  // assistant does when internet lookups are on.
+  const internetSources = (question: string): AssistantInternetSource[] => {
+    const id = /CVE-\d{4}-\d{4,}/.exec(question)?.[0];
+    if (id === undefined || !/mitigat|fix|patch|workaround|remediat|protect against/i.test(question)) return [];
+    return [
+      { kind: "reference", text: `Looked up ${id} on osv.dev`, url: `https://osv.dev/vulnerability/${id}` },
+      { kind: "search", text: `Searched the web for: ${id} mitigation workaround`, url: null },
+    ];
   };
 
   const routes: Route[] = [];
@@ -924,7 +938,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
 
   route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: true, model: "demo (synthetic answers)", location: "in your browser" }));
   route("POST", "/api/v1/assistant/messages", "assistant.use", (_, __, body) =>
-    json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }] }));
+    json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }], internet: internetSources(String(body.question ?? "")) }));
 
   const dashboards = createDashboardStore(
     data.dashboards,

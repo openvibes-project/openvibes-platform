@@ -3,13 +3,14 @@
 import { useSyncExternalStore } from "react";
 
 import { ApiError, request } from "../api/client";
-import type { AssistantReply, AssistantSegment } from "../api/types";
+import type { AssistantInternetSource, AssistantReply, AssistantSegment } from "../api/types";
 import type { PanelRef } from "./location";
 
 export type Turn = {
   question: string;
   context: PanelRef | null;
   segments: AssistantSegment[] | undefined;
+  internet?: AssistantInternetSource[];
   error: string | undefined;
 };
 
@@ -55,6 +56,7 @@ export const assistant = {
     try {
       const reply = await request<AssistantReply>("POST", "/api/v1/assistant/messages", { question: sent, history });
       turn.segments = reply.segments;
+      turn.internet = reply.internet;
     } catch (error) {
       turn.error = error instanceof ApiError ? error.message : "The assistant is unavailable";
     }
