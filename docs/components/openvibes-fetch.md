@@ -33,7 +33,7 @@ Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
   contains `://`, `scheme:/`, `scheme:\` or a percent-encoded `%XX`;
   contains full-width characters (U+FF00-U+FFEF) or non-ASCII digits; contains
   a deny term (agent IDs, host and user names, internal domains) as a whole
-  word (not embedded in a longer `[a-z0-9_]` word, so user `al` does not block
+  word (not embedded in a longer `[a-z0-9]` word, so user `al` does not block
   "algorithm", host `db` does not block "mongodb", but `web-01.corp.example`
   and `mail.corp.example` are caught); or contains an address. Addresses are
   found by scanning maximal runs of address characters, whatever surrounds
@@ -43,7 +43,7 @@ Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
   bracketed), MAC (`:` or `-` separated, or Cisco `aabb.ccdd.eeff`).
   Defanged forms (`10[.]0[.]0[.]5`, `(.)`, `[dot]`) are normalised first;
   Mathematical Alphanumeric Symbols are refused like full-width characters;
-  a deny term is a word even next to `_`; a Windows path `c:\\dir` is not a URL.
+  a deny term is a word; a Windows path `c:\\dir` is not a URL.
   Plain words such as `www.example.org` or `std::vector` are not refused.
 
 ## Residual risks

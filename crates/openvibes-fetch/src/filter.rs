@@ -48,7 +48,10 @@ pub fn check_query(query: &str, deny: &[String]) -> Result<(), Refusal> {
         || q.as_bytes()
             .windows(3)
             .any(|w| w[0] == b'%' && w[1].is_ascii_hexdigit() && w[2].is_ascii_hexdigit())
-        || deny.iter().any(|d| has_word(&q, &d.to_lowercase()))
+        || deny.iter().any(|d| {
+            let d = d.to_lowercase();
+            has_word(&q, &d) || has_word(&n, &d)
+        })
         || runs(&n, |c| c.is_ascii_digit() || c == '.').any(|(_, r)| is_ipv4(r))
         || runs(&n, |c| c.is_ascii_hexdigit() || c == ':' || c == '.')
             .any(|(i, r)| is_ipv6(&n, i, r))
@@ -130,9 +133,10 @@ fn is_ipv4(run: &str) -> bool {
     })
 }
 
-/// Any sub-run of a hex/colon/dot run, starting at the run start or at/after
-/// a colon and not glued to a preceding letter, that parses as IPv6
-/// (so `ip:fe80::1`, `fe80::` and `::1` are caught, `std::vector` is not).
+/// Any sub-run of a hex/colon/dot run that parses as IPv6 (`ip:fe80::1`,
+/// `fe80::`, `::1`). A sub-run glued to a preceding letter or digit must start
+/// with a 4-digit group (or have 8 groups), reach the end of the run and be
+/// followed by a non-alphanumeric: `srcfe80::1` is caught, `std::dead` is not.
 fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
     if run.matches(':').count() < 2 {
         return false;
@@ -143,9 +147,12 @@ fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
             .next_back()
             .is_some_and(|c| c.is_ascii_alphanumeric())
     };
-    // Glued to a preceding word, a candidate must look like real IPv6 (a
-    // 4-digit group or all 8 groups): `srcfe80::1` yes, `std::bad` no.
-    let strong = |c: &str| c.matches(':').count() == 7 || c.split(':').any(|g| g.len() == 4);
+    let ends_word = !q[off + run.len()..]
+        .chars()
+        .next()
+        .is_some_and(|c| c.is_ascii_alphanumeric());
+    let strong =
+        |c: &str| c.matches(':').count() == 7 || c.split(':').next().is_some_and(|g| g.len() == 4);
     (0..run.len()).any(|s| {
         let g = glued(off + s);
         !(g && run.as_bytes()[s] == b':')
@@ -153,7 +160,7 @@ fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
                 let c = &run[s..e];
                 c.bytes().any(|b| b.is_ascii_hexdigit())
                     && c.matches(':').count() >= 2
-                    && (!g || strong(c))
+                    && (!g || (e == run.len() && ends_word && strong(c)))
                     && c.parse::<Ipv6Addr>().is_ok()
             })
     })
@@ -316,6 +323,27 @@ mod tests {
             assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
         }
         blocked(&["file:/etc/passwd", "https:\\\\x"], &deny());
+    }
+    #[test]
+    fn round_three() {
+        for q in [
+            "Self::default",
+            "Arc::default",
+            "Rc::default",
+            "u32::default",
+            "i64::default",
+            "std::decay_t",
+            "std::decay_t error",
+            "std::dead",
+        ] {
+            assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
+        }
+        blocked(
+            &["srcfe80::1", "x2001:db8:1:2:3:4:5:6", "hostfe80::1%eth0"],
+            &deny(),
+        );
+        let d = vec!["corp.example".to_string()];
+        blocked(&["mail[.]corp[.]example", "corp[dot]example"], &d);
     }
     #[test]
     fn only_public_ids_go_to_level_one() {
