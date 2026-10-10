@@ -4,3 +4,4 @@
 
 pub mod theme;
 pub mod logo;
+pub mod bar;
