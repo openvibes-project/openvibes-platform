@@ -160,3 +160,34 @@ async fn a_day_without_a_partition_is_skipped_not_fatal() {
     assert_eq!((done.stored, done.unstorable), (1, 1));
     db.drop().await;
 }
+#[tokio::test]
+async fn console_alarm_reads_do_not_see_device_alarms() {
+    let (db, device) = setup().await;
+    let mut c = as_netlog(&db).await;
+    device_alarms::insert_batch(&mut c, &[alarm(device, 1)], Utc::now())
+        .await
+        .unwrap();
+    let admin = db.pool.get().await.unwrap();
+    let id: i64 = admin
+        .query_one("SELECT id FROM alarms", &[])
+        .await
+        .unwrap()
+        .get(0);
+    // The console's alarm list and detail (inner join on agents).
+    use platform_store::{console_alarms, console_read::AgentScope};
+    let filters = console_alarms::AlarmFilters {
+        suppressed: true,
+        ..Default::default()
+    };
+    let page = console_alarms::list(&admin, &AgentScope::Global, &filters, None, 50)
+        .await
+        .unwrap();
+    assert!(page.is_empty());
+    assert!(
+        console_alarms::detail(&admin, &AgentScope::Global, id)
+            .await
+            .unwrap()
+            .is_none()
+    );
+    db.drop().await;
+}
