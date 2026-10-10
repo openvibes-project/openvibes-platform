@@ -15,6 +15,14 @@ export function useCaseBadges(kind: Kind): Map<string, number[]> {
   return useMemo(() => caseBadges(active.data?.items ?? [], kind === "alarm" ? (ref) => ref : afterAgent), [active.data, kind]);
 }
 
+/** Per host: the open cases holding this rule's or advisory's item on it
+ * (`subject`: `rule_set/rule` or the advisory id). */
+export function useHostCaseBadges(kind: Exclude<Kind, "alarm">, subject: string): Map<string, number[]> {
+  const { can } = useSession();
+  const active = useResource<{ items: { ref: string; case_number: number }[] }>(can("cases.read") ? `/api/v1/cases/active-items?kind=${kind}` : null);
+  return useMemo(() => caseBadges((active.data?.items ?? []).filter((i) => afterAgent(i.ref) === subject), (ref) => ref.slice(0, ref.indexOf("/"))), [active.data, subject]);
+}
+
 export function CaseBadge({ numbers }: { numbers: number[] | undefined }) {
   const [first, ...rest] = numbers ?? [];
   if (first === undefined) return null;

@@ -972,6 +972,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   route("GET", "/api/v1/cases/for-item", "cases.read", (_, query) => send(cases.forItem(query)));
   route("GET", "/api/v1/cases/assignees", "cases.manage", () => send(cases.assignees()));
   route("GET", "/api/v1/cases/active-items", "cases.read", (_, query) => send(cases.activeItems(query)));
+  // ponytail: the demo keeps no triage history; record changes here if the
+  // demo's History tab should show them.
+  route("GET", "/api/v1/triage-history", null, () => json({ items: [] }));
 
   // Bulk triage (triage v2): the same rules as one item, applied to each;
   // what cannot change is skipped with the reason.

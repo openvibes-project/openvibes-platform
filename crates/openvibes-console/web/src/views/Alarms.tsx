@@ -70,7 +70,7 @@ async function closeAndQuiet(alarmId: string, scope: string, note: string): Prom
   await quiet(alarmId, scope, note);
 }
 
-function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
+export function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
   const { can } = useSession();
   const [scope, setScope] = useState("");
   const scopes = quietScopes.filter((s) => can("alarms.suppress", s.global));

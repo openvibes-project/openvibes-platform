@@ -30,10 +30,11 @@ const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISO
 
 /** `items` builds the request's rows when an action is confirmed; `noun`
  * names them ("alarms"); `newCase` prefills a new case; `partial` says the
- * list holds only its first results. */
-export function BulkBar({ kind, noun, count, items, newCase, partial, onClear }: {
+ * list holds only its first results. `inline`: the detail view's action
+ * row, acting on every open host, with no count or Clear. */
+export function BulkBar({ kind, noun, count, items, newCase, partial, onClear, inline }: {
   kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
-  newCase: () => { title: string; severity?: string | undefined }; partial?: boolean; onClear: () => void;
+  newCase: () => { title: string; severity?: string | undefined }; partial?: boolean; onClear: () => void; inline?: boolean;
 }) {
   const { can } = useSession();
   const [choice, setChoice] = useState<Choice | null>(null);
@@ -42,13 +43,13 @@ export function BulkBar({ kind, noun, count, items, newCase, partial, onClear }:
     ...(can("cases.manage") ? [{ action: "case" as const, label: "Add to case…" }] : []),
     ...(kind === "alarms" && can("alarms.suppress", true) ? [{ action: "suppress" as const, label: "Suppress…" }] : [])];
   return (
-    <div className="bulk-bar bulk-bar--bottom" role="region" aria-label="Bulk actions">
-      <strong className="num">{count.toLocaleString()} selected</strong>
+    <div className={inline ? "row row--wrap" : "bulk-bar bulk-bar--bottom"} role="region" aria-label={inline ? "Triage actions" : "Bulk actions"}>
+      {!inline && <strong className="num">{count.toLocaleString()} selected</strong>}
       {partial && <span className="subtle">(of the first results only)</span>}
       {choices.map((c) => (
         <button key={c.label} type="button" className="button button--small" onClick={() => setChoice(c)}>{c.label}</button>
       ))}
-      <button type="button" className="button button--small button--ghost" onClick={onClear}>Clear</button>
+      {!inline && <button type="button" className="button button--small button--ghost" onClick={onClear}>Clear</button>}
       {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase}
         onClose={() => setChoice(null)} onDone={onClear} />}
     </div>

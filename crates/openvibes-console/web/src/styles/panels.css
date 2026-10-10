@@ -370,3 +370,8 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .bulk-dialog h2 { font-size: 15px; margin: 0; }
 /* In a list view the bar sits at the bottom, over the rows (spec §3). */
 .bulk-bar--bottom { top: auto; bottom: 12px; margin: 8px 12px; box-shadow: var(--shadow-3); }
+/* The detail view's tabs (triage v2): a segmented control under the
+   summary; the tab's table scrolls with the panel, never cut off (#239). */
+.detail-tabs { padding: 8px 16px; border-top: 1px solid var(--line); }
+.detail-tab__filters { padding: 8px 16px; }
+.detail-history { padding: 0 8px 16px; }

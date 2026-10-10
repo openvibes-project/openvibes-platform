@@ -5310,20 +5310,8 @@ pub(crate) async fn authenticated_vulnerabilities(
         more_available |= found.len() > CPE_PAGE;
         items.extend(found.into_iter().take(CPE_PAGE).map(cpe_view));
     }
-    // Each row's triage (triage v2), in one lookup.
-    let pairs: Vec<(String, String)> = items
-        .iter()
-        .map(|v| (v.agent_id.clone(), v.advisory_id.clone()))
-        .collect();
-    let Ok(triage) = platform_store::vulnerability_triage::states(&client, &pairs).await else {
+    if attach_triage(&client, &mut items).await.is_err() {
         return unavailable_auth();
-    };
-    for item in &mut items {
-        if let Some(t) = triage.get(&(item.agent_id.clone(), item.advisory_id.clone())) {
-            item.triage_state.clone_from(&t.state);
-            item.triage_version = t.version;
-            item.assigned_to.clone_from(&t.assigned_to);
-        }
     }
     Json(crate::VulnerabilityPage {
         items,
@@ -5516,11 +5504,19 @@ pub(crate) async fn authenticated_vulnerability_advisory(
         Ok(rows) => rows,
         Err(_) => return unavailable_auth(),
     };
+    // The detail's Hosts tab: as many hosts as a finding's (2,000), so
+    // it is not cut off at the list's page (#239).
+    // ponytail: one response; page it if advisories reach that many hosts.
     let mut rows = rows;
-    let more_available = rows.len() > 100;
-    rows.truncate(100);
+    let more_available = rows.len() > ADVISORY_HOSTS;
+    rows.truncate(ADVISORY_HOSTS);
+    let mut items: Vec<crate::VulnerabilityView> =
+        rows.into_iter().map(vulnerability_view).collect();
+    if attach_triage(&client, &mut items).await.is_err() {
+        return unavailable_auth();
+    }
     let hosts = crate::VulnerabilityPage {
-        items: rows.into_iter().map(vulnerability_view).collect(),
+        items,
         more_available,
         generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
     };
@@ -5538,6 +5534,29 @@ pub(crate) async fn authenticated_vulnerability_advisory(
         })
         .collect();
     Json(crate::VulnerabilityAdvisoryDetail { hosts, cves }).into_response()
+}
+
+/// Most hosts an advisory's detail lists.
+const ADVISORY_HOSTS: usize = 2_000;
+
+/// Each row's triage (triage v2), in one lookup; untriaged rows stay open.
+async fn attach_triage(
+    client: &platform_store::Client,
+    items: &mut [crate::VulnerabilityView],
+) -> Result<(), platform_store::StoreError> {
+    let pairs: Vec<(String, String)> = items
+        .iter()
+        .map(|v| (v.agent_id.clone(), v.advisory_id.clone()))
+        .collect();
+    let triage = platform_store::vulnerability_triage::states(client, &pairs).await?;
+    for item in items {
+        if let Some(t) = triage.get(&(item.agent_id.clone(), item.advisory_id.clone())) {
+            item.triage_state.clone_from(&t.state);
+            item.triage_version = t.version;
+            item.assigned_to.clone_from(&t.assigned_to);
+        }
+    }
+    Ok(())
 }
 
 fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::VulnerabilityView {
