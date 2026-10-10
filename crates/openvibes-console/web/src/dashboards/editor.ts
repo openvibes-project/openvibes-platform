@@ -20,6 +20,8 @@ export type EditorState = {
 
 const empty: EditorState = { dashboard: null, name: "", draft: null, dirty: false, saving: false, conflict: false, problems: [], selected: null, removed: null, fresh: false };
 let state = empty;
+// The deletion of a cancelled, never-saved new dashboard, while one runs.
+let discarding: Promise<void> = Promise.resolve();
 const listeners = new Set<() => void>();
 // Unsaved drafts are kept per tab, so a lost session, reload or crash does not
 // lose them; leaving on purpose, Cancel and Save clear them.
@@ -54,16 +56,18 @@ export const editor = {
     return true;
   },
   /** Ends editing and forgets the draft (the user chose to leave or cancel). A dashboard
-   *  New made and that was never saved goes too; the promise is its deletion, or undefined. */
-  cancel(): Promise<void> | undefined {
+   *  New made and that was never saved is deleted too (#252); settled() waits for that. */
+  cancel() {
     const { dashboard, fresh } = state;
     dropDraft(dashboard?.dashboard_id);
     set(empty);
-    if (!fresh || !dashboard) return undefined;
-    return request("DELETE", `/api/v1/dashboards/${dashboard.dashboard_id}`).then(
+    if (!fresh || !dashboard) return;
+    discarding = request("DELETE", `/api/v1/dashboards/${dashboard.dashboard_id}`).then(
       () => { invalidate("/api/v1/dashboards"); invalidate("/api/v1/me/home"); },
       () => { /* already gone or not allowed: nothing to clean up */ });
   },
+  /** Resolves once a cancelled new dashboard's deletion has finished. */
+  settled: () => discarding,
   /** Ends editing but keeps the stored draft (the page went away, e.g. the session ended). */
   suspend() { state = empty; for (const listener of listeners) listener(); },
   /** A stored draft for this dashboard, if one was left unsaved. */

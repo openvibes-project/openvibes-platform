@@ -155,7 +155,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
                 if (state.dirty && !window.confirm("Discard your changes?")) return;
                 // A never-saved new dashboard is deleted by cancel: go home instead of to it.
                 const fresh = state.fresh;
-                void editor.cancel();
+                editor.cancel();
                 nav.closeAll();
                 if (fresh) nav.view("/");
               }}>Cancel</button>
