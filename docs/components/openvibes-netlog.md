@@ -124,6 +124,13 @@ to the assistant: signature text comes from the network.
   skipped and counted (`unstorable`, logged). The rest of the batch is stored.
 - **Startup:** devices are loaded before the first datagram is read.
 
+## Footprint
+
+Measured 2026-10-10 (`docs/sizing.md`): 4.2 MB binary; 4.9 MB RSS idle and
+5.1 MB under 10,000 datagrams/s from one source; 20 MB under a spoofed flood
+with a new source on every datagram (twice the 10 MB target), with about
+6,400 datagrams/s taken and the rest dropped by the kernel. Idle CPU 0.
+
 ## Security notes
 
 Identity is the sender IP, because UniFi's export is plain UDP with no
