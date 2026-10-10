@@ -16,6 +16,7 @@ pub mod alarms_status;
 pub mod assistant;
 /// The append-only audit log.
 pub mod audit;
+pub mod bulk_triage;
 /// CA certificates the platform issues under.
 pub mod ca;
 /// Console reads and triage of threat alarms (P14).
@@ -57,6 +58,8 @@ pub mod signer;
 mod status;
 /// Enrollment tokens (stored only as hashes).
 pub mod tokens;
+pub mod triage_history;
+pub mod vulnerability_triage;
 /// Advisories, vulnerabilities, and feed state (vulnerability management).
 pub mod vulns;
 pub mod wire;

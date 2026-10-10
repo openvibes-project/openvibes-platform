@@ -92,7 +92,7 @@ function refOk(kind: CaseKind, ref: string): boolean {
   }
 }
 
-const caseSeverityOf = (severity: string | null | undefined) =>
+export const caseSeverityOf = (severity: string | null | undefined) =>
   ({ critical: "critical", high: "high", important: "high", medium: "medium", moderate: "medium", low: "low", info: "low", unrated: "low" } as Record<string, string>)[severity ?? ""];
 const rank = (severity: string) => ["low", "medium", "high", "critical"].indexOf(severity);
 const defaultSeverity = (severities: (string | null)[]) =>
@@ -420,6 +420,15 @@ export function createCaseStore(world: CaseWorld, seed: () => CaseState, persist
         .flatMap((i) => { const c = state.cases.find((candidate) => candidate.case_id === i.case_id); return c && sees(c) ? [{ c, i }] : []; })
         .sort((a, b) => b.c.updated_at.localeCompare(a.c.updated_at) || b.c.number - a.c.number).slice(0, 50);
       return { status: 200, body: { items: found.map(({ c, i }) => ({ case: summary(c), item_id: i.item_id, outcome: i.outcome })) } };
+    },
+
+    /** Items of one kind in open cases the caller can see, with the case number (the lists' badges). */
+    activeItems(query: URLSearchParams): Result {
+      const kind = query.get("kind");
+      if (kind === null || !isCaseKind(kind) || !EXCLUSIVE_KINDS.has(kind)) return problem(400, "invalid_kind", "kind must be alarm, compliance_finding or vulnerability");
+      const items = state.items.filter((i) => i.kind === kind && i.active && seesItem(i))
+        .flatMap((i) => { const c = state.cases.find((candidate) => candidate.case_id === i.case_id); return c && sees(c) ? [{ ref: i.ref, case_number: c.number }] : []; });
+      return { status: 200, body: { items } };
     },
 
     assignees(): Result {

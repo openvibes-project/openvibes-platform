@@ -41,7 +41,7 @@ export function plural(n: number, one: string, many = `${one}s`) {
 }
 
 export const triageLabel: Record<string, string> = {
-  open: "Open", investigating: "Investigating", mitigated: "Mitigated",
+  open: "Open", mitigated: "Mitigated",
   accepted_risk: "Accepted risk", false_positive: "False positive",
 };
 

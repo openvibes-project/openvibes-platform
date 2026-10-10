@@ -120,6 +120,7 @@ fn role_has_permission(role: BuiltInRole, permission: Permission) -> bool {
                     | P::ComplianceRead
                     | P::ComplianceTriage
                     | P::VulnerabilitiesRead
+                    | P::VulnerabilitiesTriage
                     | P::AssistantUse
                     | P::AlarmsRead
                     | P::AlarmsTriage
@@ -153,6 +154,7 @@ fn is_agent_bound(permission: Permission) -> bool {
             | Permission::ComplianceRead
             | Permission::VulnerabilitiesRead
             | Permission::ComplianceTriage
+            | Permission::VulnerabilitiesTriage
             | Permission::AlarmsRead
             | Permission::AlarmsTriage
             | Permission::AlarmsSuppress
@@ -167,6 +169,7 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::ComplianceRead,
     Permission::VulnerabilitiesRead,
     Permission::ComplianceTriage,
+    Permission::VulnerabilitiesTriage,
     Permission::AlarmsRead,
     Permission::AlarmsTriage,
     Permission::AlarmsSuppress,

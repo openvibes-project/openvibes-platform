@@ -57,7 +57,7 @@ describe("demo server", () => {
     const endpoints = await json(await server.handle("GET", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/endpoints?limit=100`));
     const open = (endpoints.items as { agent_id: string; triage_state: string; triage_version: number }[]).filter((e) => e.triage_state === "open");
     const changes = open.map((e) => ({ agent_id: e.agent_id, version: e.triage_version }));
-    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "investigating", changes });
+    const response = await server.handle("POST", `/api/v1/compliance/groups/${group.rule_set_id}/${group.rule_id}/triage`, { state: "mitigated", note: "patched", changes });
     expect(response.status).toBe(200);
     const after = await json(await server.handle("GET", "/api/v1/compliance/groups?limit=100"));
     const updated = (after.items as { rule_id: string; triage_counts: { open: number } }[]).find((g) => g.rule_id === group.rule_id);
@@ -90,16 +90,14 @@ describe("demo server", () => {
     const changes = [{ agent_id: endpoint.agent_id, version: endpoint.triage_version }];
     const future = new Date(Date.now() + 30 * 86_400_000).toISOString();
     const post = (body: Record<string, unknown>) => server.handle("POST", `${base}/triage`, { changes, ...body });
-    if (endpoint.triage_state === "open") {
-      expect((await json(await post({ state: "mitigated", note: "skipped a step" }))).code).toBe("invalid_transition");
-    }
+    expect((await json(await post({ state: "investigating" }))).code).toBe("invalid_transition");
     expect((await post({ state: "accepted_risk" })).status).toBe(400);
     expect((await post({ state: "mitigated" })).status).toBe(400);
     expect((await post({ state: "accepted_risk", accepted_until: new Date(Date.now() - 1000).toISOString() })).status).toBe(400);
-    expect((await post({ state: "investigating", accepted_until: future })).status).toBe(400);
-    expect((await json(await post({ state: "investigating", assigned_to: "nobody" }))).code).toBe("invalid_assignee");
-    expect((await post({ state: "investigating", assigned_to: "vic" })).status).toBe(400);
-    expect((await post({ state: "investigating" })).status).toBe(200);
+    expect((await post({ state: "open", accepted_until: future })).status).toBe(400);
+    expect((await json(await post({ state: "open", assigned_to: "nobody" }))).code).toBe("invalid_assignee");
+    expect((await post({ state: "open", assigned_to: "vic" })).status).toBe(400);
+    expect((await post({ state: "open" })).status).toBe(200);
     changes[0] = { agent_id: endpoint.agent_id, version: endpoint.triage_version + 1 };
     expect((await post({ state: "accepted_risk", accepted_until: future })).status).toBe(400);
     expect((await post({ state: "accepted_risk", accepted_until: future, assigned_to: "sam", note: "vendor fix due" })).status).toBe(200);
@@ -379,10 +377,13 @@ describe("demo alarms (P14)", () => {
     const first = (list.items as { id: string; state: string }[]).find((a) => a.state === "open");
     expect(first).toBeDefined();
     const id = first?.id ?? "";
-    const skip = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
-    expect(skip.status).toBe(409);
-    const step = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "investigating" }, { "if-match": "\"1\"" });
-    expect(step.status).toBe(200);
+    // Any state to any other in one step; a close needs a note; investigating is retired.
+    const bare = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive" }, { "if-match": "\"1\"" });
+    expect(bare.status).toBe(400);
+    const retired = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "investigating" }, { "if-match": "\"1\"" });
+    expect(retired.status).toBe(409);
+    const closed = await analyst.handle("PUT", `/api/v1/alarms/${id}/triage`, { state: "false_positive", note: "x" }, { "if-match": "\"1\"" });
+    expect(closed.status).toBe(200);
     const created = await analyst.handle("POST", "/api/v1/alarm-suppressions", { alarm_id: id, scope: "program", note: "noisy" });
     expect(created.status).toBe(201);
     const scoped = createDemoServer({ persona: "scoped_operator" });
@@ -455,5 +456,36 @@ describe("demo top hosts", () => {
     const response = await top("?limit=11");
     expect(response.status).toBe(422);
     expect(await json(response)).toMatchObject({ code: "invalid_metric_query", field_errors: [{ field: "limit", code: "invalid_limit" }] });
+  });
+});
+
+describe("demo bulk triage (triage v2)", () => {
+  it("closes with a note, files into one open case and expands an advisory to its hosts", async () => {
+    const analyst = createDemoServer({ persona: "analyst" });
+    const list = await json(await analyst.handle("GET", "/api/v1/alarms"));
+    const filed0 = await json(await analyst.handle("GET", "/api/v1/cases/active-items?kind=alarm"));
+    const inCases = new Set((filed0.items as { ref: string }[]).map((i) => i.ref));
+    const ids = (list.items as { id: string }[]).filter((a) => !inCases.has(a.id)).map((a) => ({ id: a.id }));
+    expect(ids.length).toBeGreaterThan(0);
+    const post = async (kind: string, body: Record<string, unknown>) => {
+      const response = await analyst.handle("POST", `/api/v1/${kind}/bulk`, body);
+      return { status: response.status, body: await json(response) };
+    };
+    expect((await post("alarms", { action: "state", state: "mitigated", items: ids })).status).toBe(400);
+    expect((await post("alarms", { action: "state", state: "mitigated", note: "patched", items: ids })).body).toMatchObject({ changed: ids.length, skipped: [] });
+    const filed = await post("alarms", { action: "case", new_case_title: "Two alarms", new_case_severity: "high", items: ids });
+    expect(filed.body).toMatchObject({ changed: ids.length });
+    expect(typeof filed.body.case_number).toBe("number");
+    const again = await post("alarms", { action: "case", new_case_title: "Again", items: ids });
+    expect(again.body.changed).toBe(0);
+    expect((again.body.skipped as { reason: string }[]).every((s) => s.reason === "in another open case")).toBe(true);
+    const active = await json(await analyst.handle("GET", "/api/v1/cases/active-items?kind=alarm"));
+    expect((active.items as { ref: string }[]).map((i) => i.ref)).toEqual(expect.arrayContaining(ids.map((i) => i.id)));
+    const vulns = await json(await analyst.handle("GET", "/api/v1/vulnerabilities"));
+    const advisory = (vulns.items as { advisory_id: string }[])[0]?.advisory_id ?? "";
+    const hosts = (vulns.items as { advisory_id: string }[]).filter((v) => v.advisory_id === advisory).length;
+    expect((await post("vulnerabilities", { action: "state", state: "false_positive", note: "not affected", items: [{ advisory_id: advisory }] })).body.changed).toBe(hosts);
+    const after = await json(await analyst.handle("GET", "/api/v1/vulnerabilities"));
+    expect((after.items as { advisory_id: string; triage_state: string }[]).filter((v) => v.advisory_id === advisory).every((v) => v.triage_state === "false_positive")).toBe(true);
   });
 });

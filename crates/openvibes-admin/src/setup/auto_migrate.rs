@@ -223,6 +223,11 @@ mod tests {
             Next::Done("schema version 43".into())
         );
         assert_eq!(decide(Err(needs())), Next::BackupThenMigrate);
+        // Triage v2 (45) takes the same automatic path from 0.2.6 (44): the
+        // store stops at it, and the refusal means backup then migrate.
+        assert_eq!(platform_store::needs_backup_after(44), Some(45));
+        let triage_v2 = platform_store::StoreError::NeedsBackup(45).to_string();
+        assert_eq!(decide(Err(triage_v2)), Next::BackupThenMigrate);
         assert_eq!(
             decide(Err("database unavailable".into())),
             Next::Fail("database unavailable".into())

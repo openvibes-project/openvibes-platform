@@ -10,20 +10,19 @@ describe("triageBody", () => {
   });
 
   it("drops the expiry for any other state and leaves a blank assignee unassigned", () => {
-    expect(triageBody({ state: "investigating", assignee: "  ", note: " look ", acceptedUntil: "2031-01-15" }))
-      .toEqual({ state: "investigating", assigned_to: null, note: "look", accepted_until: null });
+    expect(triageBody({ state: "mitigated", assignee: "  ", note: " look ", acceptedUntil: "2031-01-15" }))
+      .toEqual({ state: "mitigated", assigned_to: null, note: "look", accepted_until: null });
   });
 });
 
 describe("allowedStates", () => {
-  it("follows the workflow: open to investigating, investigating to a closing state", () => {
-    expect(allowedStates(["open"])).toEqual(["open", "investigating"]);
-    expect(allowedStates(["investigating"])).toEqual(["investigating", "mitigated", "accepted_risk", "false_positive"]);
-    expect(allowedStates(["mitigated"])).toEqual(["mitigated"]);
+  it("lets any state move to any other (triage v2)", () => {
+    const all = ["open", "mitigated", "accepted_risk", "false_positive"];
+    expect(allowedStates(["open"])).toEqual(all);
+    expect(allowedStates(["mitigated", "false_positive"])).toEqual(all);
   });
 
-  it("offers only the states every selected host can move to", () => {
-    expect(allowedStates(["open", "investigating"])).toEqual(["investigating"]);
-    expect(allowedStates(["open", "mitigated"])).toEqual([]);
+  it("offers nothing for a retired state", () => {
+    expect(allowedStates(["open", "investigating"])).toEqual([]);
   });
 });

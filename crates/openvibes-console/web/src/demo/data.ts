@@ -152,11 +152,15 @@ export function buildDemoData(now = Date.now()) {
         last_observed_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
         received_at: iso(agent.last_seen_at ? Date.parse(agent.last_seen_at) : first),
       });
-      const state = random() < 0.72 ? "open" : pick(["investigating", "mitigated", "accepted_risk", "false_positive"]);
+      // The same draws as before triage v2 (so the rest of the demo stays
+      // put): what was "investigating" is now an open finding with an assignee.
+      const drawn = random() < 0.72 ? "open" : pick(["assigned", "mitigated", "accepted_risk", "false_positive"]);
+      const state = drawn === "assigned" ? "open" : drawn;
       triage.set(`${agent.id}|${rule.ruleSetId}|${rule.ruleId}`, {
         state, version: 1, rule_version: 3,
-        assigned_to: state === "investigating" ? "analyst" : null,
-        note: state === "accepted_risk" ? "Isolated lab network; revisit next quarter." : null,
+        assigned_to: drawn === "assigned" ? "analyst" : null,
+        note: ({ accepted_risk: "Isolated lab network; revisit next quarter.", open: null } as Record<string, string | null>)[state]
+          ?? "Handled outside the console.",
         accepted_until: state === "accepted_risk" ? iso(now + 60 * DAY) : null,
       });
     }
@@ -223,6 +227,7 @@ export function buildDemoData(now = Date.now()) {
         match_basis: advisory.packages[0]?.fixed == null
           ? "The Fedora tracker lists this package version as affected and has no fix yet."
           : "Fedora's own security advisory names this package; the installed version is older than the fixed one.",
+        triage_state: "open", triage_version: 0, assigned_to: null as string | null,
       });
     }
   }
@@ -234,9 +239,9 @@ export function buildDemoData(now = Date.now()) {
   const access: AccessInventory = {
     roles: [
       { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"] },
-      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
+      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
       { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "rules.write", "alarms.read"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
+      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
     ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
@@ -338,7 +343,7 @@ export function buildDemoData(now = Date.now()) {
       rule_set_id: "baseline", rule_id: spec.rule, severity: spec.severity, message: spec.message,
       exe: spec.process.exe, parent_exe: spec.ancestors[0]?.exe ?? null, count: spec.count,
       first_seen: iso(last - spec.count * 3 * MINUTE), last_seen: iso(last),
-      state: index === 2 ? "investigating" : "open", suppressed_by: null as string | null,
+      state: "open", suppressed_by: null as string | null,
       rule_set_version: 4, rule_version: 1, confidence: 80, process: spec.process, ancestors: spec.ancestors,
       received_at: iso(last + 2000),
       detection: {
@@ -347,7 +352,7 @@ export function buildDemoData(now = Date.now()) {
           { key: "parent.exe", status: "complete", value: spec.ancestors[0]?.exe ?? "", item_count: null }],
         steps: [{ expression: `event["process.exe"] == ${JSON.stringify(spec.process.exe)} && event["parent.exe"] == ${JSON.stringify(spec.ancestors[0]?.exe ?? "")}`, result: true }],
       },
-      triage: { state: index === 2 ? "investigating" : "open", assigned_to: null as string | null, note: null as string | null,
+      triage: { state: "open", assigned_to: (index === 2 ? "analyst" : null) as string | null, note: null as string | null,
         accepted_until: null as string | null, version: index === 2 ? 2 : 1, updated_at: null as string | null, updated_by: null as string | null },
     };
   });

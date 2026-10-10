@@ -317,9 +317,43 @@ async fn automatic_migration_stops_before_compliance_names() {
 async fn automatic_migration_applies_additive_ones() {
     let db = TestDb::create().await;
     let mut client = at_version(&db, 43).await;
+    // 45 (triage v2) rewrites triage states and waits for Update's backup,
+    // like 43; with one pending, nothing is applied automatically.
+    assert!(matches!(
+        platform_store::migrate_additive(&mut client).await,
+        Err(platform_store::StoreError::NeedsBackup(45))
+    ));
     assert_eq!(
-        platform_store::migrate_additive(&mut client).await.unwrap(),
-        platform_store::SCHEMA_VERSION
+        platform_store::schema_version(&client).await.unwrap(),
+        Some(43)
+    );
+    drop(client);
+    db.drop().await;
+}
+
+/// Triage v2 (45): no triage state CHECK accepts `investigating` any more,
+/// except the history tables, which keep what was written before. (A
+/// case's own `investigating` status is the case workflow, unchanged.)
+#[tokio::test]
+async fn triage_v2_retires_investigating() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    let rows = client
+        .query(
+            "SELECT conrelid::regclass::text FROM pg_constraint
+             WHERE contype = 'c' AND pg_get_constraintdef(oid) LIKE '%investigating%'
+             ORDER BY 1",
+            &[],
+        )
+        .await
+        .unwrap();
+    let tables: Vec<String> = rows.iter().map(|r| r.get(0)).collect();
+    assert!(
+        tables
+            .iter()
+            .all(|t| t.ends_with("_history") || t == "cases"),
+        "a current-state CHECK still allows investigating: {tables:?}"
     );
     drop(client);
     db.drop().await;

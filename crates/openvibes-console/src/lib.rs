@@ -19,6 +19,7 @@ mod assets;
 mod assistant;
 mod auth;
 mod auth_first;
+mod bulk;
 mod cases;
 mod config;
 mod coverage;
@@ -41,6 +42,7 @@ mod seeded;
 mod server;
 mod site_fleet;
 mod software;
+mod triage_detail;
 mod users;
 
 pub use api::{

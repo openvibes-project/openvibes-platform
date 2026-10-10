@@ -640,6 +640,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route("/v1/cases/for-item", get(crate::cases::cases_for_item))
         .route("/v1/cases/assignees", get(crate::cases::list_assignees))
+        .route("/v1/cases/active-items", get(crate::cases::active_items))
         .route(
             "/v1/cases/{case_id}",
             get(crate::cases::get_case).put(crate::cases::update_case),
@@ -674,6 +675,26 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/alarm-suppressions/{suppression_id}",
             axum::routing::delete(crate::alarm_suppressions::remove_suppression),
+        )
+        .route(
+            "/v1/triage-history",
+            get(crate::triage_detail::triage_history),
+        )
+        .route(
+            "/v1/alarms/bulk",
+            axum::routing::post(crate::bulk::bulk_alarms),
+        )
+        .route(
+            "/v1/compliance/bulk",
+            axum::routing::post(crate::bulk::bulk_compliance),
+        )
+        .route(
+            "/v1/vulnerabilities/bulk",
+            axum::routing::post(crate::bulk::bulk_vulnerabilities),
+        )
+        .route(
+            "/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
+            axum::routing::put(crate::triage_detail::update_vulnerability_triage),
         )
         .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
         .route("/v1/attack", get(crate::coverage::attack_catalog))
@@ -4392,7 +4413,7 @@ pub(crate) fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>,
     (version > 0).then_some(Some(version)).ok_or(())
 }
 
-fn parse_if_match_zero_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
+pub(crate) fn parse_if_match_zero_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
     let values = headers.get_all(header::IF_MATCH);
     let mut iter = values.iter();
     let Some(value) = iter.next() else {
@@ -5289,6 +5310,9 @@ pub(crate) async fn authenticated_vulnerabilities(
         more_available |= found.len() > CPE_PAGE;
         items.extend(found.into_iter().take(CPE_PAGE).map(cpe_view));
     }
+    if attach_triage(&client, &mut items).await.is_err() {
+        return unavailable_auth();
+    }
     Json(crate::VulnerabilityPage {
         items,
         more_available,
@@ -5383,6 +5407,9 @@ fn cpe_view(row: platform_store::cpe::FindingRow) -> crate::VulnerabilityView {
         match_method: "cpe-nvd".into(),
         confidence: u8::try_from(row.confidence).unwrap_or(0),
         match_basis: row.basis,
+        triage_state: "open".into(),
+        triage_version: 0,
+        assigned_to: None,
     }
 }
 
@@ -5477,11 +5504,19 @@ pub(crate) async fn authenticated_vulnerability_advisory(
         Ok(rows) => rows,
         Err(_) => return unavailable_auth(),
     };
+    // The detail's Hosts tab: as many hosts as a finding's (2,000), so
+    // it is not cut off at the list's page (#239).
+    // ponytail: one response; page it if advisories reach that many hosts.
     let mut rows = rows;
-    let more_available = rows.len() > 100;
-    rows.truncate(100);
+    let more_available = rows.len() > ADVISORY_HOSTS;
+    rows.truncate(ADVISORY_HOSTS);
+    let mut items: Vec<crate::VulnerabilityView> =
+        rows.into_iter().map(vulnerability_view).collect();
+    if attach_triage(&client, &mut items).await.is_err() {
+        return unavailable_auth();
+    }
     let hosts = crate::VulnerabilityPage {
-        items: rows.into_iter().map(vulnerability_view).collect(),
+        items,
         more_available,
         generated_at: Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true),
     };
@@ -5499,6 +5534,29 @@ pub(crate) async fn authenticated_vulnerability_advisory(
         })
         .collect();
     Json(crate::VulnerabilityAdvisoryDetail { hosts, cves }).into_response()
+}
+
+/// Most hosts an advisory's detail lists.
+const ADVISORY_HOSTS: usize = 2_000;
+
+/// Each row's triage (triage v2), in one lookup; untriaged rows stay open.
+async fn attach_triage(
+    client: &platform_store::Client,
+    items: &mut [crate::VulnerabilityView],
+) -> Result<(), platform_store::StoreError> {
+    let pairs: Vec<(String, String)> = items
+        .iter()
+        .map(|v| (v.agent_id.clone(), v.advisory_id.clone()))
+        .collect();
+    let triage = platform_store::vulnerability_triage::states(client, &pairs).await?;
+    for item in items {
+        if let Some(t) = triage.get(&(item.agent_id.clone(), item.advisory_id.clone())) {
+            item.triage_state.clone_from(&t.state);
+            item.triage_version = t.version;
+            item.assigned_to.clone_from(&t.assigned_to);
+        }
+    }
+    Ok(())
 }
 
 fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::VulnerabilityView {
@@ -5534,6 +5592,9 @@ fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::Vulnerabili
         match_method: row.match_method,
         confidence: row.confidence,
         match_basis: row.match_basis,
+        triage_state: "open".into(),
+        triage_version: 0,
+        assigned_to: None,
     }
 }
 
@@ -5655,7 +5716,6 @@ pub(crate) async fn authenticated_finding_groups(
             older_endpoint_count: g.older_endpoint_count.max(0) as u64,
             triage_counts: crate::FindingTriageCounts {
                 open: g.open.max(0) as u64,
-                investigating: g.investigating.max(0) as u64,
                 mitigated: g.mitigated.max(0) as u64,
                 accepted_risk: g.accepted_risk.max(0) as u64,
                 false_positive: g.false_positive.max(0) as u64,

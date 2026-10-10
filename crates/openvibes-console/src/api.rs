@@ -121,6 +121,9 @@ pub enum Permission {
     /// Change human triage state for compliance findings.
     #[serde(rename = "compliance.triage")]
     ComplianceTriage,
+    /// Change human triage state for vulnerabilities, per host (triage v2).
+    #[serde(rename = "vulnerabilities.triage")]
+    VulnerabilitiesTriage,
     /// Read threat alarms.
     #[serde(rename = "alarms.read")]
     AlarmsRead,
@@ -1260,6 +1263,13 @@ pub struct VulnerabilityView {
     pub confidence: u8,
     /// A sentence saying how the host was matched.
     pub match_basis: String,
+    /// This host's triage: `open`, `mitigated`, `accepted_risk` or
+    /// `false_positive` (triage v2).
+    pub triage_state: String,
+    /// Triage write version (0 = never triaged), for If-Match.
+    pub triage_version: i64,
+    /// Assigned analyst's username.
+    pub assigned_to: Option<String>,
 }
 
 /// Bounded prioritised vulnerability list for the current scope.
@@ -1333,8 +1343,6 @@ pub struct FindingGroupView {
 pub struct FindingTriageCounts {
     /// Open endpoints.
     pub open: u64,
-    /// Endpoints being investigated.
-    pub investigating: u64,
     /// Mitigated endpoints.
     pub mitigated: u64,
     /// Endpoints accepted as risk.

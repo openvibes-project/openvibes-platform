@@ -531,7 +531,7 @@ fn parse_ref(kind: ItemKind, reference: &str) -> Option<Parsed<'_>> {
 }
 
 /// The case severity an item severity counts as.
-fn case_severity_of(item_severity: &str) -> Option<&'static str> {
+pub fn case_severity_of(item_severity: &str) -> Option<&'static str> {
     Some(match item_severity {
         "critical" => "critical",
         "high" | "important" => "high",
@@ -1864,6 +1864,37 @@ pub async fn for_item(
             outcome: row.get(21),
         })
         .collect()))
+}
+
+/// Most rows [`active_items`] returns.
+pub const ACTIVE_ITEMS_LIMIT: i64 = 20_000;
+
+/// Every alarm, finding or vulnerability (`kind`) active in an open case
+/// the caller can see, with that case's number: the lists' case badges
+/// (triage v2: "being worked on" means in a case). `None` for a kind that
+/// is not one-case-only.
+pub async fn active_items(
+    client: &Client,
+    scope: &AgentScope,
+    user_id: &str,
+    kind: &str,
+) -> Result<Option<Vec<(String, i64)>>, StoreError> {
+    let Some(kind) = ItemKind::parse(kind).filter(|k| k.exclusive()) else {
+        return Ok(None);
+    };
+    let viewer = Viewer::new(scope, user_id);
+    let (visible, item) = (case_visible("c"), item_visible("i"));
+    let rows = client
+        .query(
+            &format!(
+                "SELECT i.ref, c.number FROM case_items i JOIN cases c ON c.case_id = i.case_id
+                 WHERE i.kind = $4 AND i.active AND {visible} AND {item}
+                 ORDER BY c.number LIMIT $5"
+            ),
+            viewer_params!(viewer, &kind.as_str(), &ACTIVE_ITEMS_LIMIT),
+        )
+        .await?;
+    Ok(Some(rows.iter().map(|r| (r.get(0), r.get(1))).collect()))
 }
 
 /// Reopens recently closed cases whose `resolved` evidence has come back,

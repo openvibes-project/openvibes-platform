@@ -6,6 +6,7 @@ import { type KeyboardEvent, type ReactNode, useEffect, useMemo, useRef, useStat
 
 import { nav, useLocation } from "../app/nav";
 import { Icon } from "./Icon";
+import { MAX_SELECTION, selectAll, selectRange } from "./selection";
 import { type Direction, type SortValue, sortRows } from "./table";
 
 export type Column<T> = {
@@ -63,13 +64,24 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
     const nextDirection = key === sortKey ? (direction === "asc" ? "desc" : "asc") : "asc";
     nav.setParams({ sort: key, dir: nextDirection });
   };
-  const toggle = (key: string) => {
+  const last = useRef(-1);
+  const toggle = (key: string, index: number, shift = false) => {
     if (!selection) return;
-    const next = new Set(selection.selected);
-    if (next.has(key)) next.delete(key); else next.add(key);
-    selection.onChange(next);
+    const on = !selection.selected.has(key);
+    if (shift && last.current >= 0) {
+      selection.onChange(selectRange(sorted.map(rowKey), last.current, index, selection.selected, on));
+    } else {
+      const next = new Set(selection.selected);
+      if (on) next.add(key); else next.delete(key);
+      selection.onChange(next);
+    }
+    last.current = index;
   };
-  const allSelected = selection !== undefined && sorted.length > 0 && sorted.every((row) => selection.selected.has(rowKey(row)));
+  // The header box selects the rows on screen; a bar then offers every row
+  // the filter matches (spec §3).
+  const onScreen = sorted.slice(0, shown);
+  const pageSelected = selection !== undefined && onScreen.length > 0 && onScreen.every((row) => selection.selected.has(rowKey(row)));
+  const everySelected = selection !== undefined && sorted.length > 0 && selection.selected.size >= Math.min(sorted.length, MAX_SELECTION) && pageSelected;
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.target instanceof HTMLInputElement || (event.target as HTMLElement).closest(".sel")) return;
@@ -78,18 +90,29 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
     if (event.key === "j" || event.key === "ArrowDown") { event.preventDefault(); setCursor((c) => Math.min(max, c + 1)); }
     else if (event.key === "k" || event.key === "ArrowUp") { event.preventDefault(); setCursor((c) => Math.max(0, c - 1)); }
     else if (event.key === "Enter" && cursor >= 0) { const row = sorted[cursor]; if (row) onOpen(row); }
-    else if (event.key === "x" && cursor >= 0) { const row = sorted[cursor]; if (row) toggle(rowKey(row)); }
+    else if (event.key === "x" && cursor >= 0) { const row = sorted[cursor]; if (row) toggle(rowKey(row), cursor); }
   };
 
   return (
     <div className="table-wrap" ref={wrap}>
+      {selection && pageSelected && sorted.length > onScreen.length && (
+        <output className="select-all-bar">
+          {everySelected
+            ? <>All {Math.min(sorted.length, MAX_SELECTION).toLocaleString()} matching this filter are selected{sorted.length > MAX_SELECTION && ` (the first ${MAX_SELECTION.toLocaleString()}; narrow the filter for the rest)`}. </>
+            : <>{onScreen.length.toLocaleString()} on screen selected. </>}
+          {everySelected
+            ? <button type="button" className="link-button" onClick={() => selection.onChange(new Set())}>Clear</button>
+            : <button type="button" className="link-button" onClick={() => selection.onChange(selectAll(sorted.map(rowKey)))}>
+                Select all {Math.min(sorted.length, MAX_SELECTION).toLocaleString()} matching this filter</button>}
+        </output>
+      )}
       <table className={compact ? "table table--compact" : "table"} aria-label={label} tabIndex={0} onKeyDown={onKeyDown}>
         <thead>
           <tr>
             {selection && (
               <th className="check">
-                <input type="checkbox" className="checkbox" aria-label="Select all" checked={allSelected}
-                  onChange={() => selection.onChange(allSelected ? new Set() : new Set(sorted.map(rowKey)))} />
+                <input type="checkbox" className="checkbox" aria-label="Select the rows on screen" checked={pageSelected}
+                  onChange={() => selection.onChange(pageSelected ? new Set() : new Set(onScreen.map(rowKey)))} />
               </th>
             )}
             {visibleColumns.map((candidate) => (
@@ -114,7 +137,8 @@ export function DataTable<T>({ rows, columns, rowKey, onOpen, isOpen, defaultSor
                 onClick={(event) => { if (!(event.target as HTMLElement).closest("a,button,input,select,form,.sel")) { setCursor(index); onOpen(row); } }}>
                 {selection && (
                   <td className="check">
-                    <input type="checkbox" className="checkbox" aria-label="Select row" checked={selection.selected.has(key)} onChange={() => toggle(key)} />
+                    <input type="checkbox" className="checkbox" aria-label="Select row" checked={selection.selected.has(key)}
+                      onChange={(event) => toggle(key, index, (event.nativeEvent as MouseEvent).shiftKey)} />
                   </td>
                 )}
                 {visibleColumns.map((candidate) => (

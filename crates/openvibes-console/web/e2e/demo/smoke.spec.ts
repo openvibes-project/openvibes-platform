@@ -19,7 +19,7 @@ test("overview lists what needs attention and opens it beside the page", async (
 
 test("a finding opens in the inspector, links stack, and Esc goes back", async ({ page }) => {
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
-  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
   await expect(page.locator(".panel-header__kind")).toContainText("Compliance finding");
   await page.locator(".inspector tbody a").first().click();
   await expect(page.locator(".panel-header__kind")).toContainText("Host");
@@ -50,7 +50,7 @@ test("the palette finds a host and opens it", async ({ page }) => {
 
 test("a panel pops out into a window and docks back", async ({ page }) => {
   await page.goto("/compliance");
-  await page.locator(".view tbody tr").first().locator("td").nth(1).click();
+  await page.locator(".view tbody tr").first().locator("td").nth(2).click();
   await page.getByRole("button", { name: "Open in a window" }).click();
   await expect(page.locator(".window")).toBeVisible();
   await expect(page.locator(".inspector")).toHaveCount(0);
@@ -134,19 +134,20 @@ test("an asset group is created from the access view", async ({ page }) => {
   await expect(page.locator(".group-card", { hasText: "Web servers" })).toBeVisible();
 });
 
-test("a finding set to Investigating stays in the default Findings list (board #83)", async ({ page }) => {
+test("a finding mitigated on every open host leaves the default Findings list (board #83)", async ({ page }) => {
   await page.goto("/compliance?open=finding%3Abaseline%2Fport.docker_api.exposed");
   const inspector = page.locator(".inspector");
-  await inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ }).click();
-  await inspector.getByRole("checkbox", { name: "Select all hosts" }).check();
-  await inspector.getByRole("combobox", { name: "New triage state" }).click();
-  await page.getByRole("option", { name: "Investigating" }).click();
-  await inspector.getByRole("button", { name: "Apply" }).click();
+  // The summary acts on every open host in one step; a close needs a note.
+  await inspector.getByRole("region", { name: "Triage actions" }).getByRole("button", { name: "Mitigate…" }).click();
+  const dialog = page.getByRole("dialog", { name: "Mitigate" });
+  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("firewalled at the edge");
+  await dialog.getByRole("button", { name: /^Mitigate \d+ open hosts?$/ }).click();
+  await expect(page.locator(".toast")).toContainText("changed");
   await expect(inspector.getByRole("group", { name: "Show hosts by triage state" }).getByRole("button", { name: /^Open/ })).toHaveCount(0);
   // Not page.goto: the demo keeps its data in memory and a reload resets it.
   await page.keyboard.press("Escape");
   await page.getByRole("link", { name: "Compliance", exact: true }).click();
-  await expect(page.locator(".view tbody tr").filter({ hasText: "The unencrypted Docker API" })).toBeVisible();
+  await expect(page.locator(".view tbody tr").filter({ hasText: "The unencrypted Docker API" })).toHaveCount(0);
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {

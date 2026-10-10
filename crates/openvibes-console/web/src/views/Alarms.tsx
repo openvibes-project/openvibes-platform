@@ -7,7 +7,11 @@ import type { AlarmDetail, AlarmPage, AlarmSummary, AlarmSuppression } from "../
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
 import { Ago, Empty, ErrorBox, Loading, SeverityBadge, TriageBadge } from "../ui/bits";
+import { BulkBar } from "../panels/BulkBar";
+import { CaseBadge, useCaseBadges } from "../panels/CaseBadge";
+import { highest } from "../panels/bulk";
 import { DataTable } from "../ui/DataTable";
+import { filterKey, useSelection } from "../ui/selection";
 import { severityOrder } from "../ui/format";
 import { Confirm } from "../ui/panel";
 import { matches } from "../ui/table";
@@ -54,22 +58,19 @@ export async function quiet(alarmId: string, scope: string, note: string): Promi
   toast("Quieted: new matches are closed as false positives");
 }
 
-/** From the list: closes this alarm as a false positive (through the
- * workflow's steps) and then quiets new ones, both with the user's note. */
+/** From the list: closes this alarm as a false positive and then quiets
+ * new ones, both with the user's note. */
 async function closeAndQuiet(alarmId: string, scope: string, note: string): Promise<void> {
   const path = `/api/v1/alarms/${encodeURIComponent(alarmId)}`;
-  let alarm = await request<AlarmDetail>("GET", path);
-  const step = async (state: string, withNote: boolean) => {
-    await request("PUT", `${path}/triage`, { state, note: withNote ? note : null, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
+  const alarm = await request<AlarmDetail>("GET", path);
+  if (alarm.triage.state !== "false_positive") {
+    await request("PUT", `${path}/triage`, { state: "false_positive", note, assigned_to: alarm.triage.assigned_to ?? null, accepted_until: null },
       { "if-match": `"${alarm.triage.version}"` });
-    alarm = await request<AlarmDetail>("GET", path);
-  };
-  if (alarm.triage.state === "open") await step("investigating", false);
-  if (alarm.triage.state === "investigating") await step("false_positive", true);
+  }
   await quiet(alarmId, scope, note);
 }
 
-function QuietMenu({ alarm }: { alarm: AlarmSummary }) {
+export function QuietMenu({ alarm }: Readonly<{ alarm: AlarmSummary }>) {
   const { can } = useSession();
   const [scope, setScope] = useState("");
   const scopes = quietScopes.filter((s) => can("alarms.suppress", s.global));
@@ -105,6 +106,9 @@ export function Alarms() {
   const alarms = useAllPages<AlarmSummary>(path, max);
   const loaded = useMemo(() => alarms.data ?? [], [alarms.data]);
   const rows = useMemo(() => selectAlarms(loaded, params), [loaded, params]);
+  const [selected, setSelected] = useSelection(filterKey(params));
+  const chosen = () => rows.filter((a) => selected.has(a.id));
+  const cases = useCaseBadges("alarm");
   const top = panels[panels.length - 1];
   // An empty filtered page: does any alarm exist at all? If not, the
   // empty state explains how to turn alarms on, not the chips.
@@ -126,13 +130,13 @@ export function Alarms() {
             : "Resolved and suppressed alarms are hidden unless their chips are on; clear a filter to see more."}
         </Empty>
       ) : (
-        <DataTable label="Alarms" rows={rows} rowKey={(a) => a.id}
+        <DataTable label="Alarms" rows={rows} rowKey={(a) => a.id} selection={{ selected, onChange: setSelected }}
           onOpen={(a) => nav.open({ kind: "alarm", id: a.id }, true)}
           isOpen={(a) => top?.kind === "alarm" && top.id === a.id}
           defaultSort={{ key: "last", direction: "desc" }}
           columns={[
             { key: "severity", header: "Severity", width: "110px", sort: (a) => severityOrder[a.severity] ?? 9, render: (a) => <SeverityBadge severity={a.severity} /> },
-            { key: "alarm", header: "Alarm", sort: (a) => a.message, render: (a) => <div className="cell-two"><span className="truncate">{isTest(a.rule_set_id, a.rule_id) && <span className="badge badge--plain">Test</span>} {a.message}</span><span className="mono subtle">{lineage(a)}</span></div> },
+            { key: "alarm", header: "Alarm", sort: (a) => a.message, render: (a) => <div className="cell-two"><span className="truncate">{isTest(a.rule_set_id, a.rule_id) && <span className="badge badge--plain">Test</span>} {a.message} <CaseBadge numbers={cases.get(a.id)} /></span><span className="mono subtle">{lineage(a)}</span></div> },
             { key: "host", header: "Host", width: "160px", hideBelow: 560, sort: (a) => a.hostname ?? a.agent_id, render: (a) => <span className="truncate">{a.hostname ?? a.agent_id}</span> },
             { key: "count", header: "Count", numeric: true, width: "80px", sort: (a) => a.count, render: (a) => <span className="num">{a.count}</span> },
             { key: "state", header: "Triage", width: "130px", hideBelow: 760, sort: (a) => a.state, render: (a) => <TriageBadge state={a.state} /> },
@@ -140,6 +144,9 @@ export function Alarms() {
             { key: "quiet", header: "Quiet", width: "200px", hideBelow: 900, render: (a) => <QuietMenu alarm={a} /> },
           ]} />
       )}
+      <BulkBar kind="alarms" noun={selected.size === 1 ? "alarm" : "alarms"} count={selected.size} onClear={() => setSelected(new Set())}
+        items={() => chosen().map((a) => ({ id: a.id }))}
+        newCase={() => { const c = chosen(); return { title: `${c.length} alarms: ${c[0]?.message ?? ""}`, severity: highest(c.map((a) => a.severity)) }; }} />
       {loaded.length >= max && (
         <div className="view-pad"><button type="button" className="button" onClick={() => setMax((m) => m + PAGE)}>Load {PAGE} more</button></div>
       )}

@@ -1259,7 +1259,7 @@
           {
             "name": "state",
             "in": "path",
-            "description": "Exact triage state, or `active` (open or investigating).",
+            "description": "Exact triage state, or `active` (open).",
             "required": true,
             "schema": {
               "type": [
@@ -1340,6 +1340,46 @@
           },
           "403": {
             "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarms/bulk": {
+      "post": {
+        "tags": [
+          "alarms"
+        ],
+        "operationId": "bulk_alarms",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What the action did",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action, items, note or expiry",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2220,6 +2260,76 @@
         }
       }
     },
+    "/api/v1/cases/active-items": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "active_items",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Items of this kind in open cases the caller can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveCaseItemsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases/assignees": {
       "get": {
         "tags": [
@@ -2981,6 +3091,46 @@
           },
           "503": {
             "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/compliance/bulk": {
+      "post": {
+        "tags": [
+          "compliance"
+        ],
+        "operationId": "bulk_compliance",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What the action did",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action, items, note or expiry",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -6275,6 +6425,100 @@
         }
       }
     },
+    "/api/v1/triage-history": {
+      "get": {
+        "tags": [
+          "triage"
+        ],
+        "operationId": "triage_history",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "rule_set_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "rule_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "advisory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Triage changes on hosts in scope, newest first",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TriageHistoryView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind or subject",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing the kind's read permission",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/vulnerabilities": {
       "get": {
         "tags": [
@@ -6404,6 +6648,134 @@
             "description": "Advisory not visible",
             "content": {
               "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage": {
+      "put": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "operationId": "update_vulnerability_triage",
+        "parameters": [
+          {
+            "name": "advisory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "agent_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAlarmTriageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated triage",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VulnerabilityTriageView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid state, note, expiry or assignee",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No open vulnerability in scope",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Stale triage version",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/vulnerabilities/bulk": {
+      "post": {
+        "tags": [
+          "vulnerabilities"
+        ],
+        "operationId": "bulk_vulnerabilities",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "What the action did",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid action, items, note or expiry",
+            "content": {
+              "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProblemDetails"
                 }
@@ -6970,6 +7342,41 @@
           "username": {
             "type": "string",
             "description": "Canonical username."
+          }
+        }
+      },
+      "ActiveCaseItem": {
+        "type": "object",
+        "description": "One item in an open case.",
+        "required": [
+          "ref",
+          "case_number"
+        ],
+        "properties": {
+          "case_number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The case's number (`C-<number>`)."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The item's ref."
+          }
+        }
+      },
+      "ActiveCaseItemsView": {
+        "type": "object",
+        "description": "Items in open cases, for the lists' case badges.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveCaseItem"
+            },
+            "description": "Item ref (alarm id, `agent/rule_set/rule`, `agent/advisory`) and\nthe number of the open case holding it."
           }
         }
       },
@@ -8359,6 +8766,174 @@
               ]
             },
             "description": "New triage state and version for every updated endpoint."
+          }
+        }
+      },
+      "BulkItem": {
+        "type": "object",
+        "description": "One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`\n(every host in scope), with `agent_id` for one host. Vulnerabilities:\n`advisory_id` (every host where it is open), with `agent_id` for one.",
+        "properties": {
+          "advisory_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Advisory of a vulnerability."
+          },
+          "agent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One host only."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The platform's alarm id."
+          },
+          "rule_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rule of a compliance finding."
+          },
+          "rule_set_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Rule set of a compliance finding."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BulkRequest": {
+        "type": "object",
+        "description": "One action on many items.",
+        "required": [
+          "action",
+          "items"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `accepted_risk`: RFC 3339, in the future."
+          },
+          "action": {
+            "type": "string",
+            "description": "`state`, `assign`, `case`, or (alarms) `suppress`."
+          },
+          "assignee": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `assign`: a username, or absent to unassign."
+          },
+          "case_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `case`: an open case, or `new_case_title` to create one."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkItem"
+            },
+            "description": "The selected rows, at most 10,000."
+          },
+          "new_case_severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a new case: the selection's highest item severity (`important`\ncounts as high, as for case items)."
+          },
+          "new_case_title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `case`: the title of a new case."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Required to close, and for `suppress`; goes on every item."
+          },
+          "state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `state`: `open`, `mitigated`, `accepted_risk` or `false_positive`."
+          }
+        },
+        "additionalProperties": false
+      },
+      "BulkResponse": {
+        "type": "object",
+        "description": "What a bulk action did.",
+        "required": [
+          "changed",
+          "skipped"
+        ],
+        "properties": {
+          "case_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For `case`: the case the items went into."
+          },
+          "case_number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "For `case`: its number (`C-<number>`)."
+          },
+          "changed": {
+            "type": "integer",
+            "description": "Items changed (or already so).",
+            "minimum": 0
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkSkip"
+            },
+            "description": "Items left alone, with the reason."
+          }
+        }
+      },
+      "BulkSkip": {
+        "type": "object",
+        "description": "An item left alone.",
+        "required": [
+          "id",
+          "reason"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The item (alarm id, `agent/rule_set/rule`, `agent/advisory`, ...)."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why."
           }
         }
       },
@@ -9979,7 +10554,6 @@
         "description": "Number of endpoints in each current finding triage state.",
         "required": [
           "open",
-          "investigating",
           "mitigated",
           "accepted_risk",
           "false_positive"
@@ -9995,12 +10569,6 @@
             "type": "integer",
             "format": "int64",
             "description": "Findings marked as false positives.",
-            "minimum": 0
-          },
-          "investigating": {
-            "type": "integer",
-            "format": "int64",
-            "description": "Endpoints being investigated.",
             "minimum": 0
           },
           "mitigated": {
@@ -10599,6 +11167,7 @@
           "compliance.read",
           "vulnerabilities.read",
           "compliance.triage",
+          "vulnerabilities.triage",
           "alarms.read",
           "cases.read",
           "cases.manage",
@@ -12268,6 +12837,71 @@
           }
         }
       },
+      "TriageEventView": {
+        "type": "object",
+        "description": "One triage change.",
+        "required": [
+          "agent_id",
+          "to_state",
+          "changed_at",
+          "changed_by"
+        ],
+        "properties": {
+          "agent_id": {
+            "type": "string",
+            "description": "The host."
+          },
+          "changed_at": {
+            "type": "string",
+            "description": "When (RFC 3339)."
+          },
+          "changed_by": {
+            "type": "string",
+            "description": "Who: a user id, or `migration` or `system`."
+          },
+          "from_state": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The state before; absent for the first triage."
+          },
+          "hostname": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Its name, when known."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The note given."
+          },
+          "to_state": {
+            "type": "string",
+            "description": "The state after."
+          }
+        }
+      },
+      "TriageHistoryView": {
+        "type": "object",
+        "description": "The newest triage changes, at most 200.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TriageEventView"
+            },
+            "description": "Newest first."
+          }
+        }
+      },
       "UnitDetail": {
         "type": "object",
         "description": "One service unit across the caller's hosts: a page of the hosts\nrunning it.",
@@ -12710,6 +13344,46 @@
           }
         }
       },
+      "VulnerabilityTriageView": {
+        "type": "object",
+        "description": "One host's triage of one advisory (triage v2).",
+        "required": [
+          "state",
+          "version"
+        ],
+        "properties": {
+          "accepted_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Accepted-risk expiry (RFC 3339)."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assigned analyst's username."
+          },
+          "note": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Operator note."
+          },
+          "state": {
+            "type": "string",
+            "description": "`open`, `mitigated`, `accepted_risk` or `false_positive`."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Write version, also the ETag."
+          }
+        }
+      },
       "VulnerabilityView": {
         "type": "object",
         "description": "One host-advisory match with package and exploitation details.",
@@ -12730,7 +13404,9 @@
           "source",
           "match_method",
           "confidence",
-          "match_basis"
+          "match_basis",
+          "triage_state",
+          "triage_version"
         ],
         "properties": {
           "advisory_id": {
@@ -12740,6 +13416,13 @@
           "agent_id": {
             "type": "string",
             "description": "Agent or imported installation identifier."
+          },
+          "assigned_to": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Assigned analyst's username."
           },
           "confidence": {
             "type": "integer",
@@ -12845,6 +13528,15 @@
           "title": {
             "type": "string",
             "description": "Advisory title."
+          },
+          "triage_state": {
+            "type": "string",
+            "description": "This host's triage: `open`, `mitigated`, `accepted_risk` or\n`false_positive` (triage v2)."
+          },
+          "triage_version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Triage write version (0 = never triaged), for If-Match."
           },
           "url": {
             "type": "string",

@@ -38,7 +38,9 @@ export function splitRef(ref: string): [string, string] {
   return split < 0 ? [ref, ""] : [ref.slice(0, split), ref.slice(split + 1)];
 }
 
-export const findingRef = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}/${ruleSetId}/${ruleId}`;
+/** A rule set as stored: the console's `~unknown` (findings from before rule sets) is empty. */
+export const storedRuleSet = (ruleSetId: string) => (ruleSetId === "~unknown" ? "" : ruleSetId);
+export const findingRef = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}/${storedRuleSet(ruleSetId)}/${ruleId}`;
 export const vulnerabilityRef = (agentId: string, advisoryId: string) => `${agentId}/${advisoryId}`;
 
 /** The existing panel that shows an item, with the id that panel already uses. */
@@ -200,3 +202,20 @@ export function statusBadge(status: string, resolution: string | null | undefine
   const tone = resolution === "mitigated" ? "ok" : resolution === "accepted_risk" ? "info" : "plain";
   return { label: resolution ? `Closed · ${(resolutionLabel[resolution] ?? resolution).toLowerCase()}` : "Closed", tone };
 }
+
+/** Open-case numbers per list row, from the active case items of one kind:
+ * `rowOf` maps an item ref to its row's key (an alarm is its own row; a
+ * finding or vulnerability counts towards its rule's or advisory's row). */
+export function caseBadges(items: readonly { ref: string; case_number: number }[], rowOf: (ref: string) => string): Map<string, number[]> {
+  const rows = new Map<string, number[]>();
+  for (const item of items) {
+    const key = rowOf(item.ref);
+    const numbers = rows.get(key) ?? [];
+    if (!numbers.includes(item.case_number)) numbers.push(item.case_number);
+    rows.set(key, numbers);
+  }
+  return rows;
+}
+
+/** The part of a host item's ref after its agent id (`agent/rest`). */
+export const afterAgent = (ref: string) => ref.slice(ref.indexOf("/") + 1);

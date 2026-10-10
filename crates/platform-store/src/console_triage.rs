@@ -8,7 +8,7 @@ use crate::{Client, StoreError};
 /// Safe current triage view joined with the latest detector version.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TriageRecord {
-    /// Workflow state (`open`, `investigating`, or a completed state).
+    /// Workflow state: `open` or a completed state (triage v2).
     pub state: String,
     /// Detector rule version the workflow row is based on.
     pub rule_version: i64,
@@ -220,7 +220,7 @@ pub async fn update_many_with_request_id(
             .any(|(index, (agent_id, _))| changes[..index].iter().any(|(id, _)| id == agent_id))
         || !matches!(
             state,
-            "open" | "investigating" | "mitigated" | "accepted_risk" | "false_positive"
+            "open" | "mitigated" | "accepted_risk" | "false_positive"
         )
         || note.is_some_and(|value| value.trim().is_empty() || value.chars().count() > 4000)
         || ((state == "accepted_risk") != accepted_until.is_some())
@@ -373,10 +373,11 @@ pub(crate) fn fields_valid(
 ) -> bool {
     matches!(
         state,
-        "open" | "investigating" | "mitigated" | "accepted_risk" | "false_positive"
+        "open" | "mitigated" | "accepted_risk" | "false_positive"
     ) && note.is_none_or(|value| !value.trim().is_empty() && value.chars().count() <= 4000)
         && ((state == "accepted_risk") == accepted_until.is_some())
-        && accepted_until.is_none_or(|value| value > now)
+        // An accepted risk runs out within a year (triage v2 spec §1).
+        && accepted_until.is_none_or(|value| value > now && value <= now + chrono::Duration::days(366))
 }
 
 /// An enabled analyst or admin by username: (user id, username).
@@ -396,15 +397,16 @@ pub(crate) async fn assignee(
         .map(|row| (row.get(0), row.get(1))))
 }
 
+/// Triage v2 (spec 2026-10-10-bulk-triage-design.md §1): any state moves to
+/// any other in one step; cases replace the retired `investigating` step.
 pub(crate) fn transition_allowed(from: &str, to: &str) -> bool {
-    from == to
-        || matches!(
-            (from, to),
-            ("open", "investigating")
-                | ("investigating", "mitigated")
-                | ("investigating", "accepted_risk")
-                | ("investigating", "false_positive")
+    let known = |state: &str| {
+        matches!(
+            state,
+            "open" | "mitigated" | "accepted_risk" | "false_positive"
         )
+    };
+    known(from) && known(to)
 }
 
 fn record_from_row(row: tokio_postgres::Row) -> TriageRecord {

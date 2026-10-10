@@ -365,3 +365,19 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .fchip button:hover { background: var(--accent); color: var(--accent-text); }
 .fchip button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .link-add--menu .sel__button .sel__value { color: var(--accent); font-weight: 600; }
+/* The bulk action dialog (triage v2). */
+.bulk-dialog { padding: 16px; gap: 12px; overflow-y: auto; display: grid; }
+.bulk-dialog h2 { font-size: 15px; margin: 0; }
+/* In a list view the bar sits at the bottom, over the rows (spec §3). */
+.bulk-bar--bottom { top: auto; bottom: 12px; margin: 8px 12px; box-shadow: var(--shadow-3); }
+/* The detail view's tabs (triage v2): a segmented control under the
+   summary; the tab's table scrolls with the panel, never cut off (#239). */
+.detail-tabs { padding: 8px 16px; border-top: 1px solid var(--line); }
+.detail-tab__filters { padding: 8px 16px; }
+.detail-history { padding: 0 8px 16px; }
+/* A fieldset of filter chips: no browser frame. */
+fieldset.detail-tab__filters { border: 0; margin: 0; min-width: 0; }
+/* The bulk dialog is a native <dialog> (focus trap, Escape); it keeps the
+   palette's look and the same backdrop. */
+dialog.bulk-modal { padding: 0; margin: 12vh auto auto; color: var(--text); }
+dialog.bulk-modal::backdrop { background: var(--backdrop); backdrop-filter: blur(3px); }

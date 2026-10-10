@@ -18,6 +18,7 @@ export const LIST_FILTERS: Record<ListView, FilterDef[]> = {
     choice("severity", "Severity", severities("critical", "high", "medium", "low")),
   ],
   "/vulnerabilities": [
+    { param: "state", label: "Include resolved", kind: "flag", value: "all" },
     { param: "exploited", label: "Known exploited", kind: "flag", value: "true" },
     { param: "reboot", label: "Reboot needed", kind: "flag", value: "true" },
     { param: "nofix", label: "No fix yet", kind: "flag", value: "true" },

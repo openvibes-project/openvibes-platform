@@ -139,7 +139,7 @@ hosts) and a vulnerability (an advisory across its hosts):
   the caller's scope); vulnerabilities `{advisory_id, agent_id?}` (the
   same). `action` is `state:<state>`,
   `assign`, `case` or (alarms) `suppress`. CSRF, idempotency key, the
-  kind's triage permission (and `cases.write` for case actions), scope
+  kind's triage permission (and `cases.manage` for case actions), scope
   enforced in SQL. Returns `{changed, skipped: [{id, reason}]}`.
 - Single-item triage endpoints stay; they accept the new state model.
 - One audit event per bulk action (`*.bulk_triage`, count, filter or ids),

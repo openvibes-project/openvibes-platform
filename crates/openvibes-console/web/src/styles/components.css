@@ -265,3 +265,6 @@ input.input[type="number"]::-webkit-inner-spin-button, input.input[type="number"
 .attack-chip--link:hover { text-decoration: underline; }
 .attack-chip--link:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .attack-chip .link-button { margin-left: 4px; color: inherit; vertical-align: -1px; }
+
+/* "Select all N matching this filter" (bulk triage, spec §3). */
+.select-all-bar { padding: 8px 12px; background: var(--accent-soft); border-bottom: 1px solid var(--line); font-size: 13px; }

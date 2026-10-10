@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { ApiError } from "../api/client";
 import type { CaseEvent, CaseItem, CaseSummary } from "../api/types";
-import { statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, endingOf, eventText, findingRef, itemPanel, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
+import { afterAgent, caseBadges, statusBadge, localDay, blockingItems, caseErrorText, caseQuery, closeProblems, endOfLocalDay, endingOf, eventText, findingRef, itemPanel, outcomeChoices, refLabel, selectCases, updateBody, vulnerabilityRef } from "./cases";
 
 const item = (over: Partial<CaseItem>): CaseItem => ({
   item_id: "i", kind: "alarm", ref: "1", active: true, added_at: "2026-01-01T00:00:00Z", added_by: { user_id: "u", username: "sam", display_name: "Sam" },
@@ -134,5 +134,22 @@ describe("status badge", () => {
     expect(statusBadge("closed", "accepted_risk")).toEqual({ label: "Closed · accepted risk", tone: "info" });
     expect(statusBadge("closed", "false_positive")).toEqual({ label: "Closed · false positive", tone: "plain" });
     expect(localDay(new Date(2031, 0, 5))).toBe("2031-01-05");
+  });
+});
+
+describe("caseBadges", () => {
+  it("collects each row's open cases once", () => {
+    const items = [{ ref: "a1/FEDORA-1", case_number: 4 }, { ref: "a2/FEDORA-1", case_number: 4 }, { ref: "a2/FEDORA-2", case_number: 7 }, { ref: "a3/FEDORA-1", case_number: 9 }];
+    const badges = caseBadges(items, afterAgent);
+    expect(badges.get("FEDORA-1")).toEqual([4, 9]);
+    expect(badges.get("FEDORA-2")).toEqual([7]);
+    expect(caseBadges([{ ref: "a1/baseline/ssh", case_number: 2 }], afterAgent).get("baseline/ssh")).toEqual([2]);
+  });
+});
+
+describe("findings from before rule sets", () => {
+  it("are referenced with an empty rule set, as stored", () => {
+    expect(findingRef("a1", "~unknown", "ssh.root_login")).toBe("a1//ssh.root_login");
+    expect(findingRef("a1", "baseline", "ssh.root_login")).toBe("a1/baseline/ssh.root_login");
   });
 });
