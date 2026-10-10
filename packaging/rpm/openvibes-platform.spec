@@ -273,6 +273,9 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_post openvibes-maintenance.timer
 %posttrans -n openvibes-admin
 %restart_renamed openvibes-maintenance.service openvibes-maintenance.timer
+# Before v0.2.7 Setup's agent.toml for the local agent listed collectors
+# without services: add it to that exact line only (one log line, never fails).
+%{_bindir}/openvibes-admin helper agent-config-upgrade || :
 %preun -n openvibes-admin
 %systemd_preun openvibes-maintenance.timer
 %postun -n openvibes-admin

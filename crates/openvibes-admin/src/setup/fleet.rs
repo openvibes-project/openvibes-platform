@@ -33,6 +33,21 @@ fn p14_agent<R: Runner>(ctx: &Ctx<R>) -> bool {
     ctx.exists(AGENT_AUDIT_RULE) || ctx.exists(AGENT_AUDIT_TEMPLATE)
 }
 
+/// The `collectors` line Setup wrote before services (P15) were listed:
+/// replacing the agent's default, it turned services off (v0.2.7 fix).
+pub(super) const OLD_COLLECTORS: &str =
+    "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]";
+pub(super) const COLLECTORS: &str =
+    "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\", \"services\"]";
+
+/// The local agent knows the `services` collector (agents 0.2.0–0.2.1 refuse
+/// the name and would not start): 0.2.2–0.2.5 ship the owners.conf example,
+/// 0.2.6 on the audit rule template. A docs-less 0.2.2–0.2.5 install reads
+/// as older: services stay off, the agent keeps running.
+pub(super) fn p15_agent<R: Runner>(ctx: &Ctx<R>) -> bool {
+    ctx.exists(AGENT_AUDIT_TEMPLATE) || ctx.exists("/usr/share/doc/openvibes-agent/owners.conf")
+}
+
 /// `RULE_SET ISSUER_KEY_ID PUBLIC_KEY` from `STEM.key`.
 fn set_key<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Result<[String; 3], String> {
     let text = ctx.read(&format!("{RULES}/{stem}.key"))?;
@@ -175,10 +190,16 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
         // (A broken alarms.key already failed the rules step.)
         let alarms = alarms_key(ctx).ok().flatten().filter(|_| p14_agent(ctx));
         if alarms.is_some() {
-            text.push_str(
+            // An explicit list replaces the agent's default: keep services.
+            let collectors = if p15_agent(ctx) {
+                COLLECTORS
+            } else {
+                OLD_COLLECTORS
+            };
+            text.push_str(&format!(
                 "# Threat alarms: the agent's eBPF watcher, or kernel audit (auditd) as the fallback.\n\
-                 collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n",
-            );
+                 {collectors}\n",
+            ));
         }
         text.push_str(&format!("distribution_url = \"{distribution}\"\n"));
         for [set, issuer, key] in std::iter::once(baseline).chain(alarms) {
@@ -745,13 +766,24 @@ mod tests {
             "/etc/audit/rules.d/openvibes-agent.rules",
             "-a always,exit\n",
         );
+        // Agents 0.2.0–0.2.1 know process_events but refuse "services".
+        let p14 = super::agent_toml(&fake.ctx(&plan_defaults()));
+        assert!(
+            p14.contains(
+                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n"
+            ),
+            "{p14}"
+        );
+        // A P15 agent: the explicit list keeps services (v0.2.7 fix).
+        fake.file("/usr/share/doc/openvibes-agent/owners.conf", "# example\n");
         let new = super::agent_toml(&fake.ctx(&plan_defaults()));
         assert!(
             new.contains(
-                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\"]\n"
+                "collectors = [\"processes\", \"packages\", \"ports\", \"process_events\", \"services\"]\n"
             ),
             "{new}"
         );
+        fake.remove("/usr/share/doc/openvibes-agent/owners.conf");
         assert!(new.contains("id = \"baseline-alarms\""), "{new}");
         // collectors is a top-level key: it must come before any table.
         assert!(new.find("collectors").unwrap() < new.find("[[rule_sets]]").unwrap());
@@ -765,6 +797,18 @@ mod tests {
         );
         let ebpf = super::agent_toml(&fake.ctx(&plan_defaults()));
         assert!(ebpf.contains("process_events"), "{ebpf}");
+        assert!(ebpf.contains("\"services\"]"), "{ebpf}");
+        // Setup's pre-0.2.7 file is not "configured": Repair rewrites it.
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 0, "");
+        fake.file("/etc/openvibes-agent/agent.toml", &ebpf);
+        let plan = plan_defaults();
+        let ctx = fake.ctx(&plan);
+        assert!(matches!(super::agent_check(&ctx), Ok(StepState::Done(_))));
+        fake.file(
+            "/etc/openvibes-agent/agent.toml",
+            &ebpf.replace(super::COLLECTORS, super::OLD_COLLECTORS),
+        );
+        assert_eq!(super::agent_check(&ctx), Ok(StepState::Todo));
         assert!(ebpf.contains("id = \"baseline-alarms\""), "{ebpf}");
     }
 

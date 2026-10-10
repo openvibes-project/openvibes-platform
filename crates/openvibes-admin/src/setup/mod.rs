@@ -4,6 +4,7 @@
 //! safe and resumes.
 
 mod assistant;
+mod auto_agent;
 mod auto_migrate;
 mod auto_rules;
 mod backup;
@@ -313,6 +314,15 @@ pub fn update(step: UpdateStep, args: &update::UpdateArgs) -> ExitCode {
 /// `helper rules-apply`: one log line, exit 0 whatever happened.
 pub fn rules_apply() -> ExitCode {
     println!("{}", auto_rules::run(Path::new("/"), &SystemRunner));
+    ExitCode::SUCCESS
+}
+
+/// `helper agent-config-upgrade`: at most one log line, always exit 0
+/// (never blocks a package upgrade).
+pub fn agent_config_upgrade() -> ExitCode {
+    if let Some(line) = auto_agent::run(Path::new("/"), &SystemRunner) {
+        println!("openvibes-admin: {line}");
+    }
     ExitCode::SUCCESS
 }
 
