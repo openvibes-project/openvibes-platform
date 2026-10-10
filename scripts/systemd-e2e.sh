@@ -212,12 +212,15 @@ TOML
     # The assistant's internet fetcher (one process per connection, socket
     # group openvibes-console). No outbound network here: level 1 must end
     # in "unavailable" within the 20 s deadline, level 0 in "off".
-    # The preset must leave the socket enabled. Starting it is Setup's job
-    # (`enable --now`, unit-tested in the admin crate); this console was
-    # installed by hand, so start it here.
+    # The preset must leave the socket enabled, and the console must pull it
+    # in: on a `dnf upgrade` nothing else starts it (%systemd_post only
+    # enables), and the upgrade restarts the console. Not started by hand
+    # here, or this check would hide that.
     in_c 'dnf -q -y install /test/openvibes-fetch-*.rpm' >/dev/null 2>&1 || fail "install openvibes-fetch"
     in_c 'systemctl is-enabled -q openvibes-fetch.socket' || fail "openvibes-fetch.socket is not enabled by the preset after install"
-    in_c 'systemctl start openvibes-fetch.socket && systemctl is-active -q openvibes-fetch.socket' || fail "start openvibes-fetch.socket"
+    in_c '! systemctl is-active -q openvibes-fetch.socket' || fail "fetch socket active before the console restart: this check proves nothing"
+    in_c 'systemctl try-restart openvibes-console && systemctl is-active -q openvibes-fetch.socket' ||
+        fail "restarting the console (as an upgrade does) does not start openvibes-fetch.socket"
     [[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-fetch/fetch.sock')" == "660 root:openvibes-console" ]] ||
         fail "fetch socket has the wrong owner or mode"
     set_internet_level() { # LEVEL, through the console API as the c5-upgrade administrator

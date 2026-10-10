@@ -2,7 +2,7 @@
 Description=OpenVIBES web console
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=network-online.target postgresql.service openvibes-migrate.service
-Wants=network-online.target openvibes-migrate.service
+Wants=network-online.target openvibes-migrate.service openvibes-fetch.socket
 
 [Service]
 Type=exec
