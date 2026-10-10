@@ -1039,6 +1039,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     for (const t of picked.found) {
       // A rule or advisory's closed hosts keep their decision (as the server).
       if (state !== "open" && !t.named && t.current().state !== "open") { skipped.push({ id: t.id, reason: "already closed" }); continue; }
+      if (state === "open" && !t.named && t.current().state === "open") { skipped.push({ id: t.id, reason: "already open" }); continue; }
       t.write({ state, note, assigned_to: t.current().assigned_to, accepted_until: state === "accepted_risk" ? text(body.accepted_until) : null });
       changed += 1;
     }

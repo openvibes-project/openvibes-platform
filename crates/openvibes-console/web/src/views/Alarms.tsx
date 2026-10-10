@@ -146,6 +146,8 @@ export function Alarms() {
       )}
       <BulkBar kind="alarms" noun={selected.size === 1 ? "alarm" : "alarms"} count={selected.size} onClear={() => setSelected(new Set())}
         items={() => chosen().map((a) => ({ id: a.id }))}
+        closed={chosen().filter((a) => a.state !== "open").length}
+        reopenItems={() => chosen().filter((a) => a.state !== "open").map((a) => ({ id: a.id }))}
         newCase={() => { const c = chosen(); return { title: `${c.length} alarms: ${c[0]?.message ?? ""}`, severity: highest(c.map((a) => a.severity)) }; }} />
       {loaded.length >= max && (
         <div className="view-pad"><button type="button" className="button" onClick={() => setMax((m) => m + PAGE)}>Load {PAGE} more</button></div>

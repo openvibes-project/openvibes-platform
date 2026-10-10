@@ -15,7 +15,9 @@ export type { SelectGroup, SelectOption } from "./select";
 // Only one Select is open at a time: opening registers its closer here.
 let closeCurrent: (() => void) | null = null;
 
-export function Select({ label, value, onChange, options, placeholder, unknownLabel = (v) => v, small, disabled }: {
+/** `search` shows the filter box however short the list; `button` draws
+ * the trigger as a button (a picker among action buttons, #253). */
+export function Select({ label, value, onChange, options, placeholder, unknownLabel = (v) => v, small, disabled, search, button: asButton }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -24,6 +26,8 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
   unknownLabel?: (value: string) => string;
   small?: boolean;
   disabled?: boolean;
+  search?: boolean;
+  button?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState("");
@@ -37,13 +41,14 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
   const sections = useMemo(() => toSections(options), [options]);
   const known = sections.some((s) => s.options.some((o) => o.value === value));
   const unknown = !!value && !known;
-  const searchable = enabledCount(sections) > SEARCH_ABOVE;
+  const searchable = search === true || enabledCount(sections) > SEARCH_ABOVE;
   const shown = useMemo(() => {
     const filtered = filterSections(sections, filter);
     return unknown && !filter ? [{ options: [{ value, label: unknownLabel(value) }] }, ...filtered] : filtered;
   }, [sections, filter, unknown, value, unknownLabel]);
   const flat = useMemo(() => shown.flatMap((s) => s.options), [shown]);
-  const selectedLabel = unknown ? unknownLabel(value) : sections.flatMap((s) => s.options).find((o) => o.value === value)?.label;
+  const selectedOption = unknown ? undefined : sections.flatMap((s) => s.options).find((o) => o.value === value);
+  const selectedLabel = unknown ? unknownLabel(value) : selectedOption?.label;
 
   const close = (restoreFocus = false) => {
     setOpen(false);
@@ -129,10 +134,11 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
   const starts = shown.map((_, s) => shown.slice(0, s).reduce((n, x) => n + x.options.length, 0));
   return (
     <div className="sel" ref={root}>
-      <button type="button" ref={button} className={small ? "select select--small sel__button" : "select sel__button"} role="combobox"
+      <button type="button" ref={button} className={`${asButton ? "button menu-button" : small ? "select select--small" : "select"} sel__button`} role="combobox"
         aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined} aria-label={label} disabled={disabled}
         onClick={() => (open ? close() : openWith())} onKeyDown={onButtonKey}>
-        <span className={selectedLabel ? "sel__value" : "sel__value subtle"}>{selectedLabel ?? placeholder ?? ""}</span>
+        {selectedOption?.icon}
+        <span className={selectedLabel || asButton ? "sel__value" : "sel__value subtle"}>{selectedLabel ?? placeholder ?? ""}</span>
         <Icon name="chevronDown" size={14} />
       </button>
       {open && (
@@ -158,7 +164,7 @@ export function Select({ label, value, onChange, options, placeholder, unknownLa
                     className={i === active ? "sel__option sel__option--active" : "sel__option"}
                     onPointerEnter={() => { if (!option.disabled) setActive(i); }} onClick={() => choose(option)}
                     onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); choose(option); } }}>
-                    <span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}</span>
+                    <span className="sel__label">{option.icon}<span>{option.label}{option.hint && <span className="subtle sel__hint"> {option.hint}</span>}</span></span>
                     {selected && <Icon name="check" size={14} />}
                   </div>
                 );

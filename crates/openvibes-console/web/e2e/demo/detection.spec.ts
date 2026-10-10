@@ -20,7 +20,7 @@ test("an alarm opens the historical rule and evidence at a narrow width", async 
   const row = page.locator(".view tbody tr").filter({ hasText: "A database server started a shell" });
   await row.locator("td").nth(2).click();
   const panel = page.locator(".inspector");
-  await panel.getByRole("radio", { name: "Evidence" }).click();
+  await panel.getByRole("tab", { name: /^Evidence/ }).click();
   await panel.getByRole("button", { name: "Show rule" }).click();
   await expect(panel.locator(".detection-code code").first()).toContainText('/usr/bin/postgres');
   await expect(panel.locator(".detection-inputs")).toContainText('/usr/bin/bash');
@@ -33,7 +33,7 @@ test("the host Select filters, picks a host and its evidence opens", async ({ pa
   await page.goto("/compliance");
   await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
   const panel = page.locator(".inspector");
-  await panel.getByRole("radio", { name: "Evidence" }).click();
+  await panel.getByRole("tab", { name: /^Evidence/ }).click();
   await panel.getByRole("combobox", { name: "Host", exact: true }).click();
   await panel.getByRole("combobox", { name: "Filter Host" }).fill("db-01");
   await expect(panel.getByRole("option")).toHaveCount(1);
@@ -47,7 +47,7 @@ test("the host Select opens by keyboard, never clipped at 390 px", async ({ page
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/compliance");
   await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
-  await page.locator(".inspector").getByRole("radio", { name: "Evidence" }).click();
+  await page.locator(".inspector").getByRole("tab", { name: /^Evidence/ }).click();
   const host = page.locator(".inspector").getByRole("combobox", { name: "Host", exact: true });
   await host.focus();
   await page.keyboard.press("ArrowDown");
@@ -69,7 +69,7 @@ test("a typed letter opens the Select with the search filled and a row active", 
   await page.goto("/compliance");
   await page.locator(".view tbody tr").filter({ hasText: "SSH (tcp 22)" }).locator("td").nth(2).click();
   const panel = page.locator(".inspector");
-  await panel.getByRole("radio", { name: "Evidence" }).click();
+  await panel.getByRole("tab", { name: /^Evidence/ }).click();
   await panel.getByRole("combobox", { name: "Host", exact: true }).focus();
   await page.keyboard.press("d");
   await expect(panel.getByRole("combobox", { name: "Filter Host" })).toHaveValue("d");

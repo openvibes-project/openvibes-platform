@@ -22,11 +22,12 @@ test("an alarm shows its process tree and is triaged and quieted", async ({ page
   await expect(tree.locator("li").first()).toContainText("postgres: checkpointer");
 
   // One step to a closing state, and it needs a note (triage v2).
-  await inspector.getByRole("region", { name: "Triage actions" }).getByRole("button", { name: "False positive…" }).click();
+  await inspector.locator(".panel-header__actions").getByRole("button", { name: /^Set state/ }).click();
+  await page.getByRole("menuitem", { name: /^False positive/ }).click();
   const dialog = page.getByRole("dialog", { name: "False positive" });
   await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
   await expect(dialog.getByRole("alert")).toContainText("note");
-  await dialog.getByRole("textbox", { name: "Note (required)" }).fill("our backup job");
+  await dialog.getByRole("textbox", { name: "Why (required)" }).fill("our backup job");
   await dialog.getByRole("button", { name: "Mark as false positive: 1 alarm" }).click();
   await expect(page.locator(".toast")).toContainText("1 changed");
   await expect(inspector.locator(".panel-header")).toContainText("False positive");

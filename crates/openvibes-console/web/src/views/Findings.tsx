@@ -64,6 +64,8 @@ export function Findings() {
       <BulkBar kind="compliance" noun={selected.size === 1 ? "finding" : "findings"} count={selected.size}
         onClear={() => setSelected(new Set())}
         items={() => chosen().map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id }))}
+        closed={chosen().filter((g) => g.endpoint_count > g.triage_counts.open).length}
+        reopenItems={() => chosen().filter((g) => g.endpoint_count > g.triage_counts.open).map((g) => ({ rule_set_id: g.rule_set_id, rule_id: g.rule_id }))}
         newCase={() => { const c = chosen(); return { title: `${c.length} findings: ${c[0]?.latest_message ?? ""}`, severity: highest(c.map((g) => g.severity)) }; }} />
     </div>
   );

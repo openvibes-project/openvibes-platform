@@ -84,12 +84,16 @@ export function confirmLabel(form: BulkForm, count: number, noun: string): strin
 
 /** "12 changed; 3 skipped (2 in another open case, 1 not found or out of scope)". */
 export function resultText(result: BulkResult): string {
-  const changed = `${result.changed.toLocaleString()} changed`;
-  if (result.skipped.length === 0) return changed;
+  // Items already in that state are not failures: "unchanged".
+  const unchanged = result.skipped.filter((s) => s.reason.startsWith("already ")).length;
+  const skipped = result.skipped.filter((s) => !s.reason.startsWith("already "));
+  const parts = [`${result.changed.toLocaleString()} changed`];
+  if (unchanged > 0) parts.push(`${unchanged.toLocaleString()} unchanged`);
+  if (skipped.length === 0) return parts.join(", ");
   const reasons = new Map<string, number>();
-  for (const skip of result.skipped) reasons.set(skip.reason, (reasons.get(skip.reason) ?? 0) + 1);
+  for (const skip of skipped) reasons.set(skip.reason, (reasons.get(skip.reason) ?? 0) + 1);
   const why = [...reasons].map(([reason, n]) => `${n.toLocaleString()} ${reason}`).join(", ");
-  return `${changed}; ${result.skipped.length.toLocaleString()} skipped (${why})`;
+  return `${parts.join(", ")}; ${skipped.length.toLocaleString()} skipped (${why})`;
 }
 
 /** The most severe of these severities (for a new case). */

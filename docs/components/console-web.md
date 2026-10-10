@@ -44,20 +44,29 @@ Show everything, without page changes for details:
   day). The Alarms, Compliance and Vulnerabilities lists and a detail
   view's Hosts tab select rows (checkbox, shift-click range, `x` on the
   cursor row; the header box selects the rows on screen, then a bar offers
-  every row the filter matches, up to 10,000; `ui/selection.ts`). The bulk
-  bar at the bottom offers Mitigate, Accept risk, False positive, Reopen,
-  Assign, Add to case and (alarms) Suppress; each opens one dialog whose
-  confirm button names the count, and the toast says what changed and why
-  the rest was skipped. A selected finding or advisory row acts on its
-  hosts in scope; a close leaves the hosts already closed alone. Rows in an open case show
+  every row the filter matches, up to 10,000; `ui/selection.ts`). The
+  triage actions (#253) are the same in a panel header and in the bulk bar
+  at the bottom of a list: **Set state** (a menu, `ui/Menu.tsx`: Mitigate,
+  Accept risk, False positive, and Suppress for alarms in bulk), **Reopen
+  N closed** (only when the selection holds closed items; applied at once),
+  the **assignee** (the console's `Select` drawn as a button, with search,
+  "Assign to me" and "Unassigned" on top; applied on pick) and **Add to
+  case**. A state or a case opens one dialog whose confirm button names the
+  count; the toast says what changed, what was already so ("unchanged") and
+  why the rest was skipped. A selected finding or advisory row acts on its
+  hosts in scope; a close leaves the hosts already closed alone, a reopen
+  the ones already open. Rows in an open case show
   its badge (`panels/CaseBadge.tsx`). Vulnerabilities count open hosts
   and hide advisories triaged everywhere unless Include resolved is on.
 - **Detail template** (`panels/TriageDetail.tsx`): a finding, an advisory
-  and an alarm share one layout: the summary with actions on every open
-  host, then tabs (`Segmented`). Findings and advisories: Hosts (a
-  `DataTable` with a state filter, selection and the bulk bar, never cut
-  off), Evidence, History. Alarms: Process, Evidence, History, plus the
-  Quiet choice. The Hosts table shows each
+  and an alarm share one layout: the triage actions on the panel header's
+  actions line (a finding or advisory: "Set state: N open", acting on its
+  open hosts), a short summary, then the console's underline tabs
+  (`Tabs`). Findings and advisories: Hosts (a `DataTable` with a state
+  filter, selection and the bulk bar, never cut off), Evidence, History.
+  Alarms: Process, Evidence, History; a closed alarm shows its decision
+  (note, who, when) with Reopen, and the case button names the open case
+  holding it; plus the Quiet choice. The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
   (marked expired once past), and a `fixed <date>` badge (`about` when
   approximate) for a host whose agent reported the match ended (P13).

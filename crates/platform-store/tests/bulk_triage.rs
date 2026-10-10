@@ -183,6 +183,23 @@ async fn a_rule_or_an_advisory_expands_to_every_host_in_scope() {
         .unwrap()
         .get(0);
     assert_eq!(db_state, "false_positive");
+    // Reopening the rule reopens its closed hosts and skips none that are open.
+    let reopen = BulkChange::State {
+        state: "open",
+        note: None,
+        accepted_until: None,
+    };
+    let reopened = bulk::compliance(&mut client, &all, &rule, reopen, "alice", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!((reopened.changed, reopened.skipped.len()), (2, 0));
+    let again = bulk::compliance(&mut client, &all, &rule, reopen, "alice", now)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(again.changed, 0);
+    assert!(again.skipped.iter().all(|(_, why)| *why == "already open"));
     let advisory = [("FEDORA-1".to_owned(), None)];
     let done = bulk::vulnerabilities(
         &mut client,

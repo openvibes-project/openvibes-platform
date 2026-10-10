@@ -1,35 +1,33 @@
 // One detail template for an alarm, a compliance finding and a
-// vulnerability (triage v2, spec 2026-10-10-bulk-triage §5): the summary
-// with its actions, then tabs. The Hosts tab is a real table with
-// selection and the bulk bar; History lists the triage changes.
+// vulnerability (triage v2, spec 2026-10-10-bulk-triage §5; #253): the
+// panel header carries the triage actions, then a short summary, then the
+// console's underline tabs. The Hosts tab is a real table with selection
+// and the bulk bar; History lists the triage changes.
 import { type ReactNode, useMemo, useState } from "react";
 
 import { useResource } from "../api/client";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, TriageBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { triageLabel } from "../ui/format";
-import { Segmented } from "../ui/Segmented";
+import { Tabs } from "../ui/panel";
 import { useSelection } from "../ui/selection";
 import type { BulkItem, BulkKind } from "./bulk";
 import { BulkBar } from "./BulkBar";
 import { CaseBadge } from "./CaseBadge";
 import { triageStates } from "./triage";
 
-export type Tab = { key: string; label: string; body: ReactNode };
+export type Tab = { key: string; label: string; count?: number; body: ReactNode };
 
-/** The summary (with its actions) stays; one tab shows below it. `tab`
- * and `onTab` let the panel switch tabs itself (a host's "Evidence"). */
-export function TriageDetail({ summary, tabs, tab: shown, onTab }: Readonly<{ summary: ReactNode; tabs: Tab[]; tab?: string; onTab?: (tab: string) => void }>) {
-  const [own, setOwn] = useState(tabs[0]?.key ?? "");
-  const tab = shown ?? own;
-  const setTab = onTab ?? setOwn;
+/** The summary stays; one tab shows below it. `tab` and `onTab` let the
+ * panel switch tabs itself (a host's "View evidence"). */
+export function TriageDetail({ summary, tabs, tab, onTab }: Readonly<{ summary?: ReactNode; tabs: Tab[]; tab?: string; onTab?: (tab: string) => void }>) {
   return (
     <>
-      <div className="panel-body stack">{summary}</div>
-      <div className="detail-tabs">
-        <Segmented label="Detail" value={tab} onChange={setTab} options={tabs.map((t) => ({ value: t.key, label: t.label }))} />
-      </div>
-      <div className="detail-tab">{tabs.find((t) => t.key === tab)?.body}</div>
+      {summary && <div className="panel-body stack">{summary}</div>}
+      <Tabs tabs={tabs.map((t) => ({ id: t.key, label: t.label, count: t.count }))}
+        {...(tab !== undefined ? { active: tab } : {})} {...(onTab ? { onActive: onTab } : {})}>
+        {(active) => <div className="detail-tab">{tabs.find((t) => t.key === active)?.body}</div>}
+      </Tabs>
     </>
   );
 }
@@ -50,6 +48,7 @@ export function HostsTab({ kind, hosts, item, cases, title, severity }: Readonly
   const rows = useMemo(() => hosts.filter((h) => filter === "all" || h.triage_state === filter), [hosts, filter]);
   const [selected, setSelected] = useSelection(filter);
   const counts = (state: string) => hosts.filter((h) => h.triage_state === state).length;
+  const closedSelected = hosts.filter((h) => selected.has(h.agent_id) && h.triage_state !== "open");
   return (
     <>
       <fieldset className="row row--wrap detail-tab__filters" aria-label="Show hosts by triage state">
@@ -76,6 +75,7 @@ export function HostsTab({ kind, hosts, item, cases, title, severity }: Readonly
           ]} />
       )}
       <BulkBar kind={kind} noun={selected.size === 1 ? "host" : "hosts"} count={selected.size} onClear={() => setSelected(new Set())}
+        closed={closedSelected.length} reopenItems={() => closedSelected.map((h) => item(h.agent_id))}
         items={() => [...selected].map(item)} newCase={() => ({ title: `${title} on ${selected.size} hosts`, severity })} />
     </>
   );
