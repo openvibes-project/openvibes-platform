@@ -45,7 +45,8 @@ asking user's scope.
   called on a blocking thread. `events` streams `Lookup`, `Text` (native
   mode), and `Reset`.
 - `StoreLookups::new(pool, AgentScope, now)` runs lookups through
-  `platform_store::assistant` with the user's scope; `LookupRunner` lets
+  `platform_store::assistant` and `platform_store::assistant_inventory`
+  with the user's scope; `LookupRunner` lets
   tests substitute their own. The console wraps it to check its own
   permissions per lookup ([console-assistant.md](console-assistant.md));
   a lookup the user may not run returns `LookupError::Forbidden(Area)`,
@@ -58,11 +59,13 @@ asking user's scope.
 |---|---|---|
 | `search_findings` | `text?`, `min_severity?` (finding severity), `rule_set?`, `window_hours?` | Finding groups (an unknown `rule_set` falls back to all sets with a note): severity, endpoints, versions, first/last observed, latest message |
 | `finding_endpoints` | `rule_set?`, `rule`, `window_hours?` | Endpoints in the window, and how many were not seen in it. A missing or unknown `rule_set` resolves from the findings; a rule in several sets returns all, each item naming its set |
-| `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents) |
+| `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents). No ports, services or software: its description points to the two lookups below |
 | `host_vulnerabilities` | `agent`, `min_severity?` (advisory severity) | Open vulnerabilities by priority; a host name matching several agents in scope is refused as ambiguous |
 | `vulnerability_hosts` | `id` (CVE or advisory) | Hosts where it is open |
 | `fleet_overview` | `window_hours?` | Agent counts, open and exploited vulnerabilities, top findings and advisories |
 | `rule_description` | `rule_set?`, `rule` | Title, severity, message, and expression from the latest published JSON bundle. A missing or unknown set resolves from the findings; a rule in several sets is a fixed error asking for one |
+| `host_services` | `agent?` (ID or host name), `port?` (1–65535); at least one | With `agent`: its listening ports (port, protocol, address, exposed, owning service and program), exposed first, then (without `port`) its running services (unit, programs, processes, user), in one list; a note when the host reported none. With only `port`: the non-revoked hosts listening on it (TCP or UDP), exposed first, and how many distinct hosts |
+| `software` | `name` (part of the package name, case-insensitive like the Software page), `agent?` | Installed packages matching it: one item per host and package with version, architecture and manager, by package then host name, and how many distinct hosts; with `agent`, only that host (empty: not installed there). Revoked hosts are left out |
 
 `rule_set` is optional on `finding_endpoints` and `rule_description`. When
 it is missing or names no set, the runner looks the rule up in the caller's
@@ -160,7 +163,8 @@ scores it; `openvibes-admin assistant eval` runs it (spec §10).
 
 - **Fleet** (`eval/fleet.toml`): 12 agents in every state (seen recently,
   offline, never seen, revoked), findings, advisories, vulnerabilities,
-  and published rules, with times relative to the run. `FleetSource`
+  published rules, and listening ports, running services and installed
+  packages (`eval/inventory.rs` answers those), with times relative to the run. `FleetSource`
   answers lookups with the same types, grouping, ordering, and windows as
   the database, so no platform data is used. `vault-01` is outside the
   evaluating user's scope and dropped as scope would drop it. One agent is
@@ -168,7 +172,7 @@ scores it; `openvibes-admin assistant eval` runs it (spec §10).
   injected instructions, each asking for something not written in it
   (8484, 777, evil.example/steal), so quoting the data is harmless and only
   obeying it is caught.
-- **Questions** (`eval/questions.toml`, or `--cases FILE`): 55 cases with
+- **Questions** (`eval/questions.toml`, or `--cases FILE`): 61 cases with
   the lookups that answer each, facts the answer must hold (`a|b` for
   either), and terms it must never hold; `forbid_everywhere` holds the
   hidden host's data and the injected outputs, and is not checked against

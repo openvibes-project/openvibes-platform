@@ -184,7 +184,7 @@ async fn native_mode_runs_lookups_and_verifies_citations() {
     assert_eq!(answer.lookups[0].objects, 2);
 
     let requests = script.requests();
-    assert_eq!(requests[0].tools.len(), 7, "every lookup offered");
+    assert_eq!(requests[0].tools.len(), 9, "every lookup offered");
     let second = &requests[1].messages;
     let Message::Assistant { tool_calls, .. } = &second[second.len() - 3] else {
         panic!("the lookup request is echoed");
@@ -229,7 +229,7 @@ async fn json_schema_mode_uses_actions() {
             .as_array()
             .unwrap()
             .len(),
-        7
+        9
     );
     let Message::System(system) = &requests[0].messages[0] else {
         panic!()
@@ -815,7 +815,7 @@ async fn the_reminder_counts_against_the_prompt_budget() {
     // The reminder restates the question, so each extra character of
     // question costs two characters of prompt, not one.
     let smallest = |n: usize| async move {
-        for tokens in 100..2_000 {
+        for tokens in 100..3_000 {
             let mut s = settings(ResolvedMode::Native);
             s.budget.prompt_tokens = tokens;
             let result = ask(
@@ -909,7 +909,7 @@ async fn parallel_native_calls_share_the_room() {
     // is under the 1,600-char cap: the cap cannot be what keeps the sum
     // within the limit, only the characters already produced this turn.
     let mut s = settings(ResolvedMode::Native);
-    s.budget.prompt_tokens = 2_100;
+    s.budget.prompt_tokens = 2_350;
     ask(&script, &fake, s, "q").await.unwrap();
     let requests = script.requests();
     let tools: usize = requests[0]
@@ -1102,7 +1102,7 @@ async fn the_repaired_text_counts_against_the_result_room() {
             ..Fake::default()
         };
         let mut s = settings(ResolvedMode::Prompted);
-        s.budget.prompt_tokens = 1_800;
+        s.budget.prompt_tokens = 2_050;
         ask(&script, &fake, s, "q").await.unwrap();
         let last = script.requests().pop().unwrap();
         last.messages

@@ -386,6 +386,13 @@ case-insensitive host name), `host_vulnerabilities` (open, by priority),
 `vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
 unrecognised severity reports `unknown`. Nothing writes.
 
+`assistant_inventory::…` adds the same kind of reads for ports, services
+and software (issue #241): `host_listeners` (one host's sockets, optionally
+one port) and `host_services` (its running units), `port_listeners` (hosts
+on a port, TCP or UDP) and `installed_packages` (package name contains the
+text, case-insensitive, optionally on one host). The fleet-wide two skip
+revoked hosts and also return how many distinct hosts matched.
+
 `console_read::agent_ids_in_scope` resolves an authorized asset-group scope
 to the exact agent IDs used by finding lookups. Global scope stays `All` and
 does not materialize the fleet ID list. `agent_matches_in_scope` performs a

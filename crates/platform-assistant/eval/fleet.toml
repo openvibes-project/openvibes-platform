@@ -342,3 +342,204 @@ title = "Audit daemon not running"
 severity = "low"
 message = "The audit daemon is not running"
 expression = "!('auditd' in facts['process.names'])"
+
+# Open ports (host, protocol (default tcp), address, port, owning service
+# and program). A non-loopback address is exposed. build-01 runs no ports
+# collector, so it reports none.
+[[listeners]]
+host = "web-01"
+address = "0.0.0.0"
+port = 22
+service = "sshd.service"
+program = "sshd"
+
+[[listeners]]
+host = "web-01"
+address = "0.0.0.0"
+port = 443
+service = "nginx.service"
+program = "nginx"
+
+[[listeners]]
+host = "web-01"
+address = "127.0.0.1"
+port = 9090
+service = "cockpit.socket"
+program = "systemd"
+
+[[listeners]]
+host = "web-02"
+address = "0.0.0.0"
+port = 22
+service = "sshd.service"
+program = "sshd"
+
+[[listeners]]
+host = "web-02"
+address = "0.0.0.0"
+port = 443
+service = "nginx.service"
+program = "nginx"
+
+[[listeners]]
+host = "web-03"
+address = "::"
+port = 22
+service = "sshd.service"
+program = "sshd"
+
+[[listeners]]
+host = "db-01"
+address = "0.0.0.0"
+port = 5432
+service = "postgresql.service"
+program = "postgres"
+
+[[listeners]]
+host = "db-01"
+address = "127.0.0.1"
+port = 22
+service = "sshd.service"
+program = "sshd"
+
+[[listeners]]
+host = "mail-01"
+address = "0.0.0.0"
+port = 25
+service = "postfix.service"
+program = "master"
+
+[[listeners]]
+host = "mail-01"
+address = "0.0.0.0"
+port = 23
+service = "telnet.socket"
+program = "in.telnetd"
+
+[[listeners]]
+host = "mail-01"
+protocol = "udp"
+address = "127.0.0.1"
+port = 323
+service = "chronyd.service"
+program = "chronyd"
+
+[[listeners]]
+host = "vault-01"
+address = "0.0.0.0"
+port = 22
+service = "sshd.service"
+program = "sshd"
+
+[[listeners]]
+host = "vault-01"
+address = "0.0.0.0"
+port = 8200
+service = "vault.service"
+program = "vault"
+
+# Running services: host, unit, programs, processes, user.
+[[services]]
+host = "web-01"
+unit = "sshd.service"
+programs = ["sshd"]
+processes = 1
+run_as = "root"
+
+[[services]]
+host = "web-01"
+unit = "nginx.service"
+programs = ["nginx"]
+processes = 5
+run_as = "nginx"
+
+[[services]]
+host = "web-01"
+unit = "chronyd.service"
+programs = ["chronyd"]
+processes = 1
+run_as = "chrony"
+
+[[services]]
+host = "web-02"
+unit = "nginx.service"
+programs = ["nginx"]
+processes = 5
+run_as = "nginx"
+
+[[services]]
+host = "db-01"
+unit = "postgresql.service"
+programs = ["postgres"]
+processes = 12
+run_as = "postgres"
+
+[[services]]
+host = "mail-01"
+unit = "postfix.service"
+programs = ["master", "pickup", "qmgr"]
+processes = 3
+run_as = "root"
+
+[[services]]
+host = "vault-01"
+unit = "vault.service"
+programs = ["vault"]
+processes = 1
+run_as = "vault"
+
+# Installed packages: host, name, version (manager rpm, arch x86_64).
+[[packages]]
+host = "web-01"
+name = "openssh-server"
+version = "9.9p1-3.fc44"
+
+[[packages]]
+host = "web-02"
+name = "openssh-server"
+version = "9.9p1-3.fc44"
+
+[[packages]]
+host = "web-03"
+name = "openssh-server"
+version = "9.9p1-2.fc44"
+
+[[packages]]
+host = "db-01"
+name = "openssh-server"
+version = "9.9p1-2.fc44"
+
+[[packages]]
+host = "web-01"
+name = "nginx"
+version = "1:1.28.0-1.fc44"
+
+[[packages]]
+host = "db-01"
+name = "postgresql-server"
+version = "17.6-1.fc44"
+
+[[packages]]
+host = "dev-laptop-17"
+name = "google-chrome-stable"
+version = "141.0.7390.65-1"
+
+[[packages]]
+host = "dev-laptop-17"
+name = "firefox"
+version = "143.0.4-1.fc44"
+
+[[packages]]
+host = "old-02"
+name = "google-chrome-stable"
+version = "120.0.6099.71-1"
+
+[[packages]]
+host = "vault-01"
+name = "openssh-server"
+version = "9.9p1-3.fc44"
+
+[[packages]]
+host = "vault-01"
+name = "vault"
+version = "1.20.4-1"

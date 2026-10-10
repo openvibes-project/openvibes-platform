@@ -15,6 +15,8 @@ use platform_store::{
     assistant::{
         self as store, ADVISORY_SEVERITIES, AgentScope, FINDING_SEVERITIES, GroupFilter, Page,
     },
+    assistant_inventory::{self as inv, HostRows, InstalledPackage, PortListener},
+    host_services::{Listener, Service},
     rules::{self, Served},
 };
 use serde::Deserialize;
@@ -83,6 +85,20 @@ pub enum Lookup {
         rule_set: Option<String>,
         /// Rule.
         rule: String,
+    },
+    /// Open ports and running services: one host's, or the hosts on a port.
+    HostServices {
+        /// Agent ID or host name.
+        agent: Option<String>,
+        /// One port.
+        port: Option<u16>,
+    },
+    /// Installed packages whose name contains `name`.
+    Software {
+        /// Part of the package name.
+        name: String,
+        /// Agent ID or host name.
+        agent: Option<String>,
     },
 }
 
@@ -164,7 +180,7 @@ pub fn specs() -> Vec<ToolSpec> {
         description: description.into(),
         parameters,
     };
-    vec![
+    let mut specs = vec![
         spec(
             "search_findings",
             "Search compliance findings by words, such as firewall, auditd or root login: one row per rule with an endpoint count but no host names; use finding_endpoints for the hosts.",
@@ -192,7 +208,7 @@ pub fn specs() -> Vec<ToolSpec> {
         ),
         spec(
             "agent_summary",
-            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), counts of findings in the last 24 hours and of open vulnerabilities.",
+            "One endpoint by agent ID or host name: status, last contact, OS, running kernel, capabilities (collectors), counts of findings in the last 24 hours and of open vulnerabilities. Not ports, services or software: use host_services or software.",
             object(
                 json!({ "agent": text_schema("Agent ID or host name.") }),
                 &["agent"],
@@ -236,11 +252,13 @@ pub fn specs() -> Vec<ToolSpec> {
                 &["rule"],
             ),
         ),
-    ]
+    ];
+    specs.extend(inventory::specs());
+    specs
 }
 
 /// The lookup names, in [`specs`] order.
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 9] = [
     "search_findings",
     "finding_endpoints",
     "agent_summary",
@@ -248,6 +266,8 @@ pub const NAMES: [&str; 7] = [
     "vulnerability_hosts",
     "fleet_overview",
     "rule_description",
+    "host_services",
+    "software",
 ];
 
 fn text_arg(value: Option<String>) -> Result<Option<String>, LookupError> {
@@ -302,18 +322,19 @@ fn severity(
         .transpose()
 }
 
+fn args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, LookupError> {
+    let arguments = if arguments.trim().is_empty() {
+        "{}"
+    } else {
+        arguments
+    };
+    serde_json::from_str(arguments).map_err(|_| LookupError::InvalidArguments)
+}
+
 impl Lookup {
     /// Parses a request by name with its JSON arguments; unknown fields,
     /// wrong types, and out-of-range values are refused.
     pub fn parse(name: &str, arguments: &str) -> Result<Self, LookupError> {
-        fn args<T: for<'de> Deserialize<'de>>(arguments: &str) -> Result<T, LookupError> {
-            let arguments = if arguments.trim().is_empty() {
-                "{}"
-            } else {
-                arguments
-            };
-            serde_json::from_str(arguments).map_err(|_| LookupError::InvalidArguments)
-        }
         #[derive(Deserialize)]
         #[serde(deny_unknown_fields)]
         struct Search {
@@ -406,7 +427,7 @@ impl Lookup {
                     rule: required(a.rule)?,
                 })
             }
-            _ => Err(LookupError::Unknown),
+            _ => inventory::parse(name, arguments),
         }
     }
 
@@ -421,6 +442,8 @@ impl Lookup {
             Self::VulnerabilityHosts { .. } => NAMES[4],
             Self::FleetOverview { .. } => NAMES[5],
             Self::RuleDescription { .. } => NAMES[6],
+            Self::HostServices { .. } => NAMES[7],
+            Self::Software { .. } => NAMES[8],
         }
     }
 
@@ -457,6 +480,8 @@ impl Lookup {
             Self::RuleDescription { rule_set, rule } => {
                 json!({ "rule_set": rule_set, "rule": rule })
             }
+            Self::HostServices { agent, port } => json!({ "agent": agent, "port": port }),
+            Self::Software { name, agent } => json!({ "name": name, "agent": agent }),
         }
     }
 }
@@ -619,6 +644,32 @@ pub trait Source: Send + Sync {
         &self,
         rule_set: &str,
     ) -> impl Future<Output = Result<Served, StoreError>> + Send;
+    /// See [`inv::host_listeners`].
+    fn host_listeners(
+        &self,
+        agent_id: &str,
+        port: Option<i32>,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<Listener>, StoreError>> + Send;
+    /// See [`inv::host_services`].
+    fn host_services(
+        &self,
+        agent_id: &str,
+        limit: u32,
+    ) -> impl Future<Output = Result<Page<Service>, StoreError>> + Send;
+    /// See [`inv::port_listeners`].
+    fn port_listeners(
+        &self,
+        port: i32,
+        limit: u32,
+    ) -> impl Future<Output = Result<HostRows<PortListener>, StoreError>> + Send;
+    /// See [`inv::installed_packages`].
+    fn installed_packages(
+        &self,
+        name: &str,
+        agent_id: Option<&str>,
+        limit: u32,
+    ) -> impl Future<Output = Result<HostRows<InstalledPackage>, StoreError>> + Send;
 }
 
 /// `platform-store`, limited to one user's scope.
@@ -700,6 +751,32 @@ impl Source for StoreSource {
     async fn rule_envelope(&self, rule_set: &str) -> Result<Served, StoreError> {
         rules::serve(&self.client().await?, rule_set, None).await
     }
+    async fn host_listeners(
+        &self,
+        agent_id: &str,
+        port: Option<i32>,
+        limit: u32,
+    ) -> Result<Page<Listener>, StoreError> {
+        inv::host_listeners(&self.client().await?, &self.scope, agent_id, port, limit).await
+    }
+    async fn host_services(&self, agent_id: &str, limit: u32) -> Result<Page<Service>, StoreError> {
+        inv::host_services(&self.client().await?, &self.scope, agent_id, limit).await
+    }
+    async fn port_listeners(
+        &self,
+        port: i32,
+        limit: u32,
+    ) -> Result<HostRows<PortListener>, StoreError> {
+        inv::port_listeners(&self.client().await?, &self.scope, port, limit).await
+    }
+    async fn installed_packages(
+        &self,
+        name: &str,
+        agent_id: Option<&str>,
+        limit: u32,
+    ) -> Result<HostRows<InstalledPackage>, StoreError> {
+        inv::installed_packages(&self.client().await?, &self.scope, name, agent_id, limit).await
+    }
 }
 
 /// Runs lookups against a [`Source`] as of a fixed time.
@@ -765,6 +842,7 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
         .collect()
 }
 
+mod inventory;
 mod resolve;
 
 impl<S: Source> Lookups<S> {
@@ -977,6 +1055,14 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .map_err(store_error)?;
                 summary.insert("rule".into(), rule_json(served, &rule_set, &rule));
                 LookupOutput::page(summary, Vec::new(), 0)
+            }
+            Lookup::HostServices { agent, port } => {
+                self.host_services_lookup(summary, agent.as_deref(), *port, items)
+                    .await?
+            }
+            Lookup::Software { name, agent } => {
+                self.software_lookup(summary, name, agent.as_deref(), items)
+                    .await?
             }
         })
     }

@@ -1,7 +1,7 @@
 # Console assistant
 
 The opt-in assistant dock (Ctrl+J, from any view of the web console) lets an authorized analyst ask questions about
-agents, compliance findings, vulnerabilities, and rules using an operator-hosted OpenAI-compatible model.
+agents (with their open ports, services and installed software), compliance findings, vulnerabilities, and rules using an operator-hosted OpenAI-compatible model.
 The console authenticates every request, applies the caller's existing
 console permissions and scopes to SQL lookups (below), and returns only
 sanitized answer text, verified citations, and a short lookup summary. The
@@ -16,7 +16,7 @@ The console runs every lookup the model is offered
 
 | Lookup | Needs | Scope |
 |---|---|---|
-| `search_findings`, `finding_endpoints`, `agent_summary` | `agents.read`, `compliance.read` (required for the dock) | agent scope |
+| `search_findings`, `finding_endpoints`, `agent_summary`, `host_services`, `software` | `agents.read`, `compliance.read` (required for the dock) | agent scope |
 | `host_vulnerabilities`, `vulnerability_hosts` | `vulnerabilities.read` | the user's vulnerability scope, never wider |
 | `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `agents.read` | agent scope |
 | `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise the latest published definition of a rule the user has findings for (the Compliance page shows the version each finding was evaluated against) | rule set resolved from the user's findings |

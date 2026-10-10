@@ -247,9 +247,13 @@ impl LookupRunner for ConsoleReadLookups {
     async fn run(&self, lookup: &Lookup, items: u32) -> Result<LookupOutput, LookupError> {
         let forbidden = |area| Err(LookupError::Forbidden(area));
         match lookup {
-            Lookup::SearchFindings { .. } | Lookup::FindingEndpoints { .. } => {
-                self.lookups.run(lookup, items).await
-            }
+            // Host services and software read host data, guarded by
+            // agents.read like agent_summary (and the Assets and Software
+            // pages), with the agent scope.
+            Lookup::SearchFindings { .. }
+            | Lookup::FindingEndpoints { .. }
+            | Lookup::HostServices { .. }
+            | Lookup::Software { .. } => self.lookups.run(lookup, items).await,
             Lookup::HostVulnerabilities { .. } | Lookup::VulnerabilityHosts { .. } => {
                 match &self.vulnerabilities {
                     Some(lookups) => lookups.run(lookup, items).await,

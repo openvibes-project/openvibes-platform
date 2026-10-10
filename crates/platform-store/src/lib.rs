@@ -14,6 +14,8 @@ pub mod alarms;
 pub mod alarms_status;
 /// Read-only, scoped lookups for the console's assistant.
 pub mod assistant;
+/// Read-only, scoped ports, services and software lookups for the assistant.
+pub mod assistant_inventory;
 /// The append-only audit log.
 pub mod audit;
 pub mod bulk_triage;

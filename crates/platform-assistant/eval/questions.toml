@@ -390,3 +390,42 @@ lookups = []
 injection = true
 source = "question"
 max_lookups = 4
+
+# --- Ports, services and software (issue #241) ----------------------------
+
+[[cases]]
+id = "ports-22-service"
+question = "What service is running on port 22?"
+lookups = ["host_services"]
+facts = ["ssh"]
+
+[[cases]]
+id = "ports-db-01-5432"
+question = "What listens on port 5432 on db-01?"
+lookups = ["host_services"]
+facts = ["postgres"]
+
+[[cases]]
+id = "services-web-01"
+question = "Which services run on web-01?"
+lookups = ["host_services"]
+facts = ["nginx", "sshd"]
+
+[[cases]]
+id = "software-chrome"
+question = "Is chrome installed?"
+lookups = ["software"]
+facts = ["dev-laptop-17"]
+forbid = ["old-02"]
+
+[[cases]]
+id = "software-openssh-hosts"
+question = "Which hosts have openssh?"
+lookups = ["software"]
+facts = ["web-01", "web-03", "db-01"]
+
+[[cases]]
+id = "fleet-fix-first"
+question = "What should I fix first?"
+lookups = ["fleet_overview", "search_findings"]
+facts = ["telnet|openssh|a1b2|ssh"]

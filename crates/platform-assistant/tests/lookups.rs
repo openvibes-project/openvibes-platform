@@ -242,11 +242,23 @@ fn descriptions_name_the_fields_the_results_carry() {
             .split(|c: char| !c.is_alphanumeric())
             .any(|w| w == "os")
     );
+    // Issue #241: a small model asked about ports or software must not
+    // settle for agent_summary.
+    for word in ["not ports", "host_services", "software"] {
+        assert!(d("agent_summary").contains(word), "{word}");
+    }
+    for word in ["open ports", "running services", "listens on a port"] {
+        assert!(d("host_services").contains(word), "{word}");
+    }
+    for word in ["installed software", "which hosts", "which version"] {
+        assert!(d("software").contains(word), "{word}");
+    }
     let total: usize = specs
         .iter()
         .map(|s| {
             serde_json::to_string(&s.parameters).unwrap().len() + s.description.len() + s.name.len()
         })
         .sum();
-    assert!(total <= 3_100, "{total}");
+    // host_services and software (issue #241) added about 700.
+    assert!(total <= 3_800, "{total}");
 }

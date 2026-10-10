@@ -396,3 +396,79 @@ async fn resolution_stays_in_scope_and_never_picks_silently() {
     drop(client);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn ports_services_and_software_stay_in_scope() {
+    let (db, now) = seed().await;
+    let client = db.pool.get().await.unwrap();
+    // OTHER (outside the scope) has the same port and package as WEB.
+    client
+        .batch_execute(&format!(
+            "INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
+             VALUES ('{WEB}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd'),
+                    ('{WEB}', 'tcp', '::', 22, true, 'sshd.service', 'sshd'),
+                    ('{WEB}', 'tcp', '127.0.0.1', 5432, false, NULL, 'postgres'),
+                    ('{OTHER}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd');
+             INSERT INTO host_services (agent_id, unit, programs, processes, run_as)
+             VALUES ('{WEB}', 'sshd.service', '{{sshd}}', 1, 'root'),
+                    ('{OTHER}', 'sshd.service', '{{sshd}}', 1, 'root');
+             INSERT INTO package_versions (id, manager, name, epoch, version, release, arch)
+             VALUES (1, 'rpm', 'google-chrome-stable', 0, '141.0', '1', 'x86_64'),
+                    (2, 'rpm', 'openssh-server', 0, '9.9p1', '3.fc44', 'x86_64');
+             INSERT INTO host_packages VALUES ('{WEB}', 1), ('{WEB}', 2), ('{OTHER}', 1);"
+        ))
+        .await
+        .unwrap();
+    let lookups = scoped(&db, now);
+    let run = |name: &str, arguments: &str| {
+        let lookup = Lookup::parse(name, arguments).unwrap();
+        let lookups = &lookups;
+        async move { lookups.run(&lookup, 10).await.unwrap() }
+    };
+
+    let port = run("host_services", r#"{"port":22}"#).await;
+    assert_eq!(
+        port.data["items"].as_array().unwrap().len(),
+        2,
+        "two addresses"
+    );
+    assert_eq!(port.data["hosts"], 1, "OTHER is not counted");
+    assert_eq!(port.data["omitted"], 0);
+    assert_eq!(port.data["items"][0]["cite"], format!("[agent:{WEB}]"));
+    assert_eq!(port.data["items"][0]["service"], "sshd.service");
+
+    let host = run("host_services", r#"{"agent":"web-01"}"#).await;
+    let items = host.data["items"].as_array().unwrap();
+    assert_eq!(items.len(), 4, "three listeners and one service");
+    assert_eq!(items[2]["port"], 5432, "loopback after exposed");
+    assert_eq!(items[2]["exposed"], false);
+    assert_eq!(items[3]["kind"], "running service");
+    let one = run("host_services", r#"{"agent":"web-01","port":5432}"#).await;
+    assert_eq!(one.data["items"].as_array().unwrap().len(), 1);
+    // Out of scope looks exactly like unknown.
+    let hidden = run("host_services", &format!(r#"{{"agent":"{OTHER}"}}"#)).await;
+    assert_eq!(hidden.data["agent"], Value::Null);
+    assert_eq!(hidden.data["items"], Value::Array(Vec::new()));
+    let quiet = run("host_services", r#"{"agent":"twin"}"#).await;
+    assert!(quiet.data["note"].is_string(), "in scope, nothing reported");
+
+    let chrome = run("software", r#"{"name":"CHROME"}"#).await;
+    assert_eq!(chrome.data["hosts"], 1);
+    assert_eq!(chrome.data["items"][0]["cite"], format!("[agent:{WEB}]"));
+    assert_eq!(chrome.data["items"][0]["version"], "141.0-1");
+    assert!(!chrome.citations().contains(&Citation::Agent(OTHER.into())));
+    let on_web = run("software", r#"{"name":"openssh","agent":"web-01"}"#).await;
+    assert_eq!(on_web.data["items"][0]["package"], "openssh-server");
+    assert_eq!(on_web.data["items"][0]["version"], "9.9p1-3.fc44");
+    let on_twin = run("software", r#"{"name":"chrome","agent":"twin"}"#).await;
+    assert_eq!(on_twin.data["items"], Value::Array(Vec::new()));
+    assert_eq!(on_twin.data["agent"], format!("[agent:{WEB_TWIN}]"));
+    let hidden = run(
+        "software",
+        &format!(r#"{{"name":"chrome","agent":"{OTHER}"}}"#),
+    )
+    .await;
+    assert_eq!(hidden.data["agent"], Value::Null);
+    drop(client);
+    db.drop().await;
+}
