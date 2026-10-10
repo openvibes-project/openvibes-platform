@@ -422,6 +422,10 @@ pub struct VulnerableHost {
     pub hostname: Option<String>,
     /// The advisory that affects it.
     pub advisory_id: String,
+    /// The advisory's severity.
+    pub severity: String,
+    /// The advisory's title.
+    pub title: String,
     /// First seen.
     pub first_seen_at: DateTime<Utc>,
     /// Fix installed, reboot needed.
@@ -439,8 +443,9 @@ pub async fn vulnerable_hosts(
     let rows = client
         .query(
             "SELECT v.agent_id, g.hostname, v.advisory_id, v.first_seen_at, v.reboot_needed,
-                    count(*) OVER ()
+                    count(*) OVER (), a.severity, a.title
              FROM vulnerabilities v JOIN agents g ON g.agent_id = v.agent_id
+             JOIN advisories a ON a.advisory_id = v.advisory_id
              WHERE v.fixed_at IS NULL
                AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
                AND (v.advisory_id = $2 OR EXISTS (SELECT 1 FROM advisory_cves c
@@ -458,6 +463,8 @@ pub async fn vulnerable_hosts(
                 agent_id: row.get(0),
                 hostname: row.get(1),
                 advisory_id: row.get(2),
+                severity: row.get(6),
+                title: row.get(7),
                 first_seen_at: row.get(3),
                 reboot_needed: row.get(4),
             })
@@ -481,7 +488,7 @@ pub struct AgentCounts {
 }
 
 /// One advisory across hosts.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct AdvisoryHosts {
     /// Advisory.
     pub advisory_id: String,
@@ -491,6 +498,10 @@ pub struct AdvisoryHosts {
     pub title: String,
     /// Hosts in scope where it is open.
     pub hosts: i64,
+    /// A CVE is exploited in the wild (KEV or EUVD).
+    pub exploited: bool,
+    /// Highest EPSS percentile among its CVEs.
+    pub epss_percentile: Option<f32>,
 }
 
 /// The fleet at a glance.
@@ -504,7 +515,8 @@ pub struct Overview {
     pub hosts_with_exploited: i64,
     /// Most severe and widespread findings in the window.
     pub top_findings: Page<FindingGroup>,
-    /// Advisories open on the most hosts.
+    /// Open advisories by priority: exploited, then EPSS percentile, then
+    /// severity, then hosts (#249).
     pub top_advisories: Page<AdvisoryHosts>,
 }
 
@@ -542,13 +554,26 @@ pub async fn overview(
         .await?;
     let advisories = client
         .query(
-            "SELECT v.advisory_id, a.severity, a.title, count(*) AS hosts, count(*) OVER ()
+            "SELECT v.advisory_id, a.severity, a.title, count(*) AS hosts, count(*) OVER (),
+                    COALESCE(e.exploited, false), e.pct
              FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
+             LEFT JOIN LATERAL (
+                 SELECT bool_or(x.kev_added IS NOT NULL OR COALESCE(x.euvd_exploited, false))
+                            AS exploited,
+                        max(x.epss_percentile) AS pct
+                 FROM advisory_cves y JOIN cve_enrichment x ON x.cve_id = y.cve_id
+                 WHERE y.advisory_id = v.advisory_id) e ON true
              WHERE v.fixed_at IS NULL AND ($1::text[] IS NULL OR v.agent_id = ANY($1))
-             GROUP BY v.advisory_id, a.severity, a.title
-             ORDER BY hosts DESC, v.advisory_id
+             GROUP BY v.advisory_id, a.severity, a.title, e.exploited, e.pct
+             ORDER BY COALESCE(e.exploited, false) DESC, e.pct DESC NULLS LAST,
+                      COALESCE(array_position($3::text[], a.severity), 5), hosts DESC,
+                      v.advisory_id
              LIMIT $2",
-            &[&scope.param(), &limit_param(limit)],
+            &[
+                &scope.param(),
+                &limit_param(limit),
+                &ADVISORY_SEVERITIES.as_slice(),
+            ],
         )
         .await?;
     Ok(Overview {
@@ -571,6 +596,8 @@ pub async fn overview(
                     severity: row.get(1),
                     title: row.get(2),
                     hosts: row.get(3),
+                    exploited: row.get(5),
+                    epss_percentile: row.get(6),
                 })
                 .collect(),
         },

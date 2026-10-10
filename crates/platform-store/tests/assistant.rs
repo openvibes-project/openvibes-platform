@@ -438,3 +438,62 @@ async fn the_overview_counts_only_the_scope() {
     );
     db.drop().await;
 }
+
+/// #249/#258: "what to fix first" ranks like the Vulnerabilities page
+/// (exploited, then EPSS, then severity), not by spread or ID. Two critical
+/// one-host advisories and a low one on every host: the critical ones lead,
+/// and an ID that sorts last alphabetically is not dropped.
+#[tokio::test]
+async fn the_overview_ranks_advisories_by_priority_not_spread() {
+    let (db, client, now) = seed().await;
+    client
+        .batch_execute(
+            "INSERT INTO advisories (advisory_id, source, os_id, os_version, severity, title,
+                 url)
+             VALUES ('FEDORA-2026-b', 'fedora-44', 'fedora', '44', 'critical', 'chromium',
+                     'https://example/b'),
+                    ('FEDORA-2026-a', 'fedora-44', 'fedora', '44', 'critical', 'python3',
+                     'https://example/a');
+             INSERT INTO advisory_cves VALUES ('FEDORA-2026-b', 'CVE-2026-0003');
+             INSERT INTO cve_enrichment (cve_id, epss_percentile) VALUES ('CVE-2026-0003', 0.7);",
+        )
+        .await
+        .unwrap();
+    vulnerability(&client, WEB, "FEDORA-2026-b", now).await;
+    vulnerability(&client, WEB, "FEDORA-2026-a", now).await;
+    let all = assistant::overview(&client, &AgentScope::All, now - Duration::hours(24), now, 5)
+        .await
+        .unwrap();
+    let ids: Vec<_> = all
+        .top_advisories
+        .items
+        .iter()
+        .map(|a| a.advisory_id.as_str())
+        .collect();
+    // FEDORA-2026-1 is exploited (KEV); b has EPSS; a is critical; 2 is low on two hosts.
+    assert_eq!(
+        ids,
+        [
+            "FEDORA-2026-1",
+            "FEDORA-2026-b",
+            "FEDORA-2026-a",
+            "FEDORA-2026-2"
+        ]
+    );
+    assert!(all.top_advisories.items[0].exploited);
+    assert_eq!(all.top_advisories.items[1].epss_percentile, Some(0.7));
+    db.drop().await;
+}
+
+/// #258: looking up an advisory by ID tells its severity and title, so the
+/// assistant can say whether it is critical.
+#[tokio::test]
+async fn vulnerable_hosts_carry_the_advisory() {
+    let (db, client, _) = seed().await;
+    let hosts = assistant::vulnerable_hosts(&client, &in_scope(), "FEDORA-2026-1", 10)
+        .await
+        .unwrap();
+    assert_eq!(hosts.items[0].severity, "important");
+    assert_eq!(hosts.items[0].title, "openssh fix");
+    db.drop().await;
+}
