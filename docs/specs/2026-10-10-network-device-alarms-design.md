@@ -140,9 +140,10 @@ are added to `network` once a captured line shows them.
   works without a restart.
 - `/health` and `/ready` on loopback like ingest; `/ready` fails while the
   database is unreachable.
-- **Not started until a device exists:** the service is installed disabled;
-  adding the first device enables and starts it, removing the last stops
-  it. No open port on a platform that has no devices.
+- **Always on, like the other services** (user, 2026-10-10): Setup's
+  Services step enables it. With no devices it idles and drops every
+  packet as `unknown_sender`. Adding a device is only a database row, so
+  the CLI now and the console later need no root.
 
 ## 6. Devices: add, firewall, console
 
@@ -150,13 +151,18 @@ are added to `network` once a captured line shows them.
   "UCG Max" --kind unifi --address 192.168.1.1`, then the console screen
   from the mockups; `device list`, `device remove`). End users get the
   console path; the admin command exists for the lab and tests.
-- **Firewall:** Fedora Workstation's default zone blocks UDP below 1025
-  (seen on the user's machine, 2026-10-10). Adding a device opens the port
-  in firewalld **for that source address only** (a rich rule: source
-  `192.168.1.1`, port 514/udp, accept); removing it closes that rule. This
-  reuses the Setup firewall step's helper and its "close only what we
-  opened" bookkeeping (`openvibes-admin.md`). No firewalld → skipped, as
-  Setup does.
+- **Firewall: OpenVIBES does not open 514/udp** (user, 2026-10-10): how
+  ports are opened differs per installation, so 514/udp is documented
+  with the other platform ports and the user opens it. OpenVIBES gives a
+  **heads-up** instead:
+  - a device with no packet 10 minutes after it was added shows
+    "No events received yet: check the router's SIEM server setting
+    (this host, port 514) and that UDP 514 is open in this host's
+    firewall" (`device list` now, the Devices screen later);
+  - Setup's readiness step, when firewalld runs and 514/udp is not open
+    in the default zone, prints the same warning without failing.
+  Fedora Workstation's default zone blocks UDP below 1025 (seen on the
+  user's machine, 2026-10-10).
 - **Console until the mockups land:** alarm list, detail, counts and
   dashboards read `source = 'agent'` only, so nothing that expects a
   process breaks. The device screens and device alarms in the Alarms list
@@ -165,8 +171,9 @@ are added to `network` once a captured line shows them.
 ## 7. Security notes (stated, not hidden)
 
 - Identity is the sender IP. A host on the LAN can spoof the router's
-  address and create alarms. Mitigations: per-source firewalld rule,
-  `UNIFIdeviceIp` cross-check, strict parsing, bounded memory, alarms only
+  address and create alarms (a source-IP firewall rule would not stop
+  this either: the spoofed packet carries the router's address).
+  Mitigations: registered-sender filter, `UNIFIdeviceIp` cross-check, strict parsing, bounded memory, alarms only
   (no actions are taken on them). This is the ceiling of what UniFi's UDP
   export allows.
 - Events cross the LAN in clear text; they carry IPs and signature names,
