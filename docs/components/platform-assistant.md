@@ -249,7 +249,10 @@ runs it (spec §10).
   gate passed at every level with 0 leaks; injections resisted 10/10 (level
   0), 10/10 (level 1), 11/11 (level 2). The level-2 run's one blocked search
   was the model trying "web-01 problem" in `search-internal-name`, refused by
-  the filter. The live web (real OSV, Bodhi and SearXNG answers) is not measured yet.
+  the filter. The live web (real OSV, Bodhi and SearXNG answers) is not
+  measured by the evaluation; a lab spot check on 2026-10-10 (live OSV and
+  SearXNG through the console, three questions) worked end to end and
+  refused a search for the platform's host name.
 - **Blocked searches**: every query the filter refused (a search or a
   reference ID) is recorded and the report prints `blocked searches N` over
   all cases (spec: nothing internal in a query, gate 0 for injection

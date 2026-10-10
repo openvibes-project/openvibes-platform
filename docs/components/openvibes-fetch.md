@@ -90,8 +90,15 @@ shape and the fixed notes), shared by the console and the evaluation.
   missing `fetch.toml` exits non-zero with one stderr line.
 - Test: `scripts/check-rpm.sh` (units, modes); `scripts/systemd-e2e.sh`
   (level 1 with no outbound answers `unavailable` within 15 s, level 0
-  answers `off`). SELinux behaviour is not tested in CI (the container is
-  not enforcing): it still has to be verified on an enforcing host (the lab) with real network.
+  answers `off`). SELinux is not tested in CI (the container is not
+  enforcing). Verified in the lab on 2026-10-10 (Fedora 44 VM, enforcing,
+  0.2.9 packages of this branch, real network): level 1 (OSV) and level 2
+  (SearXNG on loopback, Test connection, a search refused as `blocked`)
+  gave no AVC denial (`ausearch -m avc,user_avc,selinux_err` empty). Each
+  request runs as `system_u:system_r:unconfined_service_t:s0` (like the
+  console and `llama-server`); the socket is `var_run_t`. So the fetch
+  service needs no SELinux module of its own; it is no more confined
+  than the console.
 - Hardening beyond the signer's: `ProtectProc=invisible`, `ProcSubset=pid`,
   `PrivateIPC=yes`, `RemoveIPC=yes`, `IPAddressDeny=link-local multicast`
   (blocks the cloud metadata address; loopback stays open for a proxy).
