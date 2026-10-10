@@ -50,6 +50,31 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
   expect(checks.thirdParty).toEqual([]);
 });
 
+// #260: the sign-in token is single-use and lives 5 minutes; the page took
+// it once, so a typo or a page left open (after an inactivity sign-out)
+// failed every later attempt as "incorrect" until a reload.
+test("a mistyped password, then the right one, signs in without a reload", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Username").fill("alex");
+  await page.getByLabel("Password").fill("not-the-password");
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("alert")).toContainText("incorrect");
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator(".view")).toBeVisible();
+});
+
+test("a sign-in page left open past its token's lifetime still signs in", async ({ page, context }) => {
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  // The token's cookies expire after 5 minutes: as if the page sat that long.
+  await context.clearCookies();
+  await page.getByLabel("Username").fill("alex");
+  await page.getByLabel("Password").fill(PASSWORD);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.locator(".view")).toBeVisible();
+});
+
 test("/login shows home once signed in, and /assistant is gone", async ({ page }) => {
   await signIn(page, "alex");
   await page.goto("/login");
