@@ -6,7 +6,11 @@ use std::net::IpAddr;
 
 use chrono::{DateTime, Utc};
 use clap::Subcommand;
-use platform_store::devices::{self, Device};
+use platform_store::{
+    alarm_suppressions::{self, Change, Suppression},
+    console_read::AgentScope,
+    devices::{self, Device},
+};
 
 fn parse_address(s: &str) -> Result<IpAddr, String> {
     s.parse::<IpAddr>()
@@ -35,6 +39,25 @@ pub enum DeviceCommand {
         /// Device id from `device list`.
         id: i64,
     },
+    /// Quiet a device alarm's rule from now on: on its device, or on every
+    /// device. New matches arrive closed as false positives.
+    Suppress {
+        /// The alarm's id (as the console shows it).
+        alarm: i64,
+        /// `device` (this device) or `signature` (every device).
+        #[arg(long)]
+        scope: String,
+        /// Why (1 to 4000 characters).
+        #[arg(long)]
+        note: String,
+    },
+    /// List active device suppressions.
+    Suppressions,
+    /// Remove a suppression by id; it stays as history.
+    Unsuppress {
+        /// Suppression id from `device suppressions`.
+        id: i64,
+    },
 }
 
 impl DeviceCommand {
@@ -43,13 +66,16 @@ impl DeviceCommand {
             Self::Add { .. } => "device add",
             Self::List => "device list",
             Self::Remove { .. } => "device remove",
+            Self::Suppress { .. } => "device suppress",
+            Self::Suppressions => "device suppressions",
+            Self::Unsuppress { .. } => "device unsuppress",
         }
     }
 }
 
 pub async fn run(
     command: &DeviceCommand,
-    client: &platform_store::Client,
+    client: &mut platform_store::Client,
     actor: &str,
 ) -> (Result<String, String>, Option<String>) {
     let now = Utc::now();
@@ -78,6 +104,75 @@ pub async fn run(
             Ok(false) => (Err(format!("no device {id}")), None),
             Err(error) => (Err(error.to_string()), None),
         },
+        DeviceCommand::Suppress { alarm, scope, note } => {
+            match alarm_suppressions::create_for_device(client, *alarm, scope, note, actor, now)
+                .await
+            {
+                Ok(Change::Done(s)) => (
+                    Ok(format!("suppression {} created: {}\n", s.id, describe(&s))),
+                    Some(s.id.to_string()),
+                ),
+                Ok(Change::NotFound) => (Err(format!("no device alarm {alarm}")), None),
+                Ok(_) => (
+                    Err("--scope is device or signature, and --note 1 to 4000 characters".into()),
+                    None,
+                ),
+                Err(error) => (Err(error.to_string()), None),
+            }
+        }
+        DeviceCommand::Suppressions => {
+            match alarm_suppressions::list(client, &AgentScope::Global).await {
+                Ok(list) => {
+                    let rows: Vec<String> = list
+                        .iter()
+                        .filter(|s| matches!(s.scope.as_str(), "device" | "signature"))
+                        .map(|s| {
+                            format!(
+                                "{}  {}  {}  {}\n",
+                                s.id,
+                                s.scope,
+                                describe_target(s),
+                                s.note
+                            )
+                        })
+                        .collect();
+                    (
+                        Ok(if rows.is_empty() {
+                            "no device suppressions\n".into()
+                        } else {
+                            rows.concat()
+                        }),
+                        None,
+                    )
+                }
+                Err(error) => (Err(error.to_string()), None),
+            }
+        }
+        DeviceCommand::Unsuppress { id } => {
+            match alarm_suppressions::remove(client, &AgentScope::Global, *id, actor, now).await {
+                Ok(Change::Done(_)) => (
+                    Ok(format!("suppression {id} removed\n")),
+                    Some(id.to_string()),
+                ),
+                Ok(_) => (Err(format!("no active suppression {id}")), None),
+                Err(error) => (Err(error.to_string()), None),
+            }
+        }
+    }
+}
+
+/// `ips.2008983  device 3` or `ips.2008983  every device`.
+fn describe_target(s: &Suppression) -> String {
+    match s.device_id {
+        Some(device) => format!("{}  device {device}", s.rule_id),
+        None => format!("{}  every device", s.rule_id),
+    }
+}
+
+fn describe(s: &Suppression) -> String {
+    match s.device_id {
+        Some(device) => format!("{} on device {device}", s.rule_id),
+        None => format!("{} on every device", s.rule_id),
     }
 }
 

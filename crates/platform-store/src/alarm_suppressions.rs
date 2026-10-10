@@ -20,7 +20,8 @@ pub struct Suppression {
     pub rule_set_id: String,
     /// Rule it quiets.
     pub rule_id: String,
-    /// `host`, `program` or `command`.
+    /// `host`, `program` or `command`; `device` or `signature` for
+    /// network device alarms.
     pub scope: String,
     /// The agent, for `host`.
     pub agent_id: Option<String>,
@@ -28,6 +29,8 @@ pub struct Suppression {
     pub exe: Option<String>,
     /// SHA-256 of the masked args' JSON array, for `command`.
     pub args_sha256: Option<String>,
+    /// The network device, for `device`.
+    pub device_id: Option<i64>,
     /// Why.
     pub note: String,
     /// Who created it.
@@ -51,7 +54,7 @@ pub enum Change {
 }
 
 const COLUMNS: &str = "s.id, s.rule_set_id, s.rule_id, s.scope, s.agent_id, s.exe,
-    s.args_sha256, s.note, s.created_by, s.created_at";
+    s.args_sha256, s.note, s.created_by, s.created_at, s.device_id";
 
 fn suppression(row: &tokio_postgres::Row) -> Suppression {
     Suppression {
@@ -65,6 +68,7 @@ fn suppression(row: &tokio_postgres::Row) -> Suppression {
         note: row.get(7),
         created_by: row.get(8),
         created_at: row.get(9),
+        device_id: row.get(10),
     }
 }
 
@@ -108,6 +112,7 @@ fn audit_detail(suppression: &Suppression) -> serde_json::Value {
         "scope": suppression.scope,
         "agent_id": suppression.agent_id,
         "exe": suppression.exe,
+        "device_id": suppression.device_id,
     })
 }
 
@@ -196,6 +201,60 @@ pub async fn create(
                 &agent_id,
                 &exe,
                 &hash,
+                &note.trim(),
+                &actor,
+                &now,
+            ],
+        )
+        .await?;
+    let created = suppression(&row);
+    audit(&tx, actor, "alarm.suppression.created", &created).await?;
+    tx.commit().await?;
+    Ok(Change::Done(created))
+}
+
+/// Creates a suppression from network device alarm `alarm_row_id`:
+/// `device` quiets its rule on that device, `signature` on every device
+/// (spec 2026-10-10 §4). Global callers only (no asset group holds a
+/// device yet). It applies to alarms stored from now on.
+pub async fn create_for_device(
+    client: &mut Client,
+    alarm_row_id: i64,
+    kind: &str,
+    note: &str,
+    actor: &str,
+    now: DateTime<Utc>,
+) -> Result<Change, StoreError> {
+    if !matches!(kind, "device" | "signature")
+        || note.trim().is_empty()
+        || note.chars().count() > 4000
+    {
+        return Ok(Change::Invalid);
+    }
+    let tx = client.transaction().await?;
+    let Some(alarm) = tx
+        .query_opt(
+            "SELECT rule_set_id, rule_id, device_id FROM alarms
+             WHERE id = $1 AND source = 'device'",
+            &[&alarm_row_id],
+        )
+        .await?
+    else {
+        return Ok(Change::NotFound);
+    };
+    let device: Option<i64> = (kind == "device").then(|| alarm.get(2));
+    let row = tx
+        .query_one(
+            &format!(
+                "INSERT INTO alarm_suppressions AS s (rule_set_id, rule_id, scope, device_id,
+                    note, created_by, created_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING {COLUMNS}"
+            ),
+            &[
+                &alarm.get::<_, String>(0),
+                &alarm.get::<_, String>(1),
+                &kind,
+                &device,
                 &note.trim(),
                 &actor,
                 &now,

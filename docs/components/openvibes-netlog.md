@@ -96,7 +96,7 @@ Modules:
 Text is at most 256 characters with control characters removed. Ports are
 absent for ICMP. Times are receive times; `UNIFIutcTime` is ignored. The raw
 line is never stored. Suppressions with scope `device` (one device) or
-`signature` (any device) close a new alarm as a false positive. A recurrence
+`signature` (any device) close a new alarm as a false positive. They are made with `openvibes-admin device suppress`, or later in the console. A recurrence
 reopens a mitigated alarm, as for agent alarms. Device alarms are not offered
 to the assistant: signature text comes from the network.
 

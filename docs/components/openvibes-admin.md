@@ -296,6 +296,9 @@ the lab and tests; end users will add devices in the console.
 | `device add --name NAME --address IP [--kind unifi]` | Adds a device. A mapped IPv6 address (`::ffff:192.168.1.1`) is stored as IPv4. A second active device at the same address is refused. Prints where to point its SIEM server (this host, UDP 514). |
 | `device list` | Lists each device with its id, name, address, kind, last packet and counters. When nothing arrived in the 10 minutes after adding, or nothing in a day, it adds a line: check the router's SIEM setting and that UDP 514 is open. |
 | `device remove ID` | Removes the device. Its alarms stay. An unknown or already removed id is an error. |
+| `device suppress ALARM --scope device\|signature --note TEXT` | Quiets a device alarm's rule from now on: on its device (`device`) or on every device (`signature`). New matches arrive closed as false positives, with one history row. |
+| `device suppressions` | Lists active device suppressions: id, scope, rule, device, note. |
+| `device unsuppress ID` | Removes a suppression. It stays as history. |
 
 The audit target is the device id.
 

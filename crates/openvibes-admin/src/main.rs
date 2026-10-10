@@ -392,7 +392,7 @@ async fn main() -> ExitCode {
             Err(error) => (Err(error), None),
         },
         Command::Device { command } => match require_current_schema(&client).await {
-            Ok(()) => device::run(command, &client, &actor).await,
+            Ok(()) => device::run(command, &mut client, &actor).await,
             Err(error) => (Err(error), None),
         },
         Command::Agent { command } => match require_current_schema(&client).await {

@@ -191,3 +191,67 @@ async fn console_alarm_reads_do_not_see_device_alarms() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_suppression_made_from_a_device_alarm_closes_the_next_ones() {
+    use platform_store::{
+        alarm_suppressions::{self, Change},
+        console_read::AgentScope,
+    };
+    let (db, device) = setup().await;
+    let mut c = as_netlog(&db).await;
+    device_alarms::insert_batch(&mut c, &[alarm(device, 1)], Utc::now())
+        .await
+        .unwrap();
+    let mut admin = db.pool.get().await.unwrap();
+    let id: i64 = admin
+        .query_one("SELECT id FROM alarms", &[])
+        .await
+        .unwrap()
+        .get(0);
+    for bad in ["host", "program", "nope"] {
+        let refused =
+            alarm_suppressions::create_for_device(&mut admin, id, bad, "n", "t", Utc::now())
+                .await
+                .unwrap();
+        assert_eq!(refused, Change::Invalid, "{bad}");
+    }
+    let Change::Done(made) = alarm_suppressions::create_for_device(
+        &mut admin,
+        id,
+        "device",
+        "our scanner",
+        "t",
+        Utc::now(),
+    )
+    .await
+    .unwrap() else {
+        panic!("not created")
+    };
+    assert_eq!(
+        (made.scope.as_str(), made.device_id, made.rule_id.as_str()),
+        ("device", Some(device), "ips.2402000")
+    );
+    // The next alarm of that rule on that device arrives closed.
+    let mut next = alarm(device, 1);
+    next.alarm_id = "next".into();
+    let done = device_alarms::insert_batch(&mut c, &[next], Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(done.suppressed, 1);
+    let listed = alarm_suppressions::list(&admin, &AgentScope::Global)
+        .await
+        .unwrap();
+    assert!(
+        listed
+            .iter()
+            .any(|s| s.id == made.id && s.device_id == Some(device))
+    );
+    assert!(matches!(
+        alarm_suppressions::remove(&mut admin, &AgentScope::Global, made.id, "t", Utc::now())
+            .await
+            .unwrap(),
+        Change::Done(_)
+    ));
+    db.drop().await;
+}
