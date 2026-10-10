@@ -572,9 +572,24 @@ impl LookupOutput {
     /// fits `max_chars`, or no items are left.
     pub fn shrink_to(&mut self, max_chars: usize) {
         while self.text().len() > max_chars {
+            let excess = self.text().len() - max_chars;
             let Some(Value::Array(items)) = self.data.get_mut("items") else {
                 return;
             };
+            // The last item is cut (its snippet, at a character boundary)
+            // before it is dropped, so a long reference still shows its
+            // start, where the fixed versions are.
+            if let [Value::Object(only)] = items.as_mut_slice()
+                && let Some(Value::String(snippet)) = only.get_mut("snippet")
+                && !snippet.is_empty()
+            {
+                let keep = snippet.chars().count().saturating_sub(excess);
+                *snippet = snippet.chars().take(keep).collect();
+                if snippet.is_empty() {
+                    only.remove("snippet");
+                }
+                continue;
+            }
             if items.pop().is_none() {
                 return;
             }

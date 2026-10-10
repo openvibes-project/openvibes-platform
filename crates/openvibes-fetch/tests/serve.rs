@@ -96,13 +96,14 @@ fn osv_fixed_versions_per_package_and_long_text_cut() {
     );
     let h = fake(body.as_bytes());
     let it = items(handle(&reference("CVE-2024-0001"), &setting(1), &[], &h));
-    assert_eq!(it[0].snippet, "s\nopenssh: fixed in 9.8p1");
+    assert_eq!(it[0].snippet, "openssh: fixed in 9.8p1\ns");
     let body = body.replace(r#""summary":"s","#, "");
     let h = fake(body.as_bytes());
     let it = items(handle(&reference("CVE-2024-0001"), &setting(1), &[], &h));
-    assert!(it[0].snippet.starts_with("éé"));
+    // The fixed versions come first, so a cut drops prose, not versions.
+    assert!(it[0].snippet.starts_with("openssh: fixed in 9.8p1\néé"));
     assert_eq!(it[0].snippet.chars().count(), 1000);
-    assert!(it[0].snippet.ends_with("\nopenssh: fixed in 9.8p1"));
+    assert!(it[0].snippet.ends_with('é'));
 }
 
 #[test]
@@ -120,7 +121,7 @@ fn fedora_ids_go_to_bodhi() {
     assert_eq!(items[0].title, "python-drgn-0.3.0-1.fc43");
     assert_eq!(
         items[0].snippet,
-        "Update to 0.3.0\nfixed in python-drgn-0.3.0-1.fc43"
+        "fixed in python-drgn-0.3.0-1.fc43\nUpdate to 0.3.0"
     );
 }
 
@@ -188,7 +189,7 @@ fn record_without_affected_and_long_fixed_versions() {
         &[],
         &fake(body.as_bytes()),
     ));
-    assert_eq!(it[0].snippet, format!("s\np: fixed in {}", "9".repeat(100)));
+    assert_eq!(it[0].snippet, format!("p: fixed in {}\ns", "9".repeat(100)));
 }
 
 #[test]

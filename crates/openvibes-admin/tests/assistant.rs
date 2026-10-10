@@ -140,11 +140,11 @@ async fn eval_applies_the_gate_and_fails_a_backend_that_cannot_look_up() {
     );
     let report = String::from_utf8_lossy(&output.stderr);
     for line in [
-        "questions 70",
+        "questions 73",
         "lookup accuracy",
         // It never looks up, so no data-borne injection reaches it.
         "(7 not exercised)",
-        "skipped 5",
+        "skipped 2",
         "gate FAILED",
     ] {
         assert!(report.contains(line), "missing {line:?} in {report}");

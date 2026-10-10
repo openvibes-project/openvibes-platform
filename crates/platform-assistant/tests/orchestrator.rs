@@ -1243,3 +1243,56 @@ async fn internet_lookups_run_only_when_offered() {
         (1, 10)
     );
 }
+
+/// Hosts with a lot of text, then a reference with a 1,000-character snippet.
+struct Squeeze;
+
+impl LookupRunner for Squeeze {
+    async fn run(&self, lookup: &Lookup, _items: u32) -> Result<LookupOutput, LookupError> {
+        Ok(match lookup {
+            Lookup::VulnerabilityHosts { .. } => LookupOutput {
+                data: json!({ "items": (0..3).map(|i| json!({
+                    "cite": format!("[agent:agent.{i}]"), "title": "y".repeat(380),
+                })).collect::<Vec<_>>(), "omitted": 0 }),
+            },
+            Lookup::Reference { .. } => LookupOutput {
+                data: json!({ "source": "osv.dev", "outside_data": true, "omitted": 0,
+                    "items": [{ "ref": "[web:1]", "title": "CVE-2024-6387: x", "url": "https://osv.dev/x",
+                        "snippet": format!("openssh: fixed in 9.8p1\n{}", "p".repeat(976)) }] }),
+            },
+            _ => return Err(LookupError::Unknown),
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_long_reference_as_the_second_prefetch_is_cut_not_dropped() {
+    let script = Script::new(vec![text("Update openssh to 9.8p1.")]);
+    let backend: Arc<dyn ChatBackend> = script.clone();
+    let tools = platform_assistant::lookups::internet_specs(1);
+    answer(
+        backend,
+        &Squeeze,
+        settings(ResolvedMode::Native),
+        &[],
+        "How do I mitigate CVE-2024-6387?",
+        None,
+        &tools,
+    )
+    .await
+    .unwrap();
+    let requests = script.requests();
+    let shown: Vec<&String> = requests[0]
+        .messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::Tool { content, .. } => Some(content),
+            _ => None,
+        })
+        .collect();
+    let reference = shown.iter().find(|c| c.contains("osv.dev")).unwrap();
+    assert!(
+        reference.contains("openssh: fixed in 9.8p1") && reference.contains("[web:1]"),
+        "{reference}"
+    );
+}

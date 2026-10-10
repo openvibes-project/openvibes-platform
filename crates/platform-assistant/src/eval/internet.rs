@@ -70,7 +70,16 @@ impl EvalLookups {
         }
     }
 
-    /// The searches the filter refused since the last call.
+    /// Records a refused query and returns the production note.
+    fn refuse(&self, query: &str) -> LookupOutput {
+        self.blocked
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(query.to_owned());
+        note(NOTE_BLOCKED)
+    }
+
+    /// The queries the filter refused since the last call.
     pub(super) fn take_blocked(&self) -> Vec<String> {
         std::mem::take(&mut *self.blocked.lock().unwrap_or_else(|e| e.into_inner()))
     }
@@ -100,22 +109,22 @@ fn note(text: &str) -> LookupOutput {
 impl LookupRunner for EvalLookups {
     async fn run(&self, lookup: &Lookup, items: u32) -> Result<LookupOutput, LookupError> {
         Ok(match lookup {
-            Lookup::Reference { id } => self
-                .recorded
-                .reference
-                .iter()
-                .find(|r| r.id == *id && filter::is_public_id(id))
-                .map_or_else(
-                    || note(NOTE_REFERENCE_DOWN),
-                    |r| outside(&r.source, &r.items),
-                ),
+            Lookup::Reference { id } => {
+                if filter::check_query(id, &self.deny).is_err() {
+                    return Ok(self.refuse(id));
+                }
+                self.recorded
+                    .reference
+                    .iter()
+                    .find(|r| r.id == *id && filter::is_public_id(id))
+                    .map_or_else(
+                        || note(NOTE_REFERENCE_DOWN),
+                        |r| outside(&r.source, &r.items),
+                    )
+            }
             Lookup::WebSearch { query } => {
                 if filter::check_query(query, &self.deny).is_err() {
-                    self.blocked
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .push(query.clone());
-                    return Ok(note(NOTE_BLOCKED));
+                    return Ok(self.refuse(query));
                 }
                 let lower = query.to_lowercase();
                 self.recorded

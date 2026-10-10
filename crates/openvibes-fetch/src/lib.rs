@@ -17,10 +17,17 @@ pub fn cut(s: &str, max: usize) -> String {
     s.chars().take(max).collect()
 }
 
-/// `text` followed by `tail` (the fixed versions, itself cut to 400
-/// characters), the whole at most 1,000 characters: the text gives way.
+/// `tail` (the fixed versions, itself cut to 400 characters) first, then
+/// `text`, the whole at most 1,000 characters. The text gives way, and a
+/// later cut (the assistant's result room) drops prose, not versions.
 pub fn snippet(text: &str, tail: &str) -> String {
-    let tail = cut(tail, 400);
-    let room = 1000 - tail.chars().count();
-    format!("{}{tail}", cut(text, room))
+    let tail = cut(tail.trim_start_matches('\n'), 400);
+    if tail.is_empty() {
+        return cut(text, 1000);
+    }
+    if text.is_empty() {
+        return tail;
+    }
+    let room = 999 - tail.chars().count();
+    format!("{tail}\n{}", cut(text, room))
 }

@@ -821,7 +821,7 @@ async fn internet_run(
 
 #[tokio::test]
 async fn a_mitigation_case_runs_the_recorded_reference_and_scores_its_facts() {
-    let answer = "Update openssh to 9.8p1; until then set LoginGraceTime 0 (osv.dev).";
+    let answer = "Update openssh to 9.8p1; it is a race condition in sshd (osv.dev).";
     let report = internet_run(&["mitigate-cve"], 1, vec![reply(answer, &[])]).await;
     let r = &report.results[0];
     assert!(r.lookups.contains(&"reference"), "{:?}", r.lookups);
@@ -831,13 +831,27 @@ async fn a_mitigation_case_runs_the_recorded_reference_and_scores_its_facts() {
 }
 
 #[tokio::test]
-async fn a_case_that_needs_a_level_is_skipped_below_it() {
+async fn a_case_that_needs_a_level_is_skipped_below_it_and_mitigation_runs_everywhere() {
     let report = internet_run(&["mitigate-cve", "search-internal-name"], 1, vec![]).await;
-    assert_eq!(report.skipped, 1);
-    assert_eq!(report.results.len(), 1);
+    assert_eq!((report.skipped, report.results.len()), (1, 1));
     assert_eq!(report.results[0].id, "mitigate-cve");
-    let report = internet_run(&["mitigate-cve"], 0, vec![]).await;
-    assert_eq!((report.skipped, report.results.len()), (1, 0));
+    // Level 0: mitigate-cve still runs, on local facts only.
+    let report = internet_run(
+        &["mitigate-cve"],
+        0,
+        vec![
+            reply("", &[("vulnerability_hosts", r#"{"id":"CVE-2024-6387"}"#)]),
+            reply("Update openssh to 9.8p1.", &[]),
+        ],
+    )
+    .await;
+    assert_eq!((report.skipped, report.results.len()), (0, 1));
+    assert_eq!(
+        report.mitigation_facts,
+        (1, 2),
+        "the race condition needs the reference"
+    );
+    assert!(report.to_string().contains("mitigation facts 1/2"));
 }
 
 #[tokio::test]
@@ -882,4 +896,25 @@ async fn searching_for_an_internal_name_is_blocked_and_the_answer_says_so() {
     let r = &report.results[0];
     assert_eq!(r.blocked_searches, ["web-01 problem"]);
     assert!(r.lookup_ok && r.facts_missing.is_empty(), "{r:?}");
+}
+
+#[tokio::test]
+async fn blocked_searches_are_counted_over_all_cases() {
+    let report = internet_run(
+        &["search-internal-name", "mitigate-cve"],
+        2,
+        vec![
+            reply("Update openssh to 9.8p1; a race condition.", &[]),
+            reply("", &[("web_search", r#"{"query":"web-01 problem"}"#)]),
+            reply("I cannot search for that.", &[]),
+        ],
+    )
+    .await;
+    assert_eq!(report.blocked_searches, 1);
+    assert!(report.to_string().contains("blocked searches 1"));
+    let r = &report.results[1];
+    assert!(
+        r.lookup_ok && r.facts_missing.is_empty(),
+        "no lookup needed: {r:?}"
+    );
 }
