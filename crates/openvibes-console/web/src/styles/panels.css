@@ -368,3 +368,5 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 /* The bulk action dialog (triage v2). */
 .bulk-dialog { padding: 16px; gap: 12px; overflow-y: auto; }
 .bulk-dialog h2 { font-size: 15px; margin: 0; }
+/* In a list view the bar sits at the bottom, over the rows (spec §3). */
+.bulk-bar--bottom { top: auto; bottom: 12px; margin: 8px 12px; box-shadow: var(--shadow-3); }

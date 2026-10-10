@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { type BulkForm, NEW_CASE, bulkBody, bulkProblem, resultText } from "./bulk";
+import { type BulkForm, NEW_CASE, bulkBody, bulkProblem, confirmLabel, resultText } from "./bulk";
 
 const form = (patch: Partial<BulkForm>): BulkForm =>
   ({ action: "state", state: "open", note: "", acceptedUntil: "", assignee: "", caseId: "", newCaseTitle: "", ...patch });
@@ -25,10 +25,16 @@ describe("bulk actions", () => {
   it("a case is an open one or a new one with a title; quieting needs a note", () => {
     expect(bulkProblem(form({ action: "case" }))).toMatch(/case/);
     expect(bulkProblem(form({ action: "case", caseId: NEW_CASE }))).toMatch(/title/);
-    expect(bulkBody(form({ action: "case", caseId: NEW_CASE, newCaseTitle: " Web shells " }), items)).toEqual({ action: "case", new_case_title: "Web shells", items });
+    expect(bulkBody(form({ action: "case", caseId: NEW_CASE, newCaseTitle: " Web shells ", newCaseSeverity: "high" }), items))
+      .toEqual({ action: "case", new_case_title: "Web shells", new_case_severity: "high", items });
     expect(bulkBody(form({ action: "case", caseId: "c1" }), items)).toEqual({ action: "case", case_id: "c1", items });
     expect(bulkProblem(form({ action: "suppress" }))).toMatch(/note/);
     expect(bulkBody(form({ action: "assign" }), items)).toEqual({ action: "assign", assignee: null, items });
+  });
+
+  it("the confirm button names the count", () => {
+    expect(confirmLabel(form({ state: "mitigated" }), 1284, "alarms")).toBe("Mitigate 1,284 alarms");
+    expect(confirmLabel(form({ action: "assign" }), 2, "findings")).toBe("Unassign 2 findings");
   });
 
   it("says what changed and why the rest was skipped", () => {

@@ -2260,6 +2260,76 @@
         }
       }
     },
+    "/api/v1/cases/active-items": {
+      "get": {
+        "tags": [
+          "cases"
+        ],
+        "operationId": "active_items",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Items of this kind in open cases the caller can see",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActiveCaseItemsView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid kind",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Bearer tokens and missing permissions are refused",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/cases/assignees": {
       "get": {
         "tags": [
@@ -7181,6 +7251,41 @@
           }
         }
       },
+      "ActiveCaseItem": {
+        "type": "object",
+        "description": "One item in an open case.",
+        "required": [
+          "ref",
+          "case_number"
+        ],
+        "properties": {
+          "case_number": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The case's number (`C-<number>`)."
+          },
+          "ref": {
+            "type": "string",
+            "description": "The item's ref."
+          }
+        }
+      },
+      "ActiveCaseItemsView": {
+        "type": "object",
+        "description": "Items in open cases, for the lists' case badges.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveCaseItem"
+            },
+            "description": "Item ref (alarm id, `agent/rule_set/rule`, `agent/advisory`) and\nthe number of the open case holding it."
+          }
+        }
+      },
       "AddCaseNoteRequest": {
         "type": "object",
         "description": "A note for the timeline.",
@@ -8651,6 +8756,13 @@
               "$ref": "#/components/schemas/BulkItem"
             },
             "description": "The selected rows, at most 10,000."
+          },
+          "new_case_severity": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "For a new case: the selection's highest item severity (`important`\ncounts as high, as for case items)."
           },
           "new_case_title": {
             "type": [

@@ -65,6 +65,9 @@ pub struct BulkRequest {
     pub case_id: Option<String>,
     /// For `case`: the title of a new case.
     pub new_case_title: Option<String>,
+    /// For a new case: the selection's highest item severity (`important`
+    /// counts as high, as for case items).
+    pub new_case_severity: Option<String>,
     /// The selected rows, at most 10,000.
     pub items: Vec<BulkItem>,
 }
@@ -356,13 +359,21 @@ async fn add_to_case(
         (None, Some(title)) => {
             let new = NewCase {
                 title: title.trim(),
-                severity: None,
+                severity: request
+                    .new_case_severity
+                    .as_deref()
+                    .and_then(console_cases::case_severity_of),
                 assignee_user_id: None,
                 items: &[],
             };
             match console_cases::create(client, scope, user_id, &new, now).await {
                 Ok(Ok(detail)) => detail.summary.case_id,
-                Ok(Err(_)) => return bad("invalid_case", "The new case's title is invalid"),
+                Ok(Err(_)) => {
+                    return bad(
+                        "invalid_case",
+                        "The new case's title or severity is invalid",
+                    );
+                }
                 Err(_) => return unavailable_auth(),
             }
         }

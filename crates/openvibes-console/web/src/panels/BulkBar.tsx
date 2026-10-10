@@ -1,52 +1,73 @@
-// The bar over a list with selected rows: how many, the bulk actions the
-// user may take, and Clear. Each action opens one dialog (state with its
-// note and expiry, assignee, case, or quiet); the result says what changed
-// and why anything was skipped (spec 2026-10-10-bulk-triage §4).
+// The bar at the bottom of a list with selected rows: how many, the bulk
+// actions the user may take, and Clear. Each action opens one small dialog
+// (the note, the expiry, the person, or the case) whose confirm button
+// names the count; the result says what changed and why anything was
+// skipped (spec 2026-10-10-bulk-triage §3, §4).
 import { type FormEvent, useState } from "react";
 
 import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { CaseSummary, CaseUser } from "../api/types";
 import { useSession } from "../app/session";
 import { SelectField } from "../ui/Field";
-import { triageLabel } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { Select } from "../ui/Select";
 import { toast } from "../ui/toast";
-import { type BulkAction, type BulkForm, type BulkItem, type BulkKind, type BulkResult, NEW_CASE, bulkBody, bulkProblem, resultText } from "./bulk";
+import { type BulkAction, type BulkForm, type BulkItem, type BulkKind, type BulkResult, NEW_CASE, bulkBody, bulkProblem, confirmLabel, resultText } from "./bulk";
 import { caseNumber } from "./cases";
-import { noteRequired, triageStates } from "./triage";
+import { noteRequired } from "./triage";
 
 const triagePermission = { alarms: "alarms.triage", compliance: "compliance.triage", vulnerabilities: "vulnerabilities.triage" } as const;
 
-const titles: Record<BulkAction, string> = { state: "Set triage state", assign: "Assign", case: "Add to case", suppress: "Quiet these alarms" };
+type Choice = { action: BulkAction; state?: string; label: string };
+const stateChoices: Choice[] = [
+  { action: "state", state: "mitigated", label: "Mitigate…" },
+  { action: "state", state: "accepted_risk", label: "Accept risk…" },
+  { action: "state", state: "false_positive", label: "False positive…" },
+  { action: "state", state: "open", label: "Reopen" },
+];
 
-export function BulkBar({ kind, items, count, onClear }: { kind: BulkKind; items: () => BulkItem[]; count: number; onClear: () => void }) {
+const day = (offset: number) => new Date(Date.now() + offset * 86_400_000).toISOString().slice(0, 10);
+
+/** `items` builds the request's rows when an action is confirmed; `noun`
+ * names them ("alarms"); `newCase` prefills a new case; `partial` says the
+ * list holds only its first results. */
+export function BulkBar({ kind, noun, count, items, newCase, partial, onClear }: {
+  kind: BulkKind; noun: string; count: number; items: () => BulkItem[];
+  newCase: () => { title: string; severity?: string | undefined }; partial?: boolean; onClear: () => void;
+}) {
   const { can } = useSession();
-  const [action, setAction] = useState<BulkAction | null>(null);
+  const [choice, setChoice] = useState<Choice | null>(null);
   if (count === 0 || !can(triagePermission[kind])) return null;
-  const actions: BulkAction[] = ["state", "assign",
-    ...(can("cases.manage") ? ["case" as const] : []),
-    ...(kind === "alarms" && can("alarms.suppress", true) ? ["suppress" as const] : [])];
+  const choices: Choice[] = [...stateChoices, { action: "assign", label: "Assign…" },
+    ...(can("cases.manage") ? [{ action: "case" as const, label: "Add to case…" }] : []),
+    ...(kind === "alarms" && can("alarms.suppress", true) ? [{ action: "suppress" as const, label: "Suppress…" }] : [])];
   return (
-    <div className="bulk-bar" role="region" aria-label="Bulk actions">
+    <div className="bulk-bar bulk-bar--bottom" role="region" aria-label="Bulk actions">
       <strong className="num">{count.toLocaleString()} selected</strong>
-      {actions.map((a) => (
-        <button key={a} type="button" className="button button--small" onClick={() => setAction(a)}>{titles[a]}</button>
+      {partial && <span className="subtle">(of the first results only)</span>}
+      {choices.map((c) => (
+        <button key={c.label} type="button" className="button button--small" onClick={() => setChoice(c)}>{c.label}</button>
       ))}
       <button type="button" className="button button--small button--ghost" onClick={onClear}>Clear</button>
-      {action && <BulkDialog kind={kind} action={action} items={items} count={count} onClose={() => setAction(null)} onDone={onClear} />}
+      {choice && <BulkDialog kind={kind} noun={noun} choice={choice} items={items} count={count} newCase={newCase}
+        onClose={() => setChoice(null)} onDone={onClear} />}
     </div>
   );
 }
 
-function BulkDialog({ kind, action, items, count, onClose, onDone }: {
-  kind: BulkKind; action: BulkAction; items: () => BulkItem[]; count: number; onClose: () => void; onDone: () => void;
+function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone }: {
+  kind: BulkKind; noun: string; choice: Choice; items: () => BulkItem[]; count: number;
+  newCase: () => { title: string; severity?: string | undefined }; onClose: () => void; onDone: () => void;
 }) {
   const { session } = useSession();
-  const [form, setForm] = useState<BulkForm>({ action, state: "mitigated", note: "", acceptedUntil: "", assignee: "", caseId: "", newCaseTitle: "" });
+  const { action } = choice;
+  const [form, setForm] = useState<BulkForm>(() => {
+    const suggested = newCase();
+    return { action, state: choice.state ?? "", note: "", acceptedUntil: day(90), assignee: "", caseId: "",
+      newCaseTitle: suggested.title.slice(0, 120), newCaseSeverity: suggested.severity };
+  });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
-  const [tomorrow] = useState(() => new Date(Date.now() + 86_400_000).toISOString().slice(0, 10));
   const assignees = useResource<{ items: CaseUser[] }>(action === "assign" ? "/api/v1/cases/assignees" : null).data?.items;
   const cases = useAllPages<CaseSummary>(action === "case" ? "/api/v1/cases" : null);
   const set = (patch: Partial<BulkForm>) => { setForm((current) => ({ ...current, ...patch })); setError(undefined); };
@@ -75,21 +96,16 @@ function BulkDialog({ kind, action, items, count, onClose, onDone }: {
   };
 
   const needsNote = (action === "state" && noteRequired.has(form.state)) || action === "suppress";
+  const title = choice.label.replace(/…$/, "");
   return (
     <div className="palette-backdrop" onMouseDown={onClose}>
-      <form className="palette bulk-dialog" role="dialog" aria-modal="true" aria-label={titles[action]} onSubmit={(event) => void submit(event)}
+      <form className="palette bulk-dialog" role="dialog" aria-modal="true" aria-label={title} onSubmit={(event) => void submit(event)}
         onMouseDown={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}>
-        <div className="row row--between"><h2>{titles[action]}: {count.toLocaleString()} {count === 1 ? "item" : "items"}</h2>
+        <div className="row row--between"><h2>{title}: {count.toLocaleString()} {noun}</h2>
           <button type="button" className="icon-button" aria-label="Close" onClick={onClose}><Icon name="close" size={16} /></button></div>
-        {action === "state" && (
-          <SelectField label="New state">
-            <Select label="New state" value={form.state} onChange={(state) => set({ state })}
-              options={triageStates.map((value) => ({ value, label: triageLabel[value] ?? value }))} />
-          </SelectField>
-        )}
         {action === "state" && form.state === "accepted_risk" && (
           <label className="field"><span>Accepted until</span>
-            <input className="input" type="date" required min={tomorrow} value={form.acceptedUntil} onChange={(event) => set({ acceptedUntil: event.target.value })} />
+            <input className="input" type="date" required min={day(1)} max={day(365)} value={form.acceptedUntil} onChange={(event) => set({ acceptedUntil: event.target.value })} />
           </label>
         )}
         {action === "assign" && (
@@ -114,14 +130,14 @@ function BulkDialog({ kind, action, items, count, onClose, onDone }: {
         {action === "suppress" && <p className="subtle">Closes these alarms and quiets new ones from the same rule and program, on every host.</p>}
         {(action === "state" || action === "suppress") && (
           <label className="field"><span>{needsNote ? "Note (required)" : "Note (optional)"}</span>
-            <textarea className="input" rows={3} value={form.note} onChange={(event) => set({ note: event.target.value })}
-              placeholder={needsNote ? "Why: goes on every item" : undefined} />
+            <textarea className="input" rows={3} autoFocus value={form.note} onChange={(event) => set({ note: event.target.value })}
+              placeholder={needsNote ? "Why: goes on every item's history" : undefined} />
           </label>
         )}
         {error && <p className="confirm__error" role="alert">{error}</p>}
         <div className="row row--end">
           <button type="button" className="button" onClick={onClose}>Cancel</button>
-          <button type="submit" className="button button--primary" disabled={busy}>{busy ? "Applying…" : "Apply"}</button>
+          <button type="submit" className="button button--primary" disabled={busy}>{busy ? "Applying…" : confirmLabel(form, count, noun)}</button>
         </div>
       </form>
     </div>

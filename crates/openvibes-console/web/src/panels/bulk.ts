@@ -1,6 +1,7 @@
 // One bulk action on selected alarms, findings or vulnerabilities (triage
 // v2, spec 2026-10-10-bulk-triage §4): the request body the server takes,
 // the checks it would refuse with, and the result as one sentence.
+import { severityOrder } from "../ui/format";
 import { noteRequired, triageBody } from "./triage";
 
 export type BulkKind = "alarms" | "compliance" | "vulnerabilities";
@@ -18,6 +19,8 @@ export type BulkForm = {
   /** An open case's id, or NEW_CASE. */
   caseId: string;
   newCaseTitle: string;
+  /** The selection's highest item severity, for a new case. */
+  newCaseSeverity?: string | undefined;
 };
 
 export const NEW_CASE = "__new";
@@ -51,10 +54,23 @@ export function bulkBody(form: BulkForm, items: BulkItem[]) {
       return { action: "assign", assignee: form.assignee || null, items };
     case "case":
       return form.caseId === NEW_CASE
-        ? { action: "case", new_case_title: form.newCaseTitle.trim(), items }
+        ? { action: "case", new_case_title: form.newCaseTitle.trim(), new_case_severity: form.newCaseSeverity ?? null, items }
         : { action: "case", case_id: form.caseId, items };
     case "suppress":
       return { action: "suppress", note, items };
+  }
+}
+
+const verbs: Record<string, string> = { open: "Reopen", mitigated: "Mitigate", accepted_risk: "Accept risk for", false_positive: "Mark as false positive:" };
+
+/** The confirm button, naming the count: "Mitigate 12 alarms". */
+export function confirmLabel(form: BulkForm, count: number, noun: string): string {
+  const what = `${count.toLocaleString()} ${noun}`;
+  switch (form.action) {
+    case "state": return `${verbs[form.state] ?? "Set"} ${what}`;
+    case "assign": return form.assignee ? `Assign ${what}` : `Unassign ${what}`;
+    case "case": return `Add ${what} to the case`;
+    case "suppress": return `Quiet ${what}`;
   }
 }
 
@@ -66,4 +82,9 @@ export function resultText(result: BulkResult): string {
   for (const skip of result.skipped) reasons.set(skip.reason, (reasons.get(skip.reason) ?? 0) + 1);
   const why = [...reasons].map(([reason, n]) => `${n.toLocaleString()} ${reason}`).join(", ");
   return `${changed}; ${result.skipped.length.toLocaleString()} skipped (${why})`;
+}
+
+/** The most severe of these severities (for a new case). */
+export function highest(severities: readonly string[]): string | undefined {
+  return [...severities].sort((a, b) => (severityOrder[a] ?? 9) - (severityOrder[b] ?? 9))[0];
 }

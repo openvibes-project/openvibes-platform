@@ -15,6 +15,8 @@ export type ListRow = { key: string; open: PanelRef; title: string; meta: string
 export type AdvisoryRow = {
   id: string; title: string; severity: string; cves: string[]; cvss: number | null; epss: number | null;
   exploited: boolean; kev: boolean; ransomware: boolean; hosts: number; reboot: number; noFix: boolean;
+  /** Hosts whose triage is open (mitigated, accepted and false positive are not). */
+  open: number;
   /** The weakest mapping among the hosts, 0 to 100. */
   confidence: number;
 };
@@ -27,10 +29,11 @@ export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] 
   for (const item of items) {
     const row = rows.get(item.advisory_id) ?? {
       id: item.advisory_id, title: item.title, severity: item.severity, cves: item.cves, cvss: item.cvss ?? null, epss: item.epss ?? null,
-      exploited: item.exploited, kev: item.kev, ransomware: item.ransomware, hosts: 0, reboot: 0, confidence: item.confidence,
+      exploited: item.exploited, kev: item.kev, ransomware: item.ransomware, hosts: 0, open: 0, reboot: 0, confidence: item.confidence,
       noFix: Array.isArray(item.packages) && (item.packages as { fixed?: unknown }[]).every((p) => p?.fixed == null),
     };
     row.hosts += 1;
+    if (item.triage_state === "open") row.open += 1;
     row.confidence = Math.min(row.confidence, item.confidence);
     if (item.reboot_needed) row.reboot += 1;
     rows.set(item.advisory_id, row);
@@ -101,7 +104,7 @@ export function vulnerabilityQuery(params: URLSearchParams): string {
 
 export function selectAdvisories(all: readonly AdvisoryRow[], params: URLSearchParams): AdvisoryRow[] {
   const q = params.get("q") ?? "";
-  return all.filter((row) => (params.get("nofix") !== "true" || row.noFix) && matches([row.title, row.id, ...row.cves], q));
+  return all.filter((row) => (params.get("nofix") !== "true" || row.noFix) && (params.get("state") === "all" || row.open > 0) && matches([row.title, row.id, ...row.cves], q));
 }
 
 export function selectAudit(all: readonly AuditEvent[], params: URLSearchParams): AuditEvent[] {

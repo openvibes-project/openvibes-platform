@@ -640,6 +640,7 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route("/v1/cases/for-item", get(crate::cases::cases_for_item))
         .route("/v1/cases/assignees", get(crate::cases::list_assignees))
+        .route("/v1/cases/active-items", get(crate::cases::active_items))
         .route(
             "/v1/cases/{case_id}",
             get(crate::cases::get_case).put(crate::cases::update_case),

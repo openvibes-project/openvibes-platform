@@ -550,6 +550,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/cases/active-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["active_items"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/cases/assignees": {
         parameters: {
             query?: never;
@@ -1651,6 +1667,24 @@ export interface components {
             /** @description Canonical username. */
             username: string;
         };
+        /** @description One item in an open case. */
+        ActiveCaseItem: {
+            /**
+             * Format: int64
+             * @description The case's number (`C-<number>`).
+             */
+            case_number: number;
+            /** @description The item's ref. */
+            ref: string;
+        };
+        /** @description Items in open cases, for the lists' case badges. */
+        ActiveCaseItemsView: {
+            /**
+             * @description Item ref (alarm id, `agent/rule_set/rule`, `agent/advisory`) and
+             *     the number of the open case holding it.
+             */
+            items: components["schemas"]["ActiveCaseItem"][];
+        };
         /** @description A note for the timeline. */
         AddCaseNoteRequest: {
             /** @description Plain text, 1 to 4000 characters. */
@@ -2180,6 +2214,11 @@ export interface components {
             case_id?: string | null;
             /** @description The selected rows, at most 10,000. */
             items: components["schemas"]["BulkItem"][];
+            /**
+             * @description For a new case: the selection's highest item severity (`important`
+             *     counts as high, as for case items).
+             */
+            new_case_severity?: string | null;
             /** @description For `case`: the title of a new case. */
             new_case_title?: string | null;
             /** @description Required to close, and for `suppress`; goes on every item. */
@@ -5790,6 +5829,64 @@ export interface operations {
             };
             /** @description Invalid field */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    active_items: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                kind: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Items of this kind in open cases the caller can see */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActiveCaseItemsView"];
+                };
+            };
+            /** @description Invalid kind */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Bearer tokens and missing permissions are refused */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

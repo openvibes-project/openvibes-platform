@@ -371,7 +371,7 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
             .map(|id| json!({"id": id.to_string()}))
             .collect::<Vec<_>>()
     );
-    let first = json!({"action": "case", "new_case_title": "2 alarms: test", "items": items});
+    let first = json!({"action": "case", "new_case_title": "2 alarms: test", "new_case_severity": "high", "items": items});
     let (status, body, _) = call(
         &router,
         "POST",
@@ -385,6 +385,31 @@ async fn items_go_into_one_open_case_and_vulnerabilities_triage_per_host() {
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["changed"].as_u64(), Some(2));
     assert!(body["case_number"].as_i64().is_some());
+    // The lists' case badges: both alarms, under that case's number.
+    let (_, active, _) = call(
+        &router,
+        "GET",
+        "/api/v1/cases/active-items?kind=alarm",
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    let refs: Vec<&str> = active["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["ref"].as_str().unwrap())
+        .collect();
+    assert_eq!(refs.len(), 2, "{active}");
+    assert!(
+        active["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|i| i["case_number"] == body["case_number"])
+    );
     let second = json!({"action": "case", "new_case_title": "again", "items": items});
     let (_, body, _) = call(
         &router,

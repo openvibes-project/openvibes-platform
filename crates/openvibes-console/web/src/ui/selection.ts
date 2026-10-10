@@ -28,3 +28,8 @@ export function useSelection(reset: string): [Set<string>, (next: Set<string>) =
   const selected = state.reset === reset ? state.selected : new Set<string>();
   return [selected, (next) => setState({ reset, selected: next })];
 }
+
+/** The list's filter, without its sort: a selection survives re-sorting. */
+export function filterKey(params: URLSearchParams): string {
+  return [...params].filter(([key]) => key !== "sort" && key !== "dir").map(([k, v]) => `${k}=${v}`).sort().join("&");
+}
