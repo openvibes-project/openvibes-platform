@@ -37,15 +37,27 @@ Show everything, without page changes for details:
   - access: roles, bindings and asset groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
-- **Triage** (finding panel, `panels/triage.ts`): select one host or many,
-  then set state, assignee (an analyst or admin username), note and, for
-  accepted risk, the date it is accepted until (end of that local day).
-  The state list follows the server's workflow (open → investigating →
-  mitigated, accepted risk or false positive; closed states stay), limited
-  to states every selected host can reach. Mitigated, accepted risk and
-  false positive need a note. With one host selected, the form loads and
-  shows its saved triage first (fields stay disabled until it arrives).
-  A stale selection (412) reloads the list. The Hosts table shows each
+- **Triage** (triage v2, `panels/triage.ts`, `panels/bulk.ts`,
+  `panels/BulkBar.tsx`): four states (open, mitigated, accepted risk, false
+  positive), any to any other; every close needs a note, accepted risk an
+  expiry (90 days by default, at most a year, to the end of that local
+  day). The Alarms, Compliance and Vulnerabilities lists and a detail
+  view's Hosts tab select rows (checkbox, shift-click range, `x` on the
+  cursor row; the header box selects the rows on screen, then a bar offers
+  every row the filter matches, up to 10,000; `ui/selection.ts`). The bulk
+  bar at the bottom offers Mitigate, Accept risk, False positive, Reopen,
+  Assign, Add to case and (alarms) Suppress; each opens one dialog whose
+  confirm button names the count, and the toast says what changed and why
+  the rest was skipped. A selected finding or advisory row acts on every
+  host in scope where it is current or open. Rows in an open case show
+  its badge (`panels/CaseBadge.tsx`). Vulnerabilities count open hosts
+  and hide advisories triaged everywhere unless Include resolved is on.
+- **Detail template** (`panels/TriageDetail.tsx`): a finding, an advisory
+  and an alarm share one layout: the summary with actions on every open
+  host, then tabs (`Segmented`). Findings and advisories: Hosts (a
+  `DataTable` with a state filter, selection and the bulk bar, never cut
+  off), Evidence, History. Alarms: Process, Evidence, History, plus the
+  Quiet choice. The Hosts table shows each
   host's assignee and, for accepted risk, the date it is accepted until
   (marked expired once past), and a `fixed <date>` badge (`about` when
   approximate) for a host whose agent reported the match ended (P13).
@@ -243,7 +255,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
   host, or (global scope only) this program or this exact command on any
   host. Choosing does nothing until the inline confirmation, which names
   what it quiets and asks why; confirming closes that alarm as a false
-  positive (through investigating) and creates the suppression.
+  positive and creates the suppression.
 
 **Site rules** (`/site-rules`, with `rules.write`) lists the site's own
 compliance rules and alarm rules (drafts) with New rule. A rule opens in
@@ -263,9 +275,9 @@ ones that aren't current, and shows the `[[rule_sets]]` lines to paste into
 an existing agent's `agent.toml`.
 - **Alarm panel** (`alarm`): the process tree top-down (ancestors, then the
   process: program, masked command line, uid and euid when they differ,
-  working directory, pid), rule and versions, first/last seen, count, and
-  the triage bar (findings workflow). Choosing false positive offers
-  "Don't alarm on this again" with the same scopes.
+  working directory, pid), rule and versions, first/last seen, count, in
+  the detail template (Process, Evidence, History tabs); the summary has
+  the triage actions and Quiet… with the same scopes.
 - **Coverage** (`/coverage`, `g t`, global `rules.read`): an ATT&CK
   matrix (tactics as columns, covered techniques with rule counts; empty
   tactics stay as visible gaps) above the rule list. Chips: Kill chain

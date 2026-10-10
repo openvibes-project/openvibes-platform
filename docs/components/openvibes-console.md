@@ -239,10 +239,11 @@ stay in the low thousands.
   triage version. `{id}` is the platform's id, never the agent's
   `alarm_id`. Outside the scope is 404.
 - `PUT /api/v1/alarms/{id}/triage` (`alarms.triage`, CSRF, `If-Match`):
-  the findings workflow (open → investigating → mitigated / accepted risk
-  / false positive; completed states need a note; accepted risk a future
-  expiry); 412 stale, 409 transition, 428 without `If-Match`. Audited as
-  `alarm.triage.changed` with a history row.
+  any of the four states to any other (open, mitigated, accepted risk,
+  false positive; `investigating` is retired, triage v2); completed states
+  need a note, accepted risk a future expiry; 412 stale, 409 for a retired
+  state, 428 without `If-Match`. Audited as `alarm.triage.changed` with a
+  history row.
 - `GET /api/v1/alarm-suppressions` (`alarms.read`): active suppressions
   the caller may see: `host` ones on agents in scope; `program` and
   `command` ones (they apply on every host) only with global scope.
@@ -406,6 +407,47 @@ unique identities; hostname-based vulnerability lookup must refuse ambiguous
 matches while exact installation IDs remain addressable.
 
 ## Configuration
+
+
+### Bulk triage and the detail view (triage v2, `src/bulk.rs`, `src/triage_detail.rs`)
+
+Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
+
+- `POST /api/v1/{alarms,compliance,vulnerabilities}/bulk` (CSRF): `{action,
+  state?, note?, accepted_until?, assignee?, case_id? | new_case_title +
+  new_case_severity?, items[]}`, 1 to 10,000 items, each fitting its list
+  (alarms `{id}`; compliance `{rule_set_id, rule_id, agent_id?}`;
+  vulnerabilities `{advisory_id, agent_id?}`; without a host, every host in
+  scope). Actions: `state` (a close needs a note, accepted risk its
+  expiry), `assign`, `case` (an open case or a new one; an item in another
+  open case is skipped) and, for alarms, `suppress` (one `program`
+  suppression per distinct rule and program). Needs the kind's triage
+  permission (`alarms.triage`, `compliance.triage`,
+  `vulnerabilities.triage`), plus `cases.manage` for `case` and
+  `alarms.suppress` for `suppress`. Answers `{changed, skipped[{id,
+  reason}], case_id?, case_number?}`: items out of scope, gone or refused
+  are listed, never silently changed. One audit row per action
+  (`alarm.bulk_triage`, `finding.bulk_triage`,
+  `vulnerability.bulk_triage`), one history row per item.
+- `PUT /api/v1/vulnerabilities/advisories/{advisory}/hosts/{agent}/triage`
+  (`vulnerabilities.triage`, CSRF, `If-Match`, version 0 when never
+  triaged): one host's vulnerability triage. Vulnerability rows (list and
+  advisory detail) carry `triage_state`, `triage_version` and
+  `assigned_to`; the advisory detail lists up to 2,000 hosts.
+- `GET /api/v1/triage-history?kind=alarm&id=` (or
+  `kind=compliance&rule_set_id=&rule_id=`, `kind=vulnerability&advisory_id=`):
+  the newest 200 triage changes on hosts in scope, behind the kind's read
+  permission. The detail view's History tab.
+- `GET /api/v1/cases/active-items?kind=` (`cases.read`): the alarm,
+  finding or vulnerability refs in open cases the caller can see, with the
+  case number, for the lists' case badges.
+- Failure behaviour: a refused request (count, fields, action, permission)
+  changes nothing; once accepted, each item is its own transaction, so a
+  database error mid-way leaves the items before it changed (their history
+  and audit say so).
+- Tests: `tests/bulk_http.rs` (permission, CSRF, the note rule, items that
+  do not fit, one open case per item, advisory expansion, version 0, the
+  History tab, case badges).
 
 ### Current
 

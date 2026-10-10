@@ -730,3 +730,32 @@ bundle lookup to the console, including expired or retired bundles, so a
 finding or alarm can show the exact rule that produced its evidence. Bundle
 signature verification still uses the original signed bytes and recorded
 issuer key.
+
+## Triage v2 (schema 45)
+
+Spec `docs/specs/2026-10-10-bulk-triage-design.md`. Migration 45 (marked
+`needs-backup`: an upgrade backs up, then migrates, on its own) retires
+`investigating`: those alarms and findings become `open`, keeping assignee,
+note and case links, with a history row ("investigating retired; cases
+replace it", actor `migration`); the CHECKs drop the value. It adds
+`vulnerability_triage` (per host × advisory: state, assignee, note,
+`accepted_until`, version) and its history, the
+`vulnerabilities.triage` permission (roles that have `compliance.triage`),
+and a trigger that clears open and mitigated triage, and expired accepted
+risk, when the vulnerability is fixed.
+
+- `console_triage` / `console_alarms`: any state to any other.
+- `vulnerability_triage`: `get`, `states` (one lookup for a page),
+  `update` (version-checked, history, audit, open counts refreshed) and
+  `history`. Triaged vulnerabilities leave `host_vulnerability_counts`.
+- `bulk_triage`: one state or assignee change on up to 10,000 alarms,
+  findings or vulnerabilities (`expand_compliance` and
+  `expand_vulnerabilities` turn a rule or advisory into its hosts in
+  scope); each item goes through its single-item update, skipped items
+  come back with a reason, one audit row per action.
+- `triage_history::events`: the newest 200 changes of an alarm, or of a
+  rule or advisory across the hosts in scope.
+- `console_cases::active_items`: refs of one kind in open cases the
+  caller can see, with the case number.
+- Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
+  `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`.

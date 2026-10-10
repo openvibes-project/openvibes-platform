@@ -46,7 +46,7 @@ host expand to every host in scope.
 **T5. Console API.** `POST /api/v1/{alarms,compliance,vulnerabilities}/bulk`
 (`state:<s>`, `assign`, `case` with `case_id` or `new_case`, alarms
 `suppress` per distinct rule and program); single vulnerability triage
-endpoints; permissions (`cases.write` for case actions); OpenAPI snapshot
+endpoints; permissions (`cases.manage` for case actions); OpenAPI snapshot
 and TS client.
 - Check: HTTP tests (CSRF, permission, scope, skips, case exclusivity).
 
