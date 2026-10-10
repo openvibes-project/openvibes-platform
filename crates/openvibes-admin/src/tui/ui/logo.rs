@@ -73,7 +73,12 @@ pub fn lines(theme: &Theme, header: &Header) -> Vec<Line<'static>> {
 pub fn text(lines: &[Line]) -> Vec<String> {
     lines
         .iter()
-        .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect())
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|span| span.content.as_ref())
+                .collect()
+        })
         .collect()
 }
 
@@ -82,7 +87,11 @@ mod tests {
     use super::*;
 
     fn header(update: Option<&'static str>) -> Header<'static> {
-        Header { location: "limebox · Maintenance › Certificates", version: "v0.2.8", update }
+        Header {
+            location: "limebox · Maintenance › Certificates",
+            version: "v0.2.8",
+            update,
+        }
     }
 
     #[test]
@@ -92,7 +101,11 @@ mod tests {
         assert_eq!(text.len(), 7);
         assert!(text[0].starts_with("     ██████╗ ██████╗"), "{:?}", text[0]);
         assert!(text[6].starts_with("    limebox · Maintenance › Certificates"));
-        assert!(text[6].ends_with("v0.2.8  ▲ 0.2.9 available"), "{:?}", text[6]);
+        assert!(
+            text[6].ends_with("v0.2.8  ▲ 0.2.9 available"),
+            "{:?}",
+            text[6]
+        );
         assert_eq!(text[6].chars().count(), RIGHT);
     }
 

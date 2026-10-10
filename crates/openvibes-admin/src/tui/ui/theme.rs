@@ -20,7 +20,10 @@ pub struct Theme {
 
 impl Theme {
     pub fn from_env() -> Self {
-        Self::new(std::env::var_os("NO_COLOR").as_deref(), std::env::var("TERM").ok().as_deref())
+        Self::new(
+            std::env::var_os("NO_COLOR").as_deref(),
+            std::env::var("TERM").ok().as_deref(),
+        )
     }
 
     pub fn new(no_color: Option<&OsStr>, term: Option<&str>) -> Self {
@@ -31,7 +34,11 @@ impl Theme {
     }
 
     fn fg(&self, color: Color) -> Style {
-        if self.color { Style::new().fg(color) } else { Style::new() }
+        if self.color {
+            Style::new().fg(color)
+        } else {
+            Style::new()
+        }
     }
 
     pub fn white(&self) -> Style {
@@ -70,17 +77,28 @@ impl Theme {
     /// A key shown as a button.
     pub fn key(&self) -> Style {
         if self.color {
-            Style::new().bg(KEY).fg(Color::White).add_modifier(Modifier::BOLD)
+            Style::new()
+                .bg(KEY)
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD)
         } else {
             Style::new().add_modifier(Modifier::REVERSED | Modifier::BOLD)
         }
     }
 
     pub fn up_down(&self) -> &'static str {
-        if self.plain_arrows { "↑↓" } else { "⭡⭣" }
+        if self.plain_arrows {
+            "↑↓"
+        } else {
+            "⭡⭣"
+        }
     }
     pub fn left_right(&self) -> &'static str {
-        if self.plain_arrows { "←→" } else { "⭠⭢" }
+        if self.plain_arrows {
+            "←→"
+        } else {
+            "⭠⭢"
+        }
     }
     pub fn up(&self) -> &'static str {
         if self.plain_arrows { "↑" } else { "⭡" }
@@ -103,7 +121,15 @@ mod tests {
         let fancy = Theme::new(None, Some("xterm-256color"));
         assert_eq!((fancy.up_down(), fancy.left_right()), ("⭡⭣", "⭠⭢"));
         let console = Theme::new(None, Some("linux"));
-        assert_eq!((console.up_down(), console.left_right(), console.up(), console.down()), ("↑↓", "←→", "↑", "↓"));
+        assert_eq!(
+            (
+                console.up_down(),
+                console.left_right(),
+                console.up(),
+                console.down()
+            ),
+            ("↑↓", "←→", "↑", "↓")
+        );
     }
 
     #[test]
@@ -115,7 +141,10 @@ mod tests {
         assert!(plain.key().add_modifier.contains(Modifier::REVERSED));
         assert_eq!(plain.teal().fg, None);
         let coloured = Theme::new(Some(OsStr::new("")), None);
-        assert!(coloured.color, "an empty NO_COLOR means colour (no-color.org)");
+        assert!(
+            coloured.color,
+            "an empty NO_COLOR means colour (no-color.org)"
+        );
         assert_eq!(coloured.teal().fg, Some(TEAL));
         assert_eq!(coloured.highlight().bg, Some(Color::Rgb(0x1f, 0x3a, 0x4a)));
     }
