@@ -268,7 +268,7 @@ pub struct AuditRetentionPolicy {
 /// The assistant's internet-lookup setting.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
 pub struct AssistantInternet {
-    /// 0 off, 1 fetch pages, 2 fetch pages and search through SearXNG.
+    /// 0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.
     pub level: u8,
     /// SearXNG base URL, required at level 2.
     pub searxng_url: Option<String>,
@@ -297,7 +297,7 @@ pub struct AssistantInternetTest {
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdateAssistantInternetRequest {
-    /// 0 off, 1 fetch pages, 2 fetch pages and search.
+    /// 0 off, 1 security references (OSV, Bodhi), 2 those and web search.
     #[schema(minimum = 0, maximum = 2)]
     pub level: u8,
     /// SearXNG base URL: `https://`, or `http://` on a local or private address.

@@ -13,8 +13,13 @@ test("a mitigation answer shows where outside information came from", async ({ p
   const source = dock.getByRole("link", { name: "Looked up CVE-2024-6387 on osv.dev" });
   await expect(source).toHaveAttribute("href", "https://osv.dev/vulnerability/CVE-2024-6387");
   await expect(source).toHaveAttribute("target", "_blank");
-  await expect(source).toHaveAttribute("rel", "noopener noreferrer");
+  await expect(source).toHaveAttribute("rel", "noopener noreferrer nofollow");
   await expect(dock.getByText("Searched the web for: CVE-2024-6387 mitigation workaround")).toBeVisible();
+  // A search result: its number as the answer cites it, its host only, the user follows it.
+  const result = dock.getByRole("link", { name: "[web:2] www.openssh.com" });
+  await expect(result).toHaveAttribute("href", "https://www.openssh.com/txt/release-9.8");
+  await expect(result).toHaveAttribute("target", "_blank");
+  await expect(result).toHaveAttribute("rel", "noopener noreferrer nofollow");
 });
 
 test("an answer from local data shows no sources line", async ({ page }) => {

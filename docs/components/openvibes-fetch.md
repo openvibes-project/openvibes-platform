@@ -18,11 +18,13 @@ Request, one JSON object, tagged by `kind`:
 Response, tagged by `result`:
 
 ```json
-{"result":"ok","source":"nvd","items":[{"title":"..","snippet":"..","url":".."}]}
+{"result":"ok","source":"osv.dev","items":[{"title":"..","snippet":"..","url":".."}]}
 {"result":"refused","code":"blocked"}
 ```
 
-Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
+`source` is `osv.dev`, `bodhi.fedoraproject.org` (Fedora IDs) or the
+SearXNG `host[:port]`. Refusal codes: `off`, `blocked`, `invalid`,
+`unavailable`, `too_large`.
 
 ## Filter (`filter.rs`)
 
@@ -57,19 +59,32 @@ stderr: user, kind and ID or query, outcome; never response text. A database
 or proxy failure answers `unavailable`. Deadlines: the stdin read and the
 whole answer each have 20 s (stdin timeout: `invalid`, then exit; answer
 timeout: `unavailable`); the HTTP call is bounded by its own 10 s timeout.
-The systemd unit also sets `RuntimeMaxSec=30`.
+The deadline is `openvibes_fetch::DEADLINE`; the console waits 25 s, longer,
+so even a timeout answer reaches it. A client that hung up is no error (the
+write's EPIPE is ignored, exit 0). The systemd unit also sets
+`RuntimeMaxSec=30` and `CollectMode=inactive-or-failed`.
 
 Config `fetch.toml` (unknown keys rejected): `database_url`, optional
-`proxy_url`.
+`proxy_url` (set by hand), optional `platform_domain` (written by Setup's
+console step: the public origin's host). That host, and its parent when the
+parent still has a dot (`example.com` for `vibes.example.com`, not `lan` for
+`vibes.lan`), join the deny list (`FetchConfig::platform_names`).
+
+The deny list from PostgreSQL holds agent IDs, host names and the first
+label of every dotted host name (`web-01` for `web-01.corp.example`),
+console user names and the internal domains.
+
+`outside.rs` holds what the model sees of a lookup (the `[web:N]` data
+shape and the fixed notes), shared by the console and the evaluation.
 
 ## Packaging (`packaging/rpm/openvibes-fetch.*`)
 
 - `openvibes-fetch.socket`: `/run/openvibes-fetch/fetch.sock`, 0660
-  `root:openvibes-console`, `Accept=yes`, `MaxConnections=8` (the ninth
-  concurrent connection waits). Enabled by a preset (`80-`, before Fedora's `90-default` disable-all).
+  `root:openvibes-console`, `Accept=yes`, `MaxConnections=8` (systemd refuses a ninth concurrent
+  connection; the console then answers with the unreachable note). Enabled by a preset (`80-`, before Fedora's `90-default` disable-all).
 - `openvibes-fetch@.service`: one instance per connection as user
   `openvibes-fetch`, stdin/stdout on the socket, stderr to the journal,
-  `RuntimeMaxSec=30`, no capabilities, `ProtectSystem=strict`, seccomp,
+  `RuntimeMaxSec=30`, `CollectMode=inactive-or-failed`, no capabilities, `ProtectSystem=strict`, seccomp,
   `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
 - Failure: no database or no outbound network answers `unavailable`; a
   missing `fetch.toml` exits non-zero with one stderr line.

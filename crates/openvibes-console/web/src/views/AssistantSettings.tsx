@@ -14,7 +14,7 @@ import { toDomains, validSearxngUrl } from "./assistantRules";
 const message = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback);
 const PATH = "/api/v1/assistant-internet";
 const LEVEL1_RISK = "Sends public IDs only (like CVE-2026-1234) to api.osv.dev and bodhi.fedoraproject.org. No host data leaves your network.";
-const LEVEL2_RISK = "The query goes to your SearXNG and the engines behind it; code removes host names, agent IDs, IP addresses, user names and internal domains; website snippets reach the assistant as data and may be wrong or hostile; every answer shows what was searched.";
+const LEVEL2_RISK = "The query goes to your SearXNG and the engines behind it; code refuses any query naming a host, agent ID, IP address, user name or internal domain; website snippets reach the assistant as data and may be wrong or hostile; every answer shows what was searched.";
 
 type Change = { level: number; searxng_url: string | null; internal_domains: string[] };
 
@@ -105,7 +105,7 @@ export function AssistantSettings() {
           <label className="field">Internal domains (one per line)
             <textarea className="textarea mono" rows={4} disabled={off} value={domainText} onChange={(event) => setDomains(event.target.value)} placeholder={"corp.example\nlan.example"} />
           </label>
-          <p className="subtle">Always included: <span className="mono">{current.platform_domain}</span>. Names ending in these are removed from web searches.</p>
+          <p className="subtle">Always included: <span className="mono">{current.platform_domain}</span>. A search naming any of these is refused, never trimmed.</p>
           {!asking && error && <p className="confirm__error" role="alert">{error}</p>}
           <div><button type="submit" className="button button--primary" disabled={off || busy || toDomains(domainText).join("\n") === current.internal_domains.join("\n")}>Save domains</button></div>
         </form>

@@ -10,24 +10,28 @@ use std::{
     time::Duration,
 };
 
-use openvibes_fetch::protocol::{Kind, Refusal, Request, Response};
+use openvibes_fetch::{
+    filter::upper_prefix,
+    outside::{
+        self, NOTE_BLOCKED, NOTE_INVALID, NOTE_LIMIT, NOTE_OFF, NOTE_REFERENCE_DOWN,
+        NOTE_SEARCH_DOWN,
+    },
+    protocol::{Kind, Refusal, Request, Response},
+};
 use platform_assistant::{Area, Lookup, LookupError, LookupOutput};
 use platform_store::Pool;
 use serde_json::{Value, json};
 
+use crate::assistant::{AssistantInternetSource, encode_component};
+
 /// Where `openvibes-fetch.socket` listens.
 pub(crate) const DEFAULT_FETCH_SOCKET: &str = "/run/openvibes-fetch/fetch.sock";
-const TIMEOUT: Duration = Duration::from_secs(15);
+const TIMEOUT: Duration = Duration::from_secs(25);
+// The fetcher's own deadline is the bound; its answer must still arrive.
+const _: () = assert!(TIMEOUT.as_secs() > openvibes_fetch::DEADLINE.as_secs());
 const MAX_REPLY: u64 = 64 * 1024;
 /// Lookups per user and hour.
 const PER_HOUR: u32 = 20;
-
-const NOTE_OFF: &str = "internet lookups are off";
-const NOTE_BLOCKED: &str = "blocked: the query contained internal data";
-const NOTE_LIMIT: &str = "the internet lookup limit is reached; try again later";
-const NOTE_REFERENCE_DOWN: &str = "OSV could not be reached; this answer uses local data only";
-const NOTE_SEARCH_DOWN: &str =
-    "the web search could not be reached; this answer uses local data only";
 
 /// Lookups used per user in the current hour.
 #[derive(Default)]
@@ -51,11 +55,26 @@ pub(crate) struct Internet {
     pub(crate) user: String,
     pub(crate) socket: Arc<Path>,
     pub(crate) limits: Arc<Limits>,
+    /// What went out so far for this answer.
+    pub(crate) sent: Mutex<Vec<Sent>>,
+}
+
+/// One lookup that went out, for the sources line under the answer.
+#[derive(Clone, Debug)]
+pub(crate) struct Sent {
+    /// `reference` (answered) or `search` (sent, whatever came back).
+    pub(crate) kind: &'static str,
+    /// The ID or query as sent.
+    pub(crate) subject: String,
+    /// The `[web:N]` number of the first result.
+    pub(crate) first: usize,
+    /// Every result's URL, in order.
+    pub(crate) links: Vec<String>,
 }
 
 fn note(text: &str) -> LookupOutput {
     LookupOutput {
-        data: json!({ "note": text }),
+        data: outside::note(text),
     }
 }
 
@@ -66,7 +85,7 @@ pub(crate) fn is_failure(output: &LookupOutput) -> bool {
         .data
         .get("note")
         .and_then(Value::as_str)
-        .is_some_and(|text| text != NOTE_OFF)
+        .is_some_and(|text| text != NOTE_OFF && text != NOTE_INVALID)
 }
 
 /// One exchange with the fetch service; `None` when it cannot be reached
@@ -96,14 +115,16 @@ impl Internet {
         let (kind, subject, wire, down, fallback) = match lookup {
             Lookup::Reference { id } => (
                 "reference",
-                id,
-                Kind::Reference { id: id.clone() },
+                upper_prefix(id),
+                Kind::Reference {
+                    id: upper_prefix(id),
+                },
                 NOTE_REFERENCE_DOWN,
                 "osv.dev",
             ),
             Lookup::WebSearch { query } => (
                 "search",
-                query,
+                query.clone(),
                 Kind::Search {
                     query: query.clone(),
                 },
@@ -145,14 +166,47 @@ impl Internet {
         )
         .await
         .map_err(|_| LookupError::Store)?;
+        let first = self.record(kind, subject, response.as_ref());
         Ok(match response {
-            Some(Response::Ok { source, items }) => outside(&source, items),
+            Some(Response::Ok { source, items }) => LookupOutput {
+                data: outside::data(&source, &items, first),
+            },
             Some(Response::Refused { code: Refusal::Off }) => note(NOTE_OFF),
             Some(Response::Refused {
                 code: Refusal::Blocked,
             }) => note(NOTE_BLOCKED),
+            Some(Response::Refused {
+                code: Refusal::Invalid,
+            }) if kind == "reference" => note(NOTE_INVALID),
             _ => note(down),
         })
+    }
+
+    /// Keeps an answered reference, or a search that went out (answered,
+    /// or failed at the source), for the sources line. Returns the first
+    /// `[web:N]` number for this lookup's results.
+    fn record(&self, kind: &'static str, subject: String, response: Option<&Response>) -> usize {
+        let mut sent = self
+            .sent
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let first = sent.last().map_or(1, |s| s.first + s.links.len());
+        let links = match response {
+            Some(Response::Ok { items, .. }) => Some(items.iter().map(|i| i.url.clone()).collect()),
+            Some(Response::Refused {
+                code: Refusal::Unavailable | Refusal::TooLarge,
+            }) if kind == "search" => Some(Vec::new()),
+            _ => None,
+        };
+        if let Some(links) = links {
+            sent.push(Sent {
+                kind,
+                subject,
+                first,
+                links,
+            });
+        }
+        first
     }
 }
 
@@ -168,6 +222,7 @@ pub(crate) async fn test_search(
         user,
         socket: socket.clone(),
         limits: limits.clone(),
+        sent: Mutex::default(),
     };
     let lookup = Lookup::WebSearch {
         query: "openvibes".into(),
@@ -193,21 +248,70 @@ fn code_name(code: Refusal) -> &'static str {
     }
 }
 
-/// Outside text as data for the model. Each item has a plain-text `ref`
-/// label and its URL as text; no key here is a citation key, so nothing
-/// outside can become a link in the answer.
-fn outside(source: &str, items: Vec<openvibes_fetch::protocol::Item>) -> LookupOutput {
-    let items: Vec<Value> = items
-        .into_iter()
-        .enumerate()
-        .map(|(n, item)| {
-            json!({ "ref": format!("[web:{}]", n + 1), "title": item.title,
-                    "snippet": item.snippet, "url": item.url })
-        })
-        .collect();
-    LookupOutput {
-        data: json!({ "source": source, "outside_data": true, "items": items, "omitted": 0 }),
+/// The sources line under an answer: each reference looked up (its link
+/// built here from the ID), each search that went out, each result link
+/// shown by host only (never its outside title) with its `[web:N]` number,
+/// each link once; then one line if any lookup failed.
+pub(crate) fn internet_sources(failed: bool, sent: &[Sent]) -> Vec<AssistantInternetSource> {
+    let unavailable = failed.then(|| AssistantInternetSource {
+        kind: "unavailable",
+        text: "Internet lookup unavailable; this answer uses local data only".to_owned(),
+        url: None,
+        number: None,
+    });
+    let mut out: Vec<AssistantInternetSource> = Vec::new();
+    for s in sent {
+        let head = if s.kind == "reference" {
+            let id = &s.subject;
+            let (source, url) = if id.starts_with("FEDORA-") {
+                (
+                    "bodhi.fedoraproject.org",
+                    format!(
+                        "https://bodhi.fedoraproject.org/updates/{}",
+                        encode_component(id)
+                    ),
+                )
+            } else {
+                (
+                    "osv.dev",
+                    format!("https://osv.dev/vulnerability/{}", encode_component(id)),
+                )
+            };
+            AssistantInternetSource {
+                kind: "reference",
+                text: format!("Looked up {id} on {source}"),
+                url: Some(url),
+                number: None,
+            }
+        } else {
+            AssistantInternetSource {
+                kind: "search",
+                text: format!("Searched the web for: {}", s.subject),
+                url: None,
+                number: None,
+            }
+        };
+        let results = s.links.iter().enumerate().filter_map(|(n, url)| {
+            Some(AssistantInternetSource {
+                kind: "result",
+                text: outside::link_host(url)?,
+                url: Some(url.clone()),
+                number: u32::try_from(s.first + n).ok(),
+            })
+        });
+        for entry in std::iter::once(head).chain(results) {
+            let seen = out.iter().any(|o| match (&o.url, &entry.url) {
+                (Some(a), Some(b)) => a == b,
+                (None, None) => o.text == entry.text,
+                _ => false,
+            });
+            if !seen {
+                out.push(entry);
+            }
+        }
     }
+    out.extend(unavailable);
+    out
 }
 
 /// The forbidden answer for a user without internet access.

@@ -3160,6 +3160,7 @@ pub(crate) async fn authenticated_assistant_message(
             user: actor.clone(),
             socket: state.fetch_socket.clone(),
             limits: state.internet_limits.clone(),
+            sent: std::sync::Mutex::default(),
         }),
     };
     let lookups = match crate::assistant::ConsoleReadLookups::for_user(
@@ -3299,7 +3300,10 @@ pub(crate) async fn authenticated_assistant_message(
                 error: lookup.error.map(|error| error.message().to_owned()),
             })
             .collect(),
-        internet: crate::assistant::internet_sources(lookups.internet_failed(), &answer.lookups),
+        internet: crate::assistant::internet_sources(
+            lookups.internet_failed(),
+            &lookups.internet_sent(),
+        ),
     };
     let mut response = (StatusCode::OK, Json(response)).into_response();
     response

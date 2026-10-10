@@ -392,3 +392,60 @@ async fn test_connection_searches_through_the_fetch_socket_and_is_audited() {
     assert_eq!(rows, 1);
     db.drop().await;
 }
+
+#[tokio::test]
+async fn a_put_needs_the_admin_permission_the_csrf_token_and_the_origin() {
+    let (db, router) = setup().await;
+    let uri = "/api/v1/assistant-internet";
+    let body = serde_json::json!({"level": 1, "searxng_url": null, "internal_domains": []});
+    let (cookie, csrf) = login(&router, "bob").await;
+    let analyst = call(
+        &router,
+        "PUT",
+        uri,
+        &cookie,
+        &csrf,
+        Some(body.clone()),
+        Some("\"1\""),
+    )
+    .await;
+    assert_eq!(analyst.0, StatusCode::FORBIDDEN, "analyst");
+
+    let (cookie, csrf) = login(&router, "alice").await;
+    let wrong_csrf = call(
+        &router,
+        "PUT",
+        uri,
+        &cookie,
+        "nope",
+        Some(body.clone()),
+        Some("\"1\""),
+    )
+    .await;
+    assert_eq!(wrong_csrf.0, StatusCode::FORBIDDEN, "wrong CSRF token");
+    for (origin, token) in [(None, ""), (Some("https://evil.example"), csrf.as_str())] {
+        let mut request = Request::builder()
+            .method("PUT")
+            .uri(uri)
+            .header(header::COOKIE, &cookie)
+            .header(header::CONTENT_TYPE, "application/json")
+            .header(header::IF_MATCH, "\"1\"");
+        if let Some(origin) = origin {
+            request = request
+                .header(header::ORIGIN, origin)
+                .header("sec-fetch-site", "cross-site")
+                .header("x-csrf-token", token);
+        }
+        let response = router
+            .clone()
+            .oneshot(request.body(Body::from(body.to_string())).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN, "{origin:?}");
+    }
+    let setting = platform_store::assistant_internet::get(&db.pool.get().await.unwrap())
+        .await
+        .unwrap();
+    assert_eq!((setting.level, setting.version), (0, 1), "nothing changed");
+    db.drop().await;
+}

@@ -8493,7 +8493,7 @@
           "level": {
             "type": "integer",
             "format": "int32",
-            "description": "0 off, 1 fetch pages, 2 fetch pages and search through SearXNG.",
+            "description": "0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.",
             "minimum": 0
           },
           "platform_domain": {
@@ -8525,7 +8525,7 @@
       },
       "AssistantInternetSource": {
         "type": "object",
-        "description": "One outside lookup the answer used, shown under it. The link is built\nhere from the ID, never from fetched text.",
+        "description": "One line under an answer that used the internet. A reference's link is\nbuilt from its ID; a result's text is its link's host, never fetched text.",
         "required": [
           "kind",
           "text"
@@ -8533,7 +8533,16 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`reference`, `search` or `unavailable`."
+            "description": "`reference`, `search`, `result` or `unavailable`."
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "A result's `[web:N]` number, as the model saw it.",
+            "minimum": 0
           },
           "text": {
             "type": "string"
@@ -13404,7 +13413,7 @@
           "level": {
             "type": "integer",
             "format": "int32",
-            "description": "0 off, 1 fetch pages, 2 fetch pages and search.",
+            "description": "0 off, 1 security references (OSV, Bodhi), 2 those and web search.",
             "maximum": 2,
             "minimum": 0
           },

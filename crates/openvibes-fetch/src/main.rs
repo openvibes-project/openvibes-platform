@@ -3,9 +3,14 @@
 //! `openvibes-fetch [--config PATH]`: reads one JSON request (at most 8 KiB)
 //! from stdin, writes one JSON response to stdout, logs one line to stderr.
 
-use std::{io::Read, path::PathBuf, process::ExitCode};
+use std::{
+    io::{Read, Write},
+    path::PathBuf,
+    process::ExitCode,
+};
 
 use openvibes_fetch::{
+    DEADLINE,
     config::FetchConfig,
     http::Client,
     protocol::{Kind, Refusal, Request, Response},
@@ -13,8 +18,6 @@ use openvibes_fetch::{
 };
 
 const DEFAULT_CONFIG: &str = "/etc/openvibes/fetch.toml";
-/// Longest wait for the request and for the whole answer.
-const DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 const MAX_REQUEST: u64 = 8 * 1024;
 
 fn fail(message: &str) -> ExitCode {
@@ -50,7 +53,11 @@ async fn main() -> ExitCode {
         Ok(Ok(Ok(raw))) => raw,
         Ok(_) => return fail("cannot read stdin"),
         Err(_) => {
-            println!(r#"{{"result":"refused","code":"invalid"}}"#);
+            // The client may be gone: no panic on EPIPE.
+            let _ = writeln!(
+                std::io::stdout(),
+                r#"{{"result":"refused","code":"invalid"}}"#
+            );
             eprintln!("openvibes-fetch: stdin timed out");
             // The blocked read cannot be cancelled; leave without waiting.
             std::process::exit(0);
@@ -91,7 +98,8 @@ async fn main() -> ExitCode {
     eprintln!("openvibes-fetch: user={who:?} {what:?} -> {result}");
     match serde_json::to_string(&response) {
         Ok(json) => {
-            println!("{json}");
+            // The client may have hung up (its own timeout): nothing to do.
+            let _ = writeln!(std::io::stdout(), "{json}");
             ExitCode::SUCCESS
         }
         Err(_) => fail("cannot encode the response"),
@@ -110,12 +118,13 @@ async fn answer(config: &FetchConfig, req: &Request) -> Response {
     let Ok(db) = pool.get().await else {
         return unavailable;
     };
-    let (Ok(setting), Ok(deny)) = (
+    let (Ok(setting), Ok(mut deny)) = (
         platform_store::assistant_internet::get(&db).await,
         platform_store::assistant_internet::denylist(&db).await,
     ) else {
         return unavailable;
     };
+    deny.extend(config.platform_names());
     let Ok(http) = Client::new(config.proxy_url.as_deref()) else {
         return unavailable;
     };

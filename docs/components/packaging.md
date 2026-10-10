@@ -83,15 +83,18 @@ process per connection: `openvibes-fetch.socket` listens on
 `/run/openvibes-fetch/fetch.sock` (`SocketUser=root`,
 `SocketGroup=openvibes-console`, 0660, `Accept=yes`, `MaxConnections=8`), so
 only the console connects. `openvibes-fetch@.service` runs as
-`openvibes-fetch` with stdin and stdout on the connection, `RuntimeMaxSec=30`
-and the signer's hardening except that the network is allowed
+`openvibes-fetch` with stdin and stdout on the connection, `RuntimeMaxSec=30`,
+`CollectMode=inactive-or-failed` (a failed instance does not linger) and the signer's hardening except that the network is allowed
 (`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`). `Accept=yes` because a
 Rust service may not adopt a listening descriptor (no `unsafe`). Idle cost is
 the listening socket only. `openvibes-console` recommends the package (it is
 off until an administrator sets a level above 0); Setup installs it with the
 console. The database role `openvibes-fetch` comes from migration 0046 and
 authenticates by peer, like the signer's. Setup does not know a proxy today,
-so `proxy_url` in `fetch.toml` stays commented until set by hand.
+so `proxy_url` in `fetch.toml` stays commented until set by hand; Setup's
+console step adds `platform_domain` (the console's host, never searched for).
+Remove stops `openvibes-fetch.socket` with the console only when the package
+is installed (an offline-kit host has none).
 
 **openvibes-signer** (own rules, board #107) runs as `openvibes-signer`
 with `openvibes-signer-clients` as its group, so its socket

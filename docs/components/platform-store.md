@@ -779,7 +779,7 @@ risk, when the vulnerability is fixed.
 
 Spec `docs/specs/2026-10-10-assistant-internet-lookups.md`. Migration 46
 adds the one-row `assistant_internet` table (off by default): `level`
-(0 off, 1 fetch pages, 2 fetch and search), `searxng_url` (required at
+(0 off, 1 security references (OSV, Bodhi), 2 those and web search), `searxng_url` (required at
 level 2), `internal_domains` (at most 50), `version`, `updated_at`,
 `updated_by`. It adds the global `assistant.admin` permission (granted to
 `admin`) and the `openvibes-fetch` login role, which has `SELECT` only on
@@ -795,7 +795,8 @@ and `schema_version`. `openvibes-console` can `SELECT` the table and
   domains, or a domain that is not lowercase LDH labels joined by dots
   (253 characters at most; a single label such as `intranet` is allowed).
 - `assistant_internet::denylist`: lowercase, de-duplicated agent ids,
-  hostnames (not empty), console usernames and the internal domains, for
+  hostnames (not empty) and the first label of every dotted one (`web-01`
+  for `web-01.corp.example`), console usernames and the internal domains, for
   the fetch service's outbound filter.
 - Tests: `tests/assistant_internet.rs` (including the denylist and the
   console write path under their own roles).

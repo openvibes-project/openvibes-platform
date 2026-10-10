@@ -26,6 +26,15 @@ pub fn is_public_id(id: &str) -> bool {
         && rest[digits..].starts_with(['-', ':'])
 }
 
+/// `id` with its prefix (up to the first `-`) uppercased, the rest kept:
+/// `cve-2024-6387` becomes `CVE-2024-6387`, as [`is_public_id`] wants.
+pub fn upper_prefix(id: &str) -> String {
+    match id.split_once('-') {
+        Some((prefix, rest)) => format!("{}-{rest}", prefix.to_ascii_uppercase()),
+        None => id.to_owned(),
+    }
+}
+
 /// Refuses (`Blocked`) a query that is too long, contains a URL (`://`,
 /// `scheme:/`, `scheme:\`, any `%XX`), full-width or non-ASCII-digit
 /// look-alikes, an IPv4/IPv6/MAC address in any surroundings, or any `deny`
@@ -385,5 +394,19 @@ mod tests {
         ] {
             assert!(!is_public_id(id), "{id}");
         }
+    }
+    #[test]
+    fn a_short_host_name_is_refused_when_the_fleet_reports_an_fqdn() {
+        let deny: Vec<String> = vec!["web-01.corp.example".into(), "web-01".into()];
+        blocked(&["web-01 openssh error"], &deny);
+    }
+    #[test]
+    fn the_id_prefix_is_uppercased_and_the_rest_kept() {
+        assert_eq!(upper_prefix("cve-2024-6387"), "CVE-2024-6387");
+        assert_eq!(
+            upper_prefix("fedora-2026-6261b26f4e"),
+            "FEDORA-2026-6261b26f4e"
+        );
+        assert_eq!(upper_prefix("web01"), "web01");
     }
 }

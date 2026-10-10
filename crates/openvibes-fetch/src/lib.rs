@@ -8,9 +8,14 @@ pub mod config;
 pub mod filter;
 pub mod http;
 pub mod osv;
+pub mod outside;
 pub mod protocol;
 pub mod searxng;
 pub mod serve;
+
+/// The binary's longest wait for the request and for the whole answer.
+/// The console waits longer, so the answer (even a timeout) reaches it.
+pub const DEADLINE: std::time::Duration = std::time::Duration::from_secs(20);
 
 /// Cuts `s` to at most `max` characters, on a character boundary.
 pub fn cut(s: &str, max: usize) -> String {

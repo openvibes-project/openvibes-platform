@@ -6,19 +6,18 @@
 
 use std::sync::Mutex;
 
-use openvibes_fetch::{filter, protocol::Item};
+use openvibes_fetch::{
+    filter,
+    outside::{self, NOTE_BLOCKED, NOTE_INVALID, NOTE_REFERENCE_DOWN},
+    protocol::Item,
+};
 use serde::Deserialize;
-use serde_json::json;
 
 use super::{Fleet, FleetSource};
 use crate::lookups::{Lookup, LookupError, LookupOutput, LookupRunner, Lookups};
 
 /// The recorded answers.
 pub const INTERNET: &str = include_str!("../../eval/internet.toml");
-
-// The console's fixed notes (crates/openvibes-console/src/fetch_client.rs).
-const NOTE_BLOCKED: &str = "blocked: the query contained internal data";
-const NOTE_REFERENCE_DOWN: &str = "OSV could not be reached; this answer uses local data only";
 
 #[derive(Default, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -86,23 +85,14 @@ impl EvalLookups {
 }
 
 fn outside(source: &str, items: &[Item]) -> LookupOutput {
-    // The console's shape: plain-text refs, no citation keys.
-    let items: Vec<_> = items
-        .iter()
-        .enumerate()
-        .map(|(n, i)| {
-            json!({ "ref": format!("[web:{}]", n + 1), "title": i.title,
-                    "snippet": i.snippet, "url": i.url })
-        })
-        .collect();
     LookupOutput {
-        data: json!({ "source": source, "outside_data": true, "items": items, "omitted": 0 }),
+        data: outside::data(source, items, 1),
     }
 }
 
 fn note(text: &str) -> LookupOutput {
     LookupOutput {
-        data: json!({ "note": text }),
+        data: outside::note(text),
     }
 }
 
@@ -110,13 +100,18 @@ impl LookupRunner for EvalLookups {
     async fn run(&self, lookup: &Lookup, items: u32) -> Result<LookupOutput, LookupError> {
         Ok(match lookup {
             Lookup::Reference { id } => {
+                // As the console: the prefix uppercased, then the fetcher's checks.
+                let id = &filter::upper_prefix(id);
+                if !filter::is_public_id(id) {
+                    return Ok(note(NOTE_INVALID));
+                }
                 if filter::check_query(id, &self.deny).is_err() {
                     return Ok(self.refuse(id));
                 }
                 self.recorded
                     .reference
                     .iter()
-                    .find(|r| r.id == *id && filter::is_public_id(id))
+                    .find(|r| r.id == *id)
                     .map_or_else(
                         || note(NOTE_REFERENCE_DOWN),
                         |r| outside(&r.source, &r.items),

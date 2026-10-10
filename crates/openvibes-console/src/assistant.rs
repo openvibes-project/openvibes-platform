@@ -257,6 +257,17 @@ impl ConsoleReadLookups {
         self.internet_failed
             .load(std::sync::atomic::Ordering::Relaxed)
     }
+
+    /// The internet lookups that went out for this answer.
+    pub(crate) fn internet_sent(&self) -> Vec<crate::fetch_client::Sent> {
+        self.internet.as_ref().map_or_else(Vec::new, |internet| {
+            internet
+                .sent
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        })
+    }
 }
 
 impl LookupRunner for ConsoleReadLookups {
@@ -378,14 +389,16 @@ pub(crate) struct AssistantLookup {
     pub(crate) error: Option<String>,
 }
 
-/// One outside lookup the answer used, shown under it. The link is built
-/// here from the ID, never from fetched text.
+/// One line under an answer that used the internet. A reference's link is
+/// built from its ID; a result's text is its link's host, never fetched text.
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 pub(crate) struct AssistantInternetSource {
-    /// `reference`, `search` or `unavailable`.
+    /// `reference`, `search`, `result` or `unavailable`.
     pub(crate) kind: &'static str,
     pub(crate) text: String,
     pub(crate) url: Option<String>,
+    /// A result's `[web:N]` number, as the model saw it.
+    pub(crate) number: Option<u32>,
 }
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
@@ -395,54 +408,7 @@ pub(crate) struct AssistantMessageResponse {
     pub(crate) internet: Vec<AssistantInternetSource>,
 }
 
-/// The internet lookups that found something, as the sources line. The
-/// source follows the ID as `openvibes-fetch` chooses it (Fedora updates
-/// from Bodhi, everything else from OSV).
-pub(crate) fn internet_sources(
-    failed: bool,
-    records: &[platform_assistant::LookupRecord],
-) -> Vec<AssistantInternetSource> {
-    let unavailable = failed.then(|| AssistantInternetSource {
-        kind: "unavailable",
-        text: "Internet lookup unavailable; this answer uses local data only".to_owned(),
-        url: None,
-    });
-    records
-        .iter()
-        .filter(|r| r.found && r.error.is_none())
-        .filter_map(|r| match (r.name, r.arguments.as_object()) {
-            (Some("reference"), Some(args)) => {
-                let id = args.get("id")?.as_str()?;
-                let (source, url) = if id.starts_with("FEDORA-") {
-                    (
-                        "bodhi.fedoraproject.org",
-                        format!(
-                            "https://bodhi.fedoraproject.org/updates/{}",
-                            encode_component(id)
-                        ),
-                    )
-                } else {
-                    (
-                        "osv.dev",
-                        format!("https://osv.dev/vulnerability/{}", encode_component(id)),
-                    )
-                };
-                Some(AssistantInternetSource {
-                    kind: "reference",
-                    text: format!("Looked up {id} on {source}"),
-                    url: Some(url),
-                })
-            }
-            (Some("web_search"), Some(args)) => Some(AssistantInternetSource {
-                kind: "search",
-                text: format!("Searched the web for: {}", args.get("query")?.as_str()?),
-                url: None,
-            }),
-            _ => None,
-        })
-        .chain(unavailable)
-        .collect()
-}
+pub(crate) use crate::fetch_client::internet_sources;
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub(crate) struct AssistantStatusResponse {
@@ -481,7 +447,7 @@ impl From<&Segment> for AssistantSegment {
     }
 }
 
-fn encode_component(value: &str) -> String {
+pub(crate) fn encode_component(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {

@@ -2055,7 +2055,7 @@ export interface components {
             internal_domains: string[];
             /**
              * Format: int32
-             * @description 0 off, 1 fetch pages, 2 fetch pages and search through SearXNG.
+             * @description 0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.
              */
             level: number;
             /** @description Host of the console's public origin; always filtered. */
@@ -2073,12 +2073,17 @@ export interface components {
             version: number;
         };
         /**
-         * @description One outside lookup the answer used, shown under it. The link is built
-         *     here from the ID, never from fetched text.
+         * @description One line under an answer that used the internet. A reference's link is
+         *     built from its ID; a result's text is its link's host, never fetched text.
          */
         AssistantInternetSource: {
-            /** @description `reference`, `search` or `unavailable`. */
+            /** @description `reference`, `search`, `result` or `unavailable`. */
             kind: string;
+            /**
+             * Format: int32
+             * @description A result's `[web:N]` number, as the model saw it.
+             */
+            number?: number | null;
             text: string;
             url?: string | null;
         };
@@ -4066,7 +4071,7 @@ export interface components {
             internal_domains: string[];
             /**
              * Format: int32
-             * @description 0 off, 1 fetch pages, 2 fetch pages and search.
+             * @description 0 off, 1 security references (OSV, Bodhi), 2 those and web search.
              */
             level: number;
             /** @description SearXNG base URL: `https://`, or `http://` on a local or private address. */

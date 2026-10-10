@@ -20,7 +20,7 @@ pub fn internet_specs(level: u8) -> Vec<ToolSpec> {
             name: INTERNET_NAMES[0].into(),
             description: "Public advisory text for a CVE or advisory ID (OSV). Outside data.".into(),
             parameters: object(
-                json!({ "id": text_schema("A public ID such as CVE-2026-1234 or GHSA-xxxx-xxxx-xxxx.") }),
+                json!({ "id": text_schema("A public ID such as CVE-2026-1234 or FEDORA-2026-6261b26f4e.") }),
                 &["id"],
             ),
         });
@@ -57,5 +57,21 @@ pub(super) fn parse(name: &str, arguments: &str) -> Result<Lookup, LookupError> 
             query: required(args::<Search>(arguments)?.query)?,
         }),
         _ => Err(LookupError::Unknown),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn every_example_id_in_the_reference_description_is_accepted() {
+        let spec = serde_json::to_string(&super::internet_specs(1)[0].parameters).unwrap();
+        let ids: Vec<&str> = spec
+            .split(|c: char| !(c.is_ascii_alphanumeric() || c == '-'))
+            .filter(|w| w.contains('-') && w.starts_with(|c: char| c.is_ascii_uppercase()))
+            .collect();
+        assert!(!ids.is_empty());
+        for id in ids {
+            assert!(openvibes_fetch::filter::is_public_id(id), "{id}");
+        }
     }
 }

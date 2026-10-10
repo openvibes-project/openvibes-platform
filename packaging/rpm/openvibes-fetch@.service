@@ -2,6 +2,8 @@
 Description=OpenVIBES internet fetcher (one request)
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=postgresql.service openvibes-migrate.service
+# A failed per-connection instance is unloaded too, not left behind.
+CollectMode=inactive-or-failed
 
 [Service]
 User=openvibes-fetch

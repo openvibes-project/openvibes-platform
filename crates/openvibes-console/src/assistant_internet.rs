@@ -1,5 +1,5 @@
 //! `/api/v1/assistant-internet`: the administrator's switch for the
-//! assistant's internet lookups (off, fetch pages, fetch pages and search).
+//! assistant's internet lookups (off, security references (OSV, Bodhi), those and web search).
 
 use axum::{
     Json,

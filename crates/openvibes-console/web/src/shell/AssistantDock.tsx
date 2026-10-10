@@ -30,6 +30,9 @@ function Segments({ segments }: { segments: AssistantSegment[] }) {
   );
 }
 
+/** A result shows its `[web:N]` number, as the answer cites it, and its host. */
+const label = (source: AssistantInternetSource) => source.number == null ? source.text : `[web:${String(source.number)}] ${source.text}`;
+
 function Sources({ sources }: { sources: AssistantInternetSource[] | undefined }) {
   if (!sources?.length) return null;
   return (
@@ -37,7 +40,7 @@ function Sources({ sources }: { sources: AssistantInternetSource[] | undefined }
       {sources.map((source, index) => (
         <li key={index}>
           <Icon name={source.kind === "search" ? "search" : source.kind === "unavailable" ? "alert" : "external"} size={11} />
-          {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.text}</a> : source.text}
+          {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer nofollow">{label(source)}</a> : source.text}
         </li>
       ))}
     </ul>
