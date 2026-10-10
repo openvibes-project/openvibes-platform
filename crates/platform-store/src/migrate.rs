@@ -160,7 +160,10 @@ const MIGRATIONS: &[(i32, &str)] = &[
         include_str!("../../../migrations/0044_host_daily_counts.sql"),
     ),
     (45, include_str!("../../../migrations/0045_triage_v2.sql")),
-    (46, include_str!("../../../migrations/0046_network_devices.sql")),
+    (
+        46,
+        include_str!("../../../migrations/0046_network_devices.sql"),
+    ),
 ];
 
 // The build fails if a migration is added without bumping SCHEMA_VERSION or
