@@ -467,7 +467,7 @@ absolute. Without `--quick` the command refuses and points to the TUI.
 Ports (boards #45, #48, #61, `src/setup/ports.rs`): the console listens on
 `--console-port` (default 443), ingest on `--ingest-port` (18423) and
 distribution on `--distribution-port` (18424). The three must differ and
-may not be 18430 or 18480-18483 (the assistant's and the health
+may not be 18430 or 18480-18484 (the assistant's and the health
 listeners). Before anything changes, and again in `services` just before
 the units start, Setup asks `ss -ltnpH` who listens on each chosen port.
 Any listener counts, on any address, IPv4 or IPv6, except the unit that

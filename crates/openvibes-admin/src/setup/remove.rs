@@ -63,8 +63,9 @@ const DATA: [&str; 10] = [
     "/var/lib/openvibes-signer",
 ];
 /// Service accounts (user and group of the same name) it deletes.
-const ACCOUNTS: [&str; 8] = [
+const ACCOUNTS: [&str; 9] = [
     "openvibes-ingest",
+    "openvibes-netlog",
     "openvibes-distribution",
     "openvibes-vulns",
     "openvibes-console",
@@ -455,6 +456,31 @@ mod tests {
     }
 
     /// #82: while openvibes-admin is still installed, its packaged
+    /// Review 2026-10-10 (user: nothing may be left behind): every account
+    /// a platform package creates is one Uninstall deletes.
+    #[test]
+    fn every_packaged_service_account_is_deleted() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packaging/rpm");
+        let mut packaged = Vec::new();
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "sysusers") {
+                for line in std::fs::read_to_string(&path).unwrap().lines() {
+                    if let Some(rest) = line.strip_prefix("u ") {
+                        packaged.push(rest.split_whitespace().next().unwrap().to_owned());
+                    }
+                }
+            }
+        }
+        assert!(packaged.len() >= 7, "{packaged:?}");
+        for account in &packaged {
+            assert!(
+                super::ACCOUNTS.contains(&account.as_str()),
+                "{account} is left behind"
+            );
+        }
+    }
+
     /// admin.toml stays for `dnf remove`; everything else goes.
     #[test]
     fn purge_leaves_the_admin_package_config_for_rpm() {
