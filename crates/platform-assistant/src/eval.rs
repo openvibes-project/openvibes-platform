@@ -26,6 +26,8 @@ use platform_store::{
         FINDING_SEVERITIES, FindingEndpoint, FindingGroup, GroupFilter, HostVulnerability,
         Overview, Page, VulnerableHost,
     },
+    assistant_inventory::{HostReport, HostRows, Installed, PortListener},
+    host_services::{Listener, Service},
     rules::Served,
 };
 use serde::Deserialize;
@@ -58,6 +60,12 @@ struct FleetFile {
     advisories: Vec<AdvisoryRow>,
     vulnerabilities: Vec<VulnRow>,
     rules: Vec<RuleRow>,
+    #[serde(default)]
+    listeners: Vec<inventory::ListenerRow>,
+    #[serde(default)]
+    services: Vec<inventory::ServiceRow>,
+    #[serde(default)]
+    packages: Vec<inventory::PackageRow>,
 }
 
 #[derive(Deserialize)]
@@ -170,7 +178,10 @@ pub struct Fleet {
     advisories: BTreeMap<String, AdvisoryRow>,
     vulns: Vec<Vuln>,
     envelope: Vec<u8>,
+    inventory: inventory::Inventory,
 }
+
+mod inventory;
 
 fn hours(value: f64) -> chrono::Duration {
     chrono::Duration::milliseconds((value * 3_600_000.0) as i64)
@@ -279,7 +290,15 @@ impl Fleet {
             signature_base64url: String::new(),
         })
         .map_err(|error| error.to_string())?;
+        let inventory = inventory::Inventory::parse(
+            file.listeners,
+            file.services,
+            file.packages,
+            agent_of,
+            &hidden,
+        )?;
         Ok(Self {
+            inventory,
             agents: file
                 .agents
                 .into_iter()
@@ -632,6 +651,40 @@ impl Source for FleetSource {
         } else {
             Served::Unknown
         })
+    }
+
+    async fn host_report(&self, agent_id: &str) -> Result<Option<HostReport>, StoreError> {
+        self.0.host_report(agent_id)
+    }
+
+    async fn host_listeners(
+        &self,
+        agent_id: &str,
+        port: Option<i32>,
+        limit: u32,
+    ) -> Result<Page<Listener>, StoreError> {
+        self.0.host_listeners(agent_id, port, limit)
+    }
+
+    async fn host_services(&self, agent_id: &str, limit: u32) -> Result<Page<Service>, StoreError> {
+        self.0.host_services(agent_id, limit)
+    }
+
+    async fn port_listeners(
+        &self,
+        port: i32,
+        limit: u32,
+    ) -> Result<HostRows<PortListener>, StoreError> {
+        self.0.port_listeners(port, limit)
+    }
+
+    async fn installed_packages(
+        &self,
+        name: &str,
+        agent_id: Option<&str>,
+        limit: u32,
+    ) -> Result<Installed, StoreError> {
+        self.0.installed_packages(name, agent_id, limit)
     }
 }
 

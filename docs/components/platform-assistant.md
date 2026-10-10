@@ -45,7 +45,8 @@ asking user's scope.
   called on a blocking thread. `events` streams `Lookup`, `Text` (native
   mode), and `Reset`.
 - `StoreLookups::new(pool, AgentScope, now)` runs lookups through
-  `platform_store::assistant` with the user's scope; `LookupRunner` lets
+  `platform_store::assistant` and `platform_store::assistant_inventory`
+  with the user's scope; `LookupRunner` lets
   tests substitute their own. The console wraps it to check its own
   permissions per lookup ([console-assistant.md](console-assistant.md));
   a lookup the user may not run returns `LookupError::Forbidden(Area)`,
@@ -58,11 +59,13 @@ asking user's scope.
 |---|---|---|
 | `search_findings` | `text?`, `min_severity?` (finding severity), `rule_set?`, `window_hours?` | Finding groups (an unknown `rule_set` falls back to all sets with a note): severity, endpoints, versions, first/last observed, latest message |
 | `finding_endpoints` | `rule_set?`, `rule`, `window_hours?` | Endpoints in the window, and how many were not seen in it. A missing or unknown `rule_set` resolves from the findings; a rule in several sets returns all, each item naming its set |
-| `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents) |
+| `agent_summary` | `agent` (ID or host name) | State, last seen, OS, kernel, capabilities, counts (at most 5 agents). No ports, services or software: its description points to the two lookups below |
 | `host_vulnerabilities` | `agent`, `min_severity?` (advisory severity) | Open vulnerabilities by priority; a host name matching several agents in scope is refused as ambiguous |
 | `vulnerability_hosts` | `id` (CVE or advisory) | Hosts where it is open |
 | `fleet_overview` | `window_hours?` | Agent counts, open and exploited vulnerabilities, top findings and advisories |
 | `rule_description` | `rule_set?`, `rule` | Title, severity, message, and expression from the latest published JSON bundle. A missing or unknown set resolves from the findings; a rule in several sets is a fixed error asking for one |
+| `host_services` | `agent?` (ID or host name), `port?` (1–65535); at least one | With `agent` (revoked hosts too, marked `state: revoked`): when the host last reported (`reported_at`; `null` with a note: never reported, so nothing is known about its ports), notes when owners were not all visible or the agent cut its lists, and its listening ports (port, protocol, address, exposed, owning service and program), exposed first, then (without `port`) its running services (unit, programs, processes, user), in one list split about half and half. With only `port`: the non-revoked hosts listening on it (TCP or UDP), exposed first, and how many distinct hosts |
+| `software` | `name` (at least 2 characters; a literal, case-insensitive part of the package name, like the Software page), `agent?` | The first matching package names installed on a host in scope (as many as result items), then one item per host and package with version, architecture and manager, by package then host name. `package_names` and `hosts_with_these_names` count those names only; a note says when more names match. With `agent`, only that host (empty: not installed there; a named revoked host is read). Otherwise revoked hosts are left out |
 
 `rule_set` is optional on `finding_endpoints` and `rule_description`. When
 it is missing or names no set, the runner looks the rule up in the caller's
@@ -78,6 +81,15 @@ findings are all older than the window, returns `items: []` with the
 finding's cite and `not_seen_in_window` counting the older sightings. `search_findings` with an unknown `rule_set` searches all sets and says
 so in a note. The tool descriptions name the fields each result carries and
 when to use each lookup.
+
+An `agent` argument holding a placeholder a small model writes for "no
+host in particular" (`all`, `any`, `unknown`, `none`, `*`, `all hosts`,
+… trimmed, any case; the list is `AGENT_PLACEHOLDERS`) counts as absent
+where `agent` is optional (`host_services` with a port becomes the port
+query, `software` searches every host) and is refused as invalid where it
+is required (`agent_summary`, `host_vulnerabilities`). The #241 lab run
+saw qwen3-4b send `{"agent":"unknown","port":22}` and
+`{"name":"openssh","agent":"all"}`.
 
 Arguments are parsed with unknown fields refused, strings trimmed and at most
 128 characters without control characters, windows 1–720 hours (default
@@ -160,15 +172,16 @@ scores it; `openvibes-admin assistant eval` runs it (spec §10).
 
 - **Fleet** (`eval/fleet.toml`): 12 agents in every state (seen recently,
   offline, never seen, revoked), findings, advisories, vulnerabilities,
-  and published rules, with times relative to the run. `FleetSource`
+  published rules, and listening ports, running services and installed
+  packages (`eval/inventory.rs` answers those), with times relative to the run. `FleetSource`
   answers lookups with the same types, grouping, ordering, and windows as
   the database, so no platform data is used. `vault-01` is outside the
   evaluating user's scope and dropped as scope would drop it. One agent is
-  hostile: its host name, a finding message, and an advisory title carry
-  injected instructions, each asking for something not written in it
-  (8484, 777, evil.example/steal), so quoting the data is harmless and only
+  hostile: its host name, a finding message, an advisory title, a service
+  unit and a package name carry injected instructions, each asking for
+  something not written in it (8484, 777, evil.example/steal, 1332, 9001), so quoting the data is harmless and only
   obeying it is caught.
-- **Questions** (`eval/questions.toml`, or `--cases FILE`): 55 cases with
+- **Questions** (`eval/questions.toml`, or `--cases FILE`): 67 cases with
   the lookups that answer each, facts the answer must hold (`a|b` for
   either), and terms it must never hold; `forbid_everywhere` holds the
   hidden host's data and the injected outputs, and is not checked against

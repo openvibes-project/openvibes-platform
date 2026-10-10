@@ -22,7 +22,7 @@ pub enum AgentScope {
 
 impl AgentScope {
     /// The SQL parameter: `NULL` for every agent, else the allowed IDs.
-    fn param(&self) -> Option<&[String]> {
+    pub(crate) fn param(&self) -> Option<&[String]> {
         match self {
             Self::All => None,
             Self::Only(ids) => Some(ids),
@@ -48,7 +48,7 @@ fn contains_pattern(text: &str) -> String {
     pattern
 }
 
-fn limit_param(limit: u32) -> i64 {
+pub(crate) fn limit_param(limit: u32) -> i64 {
     i64::from(limit.clamp(1, 100))
 }
 

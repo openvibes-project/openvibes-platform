@@ -125,7 +125,13 @@ async fn seed() -> (TestDb, DateTime<Utc>) {
                  last_evaluated_at) VALUES
                 ('{WEB}', 'FEDORA-2026-1', '[]', now(), now()),
                 ('{DB}', 'FEDORA-2026-1', '[]', now(), now());
-             INSERT INTO rule_sets (rule_set_id) VALUES ('baseline');"
+             INSERT INTO rule_sets (rule_set_id) VALUES ('baseline');
+             INSERT INTO host_listeners (agent_id, protocol, address, port, exposed, service, program)
+             VALUES ('{WEB}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd'),
+                    ('{DB}', 'tcp', '0.0.0.0', 22, true, 'sshd.service', 'sshd');
+             INSERT INTO package_versions (id, manager, name, epoch, version, release, arch)
+             VALUES (1, 'rpm', 'openssh-server', 0, '9.9p1', '3.fc44', 'x86_64');
+             INSERT INTO host_packages VALUES ('{WEB}', 1), ('{DB}', 1);"
         ))
         .await
         .unwrap();
@@ -177,6 +183,8 @@ fn sample(name: &str) -> Lookup {
         "vulnerability_hosts" => r#"{"id":"CVE-2026-0001"}"#,
         "fleet_overview" => "{}",
         "rule_description" => r#"{"rule":"ssh.exposed"}"#,
+        "host_services" => r#"{"port":22}"#,
+        "software" => r#"{"name":"openssh"}"#,
         other => panic!("add a sample request for the new lookup {other}"),
     };
     Lookup::parse(name, arguments).unwrap()
@@ -315,5 +323,27 @@ async fn vulnerability_lookups_use_the_vulnerability_scope() {
         run(&db, now, narrower(), "fleet_overview").await,
         Err(LookupError::Forbidden(Area::Vulnerabilities))
     );
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn ports_and_software_use_the_agent_scope() {
+    let (db, now) = seed().await;
+    for name in ["host_services", "software"] {
+        let all = run(&db, now, access(AgentScope::Global, None, false), name)
+            .await
+            .unwrap();
+        assert_eq!(hosts(&all), ["db-01", "web-01"], "{name}");
+        let scoped = run(&db, now, access(groups(), None, false), name)
+            .await
+            .unwrap();
+        assert_eq!(hosts(&scoped), ["web-01"], "{name}");
+        let hosts = &scoped.data[if name == "software" {
+            "hosts_with_these_names"
+        } else {
+            "hosts"
+        }];
+        assert_eq!(*hosts, 1, "{name}: db-01 is not counted");
+    }
     db.drop().await;
 }

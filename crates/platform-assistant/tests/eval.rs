@@ -124,6 +124,72 @@ async fn the_fleet_answers_like_the_database() {
     assert!(!all.contains("vault"), "no trace of the hidden host");
 }
 
+#[tokio::test]
+async fn the_fleet_answers_ports_services_and_software() {
+    let ssh = run("host_services", r#"{"port":22}"#).await;
+    // Exposed first; db-01's loopback sshd last; vault-01 is hidden.
+    assert_eq!(hosts(&ssh), ["web-01", "web-02", "web-03", "db-01"]);
+    assert_eq!(ssh["hosts"], 4);
+    assert_eq!(ssh["items"][0]["service"], "sshd.service");
+    assert_eq!(ssh["items"][3]["exposed"], false);
+    let web = run("host_services", r#"{"agent":"web-01"}"#).await;
+    let kinds: Vec<&str> = web["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds.iter().filter(|k| **k == "listening port").count(), 3);
+    assert_eq!(kinds.iter().filter(|k| **k == "running service").count(), 3);
+    assert_eq!(web["items"][0]["port"], 22, "exposed first, by port");
+    assert_eq!(
+        web["agent"],
+        "[agent:agent.00000000-0000-4000-8000-000000000001]"
+    );
+    let db = run("host_services", r#"{"agent":"db-01","port":5432}"#).await;
+    assert_eq!(db["items"].as_array().unwrap().len(), 1);
+    assert_eq!(db["items"][0]["program"], "postgres");
+    let build = run("host_services", r#"{"agent":"build-01"}"#).await;
+    assert!(build["reported_at"].is_null());
+    assert!(
+        build["notes"][0]
+            .as_str()
+            .unwrap()
+            .contains("never reported")
+    );
+    let build_22 = run("host_services", r#"{"agent":"build-01","port":22}"#).await;
+    assert!(
+        build_22["notes"][0]
+            .as_str()
+            .unwrap()
+            .contains("never reported")
+    );
+    assert!(web["reported_at"].is_string() && web.get("notes").is_none());
+    let chrome = run("software", r#"{"name":"Chrome"}"#).await;
+    assert_eq!(hosts(&chrome), ["dev-laptop-17"], "revoked old-02 left out");
+    assert_eq!(chrome["items"][0]["version"], "141.0.7390.65-1");
+    let openssh = run("software", r#"{"name":"openssh"}"#).await;
+    assert_eq!(hosts(&openssh), ["db-01", "web-01", "web-02", "web-03"]);
+    assert_eq!(openssh["hosts_with_these_names"], 4);
+    assert_eq!(openssh["package_names"], 1);
+    let none = run("software", r#"{"name":"nginx","agent":"web-02"}"#).await;
+    assert_eq!(none["items"], Value::Array(Vec::new()));
+    assert!(
+        none["agent"].is_string(),
+        "the host is known, nginx is not there"
+    );
+    for (name, arguments) in [
+        ("host_services", r#"{"port":8200}"#),
+        ("host_services", r#"{"agent":"vault-01"}"#),
+        ("software", r#"{"name":"vault"}"#),
+    ] {
+        let result = run(name, arguments).await;
+        assert_eq!(result["items"], Value::Array(Vec::new()), "{arguments}");
+        assert_eq!(result["omitted"], 0);
+        assert!(!result.to_string().contains("vault-01"));
+    }
+}
+
 #[test]
 fn the_shipped_question_set_is_valid_and_answerable() {
     let set = CaseSet::builtin().unwrap();
@@ -188,7 +254,7 @@ fn the_shipped_question_set_is_valid_and_answerable() {
         )
         .is_err()
     );
-    assert!(NAMES.len() == 7);
+    assert!(NAMES.len() == 9);
 }
 
 fn run_blocking_overview() -> Value {
