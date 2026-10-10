@@ -53,7 +53,10 @@ Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
 more or malformed is `invalid`), reads the setting and deny list from
 PostgreSQL, writes one JSON response to stdout, exits 0. One journal line to
 stderr: user, kind and ID or query, outcome; never response text. A database
-or proxy failure answers `unavailable`.
+or proxy failure answers `unavailable`. Deadlines: the stdin read and the
+whole answer each have 20 s (stdin timeout: `invalid`, then exit; answer
+timeout: `unavailable`); the HTTP call is bounded by its own 10 s timeout.
+The systemd unit also sets `RuntimeMaxSec` (Task 7).
 
 Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 `proxy_url`.
@@ -67,15 +70,19 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
   other ID to `https://api.osv.dev/v1/vulns/{id}`. The URL is built only from
   a checked ID and its host must be on the allowlist, else `unavailable`.
 - Limits: connect 5 s, total 10 s, no redirects (a 3xx or any non-200 is
-  `unavailable`), body over 256 KiB `too_large`, non-JSON or unexpected JSON
-  `unavailable`. Proxy from `proxy_url`.
+  `unavailable`), body over 256 KiB `too_large` (read through `take(256 KiB + 1)`), non-JSON or unexpected JSON
+  `unavailable`. A reference ID also passes `check_query` against the deny
+  list (`blocked`), since a well-formed ID can carry a host name. Proxy from `proxy_url`.
 - Extraction is by JSON path only. OSV: one item (title `id: first summary
   line`; snippet: summary, else details, cut to 1,000 characters, plus
   `package: fixed in a, b` per affected package with a `package.name`; git
   commit ranges give no versions here), then up to 5 `https://` reference
   URLs as further items titled `reference`. Bodhi: `update.title`,
   `update.notes` cut to 1,000 characters plus `fixed in` the `builds[].nvr`.
-  Cuts fall on character boundaries.
+  A record without `affected` is fine. Each fixed version and NVR is cut to
+  100 characters, the fixed-versions text to 400, and the whole snippet stays
+  within 1,000 characters (the summary gives way). Cuts fall on character
+  boundaries.
 
 ## Residual risks
 
@@ -88,4 +95,5 @@ against a model told to smuggle data out.
 ## Test
 
 `cargo test -p openvibes-fetch`. `tests/serve.rs` drives `serve::handle` with a
-fake `Http` and real OSV/Bodhi responses saved in `tests/fixtures/`.
+fake `Http` and real OSV/Bodhi responses saved in `tests/fixtures/`; `tests/http.rs` tests the real client against a
+loopback listener (redirect, oversize, 500).
