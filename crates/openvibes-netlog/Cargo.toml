@@ -1,0 +1,23 @@
+[package]
+name = "openvibes-netlog"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+platform-config = { path = "../platform-config" }
+platform-store = { path = "../platform-store" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+
+[dev-dependencies]
+deadpool-postgres.workspace = true
+
+[lints]
+workspace = true

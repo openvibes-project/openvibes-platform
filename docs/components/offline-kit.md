@@ -17,7 +17,7 @@ and Fedora version, `openvibes-platform-<version>-offline-fedora<N>.tar` (today
 | `SHA256SUMS`, `SHA256SUMS.asc` | every file in the kit; a detached signature by the package key |
 | `LICENSES/fedora-packages.txt` | name, licence, source RPM and `https://src.fedoraproject.org/rpms/<source>` of each bundled Fedora package (GPL source offer) |
 
-The model is not in the kit (2.5 GB, a Hugging Face link in `README.txt`).
+The model is not in the kit (2.7 GB, a Hugging Face link in `README.txt`).
 Size: about 95 MB.
 
 ## Building

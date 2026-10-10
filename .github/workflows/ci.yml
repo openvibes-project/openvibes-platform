@@ -27,11 +27,11 @@ env:
   OPENVIBES_TEST_DATABASE_URL: postgresql://postgres:ci@localhost:5432/postgres
 
 jobs:
-  # Decides which tiers run. Fast tier (rust, console): every run. Heavy tier
-  # (RPMs and the end to end jobs, Firefox/WebKit, release latency test): runs
-  # on main, nightly, on manual runs, with the full-ci label, and on pull
-  # requests that change anything outside the web frontend and the docs.
-  # Skipped jobs count as passing for required checks.
+  # Decides which tiers run: scripts/ci-tiers.sh (rules there, cases in
+  # scripts/test-ci-tiers.sh). Main, nightly, manual runs and the full-ci
+  # label run everything; a pull request of only docs skips Rust and the
+  # console job, and one of only docs and frontend sources skips the heavy
+  # tier. Skipped jobs count as passing for required checks.
   changes:
     name: Choose test tiers
     runs-on: ubuntu-24.04
@@ -39,6 +39,7 @@ jobs:
     outputs:
       heavy: ${{ steps.pick.outputs.heavy }}
       kit: ${{ steps.pick.outputs.kit }}
+      docs: ${{ steps.pick.outputs.docs }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -55,30 +56,24 @@ jobs:
           LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
         shell: bash
         run: |
-          heavy=true
-          # The offline kit test: always off pull requests; on them only when
-          # the kit, its scripts or the spec changed (or with full-ci).
-          kit=true
+          bash scripts/test-ci-tiers.sh
+          # The rules come from the base branch, never from the pull request:
+          # a PR could otherwise edit them to skip its own required checks
+          # (security review). A base without them runs everything.
           if [ "$EVENT" = pull_request ]; then
-            case ",$LABELS," in
-              *,full-ci,*) ;;
-              *)
-                # Heavy unless every changed file is frontend source or docs.
-                changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
-                grep -qE '^(packaging/offline/|packaging/llm/model\.pin$|scripts/[^/]*offline[^/]*$|scripts/sign-rpms\.sh$|packaging/rpm/openvibes-platform\.spec$|crates/openvibes-admin/src/(setup/assistant|model_fetch)\.rs$|\.github/workflows/ci\.yml$)' <<<"$changed" || kit=false
-                if ! grep -qvE '^(crates/openvibes-console/web/(src|tests|e2e|public)/|docs/|[^/]+\.md$)' <<<"$changed"; then
-                  heavy=false
-                fi
-                ;;
-            esac
-          fi
-          echo "heavy=$heavy" >> "$GITHUB_OUTPUT"
-          echo "kit=$kit" >> "$GITHUB_OUTPUT"
-          echo "heavy tier: $heavy"
+            if git show "$BASE_SHA:scripts/ci-tiers.sh" > "$RUNNER_TEMP/ci-tiers.sh" 2>/dev/null; then
+              git diff --name-only "$BASE_SHA...$HEAD_SHA" | bash "$RUNNER_TEMP/ci-tiers.sh"
+            else
+              printf 'heavy=true\nkit=true\ndocs=false\n'
+            fi
+          else
+            bash scripts/ci-tiers.sh < /dev/null
+          fi | tee -a "$GITHUB_OUTPUT"
 
   rust:
     name: Rust lint and tests
     needs: changes
+    if: needs.changes.outputs.docs != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -175,6 +170,7 @@ jobs:
   console:
     name: Console frontend and browsers
     needs: changes
+    if: needs.changes.outputs.docs != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -249,17 +245,33 @@ jobs:
   # renames the check (board #29). It passes when both fast jobs pass.
   test:
     name: Lint, audit, and tests (ubuntu-latest)
-    needs: [rust, console]
+    needs: [changes, rust, console]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: Require the fast tier
+      - name: Require the fast tier (or the tier rules' skip)
         env:
-          RESULTS: ${{ needs.rust.result }} ${{ needs.console.result }}
+          TIERS: ${{ needs.changes.result }}
+          RUST: ${{ needs.rust.result }}
+          CONSOLE: ${{ needs.console.result }}
+          DOCS: ${{ needs.changes.outputs.docs }}
         run: |
-          echo "rust and console: $RESULTS"
-          [ "$RESULTS" = "success success" ]
+          echo "tiers $TIERS (docs $DOCS); rust $RUST; console $CONSOLE"
+          [ "$TIERS" = success ]
+          [ "$RUST" = success ] || { [ "$DOCS" = true ] && [ "$RUST" = skipped ]; }
+          [ "$CONSOLE" = success ] || { [ "$DOCS" = true ] && [ "$CONSOLE" = skipped ]; }
+
+      # The Rust job runs this; docs-only runs skip it.
+      - name: Checkout repository
+        if: needs.rust.result == 'skipped'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: No old account names
+        if: needs.rust.result == 'skipped'
+        run: bash scripts/check-names.sh
 
   fedora:
     name: RPMs (fedora:44)
@@ -575,7 +587,7 @@ jobs:
     name: Setup life cycle under systemd (install, repair, update, uninstall)
     needs: fedora
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -590,3 +602,15 @@ jobs:
         run: |
           cp dist/openvibes-agent-*.rpm dist/old/
           bash scripts/setup-lifecycle-e2e.sh dist/old dist
+      - name: Model switch on upgrade (#264)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # v0.2.8 pinned Qwen3-4B (in packaging/llm/past-models): upgrading
+          # from it must keep the model in use until the new one is fetched.
+          mkdir -p dist/model-old dist/model-new
+          for p in admin ingest distribution vulns signer llm-0 llm-model; do
+            gh release download v0.2.8 -R "$GITHUB_REPOSITORY" -D dist/model-old -p "openvibes-$p*.rpm"
+          done
+          cp dist/openvibes-{admin,ingest,distribution,vulns,signer,llm}-[0-9]*.rpm dist/llm-model/openvibes-llm-model-*.rpm dist/model-new/
+          bash scripts/model-switch-e2e.sh dist/model-old dist/model-new

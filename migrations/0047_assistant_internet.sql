@@ -1,4 +1,4 @@
--- OpenVIBES platform schema version 46: assistant internet lookups
+-- OpenVIBES platform schema version 47: assistant internet lookups
 -- (spec 2026-10-10-assistant-internet-lookups). One row, off by default.
 CREATE TABLE assistant_internet (
     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),

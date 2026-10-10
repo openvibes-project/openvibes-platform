@@ -279,3 +279,25 @@ cost is the existing query over 500,000 current rows, unchanged by P13. If
 the refresh is ever measured hot, the documented upgrade is a read-side
 `greatest(last_observed_at, agents.last_seen_at)` for open P13 rows with an
 expression index (`finding_changes::heartbeat`).
+
+## openvibes-netlog (2026-10-10)
+
+Release build on the development host (loopback, test PostgreSQL), the real
+UCG Max IPS line, 10,000 datagrams/s. Binary 4.2 MB.
+
+| Run | RSS | CPU | Received | Stored |
+|---|---|---|---|---|
+| Idle, one device | 4.9 MB | 0 | — | — |
+| 30 s, one source (collapses) | 5.1 MB peak | 6 s (0.2 core) | 299,409 of 300,000 | 1 alarm, count 299,409 |
+| 60 s, a new source every datagram (spoofing worst case) | 20 MB peak, kept after (allocator) | 11 s (0.18 core) | 381,626 of 600,000 | 26,000 alarms; 16,022 new keys dropped (`collapse_full`) |
+| Idle 60 s after the flood | 20 MB | 0 | — | — |
+
+The target was under 10 MB RSS. Normal traffic (a few IPS events a minute,
+collapsing repeats) stays at about 5 MB. A spoofed flood of distinct sources
+reaches 20 MB, twice the target: 2,000 open alarms with their `network`
+JSON, plus the batch copies. Under that flood the single receive loop takes
+about 6,400 datagrams/s and the kernel drops the rest. Between flushes every
+entry is unstored, so eviction cannot make room and new keys are dropped.
+That flood is the spoofing case the spec states as the ceiling of UDP
+export.
+

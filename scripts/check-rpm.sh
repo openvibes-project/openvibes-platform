@@ -18,16 +18,21 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
     done
     ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
     meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)
-    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$(printf '%s\n' \
-        /var/lib/openvibes-llm/model.conf "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE" | sort)" ]] ||
-        fail "openvibes-llm-model lists other files than model.conf and the model path"
+    # The pinned path and every earlier one (#264: an upgrade never deletes
+    # the model in use), all %ghost, and model.conf.
+    want=$( { echo /var/lib/openvibes-llm/model.conf; echo "/var/lib/openvibes-llm/models/$LLM_MODEL_FILE"
+        grep -v '^#' packaging/llm/past-models | sed '/^$/d; s|^|/var/lib/openvibes-llm/models/|'; } | sort)
+    [[ "$(rpm -qlp "$meta" | grep -v '^/usr/share/licenses/')" == "$want" ]] ||
+        fail "openvibes-llm-model lists other files than model.conf and the model paths"
     rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part1 <' || fail "no Obsoletes part1"
     rpm -qp --obsoletes "$meta" | grep -q '^openvibes-llm-model-part2 <' || fail "no Obsoletes part2"
     rpm -qp --requires "$meta" | grep -q '^openvibes-llm = ' || fail "bridge does not require openvibes-llm"
     rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
     rpm -qp --recommends "$rpms"/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = ' || fail "openvibes-llm does not recommend the bridge"
-    rpm2cpio "$meta" | cpio -i --quiet --to-stdout ./var/lib/openvibes-llm/model.conf |
-        grep -qx "OPENVIBES_LLM_MODEL_SHA256=$LLM_MODEL_SHA256" || fail "model.conf lacks the pinned SHA-256"
+    # model.conf is written by %post on a fresh install, never by an upgrade.
+    rpm -qp --qf '[%{FILEFLAGS:fflags} %{FILENAMES}\n]' "$meta" | grep -qx 'cng /var/lib/openvibes-llm/model.conf' ||
+        fail "model.conf is not a %ghost %config(noreplace) file"
+    rpm -qp --scripts "$meta" | grep -q 'OPENVIBES_LLM_MODEL_SHA256=%s' || fail "%post does not write model.conf"
     echo "check-rpm (built): ok"
     exit 0
 fi
@@ -43,7 +48,7 @@ rpm -qc openvibes-ingest | grep -qx /etc/openvibes/ingest.toml || fail "ingest.t
 rpm -qc openvibes-admin | grep -qx /etc/openvibes/admin.toml || fail "admin.toml not %config"
 rpm -qc openvibes-distribution | grep -qx /etc/openvibes/distribution.toml || fail "distribution.toml not %config"
 rpm -qc openvibes-vulns | grep -qx /etc/openvibes/vulns.toml || fail "vulns.toml not %config"
-[[ "$(rpm -q --qf '[%{FILENAMES} %{FILEFLAGS:fflags}\n]' openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin | grep -c '\.toml cn')" == 4 ]] || fail "configs not noreplace"
+[[ "$(rpm -q --qf '[%{FILENAMES} %{FILEFLAGS:fflags}\n]' openvibes-ingest openvibes-distribution openvibes-vulns openvibes-admin | grep -c '\.toml cn')" == 5 ]] || fail "configs not noreplace"
 systemd-analyze verify /usr/lib/systemd/system/openvibes-ingest.service \
     /usr/lib/systemd/system/openvibes-distribution.service \
     /usr/lib/systemd/system/openvibes-vulns.service \
@@ -99,6 +104,17 @@ out=$(/usr/bin/openvibes-distribution --config /nonexistent 2>&1) && fail "distr
 [[ "$out" == *"invalid distribution configuration"* ]] || fail "distribution error: $out"
 out=$(/usr/bin/openvibes-vulns --config /nonexistent 2>&1) && fail "vulns started without config"
 [[ "$out" == *"invalid vulns configuration"* ]] || fail "vulns error: $out"
+getent passwd openvibes-netlog >/dev/null || fail "no user openvibes-netlog"
+expect_stat /etc/openvibes/netlog.toml 640 root:openvibes-netlog
+rpm -qc openvibes-ingest | grep -qx /etc/openvibes/netlog.toml || fail "netlog.toml not %config"
+systemd-analyze verify /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog unit verification"
+grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog unit lacks KillSignal=SIGINT"
+grep -qx 'AmbientCapabilities=CAP_NET_BIND_SERVICE' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog cannot bind 514"
+grep -q '^After=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog starts before migrate"
+# An upgraded host gets netlog with ingest (review: %systemd_post enables nothing on upgrade).
+grep -q '^Wants=.*openvibes-netlog.service' /usr/lib/systemd/system/openvibes-ingest.service || fail "ingest does not pull in netlog"
+out=$(/usr/bin/openvibes-netlog --config /nonexistent 2>&1) && fail "netlog started without config"
+[[ "$out" == *"invalid netlog configuration"* ]] || fail "netlog error: $out"
 
 # openvibes-llm: files, the generated API key, the unit, and the pre-start
 # check (which refuses root and a missing model).

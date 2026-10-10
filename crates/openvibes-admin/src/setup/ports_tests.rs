@@ -66,11 +66,12 @@ fn chosen_ports_are_real_ours_to_take_and_different() {
         (18430, 18423, 18424),
         (443, 18480, 18424),
         (443, 18423, 18483),
+        (18484, 18423, 18424),
     ] {
         assert!(
             check_ports(c, i, d)
                 .unwrap_err()
-                .contains("18430 and 18480-18483"),
+                .contains("18430 and 18480-18484"),
             "{c} {i} {d}"
         );
     }

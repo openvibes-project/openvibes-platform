@@ -65,7 +65,7 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/etc/openvibes/llm.conf` | 0644 root, `%config(noreplace)` | llm |
 | `/etc/openvibes/llm-api-key` | 0600 root, generated at first install | llm |
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
-| `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
+| `/var/lib/openvibes-llm/models/Qwen3.5-4B-Q4_K_M.gguf` and every earlier pinned file in `packaging/llm/past-models` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` (%ghost %config noreplace, written by `%post` on a fresh install) | 0444 root; 0644 root | llm-model |
 | `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
 | `/usr/bin/openvibes-fetch` | 0755 root | fetch |
 | `/usr/lib/systemd/system/openvibes-fetch.socket`, `openvibes-fetch@.service` | 0644 root | fetch |
@@ -89,7 +89,7 @@ only the console connects. `openvibes-fetch@.service` runs as
 Rust service may not adopt a listening descriptor (no `unsafe`). Idle cost is
 the listening socket only. `openvibes-console` recommends the package (it is
 off until an administrator sets a level above 0); Setup installs it with the
-console. The database role `openvibes-fetch` comes from migration 0046 and
+console. The database role `openvibes-fetch` comes from migration 0047 and
 authenticates by peer, like the signer's. Setup does not know a proxy today,
 so `proxy_url` in `fetch.toml` stays commented until set by hand; Setup's
 console step adds `platform_domain` (the console's host, never searched for).

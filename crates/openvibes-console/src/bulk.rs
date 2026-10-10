@@ -453,7 +453,7 @@ async fn suppress(
     let Ok(rows) = client
         .query(
             "SELECT DISTINCT ON (rule_set_id, rule_id, process->>'exe') id
-             FROM alarms WHERE id = ANY($1) ORDER BY rule_set_id, rule_id, process->>'exe', id",
+             FROM alarms WHERE id = ANY($1) AND source = 'agent' ORDER BY rule_set_id, rule_id, process->>'exe', id",
             &[&ids],
         )
         .await

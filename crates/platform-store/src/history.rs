@@ -57,7 +57,7 @@ LEFT JOIN (
            count(*) FILTER (WHERE severity = 'critical') c, count(*) FILTER (WHERE severity = 'high') h,
            count(*) FILTER (WHERE severity = 'medium') m, count(*) FILTER (WHERE severity = 'low') l,
            count(*) FILTER (WHERE severity = 'info') i
-    FROM alarms WHERE state = 'open' GROUP BY agent_id) al ON al.agent_id = a.agent_id
+    FROM alarms WHERE state = 'open' AND source = 'agent' GROUP BY agent_id) al ON al.agent_id = a.agent_id
 LEFT JOIN host_vulnerability_counts v ON v.agent_id = a.agent_id
 LEFT JOIN (
     SELECT agent_id, count(*) n FROM vulnerabilities

@@ -41,5 +41,5 @@ Fedora sources
   packages/ holds unmodified Fedora packages, signed by Fedora. LICENSES/
   fedora-packages.txt lists each package with its licence and source RPM;
   sources for any of them are at https://src.fedoraproject.org/rpms/<name>
-  and in Fedora's source repositories. The OpenVIBES packages are MIT
-  licensed; their sources are at https://github.com/openvibes-project.
+  and in Fedora's source repositories. The OpenVIBES packages are Apache-2.0
+  licensed (openvibes-llm also carries llama.cpp, MIT); their sources are at https://github.com/openvibes-project.

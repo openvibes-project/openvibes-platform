@@ -415,6 +415,38 @@ pub fn auto(opts: &TuneOptions, root: &Path, restarter: &dyn Restarter) -> Strin
         .and_then(|text| toml::from_str::<ConsoleFile>(&text).ok())
         .and_then(|file| file.assistant)
         .is_some_and(|a| a.enabled && a.backend.as_ref().is_some_and(|b| is_local(&b.url, port)));
+    // First a newly pinned model (#264): switching resets the tuning, so the
+    // new model is tuned below in the same run.
+    let model = auto_model(root, console_local, restarter);
+    let tuned = auto_tune(opts, root, restarter, console_local);
+    format!("{model} / {tuned}")
+}
+
+/// [`crate::model_upgrade::auto`] with the host's pin and download.
+fn auto_model(root: &Path, console_local: bool, restarter: &dyn Restarter) -> String {
+    let pin = crate::model_fetch::read_pin(&root.join("usr/share/openvibes-llm/model.pin"))
+        .or_else(|_| crate::model_fetch::embedded_pin());
+    // The download runs as openvibes-admin in its own unit (network, 2 h);
+    // `systemctl start` waits for it and fails if it failed.
+    let fetch = || {
+        if root == Path::new("/") {
+            restarter.systemctl(&["start", "openvibes-llm-model-fetch.service"])
+        } else {
+            Err("--root: not downloaded".to_owned())
+        }
+    };
+    match pin {
+        Ok(pin) => crate::model_upgrade::auto(root, console_local, &pin, restarter, &fetch),
+        Err(error) => format!("assistant-model: nothing to do: {error}"),
+    }
+}
+
+fn auto_tune(
+    opts: &TuneOptions,
+    root: &Path,
+    restarter: &dyn Restarter,
+    console_local: bool,
+) -> String {
     let data = root.join(DATA_DIR);
     // model.conf is what assistant-setup reads: OPENVIBES_LLM_MODEL=/path.
     let model_present = fs::read_to_string(data.join("model.conf"))

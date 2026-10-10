@@ -28,8 +28,8 @@ pub const DISTRIBUTION_DEFAULT: u16 = 18424;
 
 /// The platform's fixed loopback ports, never a chosen one: the assistant's
 /// model server and the health listeners of ingest, distribution, console
-/// and vulns.
-pub const RESERVED: [u16; 5] = [18430, 18480, 18481, 18482, 18483];
+/// vulns and netlog.
+pub const RESERVED: [u16; 6] = [18430, 18480, 18481, 18482, 18483, 18484];
 
 /// The plan's three listen ports: each a real port, none of the fixed
 /// ones, all different.
@@ -44,7 +44,7 @@ pub fn check_ports(console: u16, ingest: u16, distribution: u16) -> Result<(), S
         }
         if RESERVED.contains(&port) {
             return Err(format!(
-                "{what} port {port} is not allowed (18430 and 18480-18483 are the platform's own)"
+                "{what} port {port} is not allowed (18430 and 18480-18484 are the platform's own)"
             ));
         }
     }

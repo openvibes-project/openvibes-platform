@@ -139,9 +139,10 @@ exempts them. They reveal only the alias, on loopback.
 
 ## Memory and idle unloading
 
-A loaded model holds memory the whole time it runs: the bundled Qwen3-4B
-Q4_K_M at 8192 tokens of context is about 5.4 GB resident (measured:
-5,394,560 kB VmRSS; the file's mapped pages count towards it). So the
+A loaded model holds memory the whole time it runs: the bundled Qwen3.5-4B
+Q4_K_M at 8192 tokens of context peaked at about 5.2 GB resident (measured
+during `assistant eval`, VmHWM; Qwen3-4B before it 5.4 GB; the file's mapped
+pages count towards it). So the
 server runs only while it is used:
 
 ```
@@ -264,16 +265,36 @@ Another port for the socket needs its own label (see above):
 
 ## Using it
 
-The model is not packaged (a 2.5 GB file made every release asset and
+The model is not packaged (a 2.7 GB file made every release asset and
 `dnf` transaction huge, and the assistant is optional). `openvibes-llm-model`
 is a small bridge package with no model bytes: it selects the pinned model
-(Qwen3-4B Q4_K_M, Apache 2.0, about 2.5 GB, pinned by SHA-256 in
+(Qwen3.5-4B Q4_K_M, Apache 2.0, about 2.7 GB, pinned by SHA-256 in
 `packaging/llm/model.pin`, also installed as
 `/usr/share/openvibes-llm/model.pin`) in `/var/lib/openvibes-llm/model.conf`
 and owns the model path as a `%ghost` file, so upgrading from 0.2.5 (which
 shipped the model) does not delete an installed model. It replaces
 `openvibes-llm-model-part1` and `-part2`. If the model is missing after
-install, the package prints how to get it. If a future release changes `LLM_MODEL_FILE`, the old ghost path is no longer owned, so rpm removes the old GGUF on upgrade and Setup fetches the new model (the internal `assistant model fetch` step; changing the pin is a release-note item).
+install, the package prints how to get it. `model.conf` is written by the
+package's `%post` on a fresh install only, then by Setup and the model
+switch: an upgrade never rewrites it.
+
+**A new pin switches hosts automatically (#264; user decision
+2026-10-10).** The package keeps owning every earlier pinned file name
+(`packaging/llm/past-models`, all `%ghost`), so an upgrade never deletes the
+model in use. After the upgrade, `openvibes-llm-tune.service` first runs the
+switch (`model_upgrade.rs`): only on a host whose console uses the local
+model and whose `model.conf` selects a past pinned file (an admin's own
+model is never touched), it starts `openvibes-llm-model-fetch.service`
+(`assistant model fetch` as openvibes-admin, network, up to 2 h), which
+downloads and verifies the new file and only then selects it; then it points
+`console.toml`'s `model` at the new alias (when it named the old one),
+removes the tuning so the same run tunes the new model, stops the model
+server, restarts the console, and deletes the old file. A failed download
+(offline, no space, an error) changes nothing; the log line says the
+assistant keeps using the old model, and the next upgrade tries again
+(offline hosts: the offline kit). Changing the pin means adding the old
+`LLM_MODEL_FILE` to `past-models`; CI checks the switch from v0.2.8
+(`scripts/model-switch-e2e.sh`).
 
 After `dnf install openvibes-llm`, Setup's assistant switch downloads and
 verifies the pinned model and then runs `assistant-setup`, which hands the generated API key to the console's account

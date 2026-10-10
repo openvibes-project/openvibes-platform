@@ -54,7 +54,7 @@ re-enrolling every agent.
 
 **The assistant (optional).** Tick `assistant` in the form to have the
 console's chat assistant. Setup then asks "Download the assistant's model
-(2.5 GB from Hugging Face)?" and shows the model's licence: answer **Y**
+(2.7 GB from Hugging Face)?" and shows the model's licence: answer **Y**
 and Setup downloads it, checks it against its pinned checksum and turns the
 assistant on. Answer **N** and the assistant stays off; the last screen
 says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
@@ -137,6 +137,27 @@ from `/etc/openvibes/pki/` into the browser to stop the warning).
 - **Compliance:** findings from the baseline rules, which Setup publishes.
 - **Alarms:** threat alarms (for example a web server starting a shell)
   appear within seconds of the program start.
+
+## Ports
+
+| Port | Service | Opened by Setup's Firewall step |
+|---|---|---|
+| 443 (or the first free from 8443) / tcp | console | yes |
+| 18423 / tcp | ingest (agents) | yes |
+| 18424 / tcp | distribution (agent rules) | yes |
+| 514 / udp | netlog (network device events) | **no**: open it yourself if you add a router; Setup warns when firewalld has it closed |
+
+## Optional: alarms from a UniFi gateway
+
+1. Open UDP 514 on this host's firewall, e.g. with firewalld:
+   `sudo firewall-cmd --permanent --add-port=514/udp && sudo firewall-cmd --reload`.
+2. Register the gateway: `openvibes-admin device add --name "UCG Max" --address 192.168.1.1`.
+   The console screen for this comes later.
+3. In UniFi Network: Settings → Control Plane → Integrations → Activity
+   Logging (Syslog) → **SIEM Server**. Set this host's address and port 514,
+   and tick at least *Security Detections*.
+4. IPS/IDS detections now appear under **Alarms**. `openvibes-admin device
+   list` shows what the gateway has sent.
 
 ## Next
 

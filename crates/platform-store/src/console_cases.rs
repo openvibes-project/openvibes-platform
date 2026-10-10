@@ -358,7 +358,7 @@ const REF_TAIL: &str = "substr(i.ref, strpos(i.ref, '/') + 1)";
 fn item_title() -> String {
     format!(
         "CASE i.kind
-            WHEN 'alarm' THEN (SELECT al.message FROM alarms al WHERE al.id = i.ref::bigint)
+            WHEN 'alarm' THEN (SELECT al.message FROM alarms al WHERE al.id = i.ref::bigint AND al.source = 'agent')
             WHEN 'compliance_finding' THEN (SELECT f.message FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3})
@@ -374,7 +374,7 @@ fn item_title() -> String {
 fn item_severity() -> String {
     format!(
         "CASE i.kind
-            WHEN 'alarm' THEN (SELECT al.severity FROM alarms al WHERE al.id = i.ref::bigint)
+            WHEN 'alarm' THEN (SELECT al.severity FROM alarms al WHERE al.id = i.ref::bigint AND al.source = 'agent')
             WHEN 'compliance_finding' THEN (SELECT f.severity FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3})
@@ -389,7 +389,7 @@ fn item_gone() -> String {
     format!(
         "CASE i.kind
             WHEN 'alarm' THEN NOT EXISTS (SELECT 1 FROM alarms al
-                WHERE al.id = i.ref::bigint AND al.state <> 'mitigated')
+                WHERE al.id = i.ref::bigint AND al.source = 'agent' AND al.state <> 'mitigated')
             WHEN 'compliance_finding' THEN NOT EXISTS (SELECT 1 FROM current_findings f
                 WHERE f.agent_id = i.agent_id AND f.rule_set_id = {REF_PART_2}
                   AND f.rule_id = {REF_PART_3} AND f.ended_at IS NULL)

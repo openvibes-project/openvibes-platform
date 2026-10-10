@@ -8,7 +8,7 @@ polkit.addRule(function (action, subject) {
         return polkit.Result.NOT_HANDLED;
     }
     var units = ["openvibes-ingest.service", "openvibes-distribution.service",
-                 "openvibes-vulns.service", "openvibes-console.service",
+                 "openvibes-vulns.service", "openvibes-netlog.service", "openvibes-console.service",
                  "openvibes-llm.socket", "openvibes-signer.service",
                  "openvibes-maintenance.timer"];
     var verbs = ["start", "stop", "restart"];

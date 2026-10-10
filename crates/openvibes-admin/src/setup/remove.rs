@@ -63,8 +63,9 @@ const DATA: [&str; 10] = [
     "/var/lib/openvibes-signer",
 ];
 /// Service accounts (user and group of the same name) it deletes.
-const ACCOUNTS: [&str; 9] = [
+const ACCOUNTS: [&str; 10] = [
     "openvibes-ingest",
+    "openvibes-netlog",
     "openvibes-distribution",
     "openvibes-vulns",
     "openvibes-console",

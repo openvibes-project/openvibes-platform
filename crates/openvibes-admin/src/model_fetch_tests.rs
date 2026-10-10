@@ -189,7 +189,7 @@ fn low_disk_is_refused_before_download() {
     let (models, config) = dirs("disk");
     let downloader = fake(BYTES);
     let error = fetch(&pin(), &downloader, &models, &config, |_| 1000).unwrap_err();
-    assert!(error.contains("need about 2.7 GB free"), "{error}");
+    assert!(error.contains("need about 2.8 GB free"), "{error}");
     assert_eq!(downloader.calls.get(), 0);
 }
 
