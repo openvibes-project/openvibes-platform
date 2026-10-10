@@ -282,4 +282,4 @@ cargo test --locked --workspace --all-features
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) and [`AGENTS.md`](AGENTS.md): how
   changes are made, including by AI coding agents.
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [Apache License 2.0](LICENSE).

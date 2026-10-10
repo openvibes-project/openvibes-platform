@@ -4,7 +4,7 @@
     "title": "OpenVIBES Console API",
     "description": "Versioned human and service-account API for the OpenVIBES console.",
     "license": {
-      "name": "MIT"
+      "name": "Apache-2.0"
     },
     "version": "1.0.0"
   },

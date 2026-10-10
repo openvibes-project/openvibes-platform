@@ -6,7 +6,7 @@ members = ["crates/openvibes-ingest", "crates/platform-agent-server", "crates/pl
 version = "0.2.8"
 edition = "2024"
 rust-version = "1.95"
-license = "MIT"
+license = "Apache-2.0"
 
 [workspace.dependencies]
 libc = "0.2"
