@@ -146,3 +146,10 @@ describe("caseBadges", () => {
     expect(caseBadges([{ ref: "a1/baseline/ssh", case_number: 2 }], afterAgent).get("baseline/ssh")).toEqual([2]);
   });
 });
+
+describe("findings from before rule sets", () => {
+  it("are referenced with an empty rule set, as stored", () => {
+    expect(findingRef("a1", "~unknown", "ssh.root_login")).toBe("a1//ssh.root_login");
+    expect(findingRef("a1", "baseline", "ssh.root_login")).toBe("a1/baseline/ssh.root_login");
+  });
+});

@@ -38,7 +38,9 @@ export function splitRef(ref: string): [string, string] {
   return split < 0 ? [ref, ""] : [ref.slice(0, split), ref.slice(split + 1)];
 }
 
-export const findingRef = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}/${ruleSetId}/${ruleId}`;
+/** A rule set as stored: the console's `~unknown` (findings from before rule sets) is empty. */
+export const storedRuleSet = (ruleSetId: string) => (ruleSetId === "~unknown" ? "" : ruleSetId);
+export const findingRef = (agentId: string, ruleSetId: string, ruleId: string) => `${agentId}/${storedRuleSet(ruleSetId)}/${ruleId}`;
 export const vulnerabilityRef = (agentId: string, advisoryId: string) => `${agentId}/${advisoryId}`;
 
 /** The existing panel that shows an item, with the id that panel already uses. */

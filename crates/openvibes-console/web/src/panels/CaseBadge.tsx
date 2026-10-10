@@ -12,7 +12,9 @@ type Kind = "alarm" | "compliance_finding" | "vulnerability";
 export function useCaseBadges(kind: Kind): Map<string, number[]> {
   const { can } = useSession();
   const active = useResource<{ items: { ref: string; case_number: number }[] }>(can("cases.read") ? `/api/v1/cases/active-items?kind=${kind}` : null);
-  return useMemo(() => caseBadges(active.data?.items ?? [], kind === "alarm" ? (ref) => ref : afterAgent), [active.data, kind]);
+  // A finding from before rule sets is stored `agent//rule`; its row is `~unknown/rule`.
+  return useMemo(() => caseBadges(active.data?.items ?? [],
+    (ref) => (kind === "alarm" ? ref : afterAgent(ref).replace(/^\//, "~unknown/"))), [active.data, kind]);
 }
 
 /** Per host: the open cases holding this rule's or advisory's item on it

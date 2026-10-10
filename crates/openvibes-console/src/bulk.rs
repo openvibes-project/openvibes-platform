@@ -111,6 +111,12 @@ impl Kind {
     }
 }
 
+/// The console shows findings from before rule sets under `~unknown`; they
+/// are stored with an empty rule set (as the single-item routes map it).
+pub(crate) fn stored_rule_set(id: String) -> String {
+    if id == "~unknown" { String::new() } else { id }
+}
+
 fn bad(code: &'static str, title: &'static str) -> Response {
     problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
 }
@@ -179,7 +185,7 @@ fn parse_items(kind: Kind, items: &[BulkItem]) -> Option<Items> {
             .map(|i| {
                 only(i, false, true, false, true).then(|| {
                     (
-                        i.rule_set_id.clone().unwrap_or_default(),
+                        stored_rule_set(i.rule_set_id.clone().unwrap_or_default()),
                         i.rule_id.clone().unwrap_or_default(),
                         i.agent_id.clone(),
                     )

@@ -89,7 +89,12 @@ pub(crate) async fn triage_history(
         ("compliance", None, Some(rule_set_id), Some(rule_id), None) => (
             Permission::ComplianceRead,
             Subject::Finding {
-                rule_set_id,
+                // `~unknown`: findings from before rule sets (stored empty).
+                rule_set_id: if rule_set_id == "~unknown" {
+                    ""
+                } else {
+                    rule_set_id
+                },
                 rule_id,
             },
         ),

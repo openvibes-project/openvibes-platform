@@ -17,7 +17,7 @@ import { AddToCase } from "./AddToCase";
 import { highest } from "./bulk";
 import { BulkBar } from "./BulkBar";
 import { useHostCaseBadges } from "./CaseBadge";
-import { findingRef } from "./cases";
+import { findingRef, storedRuleSet } from "./cases";
 import { DetectionEvidence } from "./DetectionEvidence";
 import { triageStates } from "./triage";
 import { HistoryTab, type HostRow, HostsTab, TriageDetail } from "./TriageDetail";
@@ -58,7 +58,7 @@ export function FindingPanel({ id }: { id: string }) {
     : endpoints.data?.length === 1 ? (endpoints.data[0]?.agent_id ?? "") : "";
   const evidencePath = host ? `/api/v1/compliance/latest/${encodeURIComponent(host)}/${encodeURIComponent(ruleSetId || "~unknown")}/${encodeURIComponent(ruleId)}` : null;
   const observation = useResource<Finding>(evidencePath);
-  const cases = useHostCaseBadges("compliance_finding", `${ruleSetId}/${ruleId}`);
+  const cases = useHostCaseBadges("compliance_finding", `${storedRuleSet(ruleSetId)}/${ruleId}`);
 
   useProvideTitle({ kind: "finding", id }, group?.latest_message);
   if (endpoints.error) return <div className="panel-body"><ErrorBox error={endpoints.error} /></div>;
