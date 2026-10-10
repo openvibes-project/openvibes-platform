@@ -16,7 +16,8 @@ pub mod probe;
 
 pub use answer::{Citation, Segment, plain_text, sanitize};
 pub use lookups::{
-    Lookup, LookupError, LookupOutput, LookupRunner, Lookups, Source, StoreLookups, StoreSource,
+    Area, Lookup, LookupError, LookupOutput, LookupRunner, Lookups, Source, StoreLookups,
+    StoreSource,
 };
 pub use orchestrator::{
     Answer, AnswerError, ChatBackend, Event, LookupRecord, Settings, Turn, answer,

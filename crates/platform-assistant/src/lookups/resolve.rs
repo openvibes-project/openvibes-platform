@@ -25,13 +25,14 @@ impl<S: Source> Lookups<S> {
     /// The distinct `(rule set, rule id)` pairs with a finding group for
     /// `rule` (exact id, case-insensitive), over the longest window so a
     /// quiet rule still resolves. The id is the store's, not the model's.
+    ///
+    /// # Errors
+    ///
+    /// [`LookupError::Store`] when the source fails.
     // ponytail: reads 100 groups matched by substring; a short common id on
     // a large fleet can miss the exact group. Upgrade: exact rule filter in
     // the store.
-    pub(crate) async fn rule_sets_for(
-        &self,
-        rule: &str,
-    ) -> Result<Vec<(String, String)>, LookupError> {
+    pub async fn rule_sets_for(&self, rule: &str) -> Result<Vec<(String, String)>, LookupError> {
         let filter = GroupFilter {
             text: Some(rule),
             min_severity: None,

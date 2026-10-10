@@ -37,6 +37,16 @@ const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15)
 // The orchestrator bounds each question by the configured backend deadline
 // (at most 15 minutes) and answers 504 itself; this is only a backstop.
 const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(960);
+/// Time past the orchestrator's own question deadline before the console
+/// gives up, so the orchestrator ends the answer first.
+const ASSISTANT_ANSWER_MARGIN: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// The console's backstop for one answer: the question deadline (from the
+/// tuned `deadline_seconds`, at most 15 minutes) plus a margin, never a
+/// fixed cap that would cut off a slow host's answer.
+fn assistant_answer_timeout(question_deadline: std::time::Duration) -> std::time::Duration {
+    question_deadline + ASSISTANT_ANSWER_MARGIN
+}
 static AUDIT_EXPORT_SPOOL_ID: AtomicU64 = AtomicU64::new(1);
 // ponytail: one shared router cap; split API and asset budgets if one starves the other.
 
@@ -3033,6 +3043,28 @@ pub(crate) async fn authenticated_assistant_message(
             "Assistant access requires matching agent and finding scopes",
         ));
     }
+    // Lookups the user may not run are still offered and answer "no
+    // access" (ConsoleReadLookups); only a refusal means that here.
+    let vulnerabilities = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::VulnerabilitiesRead,
+        false,
+    )
+    .await
+    {
+        Ok((scope, _)) => Some(scope),
+        Err(response) if response.status() == StatusCode::FORBIDDEN => None,
+        Err(response) => return response,
+    };
+    // The Rules page is global only.
+    let rules =
+        match authenticated_permission(&state, &headers, crate::Permission::RulesRead, false).await
+        {
+            Ok((scope, _)) => scope == ConsoleScope::Global,
+            Err(response) if response.status() == StatusCode::FORBIDDEN => false,
+            Err(response) => return response,
+        };
     let user_slot = runtime.principal_slot(&actor).await;
     let Ok(user_permit) = user_slot.try_acquire_owned() else {
         return problem_response(ProblemDetails::new(
@@ -3062,22 +3094,6 @@ pub(crate) async fn authenticated_assistant_message(
             "The local model is unavailable",
         ));
     };
-    let assistant_scope = match &agent_scope {
-        ConsoleScope::Global => platform_store::assistant::AgentScope::All,
-        ConsoleScope::AssetGroups(_) => {
-            let client = match state.pool.get().await {
-                Ok(client) => client,
-                Err(_) => return unavailable_auth(),
-            };
-            let ids = match platform_store::console_read::agent_ids_in_scope(&client, &agent_scope)
-                .await
-            {
-                Ok(ids) => ids,
-                Err(_) => return unavailable_auth(),
-            };
-            platform_store::assistant::AgentScope::Only(ids)
-        }
-    };
     let backend = runtime
         .assistant
         .backend
@@ -3092,12 +3108,21 @@ pub(crate) async fn authenticated_assistant_message(
             answer: turn.answer,
         })
         .collect::<Vec<_>>();
-    let lookups = crate::assistant::ConsoleReadLookups::new(
-        platform_assistant::StoreLookups::new(state.pool.clone(), assistant_scope, settings.now),
+    let access = crate::assistant::Access {
+        agents: agent_scope,
+        vulnerabilities,
+        rules,
+    };
+    let lookups = match crate::assistant::ConsoleReadLookups::for_user(
         state.pool.clone(),
-        agent_scope,
+        access,
         settings.now,
-    );
+    )
+    .await
+    {
+        Ok(lookups) => lookups,
+        Err(_) => return unavailable_auth(),
+    };
     let backend: Arc<dyn platform_assistant::ChatBackend> =
         Arc::new(crate::assistant::LeasedChatBackend::new(
             runtime.backend.clone(),
@@ -3107,7 +3132,7 @@ pub(crate) async fn authenticated_assistant_message(
     let started = Instant::now();
     let request_id = next_request_id();
     let answer = tokio::time::timeout(
-        Duration::seconds(30).to_std().unwrap_or_default(),
+        assistant_answer_timeout(settings.deadline),
         platform_assistant::answer(
             backend,
             &lookups,
@@ -6950,6 +6975,19 @@ mod request_deadline_tests {
             status_after("/api/v1/slow", 16).await,
             StatusCode::GATEWAY_TIMEOUT
         );
+    }
+
+    #[test]
+    fn the_answer_timeout_follows_the_tuned_deadline_and_fits_the_request_deadline() {
+        use super::{ASSISTANT_REQUEST_DEADLINE, assistant_answer_timeout};
+        use std::time::Duration;
+        // A 4-vCPU host tuned to 72 s per call, 7 calls: far past 30 s.
+        let tuned = Duration::from_secs(72 * 7);
+        assert!(assistant_answer_timeout(tuned) > tuned);
+        // The longest question deadline (15 minutes) still ends inside the
+        // request deadline, so the orchestrator answers before either cap.
+        let longest = Duration::from_secs(900);
+        assert!(assistant_answer_timeout(longest) <= ASSISTANT_REQUEST_DEADLINE);
     }
 
     #[tokio::test(start_paused = true)]
