@@ -151,15 +151,20 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
           {editing ? (
             <>
               <button type="button" className="button" onClick={() => nav.open({ kind: "widget-gallery", id: "new" }, true)}><Icon name="plus" size={15} /> Add widget</button>
-              <button type="button" className="button button--ghost" onClick={() => { if (!state.dirty || window.confirm("Discard your changes?")) { editor.cancel(); nav.closeAll(); } }}>Cancel</button>
+              <button type="button" className="button button--ghost" onClick={() => {
+                if (state.dirty && !window.confirm("Discard your changes?")) return;
+                // A never-saved new dashboard is deleted by cancel: go home instead of to it.
+                const fresh = state.fresh;
+                void editor.cancel();
+                nav.closeAll();
+                if (fresh) nav.view("/");
+              }}>Cancel</button>
               <button type="button" className="button button--primary" disabled={state.saving} onClick={() => void editor.save().then((saved) => { if (saved) { nav.closeAll(); toast("Dashboard saved"); } })}>
                 {state.saving ? "Saving…" : "Save"}</button>
             </>
           ) : mine && dashboard ? (
             <button type="button" className="button dashboard-edit" onClick={() => editor.begin(dashboard)}><Icon name="pencil" size={15} /> Edit</button>
-          ) : (
-            <button type="button" className="button dashboard-edit" onClick={() => void duplicate().catch(fail)}><Icon name="copy" size={15} /> Duplicate to edit</button>
-          )}
+          ) : null}
           {!editing && (
             <div className="menu">
               <button type="button" className="icon-button" aria-haspopup="menu" aria-expanded={menu} aria-label="Dashboard menu" onClick={() => setMenu((m) => !m)}><Icon name="chevronDown" size={16} /></button>
@@ -218,7 +223,7 @@ function DashboardSwitcher({ current }: { current: string | null }) {
     const created = await request<Dashboard>("POST", "/api/v1/dashboards", { name: "Untitled dashboard", layout: { schema: 1, widgets: [] } });
     invalidate("/api/v1/dashboards");
     nav.view(`/dashboards/${created.dashboard_id}`);
-    editor.begin(created);
+    editor.begin(created, { fresh: true });
     nav.open({ kind: "widget-gallery", id: "new" }, true);
   };
   const group = (label: string, rows: Dashboard[]) => rows.length > 0 && (

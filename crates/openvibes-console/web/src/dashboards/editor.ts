@@ -14,9 +14,11 @@ export type EditorState = {
   saving: boolean; conflict: boolean; problems: FieldProblem[]; selected: string | null;
   /** The last removed tile, for Undo. */
   removed: Widget | null;
+  /** Created by New and never saved: Cancel deletes it (#252). */
+  fresh: boolean;
 };
 
-const empty: EditorState = { dashboard: null, name: "", draft: null, dirty: false, saving: false, conflict: false, problems: [], selected: null, removed: null };
+const empty: EditorState = { dashboard: null, name: "", draft: null, dirty: false, saving: false, conflict: false, problems: [], selected: null, removed: null, fresh: false };
 let state = empty;
 const listeners = new Set<() => void>();
 // Unsaved drafts are kept per tab, so a lost session, reload or crash does not
@@ -46,13 +48,22 @@ function problemsOf(error: unknown): FieldProblem[] {
 
 export const editor = {
   state: () => state,
-  begin(dashboard: Dashboard): boolean {
+  begin(dashboard: Dashboard, opts: { fresh?: boolean } = {}): boolean {
     if (!dashboard.mine) return false;
-    set({ ...empty, dashboard, name: dashboard.name, draft: upgradeLayout(dashboard.layout as unknown as Layout) });
+    set({ ...empty, dashboard, name: dashboard.name, draft: upgradeLayout(dashboard.layout as unknown as Layout), fresh: opts.fresh === true });
     return true;
   },
-  /** Ends editing and forgets the draft (the user chose to leave or cancel). */
-  cancel() { dropDraft(state.dashboard?.dashboard_id); set(empty); },
+  /** Ends editing and forgets the draft (the user chose to leave or cancel). A dashboard
+   *  New made and that was never saved goes too; the promise is its deletion, or undefined. */
+  cancel(): Promise<void> | undefined {
+    const { dashboard, fresh } = state;
+    dropDraft(dashboard?.dashboard_id);
+    set(empty);
+    if (!fresh || !dashboard) return undefined;
+    return request("DELETE", `/api/v1/dashboards/${dashboard.dashboard_id}`).then(
+      () => { invalidate("/api/v1/dashboards"); invalidate("/api/v1/me/home"); },
+      () => { /* already gone or not allowed: nothing to clean up */ });
+  },
   /** Ends editing but keeps the stored draft (the page went away, e.g. the session ended). */
   suspend() { state = empty; for (const listener of listeners) listener(); },
   /** A stored draft for this dashboard, if one was left unsaved. */
