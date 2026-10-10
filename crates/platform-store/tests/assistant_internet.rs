@@ -69,3 +69,76 @@ async fn level_two_needs_a_searxng_url_and_the_role_reads_only_what_it_needs() {
     assert!(grants.is_empty(), "read-only: {grants:?}");
     db.drop().await;
 }
+
+#[tokio::test]
+async fn denylist_is_lowercase_distinct_and_readable_by_the_fetch_role() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    client
+        .batch_execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname)
+               VALUES ('agent.00000000-0000-0000-0000-000000000001', 'active', now(), now(), 'Web01.Corp'),
+                      ('agent.00000000-0000-0000-0000-000000000002', 'active', now(), now(), '');
+             INSERT INTO console_users (user_id, username, display_name, created_at)
+               VALUES ('00000000-0000-0000-0000-000000000001', 'alex', 'Alex', now());",
+        )
+        .await
+        .unwrap();
+    // A single-label name is allowed.
+    let up = Update {
+        level: 1,
+        searxng_url: None,
+        internal_domains: vec![
+            "Intranet".to_lowercase(),
+            "corp.example".into(),
+            "web01.corp".into(),
+        ],
+    };
+    assistant_internet::update(&mut client, &up, 1, "alex", Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+
+    client
+        .batch_execute("SET ROLE \"openvibes-fetch\"")
+        .await
+        .unwrap();
+    let mut got = assistant_internet::denylist(&client).await.unwrap();
+    got.sort();
+    let mut want: Vec<String> = [
+        "agent.00000000-0000-0000-0000-000000000001",
+        "agent.00000000-0000-0000-0000-000000000002",
+        "web01.corp",
+        "alex",
+        "intranet",
+        "corp.example",
+    ]
+    .map(String::from)
+    .into();
+    want.sort();
+    assert_eq!(got, want);
+    let denied = client
+        .execute("UPDATE assistant_internet SET level = 0", &[])
+        .await;
+    assert!(denied.is_err(), "fetch role must not update");
+    client.batch_execute("RESET ROLE").await.unwrap();
+
+    // The console's own role can run the whole write path.
+    client
+        .batch_execute("SET ROLE \"openvibes-console\"")
+        .await
+        .unwrap();
+    let down = Update {
+        level: 0,
+        searxng_url: None,
+        internal_domains: vec![],
+    };
+    let s = assistant_internet::update(&mut client, &down, 2, "alex", Utc::now())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(s.version, 3);
+    client.batch_execute("RESET ROLE").await.unwrap();
+    db.drop().await;
+}

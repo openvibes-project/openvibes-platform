@@ -53,11 +53,10 @@ pub async fn get(client: &Client) -> Result<Setting, StoreError> {
     Ok(from_row(&row))
 }
 
-/// Lowercase LDH labels (1-63 chars, no edge hyphen) joined by dots, at least
-/// one dot, 253 chars at most.
+/// Lowercase LDH labels (1-63 chars, no edge hyphen) joined by dots, 253
+/// chars at most. A single label such as `intranet` is allowed.
 fn valid_domain(d: &str) -> bool {
     d.len() <= 253
-        && d.contains('.')
         && d.split('.').all(|l| {
             (1..=63).contains(&l.len())
                 && !l.starts_with('-')

@@ -773,3 +773,28 @@ risk, when the vulnerability is fixed.
   caller can see, with the case number.
 - Tests: `tests/migrate.rs` (`triage_v2_retires_investigating`),
   `tests/vulnerability_triage.rs`, `tests/bulk_triage.rs`.
+
+## Assistant internet lookups (schema 46)
+
+Spec `docs/specs/2026-10-10-assistant-internet-lookups.md`. Migration 46
+adds the one-row `assistant_internet` table (off by default): `level`
+(0 off, 1 fetch pages, 2 fetch and search), `searxng_url` (required at
+level 2), `internal_domains` (at most 50), `version`, `updated_at`,
+`updated_by`. It adds the global `assistant.admin` permission (granted to
+`admin`) and the `openvibes-fetch` login role, which has `SELECT` only on
+`assistant_internet`, `agents(agent_id, hostname)`, `console_users(username)`
+and `schema_version`. `openvibes-console` can `SELECT` the table and
+`UPDATE` its editable columns.
+
+- `assistant_internet::get`: reads the setting.
+- `assistant_internet::update`: version-checked (`None` when stale), with
+  an `assistant.internet.changed` audit row (old and new level, URL and
+  domains) in the same transaction. Refused with `StoreError::Query` before
+  the transaction: level outside 0-2, level 2 without a URL, over 50
+  domains, or a domain that is not lowercase LDH labels joined by dots
+  (253 characters at most; a single label such as `intranet` is allowed).
+- `assistant_internet::denylist`: lowercase, de-duplicated agent ids,
+  hostnames (not empty), console usernames and the internal domains, for
+  the fetch service's outbound filter.
+- Tests: `tests/assistant_internet.rs` (including the denylist and the
+  console write path under their own roles).
