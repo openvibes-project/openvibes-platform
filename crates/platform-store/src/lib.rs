@@ -37,6 +37,8 @@ pub mod console_triage;
 pub mod cpe;
 /// User dashboards: layouts, sharing by role, home (schema 26).
 pub mod dashboards;
+/// Network devices that send events to openvibes-netlog.
+pub mod devices;
 /// CVE enrichment: KEV and EPSS (vulnerability management).
 pub mod enrichment;
 pub mod finding_changes;
