@@ -458,3 +458,34 @@ describe("demo top hosts", () => {
     expect(await json(response)).toMatchObject({ code: "invalid_metric_query", field_errors: [{ field: "limit", code: "invalid_limit" }] });
   });
 });
+
+describe("demo bulk triage (triage v2)", () => {
+  it("closes with a note, files into one open case and expands an advisory to its hosts", async () => {
+    const analyst = createDemoServer({ persona: "analyst" });
+    const list = await json(await analyst.handle("GET", "/api/v1/alarms"));
+    const filed0 = await json(await analyst.handle("GET", "/api/v1/cases/active-items?kind=alarm"));
+    const inCases = new Set((filed0.items as { ref: string }[]).map((i) => i.ref));
+    const ids = (list.items as { id: string }[]).filter((a) => !inCases.has(a.id)).map((a) => ({ id: a.id }));
+    expect(ids.length).toBeGreaterThan(0);
+    const post = async (kind: string, body: Record<string, unknown>) => {
+      const response = await analyst.handle("POST", `/api/v1/${kind}/bulk`, body);
+      return { status: response.status, body: await json(response) };
+    };
+    expect((await post("alarms", { action: "state", state: "mitigated", items: ids })).status).toBe(400);
+    expect((await post("alarms", { action: "state", state: "mitigated", note: "patched", items: ids })).body).toMatchObject({ changed: ids.length, skipped: [] });
+    const filed = await post("alarms", { action: "case", new_case_title: "Two alarms", new_case_severity: "high", items: ids });
+    expect(filed.body).toMatchObject({ changed: ids.length });
+    expect(typeof filed.body.case_number).toBe("number");
+    const again = await post("alarms", { action: "case", new_case_title: "Again", items: ids });
+    expect(again.body.changed).toBe(0);
+    expect((again.body.skipped as { reason: string }[]).every((s) => s.reason === "in another open case")).toBe(true);
+    const active = await json(await analyst.handle("GET", "/api/v1/cases/active-items?kind=alarm"));
+    expect((active.items as { ref: string }[]).map((i) => i.ref)).toEqual(expect.arrayContaining(ids.map((i) => i.id)));
+    const vulns = await json(await analyst.handle("GET", "/api/v1/vulnerabilities"));
+    const advisory = (vulns.items as { advisory_id: string }[])[0]?.advisory_id ?? "";
+    const hosts = (vulns.items as { advisory_id: string }[]).filter((v) => v.advisory_id === advisory).length;
+    expect((await post("vulnerabilities", { action: "state", state: "false_positive", note: "not affected", items: [{ advisory_id: advisory }] })).body.changed).toBe(hosts);
+    const after = await json(await analyst.handle("GET", "/api/v1/vulnerabilities"));
+    expect((after.items as { advisory_id: string; triage_state: string }[]).filter((v) => v.advisory_id === advisory).every((v) => v.triage_state === "false_positive")).toBe(true);
+  });
+});

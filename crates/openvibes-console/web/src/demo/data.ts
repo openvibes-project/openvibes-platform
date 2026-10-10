@@ -236,9 +236,9 @@ export function buildDemoData(now = Date.now()) {
   const access: AccessInventory = {
     roles: [
       { role_id: "viewer", display_name: "Viewer", builtin: true, permissions: ["agents.read", "compliance.read", "vulnerabilities.read", "alarms.read"] },
-      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
+      { role_id: "analyst", display_name: "Analyst", builtin: true, permissions: ["agents.read", "compliance.read", "cases.read", "cases.manage", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "assistant.use", "alarms.read", "alarms.triage", "alarms.suppress"] },
       { role_id: "operator", display_name: "Operator", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "tokens.read", "tokens.create", "tokens.revoke", "rules.upload", "rules.write", "alarms.read"] },
-      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
+      { role_id: "admin", display_name: "Admin", builtin: true, permissions: ["agents.read", "agents.revoke", "compliance.read", "vulnerabilities.read", "compliance.triage", "vulnerabilities.triage", "tokens.read", "tokens.create", "tokens.revoke", "rules.read", "rules.upload", "rules.write", "audit.read", "audit.export", "audit.retention.manage", "rbac.read", "rbac.manage", "asset_groups.manage", "service_accounts.read", "service_accounts.manage", "assistant.use", "dashboards.share", "alarms.read", "alarms.triage", "alarms.suppress", "cases.read", "cases.manage"] },
     ],
     users: people.map(([user_id, username, display_name]) => ({ user_id, username, display_name })),
     asset_groups: [
