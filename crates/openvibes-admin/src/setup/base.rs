@@ -8,10 +8,7 @@ use platform_host::{
     },
 };
 
-use super::{
-    Ctx,
-    plan::{Component, Plan},
-};
+use super::{Ctx, plan::Component};
 
 /// The platform packages; the rules and agent packages have their own steps.
 fn platform_packages<R: Runner>(ctx: &Ctx<R>) -> Vec<&'static str> {
