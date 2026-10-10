@@ -4,3 +4,4 @@
 //! alarms (spec 2026-10-10-network-device-alarms).
 
 pub mod cef;
+pub mod unifi;
