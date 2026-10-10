@@ -98,3 +98,18 @@
     ticked by default (user: some people want no agent on the console
     server; not the default). Space selects.
     Approved.
+25. The core is always installed and never offered as a choice (user):
+    console, agent connections, vulnerabilities, rule distribution,
+    own-rule signing, baseline rules. Advanced install step 1 is
+    "Optional": [x] Agent on this host (default on), [ ] Assistant
+    (default off), Next. Steps: Optional, Names, Certificates, Ports,
+    Review.
+26. Advanced install step 3, Certificates (user): default "(•) Your own
+    CA — your CA signs an intermediate for OpenVIBES" (segmented,
+    professional networks); second "( ) OpenVIBES makes one" (new root,
+    key offline after). With your own CA the install pauses at the CA
+    step: Show the request (plain text to copy, also saved as a file),
+    Signed certificate and Your CA's certificate (each: Paste it — a paste
+    box checked at once: what it is, who signed it, matches the request,
+    valid until — or From a file on this host, browsed with the arrows),
+    Continue the install. Approved.
