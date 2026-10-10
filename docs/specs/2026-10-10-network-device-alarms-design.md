@@ -39,7 +39,12 @@ UNIFIipsSignature=ET DROP Dshield Block Listed Source group 1
 UNIFIipsSignatureId=2402000 msg=A network intrusion attempt has been detected and blocked.
 ```
 
-(One line on the wire, preceded by a syslog header.) Some UniFi OS admin
+(One line on the wire, preceded by a syslog header.) Captured from the
+user's UCG Max (2026-10-10, all categories and Debug Logs on): most
+traffic is **plain RFC 3164 syslog** from the gateway OS (syslog-ng,
+charon, earlyoom), not CEF, e.g.
+`<30>Oct 10 17:13:35 limebox limebox charon[9728]: 15[ENC] generating ...`.
+It is dropped first and cheaply (`not_cef`). Some UniFi OS admin
 events are reported to be malformed CEF; the parser must tolerate them.
 
 ## 2. Data flow
@@ -47,11 +52,12 @@ events are reported to be malformed CEF; the parser must tolerate them.
 ```
 UCG Max ──UDP 514, CEF──▶ openvibes-netlog
   1. sender IP is an enabled device?      no → count unknown_sender, drop
-  2. parse syslog + CEF (≤ 8 KiB, strict)  bad → count unparsed, drop
-  3. Ubiquiti Security / Intrusion *?     no → count per (class, subCategory), drop
-  4. UNIFIdeviceIp, when present, = device IP?  no → count mismatch, drop
-  5. collapse in memory: device + signature_id + src within 10 min
-  6. every ~5 s: one transaction inserts new alarms, updates count/last_seen
+  2. no "CEF:0|" in the message?           → count not_cef, drop
+  3. parse syslog + CEF (≤ 8 KiB, strict)  bad → count unparsed, drop
+  4. Ubiquiti Security / Intrusion *?     no → count per (class, subCategory), drop
+  5. UNIFIdeviceIp, when present, = device IP?  no → count mismatch, drop
+  6. collapse in memory: device + signature_id + src within 10 min
+  7. every ~5 s: one transaction inserts new alarms, updates count/last_seen
 ```
 
 - **Bounded everywhere.** Fixed receive buffer (8 KiB; longer datagrams are
@@ -62,7 +68,7 @@ UCG Max ──UDP 514, CEF──▶ openvibes-netlog
   dropped and counted), retried every 5 s. UDP cannot ask the sender to
   resend, so nothing more durable is promised.
 - **Counters** are kept per device in memory and flushed with each batch to
-  `devices` (section 4): `received`, `alarms`, `unparsed`, `dropped_other`,
+  `devices` (section 4): `received`, `alarms`, `not_cef`, `unparsed`, `dropped_other`,
   `mismatch`; plus host-level `unknown_sender` and `collapse_full`. The
   per-(class, subCategory) drop counts are kept as a small jsonb map on the
   device (at most 64 keys) so the user can see what else the router sends
