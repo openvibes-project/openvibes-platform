@@ -193,3 +193,10 @@
     runs asks, the work carries on; Console sign-in (Reset the admin
     password; Single sign-on on/off, set up in the console; local admin is
     the break-glass account); a too-small window shows one sentence.
+42. Both whole flows (Update OpenVIBES from Home and back; full advanced install) confirmed by the user.
+43. Appliance only (in review): Home adds System and replaces Quit with
+    Log out (the TUI is the SSH session). System: Network (DHCP / fixed
+    address, filled from DHCP, gateway, DNS), DNS (its own entry, user:
+    [x] Use the DNS from DHCP, or your own servers checked before Apply,
+    search domain), Host name, Time (NTP, time zone), Login password, SSH,
+    Restart, Shut down (standard question).
