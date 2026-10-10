@@ -51,8 +51,10 @@ impl NetlogConfig {
         if !(1..=1440).contains(&self.collapse_minutes) {
             return Err("collapse_minutes must be 1 to 1440".into());
         }
-        if !(1..=100_000).contains(&self.max_collapse_keys) {
-            return Err("max_collapse_keys must be 1 to 100000".into());
+        // The unit's MemoryMax=64M holds about 5,000 (each open alarm is
+        // ~7 KB at its largest, measured); more would get netlog killed.
+        if !(1..=5000).contains(&self.max_collapse_keys) {
+            return Err("max_collapse_keys must be 1 to 5000".into());
         }
         Ok(())
     }
@@ -79,8 +81,16 @@ mod tests {
         let mut bad = c.clone();
         bad.health_listen = "0.0.0.0:18484".parse().unwrap();
         assert!(bad.validate().is_err());
-        let mut bad = c;
+        let mut bad = c.clone();
         bad.batch_seconds = 0;
+        assert!(bad.validate().is_err());
+        // The unit's MemoryMax=64M holds about 5,000 open alarms (2,000
+        // measured at 20 MB under a flood); more would get it killed.
+        let mut most = c.clone();
+        most.max_collapse_keys = 5000;
+        assert!(most.validate().is_ok());
+        let mut bad = c;
+        bad.max_collapse_keys = 5001;
         assert!(bad.validate().is_err());
     }
 

@@ -36,7 +36,7 @@ Strict TOML; unknown keys are refused.
 | `health_listen` | `127.0.0.1:18484` | loopback only (`/health`, `/ready`) |
 | `batch_seconds` | 5 | 1 to 60; how often alarms and counters are stored |
 | `collapse_minutes` | 10 | 1 to 1440; quiet window per device, signature and source |
-| `max_collapse_keys` | 2000 | 1 to 100000; open alarms held in memory (also the retry buffer) |
+| `max_collapse_keys` | 2000 | 1 to 5000 (fits the unit's `MemoryMax=64M`); open alarms held in memory (also the retry buffer) |
 
 **Port 514/udp is not opened by OpenVIBES.** How ports are opened differs per
 installation, so open it the way your host manages its firewall. Setup's
