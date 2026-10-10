@@ -123,6 +123,8 @@ to the assistant: signature text comes from the network.
 - **A day with no `alarms` partition** (maintenance not run): those alarms are
   skipped and counted (`unstorable`, logged). The rest of the batch is stored.
 - **Startup:** devices are loaded before the first datagram is read.
+- **Unescaped `=` in free text** (some producers): `msg` runs to the end of
+  the line (UniFi puts it last), so a URL in it stays one value.
 
 ## Footprint
 

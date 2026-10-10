@@ -85,7 +85,8 @@ fn cef(text: &str) -> Option<Cef> {
 }
 
 /// `key=value` pairs: a key is `[A-Za-z0-9_]+` at the start or after a
-/// space, followed by an unescaped `=`; a value runs to the next key.
+/// space, followed by an unescaped `=`; a value runs to the next key, and
+/// `msg` to the end.
 fn extensions(s: &str) -> Option<BTreeMap<String, String>> {
     let b = s.as_bytes();
     let mut keys: Vec<(usize, usize)> = Vec::new();
@@ -100,6 +101,13 @@ fn extensions(s: &str) -> Option<BTreeMap<String, String>> {
                 keys.push((i, j));
                 if keys.len() > MAX_KEYS {
                     return None;
+                }
+                // Free text: producers leave `=` unescaped in it, and
+                // UniFi puts it last, so it runs to the end of the line.
+                // ponytail: msg-last is UniFi's layout; another vendor may
+                // need its own rule.
+                if &s[i..j] == "msg" {
+                    break;
                 }
                 i = j + 1;
                 continue;
@@ -201,6 +209,18 @@ mod tests {
             ),
             ("1=2", r"c\d", "f\ng")
         );
+    }
+
+    #[test]
+    fn msg_takes_the_rest_even_with_an_unescaped_equals_sign() {
+        // Review 2026-10-10: malformed producers write `=` unescaped in the
+        // free text; UniFi puts msg last.
+        let Parsed::Cef(cef) = parse(b"CEF:0|a|b|c|d|e|f|k=v msg=see url=http://x/?a=1 k=2") else {
+            panic!()
+        };
+        assert_eq!(cef.ext["msg"], "see url=http://x/?a=1 k=2");
+        assert_eq!(cef.ext["k"], "v");
+        assert!(!cef.ext.contains_key("url"));
     }
 
     #[test]
