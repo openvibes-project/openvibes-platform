@@ -687,6 +687,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/vulnerabilities/bulk",
             axum::routing::post(crate::bulk::bulk_vulnerabilities),
         )
+        .route(
+            "/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
+            axum::routing::put(crate::bulk::update_vulnerability_triage),
+        )
         .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
         .route("/v1/attack", get(crate::coverage::attack_catalog))
         .route(
@@ -4404,7 +4408,7 @@ pub(crate) fn parse_if_match_version(headers: &HeaderMap) -> Result<Option<i64>,
     (version > 0).then_some(Some(version)).ok_or(())
 }
 
-fn parse_if_match_zero_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
+pub(crate) fn parse_if_match_zero_version(headers: &HeaderMap) -> Result<Option<i64>, ()> {
     let values = headers.get_all(header::IF_MATCH);
     let mut iter = values.iter();
     let Some(value) = iter.next() else {
@@ -5301,6 +5305,21 @@ pub(crate) async fn authenticated_vulnerabilities(
         more_available |= found.len() > CPE_PAGE;
         items.extend(found.into_iter().take(CPE_PAGE).map(cpe_view));
     }
+    // Each row's triage (triage v2), in one lookup.
+    let pairs: Vec<(String, String)> = items
+        .iter()
+        .map(|v| (v.agent_id.clone(), v.advisory_id.clone()))
+        .collect();
+    let Ok(triage) = platform_store::vulnerability_triage::states(&client, &pairs).await else {
+        return unavailable_auth();
+    };
+    for item in &mut items {
+        if let Some(t) = triage.get(&(item.agent_id.clone(), item.advisory_id.clone())) {
+            item.triage_state.clone_from(&t.state);
+            item.triage_version = t.version;
+            item.assigned_to.clone_from(&t.assigned_to);
+        }
+    }
     Json(crate::VulnerabilityPage {
         items,
         more_available,
@@ -5395,6 +5414,9 @@ fn cpe_view(row: platform_store::cpe::FindingRow) -> crate::VulnerabilityView {
         match_method: "cpe-nvd".into(),
         confidence: u8::try_from(row.confidence).unwrap_or(0),
         match_basis: row.basis,
+        triage_state: "open".into(),
+        triage_version: 0,
+        assigned_to: None,
     }
 }
 
@@ -5546,6 +5568,9 @@ fn vulnerability_view(row: platform_store::vulns::VulnRow) -> crate::Vulnerabili
         match_method: row.match_method,
         confidence: row.confidence,
         match_basis: row.match_basis,
+        triage_state: "open".into(),
+        triage_version: 0,
+        assigned_to: None,
     }
 }
 

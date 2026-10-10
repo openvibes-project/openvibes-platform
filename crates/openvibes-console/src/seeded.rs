@@ -1042,6 +1042,9 @@ fn demo_vulnerabilities(persona: Persona, mode: SeedMode) -> Vec<crate::Vulnerab
             ransomware: number % 17 == 0, epss: Some((number % 100) as f32 / 100.0), epss_percentile: Some((number % 100) as f32 / 100.0), cvss: Some(5.0 + (number % 50) as f32 / 10.0),
             source: "fedora-44-x86_64".into(), match_method: "distribution-advisory".into(), confidence: 98,
             match_basis: "Fedora's own security advisory names this package; the installed version is older than the fixed one.".into(),
+            triage_state: "open".into(),
+            triage_version: 0,
+            assigned_to: None,
         }
     }).collect()
 }

@@ -374,6 +374,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/alarms/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulk_alarms"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/alarms/{alarm_id}": {
         parameters: {
             query?: never;
@@ -640,6 +656,22 @@ export interface paths {
         get?: never;
         put?: never;
         post: operations["add_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/compliance/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulk_compliance"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1386,6 +1418,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["update_vulnerability_triage"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vulnerabilities/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["bulk_vulnerabilities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/vulnerabilities/summary": {
         parameters: {
             query?: never;
@@ -2087,6 +2151,63 @@ export interface components {
                 }
             ][];
         };
+        /**
+         * @description One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`
+         *     (every host in scope), with `agent_id` for one host. Vulnerabilities:
+         *     `advisory_id` (every host where it is open), with `agent_id` for one.
+         */
+        BulkItem: {
+            /** @description Advisory of a vulnerability. */
+            advisory_id?: string | null;
+            /** @description One host only. */
+            agent_id?: string | null;
+            /** @description The platform's alarm id. */
+            id?: string | null;
+            /** @description Rule of a compliance finding. */
+            rule_id?: string | null;
+            /** @description Rule set of a compliance finding. */
+            rule_set_id?: string | null;
+        };
+        /** @description One action on many items. */
+        BulkRequest: {
+            /** @description For `accepted_risk`: RFC 3339, in the future. */
+            accepted_until?: string | null;
+            /** @description `state`, `assign`, `case`, or (alarms) `suppress`. */
+            action: string;
+            /** @description For `assign`: a username, or absent to unassign. */
+            assignee?: string | null;
+            /** @description For `case`: an open case, or `new_case_title` to create one. */
+            case_id?: string | null;
+            /** @description The selected rows, at most 10,000. */
+            items: components["schemas"]["BulkItem"][];
+            /** @description For `case`: the title of a new case. */
+            new_case_title?: string | null;
+            /** @description Required to close, and for `suppress`; goes on every item. */
+            note?: string | null;
+            /** @description For `state`: `open`, `mitigated`, `accepted_risk` or `false_positive`. */
+            state?: string | null;
+        };
+        /** @description What a bulk action did. */
+        BulkResponse: {
+            /** @description For `case`: the case the items went into. */
+            case_id?: string | null;
+            /**
+             * Format: int64
+             * @description For `case`: its number (`C-<number>`).
+             */
+            case_number?: number | null;
+            /** @description Items changed (or already so). */
+            changed: number;
+            /** @description Items left alone, with the reason. */
+            skipped: components["schemas"]["BulkSkip"][];
+        };
+        /** @description An item left alone. */
+        BulkSkip: {
+            /** @description The item (alarm id, `agent/rule_set/rule`, `agent/advisory`, ...). */
+            id: string;
+            /** @description Why. */
+            reason: string;
+        };
         /** @description Users a case can be assigned to. */
         CaseAssigneesView: {
             /** @description Enabled users who hold `cases.read`. */
@@ -2775,11 +2896,6 @@ export interface components {
             false_positive: number;
             /**
              * Format: int64
-             * @description Endpoints being investigated.
-             */
-            investigating: number;
-            /**
-             * Format: int64
              * @description Mitigated endpoints.
              */
             mitigated: number;
@@ -3031,7 +3147,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -3933,12 +4049,30 @@ export interface components {
              */
             serious: number;
         };
+        /** @description One host's triage of one advisory (triage v2). */
+        VulnerabilityTriageView: {
+            /** @description Accepted-risk expiry (RFC 3339). */
+            accepted_until?: string | null;
+            /** @description Assigned analyst's username. */
+            assigned_to?: string | null;
+            /** @description Operator note. */
+            note?: string | null;
+            /** @description `open`, `mitigated`, `accepted_risk` or `false_positive`. */
+            state: string;
+            /**
+             * Format: int64
+             * @description Write version, also the ETag.
+             */
+            version: number;
+        };
         /** @description One host-advisory match with package and exploitation details. */
         VulnerabilityView: {
             /** @description Advisory identifier. */
             advisory_id: string;
             /** @description Agent or imported installation identifier. */
             agent_id: string;
+            /** @description Assigned analyst's username. */
+            assigned_to?: string | null;
             /**
              * Format: int32
              * @description Mapping confidence, 0 to 100.
@@ -3991,6 +4125,16 @@ export interface components {
             source: string;
             /** @description Advisory title. */
             title: string;
+            /**
+             * @description This host's triage: `open`, `mitigated`, `accepted_risk` or
+             *     `false_positive` (triage v2).
+             */
+            triage_state: string;
+            /**
+             * Format: int64
+             * @description Triage write version (0 = never triaged), for If-Match.
+             */
+            triage_version: number;
             /** @description Advisory URL. */
             url: string;
         };
@@ -4980,7 +5124,7 @@ export interface operations {
                 rule_id: string | null;
                 /** @description Exact severity. */
                 severity: string | null;
-                /** @description Exact triage state, or `active` (open or investigating). */
+                /** @description Exact triage state, or `active` (open). */
                 state: string | null;
                 /** @description Include alarms closed by a suppression (default false). */
                 suppressed: boolean | null;
@@ -5022,6 +5166,39 @@ export interface operations {
             };
             /** @description Permission denied */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    bulk_alarms: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRequest"];
+            };
+        };
+        responses: {
+            /** @description What the action did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResponse"];
+                };
+            };
+            /** @description Invalid action, items, note or expiry */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6236,6 +6413,39 @@ export interface operations {
             };
             /** @description Unavailable */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    bulk_compliance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRequest"];
+            };
+        };
+        responses: {
+            /** @description What the action did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResponse"];
+                };
+            };
+            /** @description Invalid action, items, note or expiry */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8722,6 +8932,102 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_vulnerability_triage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                advisory_id: string;
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAlarmTriageRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated triage */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VulnerabilityTriageView"];
+                };
+            };
+            /** @description Invalid state, note, expiry or assignee */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No open vulnerability in scope */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Stale triage version */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    bulk_vulnerabilities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkRequest"];
+            };
+        };
+        responses: {
+            /** @description What the action did */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkResponse"];
+                };
+            };
+            /** @description Invalid action, items, note or expiry */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

@@ -439,3 +439,120 @@ async fn suppress(
     }
     respond(result, None)
 }
+
+/// One host's triage of one advisory (triage v2).
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct VulnerabilityTriageView {
+    /// `open`, `mitigated`, `accepted_risk` or `false_positive`.
+    pub state: String,
+    /// Assigned analyst's username.
+    pub assigned_to: Option<String>,
+    /// Operator note.
+    pub note: Option<String>,
+    /// Accepted-risk expiry (RFC 3339).
+    pub accepted_until: Option<String>,
+    /// Write version, also the ETag.
+    pub version: i64,
+}
+
+#[utoipa::path(put, path = "/api/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
+    tag = "vulnerabilities", params(("advisory_id" = String, Path), ("agent_id" = String, Path)),
+    request_body = crate::alarms::UpdateAlarmTriageRequest,
+    responses((status = 200, description = "Updated triage", body = crate::bulk::VulnerabilityTriageView),
+        (status = 400, description = "Invalid state, note, expiry or assignee", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "No open vulnerability in scope", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 412, description = "Stale triage version", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 428, description = "If-Match is required", body = crate::ProblemDetails, content_type = "application/problem+json")))]
+pub(crate) async fn update_vulnerability_triage(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+    axum::extract::Path((advisory_id, agent_id)): axum::extract::Path<(String, String)>,
+    payload: Result<Json<crate::alarms::UpdateAlarmTriageRequest>, JsonRejection>,
+) -> Response {
+    use platform_store::vulnerability_triage::{self as triage, VulnerabilityTriageUpdate as U};
+    let (scope, user_id) =
+        match authorize(&state, &headers, &[Permission::VulnerabilitiesTriage], true).await {
+            Ok(context) => context,
+            Err(response) => return response,
+        };
+    // An untriaged vulnerability is version 0, as findings are.
+    let expected = match crate::router::parse_if_match_zero_version(&headers) {
+        Ok(Some(version)) => version,
+        Ok(None) => {
+            return problem_response(ProblemDetails::new(
+                StatusCode::PRECONDITION_REQUIRED,
+                "precondition_required",
+                "If-Match is required",
+            ));
+        }
+        Err(()) => {
+            return bad(
+                "invalid_precondition",
+                "If-Match must be one quoted version",
+            );
+        }
+    };
+    let Ok(Json(payload)) = payload else {
+        return bad("invalid_request", "Triage request is invalid");
+    };
+    let accepted_until = match payload
+        .accepted_until
+        .as_deref()
+        .map(DateTime::parse_from_rfc3339)
+    {
+        Some(Ok(at)) => Some(at.with_timezone(&Utc)),
+        Some(Err(_)) => return bad("invalid_expiry", "accepted_until must be RFC 3339"),
+        None => None,
+    };
+    let Ok(mut client) = state.pool.get().await else {
+        return unavailable_auth();
+    };
+    let outcome = triage::update(
+        &mut client,
+        &scope,
+        &agent_id,
+        &advisory_id,
+        Some(expected),
+        &payload.state,
+        payload.assigned_to.as_deref(),
+        payload.note.as_deref(),
+        accepted_until,
+        &user_id,
+        Utc::now(),
+    )
+    .await;
+    match outcome {
+        Ok(U::Updated(t)) => {
+            let version = t.version;
+            let mut response = Json(VulnerabilityTriageView {
+                state: t.state,
+                assigned_to: t.assigned_to,
+                note: t.note,
+                accepted_until: t.accepted_until.map(|at| at.to_rfc3339()),
+                version,
+            })
+            .into_response();
+            if let Ok(value) = axum::http::HeaderValue::from_str(&format!("\"{version}\"")) {
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::ETAG, value);
+            }
+            response
+        }
+        Ok(U::NotFound) => problem_response(ProblemDetails::not_found(
+            "vulnerability_not_found",
+            "No open vulnerability for this host and advisory",
+        )),
+        Ok(U::Stale(_)) => problem_response(ProblemDetails::new(
+            StatusCode::PRECONDITION_FAILED,
+            "stale_triage",
+            "The triage changed; reload it",
+        )),
+        Ok(U::InvalidFields) => bad(
+            "invalid_triage",
+            "Triage state, note, or expiry is invalid (closing needs a note)",
+        ),
+        Ok(U::AssigneeUnavailable) => bad("assignee_unavailable", "That person cannot be assigned"),
+        Err(_) => unavailable_auth(),
+    }
+}
