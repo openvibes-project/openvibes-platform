@@ -424,9 +424,10 @@ async fn ports_services_and_software_stay_in_scope() {
              VALUES (1, 'rpm', 'google-chrome-stable', 0, '141.0', '1', 'x86_64'),
                     (2, 'rpm', 'openssh-server', 0, '9.9p1', '3.fc44', 'x86_64'),
                     (3, 'rpm', 'a_b%', 0, '1', '', 'x86_64'),
-                    (4, 'rpm', 'axbyc', 0, '1', '', 'x86_64');
+                    (4, 'rpm', 'axbyc', 0, '1', '', 'x86_64'),
+                    (5, 'rpm', 'otheronly', 0, '1', '', 'x86_64');
              INSERT INTO host_packages VALUES ('{WEB}', 1), ('{WEB}', 2), ('{WEB}', 3),
-                 ('{WEB}', 4), ('{OTHER}', 1), ('{REVOKED}', 1);"
+                 ('{WEB}', 4), ('{OTHER}', 1), ('{OTHER}', 5), ('{REVOKED}', 1);"
         ))
         .await
         .unwrap();
@@ -521,6 +522,22 @@ async fn ports_services_and_software_stay_in_scope() {
     );
     let old = ask(true, "software", r#"{"name":"chrome","agent":"old-01"}"#).await;
     assert_eq!(old.data["items"][0]["package"], "google-chrome-stable");
+    assert_eq!(old.data["state"], "revoked");
+    let active = ask(true, "software", r#"{"name":"chrome","agent":"web-01"}"#).await;
+    assert!(
+        active.data.get("state").is_none(),
+        "only a revoked host is marked"
+    );
+    // A name installed only outside the scope is not even counted.
+    let only_web = StoreLookups::new(db.pool.clone(), only_web.clone(), now);
+    let lookup = Lookup::parse("software", r#"{"name":"otheronly"}"#).unwrap();
+    let out = only_web.run(&lookup, 10).await.unwrap();
+    assert_eq!(out.data["package_names"], 0);
+    assert_eq!(out.data["omitted"], 0);
+    assert_eq!(
+        ask(true, "software", r#"{"name":"otheronly"}"#).await.data["package_names"],
+        1
+    );
     let on_web = ask(false, "software", r#"{"name":"openssh","agent":"web-01"}"#).await;
     assert_eq!(on_web.data["items"][0]["package"], "openssh-server");
     assert_eq!(on_web.data["items"][0]["version"], "9.9p1-3.fc44");

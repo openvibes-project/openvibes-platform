@@ -236,6 +236,14 @@ impl<S: Source> Lookups<S> {
                     return Ok(LookupOutput::page(summary, Vec::new(), 0));
                 };
                 summary.insert("agent".into(), json!(agent_cite(&agent_id)));
+                let report = self
+                    .source
+                    .host_report(&agent_id)
+                    .await
+                    .map_err(|_| LookupError::Store)?;
+                if report.is_some_and(|r| r.status == "revoked") {
+                    summary.insert("state".into(), json!("revoked"));
+                }
                 Some(agent_id)
             }
         };
