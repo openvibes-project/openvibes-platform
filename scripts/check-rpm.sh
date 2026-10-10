@@ -30,7 +30,7 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
     rpm -qlp "$rpms"/openvibes-llm-[0-9]*.rpm | grep -qx /usr/share/openvibes-llm/model.pin || fail "openvibes-llm lacks model.pin"
     rpm -qp --recommends "$rpms"/openvibes-llm-[0-9]*.rpm | grep -q '^openvibes-llm-model = ' || fail "openvibes-llm does not recommend the bridge"
     # model.conf is written by %post on a fresh install, never by an upgrade.
-    rpm -qp --qf '[%{FILEFLAGS:fflags} %{FILENAMES}\n]' "$meta" | grep -qx 'cgn /var/lib/openvibes-llm/model.conf' ||
+    rpm -qp --qf '[%{FILEFLAGS:fflags} %{FILENAMES}\n]' "$meta" | grep -qx 'cng /var/lib/openvibes-llm/model.conf' ||
         fail "model.conf is not a %ghost %config(noreplace) file"
     rpm -qp --scripts "$meta" | grep -q 'OPENVIBES_LLM_MODEL_SHA256=%s' || fail "%post does not write model.conf"
     echo "check-rpm (built): ok"
