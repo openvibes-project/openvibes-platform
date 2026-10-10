@@ -76,7 +76,7 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 - Test: `scripts/check-rpm.sh` (units, modes); `scripts/systemd-e2e.sh`
   (level 1 with no outbound answers `unavailable` within 15 s, level 0
   answers `off`). SELinux behaviour is not tested in CI (the container is
-  not enforcing): it is verified in the lab on a real host (Task 11).
+  not enforcing): it still has to be verified on an enforcing host (the lab) with real network.
 - Hardening beyond the signer's: `ProtectProc=invisible`, `ProcSubset=pid`,
   `PrivateIPC=yes`, `RemoveIPC=yes`, `IPAddressDeny=link-local multicast`
   (blocks the cloud metadata address; loopback stays open for a proxy).
