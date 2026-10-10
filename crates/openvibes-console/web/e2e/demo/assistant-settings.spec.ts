@@ -24,3 +24,13 @@ test("a viewer does not see the page", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "viewer" }).click();
   await expect(page.getByRole("link", { name: "Assistant" })).toHaveCount(0);
 });
+
+test("an unsaved domains edit survives a switch toggle and is saved with it", async ({ page }) => {
+  const box = page.getByLabel("Internal domains (one per line)");
+  await box.fill("Corp.Example\nintranet");
+  await page.getByRole("switch", { name: "Look up security references" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Turn on" }).click();
+  await expect(page.getByRole("switch", { name: "Look up security references" })).toBeChecked();
+  await expect(box).toHaveValue("corp.example\nintranet");
+  await expect(page.getByRole("button", { name: "Save domains" })).toBeDisabled();
+});

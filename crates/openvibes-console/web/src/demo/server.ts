@@ -2,6 +2,7 @@
 // for the GitHub Pages preview, `?demo=1` and tests. It follows the wire
 // contracts (types from the OpenAPI client) and the permission model, and
 // keeps mutations in memory for the life of the page.
+import { validDomain, validSearxngUrl } from "../views/assistantRules";
 import type {
   Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
   Severity, TriageCounts, Vulnerability,
@@ -629,7 +630,9 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const level = Number(body.level);
     const url = typeof body.searxng_url === "string" && body.searxng_url !== "" ? body.searxng_url : null;
     const domains = Array.isArray(body.internal_domains) ? body.internal_domains.map(String) : [];
-    if (![0, 1, 2].includes(level) || (level === 2 && !url) || domains.length > 50) return problem(400, "invalid_setting", "The assistant internet setting is invalid");
+    if (![0, 1, 2].includes(level) || (level === 2 && !url) || (url !== null && !validSearxngUrl(url)) || domains.length > 50 || !domains.every(validDomain)) {
+      return problem(400, "invalid_setting", "The assistant internet setting is invalid");
+    }
     data.assistantInternet = { ...data.assistantInternet, level, searxng_url: url, internal_domains: domains, version: data.assistantInternet.version + 1, updated_at: iso(), updated_by: actor };
     audit("assistant.internet.changed", "assistant", "internet");
     return json(data.assistantInternet);

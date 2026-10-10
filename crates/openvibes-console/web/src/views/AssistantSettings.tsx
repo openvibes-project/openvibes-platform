@@ -9,14 +9,12 @@ import { Icon } from "../ui/Icon";
 import { Switch } from "../ui/Switch";
 import { toast } from "../ui/toast";
 import { ViewHeader } from "../ui/ViewHeader";
+import { toDomains, validSearxngUrl } from "./assistantRules";
 
 const message = (error: unknown, fallback: string) => (error instanceof ApiError ? error.message : fallback);
 const PATH = "/api/v1/assistant-internet";
 const LEVEL1_RISK = "Sends public IDs only (like CVE-2026-1234) to api.osv.dev and bodhi.fedoraproject.org. No host data leaves your network.";
 const LEVEL2_RISK = "The query goes to your SearXNG and the engines behind it; code removes host names, agent IDs, IP addresses, user names and internal domains; website snippets reach the assistant as data and may be wrong or hostile; every answer shows what was searched.";
-
-const validUrl = (text: string) => { try { return /^https?:$/.test(new URL(text.trim()).protocol); } catch { return false; } };
-const toDomains = (text: string) => text.split(/[\n,]+/).map((line) => line.trim()).filter(Boolean);
 
 type Change = { level: number; searxng_url: string | null; internal_domains: string[] };
 
@@ -56,17 +54,19 @@ export function AssistantSettings() {
   const current = setting.data;
   if (!current) return <div className="view"><ViewHeader title="Assistant" /><Loading rows={4} /></div>;
   const off = status.data?.available === false;
+  // The draft stays until the next reload, so the box never flickers back before the refetch; a concurrent change elsewhere shows as a 412 on save.
   const domainText = domains ?? current.internal_domains.join("\n");
+
 
   const save = (change: Change, done: string) => {
     setBusy(true);
     setError(undefined);
     return request("PUT", PATH, change, { "if-match": `"${current.version}"` })
-      .then(() => { setAsking(undefined); setDomains(undefined); invalidate(PATH); toast(done); },
+      .then(() => { setAsking(undefined); setDomains(change.internal_domains.join("\n")); invalidate(PATH); toast(done); },
         (e: unknown) => { setError(message(e, "Could not change the setting")); if (e instanceof ApiError && e.status === 412) invalidate(PATH); })
       .finally(() => setBusy(false));
   };
-  const base = { searxng_url: current.searxng_url ?? null, internal_domains: current.internal_domains };
+  const base = { searxng_url: current.searxng_url ?? null, internal_domains: toDomains(domainText) };
   const close = () => { setAsking(undefined); setError(undefined); };
 
   return (
@@ -86,18 +86,18 @@ export function AssistantSettings() {
           <p className="subtle">{LEVEL2_RISK}</p>
           {current.level >= 2 && current.searxng_url && <p className="subtle">SearXNG: <span className="mono">{current.searxng_url}</span></p>}
         </section>
-        <form className="stack" onSubmit={(event) => { event.preventDefault(); void save({ ...base, level: current.level, internal_domains: toDomains(domainText) }, "Internal domains saved"); }}>
+        <form className="stack" onSubmit={(event) => { event.preventDefault(); void save({ ...base, level: current.level }, "Internal domains saved"); }}>
           <label className="field">Internal domains (one per line)
             <textarea className="textarea mono" rows={4} disabled={off} value={domainText} onChange={(event) => setDomains(event.target.value)} placeholder={"corp.example\nlan.example"} />
           </label>
           <p className="subtle">Always included: <span className="mono">{current.platform_domain}</span>. Names ending in these are removed from web searches.</p>
           {!asking && error && <p className="confirm__error" role="alert">{error}</p>}
-          <div><button type="submit" className="button button--primary" disabled={off || busy || domains === undefined}>Save domains</button></div>
+          <div><button type="submit" className="button button--primary" disabled={off || busy || toDomains(domainText).join("\n") === current.internal_domains.join("\n")}>Save domains</button></div>
         </form>
       </div>
       {asking === 1 && <TurnOnDialog title="Look up security references" risk={LEVEL1_RISK} canConfirm busy={busy} error={error} onClose={close}
         onConfirm={() => void save({ ...base, level: 1 }, "Security reference lookups are on")} />}
-      {asking === 2 && <TurnOnDialog title="Search the web" risk={LEVEL2_RISK} canConfirm={validUrl(url)} busy={busy} error={error} onClose={close}
+      {asking === 2 && <TurnOnDialog title="Search the web" risk={LEVEL2_RISK} canConfirm={validSearxngUrl(url.trim())} busy={busy} error={error} onClose={close}
         onConfirm={() => void save({ ...base, level: 2, searxng_url: url.trim() }, "Web search is on")}>
         <label className="field">SearXNG URL
           <input className="input mono" type="url" autoFocus value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://searx.corp.example" />

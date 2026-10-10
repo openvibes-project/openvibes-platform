@@ -217,6 +217,18 @@ describe("demo server", () => {
     expect(ok.level).toBe(2);
   });
 
+  it("refuses assistant internet settings the real API refuses", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const put = async (body: object) => {
+      const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+      return server.handle("PUT", "/api/v1/assistant-internet", { level: 2, internal_domains: [], ...body }, { "if-match": `"${String(setting.version)}"` });
+    };
+    for (const url of ["http://search.example.com", "http://8.8.8.8", "ftp://x", "https://u@x", "https://", "https://x/?q=1"]) expect((await put({ searxng_url: url })).status, url).toBe(400);
+    for (const domains of [["Corp.Example"], ["bad_name"], ["-a"], Array.from({ length: 51 }, (_, i) => `d${String(i)}`)]) expect((await put({ searxng_url: "https://s.example.test", internal_domains: domains })).status).toBe(400);
+    for (const url of ["https://s.example.test", "http://localhost:8080", "http://192.168.1.2", "http://172.16.0.1", "http://[fd00::1]"]) expect((await put({ searxng_url: url, internal_domains: ["intranet", "corp.example"] })).status, url).toBe(200);
+    expect((await put({ searxng_url: "http://172.32.0.1" })).status).toBe(400);
+  });
+
   it("previews a signed bundle and publishes it with the preview token", async () => {
     const server = createDemoServer({ persona: "admin" });
     const envelope = { rule_set_id: "site", rule_set_version: 99, issuer_key_id: "ops-2026", expires_at_unix_ms: Date.now() + 86_400_000 };
