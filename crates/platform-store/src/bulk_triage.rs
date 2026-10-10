@@ -161,40 +161,11 @@ pub async fn compliance(
     if let Err(refusal) = check(change, items.len(), now) {
         return Ok(Err(refusal));
     }
-    let (sets, rules, agents): (Vec<&str>, Vec<&str>, Vec<Option<&str>>) = items.iter().fold(
-        (Vec::new(), Vec::new(), Vec::new()),
-        |(mut s, mut r, mut a), (set, rule, agent)| {
-            s.push(set.as_str());
-            r.push(rule.as_str());
-            a.push(agent.as_deref());
-            (s, r, a)
-        },
-    );
-    let visible = agent_visibility("a.agent_id", "$4", "$5");
-    let rows = client
-        .query(
-            &format!(
-                "SELECT DISTINCT c.agent_id, c.rule_set_id, c.rule_id
-                 FROM unnest($1::text[], $2::text[], $3::text[]) AS k(rule_set_id, rule_id, agent_id)
-                 JOIN current_findings c ON c.rule_set_id = k.rule_set_id AND c.rule_id = k.rule_id
-                     AND (k.agent_id IS NULL OR c.agent_id = k.agent_id)
-                 JOIN agents a ON a.agent_id = c.agent_id
-                 WHERE {visible}
-                 ORDER BY 2, 3, 1 LIMIT {}",
-                MAX_ITEMS + 1
-            ),
-            &[&sets, &rules, &agents, &scope.is_global(), &scope.group_ids()],
-        )
-        .await?;
-    if rows.len() > MAX_ITEMS {
+    let Some(matched) = expand_compliance(client, scope, items).await? else {
         return Ok(Err(BulkRefusal::Count));
-    }
+    };
     let mut result = BulkResult::default();
     // A requested finding (or rule) that matched nothing in scope.
-    let matched: Vec<(String, String, String)> = rows
-        .iter()
-        .map(|r| (r.get(0), r.get(1), r.get(2)))
-        .collect();
     for (set, rule, agent) in items {
         let hit = matched.iter().any(|(a, s, r)| {
             s == set && r == rule && agent.as_ref().is_none_or(|agent| agent == a)
@@ -206,8 +177,8 @@ pub async fn compliance(
             result.skipped.push((id, "not found or out of scope"));
         }
     }
-    for row in &rows {
-        let (agent, set, rule): (String, String, String) = (row.get(0), row.get(1), row.get(2));
+    for (agent, set, rule) in &matched {
+        let (agent, set, rule) = (agent.clone(), set.clone(), rule.clone());
         let id = format!("{agent}/{set}/{rule}");
         let Some(current) = console_triage::get(client, &agent, &set, &rule).await? else {
             result.skipped.push((id, "not found or out of scope"));
@@ -274,30 +245,9 @@ pub async fn vulnerabilities(
     if let Err(refusal) = check(change, items.len(), now) {
         return Ok(Err(refusal));
     }
-    let (advisories, agents): (Vec<&str>, Vec<Option<&str>>) = items
-        .iter()
-        .map(|(adv, agent)| (adv.as_str(), agent.as_deref()))
-        .unzip();
-    let visible = agent_visibility("a.agent_id", "$3", "$4");
-    let rows = client
-        .query(
-            &format!(
-                "SELECT DISTINCT v.agent_id, v.advisory_id
-                 FROM unnest($1::text[], $2::text[]) AS k(advisory_id, agent_id)
-                 JOIN vulnerabilities v ON v.advisory_id = k.advisory_id AND v.fixed_at IS NULL
-                     AND (k.agent_id IS NULL OR v.agent_id = k.agent_id)
-                 JOIN agents a ON a.agent_id = v.agent_id
-                 WHERE {visible}
-                 ORDER BY 2, 1 LIMIT {}",
-                MAX_ITEMS + 1
-            ),
-            &[&advisories, &agents, &scope.is_global(), &scope.group_ids()],
-        )
-        .await?;
-    if rows.len() > MAX_ITEMS {
+    let Some(pairs) = expand_vulnerabilities(client, scope, items).await? else {
         return Ok(Err(BulkRefusal::Count));
-    }
-    let pairs: Vec<(String, String)> = rows.iter().map(|r| (r.get(0), r.get(1))).collect();
+    };
     let current = vulnerability_triage::states(client, &pairs).await?;
     let mut result = BulkResult::default();
     // A requested vulnerability (or advisory) that matched nothing in scope.
@@ -368,6 +318,77 @@ pub async fn vulnerabilities(
     }
     audit(client, actor, "vulnerability.bulk_triage", change, &result).await?;
     Ok(Ok(result))
+}
+
+/// The (agent, rule set, rule) findings these items name in scope: a rule
+/// without a host is every host with a current finding of it. `None` when
+/// they are more than [`MAX_ITEMS`].
+pub async fn expand_compliance(
+    client: &Client,
+    scope: &AgentScope,
+    items: &[(String, String, Option<String>)],
+) -> Result<Option<Vec<(String, String, String)>>, StoreError> {
+    let (sets, rules, agents): (Vec<&str>, Vec<&str>, Vec<Option<&str>>) = items.iter().fold(
+        (Vec::new(), Vec::new(), Vec::new()),
+        |(mut s, mut r, mut a), (set, rule, agent)| {
+            s.push(set.as_str());
+            r.push(rule.as_str());
+            a.push(agent.as_deref());
+            (s, r, a)
+        },
+    );
+    let visible = agent_visibility("a.agent_id", "$4", "$5");
+    let rows = client
+        .query(
+            &format!(
+                "SELECT DISTINCT c.agent_id, c.rule_set_id, c.rule_id
+                 FROM unnest($1::text[], $2::text[], $3::text[]) AS k(rule_set_id, rule_id, agent_id)
+                 JOIN current_findings c ON c.rule_set_id = k.rule_set_id AND c.rule_id = k.rule_id
+                     AND (k.agent_id IS NULL OR c.agent_id = k.agent_id)
+                 JOIN agents a ON a.agent_id = c.agent_id
+                 WHERE {visible}
+                 ORDER BY 2, 3, 1 LIMIT {}",
+                MAX_ITEMS + 1
+            ),
+            &[&sets, &rules, &agents, &scope.is_global(), &scope.group_ids()],
+        )
+        .await?;
+    Ok((rows.len() <= MAX_ITEMS).then(|| {
+        rows.iter()
+            .map(|r| (r.get(0), r.get(1), r.get(2)))
+            .collect()
+    }))
+}
+
+/// The (agent, advisory) open vulnerabilities these items name in scope:
+/// an advisory without a host is every host where it is open. `None` when
+/// they are more than [`MAX_ITEMS`].
+pub async fn expand_vulnerabilities(
+    client: &Client,
+    scope: &AgentScope,
+    items: &[(String, Option<String>)],
+) -> Result<Option<Vec<(String, String)>>, StoreError> {
+    let (advisories, agents): (Vec<&str>, Vec<Option<&str>>) = items
+        .iter()
+        .map(|(adv, agent)| (adv.as_str(), agent.as_deref()))
+        .unzip();
+    let visible = agent_visibility("a.agent_id", "$3", "$4");
+    let rows = client
+        .query(
+            &format!(
+                "SELECT DISTINCT v.agent_id, v.advisory_id
+                 FROM unnest($1::text[], $2::text[]) AS k(advisory_id, agent_id)
+                 JOIN vulnerabilities v ON v.advisory_id = k.advisory_id AND v.fixed_at IS NULL
+                     AND (k.agent_id IS NULL OR v.agent_id = k.agent_id)
+                 JOIN agents a ON a.agent_id = v.agent_id
+                 WHERE {visible}
+                 ORDER BY 2, 1 LIMIT {}",
+                MAX_ITEMS + 1
+            ),
+            &[&advisories, &agents, &scope.is_global(), &scope.group_ids()],
+        )
+        .await?;
+    Ok((rows.len() <= MAX_ITEMS).then(|| rows.iter().map(|r| (r.get(0), r.get(1))).collect()))
 }
 
 /// One audit row per bulk action (each item also has its own).

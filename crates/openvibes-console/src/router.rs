@@ -675,6 +675,18 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/alarm-suppressions/{suppression_id}",
             axum::routing::delete(crate::alarm_suppressions::remove_suppression),
         )
+        .route(
+            "/v1/alarms/bulk",
+            axum::routing::post(crate::bulk::bulk_alarms),
+        )
+        .route(
+            "/v1/compliance/bulk",
+            axum::routing::post(crate::bulk::bulk_compliance),
+        )
+        .route(
+            "/v1/vulnerabilities/bulk",
+            axum::routing::post(crate::bulk::bulk_vulnerabilities),
+        )
         .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
         .route("/v1/attack", get(crate::coverage::attack_catalog))
         .route(

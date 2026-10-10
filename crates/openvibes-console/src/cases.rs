@@ -507,7 +507,7 @@ fn refused(refusal: Refusal) -> Response {
 /// A signed-in browser user holding `permissions`: their scope for the
 /// first, and their id. Bearer tokens are refused. For changes, CSRF and
 /// origin are checked first; the scope is that of the first permission.
-async fn authorize(
+pub(crate) async fn authorize(
     state: &AuthHttpState,
     headers: &HeaderMap,
     permissions: &[Permission],
