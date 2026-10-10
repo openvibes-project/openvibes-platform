@@ -301,3 +301,26 @@ fn a_stored_searxng_url_the_console_would_refuse_is_never_contacted() {
     }
     assert!(h.seen.borrow().is_empty());
 }
+
+#[test]
+fn a_search_naming_the_platform_domain_is_blocked() {
+    let h = fake(SEARX.as_bytes());
+    let config: openvibes_fetch::config::FetchConfig =
+        toml::from_str("database_url = \"x\"\nplatform_domain = \"vibes.corp.example\"\n").unwrap();
+    let deny = config.platform_names();
+    for q in ["vibes.corp.example login error", "corp.example sso"] {
+        assert_eq!(
+            handle(
+                &search(q),
+                &search_setting(2, "https://searx.example.org"),
+                &deny,
+                &h
+            ),
+            Response::Refused {
+                code: Refusal::Blocked
+            },
+            "{q}"
+        );
+    }
+    assert!(h.seen.borrow().is_empty());
+}

@@ -4,7 +4,7 @@ use chrono::{DateTime, Utc};
 /// The administrator's internet-lookup setting for the assistant (one row).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Setting {
-    /// 0 off, 1 fetch pages, 2 fetch pages and search through SearXNG.
+    /// 0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.
     pub level: i16,
     /// SearXNG base URL, required at level 2.
     pub searxng_url: Option<String>,
@@ -21,7 +21,7 @@ pub struct Setting {
 /// The editable fields of the setting.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Update {
-    /// 0 off, 1 fetch pages, 2 fetch pages and search.
+    /// 0 off, 1 security references (OSV, Bodhi), 2 those and web search.
     pub level: i16,
     /// SearXNG base URL, required at level 2.
     pub searxng_url: Option<String>,
@@ -132,7 +132,8 @@ pub async fn update(
     Ok(Some(setting))
 }
 
-/// Names the outbound filter must never let through: agent ids and hostnames,
+/// Names the outbound filter must never let through: agent ids and hostnames
+/// (and the first label of every dotted one, as `web-01` for `web-01.corp`),
 /// console usernames and the configured internal domains, all lowercase.
 pub async fn denylist(client: &Client) -> Result<Vec<String>, StoreError> {
     let rows = client
@@ -140,6 +141,8 @@ pub async fn denylist(client: &Client) -> Result<Vec<String>, StoreError> {
             "SELECT lower(agent_id) FROM agents
              UNION SELECT lower(hostname) FROM agents
                    WHERE hostname IS NOT NULL AND hostname <> ''
+             UNION SELECT split_part(lower(hostname), '.', 1) FROM agents
+                   WHERE hostname LIKE '%.%'
              UNION SELECT lower(username) FROM console_users
              UNION SELECT lower(d) FROM assistant_internet, unnest(internal_domains) d",
             &[],

@@ -110,6 +110,7 @@ async fn denylist_is_lowercase_distinct_and_readable_by_the_fetch_role() {
         "agent.00000000-0000-0000-0000-000000000001",
         "agent.00000000-0000-0000-0000-000000000002",
         "web01.corp",
+        "web01",
         "alex",
         "intranet",
         "corp.example",
@@ -140,5 +141,25 @@ async fn denylist_is_lowercase_distinct_and_readable_by_the_fetch_role() {
         .unwrap();
     assert_eq!(s.version, 3);
     client.batch_execute("RESET ROLE").await.unwrap();
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn denylist_holds_the_short_name_of_every_fqdn() {
+    let db = TestDb::create().await;
+    let mut client = db.pool.get().await.unwrap();
+    platform_store::migrate(&mut client).await.unwrap();
+    client
+        .batch_execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at, last_seen_at, hostname)
+               VALUES ('agent.00000000-0000-0000-0000-000000000001', 'active', now(), now(),
+                       'web-01.corp.example')",
+        )
+        .await
+        .unwrap();
+    let got = assistant_internet::denylist(&client).await.unwrap();
+    for name in ["web-01.corp.example", "web-01"] {
+        assert!(got.contains(&name.to_owned()), "{name} missing: {got:?}");
+    }
     db.drop().await;
 }
