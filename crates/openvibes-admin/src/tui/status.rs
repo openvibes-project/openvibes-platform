@@ -139,7 +139,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             ))],
         });
     }
-    let mut scroll = app.nav.scroll;
+    let mut scroll = app.nav.scroll.get();
     let mut lines = list::lines(
         t,
         &rows,
@@ -150,6 +150,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     );
     let ok = app.database.health.iter().filter(|c| !c.problem).count();
     lines.push(Line::styled(format!("    ● {ok} checks ok"), t.dim()));
+    app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
 

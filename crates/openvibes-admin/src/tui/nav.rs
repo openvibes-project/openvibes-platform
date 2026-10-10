@@ -4,6 +4,8 @@
 //! own keys; Tab and q are no longer theirs, and Esc leaves them only when
 //! nothing is being typed or asked (sub-projects 2 and 3 replace them).
 
+use std::cell::Cell;
+
 use platform_host::{Host, Unit};
 use ratatui::Frame;
 
@@ -34,7 +36,7 @@ pub struct Nav {
     pub screen: Screen,
     pub back: Vec<Screen>,
     pub row: usize,
-    pub scroll: Scroll,
+    pub scroll: Cell<Scroll>,
 }
 
 impl Nav {
@@ -43,7 +45,7 @@ impl Nav {
             screen,
             back: Vec::new(),
             row: 0,
-            scroll: Scroll::default(),
+            scroll: Cell::default(),
         }
     }
 
@@ -51,7 +53,7 @@ impl Nav {
         let from = std::mem::replace(&mut self.screen, to);
         self.back.push(from);
         self.row = 0;
-        self.scroll = Scroll::default();
+        self.scroll.set(Scroll::default());
     }
 
     /// Back one screen; false when there is nowhere to go.
@@ -61,7 +63,7 @@ impl Nav {
         };
         self.screen = previous;
         self.row = 0;
-        self.scroll = Scroll::default();
+        self.scroll.set(Scroll::default());
         true
     }
 }

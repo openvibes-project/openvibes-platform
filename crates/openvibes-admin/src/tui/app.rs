@@ -142,6 +142,12 @@ impl<H: Host> App<H> {
             Err(error) => self.message = Some(error.to_string()),
         }
         self.selected = self.selected.min(self.services.len().saturating_sub(1));
+        if self.nav.screen == Screen::Status {
+            self.nav.row = self
+                .nav
+                .row
+                .min(self.status_items().len().saturating_sub(1));
+        }
     }
 
     pub(super) fn load_logs(&mut self) {

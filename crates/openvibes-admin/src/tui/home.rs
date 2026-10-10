@@ -40,7 +40,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let bar = app.bar(Bar::home(&[("Enter", "Open")]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
     let mut lines = vec![app.status_line(), Line::raw("")];
-    let mut scroll = app.nav.scroll;
+    let mut scroll = app.nav.scroll.get();
     lines.extend(list::lines(
         &app.theme,
         &rows(&HOME),
@@ -49,13 +49,14 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         area.height.saturating_sub(2),
         15,
     ));
+    app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
 
 pub fn draw_maintenance<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let bar = app.bar(Bar::keys(&[("Enter", "Open")]));
     let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
-    let mut scroll = app.nav.scroll;
+    let mut scroll = app.nav.scroll.get();
     let lines = list::lines(
         &app.theme,
         &rows(&MAINTENANCE),
@@ -64,6 +65,7 @@ pub fn draw_maintenance<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>)
         area.height,
         18,
     );
+    app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
 
