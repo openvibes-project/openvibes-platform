@@ -24,6 +24,7 @@ mod setup;
 #[cfg(test)]
 mod setup_tests;
 mod setup_view;
+mod ui;
 #[cfg(test)]
 mod tests;
 
