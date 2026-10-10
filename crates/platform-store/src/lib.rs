@@ -14,6 +14,8 @@ pub mod alarms;
 pub mod alarms_status;
 /// Read-only, scoped lookups for the console's assistant.
 pub mod assistant;
+/// The opt-in internet lookups setting for the assistant.
+pub mod assistant_internet;
 /// Read-only, scoped ports, services and software lookups for the assistant.
 pub mod assistant_inventory;
 /// The append-only audit log.
