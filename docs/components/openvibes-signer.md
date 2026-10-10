@@ -41,18 +41,13 @@ password.
   | `unavailable` | the database or the state directory can't be used |
 
 - **CLI:** `openvibes-signer [--config PATH]` serves. `openvibes-signer seed
-<<<<<<< HEAD
-  --min-version N` creates the version state so the next version signed is
-  `N`, keeps a readable one (seeding never lowers a version), and replaces
-  one it can't read (corrupt, or missing a set), saying so.
-=======
   --min-version N` creates the site key (0600) if it's missing and the
-  version state so the next version signed is `N`, keeps an existing state
-  (seeding never lowers a version), and prints the agents' trust lines
+  version state so the next version signed is `N`, keeps a readable state
+  (seeding never lowers a version), replaces one it can't read (corrupt, or
+  missing a set) and says so, and prints the agents' trust lines
   (`site site.key KEY`, `site-alarms site.key KEY`). Setup runs it as the
   signer's user; packaging and the unit are in
   [packaging.md](packaging.md).
->>>>>>> 0e14fe9 (openvibes-signer: RPM, unit and Setup (board #107, part B1))
 
 ## Configuration
 
