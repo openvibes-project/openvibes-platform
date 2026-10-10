@@ -2061,7 +2061,7 @@ export interface components {
          *     here from the ID, never from fetched text.
          */
         AssistantInternetSource: {
-            /** @description `reference` or `search`. */
+            /** @description `reference`, `search` or `unavailable`. */
             kind: string;
             text: string;
             url?: string | null;

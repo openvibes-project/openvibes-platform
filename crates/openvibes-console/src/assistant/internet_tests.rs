@@ -115,6 +115,7 @@ async fn level_zero_answers_off_without_touching_the_socket() {
     let lookups = runner(&db, &fake.path, true).await;
     let out = lookups.run(&reference(), 5).await.unwrap();
     assert_eq!(note(&out), "internet lookups are off");
+    assert!(!lookups.internet_failed(), "off is not a failure");
     assert_eq!(fake.calls(), 0);
     db.drop().await;
 }
@@ -134,6 +135,7 @@ async fn reference_returns_labelled_outside_data_and_is_audited() {
         "https://osv.dev/vulnerability/CVE-2026-1234"
     );
     assert!(out.citations().is_empty(), "outside text is never citable");
+    assert!(!lookups.internet_failed());
     let sent: Value = serde_json::from_str(&fake.requests.lock().unwrap()[0]).unwrap();
     assert_eq!(
         sent,
@@ -171,6 +173,7 @@ async fn the_twenty_first_lookup_in_an_hour_is_a_note() {
         note(&out),
         "the internet lookup limit is reached; try again later"
     );
+    assert!(lookups.internet_failed(), "a rate-limited attempt failed");
     assert_eq!(fake.calls(), 20);
     db.drop().await;
 }
@@ -185,10 +188,12 @@ async fn failures_become_notes() {
         note(&out),
         "OSV could not be reached; this answer uses local data only"
     );
+    assert!(dead.internet_failed());
     let blocked = Fake::start(r#"{"result":"refused","code":"blocked"}"#);
     let lookups = runner(&db, &blocked.path, true).await;
     let out = lookups.run(&reference(), 5).await.unwrap();
     assert_eq!(note(&out), "blocked: the query contained internal data");
+    assert!(lookups.internet_failed());
     // Web search needs level 2.
     let search = Lookup::parse("web_search", r#"{"query":"x"}"#).unwrap();
     let out = lookups.run(&search, 5).await.unwrap();
@@ -210,25 +215,45 @@ fn record(name: &'static str, arguments: Value, found: bool) -> platform_assista
 #[test]
 fn the_sources_line_is_built_from_ids_and_queries_only() {
     use serde_json::json;
-    let sources = super::internet_sources(&[
-        record("reference", json!({ "id": "CVE-2024-6387" }), true),
-        record("reference", json!({ "id": "FEDORA-2026-6261b26f4e" }), true),
-        record("reference", json!({ "id": "CVE-2024-0001" }), false),
-        record(
-            "web_search",
-            json!({ "query": "CVE-2024-6387 mitigation workaround" }),
-            true,
-        ),
-        record(
-            "vulnerability_hosts",
-            json!({ "id": "CVE-2024-6387" }),
-            true,
-        ),
-    ]);
+    let sources = super::internet_sources(
+        false,
+        &[
+            record("reference", json!({ "id": "CVE-2024-6387" }), true),
+            record("reference", json!({ "id": "FEDORA-2026-6261b26f4e" }), true),
+            record("reference", json!({ "id": "CVE-2024-0001" }), false),
+            record(
+                "web_search",
+                json!({ "query": "CVE-2024-6387 mitigation workaround" }),
+                true,
+            ),
+            record(
+                "vulnerability_hosts",
+                json!({ "id": "CVE-2024-6387" }),
+                true,
+            ),
+        ],
+    );
     let shown: Vec<_> = sources
         .iter()
         .map(|s| (s.kind, s.text.as_str(), s.url.as_deref()))
         .collect();
+    let failed = super::internet_sources(true, &[]);
+    assert_eq!(
+        failed
+            .iter()
+            .map(|s| (s.kind, s.text.as_str(), s.url.as_deref()))
+            .collect::<Vec<_>>(),
+        [(
+            "unavailable",
+            "Internet lookup unavailable; this answer uses local data only",
+            None
+        )]
+    );
+    assert_eq!(
+        super::internet_sources(true, &[]).len(),
+        1,
+        "once per answer"
+    );
     assert_eq!(
         shown,
         [

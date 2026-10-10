@@ -3267,7 +3267,7 @@ pub(crate) async fn authenticated_assistant_message(
                 error: lookup.error.map(|error| error.message().to_owned()),
             })
             .collect(),
-        internet: crate::assistant::internet_sources(&answer.lookups),
+        internet: crate::assistant::internet_sources(lookups.internet_failed(), &answer.lookups),
     };
     let mut response = (StatusCode::OK, Json(response)).into_response();
     response

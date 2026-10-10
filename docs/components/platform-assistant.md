@@ -127,7 +127,11 @@ level 1 or 2, also gets `reference {id}` and, at level 2, `web_search
 {"<ID> mitigation workaround"}` (built by code): three lookups instead of
 two. The internet ones go through the console runner like the model's own
 (rate limit, audit, notes). `vulnerability_hosts` lists each host's
-`packages` (`{name, installed, fixed}`) so the model sees the fixed versions.
+`packages` (`{name, installed, fixed}`, fixed ones first, at most 10, with
+`packages_omitted`) so the model sees the fixed versions without a long list
+pushing the row out. Mitigation words match whole words ("fixed" and
+"prefix" do not); an attached advisory counts as the ID when the question
+names none.
 
 Modes (from the probe): **native** offers the lookups as tools; **JSON
 schema** constrains each reply to `{"action":"lookup",...}` or

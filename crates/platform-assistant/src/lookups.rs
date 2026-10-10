@@ -923,6 +923,7 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
 }
 
 mod internet;
+mod packages;
 pub use internet::{INTERNET_NAMES, internet_specs};
 mod inventory;
 mod resolve;
@@ -1070,6 +1071,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .items
                     .iter()
                     .map(|h| {
+                        let (packages, packages_omitted) = packages::capped(&h.packages);
                         json!({
                             "cite": agent_cite(&h.agent_id),
                             "hostname": h.hostname,
@@ -1078,7 +1080,8 @@ impl<S: Source> LookupRunner for Lookups<S> {
                             "title": h.title,
                             "first_seen": time(h.first_seen_at),
                             "reboot_needed": h.reboot_needed,
-                            "packages": h.packages,
+                            "packages": packages,
+                            "packages_omitted": packages_omitted,
                         })
                     })
                     .collect();

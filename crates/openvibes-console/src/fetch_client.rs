@@ -59,6 +59,16 @@ fn note(text: &str) -> LookupOutput {
     }
 }
 
+/// Whether `output` is a note for a lookup that was attempted and failed
+/// (not the off note, which is no failure).
+pub(crate) fn is_failure(output: &LookupOutput) -> bool {
+    output
+        .data
+        .get("note")
+        .and_then(Value::as_str)
+        .is_some_and(|text| text != NOTE_OFF)
+}
+
 /// One exchange with the fetch service; `None` when it cannot be reached
 /// or answers anything but a response.
 async fn ask(socket: &Path, request: &Request) -> Option<Response> {

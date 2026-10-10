@@ -72,7 +72,10 @@ per `reference` ("Looked up ID on osv.dev" or bodhi.fedoraproject.org for
 `FEDORA-` IDs, with the source's own page as `url`) or `web_search`
 ("Searched the web for: …", no link) lookup that found something; built from
 the validated lookup record, never from fetched text. The assistant dock
-lists them under the answer; links open in a new tab with
+adds one `unavailable` entry ("Internet lookup unavailable; this answer uses
+local data only", no link) when an internet lookup was attempted and failed
+(unreachable, blocked, too large, rate-limited; not the off note). The
+assistant dock lists them under the answer; links open in a new tab with
 `rel="noopener noreferrer"`.
 The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)
 switches the two levels: "Look up security references" and "Search the web"

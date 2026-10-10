@@ -8463,7 +8463,7 @@
         "properties": {
           "kind": {
             "type": "string",
-            "description": "`reference` or `search`."
+            "description": "`reference`, `search` or `unavailable`."
           },
           "text": {
             "type": "string"

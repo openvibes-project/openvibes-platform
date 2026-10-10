@@ -19,15 +19,18 @@ pub const MAX_PREFETCH: usize = 2;
 /// A mitigation question may run one more: local hosts, reference, search.
 const MAX_MITIGATION_PREFETCH: usize = 3;
 
-/// Words of a question about how to mitigate or fix.
-const MITIGATION: [&str; 6] = [
-    "mitigat",
-    "fix",
-    "patch",
-    "workaround",
-    "remediat",
-    "protect against",
-];
+/// Whether `lower` (lowercase) asks how to mitigate or fix: whole words, so
+/// "fixed" (a status) and "prefix" do not count.
+fn mitigation(lower: &str) -> bool {
+    lower.contains("protect against")
+        || lower.split(|c: char| !c.is_alphanumeric()).any(|w| {
+            matches!(
+                w,
+                "fix" | "fixes" | "patch" | "patches" | "patching" | "workaround" | "workarounds"
+            ) || w.starts_with("mitigat")
+                || w.starts_with("remediat")
+        })
+}
 
 /// Words of a broad prioritising question.
 const PRIORITY: [&str; 6] = [
@@ -54,9 +57,13 @@ pub fn plan(question: &str, internet: u8) -> Vec<(&'static str, Value)> {
         }
     };
     let (context, rest) = context(question);
+    let mut attached = None;
     if let Some((kind, id)) = context {
         match kind {
-            "advisory" => add("vulnerability_hosts", json!({ "id": id }), max),
+            "advisory" => {
+                attached = Some(id);
+                add("vulnerability_hosts", json!({ "id": id }), max);
+            }
             "agent" => add("agent_summary", json!({ "agent": id }), max),
             "finding" => {
                 if let Some((set, rule)) = id.split_once('/') {
@@ -76,8 +83,8 @@ pub fn plan(question: &str, internet: u8) -> Vec<(&'static str, Value)> {
     }
     let lower = rest.to_lowercase();
     if let (Some(id), true) = (
-        named.first(),
-        internet > 0 && MITIGATION.iter().any(|w| lower.contains(w)),
+        named.first().copied().or(attached),
+        internet > 0 && mitigation(&lower),
     ) {
         max = MAX_MITIGATION_PREFETCH;
         add("reference", json!({ "id": id }), max);
@@ -256,5 +263,56 @@ mod tests {
                 .iter()
                 .all(|(n, _)| *n == "vulnerability_hosts")
         );
+    }
+
+    #[test]
+    fn an_attached_advisory_feeds_the_mitigation_branch() {
+        let q = "About advisory FEDORA-2026-bcdfa4c7db (chromium-154.0): How do I fix this?";
+        let id = "FEDORA-2026-bcdfa4c7db";
+        let local = ("vulnerability_hosts", json!({ "id": id }));
+        assert_eq!(plan(q, 0), std::slice::from_ref(&local));
+        assert_eq!(
+            plan(q, 1),
+            [local.clone(), ("reference", json!({ "id": id }))]
+        );
+        assert_eq!(
+            plan(q, 2),
+            [
+                local,
+                ("reference", json!({ "id": id })),
+                (
+                    "web_search",
+                    json!({ "query": format!("{id} mitigation workaround") })
+                ),
+            ]
+        );
+        // An ID the question names itself wins over the attached one.
+        let q = "About advisory FEDORA-2026-bcdfa4c7db (x): how to patch CVE-2024-6387?";
+        assert_eq!(
+            plan(q, 1)[2],
+            ("reference", json!({ "id": "CVE-2024-6387" }))
+        );
+    }
+
+    #[test]
+    fn mitigation_words_match_whole_words() {
+        for q in [
+            "Is CVE-2024-6387 fixed on web-01?",
+            "Does CVE-2024-6387 affect the prefix tool?",
+            "Was CVE-2024-6387 patched?",
+        ] {
+            assert_eq!(plan(q, 2).len(), 1, "{q}");
+        }
+        for q in [
+            "How do I fix CVE-2024-6387?",
+            "patch CVE-2024-6387",
+            "Any workaround for CVE-2024-6387?",
+            "CVE-2024-6387 mitigation?",
+            "Mitigate CVE-2024-6387",
+            "How to remediate CVE-2024-6387?",
+            "protect against CVE-2024-6387",
+        ] {
+            assert_eq!(plan(q, 2).len(), 3, "{q}");
+        }
     }
 }

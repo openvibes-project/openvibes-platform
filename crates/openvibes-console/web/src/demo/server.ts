@@ -176,6 +176,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const internetSources = (question: string): AssistantInternetSource[] => {
     const id = /CVE-\d{4}-\d{4,}/.exec(question)?.[0];
     if (id === undefined || !/mitigat|fix|patch|workaround|remediat|protect against/i.test(question)) return [];
+    // The demo's unreachable ID: the lookup failed, the answer is local only.
+    if (id === "CVE-2099-0001") return [{ kind: "unavailable", text: "Internet lookup unavailable; this answer uses local data only", url: null }];
     return [
       { kind: "reference", text: `Looked up ${id} on osv.dev`, url: `https://osv.dev/vulnerability/${id}` },
       { kind: "search", text: `Searched the web for: ${id} mitigation workaround`, url: null },

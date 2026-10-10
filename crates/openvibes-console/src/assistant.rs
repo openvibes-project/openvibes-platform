@@ -201,6 +201,8 @@ pub(crate) struct ConsoleReadLookups {
     overview: bool,
     rules: bool,
     internet: Option<crate::fetch_client::Internet>,
+    /// An internet lookup was attempted and did not succeed (not "off").
+    internet_failed: std::sync::atomic::AtomicBool,
     pool: Pool,
     scope: console_read::AgentScope,
     now: chrono::DateTime<chrono::Utc>,
@@ -240,10 +242,20 @@ impl ConsoleReadLookups {
             overview,
             rules: access.rules,
             internet: access.internet,
+            internet_failed: std::sync::atomic::AtomicBool::new(false),
             pool,
             scope: access.agents,
             now,
         })
+    }
+}
+
+impl ConsoleReadLookups {
+    /// An internet lookup was attempted for this answer and failed
+    /// (unreachable, blocked, too large, rate-limited).
+    pub(crate) fn internet_failed(&self) -> bool {
+        self.internet_failed
+            .load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
@@ -278,7 +290,17 @@ impl LookupRunner for ConsoleReadLookups {
                 self.lookups.run(lookup, items).await
             }
             Lookup::Reference { .. } | Lookup::WebSearch { .. } => match &self.internet {
-                Some(internet) => internet.run(&self.pool, lookup).await,
+                Some(internet) => {
+                    let result = internet.run(&self.pool, lookup).await;
+                    if match &result {
+                        Ok(output) => crate::fetch_client::is_failure(output),
+                        Err(_) => true,
+                    } {
+                        self.internet_failed
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    result
+                }
                 None => Err(crate::fetch_client::forbidden()),
             },
             Lookup::AgentSummary { agent } => {
@@ -360,7 +382,7 @@ pub(crate) struct AssistantLookup {
 /// here from the ID, never from fetched text.
 #[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
 pub(crate) struct AssistantInternetSource {
-    /// `reference` or `search`.
+    /// `reference`, `search` or `unavailable`.
     pub(crate) kind: &'static str,
     pub(crate) text: String,
     pub(crate) url: Option<String>,
@@ -377,8 +399,14 @@ pub(crate) struct AssistantMessageResponse {
 /// source follows the ID as `openvibes-fetch` chooses it (Fedora updates
 /// from Bodhi, everything else from OSV).
 pub(crate) fn internet_sources(
+    failed: bool,
     records: &[platform_assistant::LookupRecord],
 ) -> Vec<AssistantInternetSource> {
+    let unavailable = failed.then(|| AssistantInternetSource {
+        kind: "unavailable",
+        text: "Internet lookup unavailable; this answer uses local data only".to_owned(),
+        url: None,
+    });
     records
         .iter()
         .filter(|r| r.found && r.error.is_none())
@@ -412,6 +440,7 @@ pub(crate) fn internet_sources(
             }),
             _ => None,
         })
+        .chain(unavailable)
         .collect()
 }
 

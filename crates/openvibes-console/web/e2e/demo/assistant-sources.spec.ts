@@ -24,3 +24,12 @@ test("an answer from local data shows no sources line", async ({ page }) => {
   await expect(dock.getByText("have not checked in")).toBeVisible();
   await expect(dock.getByText("Looked up")).toHaveCount(0);
 });
+
+test("a failed internet lookup says the answer uses local data only", async ({ page }) => {
+  const dock = page.getByRole("complementary", { name: "Assistant" });
+  await page.keyboard.press("Control+j");
+  await dock.getByLabel("Question").fill("Any workaround for CVE-2099-0001 while the internet is down?");
+  await dock.getByRole("button", { name: "Send" }).click();
+  await expect(dock.getByText("Internet lookup unavailable; this answer uses local data only")).toBeVisible();
+  await expect(dock.getByRole("link")).toHaveCount(0);
+});
