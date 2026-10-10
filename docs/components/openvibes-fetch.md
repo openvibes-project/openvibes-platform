@@ -41,12 +41,16 @@ Refusal codes: `off`, `blocked`, `invalid`, `unavailable`, `too_large`.
   parts of at most 255, so `126.0.6478.126` is a version, but a version such
   as `1.2.3.4` is refused), IPv6 (also `fe80::`, `::1`, `fe80::1%eth0`,
   bracketed), MAC (`:` or `-` separated, or Cisco `aabb.ccdd.eeff`).
+  Defanged forms (`10[.]0[.]0[.]5`, `(.)`, `[dot]`) are normalised first;
+  Mathematical Alphanumeric Symbols are refused like full-width characters;
+  a deny term is a word even next to `_`; a Windows path `c:\\dir` is not a URL.
   Plain words such as `www.example.org` or `std::vector` are not refused.
 
 ## Residual risks
 
 A lexical filter cannot catch integer or hex IPv4 notations (`167772165`,
-`0x0a000005`) or deliberate encoding (spelled-out digits, base64). The
+`0x0a000005`), short or spaced IPv4 forms, other-script look-alikes
+(Cyrillic `е`), a non-breaking hyphen in a host name, or deliberate encoding (spelled-out digits, base64). The
 filter stops accidental leaks and the common forms; it is not a defence
 against a model told to smuggle data out.
 

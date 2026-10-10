@@ -33,19 +33,26 @@ pub fn is_public_id(id: &str) -> bool {
 /// Matching is case-insensitive; deny terms are lowercased here.
 pub fn check_query(query: &str, deny: &[String]) -> Result<(), Refusal> {
     let q = query.to_lowercase();
+    let n = q
+        .replace("[.]", ".")
+        .replace("(.)", ".")
+        .replace("[dot]", ".");
     if q.chars().count() > MAX_QUERY
         || q.contains("://")
-        || q.chars()
-            .any(|c| ('\u{ff00}'..='\u{ffef}').contains(&c) || (!c.is_ascii() && c.is_numeric()))
+        || q.chars().any(|c| {
+            ('\u{ff00}'..='\u{ffef}').contains(&c)
+                || ('\u{1d400}'..='\u{1d7ff}').contains(&c)
+                || (!c.is_ascii() && c.is_numeric())
+        })
         || has_scheme_slash(&q)
         || q.as_bytes()
             .windows(3)
             .any(|w| w[0] == b'%' && w[1].is_ascii_hexdigit() && w[2].is_ascii_hexdigit())
         || deny.iter().any(|d| has_word(&q, &d.to_lowercase()))
-        || runs(&q, |c| c.is_ascii_digit() || c == '.').any(|(_, r)| is_ipv4(r))
-        || runs(&q, |c| c.is_ascii_hexdigit() || c == ':' || c == '.')
-            .any(|(i, r)| is_ipv6(&q, i, r))
-        || runs(&q, |c| {
+        || runs(&n, |c| c.is_ascii_digit() || c == '.').any(|(_, r)| is_ipv4(r))
+        || runs(&n, |c| c.is_ascii_hexdigit() || c == ':' || c == '.')
+            .any(|(i, r)| is_ipv6(&n, i, r))
+        || runs(&n, |c| {
             c.is_ascii_hexdigit() || matches!(c, ':' | '.' | '-')
         })
         .any(|(_, r)| is_mac(r))
@@ -81,13 +88,16 @@ fn has_scheme_slash(q: &str) -> bool {
         matches!(q[i + 1..].chars().next(), Some('/' | '\\'))
             && q[..i]
                 .chars()
-                .next_back()
-                .is_some_and(|c| c.is_ascii_alphabetic())
+                .rev()
+                .take(2)
+                .filter(char::is_ascii_alphabetic)
+                .count()
+                == 2
     })
 }
 
 fn is_word_char(c: char) -> bool {
-    c.is_ascii_alphanumeric() || c == '_'
+    c.is_ascii_alphanumeric()
 }
 
 /// `term` occurs in `q` not embedded in a longer word.
@@ -133,19 +143,20 @@ fn is_ipv6(q: &str, off: usize, run: &str) -> bool {
             .next_back()
             .is_some_and(|c| c.is_ascii_alphanumeric())
     };
-    (0..run.len())
-        .filter(|&s| {
-            (s == 0 || run.as_bytes()[s - 1] == b':' || run.as_bytes()[s] == b':')
-                && !glued(off + s)
-        })
-        .any(|s| {
-            (s + 1..=run.len()).any(|e| {
+    // Glued to a preceding word, a candidate must look like real IPv6 (a
+    // 4-digit group or all 8 groups): `srcfe80::1` yes, `std::bad` no.
+    let strong = |c: &str| c.matches(':').count() == 7 || c.split(':').any(|g| g.len() == 4);
+    (0..run.len()).any(|s| {
+        let g = glued(off + s);
+        !(g && run.as_bytes()[s] == b':')
+            && (s + 1..=run.len()).any(|e| {
                 let c = &run[s..e];
                 c.bytes().any(|b| b.is_ascii_hexdigit())
                     && c.matches(':').count() >= 2
+                    && (!g || strong(c))
                     && c.parse::<Ipv6Addr>().is_ok()
             })
-        })
+    })
 }
 
 /// Six 2-hex groups joined by `:` or `-`, or three 4-hex groups joined by `.`.
@@ -278,6 +289,33 @@ mod tests {
         ] {
             assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
         }
+    }
+    #[test]
+    fn round_two_evasions() {
+        blocked(
+            &[
+                "web-01_logs",
+                "web-01_access.log error",
+                "_web-01",
+                "srcfe80::1",
+                "x2001:db8:1:2:3:4:5:6",
+                "10[.]0[.]0[.]5",
+                "10(.)0(.)0(.)5",
+                "10[dot]0[dot]0[dot]5",
+                "\u{1d430}\u{1d41e}\u{1d41b}-01",
+            ],
+            &deny(),
+        );
+        for q in [
+            "std::vector",
+            "cafe:babe",
+            "fix: abc",
+            "c:\\windows\\system32 error",
+            "Foo::bar",
+        ] {
+            assert_eq!(check_query(q, &deny()), Ok(()), "{q}");
+        }
+        blocked(&["file:/etc/passwd", "https:\\\\x"], &deny());
     }
     #[test]
     fn only_public_ids_go_to_level_one() {
