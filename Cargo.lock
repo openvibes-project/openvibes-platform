@@ -1718,6 +1718,7 @@ dependencies = [
  "futures-util",
  "include_dir",
  "openvibes-core",
+ "openvibes-fetch",
  "openvibes-rules",
  "openvibes-signer",
  "platform-assistant",

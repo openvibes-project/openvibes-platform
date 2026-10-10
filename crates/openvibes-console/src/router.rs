@@ -78,6 +78,10 @@ pub(crate) struct AuthHttpState {
     pub(crate) presence: crate::presence::PresenceHub,
     /// The rule signer's socket: where a site rule set is signed to publish.
     pub(crate) signer_socket: Arc<std::path::Path>,
+    /// The fetch service's socket (assistant internet lookups).
+    fetch_socket: Arc<std::path::Path>,
+    /// Internet lookups used per user this hour.
+    internet_limits: Arc<crate::fetch_client::Limits>,
 }
 
 #[derive(Deserialize)]
@@ -351,6 +355,8 @@ pub(crate) fn authenticated_router_with_assistant(
         signer_socket: signer_socket
             .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
             .into(),
+        fetch_socket: std::path::Path::new(crate::fetch_client::DEFAULT_FETCH_SOCKET).into(),
+        internet_limits: Arc::default(),
     };
     let router = Router::new()
         .nest(
@@ -3117,6 +3123,12 @@ pub(crate) async fn authenticated_assistant_message(
         agents: agent_scope,
         vulnerabilities,
         rules,
+        // The handler requires assistant.use (analysts, administrators).
+        internet: Some(crate::fetch_client::Internet {
+            user: actor.clone(),
+            socket: state.fetch_socket.clone(),
+            limits: state.internet_limits.clone(),
+        }),
     };
     let lookups = match crate::assistant::ConsoleReadLookups::for_user(
         state.pool.clone(),
@@ -3134,6 +3146,9 @@ pub(crate) async fn authenticated_assistant_message(
             user_permit,
             capacity_permit,
         ));
+    let extra_tools = platform_assistant::lookups::internet_specs(
+        crate::assistant_internet::current_level(&state.pool).await,
+    );
     let started = Instant::now();
     let request_id = next_request_id();
     let answer = tokio::time::timeout(
@@ -3145,6 +3160,7 @@ pub(crate) async fn authenticated_assistant_message(
             &history,
             &request.question,
             None,
+            &extra_tools,
         ),
     )
     .await

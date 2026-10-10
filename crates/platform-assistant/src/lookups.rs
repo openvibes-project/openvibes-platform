@@ -100,6 +100,16 @@ pub enum Lookup {
         /// Agent ID or host name.
         agent: Option<String>,
     },
+    /// Level 1: a public advisory or CVE page, fetched by the console.
+    Reference {
+        /// The public identifier.
+        id: String,
+    },
+    /// Level 2: a web search, fetched by the console.
+    WebSearch {
+        /// The search text.
+        query: String,
+    },
 }
 
 /// Why a lookup request was refused or failed. Fed back to the model as a
@@ -127,6 +137,8 @@ pub enum Area {
     Vulnerabilities,
     /// Rule definitions (`rules.read`).
     Rules,
+    /// Internet lookups (analysts and administrators).
+    Internet,
 }
 
 impl LookupError {
@@ -145,6 +157,9 @@ impl LookupError {
                 "error: the user has no access to vulnerabilities; tell them so"
             }
             Self::Forbidden(Area::Rules) => "error: the user has no access to rules; tell them so",
+            Self::Forbidden(Area::Internet) => {
+                "error: the user may not use internet lookups; tell them so"
+            }
         }
     }
 }
@@ -465,6 +480,7 @@ impl Lookup {
                     rule: required(a.rule)?,
                 })
             }
+            "reference" | "web_search" => internet::parse(name, arguments),
             _ => inventory::parse(name, arguments),
         }
     }
@@ -482,6 +498,8 @@ impl Lookup {
             Self::RuleDescription { .. } => NAMES[6],
             Self::HostServices { .. } => NAMES[7],
             Self::Software { .. } => NAMES[8],
+            Self::Reference { .. } => INTERNET_NAMES[0],
+            Self::WebSearch { .. } => INTERNET_NAMES[1],
         }
     }
 
@@ -520,6 +538,8 @@ impl Lookup {
             }
             Self::HostServices { agent, port } => json!({ "agent": agent, "port": port }),
             Self::Software { name, agent } => json!({ "name": name, "agent": agent }),
+            Self::Reference { id } => json!({ "id": id }),
+            Self::WebSearch { query } => json!({ "query": query }),
         }
     }
 }
@@ -902,6 +922,8 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
         .collect()
 }
 
+mod internet;
+pub use internet::{INTERNET_NAMES, internet_specs};
 mod inventory;
 mod resolve;
 
@@ -1126,6 +1148,10 @@ impl<S: Source> LookupRunner for Lookups<S> {
             Lookup::Software { name, agent } => {
                 self.software_lookup(summary, name, agent.as_deref(), items)
                     .await?
+            }
+            // Fetched by the console, never from the store.
+            Lookup::Reference { .. } | Lookup::WebSearch { .. } => {
+                return Err(LookupError::Unknown);
             }
         })
     }

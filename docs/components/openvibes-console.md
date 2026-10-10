@@ -54,6 +54,19 @@ loopback or a private address; level 2 requires it. Domains must be lowercase
 names (at most 50). Each change writes an `assistant.internet.changed` audit
 row; `platform_domain` (the public origin's host) is always filtered. An
 unreadable setting counts as level 0.
+The assistant's `reference` and `web_search` lookups (`src/fetch_client.rs`)
+are offered per question from that level (`internet_specs(current_level)`) and
+run through the fetch service's socket (`/run/openvibes-fetch/fetch.sock`,
+`AuthHttpState.fetch_socket`): the request JSON is written, the write side
+closed, a reply of at most 64 KiB read, within 15 s. Each user gets 20 lookups
+per hour (in console memory, reset on restart). Every outbound request writes
+an `assistant.internet.lookup` audit row (user, kind, ID or query,
+destination, result or refusal code). Failures never fail the answer: the model
+gets a fixed note ("internet lookups are off", "blocked: the query contained
+internal data", "the internet lookup limit is reached; try again later", "OSV
+could not be reached; this answer uses local data only"). Results are marked
+`"outside_data": true`, items are labelled `[web:N]` with the URL as plain
+text. Test: `cargo test -p openvibes-console assistant::internet_tests`.
 The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)
 switches the two levels: "Look up security references" and "Search the web"
 (enabled only while level 1 is on). Turning a level on opens a confirmation

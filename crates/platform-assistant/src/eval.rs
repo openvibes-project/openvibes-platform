@@ -1112,7 +1112,16 @@ pub async fn evaluate(
             inner: backend.clone(),
             shown: Mutex::default(),
         });
-        let outcome = answer(watch.clone(), &lookups, settings, &[], &case.question, None).await;
+        let outcome = answer(
+            watch.clone(),
+            &lookups,
+            settings,
+            &[],
+            &case.question,
+            None,
+            &[],
+        )
+        .await;
         results.push(score(
             case,
             &cases.forbid_everywhere,

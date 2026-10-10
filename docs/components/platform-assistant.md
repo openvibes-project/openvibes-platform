@@ -100,6 +100,15 @@ profile's `result_items`, a `cite` value per object, and `omitted`; the
 orchestrator drops trailing items to fit the prompt and counts them as
 omitted.
 
+Internet lookups: `Lookup::Reference { id }` (tool `reference`) and
+`Lookup::WebSearch { query }` (tool `web_search`) parse like the others but are
+offered only through `lookups::internet_specs(level)` (0 none, 1 `reference`,
+2 both; descriptions under 120 characters) passed to `answer(..., extra_tools)`.
+The store runner answers them `Unknown`; the console runner fetches them. A
+name the console did not offer this question is refused as unknown. Their
+results are labelled outside data and carry no `cite` keys, so nothing outside
+can become a citation or link.
+
 ## Answering a question
 
 **Prefetch** (`prefetch.rs`; decision 2026-10-10, get the most out of a

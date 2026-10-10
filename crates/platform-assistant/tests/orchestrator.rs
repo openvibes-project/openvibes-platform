@@ -145,7 +145,7 @@ async fn ask(
     question: &str,
 ) -> Result<platform_assistant::Answer, AnswerError> {
     let backend: Arc<dyn ChatBackend> = script.clone();
-    answer(backend, fake, settings, &[], question, None).await
+    answer(backend, fake, settings, &[], question, None, &[]).await
 }
 
 #[tokio::test]
@@ -458,7 +458,7 @@ async fn prompts_fit_the_budget() {
     };
     let s = settings(ResolvedMode::Native);
     let backend: Arc<dyn ChatBackend> = script.clone();
-    answer(backend, &fake, s, &history, "Newest question", None)
+    answer(backend, &fake, s, &history, "Newest question", None, &[])
         .await
         .unwrap();
     let limit = s.budget.prompt_tokens as usize * 3;
@@ -600,6 +600,7 @@ async fn native_mode_streams_and_resets_around_lookups() {
         &[],
         "hi",
         Some(&sender),
+        &[],
     )
     .await
     .unwrap();
@@ -887,6 +888,7 @@ async fn four_lookups_after_a_long_history_each_keep_the_minimum() {
         &history,
         "q",
         None,
+        &[],
     )
     .await
     .unwrap();
@@ -1210,4 +1212,34 @@ async fn the_obvious_lookup_is_run_before_the_first_turn() {
             "{mode:?}: the first request carries the overview"
         );
     }
+}
+
+#[tokio::test]
+async fn internet_lookups_run_only_when_offered() {
+    let run = |extra: Vec<platform_assistant::ToolSpec>| async move {
+        let script = Script::new(vec![
+            tool_turn(vec![call("1", "reference", r#"{"id":"CVE-2026-1"}"#)]),
+            text("done"),
+        ]);
+        let fake = Fake::default();
+        let backend: Arc<dyn ChatBackend> = script.clone();
+        answer(
+            backend,
+            &fake,
+            settings(ResolvedMode::Native),
+            &[],
+            "q",
+            None,
+            &extra,
+        )
+        .await
+        .unwrap();
+        let tools = script.requests()[0].tools.len();
+        (fake.ran.lock().unwrap().len(), tools)
+    };
+    assert_eq!(run(Vec::new()).await, (0, 9));
+    assert_eq!(
+        run(platform_assistant::lookups::internet_specs(1)).await,
+        (1, 10)
+    );
 }

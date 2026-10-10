@@ -183,6 +183,8 @@ pub(crate) struct Access {
     /// `rules.read` (global only, as on the Rules page): every published
     /// rule. Without it, only rules with a finding in the agent scope.
     pub(crate) rules: bool,
+    /// Internet lookups; `None` when the user may not use them.
+    pub(crate) internet: Option<crate::fetch_client::Internet>,
 }
 
 /// Runs every lookup offered to the model (`platform_assistant::lookups::specs`)
@@ -198,6 +200,7 @@ pub(crate) struct ConsoleReadLookups {
     /// needs `vulnerabilities.read` with the agent scope.
     overview: bool,
     rules: bool,
+    internet: Option<crate::fetch_client::Internet>,
     pool: Pool,
     scope: console_read::AgentScope,
     now: chrono::DateTime<chrono::Utc>,
@@ -236,6 +239,7 @@ impl ConsoleReadLookups {
             vulnerabilities,
             overview,
             rules: access.rules,
+            internet: access.internet,
             pool,
             scope: access.agents,
             now,
@@ -273,6 +277,10 @@ impl LookupRunner for ConsoleReadLookups {
                 }
                 self.lookups.run(lookup, items).await
             }
+            Lookup::Reference { .. } | Lookup::WebSearch { .. } => match &self.internet {
+                Some(internet) => internet.run(&self.pool, lookup).await,
+                None => Err(crate::fetch_client::forbidden()),
+            },
             Lookup::AgentSummary { agent } => {
                 let client = self.pool.get().await.map_err(|_| LookupError::Store)?;
                 let mut matches =
@@ -404,5 +412,7 @@ fn encode_component(value: &str) -> String {
     output
 }
 
+#[cfg(test)]
+mod internet_tests;
 #[cfg(test)]
 mod lookup_tests;

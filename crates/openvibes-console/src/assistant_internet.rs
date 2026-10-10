@@ -20,7 +20,6 @@ use crate::{
 
 /// The level in force (0 off, 1 pages, 2 pages and search). Any error reads
 /// as 0 so the assistant never breaks because of this setting.
-#[allow(dead_code)] // the assistant reads it from the next change
 pub(crate) async fn current_level(pool: &Pool) -> u8 {
     let Ok(client) = pool.get().await else {
         return 0;

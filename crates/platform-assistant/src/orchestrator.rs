@@ -20,7 +20,7 @@ use crate::{
         Message, ToolCall, ToolSpec, Usage,
     },
     config::{Assistant, Backend, Budget},
-    lookups::{Lookup, LookupError, LookupRunner, NAMES, specs},
+    lookups::{INTERNET_NAMES, Lookup, LookupError, LookupRunner, NAMES, specs},
     prefetch,
     probe::ResolvedMode,
 };
@@ -252,7 +252,7 @@ fn system_prompt(mode: ResolvedMode, tools: &[ToolSpec]) -> String {
     prompt
 }
 
-fn action_schema(final_turn: bool) -> Value {
+fn action_schema(final_turn: bool, tools: &[ToolSpec]) -> Value {
     if final_turn {
         json!({
             "type": "object",
@@ -268,7 +268,8 @@ fn action_schema(final_turn: bool) -> Value {
             "type": "object",
             "properties": {
                 "action": { "type": "string", "enum": ["lookup", "answer"] },
-                "name": { "type": "string", "enum": NAMES },
+                "name": { "type": "string",
+                          "enum": tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>() },
                 "arguments": { "type": "object" },
                 "text": { "type": "string" },
             },
@@ -352,7 +353,7 @@ fn read_action(content: &str) -> Action {
             Some(Value::String(name)) => (name, arguments),
             _ => return Action::Malformed,
         }
-    } else if NAMES.contains(&action.as_str()) {
+    } else if NAMES.contains(&action.as_str()) || INTERNET_NAMES.contains(&action.as_str()) {
         let arguments = map.remove("arguments").unwrap_or(Value::Object(map));
         (action, arguments)
     } else {
@@ -499,7 +500,7 @@ impl<R: LookupRunner> Run<'_, R> {
             response_format: (self.settings.mode == ResolvedMode::JsonSchema).then(|| {
                 JsonSchemaFormat {
                     name: "assistant_action".into(),
-                    schema: action_schema(final_turn),
+                    schema: action_schema(final_turn, &self.tools),
                 }
             }),
             max_tokens: self.settings.budget.output_tokens,
@@ -538,7 +539,23 @@ impl<R: LookupRunner> Run<'_, R> {
         arguments: &str,
         lookups_left: u32,
     ) -> (String, Option<Lookup>) {
-        let known = NAMES.iter().find(|known| **known == name).copied();
+        let known = NAMES
+            .iter()
+            .chain(&INTERNET_NAMES)
+            .find(|known| **known == name)
+            .copied();
+        // An internet lookup the console did not offer this question.
+        if INTERNET_NAMES.contains(&name) && !self.tools.iter().any(|t| t.name == name) {
+            let error = LookupError::Unknown;
+            self.records.push(LookupRecord {
+                name: known,
+                arguments: Value::Null,
+                objects: 0,
+                found: false,
+                error: Some(error),
+            });
+            return (error.message().to_owned(), None);
+        }
         let lookup = match Lookup::parse(name, arguments) {
             Ok(lookup) => lookup,
             Err(error) => {
@@ -738,7 +755,8 @@ impl<R: LookupRunner> Run<'_, R> {
 
 /// Answers `question` in the context of `history`, running lookups through
 /// `runner` (which carries the user's scope) and sending progress to
-/// `events`.
+/// `events`. `extra_tools` are offered besides the fixed lookups (the
+/// internet lookups, when the console allows them).
 pub async fn answer<R: LookupRunner>(
     backend: Arc<dyn ChatBackend>,
     runner: &R,
@@ -746,6 +764,7 @@ pub async fn answer<R: LookupRunner>(
     history: &[Turn],
     question: &str,
     events: Option<&UnboundedSender<Event>>,
+    extra_tools: &[ToolSpec],
 ) -> Result<Answer, AnswerError> {
     let question = question.trim();
     if question.is_empty() {
@@ -754,7 +773,8 @@ pub async fn answer<R: LookupRunner>(
     if question.chars().count() > MAX_QUESTION_CHARS {
         return Err(AnswerError::QuestionTooLong);
     }
-    let tools = specs();
+    let mut tools = specs();
+    tools.extend_from_slice(extra_tools);
     let tools_chars = if settings.mode == ResolvedMode::Native {
         tools
             .iter()

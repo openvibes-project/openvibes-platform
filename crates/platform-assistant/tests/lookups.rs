@@ -263,3 +263,37 @@ fn descriptions_name_the_fields_the_results_carry() {
     // a small model away from placeholder agents about 250 more.
     assert!(total <= 4_100, "{total}");
 }
+
+#[test]
+fn internet_specs_follow_the_level_and_stay_short() {
+    use platform_assistant::lookups::internet_specs;
+    let names = |level| {
+        internet_specs(level)
+            .into_iter()
+            .map(|s| s.name)
+            .collect::<Vec<_>>()
+    };
+    assert!(names(0).is_empty());
+    assert_eq!(names(1), ["reference"]);
+    assert_eq!(names(2), ["reference", "web_search"]);
+    for spec in internet_specs(2) {
+        assert!(spec.description.len() < 120, "{}", spec.name);
+        assert_eq!(spec.parameters["additionalProperties"], false);
+    }
+    assert_eq!(
+        Lookup::parse("reference", r#"{"id":" CVE-2026-1 "}"#).unwrap(),
+        Lookup::Reference {
+            id: "CVE-2026-1".into()
+        }
+    );
+    assert_eq!(
+        Lookup::parse("web_search", r#"{"query":"x","extra":1}"#),
+        Err(LookupError::InvalidArguments)
+    );
+    assert_eq!(
+        Lookup::parse("web_search", r#"{"query":"q"}"#)
+            .unwrap()
+            .name(),
+        "web_search"
+    );
+}

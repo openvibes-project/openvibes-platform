@@ -27,6 +27,7 @@ mod coverage;
 mod dashboards;
 mod detection;
 mod error;
+mod fetch_client;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
 mod metrics;
