@@ -258,6 +258,26 @@ question = "Which advisory affects the most hosts?"
 lookups = ["fleet_overview"]
 facts = ["openssh|a1b2"]
 
+# The user's production questions (platform #258, 2026-10-10).
+[[cases]]
+id = "vulns-fix-first"
+question = "What should I fix first?"
+lookups = ["fleet_overview"]
+facts = ["a1b2|openssh"]
+
+[[cases]]
+id = "vulns-is-critical-by-id"
+question = "Isn't FEDORA-2026-k9m1 marked as critical?"
+lookups = ["vulnerability_hosts"]
+facts = ["critical"]
+forbid = ["not critical", "not listed"]
+
+[[cases]]
+id = "vulns-context-why-not-first"
+question = "About advisory FEDORA-2026-k9m1 (chromium security update): Why isn't this the first thing to fix?"
+lookups = ["vulnerability_hosts", "fleet_overview"]
+facts = ["a1b2|openssh|exploited"]
+
 [[cases]]
 id = "vulns-db-01-critical"
 question = "Is db-01 vulnerable to anything critical?"

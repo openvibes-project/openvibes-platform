@@ -21,6 +21,7 @@ use crate::{
     },
     config::{Assistant, Backend, Budget},
     lookups::{Lookup, LookupError, LookupRunner, NAMES, specs},
+    prefetch,
     probe::ResolvedMode,
 };
 
@@ -600,7 +601,44 @@ impl<R: LookupRunner> Run<'_, R> {
         })
     }
 
-    async fn answer(mut self) -> Result<Answer, AnswerError> {
+    /// Runs [`prefetch::plan`]'s lookups and adds them to the conversation
+    /// as if the model had asked for them, so it starts from their results.
+    /// They do not count against `max_lookups`.
+    async fn prefetch(&mut self, question: &str) {
+        let native = self.settings.mode == ResolvedMode::Native;
+        for (index, (name, arguments)) in prefetch::plan(question).into_iter().enumerate() {
+            let left = self.settings.max_lookups + 1;
+            let (text, lookup) = self.lookup(name, &arguments.to_string(), left).await;
+            let Some(lookup) = lookup else { continue };
+            if native {
+                let id = format!("prefetch_{index}");
+                self.working.push(Message::Assistant {
+                    content: None,
+                    tool_calls: vec![ToolCall {
+                        id: id.clone(),
+                        name: lookup.name().to_owned(),
+                        arguments: lookup.arguments().to_string(),
+                    }],
+                });
+                self.working.push(Message::Tool {
+                    call_id: id,
+                    content: text,
+                });
+            } else {
+                let echoed = json!({
+                    "action": "lookup", "name": lookup.name(), "arguments": lookup.arguments(),
+                });
+                self.working.push(Message::Assistant {
+                    content: Some(echoed.to_string()),
+                    tool_calls: Vec::new(),
+                });
+                self.working.push(Message::User(text));
+            }
+        }
+    }
+
+    async fn answer(mut self, question: &str) -> Result<Answer, AnswerError> {
+        self.prefetch(question).await;
         let mut lookups_done = 0;
         let mut turn = 0;
         let mut repaired = false;
@@ -767,7 +805,7 @@ pub async fn answer<R: LookupRunner>(
     if run.base_chars() + RESERVE_CHARS + MIN_RESULT_CHARS > run.limit_chars {
         return Err(AnswerError::QuestionTooLong);
     }
-    tokio::time::timeout(settings.deadline, run.answer())
+    tokio::time::timeout(settings.deadline, run.answer(question))
         .await
         .map_err(|_| AnswerError::Deadline)?
 }

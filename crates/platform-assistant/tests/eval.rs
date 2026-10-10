@@ -73,7 +73,7 @@ async fn the_fleet_answers_like_the_database() {
         overview["agents"],
         serde_json::json!({ "seen_recently": 8, "offline": 1, "never_seen": 1, "revoked": 1, "imported": 0 })
     );
-    assert_eq!(overview["open_vulnerabilities"], 8);
+    assert_eq!(overview["open_vulnerabilities"], 9, "with k9m1 on web-02");
     assert_eq!(overview["hosts_with_exploited"], 3);
     assert_eq!(
         overview["top_advisories"][0]["cite"],

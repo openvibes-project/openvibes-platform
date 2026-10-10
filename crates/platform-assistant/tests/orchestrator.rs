@@ -1167,3 +1167,47 @@ async fn no_request_is_sent_over_the_budget() {
         return;
     }
 }
+
+/// Decision 2026-10-10: the platform runs the obvious lookup itself, so the
+/// model's first request already holds its result, and the model keeps its
+/// own lookups on top of it.
+#[tokio::test]
+async fn the_obvious_lookup_is_run_before_the_first_turn() {
+    for mode in [ResolvedMode::Native, ResolvedMode::Prompted] {
+        let greedy = || match mode {
+            ResolvedMode::Native => {
+                tool_turn(vec![call("c", "agent_summary", r#"{"agent":"web-01"}"#)])
+            }
+            _ => {
+                text(r#"{"action":"lookup","name":"agent_summary","arguments":{"agent":"web-01"}}"#)
+            }
+        };
+        let script = Script::new(vec![greedy(), greedy(), greedy(), greedy(), greedy()]);
+        let fake = Fake::default();
+        let answer = ask(&script, &fake, settings(mode), "What should I fix first?")
+            .await
+            .unwrap();
+        let ran = fake.ran.lock().unwrap().clone();
+        assert!(
+            matches!(ran[0], Lookup::FleetOverview { .. }),
+            "{mode:?}: {ran:?}"
+        );
+        assert_eq!(
+            ran.len(),
+            5,
+            "{mode:?}: the prefetch plus the model's own four"
+        );
+        assert!(answer.hit_lookup_limit);
+        let first = &script.requests()[0].messages;
+        let holds_result = first.iter().any(|m| match m {
+            Message::Tool { content, .. } | Message::User(content) => {
+                content.contains("[finding:baseline/ssh.exposed]")
+            }
+            _ => false,
+        });
+        assert!(
+            holds_result,
+            "{mode:?}: the first request carries the overview"
+        );
+    }
+}
