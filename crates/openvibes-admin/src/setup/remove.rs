@@ -63,13 +63,14 @@ const DATA: [&str; 10] = [
     "/var/lib/openvibes-signer",
 ];
 /// Service accounts (user and group of the same name) it deletes.
-const ACCOUNTS: [&str; 8] = [
+const ACCOUNTS: [&str; 9] = [
     "openvibes-ingest",
     "openvibes-distribution",
     "openvibes-vulns",
     "openvibes-console",
     "openvibes-llm",
     "openvibes-signer",
+    "openvibes-fetch",
     "openvibes_agent",
     "openvibes-admin",
 ];
@@ -98,6 +99,9 @@ fn stop<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String>
             units.extend(component.units().iter().map(|unit| unit.name()));
             if *component == Component::Agent {
                 units.push("openvibes-agent.service");
+            }
+            if *component == Component::Console {
+                units.push("openvibes-fetch.socket");
             }
             if *component == Component::Assistant {
                 units.extend([

@@ -1,0 +1,36 @@
+[Unit]
+Description=OpenVIBES internet fetcher (one request)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+After=postgresql.service openvibes-migrate.service
+
+[Service]
+User=openvibes-fetch
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/openvibes-fetch --config /etc/openvibes/fetch.toml
+# The binary has its own 20 s deadline; this is the backstop.
+RuntimeMaxSec=30
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+# The network is its job; the database is a Unix socket.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=

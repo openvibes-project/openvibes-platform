@@ -351,7 +351,7 @@ jobs:
         run: |
           bash scripts/build-rpm.sh
           mkdir -p dist/kit-newer
-          cp target/rpm-newer/RPMS/x86_64/openvibes-{admin,ingest,distribution,vulns,signer,llm,llm-model}-*.rpm dist/kit-newer/
+          cp target/rpm-newer/RPMS/x86_64/openvibes-{admin,ingest,distribution,vulns,signer,fetch,llm,llm-model}-*.rpm dist/kit-newer/
 
       - name: Check the built packages carry no model
         run: OV_CHECK_BUILT=1 bash scripts/check-rpm.sh
@@ -434,7 +434,7 @@ jobs:
 
       - name: Install and check RPMs
         run: |
-          dnf -q -y install selinux-policy-targeted dist/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer}-*.rpm
+          dnf -q -y install selinux-policy-targeted dist/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer,fetch}-*.rpm
           bash scripts/check-rpm.sh
           chmod +x tools/*
 

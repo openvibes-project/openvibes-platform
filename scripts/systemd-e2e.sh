@@ -5,7 +5,7 @@
 # fetches signed rules, and delivers findings and inventory; the LLM serves a
 # tiny test model to `openvibes-admin assistant check` from inside its sandbox.
 # Usage: scripts/systemd-e2e.sh RPM_DIR SIGN_BIN [CONSOLE_OLD_RPM CONSOLE_RPM]
-#   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin,llm} RPMs and one
+#   RPM_DIR  the openvibes-{ingest,distribution,vulns,admin,llm,signer,fetch} RPMs and one
 #            openvibes-agent RPM (built from the pinned agent revision)
 #   SIGN_BIN the agent repository's sign_bundle example, built
 #   CONSOLE_OLD_RPM optional prior-version console RPM for upgrade validation
@@ -31,7 +31,7 @@ wait_for() {
 cleanup() {
     local status=$?
     if ((status != 0)); then
-        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer; do
+        for unit in openvibes-ingest openvibes-distribution openvibes-vulns openvibes-agent openvibes-console openvibes-llm openvibes-llm-proxy openvibes-signer openvibes-fetch.socket "openvibes-fetch@*"; do
             echo "--- $unit"
             "$PODMAN" exec "$C" journalctl -u "$unit" --no-pager -n 15 2>/dev/null || true
         done
@@ -42,7 +42,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$W"; mkdir -p "$W"
-cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer}-*.rpm "$W/"
+cp "$1"/openvibes-{ingest,distribution,vulns,admin,llm,agent,signer,fetch}-*.rpm "$W/"
 (($(ls "$W"/openvibes-agent-*.rpm | wc -l) == 1)) || fail "want exactly one agent RPM in $1"
 cp "$2" "$W/sign_bundle"
 KEY=$("$W/sign_bundle" keygen "$W/signing.key" | tail -1)
@@ -208,6 +208,45 @@ TOML
     wait_for "console remains available over TLS after RPM upgrade" 30 \
         '[[ "$(curl -ksS --resolve console.example.invalid:443:127.0.0.1 -o /dev/null -w "%{http_code}" https://console.example.invalid/)" == 200 ]]'
     ok "console RPM upgrade preserves config, TLS, local account, database session, and authenticated access"
+
+    # The assistant's internet fetcher (one process per connection, socket
+    # group openvibes-console). No outbound network here: level 1 must end
+    # in "unavailable" within the 20 s deadline, level 0 in "off".
+    in_c 'dnf -q -y install /test/openvibes-fetch-*.rpm && systemctl enable --now openvibes-fetch.socket' >/dev/null 2>&1 ||
+        fail "install openvibes-fetch"
+    [[ "$(in_c 'stat -c "%a %U:%G" /run/openvibes-fetch/fetch.sock')" == "660 root:openvibes-console" ]] ||
+        fail "fetch socket has the wrong owner or mode"
+    set_internet_level() { # LEVEL, through the console API as the c5-upgrade administrator
+        in_c "set -e
+              h='-ksS --resolve console.example.invalid:443:127.0.0.1 -b /tmp/c5-cookies'
+              u=https://console.example.invalid
+              curl \$h -D /tmp/ai.headers -o /tmp/ai-session.json \$u/api/v1/session
+              curl \$h -D /tmp/ai.headers -o /dev/null \$u/api/v1/assistant-internet
+              csrf=\$(sed -n 's/.*\"csrf_token\":\"\\([^\"]*\\)\".*/\\1/p' /tmp/ai-session.json)
+              etag=\$(sed -n 's/^[Ee][Tt]ag: *//Ip' /tmp/ai.headers | tr -d '\\r')
+              test -n \"\$csrf\" && test -n \"\$etag\"
+              status=\$(curl \$h -X PUT -H 'Origin: https://console.example.invalid' \
+                -H 'Sec-Fetch-Site: same-origin' -H \"X-CSRF-Token: \$csrf\" -H \"If-Match: \$etag\" \
+                -H 'Content-Type: application/json' \
+                -d '{\"level\":$1,\"searxng_url\":null,\"internal_domains\":[]}' \
+                -o /tmp/ai-put.json -w '%{http_code}' \$u/api/v1/assistant-internet)
+              test \"\$status\" = 200" || fail "set the internet level to $1 through the API"
+    }
+    fetch_reply() { # prints the fetcher's reply and the seconds it took
+        in_c "s=\$(date +%s); printf '{\"user\":\"e2e\",\"kind\":\"reference\",\"id\":\"CVE-2024-6387\"}' |
+              timeout 25 socat - UNIX-CONNECT:/run/openvibes-fetch/fetch.sock; echo \"took \$((\$(date +%s) - s))\""
+    }
+    set_internet_level 1
+    out=$(fetch_reply) || fail "no reply from the fetch socket"
+    [[ "$out" == *'{"result":"refused","code":"unavailable"}'* ]] || fail "level 1 without outbound: $out"
+    (( ${out##*took } <= 15 )) || fail "level 1 answered too slowly: $out"
+    set_internet_level 0
+    out=$(fetch_reply) || fail "no reply from the fetch socket"
+    [[ "$out" == *'{"result":"refused","code":"off"}'* ]] || fail "level 0: $out"
+    in_c 'journalctl -u "openvibes-fetch@*" -o cat | grep -q "user=\"e2e\""' || fail "the fetcher's journal has no line for the lookup"
+    in_c '! command -v getenforce >/dev/null || [[ $(getenforce) != Enforcing ]] || ! ausearch -m avc -ts recent 2>/dev/null | grep -q avc' ||
+        fail "SELinux denied the fetcher"
+    ok "openvibes-fetch answers per connection: off at level 0, unavailable at level 1 without outbound"
 
     in_c 'cat > /etc/openvibes/console.toml <<TOML
 development_listen = "0.0.0.0:443"

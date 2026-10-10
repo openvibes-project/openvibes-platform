@@ -272,6 +272,7 @@ mod tests {
                 "openvibes-ingest",
                 "openvibes-admin",
                 "openvibes-console",
+                "openvibes-fetch",
                 "openvibes-distribution",
                 "openvibes-vulns"
             ]

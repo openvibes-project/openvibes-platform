@@ -1,0 +1,3 @@
+u openvibes-fetch - "OpenVIBES internet fetcher" - -
+# The socket's group: the console's own group, created here if the console is not installed yet.
+g openvibes-console -

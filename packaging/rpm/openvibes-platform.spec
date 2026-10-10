@@ -105,6 +105,18 @@ Holds the site rule-signing key and signs the site's own rule sets for the
 console, only after checking the publishing user's password and permission
 itself. Listens on a Unix socket only the console can reach.
 
+%package -n openvibes-fetch
+Summary:        OpenVIBES internet fetcher for the console's assistant
+License:        MIT
+# The migration that creates its database role comes with openvibes-admin.
+Requires:       openvibes-admin = %{version}-%{release}
+%{?systemd_requires}
+
+%description -n openvibes-fetch
+Looks up public vulnerability references for the console's assistant, one
+short-lived process per request, only when an administrator turned internet
+lookups on. Listens on a Unix socket only the console can reach.
+
 %if %{with llm}
 %package -n openvibes-llm
 Requires(pre):  shadow-utils procps-ng systemd
@@ -171,6 +183,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-signer.sysusers %{buildroot}%{_sys
 install -D -m 0640 $S/packaging/rpm/signer.toml %{buildroot}%{_sysconfdir}/openvibes/signer.toml
 install -d -m 2750 %{buildroot}%{_sharedstatedir}/openvibes-signer
 install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-signer/LICENSE
+install -D -m 0755 $S/target/release/openvibes-fetch %{buildroot}%{_bindir}/openvibes-fetch
+install -D -m 0644 $S/packaging/rpm/openvibes-fetch.socket %{buildroot}%{_unitdir}/openvibes-fetch.socket
+install -D -m 0644 $S/packaging/rpm/openvibes-fetch@.service %{buildroot}%{_unitdir}/openvibes-fetch@.service
+install -D -m 0644 $S/packaging/rpm/openvibes-fetch.preset %{buildroot}%{_prefix}/lib/systemd/system-preset/90-openvibes-fetch.preset
+install -D -m 0644 $S/packaging/rpm/openvibes-fetch.sysusers %{buildroot}%{_sysusersdir}/openvibes-fetch.conf
+install -D -m 0640 $S/packaging/rpm/fetch.toml %{buildroot}%{_sysconfdir}/openvibes/fetch.toml
+install -D -m 0644 $S/LICENSE %{buildroot}%{_licensedir}/openvibes-fetch/LICENSE
 install -D -m 0755 $S/target/release/openvibes-vulns %{buildroot}%{_bindir}/openvibes-vulns
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.service %{buildroot}%{_unitdir}/openvibes-vulns.service
 install -D -m 0644 $S/packaging/rpm/openvibes-vulns.sysusers %{buildroot}%{_sysusersdir}/openvibes-vulns.conf
@@ -253,6 +272,13 @@ install -D -m 0644 $S/packaging/rpm/openvibes-llm-vulkan.conf %{buildroot}%{_uni
 %systemd_preun openvibes-signer.service
 %postun -n openvibes-signer
 %systemd_postun_with_restart openvibes-signer.service
+
+%post -n openvibes-fetch
+%systemd_post openvibes-fetch.socket
+%preun -n openvibes-fetch
+%systemd_preun openvibes-fetch.socket
+%postun -n openvibes-fetch
+%systemd_postun_with_restart openvibes-fetch.socket
 
 %pre -n openvibes-vulns
 %rename_pre vulns openvibes-vulns.service
@@ -386,6 +412,16 @@ fi
 %config(noreplace) %attr(0640, root, openvibes-signer-clients) %{_sysconfdir}/openvibes/signer.toml
 # setgid: status.json takes the operators' group; the key and versions are 0600.
 %dir %attr(2750, openvibes-signer, openvibes-operators) %{_sharedstatedir}/openvibes-signer
+
+%files -n openvibes-fetch
+%license %{_licensedir}/openvibes-fetch/LICENSE
+%{_bindir}/openvibes-fetch
+%{_unitdir}/openvibes-fetch.socket
+%{_unitdir}/openvibes-fetch@.service
+%{_prefix}/lib/systemd/system-preset/90-openvibes-fetch.preset
+%{_sysusersdir}/openvibes-fetch.conf
+%dir %{_sysconfdir}/openvibes
+%config(noreplace) %attr(0640, root, openvibes-fetch) %{_sysconfdir}/openvibes/fetch.toml
 
 %files -n openvibes-vulns
 %license %{_licensedir}/openvibes-vulns/LICENSE

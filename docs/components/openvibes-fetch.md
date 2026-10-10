@@ -3,7 +3,7 @@
 Purpose: the one component that makes outbound requests for the console
 assistant's opt-in internet lookups (one process per request). This page
 covers the wire protocol, the query filter, and level 1 (OSV and Bodhi
-references). Web search and the systemd units are added later.
+references). Web search is added later; the systemd units are below.
 
 ## Protocol (`protocol.rs`)
 
@@ -56,10 +56,25 @@ stderr: user, kind and ID or query, outcome; never response text. A database
 or proxy failure answers `unavailable`. Deadlines: the stdin read and the
 whole answer each have 20 s (stdin timeout: `invalid`, then exit; answer
 timeout: `unavailable`); the HTTP call is bounded by its own 10 s timeout.
-The systemd unit also sets `RuntimeMaxSec` (Task 7).
+The systemd unit also sets `RuntimeMaxSec=30`.
 
 Config `fetch.toml` (unknown keys rejected): `database_url`, optional
 `proxy_url`.
+
+## Packaging (`packaging/rpm/openvibes-fetch.*`)
+
+- `openvibes-fetch.socket`: `/run/openvibes-fetch/fetch.sock`, 0660
+  `root:openvibes-console`, `Accept=yes`, `MaxConnections=8` (the ninth
+  concurrent connection waits). Enabled by a preset.
+- `openvibes-fetch@.service`: one instance per connection as user
+  `openvibes-fetch`, stdin/stdout on the socket, stderr to the journal,
+  `RuntimeMaxSec=30`, no capabilities, `ProtectSystem=strict`, seccomp,
+  `RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`.
+- Failure: no database or no outbound network answers `unavailable`; a
+  missing `fetch.toml` exits non-zero with one stderr line.
+- Test: `scripts/check-rpm.sh` (units, modes); `scripts/systemd-e2e.sh`
+  (level 1 with no outbound answers `unavailable` within 15 s, level 0
+  answers `off`, no SELinux denial when enforcing).
 
 ## Level 1 (`serve.rs`, `http.rs`, `osv.rs`, `bodhi.rs`)
 

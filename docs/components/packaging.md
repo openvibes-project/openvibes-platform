@@ -67,11 +67,31 @@ scripts/build-rpm.sh     # → target/rpm/RPMS/x86_64/openvibes-{ingest,distribu
 | `/var/lib/openvibes-llm/{,models/}` | 0775 root:openvibes-admin | llm |
 | `/var/lib/openvibes-llm/models/Qwen3-4B-Q4_K_M.gguf` (%ghost, fetched by `assistant model fetch`), `/var/lib/openvibes-llm/model.conf` | 0444 root; 0644 root (%config noreplace) | llm-model |
 | `/usr/share/openvibes-llm/model.pin` | 0644 root | llm |
+| `/usr/bin/openvibes-fetch` | 0755 root | fetch |
+| `/usr/lib/systemd/system/openvibes-fetch.socket`, `openvibes-fetch@.service` | 0644 root | fetch |
+| `/usr/lib/systemd/system-preset/90-openvibes-fetch.preset` | 0644 root (enables the socket) | fetch |
+| `/usr/lib/sysusers.d/openvibes-fetch.conf` | user `openvibes-fetch`; group `openvibes-console` (the socket's) | fetch |
+| `/etc/openvibes/fetch.toml` | 0640 root:openvibes-fetch, `%config(noreplace)` | fetch |
 | `/usr/bin/openvibes-signer` | 0755 root | signer |
 | `/usr/lib/systemd/system/openvibes-signer.service` | 0644 root | signer |
 | `/usr/lib/sysusers.d/openvibes-signer.conf` | user `openvibes-signer`, group `openvibes-signer-clients` (the socket's) | signer |
 | `/etc/openvibes/signer.toml` | 0640 root:openvibes-signer-clients, `%config(noreplace)` | signer |
 | `/var/lib/openvibes-signer/` | 2750 openvibes-signer:openvibes-operators (setgid: `status.json` 0640 reaches operators; `site.key`, `versions.json` and the signed rules are 0600) | signer |
+
+**openvibes-fetch** (assistant internet lookups) is socket-activated, one
+process per connection: `openvibes-fetch.socket` listens on
+`/run/openvibes-fetch/fetch.sock` (`SocketUser=root`,
+`SocketGroup=openvibes-console`, 0660, `Accept=yes`, `MaxConnections=8`), so
+only the console connects. `openvibes-fetch@.service` runs as
+`openvibes-fetch` with stdin and stdout on the connection, `RuntimeMaxSec=30`
+and the signer's hardening except that the network is allowed
+(`RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6`). `Accept=yes` because a
+Rust service may not adopt a listening descriptor (no `unsafe`). Idle cost is
+the listening socket only. `openvibes-console` recommends the package (it is
+off until an administrator sets a level above 0); Setup installs it with the
+console. The database role `openvibes-fetch` comes from migration 0046 and
+authenticates by peer, like the signer's. Setup does not know a proxy today,
+so `proxy_url` in `fetch.toml` stays commented until set by hand.
 
 **openvibes-signer** (own rules, board #107) runs as `openvibes-signer`
 with `openvibes-signer-clients` as its group, so its socket

@@ -1,0 +1,17 @@
+[Unit]
+Description=OpenVIBES internet fetcher socket (assistant lookups)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+
+[Socket]
+ListenStream=/run/openvibes-fetch/fetch.sock
+# Only the console (its account's group) can connect.
+SocketUser=root
+SocketGroup=openvibes-console
+SocketMode=0660
+# One short-lived process per request: nothing stays running between lookups.
+# (A Rust service may not adopt a listening fd: the workspace forbids unsafe.)
+Accept=yes
+MaxConnections=8
+
+[Install]
+WantedBy=sockets.target

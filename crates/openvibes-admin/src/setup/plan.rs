@@ -79,7 +79,7 @@ impl Component {
     pub fn packages(self) -> &'static [&'static str] {
         match self {
             Component::Ingest => &["openvibes-ingest", "openvibes-admin"],
-            Component::Console => &["openvibes-console"],
+            Component::Console => &["openvibes-console", "openvibes-fetch"],
             Component::Distribution => &["openvibes-distribution"],
             Component::Vulns => &["openvibes-vulns"],
             Component::Assistant => &["openvibes-llm"],
