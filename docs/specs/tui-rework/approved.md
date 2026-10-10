@@ -113,3 +113,8 @@
     box checked at once: what it is, who signed it, matches the request,
     valid until — or From a file on this host, browsed with the arrows),
     Continue the install. Approved.
+27. With your own CA, the request, the paste and the checks all happen in
+    step 3, before Install (user: seeing the install run before the CA
+    steps is wrong). Review shows "your own CA · ✓ signed by …"; the
+    install then runs start to finish without pausing.
+    Whole advanced install flow (16 screens, tui-advanced-full3) approved.
