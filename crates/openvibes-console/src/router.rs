@@ -3012,6 +3012,28 @@ pub(crate) async fn authenticated_assistant_message(
             "Assistant access requires matching agent and finding scopes",
         ));
     }
+    // Lookups the user may not run are still offered and answer "no
+    // access" (ConsoleReadLookups); only a refusal means that here.
+    let vulnerabilities = match authenticated_permission(
+        &state,
+        &headers,
+        crate::Permission::VulnerabilitiesRead,
+        false,
+    )
+    .await
+    {
+        Ok((scope, _)) => Some(scope),
+        Err(response) if response.status() == StatusCode::FORBIDDEN => None,
+        Err(response) => return response,
+    };
+    // The Rules page is global only.
+    let rules =
+        match authenticated_permission(&state, &headers, crate::Permission::RulesRead, false).await
+        {
+            Ok((scope, _)) => scope == ConsoleScope::Global,
+            Err(response) if response.status() == StatusCode::FORBIDDEN => false,
+            Err(response) => return response,
+        };
     let user_slot = runtime.principal_slot(&actor).await;
     let Ok(user_permit) = user_slot.try_acquire_owned() else {
         return problem_response(ProblemDetails::new(
@@ -3041,22 +3063,6 @@ pub(crate) async fn authenticated_assistant_message(
             "The local model is unavailable",
         ));
     };
-    let assistant_scope = match &agent_scope {
-        ConsoleScope::Global => platform_store::assistant::AgentScope::All,
-        ConsoleScope::AssetGroups(_) => {
-            let client = match state.pool.get().await {
-                Ok(client) => client,
-                Err(_) => return unavailable_auth(),
-            };
-            let ids = match platform_store::console_read::agent_ids_in_scope(&client, &agent_scope)
-                .await
-            {
-                Ok(ids) => ids,
-                Err(_) => return unavailable_auth(),
-            };
-            platform_store::assistant::AgentScope::Only(ids)
-        }
-    };
     let backend = runtime
         .assistant
         .backend
@@ -3071,12 +3077,21 @@ pub(crate) async fn authenticated_assistant_message(
             answer: turn.answer,
         })
         .collect::<Vec<_>>();
-    let lookups = crate::assistant::ConsoleReadLookups::new(
-        platform_assistant::StoreLookups::new(state.pool.clone(), assistant_scope, settings.now),
+    let access = crate::assistant::Access {
+        agents: agent_scope,
+        vulnerabilities,
+        rules,
+    };
+    let lookups = match crate::assistant::ConsoleReadLookups::for_user(
         state.pool.clone(),
-        agent_scope,
+        access,
         settings.now,
-    );
+    )
+    .await
+    {
+        Ok(lookups) => lookups,
+        Err(_) => return unavailable_auth(),
+    };
     let backend: Arc<dyn platform_assistant::ChatBackend> =
         Arc::new(crate::assistant::LeasedChatBackend::new(
             runtime.backend.clone(),

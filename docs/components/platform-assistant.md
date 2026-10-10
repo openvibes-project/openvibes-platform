@@ -46,7 +46,10 @@ asking user's scope.
   mode), and `Reset`.
 - `StoreLookups::new(pool, AgentScope, now)` runs lookups through
   `platform_store::assistant` with the user's scope; `LookupRunner` lets
-  tests substitute their own.
+  tests substitute their own. The console wraps it to check its own
+  permissions per lookup ([console-assistant.md](console-assistant.md));
+  a lookup the user may not run returns `LookupError::Forbidden(Area)`,
+  whose message tells the model the user has no access.
 - `sanitize(text, allowed)` → `Vec<Segment>` and `plain_text`: see below.
 
 ## Lookups

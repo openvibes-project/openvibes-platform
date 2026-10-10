@@ -100,6 +100,17 @@ pub enum LookupError {
     AmbiguousRule,
     /// The database failed.
     Store,
+    /// The asking user may not read this kind of data in the console.
+    Forbidden(Area),
+}
+
+/// A kind of data the console guards with its own permission.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Area {
+    /// Vulnerabilities (`vulnerabilities.read`).
+    Vulnerabilities,
+    /// Rule definitions (`rules.read`).
+    Rules,
 }
 
 impl LookupError {
@@ -114,6 +125,10 @@ impl LookupError {
             }
             Self::AmbiguousRule => "error: the rule is in several rule sets; name one",
             Self::Store => "error: the lookup failed; try again later",
+            Self::Forbidden(Area::Vulnerabilities) => {
+                "error: the user has no access to vulnerabilities; tell them so"
+            }
+            Self::Forbidden(Area::Rules) => "error: the user has no access to rules; tell them so",
         }
     }
 }

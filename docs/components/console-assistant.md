@@ -1,12 +1,39 @@
 # Console assistant
 
 The opt-in assistant dock (Ctrl+J, from any view of the web console) lets an authorized analyst ask questions about
-agents and observed compliance findings using an operator-hosted OpenAI-compatible model.
+agents, compliance findings, vulnerabilities, and rules using an operator-hosted OpenAI-compatible model.
 The console authenticates every request, applies the caller's existing
-`agents.read` and `compliance.read` scopes to SQL lookups, and returns only
+console permissions and scopes to SQL lookups (below), and returns only
 sanitized answer text, verified citations, and a short lookup summary. The
-model cannot run SQL, commands, arbitrary URLs, or mutations. Vulnerability
-lookups are refused until they have console read pages and permissions.
+model cannot run SQL, commands, arbitrary URLs, or mutations.
+
+## Lookups and permissions
+
+The console runs every lookup the model is offered
+(`platform_assistant::lookups::specs`, see
+[platform-assistant.md](platform-assistant.md)) through
+`ConsoleReadLookups`, with the permissions of the matching console pages:
+
+| Lookup | Needs | Scope |
+|---|---|---|
+| `search_findings`, `finding_endpoints`, `agent_summary` | `agents.read`, `compliance.read` (required for the dock) | agent scope |
+| `host_vulnerabilities`, `vulnerability_hosts` | `vulnerabilities.read` | the user's vulnerability scope, never wider |
+| `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `agents.read` | agent scope |
+| `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise only a rule with a finding in the agent scope, whose definition the Compliance page shows | rule set resolved from the user's findings |
+
+A lookup the user may not run is still offered. Running it answers the
+model with "error: the user has no access to vulnerabilities (or rules);
+tell them so" (`LookupError::Forbidden`), so the answer says the user has
+no access rather than that there is no data. The response's lookup summary
+carries the same message in `error`. Every built-in role that has
+`agents.read` also has `vulnerabilities.read`, so with today's roles the
+vulnerability refusal guards only future custom roles; the rules refusal
+is what an Analyst (no `rules.read`) gets for a rule with no finding in
+scope.
+
+A unit test runs every offered lookup through `ConsoleReadLookups`
+against PostgreSQL, so a lookup added to the list without console routing
+fails it (#241).
 
 ## Interfaces
 

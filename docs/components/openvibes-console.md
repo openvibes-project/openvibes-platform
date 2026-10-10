@@ -58,7 +58,8 @@ and audited revocation are available through global `tokens.read`,
 only as the same SHA-256 digest used by ingest, and is never repeated on a
 replayed create response. The opt-in local assistant uses the `assistant.use`
 capability plus the caller's current agent and finding read scopes. Its model
-can call only bounded agent and finding lookups; browser history is in memory
+can call only bounded agent, finding, vulnerability, and rule lookups, each
+within the caller's permission for that console page; browser history is in memory
 and prompts and responses are omitted from audit and logs. See
 [`console-assistant.md`](console-assistant.md).
 
