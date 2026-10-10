@@ -201,3 +201,4 @@
     gateway), DNS ([x] DNS from DHCP, or your own servers checked before
     Apply, search domain) and the host name, one screen (user).
     Appliance screens approved ("LGTM finally it looks like I want it"). Scroll hints stay inside the gap (rule 15).
+44. Maintenance › Shell (user): second to last, before Uninstall; standard question, then the login password; a plain shell with one line "type exit to go back to the menu", logged; exit returns to Maintenance. On normal installs it opens the user's shell. Approved in context (SSH login → Log out).
