@@ -72,7 +72,7 @@ events are reported to be malformed CEF; the parser must tolerate them.
 
 ```
 UCG Max ──UDP 514, CEF──▶ openvibes-netlog
-  1. sender IP is an enabled device?      no → count unknown_sender, drop
+  1. sender IP is an active device?      no → count unknown_sender, drop
   2. no "CEF:0|" in the message?           → count not_cef, drop
   3. parse syslog + CEF (≤ 8 KiB, strict)  bad → count unparsed, drop
   4. Ubiquiti, UNIFIcategory=Security and a UNIFIipsSignatureId?
@@ -133,7 +133,8 @@ is used (device clocks are not trusted).
 ## 4. Storage (next free migration number, additive)
 
 - `devices`: `id` (bigint identity), `name` (1–64), `kind` (`unifi`),
-  `address` (inet, unique), `enabled`, `created_by`, `created_at`,
+  `address` (inet, unique among active devices), `created_by`, `created_at`,
+  `removed_by`/`removed_at` (a removed device keeps its row: alarms point at it),
   `last_seen`, the counters of section 2, `dropped_classes` jsonb.
 - `alarms`: add `source text NOT NULL DEFAULT 'agent' CHECK (source IN
   ('agent','device'))`, `device_id bigint REFERENCES devices`, `network
@@ -184,7 +185,9 @@ is used (device clocks are not trusted).
   - a device with no packet 10 minutes after it was added shows
     "No events received yet: check the router's SIEM server setting
     (this host, port 514) and that UDP 514 is open in this host's
-    firewall" (`device list` now, the Devices screen later);
+    firewall" (`device list` now, the Devices screen later), and a device
+    that did send but has been silent for a day shows the same advice
+    (its SIEM setting or this host's firewall changed);
   - Setup's readiness step, when firewalld runs and 514/udp is not open
     in the default zone, prints the same warning without failing.
   Fedora Workstation's default zone blocks UDP below 1025 (seen on the
