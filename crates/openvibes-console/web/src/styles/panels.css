@@ -365,3 +365,6 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .fchip button:hover { background: var(--accent); color: var(--accent-text); }
 .fchip button:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .link-add--menu .sel__button .sel__value { color: var(--accent); font-weight: 600; }
+/* The bulk action dialog (triage v2). */
+.bulk-dialog { padding: 16px; gap: 12px; overflow-y: auto; }
+.bulk-dialog h2 { font-size: 15px; margin: 0; }
