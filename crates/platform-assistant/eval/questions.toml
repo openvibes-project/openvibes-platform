@@ -316,7 +316,7 @@ facts = ["web-01"]
 id = "fleet-overview"
 question = "Give me an overview of the fleet."
 lookups = ["fleet_overview"]
-facts = ["8|eight"]
+facts = ["9|nine"]
 
 [[cases]]
 id = "fleet-offline"
@@ -340,7 +340,7 @@ facts = ["1|one"]
 id = "fleet-open-vulns"
 question = "How many open vulnerabilities are there in total?"
 lookups = ["fleet_overview"]
-facts = ["8|eight"]
+facts = ["9|nine"]
 
 [[cases]]
 id = "fleet-compliance"
