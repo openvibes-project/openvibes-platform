@@ -15,14 +15,15 @@ use super::{
 };
 
 pub(super) struct FakeHost {
-    actions: RefCell<Vec<(Unit, ServiceAction)>>,
-    log_reads: RefCell<usize>,
+    pub(super) actions: RefCell<Vec<(Unit, ServiceAction)>>,
     writes: RefCell<Vec<(Service, String)>>,
     /// What a read returns instead, as if edited by hand meanwhile.
     hand_edit: RefCell<Option<String>>,
     refuse: bool,
+    /// Units reported as not enabled at boot.
+    pub(super) disabled: RefCell<Vec<Unit>>,
     /// (verb, password) of each privileged call.
-    privileged_calls: RefCell<Vec<(String, String)>>,
+    pub(super) privileged_calls: RefCell<Vec<(String, String)>>,
     /// Database commands run.
     pub(super) database_calls: RefCell<Vec<Database>>,
 }
@@ -40,13 +41,17 @@ fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> Ser
 
 impl Host for FakeHost {
     fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
-        Ok(vec![
+        let mut all = vec![
             status(Unit::Ingest, true, "active", Some(true)),
             status(Unit::Distribution, false, "inactive", None),
             status(Unit::Vulns, true, "failed", None),
             status(Unit::Llm, true, "inactive", None),
             status(Unit::Maintenance, true, "active", None),
-        ])
+        ];
+        for s in &mut all {
+            s.enabled &= !self.disabled.borrow().contains(&s.unit);
+        }
+        Ok(all)
     }
     fn service_action(&self, unit: Unit, action: ServiceAction) -> Result<(), HostError> {
         if self.refuse {
@@ -56,7 +61,6 @@ impl Host for FakeHost {
         Ok(())
     }
     fn logs(&self, unit: Unit, _lines: u16) -> Result<Vec<String>, HostError> {
-        *self.log_reads.borrow_mut() += 1;
         Ok(vec![format!("first log line of {}", unit.label())])
     }
     fn read_config(&self, service: Service) -> Result<String, HostError> {
@@ -142,10 +146,10 @@ impl Host for FakeHost {
 pub(super) fn app(refuse: bool) -> App<FakeHost> {
     App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
-        log_reads: RefCell::new(0),
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
         refuse,
+        disabled: RefCell::new(Vec::new()),
         privileged_calls: RefCell::new(Vec::new()),
         database_calls: RefCell::new(Vec::new()),
     })
@@ -163,79 +167,6 @@ pub(super) fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {
         text.push('\n');
     }
     text
-}
-
-fn select(app: &mut App<FakeHost>, unit: Unit) {
-    while app.services[app.selected].unit != unit {
-        app.key(Key::Char('j'));
-    }
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
-fn restart_asks_first() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    app.key(Key::Char('r'));
-    assert_eq!(app.confirm, Some((Unit::Vulns, ServiceAction::Restart)));
-    assert!(screen(&app, 80, 24).contains("Restart openvibes-vulns.service? y/n"));
-    app.key(Key::Char('n'));
-    assert!(app.host.actions.borrow().is_empty());
-    assert_eq!(app.confirm, None);
-    app.key(Key::Char('r'));
-    app.key(Key::Char('y'));
-    assert_eq!(
-        *app.host.actions.borrow(),
-        [(Unit::Vulns, ServiceAction::Restart)]
-    );
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("restart requested"),
-        "{:?}",
-        app.message
-    );
-}
-
-// The periodic refresh reloads unit states only: reading logs goes through
-// sudo, and every sudo call is written to the auth log (quiet by default).
-#[test]
-#[ignore = "replaced in Task 7/8"]
-fn periodic_refresh_does_not_read_logs() {
-    let mut app = app(false);
-    let reads = *app.host.log_reads.borrow();
-    app.refresh();
-    app.refresh();
-    assert_eq!(*app.host.log_reads.borrow(), reads);
-    app.key(Key::Char('R'));
-    assert_eq!(*app.host.log_reads.borrow(), reads + 1, "R reloads the log");
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
-fn not_an_operator_is_explained() {
-    let mut app = app(true);
-    app.key(Key::Char('r'));
-    app.key(Key::Char('y'));
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("openvibes-operators"),
-        "{:?}",
-        app.message
-    );
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
-fn logs_follow_the_selection_and_q_quits() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    assert_eq!(app.logs, ["first log line of vulns"]);
-    app.key(Key::Char('q'));
-    assert!(app.quit);
 }
 
 fn configuration(refuse: bool) -> App<FakeHost> {
@@ -449,29 +380,6 @@ fn a_long_value_being_typed_shows_its_end() {
     type_text(&mut app, "&application_name=tail");
     let text = screen(&app, 80, 24);
     assert!(text.contains("application_name=tail_"), "{text}");
-}
-
-#[test]
-#[ignore = "replaced in Task 7/8"]
-fn enable_at_boot_asks_for_the_password() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    app.key(Key::Char('e'));
-    for c in "pw".chars() {
-        app.key(Key::Char(c));
-    }
-    assert!(
-        screen(&app, 80, 24).contains("Enable openvibes-vulns.service at boot: your password: **")
-    );
-    app.key(Key::Enter);
-    assert_eq!(
-        *app.host.privileged_calls.borrow(),
-        [(
-            "unit-enable openvibes-vulns.service".to_owned(),
-            "pw".to_owned()
-        )]
-    );
-    assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }
 
 /// Board #78: editing `listen` here moved a service past Setup's port

@@ -21,7 +21,9 @@ mod nav;
 mod nav_tests;
 mod password;
 mod service;
-mod services;
+#[cfg(test)]
+mod service_tests;
+mod services_text;
 mod setup;
 #[cfg(test)]
 mod setup_tests;
@@ -32,6 +34,7 @@ mod status_tests;
 #[cfg(test)]
 mod tests;
 mod ui;
+mod work;
 
 use std::{
     io::IsTerminal,

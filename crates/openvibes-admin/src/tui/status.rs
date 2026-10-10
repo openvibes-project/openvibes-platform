@@ -207,7 +207,4 @@ impl<H: Host> App<H> {
             _ => {}
         }
     }
-
-    /// Task 8 asks the question or the password.
-    fn ask_fix(&mut self, _fix: Fix) {}
 }

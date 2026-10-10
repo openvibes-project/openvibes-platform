@@ -17,7 +17,6 @@ pub enum Bar {
         nav: bool,
         home: bool,
     },
-    #[allow(dead_code, reason = "used in Task 8")]
     Ask {
         question: String,
         detail: String,
@@ -25,16 +24,19 @@ pub enum Bar {
     },
     /// A value being typed: what it is, how it shows (masked for a
     /// password), what Enter does.
-    #[allow(dead_code, reason = "used in Task 8")]
     Typing {
         label: String,
         shown: String,
         done: String,
     },
-    #[allow(dead_code, reason = "used in Task 8")]
-    Busy { text: String, tick: usize },
-    #[allow(dead_code, reason = "used in Task 8")]
-    Done { ok: bool, text: String },
+    Busy {
+        text: String,
+        tick: usize,
+    },
+    Done {
+        ok: bool,
+        text: String,
+    },
 }
 
 impl Bar {
@@ -63,6 +65,15 @@ impl Bar {
                 .map(|s| s.content.chars().count())
                 .sum::<usize>()
         };
+        // A question keeps its buttons: its detail (the last span) gives way.
+        if matches!(self, Bar::Ask { .. }) && len(&left) + len(&right) + 1 > inner {
+            let over = len(&left) + len(&right) + 2 - inner;
+            if let Some(detail) = left.last_mut() {
+                let keep = detail.content.chars().count().saturating_sub(over);
+                let cut: String = detail.content.chars().take(keep).collect();
+                detail.content = format!("{cut}…").into();
+            }
+        }
         // Too long: drop the right group, then cut the left with "…".
         if len(&left) + len(&right) + 1 > inner {
             right.clear();
@@ -211,6 +222,22 @@ mod tests {
             t[1]
         );
         assert!(t[1].ends_with("  Esc  Back    ?  │"), "{:?}", t[1]);
+        assert_eq!(t[1].chars().count(), 79);
+    }
+
+    #[test]
+    fn a_long_question_shortens_its_detail_and_keeps_the_buttons() {
+        let bar = Bar::Ask {
+            question: "Restart ingest?".into(),
+            detail: "agents reconnect within a minute and keep going".into(),
+            yes: true,
+        };
+        let t = text(&bar.lines(&plain(), 80));
+        assert!(
+            t[1].contains("…") && t[1].contains("Enter  Confirm"),
+            "{:?}",
+            t[1]
+        );
         assert_eq!(t[1].chars().count(), 79);
     }
 

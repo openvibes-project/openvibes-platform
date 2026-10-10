@@ -22,9 +22,7 @@ use super::{
 pub enum Screen {
     Home,
     Status,
-    #[allow(dead_code, reason = "used in Task 8")]
     Service(Unit),
-    #[allow(dead_code, reason = "used in Task 8")]
     Log(Unit),
     Maintenance,
     Help(Box<Screen>),

@@ -145,7 +145,11 @@ pub fn lines(
         scroll.top += 1;
     }
     let mut end = (scroll.top + inner).min(laid.len());
-    if end > scroll.top + 1 && blank(&laid[end - 1]) {
+    // Nor on a heading whose entries lie below.
+    while end > scroll.top + 1
+        && end > at + 1
+        && (blank(&laid[end - 1]) || laid[end - 1].1.is_none())
+    {
         end -= 1;
     }
     let window = &laid[scroll.top..end];
@@ -281,6 +285,29 @@ mod tests {
                 assert!(!t[b - 1].is_empty(), "sel {sel}: {t:?}");
             }
             assert!(t.iter().any(|l| l.starts_with("  ▸")), "sel {sel}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn no_window_ends_on_a_heading_without_its_entries() {
+        let mut rows = self::rows(4);
+        rows.push(Row::Heading {
+            text: "Head".into(),
+            right: String::new(),
+        });
+        rows.extend(self::rows(3));
+        for height in 6..14 {
+            for sel in 0..7 {
+                let mut scroll = Scroll::default();
+                let t = text(&lines(&theme(), &rows, sel, &mut scroll, height, 15));
+                if let Some(b) = t.iter().position(|l| l.starts_with("    ⭣")) {
+                    assert!(
+                        !t[b - 1].trim().starts_with("Head") && !t[b - 1].is_empty(),
+                        "height {height} sel {sel}: {t:?}"
+                    );
+                }
+                assert!(t.iter().any(|l| l.starts_with("  ▸")), "{t:?}");
+            }
         }
     }
 }

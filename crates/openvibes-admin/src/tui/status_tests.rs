@@ -48,8 +48,6 @@ fn status_renders_problems_then_services_with_the_frame() {
         "━━ Status",
         "Needs attention",
         "vulns is stopped",
-        "Services",
-        "running",
         "Start vulns",
     ] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
@@ -61,6 +59,11 @@ fn status_renders_problems_then_services_with_the_frame() {
     while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
         app.key(Key::Down);
     }
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.contains("Services") && text.contains("running"),
+        "a heading is shown with its entries: {text}"
+    );
     assert!(
         screen(&app, 80, 24)
             .lines()

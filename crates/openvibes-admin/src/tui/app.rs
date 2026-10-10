@@ -15,11 +15,13 @@ use super::{
     nav::{Nav, Screen},
     password::{PasswordPrompt, Typed},
     setup::Setup,
-    ui::{bar::Bar, theme::Theme},
+    ui::theme::Theme,
 };
 
 /// Journal lines shown for the selected unit.
 pub const LOG_LINES: u16 = 50;
+
+pub use super::work::{Pending, Question};
 
 /// A key press, as the event loop maps it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -77,16 +79,15 @@ pub struct App<H: Host> {
     /// The update notice, looked up on another thread (`run`): dnf may
     /// take long offline. Without it, `tick` asks the host itself (tests).
     pub updates: Option<Receiver<Option<String>>>,
-    /// A question in the bar (Task 8 gives it its type).
-    pub question: Option<()>,
-    /// A value typed in the bar (Task 8 gives it its type).
-    pub prompt: Option<()>,
-    /// Work running in the background (Task 8 gives it its type).
-    #[allow(dead_code, reason = "used in Task 8")]
-    pub pending: Option<()>,
-    /// The last action's outcome in the bar (Task 8 gives it its type).
-    #[allow(dead_code, reason = "used in Task 8")]
-    pub outcome: Option<()>,
+    /// A question in the bar; the bool is the highlighted answer (Yes).
+    pub question: Option<(Question, bool)>,
+    /// The sudo password being typed in the bar (enable at boot).
+    pub prompt: Option<(Unit, PasswordPrompt)>,
+    /// Work running in the background.
+    pub pending: Option<Pending>,
+    /// The last action's result line, until the next key.
+    pub outcome: Option<(bool, String)>,
+    pub(super) tick_count: usize,
 }
 
 impl<H: Host> App<H> {
@@ -127,6 +128,7 @@ impl<H: Host> App<H> {
             prompt: None,
             pending: None,
             outcome: None,
+            tick_count: 0,
         };
         app.refresh();
         app.load_logs();
@@ -209,6 +211,9 @@ impl<H: Host> App<H> {
             }
             Key::Esc => {
                 self.nav.pop();
+                if matches!(self.nav.screen, Screen::Service(_)) {
+                    self.load_logs();
+                }
             }
             Key::Char('q') if self.nav.screen == Screen::Home => self.quit_or_ask(),
             _ => match self.nav.screen.clone() {
@@ -222,7 +227,7 @@ impl<H: Host> App<H> {
         }
     }
 
-    /// Loads the update notice once, then polls running work (Task 8).
+    /// Loads the update notice once, then polls running work.
     pub fn tick(&mut self, now: Instant) {
         if !self.versions_loaded {
             match self.updates.as_ref().map(Receiver::try_recv) {
@@ -239,23 +244,6 @@ impl<H: Host> App<H> {
             }
         }
         self.poll(now);
-    }
-
-    fn poll(&mut self, _now: Instant) {}
-
-    fn question_key(&mut self, _key: Key) {}
-
-    fn prompt_key(&mut self, _key: Key) {}
-
-    /// Task 8 asks first while work runs.
-    pub(super) fn quit_or_ask(&mut self) {
-        self.quit = true;
-    }
-
-    /// The bar: `default`, unless a question, a prompt or work takes its
-    /// place (Task 8).
-    pub(super) fn bar(&self, default: Bar) -> Bar {
-        default
     }
 
     /// Today's screens' own keys.

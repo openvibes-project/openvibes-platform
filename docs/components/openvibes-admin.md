@@ -58,9 +58,28 @@ model server or the maintenance timer, which idle by design), a unit not
 enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
 or a health check (certificates, disk, feeds, signer, audit, tuning). `Enter`
 on a service opens it; on a stopped or not-enabled unit it starts or enables
-it (a question, or the password; the prompts arrive with the service
-screens); on a health problem it does nothing. Home's summary line counts
+it (a Yes/No question in the bar, or the sudo password typed in the bar;
+see Service); on a health problem it does nothing. Home's summary line counts
 the problems. Test: `src/tui/status_tests.rs`.
+
+**Service** (`Enter` on a service in Status): the unit's state (running or
+not, ready, since), its actions as entries (a running unit offers Restart
+and Stop, a stopped one Start; all offer Full log) and the "Recent log"
+below (tracing JSON read as in the log view). `Enter` on an action asks a
+Yes/No question in the bar (`Restart ingest?` with what it means as detail;
+`←`/`→` or `y`/`n` choose, `Enter` confirms, `Esc` is No). Yes sends the
+action and the bar shows a spinner (`Restarting ingest…`) while the screen
+polls the unit about once a second. It ends in one result line, kept until
+the next key: `✓ ingest restarted and ready (N s)` when the unit is active
+(and not "not ready"; Stop: not active), or `✗ NAME did not start within 30 s:
+<its last journal line>` after `ACTION_TIMEOUT` (30 s); a refusal (not an
+operator) is the result line too. Fixing "does not start at boot" asks
+`Your password (sudo):` in the bar (masked, `Enter` enables, `Esc`
+cancels) and ends `✓ NAME now starts at boot`. `q` on Home asks `Quit while
+it runs?` while an action is still running (the unit keeps going). Full log
+shows up to 500 lines, newest at the bottom; `↑`/`↓` scroll back; `Esc`
+returns. Code: `service.rs` (screen), `work.rs` (questions, prompt, polling),
+tests `service_tests.rs`.
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,
@@ -127,27 +146,15 @@ per refresh like the install, asking for the password
 once. The steps are those of
 `setup --quick` (below).
 
-**Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
-`llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
-installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
-`-`), and since when; below, the selected unit's last 50 journal lines,
-tracing JSON shown as `HH:MM:SS LEVEL message key=value…` (fields in key
-order; other lines as they are). `llm` is `openvibes-llm.socket`: it is what
-is enabled and active, it has no readiness probe (one through it would load
-the model), and its journal lines include the model server's and its
-proxy's. The model server itself is inactive whenever the assistant is
-idle; that is normal, and Health does not flag it (see
-[openvibes-llm.md](openvibes-llm.md)).
-Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
-`y/n`; the job is queued and the state follows on the next refresh), `R`
-refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
-only on selection, `R` and after an action, since each read goes through
-sudo and the auth log. Not an operator:
-the TUI names the group to join. Every action is written to the journal
-(`journalctl -t openvibes-admin`). `e` and `d` enable or disable the
-selected unit at boot after asking for the user's password (`helper
-unit-enable|unit-disable` through sudo; polkit cannot limit boot changes to
-OpenVIBES units).
+**Boot state**: `helper unit-enable` (through the user's own sudo; polkit cannot
+limit boot changes to OpenVIBES units) enables a unit at boot. Service
+actions go through polkit for operators and are written to the journal
+(`journalctl -t openvibes-admin`). Not an operator: the TUI names the group
+to join. Unit states refresh every 5 s on Status and Service; logs are read
+on opening a service, after an action and on returning from the full log,
+since each read goes through sudo and the auth log. `llm` is
+`openvibes-llm.socket`: it has no readiness probe, and the model server is
+inactive whenever the assistant is idle (see [openvibes-llm.md](openvibes-llm.md)).
 
 **Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
 `distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
