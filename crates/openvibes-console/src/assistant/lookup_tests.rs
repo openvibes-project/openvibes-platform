@@ -75,13 +75,16 @@ fn envelope() -> Vec<u8> {
 }
 
 /// web-01 (env=prod, in asset group PROD) and db-01 (env=dev): each with
-/// the `ssh.exposed` finding and the openssh advisory; the rule published.
+/// the `ssh.exposed` finding and the openssh advisory; that rule and
+/// `quiet.rule` (no finding) published.
 async fn seed() -> (TestDb, DateTime<Utc>) {
     let admin_url = std::env::var("OPENVIBES_TEST_DATABASE_URL")
         .expect("set OPENVIBES_TEST_DATABASE_URL via scripts/test-db.sh");
-    let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
-    hasher.write_u64(std::process::id().into());
-    let name = format!("ov_console_assistant_{:016x}", hasher.finish());
+    // A random u64: RandomState is seeded randomly per instance.
+    let random = std::collections::hash_map::RandomState::new()
+        .build_hasher()
+        .finish();
+    let name = format!("ov_console_assistant_{random:016x}");
     let admin = platform_store::connect(&admin_url).await.unwrap();
     admin
         .get()

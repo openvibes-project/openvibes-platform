@@ -259,10 +259,11 @@ impl LookupRunner for ConsoleReadLookups {
             Lookup::FleetOverview { .. } if self.overview => self.lookups.run(lookup, items).await,
             Lookup::FleetOverview { .. } => forbidden(Area::Vulnerabilities),
             Lookup::RuleDescription { rule, .. } => {
-                // Without the Rules page, the Compliance page still shows the
-                // rule of each finding the user can see: so may the assistant.
-                // A rule with a finding in scope is only ever read from a set
-                // it was found in (see `rule_set_for_description`).
+                // Without rules.read: the latest published definition of a
+                // rule the user has findings for (same rule id, never another
+                // host's data; the Compliance page shows the version each
+                // finding was evaluated against). Such a rule is only read
+                // from a set it was found in (`rule_set_for_description`).
                 if !self.rules && self.lookups.rule_sets_for(rule).await?.is_empty() {
                     return forbidden(Area::Rules);
                 }

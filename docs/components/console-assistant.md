@@ -19,7 +19,7 @@ The console runs every lookup the model is offered
 | `search_findings`, `finding_endpoints`, `agent_summary` | `agents.read`, `compliance.read` (required for the dock) | agent scope |
 | `host_vulnerabilities`, `vulnerability_hosts` | `vulnerabilities.read` | the user's vulnerability scope, never wider |
 | `fleet_overview` (agents, findings and vulnerabilities together) | `vulnerabilities.read` with the same scope as `agents.read` | agent scope |
-| `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise only a rule with a finding in the agent scope, whose definition the Compliance page shows | rule set resolved from the user's findings |
+| `rule_description` | `rules.read` (global, as on the Rules page) for any published rule; otherwise the latest published definition of a rule the user has findings for (the Compliance page shows the version each finding was evaluated against) | rule set resolved from the user's findings |
 
 A lookup the user may not run is still offered. Running it answers the
 model with "error: the user has no access to vulnerabilities (or rules);
@@ -29,7 +29,9 @@ carries the same message in `error`. Every built-in role that has
 `agents.read` also has `vulnerabilities.read`, so with today's roles the
 vulnerability refusal guards only future custom roles; the rules refusal
 is what an Analyst (no `rules.read`) gets for a rule with no finding in
-scope.
+scope. The in-scope check reads at most 100 finding groups from the last
+720 hours, so on a very large fleet, or for a rule whose findings are all
+older, it can miss and a user without `rules.read` is told "no access".
 
 A unit test runs every offered lookup through `ConsoleReadLookups`
 against PostgreSQL, so a lookup added to the list without console routing
