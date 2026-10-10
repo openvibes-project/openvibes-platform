@@ -137,6 +137,13 @@ pub fn firewall_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     Ok(StepState::Done(format!("open: {}", ports.join(" "))))
 }
 
+/// Units whose not being ready is a heads-up, not a failed step: netlog
+/// serves an optional feature (network devices), and UDP 514 may belong to
+/// another syslog collector on this host (review, 2026-10-10).
+pub(super) fn optional(unit: Unit) -> bool {
+    unit == Unit::Netlog
+}
+
 pub(super) fn ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> bool {
     let healthy = unit.ready_url().is_none_or(|url| {
         ctx.succeeds(
@@ -242,11 +249,16 @@ pub(super) fn not_ready<R: Runner>(ctx: &Ctx<R>, unit: Unit) -> String {
 
 pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     let units = units(ctx);
+    let mut notes = Vec::new();
     for unit in &units {
         let mut attempts = 0;
         while !ready(ctx, *unit) {
             attempts += 1;
             if attempts == READY_ATTEMPTS {
+                if optional(*unit) {
+                    notes.push(format!("heads-up: {}", not_ready(ctx, *unit)));
+                    break;
+                }
                 return Err(not_ready(ctx, *unit));
             }
             ctx.pause();
@@ -263,7 +275,8 @@ pub fn ready_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         firewall.push_str(&line);
     }
     let mut closed = firewall;
-    if let Some(note) = netlog_port_note(ctx) {
+    notes.extend(netlog_port_note(ctx));
+    for note in notes {
         closed.push_str("; ");
         closed.push_str(&note);
     }

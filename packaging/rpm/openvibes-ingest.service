@@ -2,7 +2,9 @@
 Description=OpenVIBES ingest service
 Documentation=https://github.com/openvibes-project/openvibes-platform
 After=network-online.target postgresql.service openvibes-migrate.service
-Wants=network-online.target openvibes-migrate.service
+# Network device events come with ingest, also on hosts set up before
+# netlog existed (an upgrade enables no new unit).
+Wants=network-online.target openvibes-migrate.service openvibes-netlog.service
 
 [Service]
 Type=exec

@@ -106,6 +106,8 @@ systemd-analyze verify /usr/lib/systemd/system/openvibes-netlog.service || fail 
 grep -q '^KillSignal=SIGINT' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog unit lacks KillSignal=SIGINT"
 grep -qx 'AmbientCapabilities=CAP_NET_BIND_SERVICE' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog cannot bind 514"
 grep -q '^After=.*openvibes-migrate.service' /usr/lib/systemd/system/openvibes-netlog.service || fail "netlog starts before migrate"
+# An upgraded host gets netlog with ingest (review: %systemd_post enables nothing on upgrade).
+grep -q '^Wants=.*openvibes-netlog.service' /usr/lib/systemd/system/openvibes-ingest.service || fail "ingest does not pull in netlog"
 out=$(/usr/bin/openvibes-netlog --config /nonexistent 2>&1) && fail "netlog started without config"
 [[ "$out" == *"invalid netlog configuration"* ]] || fail "netlog error: $out"
 
