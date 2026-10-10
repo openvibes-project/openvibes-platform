@@ -79,9 +79,9 @@ pub(crate) struct AuthHttpState {
     /// The rule signer's socket: where a site rule set is signed to publish.
     pub(crate) signer_socket: Arc<std::path::Path>,
     /// The fetch service's socket (assistant internet lookups).
-    fetch_socket: Arc<std::path::Path>,
+    pub(crate) fetch_socket: Arc<std::path::Path>,
     /// Internet lookups used per user this hour.
-    internet_limits: Arc<crate::fetch_client::Limits>,
+    pub(crate) internet_limits: Arc<crate::fetch_client::Limits>,
 }
 
 #[derive(Deserialize)]
@@ -277,7 +277,7 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, (None, None))
 }
 
 /// As [`authenticated_router`], with the rule signer at `socket` instead of
@@ -287,7 +287,32 @@ pub fn authenticated_router_with_signer(
     public_origin: impl Into<Arc<str>>,
     socket: std::path::PathBuf,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, Some(socket))
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (Some(socket), None),
+    )
+}
+
+/// As [`authenticated_router`], with the fetch service at `socket` (tests).
+pub fn authenticated_router_with_fetch(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    socket: std::path::PathBuf,
+) -> Router {
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (None, Some(socket)),
+    )
 }
 
 /// As [`authenticated_router`], offering the agent install command and
@@ -305,7 +330,7 @@ pub fn authenticated_router_with_agent_install(
         None,
         None,
         Some(agent_install),
-        None,
+        (None, None),
     )
 }
 
@@ -319,7 +344,7 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, (None, None))
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -329,7 +354,8 @@ pub(crate) fn authenticated_router_with_assistant(
     assistant: Option<crate::assistant::AssistantRuntime>,
     update_checker: Option<Arc<crate::about::UpdateChecker>>,
     agent_install: Option<crate::config::AgentInstallConfig>,
-    signer_socket: Option<std::path::PathBuf>,
+    // The rule signer's and the fetch service's sockets; `None` is the default path.
+    (signer_socket, fetch_socket): (Option<std::path::PathBuf>, Option<std::path::PathBuf>),
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -355,7 +381,9 @@ pub(crate) fn authenticated_router_with_assistant(
         signer_socket: signer_socket
             .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
             .into(),
-        fetch_socket: std::path::Path::new(crate::fetch_client::DEFAULT_FETCH_SOCKET).into(),
+        fetch_socket: fetch_socket
+            .unwrap_or_else(|| std::path::PathBuf::from(crate::fetch_client::DEFAULT_FETCH_SOCKET))
+            .into(),
         internet_limits: Arc::default(),
     };
     let router = Router::new()
@@ -553,6 +581,10 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
             "/v1/assistant-internet",
             get(crate::assistant_internet::get_assistant_internet)
                 .put(crate::assistant_internet::update_assistant_internet),
+        )
+        .route(
+            "/v1/assistant-internet/test",
+            axum::routing::post(crate::assistant_internet::test_assistant_internet),
         )
         .route("/v1/audit-events", get(authenticated_audit_events))
         .route("/v1/audit-export.csv", get(authenticated_audit_export))

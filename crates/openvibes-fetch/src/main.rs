@@ -119,6 +119,7 @@ async fn answer(config: &FetchConfig, req: &Request) -> Response {
     let Ok(http) = Client::new(config.proxy_url.as_deref()) else {
         return unavailable;
     };
+    let http = http.with_searxng(setting.searxng_url.as_deref());
     // ureq blocks: fine, this process serves one request.
     handle(req, &setting, &deny, &http)
 }

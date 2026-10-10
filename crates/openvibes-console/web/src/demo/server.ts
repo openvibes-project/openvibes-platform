@@ -653,6 +653,11 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     audit("assistant.internet.changed", "assistant", "internet");
     return json(data.assistantInternet);
   });
+  route("POST", "/api/v1/assistant-internet/test", "assistant.admin", () => {
+    if (data.assistantInternet.level < 2) return json({ ok: false, detail: "web search is off" });
+    audit("assistant.internet.lookup", "assistant", "internet");
+    return json({ ok: true, detail: "5 results" });
+  });
   route("GET", "/api/v1/audit-retention", "audit.read", () => json(data.retention));
   route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body, headers) => {
     const match = headers["if-match"];

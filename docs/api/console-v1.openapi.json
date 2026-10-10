@@ -1766,6 +1766,76 @@
         }
       }
     },
+    "/api/v1/assistant-internet/test": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "test_assistant_internet",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A search for a fixed word ran (or why not)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInternetTest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Audit unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/messages": {
       "post": {
         "tags": [
@@ -8473,6 +8543,24 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "AssistantInternetTest": {
+        "type": "object",
+        "description": "The outcome of a Test connection against the stored SearXNG.",
+        "required": [
+          "ok",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "`N results`, or why not (off, blocked, unreachable)."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when the search ran and answered."
           }
         }
       },

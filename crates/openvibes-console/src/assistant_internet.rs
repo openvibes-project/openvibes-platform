@@ -13,7 +13,8 @@ use chrono::{SecondsFormat, Utc};
 use platform_store::{Pool, assistant_internet as store};
 
 use crate::{
-    AssistantInternet, Permission, ProblemDetails, UpdateAssistantInternetRequest,
+    AssistantInternet, AssistantInternetTest, Permission, ProblemDetails,
+    UpdateAssistantInternetRequest,
     problem::problem_response,
     router::{AuthHttpState, authenticated_permission, parse_if_match_version, unavailable_auth},
 };
@@ -225,6 +226,44 @@ pub(crate) async fn update_assistant_internet(
         Err(platform_store::StoreError::Query) => {
             invalid("Internal domains must be lowercase names, at most 50")
         }
+        Err(_) => unavailable_auth(),
+    }
+}
+
+#[utoipa::path(
+    post,
+    path = "/api/v1/assistant-internet/test",
+    tag = "assistant",
+    params(
+        ("Origin" = String, Header, description = "Must exactly match configured origin"),
+        ("X-CSRF-Token" = String, Header, description = "Session synchronizer token")
+    ),
+    responses(
+        (status = 200, description = "A search for a fixed word ran (or why not)", body = crate::AssistantInternetTest),
+        (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "Origin, CSRF, or permission check failed", body = crate::ProblemDetails, content_type = "application/problem+json"),
+        (status = 503, description = "Audit unavailable", body = crate::ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub(crate) async fn test_assistant_internet(
+    State(state): State<AuthHttpState>,
+    headers: HeaderMap,
+) -> Response {
+    let user =
+        match authenticated_permission(&state, &headers, Permission::AssistantAdmin, true).await {
+            Ok((platform_store::console_read::AgentScope::Global, user_id)) => user_id,
+            Ok(_) => return forbidden(),
+            Err(response) => return response,
+        };
+    match crate::fetch_client::test_search(
+        &state.pool,
+        &state.fetch_socket,
+        &state.internet_limits,
+        user,
+    )
+    .await
+    {
+        Ok((ok, detail)) => Json(AssistantInternetTest { ok, detail }).into_response(),
         Err(_) => unavailable_auth(),
     }
 }

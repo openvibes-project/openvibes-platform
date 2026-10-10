@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import { ApiError, invalidate, request, useResource } from "../api/client";
-import type { AssistantInternet, AssistantStatus } from "../api/types";
+import type { AssistantInternet, AssistantInternetTest, AssistantStatus } from "../api/types";
 import { ErrorBox, Loading } from "../ui/bits";
 import { Icon } from "../ui/Icon";
 import { Switch } from "../ui/Switch";
@@ -50,6 +50,8 @@ export function AssistantSettings() {
   const [domains, setDomains] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
+  const [testing, setTesting] = useState(false);
+  const [tested, setTested] = useState<AssistantInternetTest>();
   if (setting.error) return <div className="view"><ViewHeader title="Assistant" /><div className="view-pad"><ErrorBox error={setting.error} /></div></div>;
   const current = setting.data;
   if (!current) return <div className="view"><ViewHeader title="Assistant" /><Loading rows={4} /></div>;
@@ -67,6 +69,13 @@ export function AssistantSettings() {
       .finally(() => setBusy(false));
   };
   const base = { searxng_url: current.searxng_url ?? null, internal_domains: toDomains(domainText) };
+  const test = () => {
+    setTesting(true);
+    setTested(undefined);
+    request<AssistantInternetTest>("POST", `${PATH}/test`)
+      .then(setTested, (e: unknown) => setTested({ ok: false, detail: message(e, "Could not run the test") }))
+      .finally(() => setTesting(false));
+  };
   const close = () => { setAsking(undefined); setError(undefined); };
 
   return (
@@ -84,7 +93,13 @@ export function AssistantSettings() {
           <Switch label="Search the web" checked={current.level >= 2} disabled={off || busy || current.level < 1}
             onChange={(on) => { if (on) { setUrl(current.searxng_url ?? ""); setAsking(2); } else void save({ ...base, level: 1 }, "Web search is off"); }} />
           <p className="subtle">{LEVEL2_RISK}</p>
-          {current.level >= 2 && current.searxng_url && <p className="subtle">SearXNG: <span className="mono">{current.searxng_url}</span></p>}
+          {current.level >= 2 && current.searxng_url && (
+            <div className="row">
+              <p className="subtle">SearXNG: <span className="mono">{current.searxng_url}</span></p>
+              <button type="button" className="button button--ghost" disabled={off || busy || testing} onClick={test}>Test connection</button>
+              {tested && <p className={tested.ok ? "subtle" : "confirm__error"} role="status">{tested.ok ? "Works: " : "Failed: "}{tested.detail}</p>}
+            </div>
+          )}
         </section>
         <form className="stack" onSubmit={(event) => { event.preventDefault(); void save({ ...base, level: current.level }, "Internal domains saved"); }}>
           <label className="field">Internal domains (one per line)

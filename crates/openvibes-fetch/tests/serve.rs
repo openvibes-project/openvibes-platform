@@ -170,12 +170,6 @@ fn invalid_ids_and_search() {
         handle(&search, &setting(1), &[], &h),
         Response::Refused { code: Refusal::Off }
     );
-    assert_eq!(
-        handle(&search, &setting(2), &[], &h),
-        Response::Refused {
-            code: Refusal::Unavailable
-        }
-    );
     assert!(h.seen.borrow().is_empty());
 }
 
@@ -208,4 +202,80 @@ fn reference_ids_are_checked_against_the_deny_list() {
         }
     );
     assert!(h.seen.borrow().is_empty());
+}
+
+const SEARX: &str = include_str!("fixtures/searxng-openvibes.json");
+
+fn search_setting(level: i16, url: &str) -> Setting {
+    Setting {
+        searxng_url: Some(url.into()),
+        ..setting(level)
+    }
+}
+
+fn search(query: &str) -> Request {
+    Request {
+        user: "a".into(),
+        kind: Kind::Search {
+            query: query.into(),
+        },
+    }
+}
+
+#[test]
+fn search_asks_searxng_and_bounds_the_results() {
+    let h = fake(SEARX.as_bytes());
+    for base in ["http://10.0.0.5:8080", "http://10.0.0.5:8080/"] {
+        h.seen.borrow_mut().clear();
+        let r = handle(&search("rust & tls"), &search_setting(2, base), &[], &h);
+        assert_eq!(
+            *h.seen.borrow(),
+            ["http://10.0.0.5:8080/search?q=rust%20%26%20tls&format=json"]
+        );
+        let Response::Ok { source, items } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(source, "10.0.0.5:8080");
+        assert_eq!(items.len(), 5);
+        // result 1 is javascript: and dropped; 2 has the 900-char snippet
+        assert_eq!(items[0].title, "Result 2 about openvibes");
+        assert_eq!(items[0].snippet.chars().count(), 300);
+        assert!(items.iter().all(|i| i.url.starts_with("https://")));
+    }
+}
+
+#[test]
+fn search_is_filtered_gated_and_needs_a_url() {
+    let h = fake(SEARX.as_bytes());
+    let s2 = search_setting(2, "https://searx.example.org");
+    let deny = vec!["web01".to_string()];
+    assert_eq!(
+        handle(&search("why is web01 slow"), &s2, &deny, &h),
+        Response::Refused {
+            code: Refusal::Blocked
+        }
+    );
+    assert_eq!(
+        handle(
+            &search("openvibes"),
+            &search_setting(1, "https://s.example.org"),
+            &[],
+            &h
+        ),
+        Response::Refused { code: Refusal::Off }
+    );
+    assert_eq!(
+        handle(&search("openvibes"), &setting(2), &[], &h),
+        Response::Refused {
+            code: Refusal::Unavailable
+        }
+    );
+    assert!(h.seen.borrow().is_empty());
+    let bad = fake(b"<html>");
+    assert_eq!(
+        handle(&search("openvibes"), &s2, &[], &bad),
+        Response::Refused {
+            code: Refusal::Unavailable
+        }
+    );
 }

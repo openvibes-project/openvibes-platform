@@ -52,8 +52,8 @@ pub use api::{
     AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary,
     AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
     AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    AssistantInternet, AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
-    AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
+    AssistantInternet, AssistantInternetTest, AuditEventPage, AuditEventView, AuditRetentionPolicy,
+    AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
     BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
     CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
     CreateServiceTokenRequest, CreateUserRequest, CreatedEnrollmentToken, CreatedServiceToken,
@@ -84,7 +84,7 @@ pub use problem::{FieldError, ProblemDetails};
 pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
 pub use router::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
-    authenticated_router_with_agent_install, authenticated_router_with_signer, development_router,
-    health_router, public_router,
+    authenticated_router_with_agent_install, authenticated_router_with_fetch,
+    authenticated_router_with_signer, development_router, health_router, public_router,
 };
 pub use server::{TrustedPeer, run, serve};

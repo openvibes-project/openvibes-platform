@@ -10,7 +10,7 @@ use std::{
     thread,
 };
 
-use openvibes_fetch::http::{Client, MAX_BODY};
+use openvibes_fetch::http::{Client, Http, MAX_BODY};
 
 /// Serves `reply` to every connection; returns the URL, a connection counter
 /// and a stop function.
@@ -83,4 +83,25 @@ fn server_error_is_an_error() {
     let (url, _, finish) = serve(response("500 Internal Server Error", "", b"no"));
     assert!(Client::new(None).unwrap().fetch(&url).is_err());
     finish();
+}
+
+#[test]
+fn only_the_stored_searxng_search_url_joins_the_allowlist() {
+    let (url, _, finish) = serve(response("200 OK", "", b"{}"));
+    let base = url.trim_end_matches("/x");
+    let client = Client::new(None).unwrap().with_searxng(Some(base));
+    assert!(
+        client
+            .get(&format!("{base}/search?q=a&format=json"))
+            .is_ok()
+    );
+    assert!(client.get(&format!("{base}/other")).is_err());
+    assert!(client.get("http://127.0.0.1:1/search?q=a").is_err());
+    assert!(
+        Client::new(None)
+            .unwrap()
+            .get(&format!("{base}/search?q=a"))
+            .is_err()
+    );
+    assert_eq!(finish(), 1);
 }

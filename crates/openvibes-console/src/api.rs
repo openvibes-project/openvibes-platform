@@ -284,6 +284,15 @@ pub struct AssistantInternet {
     pub updated_by: String,
 }
 
+/// The outcome of a Test connection against the stored SearXNG.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, ToSchema)]
+pub struct AssistantInternetTest {
+    /// True when the search ran and answered.
+    pub ok: bool,
+    /// `N results`, or why not (off, blocked, unreachable).
+    pub detail: String,
+}
+
 /// Request body for changing the assistant internet setting.
 #[derive(Deserialize, ToSchema)]
 #[serde(deny_unknown_fields)]

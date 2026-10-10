@@ -3,7 +3,8 @@
 Purpose: the one component that makes outbound requests for the console
 assistant's opt-in internet lookups (one process per request). This page
 covers the wire protocol, the query filter, and level 1 (OSV and Bodhi
-references). Web search is added later; the systemd units are below.
+references), level 2 (web search through the admin's SearXNG) and the
+systemd units.
 
 ## Protocol (`protocol.rs`)
 
@@ -85,11 +86,26 @@ Config `fetch.toml` (unknown keys rejected): `database_url`, optional
   0.5 s linger drops a reply that takes longer, and the process then ends on
   a broken pipe.
 
+## Level 2 (`searxng.rs`)
+
+- `search` at level 2 runs `check_query` first (`blocked`, no request), then
+  GETs `{searxng_url}/search?q=<percent-encoded>&format=json` (a trailing `/`
+  on the stored URL is ignored). No stored URL: `unavailable`.
+- Allowlist: `Client::with_searxng(url)` adds exactly the prefix
+  `{url}/search?` for that process (so plain `http://` works only for the
+  validated private SearXNG URL); every other URL still needs the fixed hosts.
+  Same limits as level 1 (no redirects, 256 KiB, 10 s).
+- Extraction: `results[]`, at most 5 with an `http://` or `https://` URL
+  (`javascript:`, `data:` ... dropped), title cut to 200, snippet (`content`)
+  to 300, URL to 500 characters. `source` is the SearXNG `host[:port]`.
+  Not JSON or no `results`: `unavailable`.
+- Test: `tests/serve.rs` with `tests/fixtures/searxng-openvibes.json` (12
+  results, one 900-character snippet, one `javascript:` URL; synthetic).
+
 ## Level 1 (`serve.rs`, `http.rs`, `osv.rs`, `bodhi.rs`)
 
 - Level 0: `off`, no request made. An ID failing `is_public_id`: `invalid`.
-  `search` is `off` below level 2 and `unavailable` at level 2 until web
-  search is built.
+  `search` is `off` below level 2 (see Level 2 below).
 - `FEDORA-...` goes to `https://bodhi.fedoraproject.org/updates/{id}`, every
   other ID to `https://api.osv.dev/v1/vulns/{id}`. The URL is built only from
   a checked ID and its host must be on the allowlist, else `unavailable`.

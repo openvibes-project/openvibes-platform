@@ -217,6 +217,15 @@ describe("demo server", () => {
     expect(ok.level).toBe(2);
   });
 
+  it("answers Test connection only at level 2", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect(await json(await server.handle("POST", "/api/v1/assistant-internet/test"))).toEqual({ ok: false, detail: "web search is off" });
+    const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+    await server.handle("PUT", "/api/v1/assistant-internet", { level: 2, searxng_url: "https://s.example.test", internal_domains: [] }, { "if-match": `"${String(setting.version)}"` });
+    expect(await json(await server.handle("POST", "/api/v1/assistant-internet/test"))).toEqual({ ok: true, detail: "5 results" });
+    expect((await createDemoServer({ persona: "viewer" }).handle("POST", "/api/v1/assistant-internet/test")).status).toBe(403);
+  });
+
   it("refuses assistant internet settings the real API refuses", async () => {
     const server = createDemoServer({ persona: "admin" });
     const put = async (body: object) => {

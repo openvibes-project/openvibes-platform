@@ -11,7 +11,10 @@ use axum::{
     http::{Request, StatusCode, header},
 };
 use chrono::Utc;
-use openvibes_console::{NormalizedPassword, TrustedPeer, authenticated_router, hash_password};
+use openvibes_console::{
+    NormalizedPassword, TrustedPeer, authenticated_router, authenticated_router_with_fetch,
+    hash_password,
+};
 use platform_store::console_auth::{NewLocalUser, create_local_user};
 use serde_json::Value;
 use tower::ServiceExt;
@@ -214,6 +217,10 @@ async fn call(
 }
 
 async fn setup() -> (TestDb, axum::Router) {
+    setup_with(None).await
+}
+
+async fn setup_with(fetch: Option<std::path::PathBuf>) -> (TestDb, axum::Router) {
     let db = TestDb::create().await;
     let mut client = db.pool.get().await.unwrap();
     platform_store::migrate(&mut client).await.unwrap();
@@ -234,7 +241,11 @@ async fn setup() -> (TestDb, axum::Router) {
     )
     .await;
     drop(client);
-    let router = authenticated_router(db.pool.clone(), "https://console.example");
+    let origin = "https://console.example";
+    let router = match fetch {
+        Some(socket) => authenticated_router_with_fetch(db.pool.clone(), origin, socket),
+        None => authenticated_router(db.pool.clone(), origin),
+    };
     (db, router)
 }
 
@@ -301,5 +312,83 @@ async fn assistant_internet_is_admin_only_conditional_and_validated() {
         .unwrap()
         .get(0);
     assert_eq!(rows, 2);
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn test_connection_searches_through_the_fetch_socket_and_is_audited() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let dir = std::env::temp_dir().join(format!("ov-test-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("fetch.sock");
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let log = seen.clone();
+    tokio::spawn(async move {
+        while let Ok((mut stream, _)) = listener.accept().await {
+            let mut body = String::new();
+            stream.read_to_string(&mut body).await.unwrap();
+            log.lock().unwrap().push(body);
+            let reply = r#"{"result":"ok","source":"searx.example","items":[{"title":"a","snippet":"b","url":"https://x.test/"},{"title":"c","snippet":"d","url":"https://y.test/"}]}"#;
+            stream.write_all(reply.as_bytes()).await.unwrap();
+        }
+    });
+    let (db, router) = setup_with(Some(path)).await;
+    let uri = "/api/v1/assistant-internet/test";
+    let (cookie, csrf) = login(&router, "bob").await;
+    assert_eq!(
+        call(&router, "POST", uri, &cookie, &csrf, None, None)
+            .await
+            .0,
+        StatusCode::FORBIDDEN
+    );
+
+    let (cookie, csrf) = login(&router, "alice").await;
+    let (status, body, _) = call(&router, "POST", uri, &cookie, &csrf, None, None).await;
+    assert_eq!(
+        (status, body["ok"].clone(), body["detail"].as_str()),
+        (StatusCode::OK, false.into(), Some("web search is off"))
+    );
+    assert!(
+        seen.lock().unwrap().is_empty(),
+        "off never reaches the socket"
+    );
+
+    let level2 = serde_json::json!({"level": 2, "searxng_url": "https://searx.example", "internal_domains": []});
+    assert_eq!(
+        call(
+            &router,
+            "PUT",
+            "/api/v1/assistant-internet",
+            &cookie,
+            &csrf,
+            Some(level2),
+            Some("\"1\"")
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    let (status, body, _) = call(&router, "POST", uri, &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body, serde_json::json!({"ok": true, "detail": "2 results"}));
+    let sent: Value = serde_json::from_str(&seen.lock().unwrap()[0]).unwrap();
+    assert_eq!(
+        (sent["kind"].as_str(), sent["query"].as_str()),
+        (Some("search"), Some("openvibes"))
+    );
+    let rows: i64 = db
+        .pool
+        .get()
+        .await
+        .unwrap()
+        .query_one(
+            "SELECT count(*) FROM audit_log WHERE action = 'assistant.internet.lookup'",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(rows, 1);
     db.drop().await;
 }

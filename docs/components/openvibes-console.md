@@ -54,6 +54,13 @@ loopback or a private address; level 2 requires it. Domains must be lowercase
 names (at most 50). Each change writes an `assistant.internet.changed` audit
 row; `platform_domain` (the public origin's host) is always filtered. An
 unreadable setting counts as level 0.
+`POST /api/v1/assistant-internet/test` (same permission, Origin and CSRF) is
+the admin page's Test connection: it sends a `search` for the fixed word
+`openvibes` through the same fetch client as the assistant (query filter,
+hourly limit, `assistant.internet.lookup` audit row) and answers
+`{ "ok": bool, "detail": string }` (`N results`, the refusal or unreachable
+note, or `web search is off` below level 2; the fetch service re-reads the
+level). Tested with a fake fetch socket (`authenticated_router_with_fetch`).
 The assistant's `reference` and `web_search` lookups (`src/fetch_client.rs`)
 are offered per question from that level (`internet_specs(current_level)`) and
 run through the fetch service's socket (`/run/openvibes-fetch/fetch.sock`,

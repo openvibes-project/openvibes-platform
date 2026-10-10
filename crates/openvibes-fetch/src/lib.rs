@@ -9,6 +9,7 @@ pub mod filter;
 pub mod http;
 pub mod osv;
 pub mod protocol;
+pub mod searxng;
 pub mod serve;
 
 /// Cuts `s` to at most `max` characters, on a character boundary.

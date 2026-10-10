@@ -34,3 +34,14 @@ test("an unsaved domains edit survives a switch toggle and is saved with it", as
   await expect(box).toHaveValue("corp.example\nintranet");
   await expect(page.getByRole("button", { name: "Save domains" })).toBeDisabled();
 });
+
+test("Test connection appears at level 2 and reports the result", async ({ page }) => {
+  await page.getByRole("switch", { name: "Look up security references" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Turn on" }).click();
+  await page.getByRole("switch", { name: "Search the web" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("SearXNG URL").fill("https://searx.corp.example");
+  await dialog.getByRole("button", { name: "Turn on" }).click();
+  await page.getByRole("button", { name: "Test connection" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "5 results" })).toBeVisible();
+});

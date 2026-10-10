@@ -1,0 +1,155 @@
+{
+ "query": "openvibes",
+ "number_of_results": 0,
+ "results": [
+  {
+   "url": "javascript:alert(1)",
+   "title": "Result 1 about openvibes",
+   "content": "Snippet number 1.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 1.0,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-2",
+   "title": "Result 2 about openvibes",
+   "content": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.5,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-3",
+   "title": "Result 3 about openvibes",
+   "content": "Snippet number 3.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.3333333333333333,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-4",
+   "title": "Result 4 about openvibes",
+   "content": "Snippet number 4.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.25,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-5",
+   "title": "Result 5 about openvibes",
+   "content": "Snippet number 5.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.2,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-6",
+   "title": "Result 6 about openvibes",
+   "content": "Snippet number 6.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.16666666666666666,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-7",
+   "title": "Result 7 about openvibes",
+   "content": "Snippet number 7.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.14285714285714285,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-8",
+   "title": "Result 8 about openvibes",
+   "content": "Snippet number 8.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.125,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-9",
+   "title": "Result 9 about openvibes",
+   "content": "Snippet number 9.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.1111111111111111,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-10",
+   "title": "Result 10 about openvibes",
+   "content": "Snippet number 10.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.1,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-11",
+   "title": "Result 11 about openvibes",
+   "content": "Snippet number 11.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.09090909090909091,
+   "category": "general",
+   "template": "default.html"
+  },
+  {
+   "url": "https://example.org/page-12",
+   "title": "Result 12 about openvibes",
+   "content": "Snippet number 12.",
+   "engine": "duckduckgo",
+   "engines": [
+    "duckduckgo"
+   ],
+   "score": 0.08333333333333333,
+   "category": "general",
+   "template": "default.html"
+  }
+ ],
+ "answers": [],
+ "corrections": [],
+ "infoboxes": [],
+ "suggestions": [],
+ "unresponsive_engines": []
+}

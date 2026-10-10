@@ -156,6 +156,33 @@ impl Internet {
     }
 }
 
+/// Test connection: the fixed word `openvibes` through the same path as the
+/// assistant's web search (filter, level check, rate limit, audit row).
+pub(crate) async fn test_search(
+    pool: &Pool,
+    socket: &Arc<Path>,
+    limits: &Arc<Limits>,
+    user: String,
+) -> Result<(bool, String), LookupError> {
+    let internet = Internet {
+        user,
+        socket: socket.clone(),
+        limits: limits.clone(),
+    };
+    let lookup = Lookup::WebSearch {
+        query: "openvibes".into(),
+    };
+    let output = internet.run(pool, &lookup).await?;
+    Ok(match output.data.get("note").and_then(Value::as_str) {
+        Some(NOTE_OFF) => (false, "web search is off".to_owned()),
+        Some(note) => (false, note.to_owned()),
+        None => {
+            let n = output.data["items"].as_array().map_or(0, Vec::len);
+            (true, format!("{n} results"))
+        }
+    })
+}
+
 fn code_name(code: Refusal) -> &'static str {
     match code {
         Refusal::Off => "off",

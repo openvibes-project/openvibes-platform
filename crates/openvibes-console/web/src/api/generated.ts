@@ -454,6 +454,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant-internet/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test_assistant_internet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant/messages": {
         parameters: {
             query?: never;
@@ -2065,6 +2081,13 @@ export interface components {
             kind: string;
             text: string;
             url?: string | null;
+        };
+        /** @description The outcome of a Test connection against the stored SearXNG. */
+        AssistantInternetTest: {
+            /** @description `N results`, or why not (off, blocked, unreachable). */
+            detail: string;
+            /** @description True when the search ran and answered. */
+            ok: boolean;
         };
         AssistantLookup: {
             error?: string | null;
@@ -5618,6 +5641,58 @@ export interface operations {
                 };
             };
             /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    test_assistant_internet: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A search for a fixed word ran (or why not) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantInternetTest"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Audit unavailable */
             503: {
                 headers: {
                     [name: string]: unknown;

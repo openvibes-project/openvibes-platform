@@ -6,7 +6,7 @@ use std::{io::Read, time::Duration};
 /// Largest response body accepted, in bytes.
 pub const MAX_BODY: usize = 256 * 1024;
 
-/// Hosts level 1 may contact. (The SearXNG host is added with web search.)
+/// Hosts level 1 may contact. The admin's SearXNG joins them per request.
 const HOSTS: [&str; 2] = ["api.osv.dev", "bodhi.fedoraproject.org"];
 
 /// Fetches a URL; faked in tests.
@@ -25,6 +25,9 @@ pub fn allowed(url: &str) -> bool {
 /// The real client.
 pub struct Client {
     agent: ureq::Agent,
+    /// `{searxng_url}/search?`: the one extra URL prefix `get` allows (plain
+    /// `http://` included: saving the setting limits it to private hosts).
+    searxng: Option<String>,
 }
 
 impl Client {
@@ -45,7 +48,15 @@ impl Client {
             .build();
         Ok(Self {
             agent: config.into(),
+            searxng: None,
         })
+    }
+
+    /// Also allows searches against the stored SearXNG base URL.
+    #[must_use]
+    pub fn with_searxng(mut self, base: Option<&str>) -> Self {
+        self.searxng = base.map(|b| format!("{}/search?", b.trim_end_matches('/')));
+        self
     }
 }
 
@@ -84,7 +95,7 @@ impl Client {
 
 impl Http for Client {
     fn get(&self, url: &str) -> Result<Vec<u8>, String> {
-        if !allowed(url) {
+        if !allowed(url) && !self.searxng.as_ref().is_some_and(|p| url.starts_with(p)) {
             return Err("host not allowed".into());
         }
         self.fetch(url)

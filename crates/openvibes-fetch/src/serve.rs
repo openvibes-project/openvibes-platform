@@ -7,6 +7,7 @@ use crate::{
     http::{Http, MAX_BODY, allowed},
     osv,
     protocol::{Kind, Refusal, Request, Response},
+    searxng,
 };
 use platform_store::assistant_internet::Setting;
 
@@ -21,9 +22,7 @@ pub fn handle(req: &Request, setting: &Setting, deny: &[String], http: &dyn Http
     let id = match &req.kind {
         Kind::Reference { id } if is_public_id(id) => id,
         Kind::Reference { .. } => return refuse(Refusal::Invalid),
-        // Web search is built with the SearXNG task; until then level 2
-        // answers Unavailable and lower levels Off.
-        Kind::Search { .. } if setting.level >= 2 => return refuse(Refusal::Unavailable),
+        Kind::Search { query } if setting.level >= 2 => return search(query, setting, deny, http),
         Kind::Search { .. } => return refuse(Refusal::Off),
     };
     if let Err(code) = check_query(id, deny) {
@@ -58,6 +57,33 @@ pub fn handle(req: &Request, setting: &Setting, deny: &[String], http: &dyn Http
     match items {
         Some(items) => Response::Ok {
             source: source.into(),
+            items,
+        },
+        None => refuse(Refusal::Unavailable),
+    }
+}
+
+/// Level 2: the query (after the filter) to the stored SearXNG.
+fn search(query: &str, setting: &Setting, deny: &[String], http: &dyn Http) -> Response {
+    let refuse = |code| Response::Refused { code };
+    if let Err(code) = check_query(query, deny) {
+        return refuse(code);
+    }
+    let Some(base) = setting.searxng_url.as_deref() else {
+        return refuse(Refusal::Unavailable);
+    };
+    let Ok(body) = http.get(&searxng::search_url(base, query)) else {
+        return refuse(Refusal::Unavailable);
+    };
+    if body.len() > MAX_BODY {
+        return refuse(Refusal::TooLarge);
+    }
+    match serde_json::from_slice(&body)
+        .ok()
+        .and_then(|v: serde_json::Value| searxng::extract(&v))
+    {
+        Some(items) => Response::Ok {
+            source: searxng::host(base),
             items,
         },
         None => refuse(Refusal::Unavailable),

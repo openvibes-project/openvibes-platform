@@ -76,6 +76,7 @@ export type Session = S["SessionResponse"];
 export type Capability = S["EffectiveCapability"];
 export type Permission = S["Permission"];
 export type AssistantInternet = S["AssistantInternet"];
+export type AssistantInternetTest = S["AssistantInternetTest"];
 export type AssistantStatus = S["AssistantStatusResponse"];
 export type AssistantReply = S["AssistantMessageResponse"];
 export type AssistantSegment = S["AssistantSegment"];
