@@ -9,7 +9,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export CARGO_NET_GIT_FETCH_WITH_CLI=true
-packages=(-p openvibes-ingest -p openvibes-distribution -p openvibes-vulns -p openvibes-admin -p openvibes-signer -p openvibes-netlog)
+packages=(-p openvibes-ingest -p openvibes-distribution -p openvibes-vulns -p openvibes-admin -p openvibes-signer -p openvibes-netlog -p openvibes-fetch)
 [[ ${OV_LLM:-1} == 1 ]] && packages+=(-p openvibes-llm)
 cargo build --release --locked "${packages[@]}"
 llm=(--without llm)

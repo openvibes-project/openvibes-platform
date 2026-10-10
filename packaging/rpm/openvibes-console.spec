@@ -12,6 +12,8 @@ Summary:        OpenVIBES web console
 License:        Apache-2.0
 URL:            https://github.com/openvibes-project/openvibes-platform
 BuildRequires:  systemd-rpm-macros
+# The assistant's internet lookups (off until an administrator turns them on).
+Recommends:     openvibes-fetch
 %{?systemd_requires}
 Source0:        %{console_npm_cache_name}
 

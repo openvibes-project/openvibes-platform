@@ -18,14 +18,14 @@ const WEB: &str = "agent.00000000-0000-4000-8000-00000000000a";
 const DB: &str = "agent.00000000-0000-4000-8000-00000000000b";
 const PROD: &str = "00000000-0000-4000-8000-0000000000a1";
 
-struct TestDb {
-    pool: Pool,
+pub(super) struct TestDb {
+    pub(super) pool: Pool,
     admin_url: String,
     name: String,
 }
 
 impl TestDb {
-    async fn drop(self) {
+    pub(super) async fn drop(self) {
         self.pool.close();
         let admin = platform_store::connect(&self.admin_url).await.unwrap();
         let client = admin.get().await.unwrap();
@@ -77,7 +77,7 @@ fn envelope() -> Vec<u8> {
 /// web-01 (env=prod, in asset group PROD) and db-01 (env=dev): each with
 /// the `ssh.exposed` finding and the openssh advisory; that rule and
 /// `quiet.rule` (no finding) published.
-async fn seed() -> (TestDb, DateTime<Utc>) {
+pub(super) async fn seed() -> (TestDb, DateTime<Utc>) {
     let admin_url = std::env::var("OPENVIBES_TEST_DATABASE_URL")
         .expect("set OPENVIBES_TEST_DATABASE_URL via scripts/test-db.sh");
     // A random u64: RandomState is seeded randomly per instance.
@@ -167,6 +167,7 @@ fn access(agents: AgentScope, vulnerabilities: Option<AgentScope>, rules: bool) 
         agents,
         vulnerabilities,
         rules,
+        internet: None,
     }
 }
 

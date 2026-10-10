@@ -14,6 +14,7 @@ mod command_tests;
 mod console;
 #[cfg(test)]
 mod fake;
+mod fetch_domain;
 mod fleet;
 pub use fleet::AGENT_AUDIT_RULE;
 pub(crate) use fleet::agent_by_default;

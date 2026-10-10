@@ -108,6 +108,9 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .turn__q { justify-self: end; max-width: 88%; padding: 8px 12px; border-radius: 14px 14px 4px 14px; background: var(--accent); color: var(--accent-text); font-size: 13.5px; display: grid; gap: 4px; }
 .turn__ctx { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; opacity: 0.85; }
 .assistant__answer { font-size: 13.5px; line-height: 1.6; }
+.assistant__sources { list-style: none; margin: 6px 0 0; padding: 0; font-size: 12px; display: grid; gap: 2px; }
+.assistant__sources li { display: flex; gap: 5px; align-items: center; }
+.assistant__sources a { color: inherit; text-decoration: underline; }
 .turn__error { display: flex; gap: 6px; align-items: center; color: var(--bad); font-size: 13px; }
 .cite {
   display: inline-flex; align-items: center; gap: 4px; margin: 0 2px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--accent);

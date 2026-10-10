@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 
 import { useResource } from "../api/client";
-import type { AssistantSegment, AssistantStatus } from "../api/types";
+import type { AssistantInternetSource, AssistantSegment, AssistantStatus } from "../api/types";
 import { assistant, useAssistant } from "../app/assistant";
 import { nav, useLocation } from "../app/nav";
 import { objectTitle, panels } from "../app/registry";
@@ -27,6 +27,23 @@ function Segments({ segments }: { segments: AssistantSegment[] }) {
         </button>
       ))}
     </p>
+  );
+}
+
+/** A result shows its `[web:N]` number, as the answer cites it, and its host. */
+const label = (source: AssistantInternetSource) => source.number == null ? source.text : `[web:${String(source.number)}] ${source.text}`;
+
+function Sources({ sources }: { sources: AssistantInternetSource[] | undefined }) {
+  if (!sources?.length) return null;
+  return (
+    <ul className="assistant__sources subtle" aria-label="Sources">
+      {sources.map((source, index) => (
+        <li key={index}>
+          <Icon name={source.kind === "search" ? "search" : source.kind === "unavailable" ? "alert" : source.kind === "blocked" ? "ban" : "external"} size={11} />
+          {source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer nofollow">{label(source)}</a> : source.text}
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -82,7 +99,7 @@ export function AssistantDock() {
               {turn.context && <span className="turn__ctx"><Icon name={panels[turn.context.kind]?.icon ?? "layers"} size={11} /> {panels[turn.context.kind]?.title(turn.context.id)}</span>}
               {turn.question}
             </div>
-            {turn.segments ? <Segments segments={turn.segments} /> : turn.error ? <p className="turn__error"><Icon name="alert" size={14} /> {turn.error}</p> : (
+            {turn.segments ? <><Segments segments={turn.segments} /><Sources sources={turn.internet} /></> : turn.error ? <p className="turn__error"><Icon name="alert" size={14} /> {turn.error}</p> : (
               <div className="typing" aria-label="Thinking"><span /><span /><span /></div>
             )}
           </div>

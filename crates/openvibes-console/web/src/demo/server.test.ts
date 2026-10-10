@@ -140,6 +140,12 @@ describe("demo server", () => {
     expect(citations[0]?.target_kind).toBe("agent");
   });
 
+  it("shows a blocked web search as blocked, not as a failed lookup", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const reply = await json(await server.handle("POST", "/api/v1/assistant/messages", { question: "Search the web for platform.lab problem" }));
+    expect(reply.internet).toEqual([{ kind: "blocked", text: "Web search blocked: the query contained internal data", url: null, number: null }]);
+  });
+
   it("quotes the finding's own message when asked what to fix first", async () => {
     // The rule messages are whole sentences (the shipped baseline): lowercased
     // into brackets they read "(the unencrypted docker api … 2376., 4 hosts open)".
@@ -205,6 +211,37 @@ describe("demo server", () => {
     expect((await server.handle("PUT", "/api/v1/audit-retention", { retention_days: 400 }, { "if-match": '"99"' })).status).toBe(412);
     const updated = await json(await server.handle("PUT", "/api/v1/audit-retention", { retention_days: 400 }, { "if-match": `"${String(policy.version)}"` }));
     expect(updated.retention_days).toBe(400);
+  });
+
+  it("changes the assistant internet setting only with If-Match and a URL at level 2", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+    const body = { level: 2, searxng_url: null, internal_domains: [] };
+    expect((await server.handle("PUT", "/api/v1/assistant-internet", body)).status).toBe(428);
+    expect((await server.handle("PUT", "/api/v1/assistant-internet", body, { "if-match": `"${String(setting.version)}"` })).status).toBe(400);
+    const ok = await json(await server.handle("PUT", "/api/v1/assistant-internet", { ...body, searxng_url: "https://s.example.test" }, { "if-match": `"${String(setting.version)}"` }));
+    expect(ok.level).toBe(2);
+  });
+
+  it("answers Test connection only at level 2", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    expect(await json(await server.handle("POST", "/api/v1/assistant-internet/test"))).toEqual({ ok: false, detail: "web search is off" });
+    const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+    await server.handle("PUT", "/api/v1/assistant-internet", { level: 2, searxng_url: "https://s.example.test", internal_domains: [] }, { "if-match": `"${String(setting.version)}"` });
+    expect(await json(await server.handle("POST", "/api/v1/assistant-internet/test"))).toEqual({ ok: true, detail: "5 results" });
+    expect((await createDemoServer({ persona: "viewer" }).handle("POST", "/api/v1/assistant-internet/test")).status).toBe(403);
+  });
+
+  it("refuses assistant internet settings the real API refuses", async () => {
+    const server = createDemoServer({ persona: "admin" });
+    const put = async (body: object) => {
+      const setting = await json(await server.handle("GET", "/api/v1/assistant-internet"));
+      return server.handle("PUT", "/api/v1/assistant-internet", { level: 2, internal_domains: [], ...body }, { "if-match": `"${String(setting.version)}"` });
+    };
+    for (const url of ["http://search.example.com", "http://8.8.8.8", "ftp://x", "https://u@x", "https://", "https://x/?q=1"]) expect((await put({ searxng_url: url })).status, url).toBe(400);
+    for (const domains of [["Corp.Example"], ["bad_name"], ["-a"], Array.from({ length: 51 }, (_, i) => `d${String(i)}`)]) expect((await put({ searxng_url: "https://s.example.test", internal_domains: domains })).status).toBe(400);
+    for (const url of ["https://s.example.test", "http://localhost:8080", "http://192.168.1.2", "http://172.16.0.1", "http://[fd00::1]"]) expect((await put({ searxng_url: url, internal_domains: ["intranet", "corp.example"] })).status, url).toBe(200);
+    expect((await put({ searxng_url: "http://172.32.0.1" })).status).toBe(400);
   });
 
   it("previews a signed bundle and publishes it with the preview token", async () => {

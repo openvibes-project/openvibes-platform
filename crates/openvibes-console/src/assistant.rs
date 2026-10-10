@@ -183,6 +183,8 @@ pub(crate) struct Access {
     /// `rules.read` (global only, as on the Rules page): every published
     /// rule. Without it, only rules with a finding in the agent scope.
     pub(crate) rules: bool,
+    /// Internet lookups; `None` when the user may not use them.
+    pub(crate) internet: Option<crate::fetch_client::Internet>,
 }
 
 /// Runs every lookup offered to the model (`platform_assistant::lookups::specs`)
@@ -198,6 +200,10 @@ pub(crate) struct ConsoleReadLookups {
     /// needs `vulnerabilities.read` with the agent scope.
     overview: bool,
     rules: bool,
+    internet: Option<crate::fetch_client::Internet>,
+    /// An internet lookup was attempted and did not succeed (not "off",
+    /// not blocked).
+    internet_failed: std::sync::atomic::AtomicBool,
     pool: Pool,
     scope: console_read::AgentScope,
     now: chrono::DateTime<chrono::Utc>,
@@ -236,9 +242,31 @@ impl ConsoleReadLookups {
             vulnerabilities,
             overview,
             rules: access.rules,
+            internet: access.internet,
+            internet_failed: std::sync::atomic::AtomicBool::new(false),
             pool,
             scope: access.agents,
             now,
+        })
+    }
+}
+
+impl ConsoleReadLookups {
+    /// An internet lookup was attempted for this answer and failed
+    /// (unreachable, too large, rate-limited; a blocked query is no failure).
+    pub(crate) fn internet_failed(&self) -> bool {
+        self.internet_failed
+            .load(std::sync::atomic::Ordering::Relaxed)
+    }
+
+    /// The internet lookups that went out for this answer.
+    pub(crate) fn internet_sent(&self) -> Vec<crate::fetch_client::Sent> {
+        self.internet.as_ref().map_or_else(Vec::new, |internet| {
+            internet
+                .sent
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
         })
     }
 }
@@ -273,6 +301,20 @@ impl LookupRunner for ConsoleReadLookups {
                 }
                 self.lookups.run(lookup, items).await
             }
+            Lookup::Reference { .. } | Lookup::WebSearch { .. } => match &self.internet {
+                Some(internet) => {
+                    let result = internet.run(&self.pool, lookup).await;
+                    if match &result {
+                        Ok(output) => crate::fetch_client::is_failure(output),
+                        Err(_) => true,
+                    } {
+                        self.internet_failed
+                            .store(true, std::sync::atomic::Ordering::Relaxed);
+                    }
+                    result
+                }
+                None => Err(crate::fetch_client::forbidden()),
+            },
             Lookup::AgentSummary { agent } => {
                 let client = self.pool.get().await.map_err(|_| LookupError::Store)?;
                 let mut matches =
@@ -348,11 +390,27 @@ pub(crate) struct AssistantLookup {
     pub(crate) error: Option<String>,
 }
 
+/// One line under an answer that used the internet. A reference's link is
+/// built from its ID; a result's text is its link's host, never fetched text.
+#[derive(Clone, Debug, PartialEq, Serialize, ToSchema)]
+pub(crate) struct AssistantInternetSource {
+    /// `reference`, `search`, `result`, `blocked` (a query kept on the
+    /// host) or `unavailable` (a lookup failed).
+    pub(crate) kind: &'static str,
+    pub(crate) text: String,
+    pub(crate) url: Option<String>,
+    /// A result's `[web:N]` number, as the model saw it.
+    pub(crate) number: Option<u32>,
+}
+
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub(crate) struct AssistantMessageResponse {
     pub(crate) segments: Vec<AssistantSegment>,
     pub(crate) lookups: Vec<AssistantLookup>,
+    pub(crate) internet: Vec<AssistantInternetSource>,
 }
+
+pub(crate) use crate::fetch_client::internet_sources;
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub(crate) struct AssistantStatusResponse {
@@ -391,7 +449,7 @@ impl From<&Segment> for AssistantSegment {
     }
 }
 
-fn encode_component(value: &str) -> String {
+pub(crate) fn encode_component(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     for byte in value.bytes() {
         if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
@@ -404,5 +462,7 @@ fn encode_component(value: &str) -> String {
     output
 }
 
+#[cfg(test)]
+mod internet_tests;
 #[cfg(test)]
 mod lookup_tests;

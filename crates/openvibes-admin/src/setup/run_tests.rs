@@ -38,6 +38,29 @@ fn chosen_services_are_enabled_and_started() {
 }
 
 #[test]
+fn the_console_brings_the_fetch_socket_when_its_package_is_installed() {
+    for (installed, listed) in [(0, true), (1, false)] {
+        let fake = Fake::new(&format!("fetch-socket-{installed}"));
+        fake.answer(&["/usr/sbin/ss"], 0, "");
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-fetch"],
+            installed,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "is-enabled"], 1, "");
+        fake.answer(&["/usr/bin/systemctl", "enable", "--now"], 0, "");
+        let state = run_step(&fake.ctx(&plan(&[Ingest, Console])), Step::Services);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        let call = fake.call(&["/usr/bin/systemctl", "enable"]);
+        assert_eq!(
+            call.contains(&"openvibes-fetch.socket".to_owned()),
+            listed,
+            "{call:?}"
+        );
+    }
+}
+
+#[test]
 fn firewall_ports_are_opened_or_the_step_skipped() {
     let fake = Fake::new("firewall");
     fake.file(

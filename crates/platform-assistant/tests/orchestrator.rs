@@ -145,7 +145,7 @@ async fn ask(
     question: &str,
 ) -> Result<platform_assistant::Answer, AnswerError> {
     let backend: Arc<dyn ChatBackend> = script.clone();
-    answer(backend, fake, settings, &[], question, None).await
+    answer(backend, fake, settings, &[], question, None, &[]).await
 }
 
 #[tokio::test]
@@ -458,7 +458,7 @@ async fn prompts_fit_the_budget() {
     };
     let s = settings(ResolvedMode::Native);
     let backend: Arc<dyn ChatBackend> = script.clone();
-    answer(backend, &fake, s, &history, "Newest question", None)
+    answer(backend, &fake, s, &history, "Newest question", None, &[])
         .await
         .unwrap();
     let limit = s.budget.prompt_tokens as usize * 3;
@@ -600,6 +600,7 @@ async fn native_mode_streams_and_resets_around_lookups() {
         &[],
         "hi",
         Some(&sender),
+        &[],
     )
     .await
     .unwrap();
@@ -887,6 +888,7 @@ async fn four_lookups_after_a_long_history_each_keep_the_minimum() {
         &history,
         "q",
         None,
+        &[],
     )
     .await
     .unwrap();
@@ -1209,5 +1211,133 @@ async fn the_obvious_lookup_is_run_before_the_first_turn() {
             holds_result,
             "{mode:?}: the first request carries the overview"
         );
+    }
+}
+
+#[tokio::test]
+async fn internet_lookups_run_only_when_offered() {
+    let run = |extra: Vec<platform_assistant::ToolSpec>| async move {
+        let script = Script::new(vec![
+            tool_turn(vec![call("1", "reference", r#"{"id":"CVE-2026-1"}"#)]),
+            text("done"),
+        ]);
+        let fake = Fake::default();
+        let backend: Arc<dyn ChatBackend> = script.clone();
+        answer(
+            backend,
+            &fake,
+            settings(ResolvedMode::Native),
+            &[],
+            "q",
+            None,
+            &extra,
+        )
+        .await
+        .unwrap();
+        let tools = script.requests()[0].tools.len();
+        (fake.ran.lock().unwrap().len(), tools)
+    };
+    assert_eq!(run(Vec::new()).await, (0, 9));
+    assert_eq!(
+        run(platform_assistant::lookups::internet_specs(1)).await,
+        (1, 10)
+    );
+}
+
+/// Hosts with a lot of text, then a reference with a 1,000-character snippet.
+struct Squeeze;
+
+impl LookupRunner for Squeeze {
+    async fn run(&self, lookup: &Lookup, _items: u32) -> Result<LookupOutput, LookupError> {
+        Ok(match lookup {
+            Lookup::VulnerabilityHosts { .. } => LookupOutput {
+                data: json!({ "items": (0..3).map(|i| json!({
+                    "cite": format!("[agent:agent.{i}]"), "title": "y".repeat(380),
+                })).collect::<Vec<_>>(), "omitted": 0 }),
+            },
+            Lookup::Reference { .. } => LookupOutput {
+                data: json!({ "source": "osv.dev", "outside_data": true, "omitted": 0,
+                    "items": [{ "ref": "[web:1]", "title": "CVE-2024-6387: x", "url": "https://osv.dev/x",
+                        "snippet": format!("openssh: fixed in 9.8p1\n{}", "p".repeat(976)) }] }),
+            },
+            _ => return Err(LookupError::Unknown),
+        })
+    }
+}
+
+#[tokio::test]
+async fn a_long_reference_as_the_second_prefetch_is_cut_not_dropped() {
+    let script = Script::new(vec![text("Update openssh to 9.8p1.")]);
+    let backend: Arc<dyn ChatBackend> = script.clone();
+    let tools = platform_assistant::lookups::internet_specs(1);
+    answer(
+        backend,
+        &Squeeze,
+        settings(ResolvedMode::Native),
+        &[],
+        "How do I mitigate CVE-2024-6387?",
+        None,
+        &tools,
+    )
+    .await
+    .unwrap();
+    let requests = script.requests();
+    let shown: Vec<&String> = requests[0]
+        .messages
+        .iter()
+        .filter_map(|m| match m {
+            Message::Tool { content, .. } => Some(content),
+            _ => None,
+        })
+        .collect();
+    let reference = shown.iter().find(|c| c.contains("osv.dev")).unwrap();
+    assert!(
+        reference.contains("openssh: fixed in 9.8p1") && reference.contains("[web:1]"),
+        "{reference}"
+    );
+}
+
+/// Internet lookups that take longer than the model's whole budget.
+struct SlowInternet;
+
+impl LookupRunner for SlowInternet {
+    async fn run(&self, lookup: &Lookup, _items: u32) -> Result<LookupOutput, LookupError> {
+        if matches!(lookup, Lookup::Reference { .. } | Lookup::WebSearch { .. }) {
+            tokio::time::sleep(Duration::from_millis(500)).await;
+        }
+        Ok(LookupOutput {
+            data: json!({ "items": [], "omitted": 0 }),
+        })
+    }
+}
+
+#[tokio::test]
+async fn internet_lookup_time_does_not_count_against_the_model_budget() {
+    // Spec §6: the assistant never fails because of the internet. The model
+    // gets 300 ms and uses 100; each internet lookup takes 500.
+    let tools = platform_assistant::lookups::internet_specs(2);
+    for (question, replies) in [
+        // Prefetched: a reference and a search before the first turn.
+        ("How do I mitigate CVE-2024-6387?", vec![text("Update.")]),
+        // Requested by the model.
+        (
+            "hi",
+            vec![
+                tool_turn(vec![call("1", "web_search", r#"{"query":"x"}"#)]),
+                text("Done."),
+            ],
+        ),
+    ] {
+        let script = Arc::new(Script {
+            replies: Mutex::new(replies.into_iter().map(Ok).collect()),
+            seen: Mutex::new(Vec::new()),
+            stream: Vec::new(),
+            delay: Duration::from_millis(50),
+        });
+        let mut quick = settings(ResolvedMode::Native);
+        quick.deadline = Duration::from_millis(300);
+        let backend: Arc<dyn ChatBackend> = script.clone();
+        let result = answer(backend, &SlowInternet, quick, &[], question, None, &tools).await;
+        assert!(result.is_ok(), "{question}: {result:?}");
     }
 }

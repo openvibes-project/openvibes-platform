@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer and -llm (run as root).
+# Verifies installed openvibes-ingest, -distribution, -vulns, -admin, -signer, -fetch and -llm (run as root).
 set -euo pipefail
 fail() { echo "FAIL: $*" >&2; exit 1; }
 expect_stat() { # PATH MODE OWNER:GROUP
@@ -198,4 +198,27 @@ grep -q '"version": 2' /var/lib/openvibes-signer/versions.json || fail "seed did
 grep -q '"version": 2' /var/lib/openvibes-signer/versions.json || fail "a second seed lowered the version"
 out=$(/usr/bin/openvibes-signer --config /nonexistent 2>&1) && fail "signer started without config"
 [[ "$out" == *"openvibes-signer:"* ]] || fail "signer error: $out"
+# openvibes-fetch (assistant internet lookups): one process per connection,
+# the socket reachable only by the console's group, the network allowed.
+getent passwd openvibes-fetch >/dev/null || fail "no user openvibes-fetch"
+getent group openvibes-console >/dev/null || fail "no group openvibes-console (the socket's group)"
+expect_stat /etc/openvibes/fetch.toml 640 root:openvibes-fetch
+rpm -qc openvibes-fetch | grep -qx /etc/openvibes/fetch.toml || fail "fetch.toml not %config"
+grep -q '^database_url = .*user=openvibes-fetch' /etc/openvibes/fetch.toml || fail "fetch.toml has no database_url"
+for u in openvibes-fetch.socket openvibes-fetch@.service; do
+    systemd-analyze verify "/usr/lib/systemd/system/$u" || fail "fetch unit verification: $u"
+done
+for line in 'ListenStream=/run/openvibes-fetch/fetch.sock' 'SocketUser=root' 'SocketGroup=openvibes-console' \
+    'SocketMode=0660' 'Accept=yes' 'MaxConnections=8' 'WantedBy=sockets.target'; do
+    grep -qx "$line" /usr/lib/systemd/system/openvibes-fetch.socket || fail "fetch socket lacks $line"
+done
+for line in 'User=openvibes-fetch' 'StandardInput=socket' 'StandardOutput=socket' 'StandardError=journal' \
+    'RuntimeMaxSec=30' 'CollectMode=inactive-or-failed' 'RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6' 'CapabilityBoundingSet=' \
+    'NoNewPrivileges=yes' 'ProtectSystem=strict' 'MemoryDenyWriteExecute=yes' 'ProtectProc=invisible' \
+    'ProcSubset=pid' 'PrivateIPC=yes' 'RemoveIPC=yes' 'IPAddressDeny=link-local multicast'; do
+    grep -qx "$line" /usr/lib/systemd/system/openvibes-fetch@.service || fail "fetch unit lacks $line"
+done
+systemctl is-enabled openvibes-fetch.socket >/dev/null || fail "openvibes-fetch.socket is not enabled after install"
+out=$(/usr/bin/openvibes-fetch --config /nonexistent </dev/null 2>&1) && fail "fetch started without config"
+[[ "$out" == *"openvibes-fetch:"* ]] || fail "fetch error: $out"
 echo "check-rpm: ok"

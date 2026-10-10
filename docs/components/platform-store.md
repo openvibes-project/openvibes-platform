@@ -383,7 +383,8 @@ text filter on rule, rule set, and latest message with `LIKE` wildcards
 escaped; minimum severity), `finding_endpoints` (in-window endpoints and the
 count not seen in the window), `agent_summaries` (by agent ID or
 case-insensitive host name), `host_vulnerabilities` (open, by priority),
-`vulnerable_hosts` (by CVE or advisory), and `overview`. A finding with an
+`vulnerable_hosts` (by CVE or advisory; each host carries the open row's
+`packages` `{name, installed, fixed}`), and `overview`. A finding with an
 unrecognised severity reports `unknown`. Nothing writes.
 
 `assistant_inventory::…` adds the same kind of reads for ports, services
@@ -811,3 +812,30 @@ Functions:
 - Console reads stay agent-only until the device screens exist: list,
   detail, triage and cases inner-join `agents`, and `HOST_COUNTS_SQL`, case
   item titles and bulk suppressions filter `source = 'agent'`.
+
+## Assistant internet lookups (schema 47)
+
+Spec `docs/specs/2026-10-10-assistant-internet-lookups.md`. Migration 47
+adds the one-row `assistant_internet` table (off by default): `level`
+(0 off, 1 security references (OSV, Bodhi), 2 those and web search), `searxng_url` (required at
+level 2), `internal_domains` (at most 50), `version`, `updated_at`,
+`updated_by`. It adds the global `assistant.admin` permission (granted to
+`admin`) and the `openvibes-fetch` login role, which has `SELECT` only on
+`assistant_internet`, `agents(agent_id, hostname)`, `console_users(username)`
+and `schema_version`. `openvibes-console` can `SELECT` the table and
+`UPDATE` its editable columns.
+
+- `assistant_internet::get`: reads the setting.
+- `assistant_internet::update`: version-checked (`None` when stale), with
+  an `assistant.internet.changed` audit row (old and new level, URL and
+  domains) in the same transaction. Refused with `StoreError::Query` before
+  the transaction: level outside 0-2, level 2 without a URL, over 50
+  domains, or a domain that is not lowercase LDH labels joined by dots
+  (253 characters at most; a single label such as `intranet` is allowed).
+- `assistant_internet::denylist`: lowercase, de-duplicated agent ids,
+  hostnames (not empty) and the first label of every dotted one (`web-01`
+  for `web-01.corp.example`; only when it has at least three characters, so
+  `a.corp.example` adds no `a`), console usernames and the internal domains, for
+  the fetch service's outbound filter.
+- Tests: `tests/assistant_internet.rs` (including the denylist and the
+  console write path under their own roles).

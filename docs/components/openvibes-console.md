@@ -46,6 +46,71 @@ reads/updates are available; `/audit` provides a filtered, cursor-paginated
 activity screen without exposing event details or request source metadata.
 Global `audit.export` users can download the exact visible filters as bounded
 CSV; the export audit event records only filters, row count, and digest.
+`GET`/`PUT /api/v1/assistant-internet` (permission `assistant.admin`, global
+scope, `If-Match`, Origin and CSRF on writes) read and change the assistant's
+internet-lookup setting: level 0 off, 1 security references (OSV, Bodhi), 2
+those and web search through SearXNG. The SearXNG URL must be `https://`, or `http://` only on
+loopback or a private address; level 2 requires it. Domains must be lowercase
+names (at most 50). Each change writes an `assistant.internet.changed` audit
+row; `platform_domain` (the public origin's host) is always filtered
+(Setup writes it to `fetch.toml`). An
+unreadable setting counts as level 0.
+`POST /api/v1/assistant-internet/test` (same permission, Origin and CSRF) is
+the admin page's Test connection: it sends a `search` for the fixed word
+`openvibes` through the same fetch client as the assistant (query filter,
+hourly limit, `assistant.internet.lookup` audit row) and answers
+`{ "ok": bool, "detail": string }` (`N results`, the refusal or unreachable
+note, or `web search is off` below level 2; the fetch service re-reads the
+level). Tested with a fake fetch socket (`authenticated_router_with_fetch`).
+The assistant's `reference` and `web_search` lookups (`src/fetch_client.rs`)
+are offered per question from that level (`internet_specs(current_level)`) and
+run through the fetch service's socket (`/run/openvibes-fetch/fetch.sock`,
+`AuthHttpState.fetch_socket`): the request JSON is written, the write side
+closed, a reply of at most 64 KiB read, within 25 s (longer than the fetch
+service's own 20 s deadline). A `reference` ID's prefix is uppercased before
+sending (`cve-2024-6387` becomes `CVE-2024-6387`). Each user gets 20 lookups
+per hour (in console memory, reset on restart). Every outbound request writes
+an `assistant.internet.lookup` audit row (user, kind, ID or query,
+destination, result or refusal code) under the request ID of the question
+it serves, the same as that question's `assistant.question` row, prefetched
+and model lookups alike (Test connection gets its own). Failures never fail the answer: the model
+gets a fixed note ("internet lookups are off", "blocked: the query contained
+internal data", "the internet lookup limit is reached; try again later", "OSV
+could not be reached; this answer uses local data only", "not a public
+advisory or CVE ID"; the notes and the data shape live in
+`openvibes_fetch::outside`). Results are marked `"outside_data": true`, items
+are labelled `[web:N]` (numbered on across one answer's lookups) with the URL
+as plain text. Test: `cargo test -p openvibes-console assistant::internet_tests`.
+An answer response also carries `internet: [{kind, text, url?, number?}]`,
+built by `fetch_client::internet_sources` from what went out for the answer
+(`Internet::sent`), each link once: a `reference` that answered ("Looked up ID
+on osv.dev", or bodhi.fedoraproject.org for `FEDORA-` IDs, with the source's
+own page as `url`, built from the ID); every `web_search` that went out, even
+with no results or a failed source, but never an off or blocked one
+("Searched the web for: …", no link); and each `result` link of an answer,
+`text` its host only (never the outside title), `url` the result's http(s)
+URL and `number` its `[web:N]`; a result whose URL is the reference's own
+page is not listed twice, and the reference row takes its `number`, so every
+number the model was given has a row. A query the fetch service's filter refused
+(`Refused{Blocked}`) never left the host and is no failure: it gets one
+`blocked` entry ("Web search blocked: the query contained internal data", no
+link). One `unavailable` entry ("Internet lookup unavailable; this answer
+uses local data only", no link) follows when an internet lookup was
+attempted and failed (unreachable, too large, rate-limited; not the off,
+invalid-ID or blocked note). The assistant dock lists them
+under the answer; links open in a new tab with
+`rel="noopener noreferrer nofollow"`.
+The Administer menu's Assistant page (`/assistant-settings`, `assistant.admin`)
+switches the two levels: "Look up security references" and "Search the web"
+(enabled only while level 1 is on). Turning a level on opens a confirmation
+dialog repeating its risk text; level 2 also asks for the SearXNG URL and
+stays disabled until it is an http(s) URL. Turning off needs no confirmation.
+A textarea holds the internal domains, one per line, beside the always-included
+platform domain. When `/api/v1/assistant/status` says the assistant is
+unavailable the page says so and the switches are off. With level 2 on and
+a URL saved, Test connection (`POST /api/v1/assistant-internet/test`) asks the
+SearXNG for a fixed harmless query and shows whether it answered with JSON
+results. The demo serves the setting from memory.
 The first-account bootstrap and account recovery CLI is available through
 `openvibes-admin user`. The embedded UI has a login form, session gate, and
 sign-out action, and its production Overview, Agents, Findings, Audit, and

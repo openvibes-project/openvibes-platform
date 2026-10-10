@@ -438,6 +438,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/assistant-internet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["get_assistant_internet"];
+        put: operations["update_assistant_internet"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/assistant-internet/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["test_assistant_internet"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/assistant/messages": {
         parameters: {
             query?: never;
@@ -2017,6 +2049,54 @@ export interface components {
             /** @description Exact tag value. */
             value: string;
         };
+        /** @description The assistant's internet-lookup setting. */
+        AssistantInternet: {
+            /** @description Extra internal domain names the outbound filter refuses. */
+            internal_domains: string[];
+            /**
+             * Format: int32
+             * @description 0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.
+             */
+            level: number;
+            /** @description Host of the console's public origin; always filtered. */
+            platform_domain: string;
+            /** @description SearXNG base URL, required at level 2. */
+            searxng_url?: string | null;
+            /** @description RFC 3339 update instant. */
+            updated_at: string;
+            /** @description Local user id that last changed the setting. */
+            updated_by: string;
+            /**
+             * Format: int64
+             * @description Version for conditional updates.
+             */
+            version: number;
+        };
+        /**
+         * @description One line under an answer that used the internet. A reference's link is
+         *     built from its ID; a result's text is its link's host, never fetched text.
+         */
+        AssistantInternetSource: {
+            /**
+             * @description `reference`, `search`, `result`, `blocked` (a query kept on the
+             *     host) or `unavailable` (a lookup failed).
+             */
+            kind: string;
+            /**
+             * Format: int32
+             * @description A result's `[web:N]` number, as the model saw it.
+             */
+            number?: number | null;
+            text: string;
+            url?: string | null;
+        };
+        /** @description The outcome of a Test connection against the stored SearXNG. */
+        AssistantInternetTest: {
+            /** @description `N results`, or why not (off, blocked, unreachable). */
+            detail: string;
+            /** @description True when the search ran and answered. */
+            ok: boolean;
+        };
         AssistantLookup: {
             error?: string | null;
             name?: string | null;
@@ -2027,6 +2107,7 @@ export interface components {
             question: string;
         };
         AssistantMessageResponse: {
+            internet: components["schemas"]["AssistantInternetSource"][];
             lookups: components["schemas"]["AssistantLookup"][];
             segments: components["schemas"]["AssistantSegment"][];
         };
@@ -3202,7 +3283,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "assistant.admin" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
@@ -3986,6 +4067,18 @@ export interface components {
             note?: string | null;
             /** @description New state. */
             state: string;
+        };
+        /** @description Request body for changing the assistant internet setting. */
+        UpdateAssistantInternetRequest: {
+            /** @description Lowercase internal domain names, at most 50. */
+            internal_domains: string[];
+            /**
+             * Format: int32
+             * @description 0 off, 1 security references (OSV, Bodhi), 2 those and web search.
+             */
+            level: number;
+            /** @description SearXNG base URL: `https://`, or `http://` on a local or private address. */
+            searxng_url?: string | null;
         };
         /** @description Request body for changing audit retention. */
         UpdateAuditRetentionRequest: {
@@ -5427,6 +5520,194 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    get_assistant_internet: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The assistant internet setting */
+            200: {
+                headers: {
+                    /** @description Setting version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantInternet"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    update_assistant_internet: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Quoted setting version from ETag */
+                "If-Match": string;
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateAssistantInternetRequest"];
+            };
+        };
+        responses: {
+            /** @description Updated setting */
+            200: {
+                headers: {
+                    /** @description New setting version */
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantInternet"];
+                };
+            };
+            /** @description Invalid setting or request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Setting version is stale */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description If-Match is required */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    test_assistant_internet: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A search for a fixed word ran (or why not) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantInternetTest"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Audit unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
         };
     };

@@ -1,0 +1,4 @@
+# The internet fetcher for the assistant; see docs/components/openvibes-fetch.md.
+# One process per request, started by openvibes-fetch.socket.
+database_url = "postgresql:///openvibes?host=/run/postgresql&user=openvibes-fetch"
+# proxy_url = "http://proxy.example:3128"

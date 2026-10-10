@@ -27,7 +27,7 @@ pub struct Fake {
 
 /// Users and groups the steps look up; all map to the test's own ids, so
 /// chown succeeds without root.
-const ACCOUNTS: [&str; 9] = [
+const ACCOUNTS: [&str; 10] = [
     "root",
     "postgres",
     "alice",
@@ -35,6 +35,7 @@ const ACCOUNTS: [&str; 9] = [
     "openvibes-ingest",
     "openvibes-distribution",
     "openvibes-console",
+    "openvibes-fetch",
     "openvibes_agent",
     "openvibes-operators",
 ];

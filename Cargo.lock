@@ -1718,6 +1718,7 @@ dependencies = [
  "futures-util",
  "include_dir",
  "openvibes-core",
+ "openvibes-fetch",
  "openvibes-rules",
  "openvibes-signer",
  "platform-assistant",
@@ -1772,6 +1773,20 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "openvibes-fetch"
+version = "0.2.8"
+dependencies = [
+ "chrono",
+ "platform-config",
+ "platform-store",
+ "serde",
+ "serde_json",
+ "tokio",
+ "toml",
+ "ureq",
 ]
 
 [[package]]
@@ -2163,6 +2178,7 @@ version = "0.2.8"
 dependencies = [
  "chrono",
  "openvibes-core",
+ "openvibes-fetch",
  "platform-pki",
  "platform-store",
  "rcgen",

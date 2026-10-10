@@ -34,16 +34,17 @@ use crate::{
 const MAX_REQUEST_BODY_BYTES: usize = 1_048_576;
 const MAX_IN_FLIGHT_REQUESTS: usize = 128;
 const REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(15);
-// The orchestrator bounds each question by the configured backend deadline
-// (at most 15 minutes) and answers 504 itself; this is only a backstop.
-const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(960);
+// The orchestrator bounds each question (`Settings::longest`: at most 15
+// minutes for the model plus 30 s per internet lookup, 20.5 minutes in all)
+// and answers 504 itself; this is only a backstop.
+const ASSISTANT_REQUEST_DEADLINE: std::time::Duration = std::time::Duration::from_secs(1_260);
 /// Time past the orchestrator's own question deadline before the console
 /// gives up, so the orchestrator ends the answer first.
 const ASSISTANT_ANSWER_MARGIN: std::time::Duration = std::time::Duration::from_secs(5);
 
-/// The console's backstop for one answer: the question deadline (from the
-/// tuned `deadline_seconds`, at most 15 minutes) plus a margin, never a
-/// fixed cap that would cut off a slow host's answer.
+/// The console's backstop for one answer: the question's hard bound (the
+/// tuned deadline plus its internet lookups, `Settings::longest`) plus a
+/// margin, never a fixed cap that would cut off a slow host's answer.
 fn assistant_answer_timeout(question_deadline: std::time::Duration) -> std::time::Duration {
     question_deadline + ASSISTANT_ANSWER_MARGIN
 }
@@ -62,7 +63,7 @@ pub struct Readiness(Arc<AtomicBool>);
 #[derive(Clone)]
 pub(crate) struct AuthHttpState {
     pub(crate) pool: Pool,
-    public_origin: Arc<str>,
+    pub(crate) public_origin: Arc<str>,
     public_origin_valid: bool,
     /// Lowercase `Host` values served: `public_origin`'s authority and every
     /// name the certificate covers at the console's port (board #71).
@@ -78,6 +79,10 @@ pub(crate) struct AuthHttpState {
     pub(crate) presence: crate::presence::PresenceHub,
     /// The rule signer's socket: where a site rule set is signed to publish.
     pub(crate) signer_socket: Arc<std::path::Path>,
+    /// The fetch service's socket (assistant internet lookups).
+    pub(crate) fetch_socket: Arc<std::path::Path>,
+    /// Internet lookups used per user this hour.
+    pub(crate) internet_limits: Arc<crate::fetch_client::Limits>,
 }
 
 #[derive(Deserialize)]
@@ -273,7 +278,7 @@ pub fn public_router() -> Router {
 /// Builds the authenticated C3 router backed by the shared PostgreSQL store.
 /// Data routes remain absent until every query applies SQL-enforced asset scope.
 pub fn authenticated_router(pool: Pool, public_origin: impl Into<Arc<str>>) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, (None, None))
 }
 
 /// As [`authenticated_router`], with the rule signer at `socket` instead of
@@ -283,7 +288,32 @@ pub fn authenticated_router_with_signer(
     public_origin: impl Into<Arc<str>>,
     socket: std::path::PathBuf,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, [], None, None, None, Some(socket))
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (Some(socket), None),
+    )
+}
+
+/// As [`authenticated_router`], with the fetch service at `socket` (tests).
+pub fn authenticated_router_with_fetch(
+    pool: Pool,
+    public_origin: impl Into<Arc<str>>,
+    socket: std::path::PathBuf,
+) -> Router {
+    authenticated_router_with_assistant(
+        pool,
+        public_origin,
+        [],
+        None,
+        None,
+        None,
+        (None, Some(socket)),
+    )
 }
 
 /// As [`authenticated_router`], offering the agent install command and
@@ -301,7 +331,7 @@ pub fn authenticated_router_with_agent_install(
         None,
         None,
         Some(agent_install),
-        None,
+        (None, None),
     )
 }
 
@@ -315,7 +345,7 @@ pub fn authenticated_router_for_hosts(
     public_origin: impl Into<Arc<str>>,
     hosts: impl IntoIterator<Item = String>,
 ) -> Router {
-    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, None)
+    authenticated_router_with_assistant(pool, public_origin, hosts, None, None, None, (None, None))
 }
 
 pub(crate) fn authenticated_router_with_assistant(
@@ -325,7 +355,8 @@ pub(crate) fn authenticated_router_with_assistant(
     assistant: Option<crate::assistant::AssistantRuntime>,
     update_checker: Option<Arc<crate::about::UpdateChecker>>,
     agent_install: Option<crate::config::AgentInstallConfig>,
-    signer_socket: Option<std::path::PathBuf>,
+    // The rule signer's and the fetch service's sockets; `None` is the default path.
+    (signer_socket, fetch_socket): (Option<std::path::PathBuf>, Option<std::path::PathBuf>),
 ) -> Router {
     let public_origin = public_origin.into();
     let mut allowed_hosts: Vec<String> = public_origin
@@ -351,6 +382,10 @@ pub(crate) fn authenticated_router_with_assistant(
         signer_socket: signer_socket
             .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
             .into(),
+        fetch_socket: fetch_socket
+            .unwrap_or_else(|| std::path::PathBuf::from(crate::fetch_client::DEFAULT_FETCH_SOCKET))
+            .into(),
+        internet_limits: Arc::default(),
     };
     let router = Router::new()
         .nest(
@@ -542,6 +577,15 @@ fn authenticated_api_router() -> Router<AuthHttpState> {
         .route(
             "/v1/audit-retention",
             get(authenticated_audit_retention).put(update_authenticated_audit_retention),
+        )
+        .route(
+            "/v1/assistant-internet",
+            get(crate::assistant_internet::get_assistant_internet)
+                .put(crate::assistant_internet::update_assistant_internet),
+        )
+        .route(
+            "/v1/assistant-internet/test",
+            axum::routing::post(crate::assistant_internet::test_assistant_internet),
         )
         .route("/v1/audit-events", get(authenticated_audit_events))
         .route("/v1/audit-export.csv", get(authenticated_audit_export))
@@ -3108,10 +3152,20 @@ pub(crate) async fn authenticated_assistant_message(
             answer: turn.answer,
         })
         .collect::<Vec<_>>();
+    // One ID for the question's audit row and every internet lookup it makes.
+    let request_id = next_request_id();
     let access = crate::assistant::Access {
         agents: agent_scope,
         vulnerabilities,
         rules,
+        // The handler requires assistant.use (analysts, administrators).
+        internet: Some(crate::fetch_client::Internet {
+            user: actor.clone(),
+            request_id: request_id.clone(),
+            socket: state.fetch_socket.clone(),
+            limits: state.internet_limits.clone(),
+            sent: std::sync::Mutex::default(),
+        }),
     };
     let lookups = match crate::assistant::ConsoleReadLookups::for_user(
         state.pool.clone(),
@@ -3129,10 +3183,14 @@ pub(crate) async fn authenticated_assistant_message(
             user_permit,
             capacity_permit,
         ));
+    // The same level decides the offered tools and the mitigation prefetch
+    // (the orchestrator reads it from the tools).
+    let extra_tools = platform_assistant::lookups::internet_specs(
+        crate::assistant_internet::current_level(&state.pool).await,
+    );
     let started = Instant::now();
-    let request_id = next_request_id();
     let answer = tokio::time::timeout(
-        assistant_answer_timeout(settings.deadline),
+        assistant_answer_timeout(settings.longest()),
         platform_assistant::answer(
             backend,
             &lookups,
@@ -3140,6 +3198,7 @@ pub(crate) async fn authenticated_assistant_message(
             &history,
             &request.question,
             None,
+            &extra_tools,
         ),
     )
     .await
@@ -3244,6 +3303,10 @@ pub(crate) async fn authenticated_assistant_message(
                 error: lookup.error.map(|error| error.message().to_owned()),
             })
             .collect(),
+        internet: crate::assistant::internet_sources(
+            lookups.internet_failed(),
+            &lookups.internet_sent(),
+        ),
     };
     let mut response = (StatusCode::OK, Json(response)).into_response();
     response
@@ -6984,9 +7047,18 @@ mod request_deadline_tests {
         // A 4-vCPU host tuned to 72 s per call, 7 calls: far past 30 s.
         let tuned = Duration::from_secs(72 * 7);
         assert!(assistant_answer_timeout(tuned) > tuned);
-        // The longest question deadline (15 minutes) still ends inside the
-        // request deadline, so the orchestrator answers before either cap.
-        let longest = Duration::from_secs(900);
+        // The longest question (15 minutes, 8 lookups, each one an internet
+        // lookup) still ends inside the request deadline, so the
+        // orchestrator answers before either cap.
+        let longest = platform_assistant::Settings {
+            mode: platform_assistant::probe::ResolvedMode::Native,
+            budget: platform_assistant::Profile::Small.budget(),
+            max_lookups: 8,
+            deadline: Duration::from_secs(900),
+            now: chrono::Utc::now(),
+        }
+        .longest();
+        assert_eq!(longest, Duration::from_secs(900 + 11 * 30));
         assert!(assistant_answer_timeout(longest) <= ASSISTANT_REQUEST_DEADLINE);
     }
 

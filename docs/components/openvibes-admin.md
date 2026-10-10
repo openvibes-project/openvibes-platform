@@ -413,6 +413,38 @@ stderr). Re-running an import is always safe. One audit entry per run:
 the totals and the paths given (`… from /exports`, at most 1,000
 characters), so the log keeps where unsigned data came from.
 
+## Assistant internet lookups (risk levels)
+
+Off by default; set in the console under Administer, Assistant
+(`assistant.admin`), not by a command. Turning a level on asks for
+confirmation and repeats its risk text:
+
+- **Level 1, "Look up security references":** "Sends public IDs only (like
+  CVE-2026-1234) to api.osv.dev and bodhi.fedoraproject.org. No host data
+  leaves your network."
+- **Level 2, "Search the web"** (needs level 1): "The query goes to your
+  SearXNG and the engines behind it; code refuses any query naming a host,
+  agent ID, IP address, user name or internal domain; website snippets reach the
+  assistant as data and may be wrong or hostile; every answer shows what was
+  searched."
+
+The search engine is **your own SearXNG**, self-hosted: OpenVIBES ships none
+and never uses a third-party search API. Enable the `json` format in its
+`settings.yml` (`search.formats`), and enter its URL (`https://`, or `http://`
+only on a loopback or private address) when turning level 2 on; Test
+connection checks it. Add internal domains (one per line): a query naming one
+is refused (never trimmed), as is one naming the platform's own domain, which
+Setup writes to `/etc/openvibes/fetch.toml` (`platform_domain`). Every lookup
+is audited (`assistant.internet.lookup`), every change of the setting too
+(`assistant.internet.changed`, old and new values), and the platform side is
+[openvibes-fetch](openvibes-fetch.md). A site behind an outbound proxy sets
+`proxy_url` in `/etc/openvibes/fetch.toml` by hand (separately from
+`vulns.toml`).
+
+If a lookup fails (source unreachable, slow, too large, refused or over the
+hourly limit), the assistant still answers from local data and says so under
+the answer.
+
 ## Assistant commands
 
 `check` and `eval` read the `[assistant]` section of the console's configuration
@@ -514,8 +546,9 @@ privacy or deprecated ones), container and VM bridges
 interfaces kept, so the console opens by IP; a changed address makes the step Todo
 and Repair reissues), `console` (`public_origin`
 `https://HOST` or `https://HOST:PORT`, `development_listen` on the chosen
-port with direct TLS, and the `admin` account; a generated password is
-shown once), `services` (after the port check),
+port with direct TLS, `platform_domain` in `/etc/openvibes/fetch.toml`
+when openvibes-fetch is installed, and the `admin` account; a generated
+password is shown once), `services` (after the port check),
 `firewall` (skipped without firewalld), `rules` (skipped until
 `openvibes-rules-baseline` exists; done while the published version is at
 least the installed package's, so Repair publishes a newer package; when

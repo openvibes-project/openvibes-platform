@@ -1,0 +1,45 @@
+[Unit]
+Description=OpenVIBES internet fetcher (one request)
+Documentation=https://github.com/openvibes-project/openvibes-platform
+After=postgresql.service openvibes-migrate.service
+# A failed per-connection instance is unloaded too, not left behind.
+CollectMode=inactive-or-failed
+
+[Service]
+User=openvibes-fetch
+StandardInput=socket
+StandardOutput=socket
+StandardError=journal
+ExecStart=/usr/bin/openvibes-fetch --config /etc/openvibes/fetch.toml
+# The binary has its own 20 s deadline; this is the backstop.
+RuntimeMaxSec=30
+UMask=0077
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectProc=invisible
+ProcSubset=pid
+PrivateIPC=yes
+RemoveIPC=yes
+# Loopback stays open (a local proxy or SearXNG); link-local blocks the cloud
+# metadata address 169.254.169.254.
+IPAddressDeny=link-local multicast
+# The network is its job; the database is a Unix socket.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+CapabilityBoundingSet=

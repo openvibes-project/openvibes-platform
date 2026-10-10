@@ -140,7 +140,11 @@ pub fn console_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Skipped("console not chosen".into()));
     }
     Ok(
-        if origin_set(ctx)? && admin_exists(ctx)? && signer_ready(ctx)? {
+        if origin_set(ctx)?
+            && super::fetch_domain::set(ctx)?
+            && admin_exists(ctx)?
+            && signer_ready(ctx)?
+        {
             StepState::Done(format!(
                 "{} · console admin: admin{}",
                 origin(ctx),
@@ -192,6 +196,7 @@ pub fn console_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         // existing host); try-restart leaves a stopped one alone.
         ctx.ok(Systemctl, &["try-restart", "openvibes-console"])?;
     }
+    super::fetch_domain::apply(ctx)?;
     if !signer_ready(ctx)? {
         signer_apply(ctx)?;
     }

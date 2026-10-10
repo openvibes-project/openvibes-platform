@@ -1,0 +1,21 @@
+[package]
+name = "openvibes-fetch"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+platform-config = { path = "../platform-config" }
+platform-store = { path = "../platform-store" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+chrono.workspace = true
+toml.workspace = true

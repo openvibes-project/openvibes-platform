@@ -2,8 +2,9 @@
 // for the GitHub Pages preview, `?demo=1` and tests. It follows the wire
 // contracts (types from the OpenAPI client) and the permission model, and
 // keeps mutations in memory for the life of the page.
+import { validDomain, validSearxngUrl } from "../views/assistantRules";
 import type {
-  Agent, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
+  Agent, AssistantInternetSource, AssistantSegment, AuditEvent, Capability, FindingGroup, GroupEndpoint, Permission, RuleDraft,
   Severity, TriageCounts, Vulnerability,
 } from "../api/types";
 import { caseSeverityOf, createCaseStore, seedCases } from "./cases";
@@ -143,6 +144,13 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
   const assistant = (question: string): AssistantSegment[] => {
     const q = question.toLowerCase();
     const text = (value: string): AssistantSegment => ({ kind: "text", text: value });
+    const sources = internetSources(question);
+    if (sources[0]?.kind === "blocked") {
+      return [text("I could not search the web: the query named an internal host, so it was not sent. This is the demo assistant; it answers from synthetic data only.")];
+    }
+    if (sources.length > 0) {
+      return [text("Update OpenSSH to the fixed version and restart sshd; until then, set LoginGraceTime 0 to limit exposure. This is the demo assistant; it answers from synthetic data only.")];
+    }
     const cite = (target_kind: string, id: string): AssistantSegment => ({ kind: "citation", target_kind, id, path: "" });
     if (q.includes("stale") || q.includes("offline") || q.includes("contact")) {
       const stale = data.agents.filter((agent) => agent.status === "stale" && visible(agent.id)).slice(0, 4);
@@ -165,6 +173,23 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     const top = groups()[0];
     return [text("Start with the most severe open compliance finding: "), ...(top ? [cite("finding", `${top.rule_set_id}/${top.rule_id}`), text(`. ${top.latest_message} Open on ${top.triage_counts.open} ${top.triage_counts.open === 1 ? "host" : "hosts"}.`)] : []),
       text(" This is the demo assistant; it answers from synthetic data only.")];
+  };
+
+  // A mitigation question about a CVE shows the sources line, as the real
+  // assistant does when internet lookups are on.
+  const internetSources = (question: string): AssistantInternetSource[] => {
+    // A search naming an internal host: the filter keeps it on the platform.
+    if (/search the web for .*\.lab\b/i.test(question)) return [{ kind: "blocked", text: "Web search blocked: the query contained internal data", url: null, number: null }];
+    const id = /CVE-\d{4}-\d{4,}/.exec(question)?.[0];
+    if (id === undefined || !/mitigat|fix|patch|workaround|remediat|protect against/i.test(question)) return [];
+    // The demo's unreachable ID: the lookup failed, the answer is local only.
+    if (id === "CVE-2099-0001") return [{ kind: "unavailable", text: "Internet lookup unavailable; this answer uses local data only", url: null, number: null }];
+    // [web:1] is the OSV page itself, shown once as the reference with its number.
+    return [
+      { kind: "reference", text: `Looked up ${id} on osv.dev`, url: `https://osv.dev/vulnerability/${id}`, number: 1 },
+      { kind: "search", text: `Searched the web for: ${id} mitigation workaround`, url: null, number: null },
+      { kind: "result", text: "www.openssh.com", url: "https://www.openssh.com/txt/release-9.8", number: 2 },
+    ];
   };
 
   const routes: Route[] = [];
@@ -621,6 +646,26 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     if (Number.isNaN(since) || since > Date.now()) return problem(400, "invalid_query", "Audit event query parameters are invalid");
     return json(page(data.audit.filter((event) => Date.parse(event.at) >= since), query));
   });
+  route("GET", "/api/v1/assistant-internet", "assistant.admin", () => json(data.assistantInternet));
+  route("PUT", "/api/v1/assistant-internet", "assistant.admin", (_, __, body, headers) => {
+    const match = headers["if-match"];
+    if (match === undefined) return problem(428, "precondition_required", "If-Match is required");
+    if (match !== `"${data.assistantInternet.version}"`) return problem(412, "stale_setting", "The setting changed; reload and try again");
+    const level = Number(body.level);
+    const url = typeof body.searxng_url === "string" && body.searxng_url !== "" ? body.searxng_url : null;
+    const domains = Array.isArray(body.internal_domains) ? body.internal_domains.map(String) : [];
+    if (![0, 1, 2].includes(level) || (level === 2 && !url) || (url !== null && !validSearxngUrl(url)) || domains.length > 50 || !domains.every(validDomain)) {
+      return problem(400, "invalid_setting", "The assistant internet setting is invalid");
+    }
+    data.assistantInternet = { ...data.assistantInternet, level, searxng_url: url, internal_domains: domains, version: data.assistantInternet.version + 1, updated_at: iso(), updated_by: actor };
+    audit("assistant.internet.changed", "assistant", "internet");
+    return json(data.assistantInternet);
+  });
+  route("POST", "/api/v1/assistant-internet/test", "assistant.admin", () => {
+    if (data.assistantInternet.level < 2) return json({ ok: false, detail: "web search is off" });
+    audit("assistant.internet.lookup", "assistant", "internet");
+    return json({ ok: true, detail: "5 results" });
+  });
   route("GET", "/api/v1/audit-retention", "audit.read", () => json(data.retention));
   route("PUT", "/api/v1/audit-retention", "audit.retention.manage", (_, __, body, headers) => {
     const match = headers["if-match"];
@@ -908,7 +953,7 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
 
   route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: true, model: "demo (synthetic answers)", location: "in your browser" }));
   route("POST", "/api/v1/assistant/messages", "assistant.use", (_, __, body) =>
-    json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }] }));
+    json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }], internet: internetSources(String(body.question ?? "")) }));
 
   const dashboards = createDashboardStore(
     data.dashboards,

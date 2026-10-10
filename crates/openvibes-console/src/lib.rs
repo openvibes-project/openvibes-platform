@@ -17,6 +17,7 @@ mod api;
 #[cfg(feature = "embedded-ui")]
 mod assets;
 mod assistant;
+mod assistant_internet;
 mod auth;
 mod auth_first;
 mod bulk;
@@ -26,6 +27,7 @@ mod coverage;
 mod dashboards;
 mod detection;
 mod error;
+mod fetch_client;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
 mod metrics;
@@ -50,8 +52,8 @@ pub use api::{
     AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary,
     AgentTagBindingImpact, AgentTagChangeRequest, AgentTagGroupImpact, AgentTagInput,
     AgentTagPreviewResponse, AgentView, ApplyAgentTagsRequest, AssetGroupSelectorInput,
-    AuditEventPage, AuditEventView, AuditRetentionPolicy, AuthenticationLevel,
-    AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
+    AssistantInternet, AssistantInternetTest, AuditEventPage, AuditEventView, AuditRetentionPolicy,
+    AuthenticationLevel, AuthenticationMethod, BulkFindingTriageChange, BulkFindingTriageRequest,
     BulkFindingTriageResponse, CertificatePage, CertificateView, ChangePasswordRequest,
     CreateAccessBindingRequest, CreateEnrollmentTokenRequest, CreateServiceAccountRequest,
     CreateServiceTokenRequest, CreateUserRequest, CreatedEnrollmentToken, CreatedServiceToken,
@@ -64,10 +66,10 @@ pub use api::{
     PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
     RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
     ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
-    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAuditRetentionRequest,
-    UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail, VulnerabilityPage,
-    VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost,
-    VulnerabilityView,
+    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAssistantInternetRequest,
+    UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
+    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
+    VulnerabilityTopHost, VulnerabilityView,
 };
 pub use auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
@@ -82,7 +84,7 @@ pub use problem::{FieldError, ProblemDetails};
 pub use rbac::{BuiltInRole, RoleBinding, RoleBindingError, resolve_capabilities};
 pub use router::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
-    authenticated_router_with_agent_install, authenticated_router_with_signer, development_router,
-    health_router, public_router,
+    authenticated_router_with_agent_install, authenticated_router_with_fetch,
+    authenticated_router_with_signer, development_router, health_router, public_router,
 };
 pub use server::{TrustedPeer, run, serve};

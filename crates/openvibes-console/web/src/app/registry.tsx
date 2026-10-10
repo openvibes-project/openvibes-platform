@@ -26,6 +26,7 @@ import { Cases } from "../views/Cases";
 import { Access, Audit, Enrollment, RuleSets, ServiceAccounts } from "../views/Admin";
 import { Coverage } from "../views/Coverage";
 import { SiteRules } from "../views/SiteRules";
+import { AssistantSettings } from "../views/AssistantSettings";
 import { About } from "../views/About";
 import { Agents } from "../views/Agents";
 import { AlarmSuppressions, Alarms } from "../views/Alarms";
@@ -69,6 +70,7 @@ export const views: readonly ViewDef[] = [
   { path: "/access", label: "Access", icon: "access", group: "Administer", keys: "g p", access: [{ permission: "rbac.read", global: true }], render: () => <Access /> },
   { path: "/service-accounts", label: "Service accounts", icon: "service", group: "Administer", keys: "g s", access: [{ permission: "service_accounts.read", global: true }], render: () => <ServiceAccounts /> },
   { path: "/audit", label: "Audit log", icon: "audit", group: "Administer", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
+  { path: "/assistant-settings", label: "Assistant", icon: "sparkles", group: "Administer", keys: "g n", access: [{ permission: "assistant.admin", global: true }], render: () => <AssistantSettings /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 

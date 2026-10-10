@@ -59,6 +59,12 @@ and Setup downloads it, checks it against its pinned checksum and turns the
 assistant on. Answer **N** and the assistant stays off; the last screen
 says so. No internet on the platform host: see the [offline install guide](components/offline-kit.md).
 
+**Internet lookups (optional, off).** The assistant can look up public
+security references (level 1) and search the web through your own SearXNG
+(level 2). Turn them on in the console under Administer, Assistant; each
+switch shows what leaves your network. See the
+[admin guide](components/openvibes-admin.md#assistant-internet-lookups-risk-levels).
+
 **Adding the assistant later:** open Setup (`sudo openvibes-admin`), turn the
 assistant on with `m` (change components) and answer **Y**.
 

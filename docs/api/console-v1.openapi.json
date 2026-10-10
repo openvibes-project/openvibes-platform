@@ -1583,6 +1583,259 @@
         }
       }
     },
+    "/api/v1/assistant-internet": {
+      "get": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "get_assistant_internet",
+        "responses": {
+          "200": {
+            "description": "The assistant internet setting",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "Setting version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInternet"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Read unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "update_assistant_internet",
+        "parameters": [
+          {
+            "name": "If-Match",
+            "in": "header",
+            "description": "Quoted setting version from ETag",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateAssistantInternetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Updated setting",
+            "headers": {
+              "ETag": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "New setting version"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInternet"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid setting or request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "412": {
+            "description": "Setting version is stale",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "428": {
+            "description": "If-Match is required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Update unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/assistant-internet/test": {
+      "post": {
+        "tags": [
+          "assistant"
+        ],
+        "operationId": "test_assistant_internet",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "description": "Must exactly match configured origin",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "description": "Session synchronizer token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A search for a fixed word ran (or why not)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantInternetTest"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Origin, CSRF, or permission check failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Audit unavailable",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/assistant/messages": {
       "post": {
         "tags": [
@@ -8218,6 +8471,108 @@
         },
         "additionalProperties": false
       },
+      "AssistantInternet": {
+        "type": "object",
+        "description": "The assistant's internet-lookup setting.",
+        "required": [
+          "level",
+          "internal_domains",
+          "platform_domain",
+          "version",
+          "updated_at",
+          "updated_by"
+        ],
+        "properties": {
+          "internal_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Extra internal domain names the outbound filter refuses."
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 off, 1 security references (OSV, Bodhi), 2 those and web search through SearXNG.",
+            "minimum": 0
+          },
+          "platform_domain": {
+            "type": "string",
+            "description": "Host of the console's public origin; always filtered."
+          },
+          "searxng_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SearXNG base URL, required at level 2."
+          },
+          "updated_at": {
+            "type": "string",
+            "description": "RFC 3339 update instant."
+          },
+          "updated_by": {
+            "type": "string",
+            "description": "Local user id that last changed the setting."
+          },
+          "version": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Version for conditional updates.",
+            "minimum": 0
+          }
+        }
+      },
+      "AssistantInternetSource": {
+        "type": "object",
+        "description": "One line under an answer that used the internet. A reference's link is\nbuilt from its ID; a result's text is its link's host, never fetched text.",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "description": "`reference`, `search`, `result`, `blocked` (a query kept on the\nhost) or `unavailable` (a lookup failed)."
+          },
+          "number": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "A result's `[web:N]` number, as the model saw it.",
+            "minimum": 0
+          },
+          "text": {
+            "type": "string"
+          },
+          "url": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "AssistantInternetTest": {
+        "type": "object",
+        "description": "The outcome of a Test connection against the stored SearXNG.",
+        "required": [
+          "ok",
+          "detail"
+        ],
+        "properties": {
+          "detail": {
+            "type": "string",
+            "description": "`N results`, or why not (off, blocked, unreachable)."
+          },
+          "ok": {
+            "type": "boolean",
+            "description": "True when the search ran and answered."
+          }
+        }
+      },
       "AssistantLookup": {
         "type": "object",
         "required": [
@@ -8264,9 +8619,16 @@
         "type": "object",
         "required": [
           "segments",
-          "lookups"
+          "lookups",
+          "internet"
         ],
         "properties": {
+          "internet": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssistantInternetSource"
+            }
+          },
           "lookups": {
             "type": "array",
             "items": {
@@ -11181,6 +11543,7 @@
           "rules.write",
           "audit.read",
           "audit.export",
+          "assistant.admin",
           "audit.retention.manage",
           "rbac.read",
           "rbac.manage",
@@ -13028,6 +13391,38 @@
           "state": {
             "type": "string",
             "description": "New state."
+          }
+        },
+        "additionalProperties": false
+      },
+      "UpdateAssistantInternetRequest": {
+        "type": "object",
+        "description": "Request body for changing the assistant internet setting.",
+        "required": [
+          "level",
+          "internal_domains"
+        ],
+        "properties": {
+          "internal_domains": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Lowercase internal domain names, at most 50."
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 off, 1 security references (OSV, Bodhi), 2 those and web search.",
+            "maximum": 2,
+            "minimum": 0
+          },
+          "searxng_url": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "SearXNG base URL: `https://`, or `http://` on a local or private address."
           }
         },
         "additionalProperties": false

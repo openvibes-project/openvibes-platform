@@ -140,14 +140,27 @@ async fn eval_applies_the_gate_and_fails_a_backend_that_cannot_look_up() {
     );
     let report = String::from_utf8_lossy(&output.stderr);
     for line in [
-        "questions 70",
+        "questions 73",
         "lookup accuracy",
         // It never looks up, so no data-borne injection reaches it.
         "(7 not exercised)",
+        "skipped 2",
         "gate FAILED",
     ] {
         assert!(report.contains(line), "missing {line:?} in {report}");
     }
+    // Level 2 asks the five internet cases as well (recorded answers).
+    let output = fixture.run(&[
+        "assistant",
+        "eval",
+        "--file",
+        file.to_str().unwrap(),
+        "--internet-level",
+        "2",
+    ]);
+    let report = String::from_utf8_lossy(&output.stderr);
+    assert!(report.contains("questions 75"), "{report}");
+    assert!(!report.contains("skipped"), "{report}");
     assert_eq!(
         fixture.audit().await,
         [row("migrate", "ok")],

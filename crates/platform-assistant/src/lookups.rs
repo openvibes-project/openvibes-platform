@@ -100,6 +100,16 @@ pub enum Lookup {
         /// Agent ID or host name.
         agent: Option<String>,
     },
+    /// Level 1: a public advisory or CVE page, fetched by the console.
+    Reference {
+        /// The public identifier.
+        id: String,
+    },
+    /// Level 2: a web search, fetched by the console.
+    WebSearch {
+        /// The search text.
+        query: String,
+    },
 }
 
 /// Why a lookup request was refused or failed. Fed back to the model as a
@@ -127,6 +137,8 @@ pub enum Area {
     Vulnerabilities,
     /// Rule definitions (`rules.read`).
     Rules,
+    /// Internet lookups (analysts and administrators).
+    Internet,
 }
 
 impl LookupError {
@@ -145,6 +157,9 @@ impl LookupError {
                 "error: the user has no access to vulnerabilities; tell them so"
             }
             Self::Forbidden(Area::Rules) => "error: the user has no access to rules; tell them so",
+            Self::Forbidden(Area::Internet) => {
+                "error: the user may not use internet lookups; tell them so"
+            }
         }
     }
 }
@@ -465,6 +480,7 @@ impl Lookup {
                     rule: required(a.rule)?,
                 })
             }
+            "reference" | "web_search" => internet::parse(name, arguments),
             _ => inventory::parse(name, arguments),
         }
     }
@@ -482,6 +498,8 @@ impl Lookup {
             Self::RuleDescription { .. } => NAMES[6],
             Self::HostServices { .. } => NAMES[7],
             Self::Software { .. } => NAMES[8],
+            Self::Reference { .. } => INTERNET_NAMES[0],
+            Self::WebSearch { .. } => INTERNET_NAMES[1],
         }
     }
 
@@ -520,6 +538,8 @@ impl Lookup {
             }
             Self::HostServices { agent, port } => json!({ "agent": agent, "port": port }),
             Self::Software { name, agent } => json!({ "name": name, "agent": agent }),
+            Self::Reference { id } => json!({ "id": id }),
+            Self::WebSearch { query } => json!({ "query": query }),
         }
     }
 }
@@ -552,9 +572,24 @@ impl LookupOutput {
     /// fits `max_chars`, or no items are left.
     pub fn shrink_to(&mut self, max_chars: usize) {
         while self.text().len() > max_chars {
+            let excess = self.text().len() - max_chars;
             let Some(Value::Array(items)) = self.data.get_mut("items") else {
                 return;
             };
+            // The last item is cut (its snippet, at a character boundary)
+            // before it is dropped, so a long reference still shows its
+            // start, where the fixed versions are.
+            if let [Value::Object(only)] = items.as_mut_slice()
+                && let Some(Value::String(snippet)) = only.get_mut("snippet")
+                && !snippet.is_empty()
+            {
+                let keep = snippet.chars().count().saturating_sub(excess);
+                *snippet = snippet.chars().take(keep).collect();
+                if snippet.is_empty() {
+                    only.remove("snippet");
+                }
+                continue;
+            }
             if items.pop().is_none() {
                 return;
             }
@@ -902,6 +937,9 @@ fn groups_json(page: &Page<store::FindingGroup>) -> Vec<Value> {
         .collect()
 }
 
+mod internet;
+mod packages;
+pub use internet::{INTERNET_NAMES, internet_specs};
 mod inventory;
 mod resolve;
 
@@ -1048,6 +1086,7 @@ impl<S: Source> LookupRunner for Lookups<S> {
                     .items
                     .iter()
                     .map(|h| {
+                        let (packages, packages_omitted) = packages::capped(&h.packages);
                         json!({
                             "cite": agent_cite(&h.agent_id),
                             "hostname": h.hostname,
@@ -1056,6 +1095,8 @@ impl<S: Source> LookupRunner for Lookups<S> {
                             "title": h.title,
                             "first_seen": time(h.first_seen_at),
                             "reboot_needed": h.reboot_needed,
+                            "packages": packages,
+                            "packages_omitted": packages_omitted,
                         })
                     })
                     .collect();
@@ -1126,6 +1167,10 @@ impl<S: Source> LookupRunner for Lookups<S> {
             Lookup::Software { name, agent } => {
                 self.software_lookup(summary, name, agent.as_deref(), items)
                     .await?
+            }
+            // Fetched by the console, never from the store.
+            Lookup::Reference { .. } | Lookup::WebSearch { .. } => {
+                return Err(LookupError::Unknown);
             }
         })
     }

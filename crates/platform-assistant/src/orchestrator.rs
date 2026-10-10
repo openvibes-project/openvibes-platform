@@ -20,7 +20,7 @@ use crate::{
         Message, ToolCall, ToolSpec, Usage,
     },
     config::{Assistant, Backend, Budget},
-    lookups::{Lookup, LookupError, LookupRunner, NAMES, specs},
+    lookups::{INTERNET_NAMES, Lookup, LookupError, LookupRunner, NAMES, specs},
     prefetch,
     probe::ResolvedMode,
 };
@@ -39,6 +39,9 @@ const MIN_RESULT_CHARS: usize = 400;
 const MAX_RESULT_CHARS: usize = 1_600;
 /// Longest whole-question deadline.
 const MAX_QUESTION_DEADLINE: Duration = Duration::from_secs(900);
+/// Longest one internet lookup may take. The console's fetch client gives
+/// up after 25 s; this also bounds its database work around the request.
+pub const INTERNET_LOOKUP_LIMIT: Duration = Duration::from_secs(30);
 
 /// A model backend. [`BackendClient`] is the real one; tests script their
 /// own. Blocking: the orchestrator calls it on a blocking thread.
@@ -70,7 +73,8 @@ pub struct Settings {
     pub budget: Budget,
     /// Lookups per question.
     pub max_lookups: u32,
-    /// Time the whole question may take.
+    /// Time the model and the local lookups may take. Time spent in internet
+    /// lookups extends it (spec §6), up to [`Settings::longest`].
     pub deadline: Duration,
     /// Current time, given to the model and used for windows.
     pub now: DateTime<Utc>,
@@ -94,6 +98,15 @@ impl Settings {
             deadline: (backend.deadline * requests).min(MAX_QUESTION_DEADLINE),
             now,
         }
+    }
+
+    /// The hard bound on one question: the deadline plus
+    /// [`INTERNET_LOOKUP_LIMIT`] for every lookup it can run (the prefetch
+    /// and `max_lookups`), each of which may be an internet lookup.
+    #[must_use]
+    pub fn longest(&self) -> Duration {
+        let lookups = self.max_lookups + prefetch::MAX_MITIGATION_PREFETCH as u32;
+        self.deadline + INTERNET_LOOKUP_LIMIT * lookups
     }
 }
 
@@ -252,7 +265,7 @@ fn system_prompt(mode: ResolvedMode, tools: &[ToolSpec]) -> String {
     prompt
 }
 
-fn action_schema(final_turn: bool) -> Value {
+fn action_schema(final_turn: bool, tools: &[ToolSpec]) -> Value {
     if final_turn {
         json!({
             "type": "object",
@@ -268,7 +281,8 @@ fn action_schema(final_turn: bool) -> Value {
             "type": "object",
             "properties": {
                 "action": { "type": "string", "enum": ["lookup", "answer"] },
-                "name": { "type": "string", "enum": NAMES },
+                "name": { "type": "string",
+                          "enum": tools.iter().map(|t| t.name.as_str()).collect::<Vec<_>>() },
                 "arguments": { "type": "object" },
                 "text": { "type": "string" },
             },
@@ -352,7 +366,7 @@ fn read_action(content: &str) -> Action {
             Some(Value::String(name)) => (name, arguments),
             _ => return Action::Malformed,
         }
-    } else if NAMES.contains(&action.as_str()) {
+    } else if NAMES.contains(&action.as_str()) || INTERNET_NAMES.contains(&action.as_str()) {
         let arguments = map.remove("arguments").unwrap_or(Value::Object(map));
         (action, arguments)
     } else {
@@ -419,6 +433,8 @@ struct Run<'a, R> {
     records: Vec<LookupRecord>,
     usage: Usage,
     requests: u32,
+    /// When the model's budget ends; internet lookups push it back.
+    deadline: tokio::time::Instant,
 }
 
 impl<R: LookupRunner> Run<'_, R> {
@@ -499,7 +515,7 @@ impl<R: LookupRunner> Run<'_, R> {
             response_format: (self.settings.mode == ResolvedMode::JsonSchema).then(|| {
                 JsonSchemaFormat {
                     name: "assistant_action".into(),
-                    schema: action_schema(final_turn),
+                    schema: action_schema(final_turn, &self.tools),
                 }
             }),
             max_tokens: self.settings.budget.output_tokens,
@@ -507,16 +523,18 @@ impl<R: LookupRunner> Run<'_, R> {
         };
         let backend = self.backend.clone();
         let events = self.events.filter(|_| native).cloned();
-        let response = tokio::task::spawn_blocking(move || {
+        let chat = tokio::task::spawn_blocking(move || {
             backend.chat(&request, &mut |piece| {
                 if let Some(events) = &events {
                     let _ = events.send(Event::Text(piece.to_owned()));
                 }
             })
-        })
-        .await
-        .map_err(|_| AnswerError::Backend(BackendError::InvalidResponse))?
-        .map_err(AnswerError::Backend)?;
+        });
+        let response = tokio::time::timeout_at(self.deadline, chat)
+            .await
+            .map_err(|_| AnswerError::Deadline)?
+            .map_err(|_| AnswerError::Backend(BackendError::InvalidResponse))?
+            .map_err(AnswerError::Backend)?;
         self.requests += 1;
         if response.finish == FinishReason::Length
             && response.tool_calls.is_empty()
@@ -538,7 +556,23 @@ impl<R: LookupRunner> Run<'_, R> {
         arguments: &str,
         lookups_left: u32,
     ) -> (String, Option<Lookup>) {
-        let known = NAMES.iter().find(|known| **known == name).copied();
+        let known = NAMES
+            .iter()
+            .chain(&INTERNET_NAMES)
+            .find(|known| **known == name)
+            .copied();
+        // An internet lookup the console did not offer this question.
+        if INTERNET_NAMES.contains(&name) && !self.tools.iter().any(|t| t.name == name) {
+            let error = LookupError::Unknown;
+            self.records.push(LookupRecord {
+                name: known,
+                arguments: Value::Null,
+                objects: 0,
+                found: false,
+                error: Some(error),
+            });
+            return (error.message().to_owned(), None);
+        }
         let lookup = match Lookup::parse(name, arguments) {
             Ok(lookup) => lookup,
             Err(error) => {
@@ -554,11 +588,20 @@ impl<R: LookupRunner> Run<'_, R> {
         };
         self.emit(Event::Lookup(lookup.name()));
         let room = result_room(self.limit_chars, self.base_chars(), lookups_left);
-        let text = match self
-            .runner
-            .run(&lookup, self.settings.budget.result_items)
-            .await
-        {
+        let run = self.runner.run(&lookup, self.settings.budget.result_items);
+        // Internet time does not count against the model's budget (spec §6):
+        // the deadline moves by what the lookup took, at most the limit.
+        let result = if INTERNET_NAMES.contains(&lookup.name()) {
+            let started = tokio::time::Instant::now();
+            let result = tokio::time::timeout(INTERNET_LOOKUP_LIMIT, run)
+                .await
+                .unwrap_or(Err(LookupError::Store));
+            self.deadline += started.elapsed();
+            result
+        } else {
+            run.await
+        };
+        let text = match result {
             Ok(mut output) => {
                 output.shrink_to(room);
                 let found = output.found();
@@ -606,7 +649,15 @@ impl<R: LookupRunner> Run<'_, R> {
     /// They do not count against `max_lookups`.
     async fn prefetch(&mut self, question: &str) {
         let native = self.settings.mode == ResolvedMode::Native;
-        for (index, (name, arguments)) in prefetch::plan(question).into_iter().enumerate() {
+        // The internet level is what the console offers as tools.
+        let offered = |name: &str| self.tools.iter().any(|t| t.name == name);
+        let internet = if offered(INTERNET_NAMES[1]) {
+            2
+        } else {
+            u8::from(offered(INTERNET_NAMES[0]))
+        };
+        for (index, (name, arguments)) in prefetch::plan(question, internet).into_iter().enumerate()
+        {
             let left = self.settings.max_lookups + 1;
             let (text, lookup) = self.lookup(name, &arguments.to_string(), left).await;
             let Some(lookup) = lookup else { continue };
@@ -738,7 +789,8 @@ impl<R: LookupRunner> Run<'_, R> {
 
 /// Answers `question` in the context of `history`, running lookups through
 /// `runner` (which carries the user's scope) and sending progress to
-/// `events`.
+/// `events`. `extra_tools` are offered besides the fixed lookups (the
+/// internet lookups, when the console allows them).
 pub async fn answer<R: LookupRunner>(
     backend: Arc<dyn ChatBackend>,
     runner: &R,
@@ -746,6 +798,7 @@ pub async fn answer<R: LookupRunner>(
     history: &[Turn],
     question: &str,
     events: Option<&UnboundedSender<Event>>,
+    extra_tools: &[ToolSpec],
 ) -> Result<Answer, AnswerError> {
     let question = question.trim();
     if question.is_empty() {
@@ -754,7 +807,8 @@ pub async fn answer<R: LookupRunner>(
     if question.chars().count() > MAX_QUESTION_CHARS {
         return Err(AnswerError::QuestionTooLong);
     }
-    let tools = specs();
+    let mut tools = specs();
+    tools.extend_from_slice(extra_tools);
     let tools_chars = if settings.mode == ResolvedMode::Native {
         tools
             .iter()
@@ -801,11 +855,13 @@ pub async fn answer<R: LookupRunner>(
             completion_tokens: 0,
         },
         requests: 0,
+        deadline: tokio::time::Instant::now() + settings.deadline,
     };
     if run.base_chars() + RESERVE_CHARS + MIN_RESULT_CHARS > run.limit_chars {
         return Err(AnswerError::QuestionTooLong);
     }
-    tokio::time::timeout(settings.deadline, run.answer(question))
+    // The model's own deadline is checked per request; this is the backstop.
+    tokio::time::timeout(settings.longest(), run.answer(question))
         .await
         .map_err(|_| AnswerError::Deadline)?
 }
