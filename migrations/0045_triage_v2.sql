@@ -102,3 +102,8 @@ ON CONFLICT DO NOTHING;
 GRANT SELECT, INSERT, UPDATE ON vulnerability_triage TO "openvibes-console";
 GRANT SELECT, INSERT ON vulnerability_triage_history TO "openvibes-console";
 GRANT USAGE ON SEQUENCE vulnerability_triage_history_event_id_seq TO "openvibes-console";
+-- Open-vulnerability counts per host leave out triaged ones (mitigated,
+-- false positive, unexpired accepted risk): the matcher's recount reads the
+-- triage, and the console recounts a host after a triage change.
+GRANT SELECT ON vulnerability_triage TO "openvibes-vulns";
+GRANT INSERT, UPDATE ON host_vulnerability_counts TO "openvibes-console";

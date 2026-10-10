@@ -10,7 +10,7 @@ use crate::{Client, StoreError};
 mod candidates;
 mod confidence;
 mod feeds;
-mod summary;
+pub(crate) mod summary;
 use candidates::INSTALLED;
 pub use candidates::*;
 pub use feeds::*;

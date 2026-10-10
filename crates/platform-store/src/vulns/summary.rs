@@ -188,6 +188,13 @@ pub async fn refresh_counts(
                             (count(*) FILTER (WHERE v.reboot_needed))::int AS reboot
                         FROM vulnerabilities v JOIN advisories a ON a.advisory_id = v.advisory_id
                         WHERE v.agent_id = ANY($1) AND v.fixed_at IS NULL
+                          -- Triage v2: mitigated, false positive and an
+                          -- unexpired accepted risk are not open.
+                          AND NOT EXISTS (
+                              SELECT 1 FROM vulnerability_triage t
+                              WHERE t.agent_id = v.agent_id AND t.advisory_id = v.advisory_id
+                                AND (t.state IN ('mitigated', 'false_positive')
+                                     OR (t.state = 'accepted_risk' AND t.accepted_until > $2)))
                         GROUP BY v.agent_id) o ON o.agent_id = h.agent_id
              ON CONFLICT (agent_id) DO UPDATE SET no_fix = EXCLUDED.no_fix,
                  critical = EXCLUDED.critical, important = EXCLUDED.important,
