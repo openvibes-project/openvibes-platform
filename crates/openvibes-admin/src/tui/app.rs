@@ -80,6 +80,9 @@ pub struct App<H: Host> {
     /// The full log's page length at its last draw; it caps how far up
     /// the log scrolls.
     pub log_room: Cell<usize>,
+    /// The Status item highlighted when Status was left; Esc looks it up
+    /// again, as the list may have changed meanwhile.
+    pub(super) held: Option<super::status::Item>,
     /// A question in the bar; the bool is the highlighted answer (Yes).
     pub question: Option<(Question, bool)>,
     /// The sudo password being typed in the bar (enable at boot).
@@ -133,6 +136,7 @@ impl<H: Host> App<H> {
             updates: None,
             health: None,
             log_room: Cell::new(0),
+            held: None,
             question: None,
             prompt: None,
             pending: None,
@@ -230,11 +234,15 @@ impl<H: Host> App<H> {
         }
         match key {
             Key::Char('?') if !matches!(self.nav.screen, Screen::Help(_)) => {
+                self.hold_status_item();
                 let from = Box::new(self.nav.screen.clone());
                 self.nav.go(Screen::Help(from));
             }
             Key::Esc => {
                 self.nav.pop();
+                // A note from another screen is not news here.
+                self.message = None;
+                self.find_held_status_item();
                 if matches!(self.nav.screen, Screen::Service(_)) {
                     self.load_logs();
                 }

@@ -147,6 +147,7 @@ impl<H: Host> App<H> {
 
     /// Back one screen; Home when there is none (a fresh install, finished).
     pub(super) fn back(&mut self) {
+        self.message = None;
         if !self.nav.pop() {
             self.nav = Nav::new(Screen::Home);
         }

@@ -32,6 +32,8 @@ pub(super) struct FakeHost {
     pub(super) hold_restart: Cell<bool>,
     /// Units stopped by an action.
     stopped: RefCell<Vec<Unit>>,
+    /// Units running after an action (failed in the fake until then).
+    pub(super) started: RefCell<Vec<Unit>>,
     /// `services()` fails with this.
     pub(super) services_error: RefCell<Option<String>>,
 }
@@ -61,6 +63,10 @@ impl Host for FakeHost {
         ];
         for s in &mut all {
             s.enabled &= !self.disabled.borrow().contains(&s.unit);
+            if self.started.borrow().contains(&s.unit) {
+                s.active = "active".into();
+                s.ready = Some(true);
+            }
             if self.stopped.borrow().contains(&s.unit) {
                 s.active = "inactive".into();
                 s.ready = None;
@@ -180,6 +186,7 @@ pub(super) fn app(refuse: bool) -> App<FakeHost> {
         since: RefCell::new("Sat 2026-10-10 18:40:00 CEST".into()),
         hold_restart: Cell::new(false),
         stopped: RefCell::new(Vec::new()),
+        started: RefCell::new(Vec::new()),
         services_error: RefCell::new(None),
     });
     // The health checks at start are not what the test is about.

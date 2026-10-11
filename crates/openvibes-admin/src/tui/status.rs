@@ -189,24 +189,58 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         &rows,
         app.nav.row,
         &mut scroll,
-        area.height.saturating_sub(1),
+        area.height.saturating_sub(HELP_LINES),
         18,
     );
-    // The line under the list: the highlighted problem or check in full.
+    // Under the list: the highlighted problem or check in full, wrapped
+    // over up to HELP_LINES lines.
     if let Some(Item::Problem { text, .. } | Item::Check(text)) = items.get(app.nav.row) {
-        lines.push(Line::styled(format!("    {}", cut(text, 72)), t.dim()));
+        lines.extend(
+            wrap(text, 72, usize::from(HELP_LINES))
+                .into_iter()
+                .map(|l| Line::styled(format!("    {l}"), t.dim())),
+        );
     }
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
 
-/// `text`, cut with "…" only when it is longer than `max` columns.
-fn cut(text: &str, max: usize) -> String {
-    if text.chars().count() <= max {
-        return text.to_owned();
+/// Lines under the list for the highlighted entry's full text.
+const HELP_LINES: u16 = 3;
+
+/// `text` wrapped at word boundaries to `width` columns, at most `max`
+/// lines; what does not fit ends the last line with "…".
+fn wrap(text: &str, width: usize, max: usize) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    for word in text.split_whitespace() {
+        let mut word = word.to_owned();
+        loop {
+            let len = word.chars().count();
+            if let Some(l) = lines.last_mut()
+                && l.chars().count() + 1 + len <= width
+            {
+                l.push(' ');
+                l.push_str(&word);
+                break;
+            }
+            if len <= width {
+                lines.push(word);
+                break;
+            }
+            // A word longer than a line is broken.
+            let at = word.char_indices().nth(width).map_or(0, |(i, _)| i);
+            let rest = word.split_off(at);
+            lines.push(word);
+            word = rest;
+        }
     }
-    let kept: String = text.chars().take(max - 1).collect();
-    format!("{kept}…")
+    if lines.len() > max {
+        lines.truncate(max);
+        let last = &mut lines[max - 1];
+        let kept: String = last.chars().take(width - 1).collect();
+        *last = format!("{kept}…");
+    }
+    lines
 }
 
 /// systemd's `Sat 2026-10-10 12:56:13 CEST` as `12:56` when that day is
@@ -284,6 +318,27 @@ impl<H: Host> App<H> {
         ])
     }
 
+    /// Remembers the highlighted item before Status is left.
+    pub(super) fn hold_status_item(&mut self) {
+        if self.nav.screen == Screen::Status {
+            self.held = self.status_items().get(self.nav.row).cloned();
+        }
+    }
+
+    /// Back on Status: the remembered item, wherever it is now, else the
+    /// old row clamped.
+    pub(super) fn find_held_status_item(&mut self) {
+        let held = self.held.take();
+        if self.nav.screen != Screen::Status {
+            return;
+        }
+        let items = self.status_items();
+        self.nav.row = held
+            .and_then(|held| items.iter().position(|i| *i == held))
+            .unwrap_or(self.nav.row)
+            .min(items.len().saturating_sub(1));
+    }
+
     pub(super) fn status_key(&mut self, key: Key) {
         let items = self.status_items();
         if self.move_row(key, items.len()) || key != Key::Enter {
@@ -292,6 +347,7 @@ impl<H: Host> App<H> {
         match items.get(self.nav.row) {
             Some(Item::Service(unit)) => {
                 let unit = *unit;
+                self.hold_status_item();
                 self.nav.go(Screen::Service(unit));
                 self.selected = self
                     .services

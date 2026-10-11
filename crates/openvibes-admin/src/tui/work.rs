@@ -127,24 +127,28 @@ impl<H: Host> App<H> {
         }
         match question {
             Question::Quit => self.quit = true,
-            Question::Service(unit, action) => match self.host.service_action(unit, action) {
-                Ok(()) => {
-                    let now = Instant::now();
-                    let started = self
-                        .services
-                        .iter()
-                        .find(|s| s.unit == unit)
-                        .and_then(|s| s.since.clone());
-                    self.pending = Some(Pending {
-                        unit,
-                        action,
-                        since: now,
-                        polled: now,
-                        started,
-                    });
+            Question::Service(unit, action) => {
+                // A fresh start time to compare with (not up to 5 s old).
+                self.refresh();
+                let started = self
+                    .services
+                    .iter()
+                    .find(|s| s.unit == unit)
+                    .and_then(|s| s.since.clone());
+                match self.host.service_action(unit, action) {
+                    Ok(()) => {
+                        let now = Instant::now();
+                        self.pending = Some(Pending {
+                            unit,
+                            action,
+                            since: now,
+                            polled: now,
+                            started,
+                        });
+                    }
+                    Err(error) => self.outcome = Some((false, error.to_string())),
                 }
-                Err(error) => self.outcome = Some((false, error.to_string())),
-            },
+            }
         }
     }
 

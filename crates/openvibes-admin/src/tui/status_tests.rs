@@ -54,7 +54,7 @@ fn status_renders_problems_then_services_with_the_frame() {
     }
     // At 80x24 three problems leave no room for the service rows: the
     // hint says so (select a service to see them, see the scroll test).
-    assert!(text.contains("⭣ 6 more"), "{text}");
+    assert!(text.contains("⭣ 7 more"), "{text}");
     let mut app = app;
     while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
         app.key(Key::Down);
@@ -238,11 +238,14 @@ fn service_rows_say_since_and_ok_checks_are_rows_under_checks() {
 }
 
 #[test]
-fn a_problem_longer_than_its_row_is_read_in_full_on_the_help_line() {
+fn a_problem_longer_than_its_row_is_read_in_full_wrapped_under_the_list() {
     let mut app = app(false);
     app.open_status();
-    let long = format!("disk {}", "z".repeat(67));
-    assert_eq!(long.chars().count(), 72);
+    let long = (1..=40)
+        .map(|i| format!("w{i:03}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(long.len(), 199);
     app.database.health.insert(
         0,
         super::database::Check {
@@ -258,8 +261,56 @@ fn a_problem_longer_than_its_row_is_read_in_full_on_the_help_line() {
     let text = screen(&app, 80, 24);
     let row = text.lines().find(|l| l.contains('▸')).unwrap();
     assert!(row.trim_end().ends_with('…'), "the row is cut: {row}");
-    let help = text.lines().rev().nth(3).unwrap();
-    assert_eq!(help.trim(), long, "the help line has it all:\n{text}");
+    for word in long.split(' ') {
+        let under: Vec<&str> = text.lines().rev().skip(3).take(3).collect();
+        assert!(under.iter().any(|l| l.contains(word)), "{word}:\n{text}");
+    }
+}
+
+#[test]
+fn text_past_three_lines_ends_in_an_ellipsis() {
+    let mut app = app(false);
+    app.open_status();
+    let long = (1..=80)
+        .map(|i| format!("w{i:03}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    app.database.health.insert(
+        0,
+        super::database::Check {
+            problem: true,
+            text: long.clone(),
+        },
+    );
+    app.nav.row = 1;
+    let text = screen(&app, 80, 24);
+    let last = text.lines().rev().nth(3).unwrap();
+    assert!(
+        last.trim_end().ends_with('…') && !text.contains("w080"),
+        "{text}"
+    );
+}
+
+#[test]
+fn esc_finds_the_remembered_item_after_it_moved_or_went() {
+    let mut app = app(false);
+    app.open_status();
+    // vulns is stopped (a problem) and also the last... select its service row.
+    app.host.disabled.borrow_mut().clear();
+    select_service(&mut app, Unit::Vulns);
+    app.key(Key::Enter);
+    app.key(Key::Enter); // Start
+    app.key(Key::Char('y'));
+    // The fake: vulns now runs.
+    app.host.started.borrow_mut().push(Unit::Vulns);
+    app.poll(std::time::Instant::now() + std::time::Duration::from_secs(2));
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Status);
+    assert!(
+        matches!(app.status_items()[app.nav.row], Item::Service(Unit::Vulns)),
+        "{:?}",
+        app.status_items()[app.nav.row]
+    );
 }
 
 #[test]

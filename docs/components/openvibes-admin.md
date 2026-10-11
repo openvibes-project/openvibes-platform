@@ -58,8 +58,8 @@ Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
 **Status** (from Home): "Needs attention" first, then "Services" (installed
 units only: name, state, ready, `since 18:40` or `since 2026-10-10`), then
 "Checks" (the health checks that are fine, one entry each, `N ok` on the
-heading). The line under the list shows the highlighted problem or check in
-full (cut with `…` only past the line). A problem is an
+heading). Under the list the highlighted problem or check is shown in
+full, wrapped over up to 3 dim lines (cut with `…` only after the third). A problem is an
 installed unit that is failed or inactive (`■ NAME is stopped`; not the
 model server or the maintenance timer, which idle by design), a unit not
 enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),

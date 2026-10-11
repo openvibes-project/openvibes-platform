@@ -282,6 +282,20 @@ fn a_failing_service_list_shows_its_error_on_home_status_and_service() {
 }
 
 #[test]
+fn esc_clears_a_note_left_by_another_screen() {
+    let mut app = app(false);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    app.message = Some("saved ingest.toml".into());
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Maintenance);
+    app.key(Key::Esc);
+    let text = screen(&app, 80, 24);
+    assert!(!text.contains("saved") && !text.contains('✗'), "{text}");
+}
+
+#[test]
 fn no_services_is_a_problem_not_all_zero_running() {
     let mut app = app(false);
     app.services.clear();
