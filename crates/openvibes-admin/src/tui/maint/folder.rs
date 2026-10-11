@@ -22,7 +22,7 @@ use ratatui::{
 
 use super::{
     Page,
-    backup::{cheap_check, check_folder},
+    backup::{cheap_check, check_folder, next_file},
 };
 use crate::tui::{
     app::{App, Key},
@@ -52,6 +52,8 @@ pub struct Folder {
     pub check: Option<Result<String, String>>,
     /// The folder before typing began: Esc puts it back.
     before: Option<String>,
+    /// The file a backup would write, worked out once when the check succeeds.
+    pub file: Option<String>,
     /// When the slow check starts.
     due: Option<Instant>,
     /// The slow check running on its thread, and since when.
@@ -85,6 +87,7 @@ impl Folder {
     /// Takes `text`: the cheap check now, the slow one from `due` on.
     pub fn set(&mut self, text: String, due: Instant) {
         self.running = None;
+        self.file = None;
         match cheap_check(&text) {
             Ok(_) => {
                 self.check = None;
@@ -124,12 +127,17 @@ impl Folder {
         Edited::Typing
     }
 
+    fn finish(&mut self, result: Result<String, String>) {
+        self.file = result.is_ok().then(|| next_file(&self.text));
+        self.check = Some(result);
+    }
+
     /// Runs the slow check once due, and takes its answer or gives up.
     pub fn poll<H: Host>(&mut self, host: &H, checker: Option<&Checker>, now: Instant) {
         if let Some((rx, since)) = &self.running {
             let since = *since;
             match rx.try_recv() {
-                Ok(result) => self.check = Some(result),
+                Ok(result) => self.finish(result),
                 Err(TryRecvError::Empty) if now.saturating_duration_since(since) < PATIENCE => {
                     return;
                 }
@@ -151,7 +159,10 @@ impl Folder {
             let text = self.text.trim().to_owned();
             match checker {
                 Some(start) => self.running = Some((start(text), now)),
-                None => self.check = Some(check_folder(host, &text)),
+                None => {
+                    let result = check_folder(host, &text);
+                    self.finish(result);
+                }
             }
         }
     }
@@ -202,6 +213,9 @@ pub struct Browse {
 }
 
 impl Browse {
+    // ponytail: `is_dir` and `read_dir` run on the UI thread, once per
+    // open: a dead mount can still freeze the key that opens it. Upgrade:
+    // list on a thread like the folder check.
     /// At the folder typed so far, else its nearest parent that exists, else /.
     pub fn at(text: &str) -> Browse {
         let mut dir = PathBuf::from(if text.starts_with('/') { text } else { "/" });
@@ -216,7 +230,8 @@ impl Browse {
             Ok(entries) => {
                 let mut folders: Vec<String> = entries
                     .filter_map(Result::ok)
-                    .filter(|e| e.path().is_dir())
+                    // A symbolic link is not offered: the helper refuses them.
+                    .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
                     .filter_map(|e| e.file_name().into_string().ok())
                     .filter(|name| !name.starts_with('.'))
                     .collect();
@@ -337,6 +352,11 @@ impl<H: Host> App<H> {
             Key::Esc => {
                 self.maint.browse = None;
                 self.back();
+            }
+            // The bar promises ? (Help); Esc there returns to the browser.
+            Key::Char('?') => {
+                let from = Box::new(self.nav.screen.clone());
+                self.nav.go(Screen::Help(from));
             }
             Key::Enter if row == 0 => {
                 self.maint.browse = None;

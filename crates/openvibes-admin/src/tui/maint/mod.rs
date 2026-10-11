@@ -19,6 +19,7 @@ use ratatui::{
 use super::{
     app::{App, Key, Tab},
     nav::Screen,
+    run::Kind,
     status::wrap,
     ui::{
         bar::Bar,
@@ -182,7 +183,17 @@ impl<H: Host> App<H> {
             Page::Database => {
                 self.read(database::work());
             }
-            Page::Backup => self.load_backup_choice(),
+            Page::Backup => {
+                // A finished backup's result is not news the next time.
+                if self
+                    .run
+                    .as_ref()
+                    .is_some_and(|r| !r.running() && matches!(r.work.kind, Kind::Backup { .. }))
+                {
+                    self.run = None;
+                }
+                self.load_backup_choice();
+            }
             Page::Folder => {}
         }
     }

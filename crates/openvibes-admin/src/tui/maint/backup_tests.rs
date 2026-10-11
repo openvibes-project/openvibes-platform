@@ -157,6 +157,7 @@ fn typing_does_the_cheap_checks_and_df_waits_for_a_pause() {
         app.key(Key::Backspace);
     }
     type_text(&mut app, &format!("{}/nope", dir.display()));
+    pause(&mut app);
     assert!(screen(&app).contains("does not exist"), "{}", screen(&app));
     app.key(Key::ClearLine);
     type_text(&mut app, &dir.display().to_string());
@@ -181,7 +182,12 @@ fn the_slow_check_runs_on_another_thread_and_gives_up_on_a_stuck_mount() {
     let mut app = set_up(vec![]);
     let (answer, receiver) = mpsc::channel();
     let receiver = RefCell::new(Some(receiver));
-    app.checker = Some(Box::new(move |_| receiver.borrow_mut().take().unwrap()));
+    app.checker = Some(Box::new(move |_| {
+        receiver
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| mpsc::channel().1)
+    }));
     app.open_page(Page::Backup);
     app.key(Key::Enter);
     type_text(&mut app, &dir.display().to_string());
@@ -201,7 +207,12 @@ fn a_late_answer_for_old_text_is_not_taken() {
     let mut app = set_up(vec![]);
     let (answer, receiver) = mpsc::channel();
     let receiver = RefCell::new(Some(receiver));
-    app.checker = Some(Box::new(move |_| receiver.borrow_mut().take().unwrap()));
+    app.checker = Some(Box::new(move |_| {
+        receiver
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| mpsc::channel().1)
+    }));
     app.open_page(Page::Backup);
     app.key(Key::Enter);
     type_text(&mut app, &dir.display().to_string());
@@ -213,5 +224,117 @@ fn a_late_answer_for_old_text_is_not_taken() {
         !app.maint.folder.ok(),
         "the answer was for the folder before 'x'"
     );
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+fn never_answering(app: &mut App<SetupHost>) -> mpsc::Sender<Result<String, String>> {
+    let (answer, receiver) = mpsc::channel();
+    let receiver = RefCell::new(Some(receiver));
+    app.checker = Some(Box::new(move |_| {
+        receiver
+            .borrow_mut()
+            .take()
+            .unwrap_or_else(|| mpsc::channel().1)
+    }));
+    answer
+}
+
+#[test]
+fn opening_the_page_and_typing_do_no_filesystem_work_on_the_ui_thread() {
+    let mut app = set_up(vec![]);
+    let _answer = never_answering(&mut app);
+    let memory = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&memory).unwrap();
+    std::fs::write(
+        memory.join("backup.toml"),
+        "folder = \"/nonexistent-ov/nas\"\n",
+    )
+    .unwrap();
+    app.open_page(Page::Backup);
+    assert!(
+        app.maint.folder.pending(),
+        "the folder is left to the checker"
+    );
+    app.key(Key::Enter);
+    type_text(&mut app, "/x");
+    assert!(app.maint.folder.pending(), "typing only checks the text");
+    assert_eq!(app.host.free_calls.get(), 0);
+}
+
+#[test]
+fn a_folder_that_does_not_exist_is_said_after_the_pause_not_per_key() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Backup);
+    app.key(Key::Enter);
+    type_text(&mut app, "/nonexistent-ov");
+    assert!(!screen(&app).contains("does not exist"));
+    pause(&mut app);
+    assert!(screen(&app).contains("/nonexistent-ov does not exist"));
+}
+
+#[test]
+fn the_browser_skips_symbolic_links() {
+    let dir = folder("links");
+    std::os::unix::fs::symlink(dir.join("nas"), dir.join("link")).unwrap();
+    let browse = super::folder::Browse::open(dir.clone());
+    assert_eq!(browse.folders, ["nas"]);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn the_file_name_is_worked_out_once_when_the_check_succeeds() {
+    let dir = folder("cache");
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Backup);
+    app.key(Key::Enter);
+    type_text(&mut app, &dir.display().to_string());
+    assert!(app.maint.folder.file.is_none());
+    pause(&mut app);
+    let file = app.maint.folder.file.clone().unwrap();
+    assert!(file.starts_with(&dir.display().to_string()) && file.ends_with(".dump"));
+    app.key(Key::Char('x'));
+    assert!(app.maint.folder.file.is_none(), "typing drops it");
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn question_mark_opens_help_in_the_browser_as_its_bar_promises() {
+    let dir = folder("help");
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Backup);
+    app.key(Key::Enter);
+    type_text(&mut app, &dir.display().to_string());
+    app.key(Key::Tab);
+    app.key(Key::Char('?'));
+    assert!(
+        matches!(app.nav.screen, Screen::Help(_)),
+        "{:?}",
+        app.nav.screen
+    );
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Folder));
+    std::fs::remove_dir_all(&dir).unwrap();
+}
+
+#[test]
+fn reopening_back_up_after_a_finished_run_shows_no_old_result() {
+    let dir = folder("reopen");
+    let shown = dir.display().to_string();
+    let mut app = set_up(vec![Ok(format!(
+        "done\tbackup saved to {shown}/x.dump (1000 bytes)\n"
+    ))]);
+    app.open_page(Page::Backup);
+    app.key(Key::Enter);
+    type_text(&mut app, &shown);
+    app.key(Key::Enter);
+    pause(&mut app);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("Saved"));
+    app.key(Key::Esc);
+    app.open_page(Page::Backup);
+    assert!(!screen(&app).contains("Saved"), "{}", screen(&app));
     std::fs::remove_dir_all(&dir).unwrap();
 }

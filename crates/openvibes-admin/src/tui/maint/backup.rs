@@ -79,32 +79,50 @@ pub fn free_path(base: &str, ext: &str, exists: impl Fn(&str) -> bool) -> String
         .unwrap_or_default()
 }
 
-/// What typing can afford (spec §2), on every key: a full path to an
-/// existing folder. Returns the path.
+/// What typing can afford (spec §2), on every key and without touching
+/// the file system, which can hang on a dead mount: a full path. Returns
+/// the path.
 pub fn cheap_check(text: &str) -> Result<String, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("type a folder, or Tab to browse".into());
     }
-    let path = Path::new(text);
-    if !path.is_absolute() {
+    if !text.starts_with('/') {
         return Err("a full path, starting with /".into());
     }
-    match std::fs::metadata(path) {
-        Err(_) => Err(format!("{text} does not exist")),
-        Ok(meta) if !meta.is_dir() => Err(format!("{text} is not a folder")),
-        Ok(_) => Ok(text.to_owned()),
-    }
+    Ok(text.to_owned())
 }
 
-/// The whole check, which may block on a slow mount: the cheap one, then
-/// a probe file and the free space. Never on the UI thread.
+/// The whole check, which may block on a slow mount: the folder exists,
+/// is a folder and is not reached through a symbolic link (the helper
+/// refuses those), then a probe file and the free space. Never on the UI
+/// thread.
 pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
+    static PROBES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let text = cheap_check(text)?;
+    let path = Path::new(&text);
+    match std::fs::metadata(path) {
+        Err(_) => return Err(format!("{text} does not exist")),
+        Ok(meta) if !meta.is_dir() => return Err(format!("{text} is not a folder")),
+        Ok(_) => {}
+    }
+    if let Ok(real) = std::fs::canonicalize(path)
+        && real != path
+    {
+        return Err(format!(
+            "{text} goes through a symbolic link: use {}",
+            real.display()
+        ));
+    }
     // ponytail: a probe file made and removed at once (access(2) needs
     // unsafe). A root-squashed NFS folder passes here though the helper,
-    // as root, cannot write there: its backup step then says so.
-    let probe = Path::new(&text).join(format!(".openvibes-write-check-{}", std::process::id()));
+    // as root, cannot write there: its backup step then says so. The
+    // counter keeps a stuck earlier probe from failing a later one.
+    let probe = path.join(format!(
+        ".openvibes-write-check-{}-{}",
+        std::process::id(),
+        PROBES.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
     match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -119,6 +137,19 @@ pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
         Some(free) => format!("{text} exists and is writable · {free} free"),
         None => format!("{text} exists and is writable"),
     })
+}
+
+/// A new backup file in `folder`, for data of this version.
+pub fn next_file(folder: &str) -> String {
+    let base = format!(
+        "{}/{}",
+        folder.trim().trim_end_matches('/'),
+        file_stem(
+            env!("CARGO_PKG_VERSION"),
+            chrono::Local::now().naive_local()
+        )
+    );
+    free_backup(&base, |p| Path::new(p).exists())
 }
 
 /// The size in the helper's "backup saved to X (N bytes) and …".
@@ -215,8 +246,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         }
         Some(_) => {}
         None if app.nav.row == 0 => lines.push(folder::help(t, folder)),
-        None if folder.ok() => lines.push(Line::styled(
-            format!("    Writes {}.", app.backup_file()),
+        None if folder.file.is_some() => lines.push(Line::styled(
+            format!("    Writes {}.", folder.file.as_deref().unwrap_or_default()),
             t.dim(),
         )),
         None => lines.push(Line::styled("    Choose a folder first.", t.dim())),
@@ -235,17 +266,10 @@ impl<H: Host> App<H> {
         }
     }
 
-    /// A new file in the chosen folder, for data of this version.
+    /// A new file in the chosen folder (looks at the file system: once,
+    /// on the key that starts the backup, never per frame).
     pub(in crate::tui) fn backup_file(&self) -> String {
-        let base = format!(
-            "{}/{}",
-            self.maint.folder.text.trim().trim_end_matches('/'),
-            file_stem(
-                env!("CARGO_PKG_VERSION"),
-                chrono::Local::now().naive_local()
-            )
-        );
-        free_backup(&base, |p| Path::new(p).exists())
+        next_file(&self.maint.folder.text)
     }
 
     pub(super) fn backup_key(&mut self, key: Key) {
@@ -370,6 +394,7 @@ mod tests {
             check_folder(&app.host, ""),
             Err("type a folder, or Tab to browse".into())
         );
+        assert!(super::cheap_check("/no/such/folder").is_ok(), "text only");
         assert_eq!(
             check_folder(&app.host, "backups"),
             Err("a full path, starting with /".into())
@@ -383,6 +408,18 @@ mod tests {
             check_folder(&app.host, &file.display().to_string())
                 .unwrap_err()
                 .ends_with("is not a folder")
+        );
+        std::os::unix::fs::symlink(&dir, dir.with_extension("link")).unwrap();
+        let error =
+            check_folder(&app.host, &dir.with_extension("link").display().to_string()).unwrap_err();
+        assert!(
+            error.contains("symbolic link") && error.contains(&shown),
+            "{error}"
+        );
+        std::fs::remove_file(dir.with_extension("link")).unwrap();
+        assert_eq!(
+            check_folder(&app.host, &format!("{shown}/")),
+            Ok(format!("{shown}/ exists and is writable"))
         );
         assert_eq!(
             check_folder(&app.host, &shown),
