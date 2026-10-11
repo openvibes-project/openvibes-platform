@@ -1,13 +1,13 @@
-//! The Database and Health screens' state and keys (admin TUI spec §5).
-//! Database work runs the admin CLI as `openvibes-admin` through the host,
-//! so it keeps its peer login, schema checks and audit log.
+//! The health checks Status shows (admin TUI spec §5). Database reads run
+//! the admin CLI as `openvibes-admin` through the host, so they keep its
+//! peer login, schema checks and audit log.
 
 use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use platform_host::{Database, DiskUse, Host, HostError, ServiceStatus};
 
-use super::app::{App, Key, Tab};
+use super::app::App;
 use crate::setup::pki::RENEW_DAYS;
 
 /// Disk use from which Health reports a problem.
@@ -18,13 +18,9 @@ const RULES_WARN_DAYS: i64 = 90;
 /// Days before a site rule set expires that Health warns (board #107).
 const SITE_WARN_DAYS: i64 = 30;
 
-/// Both screens' state.
+/// The health checks' state.
 #[derive(Default)]
 pub struct DatabaseScreen {
-    /// `status` output, or why it could not be read.
-    pub status: Vec<String>,
-    /// A command waiting for y/n.
-    pub confirm: Option<Database>,
     /// Health's lines, problems first.
     pub health: Vec<Check>,
 }
@@ -321,44 +317,6 @@ pub fn signer_checks(files: &platform_host::SignerFiles) -> Vec<Check> {
 }
 
 impl<H: Host> App<H> {
-    /// Opens the Database screen.
-    pub fn open_database(&mut self) {
-        self.tab = Tab::Database;
-        self.message = None;
-        self.load_database();
-    }
-
-    fn load_database(&mut self) {
-        self.database.status = match self.host.database(Database::Status) {
-            Ok(out) => out.lines().map(str::to_owned).collect(),
-            Err(error) => vec![error.to_string()],
-        };
-    }
-
-    /// m/n ask to migrate / run maintenance, y answers, R reloads, Tab
-    /// opens Health, q quits.
-    pub(super) fn database_key(&mut self, key: Key) {
-        if let Some(command) = self.database.confirm.take() {
-            if key == Key::Char('y') {
-                self.message = Some(match self.host.database(command) {
-                    Ok(out) => out.trim().replace('\n', "; "),
-                    Err(error) => error.to_string(),
-                });
-                self.load_database();
-            }
-            return;
-        }
-        match key {
-            Key::Char('m') => self.database.confirm = Some(Database::Migrate),
-            Key::Char('n') => self.database.confirm = Some(Database::Maintenance),
-            Key::Char('R') => {
-                self.message = None;
-                self.load_database();
-            }
-            _ => {}
-        }
-    }
-
     /// Reloads the health checks (Status shows them; a refresh of the
     /// units comes with it).
     pub(super) fn load_health(&mut self) {

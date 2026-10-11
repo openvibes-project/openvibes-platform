@@ -210,7 +210,7 @@ const HELP_LINES: u16 = 3;
 
 /// `text` wrapped at word boundaries to `width` columns, at most `max`
 /// lines; what does not fit ends the last line with "…".
-fn wrap(text: &str, width: usize, max: usize) -> Vec<String> {
+pub(super) fn wrap(text: &str, width: usize, max: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for word in text.split_whitespace() {
         let mut word = word.to_owned();

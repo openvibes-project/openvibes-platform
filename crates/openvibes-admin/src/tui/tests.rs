@@ -149,8 +149,6 @@ impl Host for FakeHost {
             Database::Status => Ok("schema version 25\npartitions 2026-06-30..2026-10-05\n\
                                     partition count 98\ndatabase size 42 MiB\n"
                 .into()),
-            Database::Migrate => Ok("schema version 25\n".into()),
-            Database::Maintenance => Ok("created 1 partitions, dropped 1\n".into()),
             Database::RulesList => Ok("baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n".into()),
             Database::FeedsStatus => {
                 Ok("osv-rocky 10 advisories checked 2026-09-28 changed never \

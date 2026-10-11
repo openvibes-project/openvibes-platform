@@ -1,0 +1,168 @@
+//! Maintenance (spec §6): the menu and the pages behind it, on today's
+//! backend. Pages whose backend comes with a later step are not listed
+//! until then; today's Components and ports and Settings files screens
+//! stay behind the menu until their pages replace them.
+
+mod database;
+
+use platform_host::{DiskUse, Host};
+use ratatui::{
+    Frame,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
+
+use super::{
+    app::{App, Key, Tab},
+    nav::Screen,
+    status::wrap,
+    ui::{
+        bar::Bar,
+        frame,
+        list::{self, Row},
+        logo::Header,
+        theme::Theme,
+    },
+};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Page {
+    Database,
+}
+
+impl Page {
+    pub fn title(self) -> &'static str {
+        match self {
+            Page::Database => "Database",
+        }
+    }
+    /// What the keys do here, for Help.
+    pub fn help(self) -> &'static str {
+        match self {
+            Page::Database => "A report: the clean-up runs by itself every night.",
+        }
+    }
+}
+
+/// What the pages keep while open.
+#[derive(Default)]
+pub struct Maint {
+    /// The database's disk, read when Database opens.
+    pub disk: Option<DiskUse>,
+}
+
+#[derive(Clone, Copy)]
+enum Entry {
+    Page(Page),
+    Legacy(Tab),
+}
+
+/// The menu, in spec §3's order; later tasks add their pages.
+const ENTRIES: [(Entry, &str); 3] = [
+    (Entry::Legacy(Tab::Setup), "Components and ports"),
+    (Entry::Page(Page::Database), "Database"),
+    (Entry::Legacy(Tab::Configuration), "Settings files"),
+];
+
+fn value(entry: Entry) -> &'static str {
+    match entry {
+        Entry::Legacy(Tab::Setup) => "agent, assistant, ports (the previous screen)",
+        Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection",
+        Entry::Page(Page::Database) => "schema, size, automatic clean-up",
+    }
+}
+
+/// The menu row of `name` (tests).
+#[cfg(test)]
+pub fn row_of(name: &str) -> usize {
+    ENTRIES
+        .iter()
+        .position(|(_, n)| *n == name)
+        .expect("a Maintenance entry")
+}
+
+/// "3.1 GB", "42 MB", "1 KB".
+pub fn human(bytes: u64) -> String {
+    let mb = bytes as f64 / (1024.0 * 1024.0);
+    if mb >= 1024.0 {
+        format!("{:.1} GB", mb / 1024.0)
+    } else if mb >= 1.0 {
+        format!("{mb:.0} MB")
+    } else {
+        format!("{} KB", bytes.div_ceil(1024))
+    }
+}
+
+/// An information row in the pages' value column (26 wide, maint3.py).
+pub fn info(name: &str, value: Vec<Span<'static>>) -> Line<'static> {
+    let mut spans = vec![Span::raw(format!("    {name:<26} "))];
+    spans.extend(value);
+    Line::from(spans)
+}
+
+/// A failed step (spec §2 "Errors"): what failed and why in red, what to
+/// do and what was left as it was, dim.
+#[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
+pub fn failure(theme: &Theme, why: &str, todo: &str) -> Vec<Line<'static>> {
+    let mut out: Vec<Line<'static>> = wrap(why, 72, 2)
+        .into_iter()
+        .map(|l| Line::styled(format!("    {l}"), theme.red()))
+        .collect();
+    out.extend(
+        wrap(todo, 72, 2)
+            .into_iter()
+            .map(|l| Line::styled(format!("    {l}"), theme.dim())),
+    );
+    out
+}
+
+pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
+    let bar = app.bar(Bar::keys(&[("Enter", "Open")]));
+    let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
+    let rows: Vec<Row> = ENTRIES
+        .iter()
+        .map(|(e, name)| Row::entry(name, value(*e)))
+        .collect();
+    let mut scroll = app.nav.scroll.get();
+    let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 22);
+    app.nav.scroll.set(scroll);
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page) {
+    match page {
+        Page::Database => database::draw(frame, head, app),
+    }
+}
+
+impl<H: Host> App<H> {
+    pub(super) fn menu_key(&mut self, key: Key) {
+        if self.move_row(key, ENTRIES.len()) || key != Key::Enter {
+            return;
+        }
+        match ENTRIES[self.nav.row].0 {
+            Entry::Legacy(tab) => self.open(tab),
+            Entry::Page(page) => self.open_page(page),
+        }
+    }
+
+    pub(super) fn open_page(&mut self, page: Page) {
+        self.message = None;
+        self.nav.go(Screen::Maint(page));
+        match page {
+            Page::Database => {
+                self.maint.disk = self
+                    .host
+                    .disk()
+                    .ok()
+                    .and_then(|d| d.into_iter().find(|d| d.path == "/var/lib/pgsql"));
+                self.read(database::work());
+            }
+        }
+    }
+
+    pub(super) fn maint_key(&mut self, page: Page, key: Key) {
+        // Database is a report: it has no keys of its own.
+        let _ = (page, key);
+    }
+}

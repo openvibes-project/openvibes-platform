@@ -25,10 +25,8 @@ pub enum Call {
     #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Remove(RemoveStep, Vec<String>),
     /// A database command (no password).
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     Database(Database),
     /// The unit's last journal lines, joined (no password).
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     Logs(Unit, u16),
 }
 
@@ -45,7 +43,6 @@ pub enum Kind {
     #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Uninstall { everything: bool },
     /// The Database page's reads.
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     Report,
 }
 
@@ -113,7 +110,6 @@ pub struct Work {
 }
 
 impl Work {
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     pub fn new(kind: Kind, calls: Vec<Call>) -> Work {
         Work {
             kind,

@@ -72,7 +72,6 @@ impl Bar {
         }
     }
     /// Keys without ⭡⭣ Move (nothing to move between); Esc Back and ? stay.
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     pub fn act(keys: &[(&str, &str)]) -> Bar {
         Bar::Keys {
             keys: owned(keys),

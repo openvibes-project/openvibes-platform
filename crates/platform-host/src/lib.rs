@@ -63,16 +63,12 @@ pub struct PackageUpdate {
     pub available: Option<String>,
 }
 
-/// A database command the Database and Health screens run: the admin CLI
+/// A database read the Database page and Status run: the admin CLI
 /// as `openvibes-admin`, through the operators' sudoers entry (spec §3).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Database {
     /// `status`: schema, partitions, size.
     Status,
-    /// `migrate`.
-    Migrate,
-    /// `maintenance`, as the daily timer runs it.
-    Maintenance,
     /// `feeds status`.
     FeedsStatus,
     /// `rules list`.
@@ -85,8 +81,6 @@ impl Database {
     pub fn args(self) -> &'static [&'static str] {
         match self {
             Database::Status => &["status"],
-            Database::Migrate => &["migrate"],
-            Database::Maintenance => &["maintenance"],
             Database::FeedsStatus => &["feeds", "status"],
             Database::RulesList => &["rules", "list"],
         }

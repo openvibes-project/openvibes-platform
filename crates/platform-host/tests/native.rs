@@ -650,7 +650,7 @@ fn the_journal_records_the_state_a_step_ended_in() {
 }
 
 #[test]
-fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
+fn database_commands_run_the_cli_as_its_account() {
     let admin = [
         "/usr/bin/sudo",
         "-n",
@@ -658,30 +658,16 @@ fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
         "openvibes-admin",
         "/usr/bin/openvibes-admin",
     ];
-    let host = fake(vec![
-        (
-            [&admin[..], &["status"]].concat(),
-            out(0, "schema version 25\n", ""),
-        ),
-        (
-            [&admin[..], &["migrate"]].concat(),
-            out(1, "", "openvibes-admin: database unavailable\n"),
-        ),
-        (vec!["/usr/bin/logger"], out(0, "", "")),
-    ]);
+    let host = fake(vec![(
+        [&admin[..], &["status"]].concat(),
+        out(0, "schema version 25\n", ""),
+    )]);
     assert_eq!(
         host.database(Database::Status).unwrap(),
         "schema version 25\n"
     );
-    assert_eq!(
-        host.database(Database::Migrate),
-        Err(HostError::Failed(
-            "openvibes-admin: database unavailable".into()
-        ))
-    );
     let calls = host.runner.calls.borrow();
-    assert_eq!(calls.len(), 3, "status is not journalled: {calls:?}");
-    assert!(calls[2][3].ends_with(" migrate failed"), "{:?}", calls[2]);
+    assert_eq!(calls.len(), 1, "{calls:?}");
     assert_eq!(
         Database::FeedsStatus.args(),
         ["feeds", "status"],

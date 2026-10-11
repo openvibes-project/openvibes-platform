@@ -38,17 +38,14 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance (interim, until it is
-reworked) holds today's Setup, Settings files (Configuration) and Database
-screens: they keep their own keys, and `Esc` leaves them only when nothing
-is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists Components and ports (today's Setup screen, until Optional parts and Ports replace it), Database and Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6); later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
 Maintenance and Help) shows the block logo ("OPEN" in white, "VIBES" in the
 brand teal `#36b9e0`), a location line (host, where you are, the version
 and any available update; a long host name is cut with `…` first), and a
-key bar; today's screens (Setup, Settings files, Database) show only the
+key bar; today's screens (Components and ports, Settings files) show only the
 location line and have no Help. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
 Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
@@ -192,15 +189,7 @@ file keeps its owner, group and mode, and the old one is kept as
 `NAME.toml.bak`), then offers to restart the service. Each save is written
 to the journal (`config-write SERVICE ok|failed`, never the content).
 
-**Database**: the output of `status` (schema version, agents, partitions
-oldest..newest, partition count, database size). A schema that is not
-current, a newer one, or an unreachable database shows the CLI's error
-instead. `m` migrate and `n` run maintenance now (as the daily timer does:
-90-day retention) each ask `y/n`; the result is shown under the box. The
-screen runs the CLI as `openvibes-admin` (`sudo -n -u openvibes-admin
-openvibes-admin …`, the operators' sudoers entry), so each command keeps its
-peer login, schema check and `audit_log` row; migrate and maintenance are
-also journalled. `R` reloads.
+**Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("up to date"), the database size with its disk's use and free space, the data kept (90 days of findings, the timer's default), and the automatic nightly clean-up with its last run and what it removed. These are read on another thread from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem

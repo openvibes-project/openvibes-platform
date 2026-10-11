@@ -36,7 +36,6 @@ impl<H: Host> App<H> {
     }
 
     /// Starts reads that need no password.
-    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     pub(super) fn read(&mut self, work: Work) {
         self.start(work, 0, Secret::new(String::new()), false);
     }

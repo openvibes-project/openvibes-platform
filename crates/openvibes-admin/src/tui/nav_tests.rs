@@ -2,7 +2,7 @@
 
 use std::sync::mpsc;
 
-use platform_host::{Database, Unit};
+use platform_host::Unit;
 
 use super::{
     app::{App, Key, Tab},
@@ -78,7 +78,7 @@ fn maintenance_reaches_todays_screens_and_esc_comes_back() {
     app.key(Key::Down);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Maintenance);
-    app.key(Key::Down);
+    app.nav.row = super::maint::row_of("Settings files");
     app.key(Key::Enter);
     assert_eq!(
         (app.nav.screen.clone(), app.tab),
@@ -144,18 +144,6 @@ fn q_types_into_a_set_up_hosts_setup_password_and_quits_nothing_there() {
         footer.contains("Esc back") && !footer.contains('q'),
         "a stopped run on a set-up host: {footer}"
     );
-}
-
-#[test]
-fn esc_answers_the_database_question_no() {
-    let mut app = app(false);
-    app.open(Tab::Database);
-    app.key(Key::Char('m'));
-    assert!(app.database.confirm.is_some());
-    app.key(Key::Esc);
-    assert_eq!(app.nav.screen, Screen::Legacy);
-    assert!(app.database.confirm.is_none());
-    assert_eq!(*app.host.database_calls.borrow(), [Database::Status]);
 }
 
 #[test]
@@ -318,7 +306,7 @@ fn esc_with_unsaved_settings_asks_and_yes_goes_back_to_maintenance() {
     let mut app = app(false);
     app.key(Key::Down);
     app.key(Key::Enter);
-    app.key(Key::Down);
+    app.nav.row = super::maint::row_of("Settings files");
     app.key(Key::Enter);
     assert_eq!(app.tab, Tab::Configuration);
     editable_field(&mut app);
@@ -394,7 +382,7 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
 
 #[test]
 fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
-    for tab in [Tab::Setup, Tab::Configuration, Tab::Database] {
+    for tab in [Tab::Setup, Tab::Configuration] {
         let mut app = app(false);
         app.open(tab);
         let text = screen(&app, 80, 24);

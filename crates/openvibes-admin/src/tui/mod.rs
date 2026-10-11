@@ -8,10 +8,10 @@ mod configuration;
 mod database;
 #[cfg(test)]
 mod database_tests;
-mod database_view;
 pub mod form;
 mod home;
 mod jobs;
+mod maint;
 mod maintain;
 #[cfg(test)]
 mod maintain_tests;
@@ -61,12 +61,11 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     nav::render(frame, app);
 }
 
-/// Today's Setup, Configuration and Database screens, under the location line.
+/// Today's Setup and Configuration screens, under the location line.
 pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
         Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
-        Tab::Database => database_view::draw_database(frame, area, app),
     }
 }
 

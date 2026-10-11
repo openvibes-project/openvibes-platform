@@ -1,4 +1,4 @@
-//! Home, the interim Maintenance menu, and Help (spec §3, §2).
+//! Home and Help (spec §3, §2).
 
 use platform_host::Host;
 use ratatui::{
@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use super::{
-    app::{App, Key, Tab},
+    app::{App, Key},
     nav::Screen,
     ui::{
         bar::Bar,
@@ -22,14 +22,9 @@ pub const HOME: [(&str, &str); 3] = [
     ("Status", "health, services, logs"),
     (
         "Maintenance",
-        "setup, settings files, database (until reworked)",
+        "updates, repair, database, backup, uninstall",
     ),
     ("Quit", ""),
-];
-pub const MAINTENANCE: [(&str, &str); 3] = [
-    ("Setup", "repair, update, components, ports, uninstall"),
-    ("Settings files", "edit each service's configuration"),
-    ("Database", "status, migrate, maintenance"),
 ];
 
 fn rows(items: &[(&str, &str)]) -> Vec<Row> {
@@ -59,22 +54,6 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         area.height.saturating_sub(1),
         15,
     ));
-    app.nav.scroll.set(scroll);
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
-pub fn draw_maintenance<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let bar = app.bar(Bar::keys(&[("Enter", "Open")]));
-    let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
-    let mut scroll = app.nav.scroll.get();
-    let lines = list::lines(
-        &app.theme,
-        &rows(&MAINTENANCE),
-        app.nav.row,
-        &mut scroll,
-        area.height,
-        18,
-    );
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -121,6 +100,7 @@ fn name(screen: &Screen) -> String {
     match screen {
         Screen::Home => "Home".into(),
         Screen::Maintenance => "Maintenance".into(),
+        Screen::Maint(page) => page.title().into(),
         Screen::Status => "Status".into(),
         Screen::Service(unit) => format!("Service: {}", unit.label()),
         Screen::Log(unit) => format!("Log: {}", unit.label()),
@@ -132,6 +112,7 @@ fn name(screen: &Screen) -> String {
 fn here(from: &Screen) -> &'static str {
     match from {
         Screen::Home | Screen::Maintenance => "Enter opens the highlighted entry.",
+        Screen::Maint(page) => page.help(),
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",
@@ -161,15 +142,6 @@ impl<H: Host> App<H> {
                 1 => self.nav.go(Screen::Maintenance),
                 _ => self.quit_or_ask(),
             }
-        }
-    }
-
-    pub(super) fn maintenance_key(&mut self, key: Key) {
-        if self.move_row(key, MAINTENANCE.len()) {
-            return;
-        }
-        if key == Key::Enter {
-            self.open([Tab::Setup, Tab::Configuration, Tab::Database][self.nav.row]);
         }
     }
 }

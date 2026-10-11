@@ -1,44 +1,9 @@
 //! The Database and Health screens against the fake host, at 80×24.
 
 use chrono::{DateTime, Duration, Utc};
-use platform_host::{Database, DiskUse, HostError, ServiceStatus, Unit};
+use platform_host::{DiskUse, HostError, ServiceStatus, Unit};
 
-use super::{
-    app::{Key, Tab},
-    database::{checks, tune_check},
-    tests::{app, screen},
-};
-
-#[test]
-fn database_shows_the_status_and_migrates_only_after_yes() {
-    let mut app = app(false);
-    app.open(Tab::Database);
-    let text = screen(&app, 80, 24);
-    assert!(text.contains("Maintenance › Database"), "{text}");
-    assert!(text.contains("partition count 98"), "{text}");
-    assert!(text.contains("database size 42 MiB"), "{text}");
-    app.key(Key::Char('m'));
-    assert!(screen(&app, 80, 24).contains("Migrate the database schema? y/n"));
-    app.key(Key::Char('x'));
-    app.key(Key::Char('n'));
-    app.key(Key::Char('y'));
-    assert_eq!(
-        *app.host.database_calls.borrow(),
-        [Database::Status, Database::Maintenance, Database::Status]
-    );
-    assert!(
-        screen(&app, 80, 24).contains("created 1 partitions, dropped 1"),
-        "{}",
-        screen(&app, 80, 24)
-    );
-}
-
-#[test]
-fn a_refused_database_command_names_the_group() {
-    let mut app = app(true);
-    app.open(Tab::Database);
-    assert!(screen(&app, 80, 24).contains("openvibes-operators"));
-}
+use super::database::{checks, tune_check};
 
 #[test]
 fn certificates_disk_and_feeds_become_problems_at_their_thresholds() {

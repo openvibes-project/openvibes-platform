@@ -1,6 +1,6 @@
 //! Where the operator is (spec §3): a stack of screens. Enter opens, Esc
 //! pops (back to the row and window it left), ? opens Help, q quits from
-//! Home. Today's Setup, Configuration and Database screens ("legacy") are
+//! Home. Today's Setup and Configuration screens ("legacy") are
 //! reached from Maintenance and keep their own keys; q is no longer theirs, and Esc leaves them only when
 //! nothing is being typed or asked (sub-projects 2 and 3 replace them).
 
@@ -25,6 +25,7 @@ pub enum Screen {
     Service(Unit),
     Log(Unit),
     Maintenance,
+    Maint(super::maint::Page),
     Help(Box<Screen>),
     Legacy,
 }
@@ -74,12 +75,12 @@ pub fn header<H: Host>(app: &App<H>) -> (String, Option<String>) {
         Screen::Status => " · Status".into(),
         Screen::Service(unit) | Screen::Log(unit) => format!(" · Status › {}", unit.label()),
         Screen::Maintenance => " · Maintenance".into(),
+        Screen::Maint(page) => format!(" · Maintenance › {}", page.title()),
         Screen::Help(_) => " · Help".into(),
         Screen::Legacy => match app.tab {
             Tab::Setup if !app.setup_done() => " · Install".into(),
-            Tab::Setup => " · Maintenance › Setup".into(),
+            Tab::Setup => " · Maintenance › Components and ports".into(),
             Tab::Configuration => " · Maintenance › Settings files".into(),
-            _ => " · Maintenance › Database".into(),
         },
     };
     (format!("{}{where_}", app.hostname), app.update.clone())
@@ -102,7 +103,8 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
             super::legacy_view(frame, body, app);
         }
         Screen::Home => home::draw(frame, &head, app),
-        Screen::Maintenance => home::draw_maintenance(frame, &head, app),
+        Screen::Maintenance => super::maint::draw_menu(frame, &head, app),
+        Screen::Maint(page) => super::maint::draw(frame, &head, app, *page),
         Screen::Status => status::draw(frame, &head, app),
         Screen::Service(unit) => service::draw(frame, &head, app, *unit),
         Screen::Log(unit) => service::draw_log(frame, &head, app, *unit),
@@ -117,7 +119,6 @@ impl<H: Host> App<H> {
             // A stopped run's Esc is its own: back to Setup's status (#73).
             Tab::Setup => matches!(self.setup.phase, Phase::Status | Phase::Finished),
             Tab::Configuration => self.config.editing.is_none() && self.config.prompt.is_none(),
-            Tab::Database => self.database.confirm.is_none(),
         }
     }
 
@@ -141,7 +142,6 @@ impl<H: Host> App<H> {
         match self.tab {
             Tab::Setup => self.setup.editing || matches!(self.setup.phase, Phase::Password(_)),
             Tab::Configuration => self.config.editing.is_some(),
-            Tab::Database => false,
         }
     }
 

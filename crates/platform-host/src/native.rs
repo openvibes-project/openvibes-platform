@@ -333,13 +333,7 @@ impl<R: Runner> Host for Native<R> {
     }
 
     fn database(&self, command: Database) -> Result<String, HostError> {
-        let result = self.as_admin(command.args());
-        // The CLI writes its own audit_log row; the journal gets the change.
-        if matches!(command, Database::Migrate | Database::Maintenance) {
-            let outcome = if result.is_ok() { "ok" } else { "failed" };
-            self.log(&format!("{} {outcome}", command.args().join(" ")));
-        }
-        result.map(|out| out.stdout)
+        self.as_admin(command.args()).map(|out| out.stdout)
     }
 
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {

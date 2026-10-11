@@ -44,7 +44,6 @@ pub enum Key {
 pub enum Tab {
     Setup,
     Configuration,
-    Database,
 }
 
 /// The TUI's state: where the operator is (`nav`), what the host reports
@@ -57,6 +56,7 @@ pub struct App<H: Host> {
     pub setup: Setup,
     pub config: Configuration,
     pub database: DatabaseScreen,
+    pub maint: super::maint::Maint,
     pub services: Vec<ServiceStatus>,
     /// Index into `services` of the unit whose log `logs` holds.
     pub selected: usize,
@@ -136,6 +136,7 @@ impl<H: Host> App<H> {
             setup,
             config: Configuration::default(),
             database: DatabaseScreen::default(),
+            maint: Default::default(),
             services: Vec::new(),
             selected: 0,
             message: None,
@@ -233,7 +234,6 @@ impl<H: Host> App<H> {
                 self.tab = Tab::Configuration;
                 self.load_config();
             }
-            Tab::Database => self.open_database(),
         }
     }
 
@@ -271,7 +271,8 @@ impl<H: Host> App<H> {
             Key::Char('q') if self.nav.screen == Screen::Home => self.quit_or_ask(),
             _ => match self.nav.screen.clone() {
                 Screen::Home => self.home_key(key),
-                Screen::Maintenance => self.maintenance_key(key),
+                Screen::Maintenance => self.menu_key(key),
+                Screen::Maint(page) => self.maint_key(page, key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
@@ -316,7 +317,6 @@ impl<H: Host> App<H> {
         match self.tab {
             Tab::Setup => self.setup_key(key),
             Tab::Configuration => self.config_key(key),
-            Tab::Database => self.database_key(key),
         }
     }
 }
