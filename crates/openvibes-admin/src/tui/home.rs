@@ -20,10 +20,7 @@ use super::{
 
 pub const HOME: [(&str, &str); 3] = [
     ("Status", "health, services, logs"),
-    (
-        "Maintenance",
-        "updates, repair, database, backup, uninstall",
-    ),
+    ("Maintenance", "updates, repair, database, backup"),
     ("Quit", ""),
 ];
 

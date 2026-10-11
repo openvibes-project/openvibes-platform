@@ -687,7 +687,7 @@ fn a_database_command_refused_by_sudo_names_the_group() {
 
 #[test]
 fn disk_use_parses_df() {
-    let df = "File           Use% Avail\n/var/lib/pgsql  45%   20G\n/var/lib/openvibes-ingest 91% 1.2G\n";
+    let df = "File           Size Use% Avail\n/var/lib/pgsql  100G 45%   20G\n/var/lib/openvibes-ingest 12G 91% 1.2G\n";
     let host = fake(vec![(vec!["/usr/bin/df"], out(0, df, ""))]);
     let paths = [
         "/var/lib/pgsql".to_owned(),
@@ -698,11 +698,13 @@ fn disk_use_parses_df() {
         [
             DiskUse {
                 path: "/var/lib/pgsql".into(),
+                size: "100G".into(),
                 used_percent: 45,
                 available: "20G".into()
             },
             DiskUse {
                 path: "/var/lib/openvibes-ingest".into(),
+                size: "12G".into(),
                 used_percent: 91,
                 available: "1.2G".into()
             }
@@ -712,7 +714,7 @@ fn disk_use_parses_df() {
         host.runner.calls.borrow()[0],
         [
             "/usr/bin/df",
-            "--output=file,pcent,avail",
+            "--output=file,size,pcent,avail",
             "-h",
             "/var/lib/pgsql",
             "/var/lib/openvibes-ingest"

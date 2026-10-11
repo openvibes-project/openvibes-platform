@@ -13,6 +13,7 @@ fn certificates_disk_and_feeds_become_problems_at_their_thresholds() {
     let disk = |used_percent| {
         Ok(vec![DiskUse {
             path: "/d".into(),
+            size: "10G".into(),
             used_percent,
             available: "1G".into(),
         }])

@@ -5,7 +5,7 @@
 
 mod database;
 
-use platform_host::{DiskUse, Host};
+use platform_host::Host;
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -44,13 +44,6 @@ impl Page {
     }
 }
 
-/// What the pages keep while open.
-#[derive(Default)]
-pub struct Maint {
-    /// The database's disk, read when Database opens.
-    pub disk: Option<DiskUse>,
-}
-
 #[derive(Clone, Copy)]
 enum Entry {
     Page(Page),
@@ -66,7 +59,7 @@ const ENTRIES: [(Entry, &str); 3] = [
 
 fn value(entry: Entry) -> &'static str {
     match entry {
-        Entry::Legacy(Tab::Setup) => "agent, assistant, ports (the previous screen)",
+        Entry::Legacy(Tab::Setup) => "agent, assistant, ports",
         Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection",
         Entry::Page(Page::Database) => "schema, size, automatic clean-up",
     }
@@ -124,7 +117,7 @@ pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         .map(|(e, name)| Row::entry(name, value(*e)))
         .collect();
     let mut scroll = app.nav.scroll.get();
-    let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 22);
+    let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 20);
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -151,11 +144,6 @@ impl<H: Host> App<H> {
         self.nav.go(Screen::Maint(page));
         match page {
             Page::Database => {
-                self.maint.disk = self
-                    .host
-                    .disk()
-                    .ok()
-                    .and_then(|d| d.into_iter().find(|d| d.path == "/var/lib/pgsql"));
                 self.read(database::work());
             }
         }

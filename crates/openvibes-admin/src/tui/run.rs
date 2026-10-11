@@ -26,6 +26,8 @@ pub enum Call {
     Remove(RemoveStep, Vec<String>),
     /// A database command (no password).
     Database(Database),
+    /// The database's disk: `size<TAB>percent<TAB>free`, empty when unknown.
+    Disk,
     /// The unit's last journal lines, joined (no password).
     Logs(Unit, u16),
 }
@@ -135,6 +137,14 @@ pub fn execute<H: Host>(host: &H, call: &Call, secret: &Secret) -> Result<String
         Call::Update(step, args) => host.privileged(Privileged::Update(*step, args), secret),
         Call::Remove(step, args) => host.privileged(Privileged::Remove(*step, args), secret),
         Call::Database(command) => host.database(*command),
+        Call::Disk => host.disk().map(|disks| {
+            disks
+                .into_iter()
+                .find(|d| d.path == "/var/lib/pgsql")
+                .map_or_else(String::new, |d| {
+                    format!("{}\t{}\t{}", d.size, d.used_percent, d.available)
+                })
+        }),
         Call::Logs(unit, lines) => host.logs(*unit, *lines).map(|l| l.join("\n")),
     }
 }

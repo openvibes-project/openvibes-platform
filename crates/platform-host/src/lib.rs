@@ -114,6 +114,8 @@ pub struct SignerFiles {
 pub struct DiskUse {
     /// The directory, e.g. `/var/lib/pgsql`.
     pub path: String,
+    /// The file system's size, as `df -h` writes it.
+    pub size: String,
     /// Percent of the file system used.
     pub used_percent: u8,
     /// Space left, as `df -h` writes it.

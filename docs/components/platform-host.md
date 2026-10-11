@@ -52,7 +52,7 @@ themselves and other deployments (pods, Kubernetes) can plug in later
   - certificates: reads `CERTIFICATES` (`/etc/openvibes/tls/ingest.crt`,
     `distribution.crt`, `/etc/openvibes/pki/intermediate.crt`, all 0644);
     missing files are left out;
-  - disk: `df --output=file,pcent,avail -h` on `/var/lib/pgsql` and each
+  - disk: `df --output=file,size,pcent,avail -h` on `/var/lib/pgsql` and each
     existing `/var/lib/openvibes-*`.
   - listeners: `ss -ltnpH sport = :PORT`, as the user (so processes of
     other users are rarely named).

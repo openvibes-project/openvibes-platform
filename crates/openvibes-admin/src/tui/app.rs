@@ -56,7 +56,6 @@ pub struct App<H: Host> {
     pub setup: Setup,
     pub config: Configuration,
     pub database: DatabaseScreen,
-    pub maint: super::maint::Maint,
     pub services: Vec<ServiceStatus>,
     /// Index into `services` of the unit whose log `logs` holds.
     pub selected: usize,
@@ -136,7 +135,6 @@ impl<H: Host> App<H> {
             setup,
             config: Configuration::default(),
             database: DatabaseScreen::default(),
-            maint: Default::default(),
             services: Vec::new(),
             selected: 0,
             message: None,

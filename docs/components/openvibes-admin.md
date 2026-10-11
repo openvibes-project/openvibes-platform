@@ -189,7 +189,7 @@ file keeps its owner, group and mode, and the old one is kept as
 `NAME.toml.bak`), then offers to restart the service. Each save is written
 to the journal (`config-write SERVICE ok|failed`, never the content).
 
-**Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("up to date"), the database size with its disk's use and free space, the data kept (90 days of findings, the timer's default), and the automatic nightly clean-up with its last run and what it removed. These are read on another thread from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
+**Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("N · up to date", or "migration pending"), the database size with its disk's size and use ("3.1 GB on a 120 GB disk (41% used)"), the data kept (90 days, set in the console), and the automatic nightly clean-up with the date of its last run ("ran today") and what it removed. The timer's time of day is not shown: no host call reads it. These are read on another thread (the disk too) from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem

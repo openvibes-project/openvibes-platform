@@ -409,7 +409,7 @@ impl<R: Runner> Native<R> {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
-        let mut args = vec!["--output=file,pcent,avail", "-h"];
+        let mut args = vec!["--output=file,size,pcent,avail", "-h"];
         args.extend(paths.iter().map(String::as_str));
         let out = self.run(Df, &args)?;
         if out.status != 0 {
@@ -423,6 +423,7 @@ impl<R: Runner> Native<R> {
                 let mut fields = line.split_whitespace();
                 Some(DiskUse {
                     path: fields.next()?.to_owned(),
+                    size: fields.next()?.to_owned(),
                     used_percent: fields.next()?.trim_end_matches('%').parse().ok()?,
                     available: fields.next()?.to_owned(),
                 })
