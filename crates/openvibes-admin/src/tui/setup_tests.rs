@@ -204,6 +204,10 @@ fn start_writes_the_plan_with_the_password_then_runs_one_step_per_tick() {
         app.host.calls.borrow()[2].0,
         format!("setup-step {}", Step::Postgres.name())
     );
+    // A fresh host has nowhere to go back to: the stopped run offers q.
+    assert!(text.contains("q quit"), "{text}");
+    app.key(Key::Char('q'));
+    assert!(app.quit);
 }
 
 /// #82: as root, Start runs at once; no password prompt is shown.

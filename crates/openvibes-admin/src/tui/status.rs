@@ -1,6 +1,7 @@
 //! Status (spec §4): what needs attention first, then the installed
-//! services (name, state, ready, since), then a checks summary. There is
-//! no boot switch: a unit not enabled at boot is a problem whose Enter
+//! services (name, state, ready, since), then the checks that are fine.
+//! The line under the list gives the highlighted problem or check in
+//! full. There is no boot switch: a unit not enabled at boot is a problem whose Enter
 //! fixes it.
 
 use platform_host::{Host, ServiceStatus, Unit};
@@ -30,8 +31,13 @@ pub enum Fix {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Item {
-    Problem { text: String, fix: Option<Fix> },
+    Problem {
+        text: String,
+        fix: Option<Fix>,
+    },
     Service(Unit),
+    /// A health check that is fine.
+    Check(String),
 }
 
 /// Idle by design while stopped: the model server starts on use, the
@@ -40,7 +46,8 @@ fn idles(unit: Unit) -> bool {
     matches!(unit, Unit::Llm | Unit::Maintenance)
 }
 
-/// Unit problems, then health problems, then the installed services.
+/// Unit problems, then health problems, then the installed services, then
+/// the checks that are fine.
 pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
     let installed = || services.iter().filter(|s| s.installed);
     let mut out = Vec::new();
@@ -62,6 +69,12 @@ pub fn items(services: &[ServiceStatus], checks: &[Check]) -> Vec<Item> {
         fix: None,
     }));
     out.extend(installed().map(|s| Item::Service(s.unit)));
+    out.extend(
+        checks
+            .iter()
+            .filter(|c| !c.problem)
+            .map(|c| Item::Check(c.text.clone())),
+    );
     out
 }
 
@@ -138,14 +151,36 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             Some(false) => "not ready",
             None => "–",
         };
+        let mut value = vec![Span::raw(format!(
+            "{:<9} {:<9} ",
+            state_word(&s.active),
+            ready
+        ))];
+        if let Some(raw) = &s.since {
+            value.push(Span::styled(format!("since {}", since(raw)), t.dim()));
+        }
         rows.push(Row::Entry {
             name: vec![dot, Span::raw(s.unit.label().to_owned())],
-            value: vec![Span::raw(format!(
-                "{:<9} {:<9} {}",
-                state_word(&s.active),
-                ready,
-                s.since.as_deref().map(since).unwrap_or_default()
-            ))],
+            value,
+        });
+    }
+    let ok: Vec<&String> = items
+        .iter()
+        .filter_map(|i| {
+            if let Item::Check(c) = i {
+                Some(c)
+            } else {
+                None
+            }
+        })
+        .collect();
+    if !ok.is_empty() {
+        heading(&mut rows, "Checks", format!("{} ok", ok.len()));
+    }
+    for text in ok {
+        rows.push(Row::Entry {
+            name: vec![Span::styled("● ", t.green()), Span::raw(text.clone())],
+            value: Vec::new(),
         });
     }
     let mut scroll = app.nav.scroll.get();
@@ -157,10 +192,21 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         area.height.saturating_sub(1),
         18,
     );
-    let ok = app.database.health.iter().filter(|c| !c.problem).count();
-    lines.push(Line::styled(format!("    ● {ok} checks ok"), t.dim()));
+    // The line under the list: the highlighted problem or check in full.
+    if let Some(Item::Problem { text, .. } | Item::Check(text)) = items.get(app.nav.row) {
+        lines.push(Line::styled(format!("    {}", cut(text, 72)), t.dim()));
+    }
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// `text`, cut with "…" only when it is longer than `max` columns.
+fn cut(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_owned();
+    }
+    let kept: String = text.chars().take(max - 1).collect();
+    format!("{kept}…")
 }
 
 /// systemd's `Sat 2026-10-10 12:56:13 CEST` as `12:56` when that day is
@@ -192,7 +238,8 @@ impl<H: Host> App<H> {
         items(&self.services, &self.database.health)
     }
 
-    /// Home's one-line summary.
+    /// Home's one-line summary: a failed refresh first, then no services,
+    /// then the problems.
     pub(super) fn status_line(&self) -> Line<'static> {
         let problems = self
             .status_items()
@@ -200,23 +247,40 @@ impl<H: Host> App<H> {
             .filter(|i| matches!(i, Item::Problem { .. }))
             .count();
         let installed = self.services.iter().filter(|s| s.installed).count();
-        let (mark, style, text) = if problems == 0 {
+        let (mark, style, text) = if let Some(error) = &self.message {
+            ("✗ ", self.theme.red(), error.clone())
+        } else if installed == 0 {
+            (
+                "▲ ",
+                self.theme.yellow(),
+                "No services installed · see Status".to_owned(),
+            )
+        } else if problems == 0 {
             (
                 "● ",
                 self.theme.green(),
                 format!("All {installed} services running"),
             )
         } else {
+            let things = if problems == 1 {
+                "1 thing needs"
+            } else {
+                &format!("{problems} things need")
+            };
             (
                 "▲ ",
                 self.theme.yellow(),
-                format!("{problems} things need attention · see Status"),
+                format!("{things} attention · see Status"),
             )
         };
         Line::from(vec![
             Span::raw("    "),
             Span::styled(mark, style),
-            Span::raw(text),
+            if self.message.is_some() {
+                Span::styled(text, style)
+            } else {
+                Span::raw(text)
+            },
         ])
     }
 

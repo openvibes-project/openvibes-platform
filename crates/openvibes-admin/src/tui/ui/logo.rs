@@ -42,11 +42,25 @@ pub fn location_line(theme: &Theme, header: &Header) -> Line<'static> {
         right_len += notice.chars().count();
         right.push(Span::styled(notice, theme.yellow()));
     }
-    let left = header.location.chars().count();
-    let gap = RIGHT.saturating_sub(INDENT.len() + left + right_len).max(1);
+    // The location gives way (cut with "…"): the version and the update
+    // notice always show, and the line ends at RIGHT.
+    let room = RIGHT.saturating_sub(INDENT.len() + right_len + 1);
+    let location = if header.location.chars().count() > room {
+        let kept: String = header
+            .location
+            .chars()
+            .take(room.saturating_sub(1))
+            .collect();
+        format!("{kept}…")
+    } else {
+        header.location.to_owned()
+    };
+    let gap = RIGHT
+        .saturating_sub(INDENT.len() + location.chars().count() + right_len)
+        .max(1);
     let mut spans = vec![
         Span::raw(INDENT),
-        Span::styled(header.location.to_owned(), theme.dim()),
+        Span::styled(location, theme.dim()),
         Span::raw(" ".repeat(gap)),
     ];
     spans.extend(right);
@@ -116,5 +130,19 @@ mod tests {
         let text = text(&lines(&theme, &header(None)));
         assert!(text[6].ends_with("v0.2.8") && !text[6].contains("available"));
         assert_eq!(text[6].chars().count(), RIGHT);
+    }
+
+    #[test]
+    fn a_long_hostname_is_cut_so_the_update_notice_shows() {
+        let theme = Theme::new(None, None);
+        let long = format!("{} · Maintenance", "h".repeat(60));
+        let head = Header {
+            location: &long,
+            ..header(Some("0.2.9"))
+        };
+        let line = &text(&lines(&theme, &head))[6];
+        assert!(line.ends_with("v0.2.8  ▲ 0.2.9 available"), "{line:?}");
+        assert!(line.contains("…"), "{line:?}");
+        assert_eq!(line.chars().count(), RIGHT);
     }
 }

@@ -38,6 +38,7 @@ pub fn question_detail(unit: Unit, action: ServiceAction) -> &'static str {
     match (unit, action) {
         (Unit::Ingest, ServiceAction::Restart) => "agents reconnect",
         (Unit::Ingest, ServiceAction::Stop) => "agents hold their findings",
+        (_, ServiceAction::Restart) => "back in a minute",
         _ => detail(unit, action),
     }
 }
@@ -144,11 +145,14 @@ pub fn draw_log<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: U
         &app.bar(Bar::keys(&[])),
     );
     let room = usize::from(area.height).saturating_sub(2);
-    let end = app.logs.len().saturating_sub(app.nav.row);
+    app.log_room.set(room);
+    // However far Up was pressed, the window never goes above line 0.
+    let row = app.nav.row.min(app.logs.len().saturating_sub(room));
+    let end = app.logs.len().saturating_sub(row);
     let start = end.saturating_sub(room);
     let t = &app.theme;
     let mut lines = vec![if start > 0 {
-        Line::styled(format!("    {} {start} more lines", t.up()), t.dim())
+        Line::styled(format!("    {} {start} more", t.up()), t.dim())
     } else {
         Line::raw("")
     }];
@@ -157,9 +161,9 @@ pub fn draw_log<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, unit: U
             .iter()
             .map(|l| Line::raw(format!("    {}", readable(l)))),
     );
-    if app.nav.row > 0 {
+    if row > 0 {
         lines.push(Line::styled(
-            format!("    {} {} more lines", t.down(), app.nav.row),
+            format!("    {} {row} more", t.down()),
             t.dim(),
         ));
     }
@@ -191,10 +195,12 @@ impl<H: Host> App<H> {
         }
     }
 
-    /// In the full log, Up goes back in time (row counts lines from the end).
+    /// In the full log, Up goes back in time (row counts lines from the
+    /// end), until the first line is the window's top.
     pub(super) fn log_key(&mut self, key: Key) {
+        let top = self.logs.len().saturating_sub(self.log_room.get());
         match key {
-            Key::Up | Key::Char('k') if self.nav.row + 1 < self.logs.len() => self.nav.row += 1,
+            Key::Up | Key::Char('k') if self.nav.row < top => self.nav.row += 1,
             Key::Down | Key::Char('j') if self.nav.row > 0 => self.nav.row -= 1,
             _ => {}
         }

@@ -2,13 +2,15 @@
 
 use std::sync::mpsc;
 
-use platform_host::Database;
+use platform_host::{Database, Unit};
 
 use super::{
     app::{App, Key, Tab},
+    database::Check,
     nav::Screen,
     setup::Phase,
     setup_tests::set_up,
+    status::Item,
     tests::{FakeHost, app, screen},
 };
 
@@ -61,9 +63,10 @@ fn question_mark_opens_help_and_esc_closes_it() {
     assert!(matches!(app.nav.screen, Screen::Help(_)));
     let text = screen(&app, 80, 24);
     assert!(text.contains("Keys"), "{text}");
+    let bar = text.lines().rev().nth(1).unwrap();
     assert!(
-        text.contains("Esc  Back    ?"),
-        "Help's bar keeps Back and ?:\n{text}"
+        bar.contains("Esc  Close") && !bar.contains("Move") && !bar.contains('?'),
+        "Help's bar is Esc Close only:\n{text}"
     );
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Home);
@@ -83,12 +86,6 @@ fn maintenance_reaches_todays_screens_and_esc_comes_back() {
     );
     let text = screen(&app, 80, 24);
     assert!(text.contains("Maintenance › Settings files"), "{text}");
-    app.key(Key::Tab);
-    assert_eq!(
-        app.tab,
-        Tab::Configuration,
-        "Tab no longer switches screens"
-    );
     app.key(Key::Esc);
     assert_eq!(app.nav.screen, Screen::Maintenance);
 }
@@ -141,6 +138,12 @@ fn q_types_into_a_set_up_hosts_setup_password_and_quits_nothing_there() {
     assert_eq!(app.setup.phase, Phase::Stopped(0));
     app.key(Key::Char('q'));
     assert!(!app.quit, "q quits from Home only, not from a stopped run");
+    let text = super::setup_tests::screen(&app);
+    let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(
+        footer.contains("Esc back") && !footer.contains('q'),
+        "a stopped run on a set-up host: {footer}"
+    );
 }
 
 #[test]
@@ -153,6 +156,147 @@ fn esc_answers_the_database_question_no() {
     assert_eq!(app.nav.screen, Screen::Legacy);
     assert!(app.database.confirm.is_none());
     assert_eq!(*app.host.database_calls.borrow(), [Database::Status]);
+}
+
+#[test]
+fn help_keys_sit_in_the_mockups_columns_and_name_the_screen() {
+    let mut app = app(false);
+    app.open_status();
+    app.key(Key::Char('?'));
+    let text = screen(&app, 80, 24);
+    let col = |needle: &str| {
+        let line = text.lines().find(|l| l.contains(needle)).unwrap();
+        line.find(needle)
+            .map(|b| line[..b].chars().count())
+            .unwrap()
+    };
+    assert_eq!(col("move · lists scroll"), 14, "{text}");
+    assert_eq!(col("back, or cancel"), 49, "{text}");
+    assert!(text.contains("Here (Status):"), "{text}");
+}
+
+#[test]
+fn enter_on_homes_quit_row_is_named_quit() {
+    let mut app = app(false);
+    assert!(screen(&app, 80, 24).contains("Enter  Open"));
+    app.key(Key::Down);
+    app.key(Key::Down);
+    let text = screen(&app, 80, 24);
+    assert!(text.contains("Enter  Quit"), "{text}");
+}
+
+#[test]
+fn esc_goes_back_to_the_row_you_left() {
+    let mut app = app(false);
+    app.open_status();
+    while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert_eq!(app.nav.row, 0, "the service screen starts at its top");
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Status);
+    assert!(
+        matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)),
+        "ingest is highlighted again"
+    );
+    app.key(Key::Esc);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.key(Key::Esc);
+    assert_eq!((app.nav.screen.clone(), app.nav.row), (Screen::Home, 1));
+}
+
+#[test]
+fn help_and_back_keep_the_scrolled_window() {
+    let mut app = app(false);
+    app.open_status();
+    for i in 0..12 {
+        app.database.health.push(Check {
+            problem: true,
+            text: format!("extra problem {i}"),
+        });
+    }
+    for _ in 0..15 {
+        app.key(Key::Down);
+    }
+    let before = screen(&app, 80, 24);
+    app.key(Key::Char('?'));
+    app.key(Key::Esc);
+    assert_eq!(screen(&app, 80, 24), before);
+}
+
+#[test]
+fn home_counts_the_health_problems_on_its_first_draw() {
+    let app = app(false);
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.contains("things need attention") && !text.contains("All "),
+        "{text}"
+    );
+    assert!(
+        app.database
+            .health
+            .iter()
+            .any(|c| c.problem && c.text.contains("ingest.crt")),
+        "health was loaded at start"
+    );
+}
+
+#[test]
+fn health_arrives_from_the_background_without_blocking() {
+    let mut app = app(false);
+    app.database.health.clear();
+    let (send, health) = mpsc::channel();
+    app.health = Some(health);
+    app.tick(std::time::Instant::now());
+    assert!(app.database.health.is_empty(), "tick does not wait");
+    send.send(vec![Check {
+        problem: true,
+        text: "disk 92% used".into(),
+    }])
+    .unwrap();
+    app.tick(std::time::Instant::now());
+    assert_eq!(app.database.health.len(), 1);
+}
+
+#[test]
+fn a_failing_service_list_shows_its_error_on_home_status_and_service() {
+    let mut app = app(false);
+    *app.host.services_error.borrow_mut() = Some("systemctl is gone".into());
+    app.refresh();
+    let home = screen(&app, 80, 24);
+    assert!(home.contains("systemctl is gone"), "{home}");
+    app.open_status();
+    *app.host.services_error.borrow_mut() = Some("systemctl is gone".into());
+    app.refresh();
+    let text = screen(&app, 80, 24);
+    let bar = text.lines().rev().nth(1).unwrap();
+    assert!(
+        bar.contains("✗") && bar.contains("systemctl is gone"),
+        "{text}"
+    );
+    *app.host.services_error.borrow_mut() = None;
+    app.refresh();
+    assert!(!screen(&app, 80, 24).contains("systemctl is gone"));
+}
+
+#[test]
+fn no_services_is_a_problem_not_all_zero_running() {
+    let mut app = app(false);
+    app.services.clear();
+    let text = screen(&app, 80, 24);
+    assert!(!text.contains("All 0"), "{text}");
+    assert!(text.contains("No services"), "{text}");
+}
+
+#[test]
+fn one_problem_is_singular() {
+    let mut app = app(false);
+    app.database.health.clear();
+    app.services
+        .retain(|s| s.unit == Unit::Ingest || s.unit == Unit::Vulns);
+    assert!(screen(&app, 80, 24).contains("1 thing needs attention"));
 }
 
 #[test]

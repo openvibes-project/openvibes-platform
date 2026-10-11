@@ -5,10 +5,10 @@
 use platform_host::Unit;
 
 use super::{
-    app::Key,
+    app::{App, Key},
     nav::Screen,
     status::{Fix, Item, items},
-    tests::{app, screen},
+    tests::{FakeHost, app, screen},
 };
 
 #[test]
@@ -54,7 +54,7 @@ fn status_renders_problems_then_services_with_the_frame() {
     }
     // At 80x24 three problems leave no room for the service rows: the
     // hint says so (select a service to see them, see the scroll test).
-    assert!(text.contains("⭣ 3 more"), "{text}");
+    assert!(text.contains("⭣ 6 more"), "{text}");
     let mut app = app;
     while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
         app.key(Key::Down);
@@ -196,4 +196,81 @@ fn since_shows_the_time_today_the_date_otherwise_and_odd_text_as_it_is() {
         "yesterday-ish"
     );
     assert_eq!(since_on("", day("2026-10-11")), "");
+}
+
+fn select_service(app: &mut App<FakeHost>, unit: Unit) {
+    while !matches!(app.status_items()[app.nav.row], Item::Service(u) if u == unit) {
+        app.key(Key::Down);
+    }
+}
+
+#[test]
+fn service_rows_say_since_and_ok_checks_are_rows_under_checks() {
+    let mut app = app(false);
+    app.open_status();
+    select_service(&mut app, Unit::Ingest);
+    let want = format!(
+        "since {}",
+        super::status::since("Sat 2026-10-10 18:40:00 CEST")
+    );
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.lines()
+            .any(|l| l.contains("ingest") && l.contains(&want)),
+        "{text}"
+    );
+    // The first ok check, highlighted, scrolls Checks into view.
+    let n_ok = app.database.health.iter().filter(|c| !c.problem).count();
+    assert!(n_ok > 0, "the fake host has ok checks");
+    app.nav.row = app.status_items().len() - 1;
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.contains("Checks") && text.contains(&format!("{n_ok} ok")),
+        "{text}"
+    );
+    let ok = app.database.health.iter().rfind(|c| !c.problem).unwrap();
+    assert!(!text.contains("checks ok"), "{text}");
+    assert!(
+        text.lines()
+            .any(|l| l.contains('▸') && l.contains(&ok.text[..20])),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_problem_longer_than_its_row_is_read_in_full_on_the_help_line() {
+    let mut app = app(false);
+    app.open_status();
+    let long = format!("disk {}", "z".repeat(67));
+    assert_eq!(long.chars().count(), 72);
+    app.database.health.insert(
+        0,
+        super::database::Check {
+            problem: true,
+            text: long.clone(),
+        },
+    );
+    app.nav.row = app
+        .status_items()
+        .iter()
+        .position(|i| matches!(i, Item::Problem { text, .. } if *text == long))
+        .unwrap();
+    let text = screen(&app, 80, 24);
+    let row = text.lines().find(|l| l.contains('▸')).unwrap();
+    assert!(row.trim_end().ends_with('…'), "the row is cut: {row}");
+    let help = text.lines().rev().nth(3).unwrap();
+    assert_eq!(help.trim(), long, "the help line has it all:\n{text}");
+}
+
+#[test]
+fn the_highlight_stays_on_its_item_when_the_list_changes_under_it() {
+    let mut app = app(false);
+    app.open_status();
+    select_service(&mut app, Unit::Ingest);
+    app.host.disabled.borrow_mut().push(Unit::Maintenance);
+    app.refresh();
+    assert!(matches!(
+        app.status_items()[app.nav.row],
+        Item::Service(Unit::Ingest)
+    ));
 }

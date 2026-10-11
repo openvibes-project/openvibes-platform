@@ -17,6 +17,8 @@ pub enum Bar {
         nav: bool,
         home: bool,
     },
+    /// Help's bar: Esc Close alone.
+    Close,
     Ask {
         question: String,
         detail: String,
@@ -138,6 +140,10 @@ impl Bar {
                 right.extend([Span::raw(" "), Span::styled(" ? ", theme.key())]);
                 (left, right)
             }
+            Bar::Close => (
+                Vec::new(),
+                vec![Span::styled(" Esc ", theme.key()), Span::raw(" Close")],
+            ),
             Bar::Ask {
                 question,
                 detail,

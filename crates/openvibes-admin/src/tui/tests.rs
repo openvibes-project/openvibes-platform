@@ -1,6 +1,6 @@
 //! The Services screen against a fake host, rendered at 80×24.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use platform_host::{
     Database, DiskUse, Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction,
@@ -26,6 +26,14 @@ pub(super) struct FakeHost {
     pub(super) privileged_calls: RefCell<Vec<(String, String)>>,
     /// Database commands run.
     pub(super) database_calls: RefCell<Vec<Database>>,
+    /// Ingest's ActiveEnterTimestamp; a restart changes it unless held.
+    pub(super) since: RefCell<String>,
+    /// A restart that leaves the old process running (its stamp unchanged).
+    pub(super) hold_restart: Cell<bool>,
+    /// Units stopped by an action.
+    stopped: RefCell<Vec<Unit>>,
+    /// `services()` fails with this.
+    pub(super) services_error: RefCell<Option<String>>,
 }
 
 fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> ServiceStatus {
@@ -41,6 +49,9 @@ fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> Ser
 
 impl Host for FakeHost {
     fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
+        if let Some(error) = &*self.services_error.borrow() {
+            return Err(HostError::Failed(error.clone()));
+        }
         let mut all = vec![
             status(Unit::Ingest, true, "active", Some(true)),
             status(Unit::Distribution, false, "inactive", None),
@@ -50,6 +61,13 @@ impl Host for FakeHost {
         ];
         for s in &mut all {
             s.enabled &= !self.disabled.borrow().contains(&s.unit);
+            if self.stopped.borrow().contains(&s.unit) {
+                s.active = "inactive".into();
+                s.ready = None;
+            }
+            if s.unit == Unit::Ingest && s.active == "active" {
+                s.since = Some(self.since.borrow().clone());
+            }
         }
         Ok(all)
     }
@@ -58,6 +76,13 @@ impl Host for FakeHost {
             return Err(HostError::NotOperator);
         }
         self.actions.borrow_mut().push((unit, action));
+        match action {
+            ServiceAction::Stop => self.stopped.borrow_mut().push(unit),
+            ServiceAction::Restart if unit == Unit::Ingest && !self.hold_restart.get() => {
+                *self.since.borrow_mut() = "Sat 2099-01-01 00:00:00 CEST".into();
+            }
+            _ => {}
+        }
         Ok(())
     }
     fn logs(&self, unit: Unit, _lines: u16) -> Result<Vec<String>, HostError> {
@@ -144,7 +169,7 @@ impl Host for FakeHost {
 }
 
 pub(super) fn app(refuse: bool) -> App<FakeHost> {
-    App::new(FakeHost {
+    let app = App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
@@ -152,7 +177,14 @@ pub(super) fn app(refuse: bool) -> App<FakeHost> {
         disabled: RefCell::new(Vec::new()),
         privileged_calls: RefCell::new(Vec::new()),
         database_calls: RefCell::new(Vec::new()),
-    })
+        since: RefCell::new("Sat 2026-10-10 18:40:00 CEST".into()),
+        hold_restart: Cell::new(false),
+        stopped: RefCell::new(Vec::new()),
+        services_error: RefCell::new(None),
+    });
+    // The health checks at start are not what the test is about.
+    app.host.database_calls.borrow_mut().clear();
+    app
 }
 
 pub(super) fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {

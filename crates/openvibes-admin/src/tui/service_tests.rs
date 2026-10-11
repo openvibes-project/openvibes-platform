@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 use platform_host::{ServiceAction, Unit};
 
 use super::{
-    app::{App, Key, Question, Tab},
+    app::{App, Key, Question},
     nav::Screen,
     status::Item,
     tests::{FakeHost, app, screen},
@@ -13,7 +13,7 @@ use super::{
 };
 
 fn open_service(app: &mut App<FakeHost>, unit: Unit) {
-    app.open(Tab::Health);
+    app.open_status();
     while !matches!(app.status_items()[app.nav.row], Item::Service(u) if u == unit) {
         app.key(Key::Down);
     }
@@ -135,7 +135,7 @@ fn full_log_shows_the_log_and_esc_comes_back() {
 fn fix_at_boot_asks_for_the_password_in_the_bar() {
     let mut app = app(false);
     app.host.disabled.borrow_mut().push(Unit::Ingest);
-    app.open(Tab::Health);
+    app.open_status();
     app.refresh();
     while !matches!(&app.status_items()[app.nav.row], Item::Problem { text, .. } if text.contains("ingest does not start at boot"))
     {
@@ -194,32 +194,78 @@ fn a_second_yes_while_work_runs_starts_nothing() {
 }
 
 #[test]
-fn tab_in_setup_keeps_a_drawn_screen() {
-    let mut app = app(false);
-    app.open(Tab::Setup);
-    app.key(Key::Tab);
-    app.key(Key::BackTab);
-    assert_eq!(app.nav.screen, Screen::Legacy);
-    assert!(
-        screen(&app, 80, 24).contains("Setup"),
-        "{}",
-        screen(&app, 80, 24)
-    );
-}
-
-#[test]
 fn every_question_fits_the_bar_at_80_columns_without_a_cut() {
-    for (unit, action) in [
-        (Unit::Ingest, ServiceAction::Restart),
-        (Unit::Ingest, ServiceAction::Stop),
-        (Unit::Console, ServiceAction::Restart),
-        (Unit::Console, ServiceAction::Stop),
-        (Unit::Vulns, ServiceAction::Start),
-    ] {
+    let units = [
+        Unit::Ingest,
+        Unit::Distribution,
+        Unit::Vulns,
+        Unit::Netlog,
+        Unit::Console,
+        Unit::Llm,
+        Unit::Maintenance,
+        Unit::Signer,
+    ];
+    let actions = [
+        ServiceAction::Start,
+        ServiceAction::Stop,
+        ServiceAction::Restart,
+    ];
+    for (unit, action) in units.into_iter().flat_map(|u| actions.map(|a| (u, a))) {
         let mut app = app(false);
         app.question = Some((Question::Service(unit, action), true));
         let text = screen(&app, 80, 24);
         assert!(!text.contains('…'), "{unit:?} {action:?}:\n{text}");
         assert!(text.contains("Enter  Confirm"), "{text}");
     }
+}
+
+#[test]
+fn a_restart_is_done_only_once_the_unit_has_a_new_start_time() {
+    let mut app = app(false);
+    app.host.hold_restart.set(true);
+    open_service(&mut app, Unit::Ingest);
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    let start = Instant::now();
+    app.poll(start + Duration::from_secs(2));
+    assert!(app.pending.is_some(), "still the old process");
+    *app.host.since.borrow_mut() = "Sat 2099-01-01 00:00:00 CEST".into();
+    app.poll(start + Duration::from_secs(4));
+    assert!(app.pending.is_none());
+    assert!(app.outcome.clone().unwrap().0);
+}
+
+#[test]
+fn after_stop_the_highlight_is_on_the_first_action() {
+    let mut app = app(false);
+    open_service(&mut app, Unit::Ingest);
+    app.key(Key::Down); // Stop
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    app.poll(Instant::now() + Duration::from_secs(2));
+    assert!(app.pending.is_none());
+    assert_eq!(app.nav.row, 0, "Start, not Full log");
+}
+
+#[test]
+fn the_full_log_cannot_scroll_past_its_first_line() {
+    let mut app = app(false);
+    open_service(&mut app, Unit::Ingest);
+    app.key(Key::Down);
+    app.key(Key::Down);
+    app.key(Key::Enter);
+    app.logs = (0..100).map(|i| format!("line {i}")).collect();
+    let _ = screen(&app, 80, 24); // the first draw learns the room
+    for _ in 0..300 {
+        app.key(Key::Up);
+    }
+    let text = screen(&app, 80, 24);
+    let shown = text
+        .lines()
+        .filter(|l| l.trim_start().starts_with("line "))
+        .count();
+    assert_eq!(shown, 24 - 7 - 1 - 1 - 3 - 2, "a full page:\n{text}");
+    assert!(text.contains("line 0") && !text.contains("⭡ "), "{text}");
+    let hidden = 100 - shown;
+    assert!(text.contains(&format!("⭣ {hidden} more")), "{text}");
 }

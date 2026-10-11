@@ -1,7 +1,7 @@
 //! Where the operator is (spec §3): a stack of screens. Enter opens, Esc
-//! pops, ? opens Help, q quits from Home. Today's Setup, Configuration and
-//! Database screens ("legacy") are reached from Maintenance and keep their
-//! own keys; Tab and q are no longer theirs, and Esc leaves them only when
+//! pops (back to the row and window it left), ? opens Help, q quits from
+//! Home. Today's Setup, Configuration and Database screens ("legacy") are
+//! reached from Maintenance and keep their own keys; q is no longer theirs, and Esc leaves them only when
 //! nothing is being typed or asked (sub-projects 2 and 3 replace them).
 
 use std::cell::Cell;
@@ -32,7 +32,8 @@ pub enum Screen {
 #[derive(Clone, Debug)]
 pub struct Nav {
     pub screen: Screen,
-    pub back: Vec<Screen>,
+    /// Where Esc returns to: the screen, its highlighted row and its window.
+    pub back: Vec<(Screen, usize, Scroll)>,
     pub row: usize,
     pub scroll: Cell<Scroll>,
 }
@@ -49,19 +50,19 @@ impl Nav {
 
     pub fn go(&mut self, to: Screen) {
         let from = std::mem::replace(&mut self.screen, to);
-        self.back.push(from);
+        self.back.push((from, self.row, self.scroll.get()));
         self.row = 0;
         self.scroll.set(Scroll::default());
     }
 
     /// Back one screen; false when there is nowhere to go.
     pub fn pop(&mut self) -> bool {
-        let Some(previous) = self.back.pop() else {
+        let Some((previous, row, scroll)) = self.back.pop() else {
             return false;
         };
         self.screen = previous;
-        self.row = 0;
-        self.scroll.set(Scroll::default());
+        self.row = row;
+        self.scroll.set(scroll);
         true
     }
 }
@@ -117,13 +118,11 @@ impl<H: Host> App<H> {
             Tab::Setup => matches!(self.setup.phase, Phase::Status | Phase::Finished),
             Tab::Configuration => self.config.editing.is_none() && self.config.prompt.is_none(),
             Tab::Database => self.database.confirm.is_none(),
-            Tab::Health => true,
         }
     }
 
     pub(super) fn legacy_key(&mut self, key: Key) {
         match key {
-            Key::Tab | Key::BackTab => {}
             // q quits from Home only, but is typed into a value.
             Key::Char('q') if (self.setup_done() || self.tab != Tab::Setup) && !self.typing() => {}
             Key::Esc if self.legacy_at_rest() && self.setup_done() => {
@@ -142,7 +141,7 @@ impl<H: Host> App<H> {
         match self.tab {
             Tab::Setup => self.setup.editing || matches!(self.setup.phase, Phase::Password(_)),
             Tab::Configuration => self.config.editing.is_some(),
-            Tab::Database | Tab::Health => false,
+            Tab::Database => false,
         }
     }
 

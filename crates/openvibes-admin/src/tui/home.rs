@@ -37,7 +37,12 @@ fn rows(items: &[(&str, &str)]) -> Vec<Row> {
 }
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let bar = app.bar(Bar::home(&[("Enter", "Open")]));
+    let enter = if app.nav.row == HOME.len() - 1 {
+        "Quit"
+    } else {
+        "Open"
+    };
+    let bar = app.bar(Bar::home(&[("Enter", enter)]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
     let mut lines = vec![app.status_line()];
     let mut scroll = app.nav.scroll.get();
@@ -70,23 +75,19 @@ pub fn draw_maintenance<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>)
 }
 
 pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: &Screen) {
-    let bar = Bar::Keys {
-        keys: Vec::new(),
-        nav: false,
-        home: false,
-    };
+    let bar = Bar::Close;
     let area = frame::draw(frame, &app.theme, head, Some("Keys"), &bar);
     let t = &app.theme;
     let key = |k: &str| Span::styled(format!(" {k} "), t.key());
     let pair = |lk: &str, ld: &str, rk: &str, rd: &str| {
-        let pad = " ".repeat(8usize.saturating_sub(lk.chars().count() + 2));
+        let pad = " ".repeat(10usize.saturating_sub(lk.chars().count() + 2));
         let mut spans = vec![
             Span::raw("    "),
             key(lk),
             Span::raw(format!("{pad}{ld:<24}   ")),
         ];
         if !rk.is_empty() {
-            let pad = " ".repeat(6usize.saturating_sub(rk.chars().count() + 2));
+            let pad = " ".repeat(8usize.saturating_sub(rk.chars().count() + 2));
             spans.push(key(rk));
             spans.push(Span::raw(format!("{pad}{rd}")));
         }
@@ -102,9 +103,24 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         Line::raw(""),
         pair(t.left_right(), "Yes or No in a question", "", ""),
         Line::raw(""),
-        Line::styled(format!("    Here: {}", here(from)), t.dim()),
+        Line::styled(
+            format!("    Here ({}): {}", name(from), here(from)),
+            t.dim(),
+        ),
     ];
     frame.render_widget(Paragraph::new(lines), area);
+}
+
+/// The screen's name, as its title or location line says it.
+fn name(screen: &Screen) -> String {
+    match screen {
+        Screen::Home => "Home".into(),
+        Screen::Maintenance => "Maintenance".into(),
+        Screen::Status => "Status".into(),
+        Screen::Service(unit) => format!("Service: {}", unit.label()),
+        Screen::Log(unit) => format!("Log: {}", unit.label()),
+        Screen::Help(_) | Screen::Legacy => String::new(),
+    }
 }
 
 /// What the keys do on the screen Help was opened from.
@@ -136,7 +152,7 @@ impl<H: Host> App<H> {
         }
         if key == Key::Enter {
             match self.nav.row {
-                0 => self.open(Tab::Health),
+                0 => self.open_status(),
                 1 => self.nav.go(Screen::Maintenance),
                 _ => self.quit_or_ask(),
             }

@@ -1,6 +1,7 @@
 //! TUI state and key handling, free of terminal code so it can be tested.
 
 use std::{
+    cell::Cell,
     sync::mpsc::{Receiver, TryRecvError},
     time::Instant,
 };
@@ -9,7 +10,7 @@ use platform_host::{Host, HostError, PackageUpdate, ServiceStatus, Unit};
 
 use super::{
     configuration::Configuration,
-    database::DatabaseScreen,
+    database::{Check, DatabaseScreen},
     nav::{Nav, Screen},
     password::PasswordPrompt,
     setup::Setup,
@@ -32,9 +33,6 @@ pub enum Key {
     Enter,
     Esc,
     Backspace,
-    Tab,
-    /// Shift+Tab: the previous screen.
-    BackTab,
     /// Ctrl+U: empty the field being edited.
     ClearLine,
 }
@@ -45,11 +43,12 @@ pub enum Tab {
     Setup,
     Configuration,
     Database,
-    Health,
 }
 
-/// The TUI's state: the Services screen's fields, and the Configuration
-/// screen's in `config`.
+/// The TUI's state: where the operator is (`nav`), what the host reports
+/// (`services`, the health checks in `database`), the bar's question, prompt
+/// and running work, and today's screens' own state (`setup`, `config`,
+/// `database`).
 pub struct App<H: Host> {
     pub host: H,
     pub tab: Tab,
@@ -57,14 +56,17 @@ pub struct App<H: Host> {
     pub config: Configuration,
     pub database: DatabaseScreen,
     pub services: Vec<ServiceStatus>,
+    /// Index into `services` of the unit whose log `logs` holds.
     pub selected: usize,
-    /// The last outcome or error, shown above the key help.
+    /// The last error (a failed refresh): Home, Status and Service show it;
+    /// today's screens also keep their notes here, above their key help.
     pub message: Option<String>,
+    /// Journal lines of the unit at `selected`.
     pub logs: Vec<String>,
     pub quit: bool,
     pub theme: Theme,
     pub nav: Nav,
-    /// From `/etc/hostname`, lowercased: the location line starts with it.
+    /// From `/etc/hostname` (else the kernel's), lowercased: the location line starts with it.
     pub hostname: String,
     /// A newer `openvibes-admin` version, shown on the location line.
     pub update: Option<String>,
@@ -72,6 +74,12 @@ pub struct App<H: Host> {
     /// The update notice, looked up on another thread (`run`): dnf may
     /// take long offline. Without it, `tick` asks the host itself (tests).
     pub updates: Option<Receiver<Option<String>>>,
+    /// The health checks, collected on another thread (`run`): the probes
+    /// take a while. Without it, `new` collects them itself (tests).
+    pub health: Option<Receiver<Vec<Check>>>,
+    /// The full log's page length at its last draw; it caps how far up
+    /// the log scrolls.
+    pub log_room: Cell<usize>,
     /// A question in the bar; the bool is the highlighted answer (Yes).
     pub question: Option<(Question, bool)>,
     /// The sudo password being typed in the bar (enable at boot).
@@ -84,11 +92,19 @@ pub struct App<H: Host> {
 }
 
 impl<H: Host> App<H> {
+    /// Collects the health checks before returning (tests: a real host
+    /// uses `lazy` and a thread).
+    #[cfg(test)]
     pub fn new(host: H) -> Self {
+        let mut app = Self::lazy(host);
+        app.database.health = super::database::health_checks(&app.host);
+        app
+    }
+
+    /// As `new`, but the health checks come later through `health`.
+    pub fn lazy(host: H) -> Self {
         let set_up = host.is_set_up();
-        let hostname = std::fs::read_to_string("/etc/hostname")
-            .map(|h| h.trim().to_lowercase())
-            .unwrap_or_default();
+        let hostname = hostname_from(&["/etc/hostname", "/proc/sys/kernel/hostname"]);
         // Under sudo, HOME is root's, but the root key belongs in the
         // person's own home (#92); directory users too (#94).
         let home = crate::setup::plan::operator_from_env()
@@ -115,6 +131,8 @@ impl<H: Host> App<H> {
             update: None,
             versions_loaded: false,
             updates: None,
+            health: None,
+            log_room: Cell::new(0),
             question: None,
             prompt: None,
             pending: None,
@@ -130,16 +148,26 @@ impl<H: Host> App<H> {
     /// only on selection, `R`, and after an action: each read goes through
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
+        // The highlighted Status item stays highlighted if it is still there.
+        let held = (self.nav.screen == Screen::Status)
+            .then(|| self.status_items().get(self.nav.row).cloned())
+            .flatten();
         match self.host.services() {
-            Ok(services) => self.services = services,
+            Ok(services) => {
+                self.services = services;
+                if self.nav.screen != Screen::Legacy {
+                    self.message = None;
+                }
+            }
             Err(error) => self.message = Some(error.to_string()),
         }
         self.selected = self.selected.min(self.services.len().saturating_sub(1));
         if self.nav.screen == Screen::Status {
-            self.nav.row = self
-                .nav
-                .row
-                .min(self.status_items().len().saturating_sub(1));
+            let items = self.status_items();
+            self.nav.row = held
+                .and_then(|held| items.iter().position(|i| *i == held))
+                .unwrap_or(self.nav.row)
+                .min(items.len().saturating_sub(1));
         }
     }
 
@@ -162,18 +190,23 @@ impl<H: Host> App<H> {
         self.setup.previous.is_some() || self.host.is_set_up()
     }
 
-    /// Opens `tab`, loading what it shows: Health opens Status,
-    /// the others today's screen behind Maintenance.
+    /// Opens Status, with fresh health checks.
+    pub(super) fn open_status(&mut self) {
+        self.message = None;
+        self.nav.go(Screen::Status);
+        self.load_health();
+        // A new screen starts at the top, whatever the refresh held.
+        self.nav.row = 0;
+    }
+
+    /// Opens `tab`, loading what it shows: today's screen behind Maintenance.
     pub(super) fn open(&mut self, tab: Tab) {
         self.message = None;
-        if matches!(tab, Tab::Health) {
-            self.nav.go(Screen::Status);
-        } else if self.nav.screen != Screen::Legacy {
+        if self.nav.screen != Screen::Legacy {
             self.nav.go(Screen::Legacy);
         }
         match tab {
             Tab::Setup => self.tab = Tab::Setup,
-            Tab::Health => self.load_health(),
             Tab::Configuration => {
                 self.tab = Tab::Configuration;
                 self.load_config();
@@ -218,8 +251,19 @@ impl<H: Host> App<H> {
         }
     }
 
-    /// Loads the update notice once, then polls running work.
+    /// Takes the health checks and the update notice once they have been
+    /// looked up, then polls running work.
     pub fn tick(&mut self, now: Instant) {
+        if let Some(rx) = &self.health {
+            match rx.try_recv() {
+                Ok(checks) => {
+                    self.database.health = checks;
+                    self.health = None;
+                }
+                Err(TryRecvError::Empty) => {}
+                Err(TryRecvError::Disconnected) => self.health = None,
+            }
+        }
         if !self.versions_loaded {
             match self.updates.as_ref().map(Receiver::try_recv) {
                 Some(Err(TryRecvError::Empty)) => {}
@@ -243,9 +287,18 @@ impl<H: Host> App<H> {
             Tab::Setup => self.setup_key(key),
             Tab::Configuration => self.config_key(key),
             Tab::Database => self.database_key(key),
-            Tab::Health => {}
         }
     }
+}
+
+/// The first non-empty of `paths`, trimmed and lowercased; empty if none.
+fn hostname_from(paths: &[&str]) -> String {
+    paths
+        .iter()
+        .filter_map(|p| std::fs::read_to_string(p).ok())
+        .map(|h| h.trim().to_lowercase())
+        .find(|h| !h.is_empty())
+        .unwrap_or_default()
 }
 
 /// The newer `openvibes-admin` version (without its release), if any.
@@ -254,4 +307,17 @@ pub fn newer_admin(packages: Result<Vec<PackageUpdate>, HostError>) -> Option<St
         let v = p.available.filter(|_| p.name == "openvibes-admin")?;
         Some(v.split('-').next().unwrap_or(&v).to_owned())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hostname_from;
+
+    #[test]
+    fn the_hostname_falls_back_to_the_kernels_when_etc_hostname_is_missing() {
+        let name = hostname_from(&["/nonexistent/hostname", "/proc/sys/kernel/hostname"]);
+        assert!(!name.is_empty());
+        assert_eq!(name, name.to_lowercase());
+        assert_eq!(hostname_from(&["/nonexistent/hostname"]), "");
+    }
 }

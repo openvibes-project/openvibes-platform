@@ -7,11 +7,12 @@ use platform_host::{Host, Privileged, ServiceAction, Unit};
 
 use super::{
     app::{App, Key},
+    nav::Screen,
     password::{PasswordPrompt, Typed},
     service::question_detail,
     services_text::readable,
     status::Fix,
-    ui::bar::Bar,
+    ui::{bar::Bar, list::Scroll},
 };
 
 /// How long a service action may take to show its result.
@@ -30,6 +31,9 @@ pub struct Pending {
     pub action: ServiceAction,
     pub since: Instant,
     pub polled: Instant,
+    /// The unit's start time (`ActiveEnterTimestamp`) when Yes was pressed:
+    /// a restart is queued, so the old process answers until this changes.
+    pub started: Option<String>,
 }
 
 impl<H: Host> App<H> {
@@ -42,6 +46,7 @@ impl<H: Host> App<H> {
             return;
         }
         let (unit, action, since) = (p.unit, p.action, p.since);
+        let started = p.started.clone();
         self.refresh();
         let reached = self
             .services
@@ -49,7 +54,10 @@ impl<H: Host> App<H> {
             .find(|s| s.unit == unit)
             .is_some_and(|s| match action {
                 ServiceAction::Stop => s.active != "active",
-                _ => s.active == "active" && s.ready != Some(false),
+                ServiceAction::Restart => {
+                    s.since != started && s.active == "active" && s.ready != Some(false)
+                }
+                ServiceAction::Start => s.active == "active" && s.ready != Some(false),
             });
         let waited = now.saturating_duration_since(since);
         if reached {
@@ -64,6 +72,11 @@ impl<H: Host> App<H> {
                 ),
             ));
             self.load_logs();
+            // The actions changed (Start instead of Restart and Stop).
+            if action == ServiceAction::Stop && self.nav.screen == Screen::Service(unit) {
+                self.nav.row = 0;
+                self.nav.scroll.set(Scroll::default());
+            }
         } else if waited > ACTION_TIMEOUT {
             self.pending = None;
             let last = self
@@ -72,10 +85,10 @@ impl<H: Host> App<H> {
                 .ok()
                 .and_then(|l| l.last().cloned())
                 .unwrap_or_default();
-            let verb = if action == ServiceAction::Stop {
-                "stop"
-            } else {
-                "start"
+            let verb = match action {
+                ServiceAction::Stop => "stop",
+                ServiceAction::Start => "start",
+                ServiceAction::Restart => "restart",
             };
             self.outcome = Some((
                 false,
@@ -117,11 +130,17 @@ impl<H: Host> App<H> {
             Question::Service(unit, action) => match self.host.service_action(unit, action) {
                 Ok(()) => {
                     let now = Instant::now();
+                    let started = self
+                        .services
+                        .iter()
+                        .find(|s| s.unit == unit)
+                        .and_then(|s| s.since.clone());
                     self.pending = Some(Pending {
                         unit,
                         action,
                         since: now,
                         polled: now,
+                        started,
                     });
                 }
                 Err(error) => self.outcome = Some((false, error.to_string())),
@@ -205,6 +224,15 @@ impl<H: Host> App<H> {
         if let Some((ok, text)) = &self.outcome {
             return Bar::Done {
                 ok: *ok,
+                text: text.clone(),
+            };
+        }
+        // A failed refresh, where the bar would otherwise only list keys.
+        if let Some(text) = &self.message
+            && matches!(self.nav.screen, Screen::Status | Screen::Service(_))
+        {
+            return Bar::Done {
+                ok: false,
                 text: text.clone(),
             };
         }

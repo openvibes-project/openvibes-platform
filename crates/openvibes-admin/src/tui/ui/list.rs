@@ -3,14 +3,19 @@
 //! scrolling one row per step with "⭡ N more" / "⭣ N more" in the gap
 //! lines above the first and below the last visible entry.
 
-use ratatui::text::{Line, Span};
+use ratatui::{
+    style::{Modifier, Style},
+    text::{Line, Span},
+};
 
 use super::theme::Theme;
 
 #[derive(Clone, Debug)]
 pub enum Row {
-    #[allow(dead_code, reason = "used in Task 7/8")]
-    Heading { text: String, right: String },
+    Heading {
+        text: String,
+        right: String,
+    },
     Entry {
         name: Vec<Span<'static>>,
         value: Vec<Span<'static>>,
@@ -21,7 +26,10 @@ impl Row {
     pub fn entry(name: &str, value: &str) -> Row {
         Row::Entry {
             name: vec![Span::raw(name.to_owned())],
-            value: vec![Span::raw(value.to_owned())],
+            value: vec![Span::styled(
+                value.to_owned(),
+                Style::new().add_modifier(Modifier::DIM),
+            )],
         }
     }
 }
@@ -30,13 +38,6 @@ impl Row {
 pub struct Scroll {
     /// The first laid-out line shown.
     pub top: usize,
-}
-
-#[allow(dead_code, reason = "used in Task 7/8")]
-pub fn entries(rows: &[Row]) -> usize {
-    rows.iter()
-        .filter(|r| matches!(r, Row::Entry { .. }))
-        .count()
 }
 
 fn width(spans: &[Span]) -> usize {
@@ -109,21 +110,23 @@ fn layout(
                 let mut spans = Vec::new();
                 if entry == selected {
                     let hl = theme.highlight();
+                    // The highlight's background; a mark keeps its colour.
+                    let on = |s: &Span<'static>| match s.style.fg {
+                        Some(fg) => hl.fg(fg),
+                        None => hl,
+                    };
                     spans.push(Span::styled("  ▸ ", hl));
-                    spans.extend(name.iter().map(|s| Span::styled(s.content.clone(), hl)));
+                    spans.extend(name.iter().map(|s| Span::styled(s.content.clone(), on(s))));
                     spans.push(Span::styled(pad, hl));
-                    spans.extend(value.iter().map(|s| Span::styled(s.content.clone(), hl)));
-                    let tail = 72usize.saturating_sub(4 + name_w + 1 + width(value));
+                    spans.extend(value.iter().map(|s| Span::styled(s.content.clone(), on(s))));
+                    let tail =
+                        72usize.saturating_sub(4 + width(name).max(name_w) + 1 + width(value));
                     spans.push(Span::styled(" ".repeat(tail), hl));
                 } else {
                     spans.push(Span::raw("    "));
                     spans.extend(name.iter().cloned());
                     spans.push(Span::raw(pad));
-                    spans.extend(
-                        value
-                            .iter()
-                            .map(|s| Span::styled(s.content.clone(), s.style.patch(theme.dim()))),
-                    );
+                    spans.extend(value.iter().cloned());
                 }
                 heads.push(if last_was_entry { None } else { heading_line });
                 out.push((Line::from(clip(spans, 76)), Some(entry)));
@@ -213,6 +216,31 @@ mod tests {
         (0..n)
             .map(|i| Row::entry(&format!("item{i}"), &format!("value {i}")))
             .collect()
+    }
+
+    #[test]
+    fn the_highlight_keeps_a_marks_colour_and_only_marked_values_are_dim() {
+        let t = Theme::new(None, Some("xterm"));
+        let dim = Style::new().add_modifier(Modifier::DIM);
+        let rows = vec![
+            Row::Entry {
+                name: vec![Span::styled("● ", t.green()), Span::raw("ingest")],
+                value: vec![Span::raw("running "), Span::styled("since 18:40", dim)],
+            },
+            Row::entry("b", "v"),
+        ];
+        let mut scroll = Scroll::default();
+        let on = lines(&t, &rows, 0, &mut scroll, 13, 15);
+        let mark = &on[1].spans[1];
+        assert_eq!(mark.style.fg, t.green().fg);
+        assert_eq!(mark.style.bg, t.highlight().bg);
+        let off = lines(&t, &rows, 1, &mut scroll, 13, 15);
+        let spans = &off[1].spans;
+        assert_eq!(spans[1].style.fg, t.green().fg);
+        let running = spans.iter().find(|s| s.content == "running ").unwrap();
+        assert!(!running.style.add_modifier.contains(Modifier::DIM));
+        let since = spans.iter().find(|s| s.content == "since 18:40").unwrap();
+        assert!(since.style.add_modifier.contains(Modifier::DIM));
     }
 
     #[test]

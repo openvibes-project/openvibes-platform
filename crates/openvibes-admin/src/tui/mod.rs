@@ -61,7 +61,6 @@ pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) 
         Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
         Tab::Database => database_view::draw_database(frame, area, app),
-        Tab::Health => {}
     }
 }
 
@@ -85,7 +84,7 @@ pub fn run() -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut app = App::new(Native {
+    let mut app = App::lazy(Native {
         runner: SystemRunner,
     });
     // dnf refreshes its metadata: on another thread, so a slow mirror or
@@ -100,6 +99,15 @@ pub fn run() -> ExitCode {
         let _ = send.send(app::newer_admin(packages));
     });
     app.updates = Some(updates);
+    // The health probes run on another thread too (certificates, feeds,
+    // disk): Home's status line counts them once they arrive.
+    let (send, health) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = send.send(database::health_checks(&Native {
+            runner: SystemRunner,
+        }));
+    });
+    app.health = Some(health);
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();
@@ -137,8 +145,6 @@ pub fn run() -> ExitCode {
                     KeyCode::Enter => Key::Enter,
                     KeyCode::Esc => Key::Esc,
                     KeyCode::Backspace => Key::Backspace,
-                    KeyCode::Tab => Key::Tab,
-                    KeyCode::BackTab => Key::BackTab,
                     _ => continue,
                 };
                 pressed = Some(key);
@@ -151,8 +157,10 @@ pub fn run() -> ExitCode {
         // the first step of a run the key just started.
         app.key_then_tick(pressed);
         app.tick(Instant::now());
-        if matches!(app.nav.screen, Screen::Status | Screen::Service(_))
-            && app.question.is_none()
+        if matches!(
+            app.nav.screen,
+            Screen::Home | Screen::Status | Screen::Service(_)
+        ) && app.question.is_none()
             && app.prompt.is_none()
             && refreshed.elapsed() >= REFRESH
         {
