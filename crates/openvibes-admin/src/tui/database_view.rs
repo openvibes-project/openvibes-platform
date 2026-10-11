@@ -1,5 +1,4 @@
-//! The Database and Health screens. State is written as text ("problem",
-//! "ok"), so both read without colour.
+//! The Database screen.
 
 use platform_host::{Database, Host};
 use ratatui::{
@@ -11,8 +10,7 @@ use ratatui::{
 
 use super::app::App;
 
-const DATABASE_KEYS: &str = "Tab screens  m migrate  n maintenance now  R refresh  q quit";
-const HEALTH_KEYS: &str = "Tab screens  R refresh  q quit";
+const DATABASE_KEYS: &str = "m migrate  n maintenance now  R refresh  Esc back";
 
 fn areas(area: Rect) -> [Rect; 3] {
     Layout::vertical([
@@ -43,31 +41,4 @@ pub fn draw_database<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     };
     frame.render_widget(Paragraph::new(line), status);
     frame.render_widget(Paragraph::new(DATABASE_KEYS), keys);
-}
-
-pub fn draw_health<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
-    let [body, status, keys] = areas(area);
-    let health = &app.database.health;
-    let problems = health.iter().filter(|check| check.problem).count();
-    let lines: Vec<Line> = health
-        .iter()
-        .map(|check| {
-            let mark = if check.problem { "problem" } else { "ok     " };
-            Line::raw(format!("{mark}  {}", check.text))
-        })
-        .collect();
-    let title = match problems {
-        0 => " health: no problems ".to_owned(),
-        1 => " health: 1 problem ".to_owned(),
-        n => format!(" health: {n} problems "),
-    };
-    frame.render_widget(
-        Paragraph::new(lines).block(Block::new().borders(Borders::ALL).title(title)),
-        body,
-    );
-    frame.render_widget(
-        Paragraph::new(app.message.clone().unwrap_or_default()),
-        status,
-    );
-    frame.render_widget(Paragraph::new(HEALTH_KEYS), keys);
 }

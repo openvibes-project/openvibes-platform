@@ -11,7 +11,7 @@ use ratatui::{
 
 use super::{app::App, configuration::Prompt};
 
-const KEYS: &str = "Tab screens  h/l file  j/k field  Enter edit  u undo  w save  R reload  q quit";
+const KEYS: &str = "h/l file  j/k field  Enter edit  u undo  w save  R reload  Esc back";
 const EDIT_KEYS: &str = "type the value  Enter set  Esc cancel  (empty: the service default)";
 
 fn shown(value: Option<&String>) -> &str {

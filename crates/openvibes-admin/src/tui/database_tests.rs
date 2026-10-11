@@ -12,9 +12,9 @@ use super::{
 #[test]
 fn database_shows_the_status_and_migrates_only_after_yes() {
     let mut app = app(false);
-    app.open_database();
+    app.open(Tab::Database);
     let text = screen(&app, 80, 24);
-    assert!(text.contains("[Database]"), "{text}");
+    assert!(text.contains("Maintenance › Database"), "{text}");
     assert!(text.contains("partition count 98"), "{text}");
     assert!(text.contains("database size 42 MiB"), "{text}");
     app.key(Key::Char('m'));
@@ -36,33 +36,8 @@ fn database_shows_the_status_and_migrates_only_after_yes() {
 #[test]
 fn a_refused_database_command_names_the_group() {
     let mut app = app(true);
-    app.open_database();
+    app.open(Tab::Database);
     assert!(screen(&app, 80, 24).contains("openvibes-operators"));
-}
-
-#[test]
-fn health_lists_problems_first() {
-    let mut app = app(false);
-    app.open_database();
-    app.key(Key::Tab);
-    assert_eq!(app.tab, Tab::Health);
-    let text = screen(&app, 80, 24);
-    let rows: Vec<&str> = text.lines().collect();
-    let first = rows.iter().position(|r| r.contains("problem  ")).unwrap();
-    let last_problem = rows.iter().rposition(|r| r.contains("problem  ")).unwrap();
-    let first_ok = rows.iter().position(|r| r.contains("ok       ")).unwrap();
-    assert!(first < first_ok && last_problem < first_ok, "{text}");
-    // Fake host: vulns failed, llm inactive, the certificate unreadable, one feed error.
-    assert!(text.contains("health: 4 problems"), "{text}");
-    for want in [
-        "vulns: failed",
-        "ingest.crt: failed: permission denied",
-        "feed osv-rocky",
-        "ingest: active, ready",
-        "/var/lib/pgsql: 40% used, 20G free",
-    ] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
-    }
 }
 
 #[test]

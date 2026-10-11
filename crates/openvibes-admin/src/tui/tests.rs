@@ -1,6 +1,6 @@
 //! The Services screen against a fake host, rendered at 80×24.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 
 use platform_host::{
     Database, DiskUse, Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction,
@@ -15,16 +15,27 @@ use super::{
 };
 
 pub(super) struct FakeHost {
-    actions: RefCell<Vec<(Unit, ServiceAction)>>,
-    log_reads: RefCell<usize>,
+    pub(super) actions: RefCell<Vec<(Unit, ServiceAction)>>,
     writes: RefCell<Vec<(Service, String)>>,
     /// What a read returns instead, as if edited by hand meanwhile.
     hand_edit: RefCell<Option<String>>,
     refuse: bool,
+    /// Units reported as not enabled at boot.
+    pub(super) disabled: RefCell<Vec<Unit>>,
     /// (verb, password) of each privileged call.
-    privileged_calls: RefCell<Vec<(String, String)>>,
+    pub(super) privileged_calls: RefCell<Vec<(String, String)>>,
     /// Database commands run.
     pub(super) database_calls: RefCell<Vec<Database>>,
+    /// Ingest's ActiveEnterTimestamp; a restart changes it unless held.
+    pub(super) since: RefCell<String>,
+    /// A restart that leaves the old process running (its stamp unchanged).
+    pub(super) hold_restart: Cell<bool>,
+    /// Units stopped by an action.
+    stopped: RefCell<Vec<Unit>>,
+    /// Units running after an action (failed in the fake until then).
+    pub(super) started: RefCell<Vec<Unit>>,
+    /// `services()` fails with this.
+    pub(super) services_error: RefCell<Option<String>>,
 }
 
 fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> ServiceStatus {
@@ -40,23 +51,47 @@ fn status(unit: Unit, installed: bool, active: &str, ready: Option<bool>) -> Ser
 
 impl Host for FakeHost {
     fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
-        Ok(vec![
+        if let Some(error) = &*self.services_error.borrow() {
+            return Err(HostError::Failed(error.clone()));
+        }
+        let mut all = vec![
             status(Unit::Ingest, true, "active", Some(true)),
             status(Unit::Distribution, false, "inactive", None),
             status(Unit::Vulns, true, "failed", None),
             status(Unit::Llm, true, "inactive", None),
             status(Unit::Maintenance, true, "active", None),
-        ])
+        ];
+        for s in &mut all {
+            s.enabled &= !self.disabled.borrow().contains(&s.unit);
+            if self.started.borrow().contains(&s.unit) {
+                s.active = "active".into();
+                s.ready = Some(true);
+            }
+            if self.stopped.borrow().contains(&s.unit) {
+                s.active = "inactive".into();
+                s.ready = None;
+            }
+            if s.unit == Unit::Ingest && s.active == "active" {
+                s.since = Some(self.since.borrow().clone());
+            }
+        }
+        Ok(all)
     }
     fn service_action(&self, unit: Unit, action: ServiceAction) -> Result<(), HostError> {
         if self.refuse {
             return Err(HostError::NotOperator);
         }
         self.actions.borrow_mut().push((unit, action));
+        match action {
+            ServiceAction::Stop => self.stopped.borrow_mut().push(unit),
+            ServiceAction::Restart if unit == Unit::Ingest && !self.hold_restart.get() => {
+                *self.since.borrow_mut() = "Sat 2099-01-01 00:00:00 CEST".into();
+            }
+            _ => {}
+        }
         Ok(())
     }
     fn logs(&self, unit: Unit, _lines: u16) -> Result<Vec<String>, HostError> {
-        *self.log_reads.borrow_mut() += 1;
         Ok(vec![format!("first log line of {}", unit.label())])
     }
     fn read_config(&self, service: Service) -> Result<String, HostError> {
@@ -140,15 +175,23 @@ impl Host for FakeHost {
 }
 
 pub(super) fn app(refuse: bool) -> App<FakeHost> {
-    App::new(FakeHost {
+    let app = App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
-        log_reads: RefCell::new(0),
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
         refuse,
+        disabled: RefCell::new(Vec::new()),
         privileged_calls: RefCell::new(Vec::new()),
         database_calls: RefCell::new(Vec::new()),
-    })
+        since: RefCell::new("Sat 2026-10-10 18:40:00 CEST".into()),
+        hold_restart: Cell::new(false),
+        stopped: RefCell::new(Vec::new()),
+        started: RefCell::new(Vec::new()),
+        services_error: RefCell::new(None),
+    });
+    // The health checks at start are not what the test is about.
+    app.host.database_calls.borrow_mut().clear();
+    app
 }
 
 pub(super) fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {
@@ -165,117 +208,9 @@ pub(super) fn screen(app: &App<FakeHost>, width: u16, height: u16) -> String {
     text
 }
 
-fn select(app: &mut App<FakeHost>, unit: Unit) {
-    while app.services[app.selected].unit != unit {
-        app.key(Key::Char('j'));
-    }
-}
-
-#[test]
-fn renders_services_at_80x24() {
-    let app = app(false);
-    let text = screen(&app, 80, 24);
-    for want in [
-        "ingest",
-        "active",
-        "ready",
-        "distribution",
-        "not installed",
-        "vulns",
-        "failed",
-        "s start  t stop  r restart  e/d boot  R refresh  q quit",
-        "first log line of ingest",
-    ] {
-        assert!(text.contains(want), "missing {want:?} in\n{text}");
-    }
-}
-
-#[test]
-fn restart_asks_first() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    app.key(Key::Char('r'));
-    assert_eq!(app.confirm, Some((Unit::Vulns, ServiceAction::Restart)));
-    assert!(screen(&app, 80, 24).contains("Restart openvibes-vulns.service? y/n"));
-    app.key(Key::Char('n'));
-    assert!(app.host.actions.borrow().is_empty());
-    assert_eq!(app.confirm, None);
-    app.key(Key::Char('r'));
-    app.key(Key::Char('y'));
-    assert_eq!(
-        *app.host.actions.borrow(),
-        [(Unit::Vulns, ServiceAction::Restart)]
-    );
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("restart requested"),
-        "{:?}",
-        app.message
-    );
-}
-
-// The periodic refresh reloads unit states only: reading logs goes through
-// sudo, and every sudo call is written to the auth log (quiet by default).
-#[test]
-fn periodic_refresh_does_not_read_logs() {
-    let mut app = app(false);
-    let reads = *app.host.log_reads.borrow();
-    app.refresh();
-    app.refresh();
-    assert_eq!(*app.host.log_reads.borrow(), reads);
-    app.key(Key::Char('R'));
-    assert_eq!(*app.host.log_reads.borrow(), reads + 1, "R reloads the log");
-}
-
-#[test]
-fn not_installed_offers_nothing() {
-    let mut app = app(false);
-    select(&mut app, Unit::Distribution);
-    app.key(Key::Char('s'));
-    assert_eq!(app.confirm, None);
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("not installed")
-    );
-}
-
-#[test]
-fn not_an_operator_is_explained() {
-    let mut app = app(true);
-    app.key(Key::Char('r'));
-    app.key(Key::Char('y'));
-    assert!(
-        app.message
-            .as_deref()
-            .unwrap_or("")
-            .contains("openvibes-operators"),
-        "{:?}",
-        app.message
-    );
-}
-
-#[test]
-fn too_small_asks_for_more_room() {
-    let app = app(false);
-    assert!(screen(&app, 60, 20).contains("needs at least 80×24"));
-}
-
-#[test]
-fn logs_follow_the_selection_and_q_quits() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    assert_eq!(app.logs, ["first log line of vulns"]);
-    app.key(Key::Char('q'));
-    assert!(app.quit);
-}
-
 fn configuration(refuse: bool) -> App<FakeHost> {
     let mut app = app(refuse);
-    app.key(Key::Tab);
+    app.open(Tab::Configuration);
     app
 }
 
@@ -308,7 +243,7 @@ fn configuration_renders_the_ingest_form_at_80x24() {
     let app = configuration(false);
     let text = screen(&app, 80, 24);
     for want in [
-        "[Configuration]",
+        "Maintenance › Settings files",
         "[ingest]",
         "/etc/openvibes/ingest.toml",
         "0.0.0.0:18423",
@@ -475,19 +410,6 @@ fn a_refused_save_keeps_the_edits() {
 }
 
 #[test]
-fn tab_switches_screens() {
-    let mut app = configuration(false);
-    assert_eq!(app.tab, Tab::Configuration);
-    app.key(Key::Tab);
-    assert_eq!(app.tab, Tab::Database);
-    app.key(Key::Tab);
-    assert_eq!(app.tab, Tab::Health);
-    app.key(Key::Tab);
-    assert_eq!(app.tab, Tab::Setup);
-    assert!(screen(&app, 80, 24).contains("[Setup]"));
-}
-
-#[test]
 fn a_long_value_being_typed_shows_its_end() {
     let mut app = configuration(false);
     while app.config.form.as_ref().unwrap().fields()[app.config.selected].key != "database_url" {
@@ -497,28 +419,6 @@ fn a_long_value_being_typed_shows_its_end() {
     type_text(&mut app, "&application_name=tail");
     let text = screen(&app, 80, 24);
     assert!(text.contains("application_name=tail_"), "{text}");
-}
-
-#[test]
-fn enable_at_boot_asks_for_the_password() {
-    let mut app = app(false);
-    select(&mut app, Unit::Vulns);
-    app.key(Key::Char('e'));
-    for c in "pw".chars() {
-        app.key(Key::Char(c));
-    }
-    assert!(
-        screen(&app, 80, 24).contains("Enable openvibes-vulns.service at boot: your password: **")
-    );
-    app.key(Key::Enter);
-    assert_eq!(
-        *app.host.privileged_calls.borrow(),
-        [(
-            "unit-enable openvibes-vulns.service".to_owned(),
-            "pw".to_owned()
-        )]
-    );
-    assert_eq!(message(&app), "enabled openvibes-vulns.service at boot");
 }
 
 /// Board #78: editing `listen` here moved a service past Setup's port
@@ -578,26 +478,4 @@ fn ctrl_u_clears_the_field_being_edited() {
     assert_eq!(app.config.editing.as_deref(), Some("128"));
     app.key(Key::ClearLine);
     assert_eq!(app.config.editing.as_deref(), Some(""));
-}
-
-/// Board #78: Shift+Tab went forward like Tab.
-#[test]
-fn shift_tab_walks_the_screens_backwards() {
-    let mut app = app(false);
-    assert_eq!(app.tab, Tab::Services);
-    let mut seen = Vec::new();
-    for _ in 0..5 {
-        app.key(Key::BackTab);
-        seen.push(app.tab);
-    }
-    assert_eq!(
-        seen,
-        [
-            Tab::Setup,
-            Tab::Health,
-            Tab::Database,
-            Tab::Configuration,
-            Tab::Services
-        ]
-    );
 }

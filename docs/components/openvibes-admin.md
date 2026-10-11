@@ -36,14 +36,61 @@ Who can use it: members of `openvibes-operators` (created by the RPM; add a
 person with `usermod -aG openvibes-operators NAME`, then they log in again).
 They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
-without a password. `Tab` switches between the screens (Setup, Services,
-Configuration, Database, Health), `Shift+Tab` back. In any field being edited,
-`Ctrl+U` empties it (other Ctrl chords are ignored, never typed as letters).
-Every screen starts with the OpenVIBES wordmark (one line, `OpenVIBES`, the
-tabs and the version, on a terminal under 30 rows, #78; otherwise six rows,
-figlet's standard font: "Open" in white, "VIBES" in the brand teal
-`#36b9e0`), the tabs on its last row (the current one highlighted), and the
-version on the right; with `NO_COLOR` set it is plain text.
+without a password. A set-up host opens on Home (Status, Maintenance,
+Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
+shows the keys, and `q` quits from Home. Maintenance (interim, until it is
+reworked) holds today's Setup, Settings files (Configuration) and Database
+screens: they keep their own keys, and `Esc` leaves them only when nothing
+is being typed or asked (unsaved settings ask first). A host not set up
+opens on the install form, which `Esc` does not leave. In any field being
+edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
+letters). Every new screen (Home, Status, Service, the full log,
+Maintenance and Help) shows the block logo ("OPEN" in white, "VIBES" in the
+brand teal `#36b9e0`), a location line (host, where you are, the version
+and any available update; a long host name is cut with `…` first), and a
+key bar; today's screens (Setup, Settings files, Database) show only the
+location line and have no Help. With `NO_COLOR` set there is no
+colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
+Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
+
+**Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
+
+**Status** (from Home): "Needs attention" first, then "Services" (installed
+units only: name, state, ready, `since 18:40` or `since 2026-10-10`), then
+"Checks" (the health checks that are fine, one entry each, `N ok` on the
+heading). Under the list the highlighted problem or check is shown in
+full, wrapped over up to 3 dim lines (cut with `…` only after the third). A problem is an
+installed unit that is failed or inactive (`■ NAME is stopped`; not the
+model server or the maintenance timer, which idle by design), a unit not
+enabled at boot (`▲ NAME does not start at boot`; there is no boot switch),
+or a health check (certificates, disk, feeds, signer, audit, tuning). `Enter`
+on a service opens it; on a stopped or not-enabled unit it starts or enables
+it (a Yes/No question in the bar, or the sudo password typed in the bar;
+see Service); on a health problem or a check it does nothing. A refresh
+keeps the highlight on the same item. Home's summary line counts the
+problems (health is collected once at start, on a thread), says "No services
+installed" when none are, and shows a failed unit refresh in red; Status and
+Service show it in the bar. Test: `src/tui/status_tests.rs`.
+
+**Service** (`Enter` on a service in Status): the unit's state (running or
+not, ready, since), its actions as entries (a running unit offers Restart
+and Stop, a stopped one Start; all offer Full log) and the "Recent log"
+below (tracing JSON read as in the log view). `Enter` on an action asks a
+Yes/No question in the bar (`Restart ingest?` with what it means as detail;
+`←`/`→` or `y`/`n` choose, `Enter` confirms, `Esc` is No). Yes sends the
+action and the bar shows a spinner (`Restarting ingest…`) while the screen
+polls the unit about once a second. It ends in one result line, kept until
+the next key: `✓ ingest restarted and ready (N s)` when the unit is active
+(and not "not ready"; Stop: not active; Restart: also a new start time,
+since the restart is queued and the old process answers until then), or `✗ NAME did not start within 30 s:
+<its last journal line>` after `ACTION_TIMEOUT` (30 s); a refusal (not an
+operator) is the result line too. Fixing "does not start at boot" asks
+`Your password (sudo):` in the bar (masked, `Enter` enables, `Esc`
+cancels) and ends `✓ NAME now starts at boot`. `q` on Home asks `Quit while
+it runs?` while an action is still running (the unit keeps going). Full log
+shows up to 500 lines, newest at the bottom; `↑`/`↓` scroll back, no further than the first line (`⭡ N more` / `⭣ N more`); `Esc`
+returns. Code: `service.rs` (screen), `work.rs` (questions, prompt, polling),
+tests `service_tests.rs`.
 
 **Setup**: opens first on a host without `/etc/openvibes/setup.toml`. A
 form: components (ingest and console always; distribution, vulns, rules,
@@ -76,7 +123,7 @@ without sudo after logging in again. A detail in a wording the screen does
 not know is shown as it is. No agent install line: hosts are added from the
 console; `agent command` prints one for scripts. Repair, update and remove
 runs end on every step's outcome. On a set-up
-host, the Setup tab offers `c` check every step (`helper setup-status`),
+host, Maintenance › Setup offers `c` check every step (`helper setup-status`),
 `r` repair (every step with `--repair`: never a new CA), `u` update (the
 installed OpenVIBES packages with any newer version, a backup file, then
 the update job), `m` change components (the form filled from `setup.toml`;
@@ -110,27 +157,15 @@ per refresh like the install, asking for the password
 once. The steps are those of
 `setup --quick` (below).
 
-**Services**: each unit (`ingest`, `distribution`, `vulns`, `console`,
-`llm`, `maintenance` timer) with boot state (`enabled`, `disabled`, `not
-installed`), state (`active`, `failed`, …), readiness (`ready`, `not ready`,
-`-`), and since when; below, the selected unit's last 50 journal lines,
-tracing JSON shown as `HH:MM:SS LEVEL message key=value…` (fields in key
-order; other lines as they are). `llm` is `openvibes-llm.socket`: it is what
-is enabled and active, it has no readiness probe (one through it would load
-the model), and its journal lines include the model server's and its
-proxy's. The model server itself is inactive whenever the assistant is
-idle; that is normal, and Health does not flag it (see
-[openvibes-llm.md](openvibes-llm.md)).
-Keys: `j`/`k` or arrows select, `s` start, `t` stop, `r` restart (each asks
-`y/n`; the job is queued and the state follows on the next refresh), `R`
-refresh, `q` or Ctrl-C quit. Unit states refresh every 5 s; the log is read
-only on selection, `R` and after an action, since each read goes through
-sudo and the auth log. Not an operator:
-the TUI names the group to join. Every action is written to the journal
-(`journalctl -t openvibes-admin`). `e` and `d` enable or disable the
-selected unit at boot after asking for the user's password (`helper
-unit-enable|unit-disable` through sudo; polkit cannot limit boot changes to
-OpenVIBES units).
+**Boot state**: `helper unit-enable` (through the user's own sudo; polkit cannot
+limit boot changes to OpenVIBES units) enables a unit at boot. Service
+actions go through polkit for operators and are written to the journal
+(`journalctl -t openvibes-admin`). Not an operator: the TUI names the group
+to join. Unit states refresh every 5 s on Status and Service; logs are read
+on opening a service, after an action and on returning from the full log,
+since each read goes through sudo and the auth log. `llm` is
+`openvibes-llm.socket`: it has no readiness probe, and the model server is
+inactive whenever the assistant is idle (see [openvibes-llm.md](openvibes-llm.md)).
 
 **Configuration**: one form per file, `/etc/openvibes/ingest.toml`,
 `distribution.toml`, `vulns.toml`, `console.toml` (with the assistant's
@@ -141,7 +176,7 @@ removes the key, so the service default applies (shown as `(default)`).
 Fields Setup owns (ingest's and distribution's `listen`, the console's
 `development_listen` with direct TLS, and `public_origin`) are shown `(set by Setup)` and do
 not open (#78): Setup checks those ports, opens the firewall and keeps the
-origin in step, so they change with `p` (Change ports) on the Setup tab.
+origin in step, so they change with `p` (Change ports) in Maintenance › Setup.
 Every change is checked at once by the service's own configuration type,
 the same check the service runs at start, and the result is shown as
 `valid` or `invalid: REASON`; the help line under the form gives each
@@ -669,7 +704,7 @@ The offline kit stages the model at `/var/lib/openvibes-offline/<pinned file>` (
 
 `helper assistant-setup [--force] [--no-download]` (internal: Setup's "Assistant model" step runs it; root, through sudoers) first downloads the pinned model when `model.conf` selects no existing file (by running `assistant model fetch` as `openvibes-admin` through `runuser`, never in-process; with `--no-download` it fails instead: "the assistant's model is not installed; turn the assistant on in Setup to download it (offline: see the [offline install guide](offline-kit.md))"; a missing selected model other than the pinned one is an error, never replaced) and never enables the socket for a missing file. Then it points the console at the bundled `openvibes-llm` model server: it gives the API key to the console's account, writes `[assistant]` into `console.toml`, stops a running model server, enables `--now openvibes-llm.socket` (the first request starts the server), restarts the console, and confirms the socket holds the port before tuning (`assistant_setup.rs`; see [openvibes-llm.md](openvibes-llm.md)).
 
-`helper assistant-tune [--cpu] [--no-install] [--json]` (root; sudoers allows it plain and with `--json`) tunes the pinned model server for this host (`tune_run.rs`, decisions in `tune.rs`). When the console uses the local server it first checks that `openvibes-llm.socket` is active and listens on `127.0.0.1:OPENVIBES_LLM_PORT` (`systemctl show`), so the key goes only to systemd's socket, never to another local user holding the port; otherwise it refuses ("openvibes-llm.socket is not active; turn the assistant on in Setup", exit 1, nothing changed), and it checks again before the health wait. It never starts or stops the socket. It picks CPU threads (physical cores minus two, 2 to 16, unless you set `OPENVIBES_LLM_THREADS` or `OPENVIBES_LLM_GPU_LAYERS` in `llm.conf`), writes `/var/lib/openvibes-llm/tuning.conf`, stops `openvibes-llm-proxy.service` and `openvibes-llm.service` (when the console uses another backend: that only, no health wait or measurement), waits for `/health` (through the socket, which starts the server on the new tuning), times one chat call with the console's `[assistant.backend]` settings (but sent to `127.0.0.1:<port>` whatever the URL's host spelling, with the server's own key, `/etc/openvibes/llm-api-key`, never the configured `api_key_file`; a `[::1]` URL counts as another backend), and raises `[assistant.backend] deadline_seconds` (never lowers it) when a call takes over half of it. It writes `tune.json` (mode, threads, model, seconds per call, deadline, keys left alone, time) and prints one summary line (plus `left alone (set in llm.conf): <keys>` when it kept your values), or that JSON with `--json`. `--cpu` is the only mode so far and `--no-install` does nothing yet. Exit 0 on success; exit 1 when the server can't answer or the measurement fails, and then nothing changed (the previous tuning is restored). Once the tuning is in place, a deadline that could not be written, a console that did not restart, or an unsaved `tune.json` is a warning on stderr, still exit 0. It holds `/var/lib/openvibes-llm/tune.lock` while it runs; a second run fails at once ("another assistant-tune is running"). `assistant-setup` runs it; the TUI Health tab shows its summary. Test: `tests/assistant_tune.rs` (a debug-only hidden `--root DIR` stands in for `/`).
+`helper assistant-tune [--cpu] [--no-install] [--json]` (root; sudoers allows it plain and with `--json`) tunes the pinned model server for this host (`tune_run.rs`, decisions in `tune.rs`). When the console uses the local server it first checks that `openvibes-llm.socket` is active and listens on `127.0.0.1:OPENVIBES_LLM_PORT` (`systemctl show`), so the key goes only to systemd's socket, never to another local user holding the port; otherwise it refuses ("openvibes-llm.socket is not active; turn the assistant on in Setup", exit 1, nothing changed), and it checks again before the health wait. It never starts or stops the socket. It picks CPU threads (physical cores minus two, 2 to 16, unless you set `OPENVIBES_LLM_THREADS` or `OPENVIBES_LLM_GPU_LAYERS` in `llm.conf`), writes `/var/lib/openvibes-llm/tuning.conf`, stops `openvibes-llm-proxy.service` and `openvibes-llm.service` (when the console uses another backend: that only, no health wait or measurement), waits for `/health` (through the socket, which starts the server on the new tuning), times one chat call with the console's `[assistant.backend]` settings (but sent to `127.0.0.1:<port>` whatever the URL's host spelling, with the server's own key, `/etc/openvibes/llm-api-key`, never the configured `api_key_file`; a `[::1]` URL counts as another backend), and raises `[assistant.backend] deadline_seconds` (never lowers it) when a call takes over half of it. It writes `tune.json` (mode, threads, model, seconds per call, deadline, keys left alone, time) and prints one summary line (plus `left alone (set in llm.conf): <keys>` when it kept your values), or that JSON with `--json`. `--cpu` is the only mode so far and `--no-install` does nothing yet. Exit 0 on success; exit 1 when the server can't answer or the measurement fails, and then nothing changed (the previous tuning is restored). Once the tuning is in place, a deadline that could not be written, a console that did not restart, or an unsaved `tune.json` is a warning on stderr, still exit 0. It holds `/var/lib/openvibes-llm/tune.lock` while it runs; a second run fails at once ("another assistant-tune is running"). `assistant-setup` runs it; the TUI Status screen lists its summary under Checks. Test: `tests/assistant_tune.rs` (a debug-only hidden `--root DIR` stands in for `/`).
 
 ## Automatic steps after an upgrade
 

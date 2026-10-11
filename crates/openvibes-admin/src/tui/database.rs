@@ -355,62 +355,47 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_database();
             }
-            Key::Tab => self.open_health(),
-            Key::BackTab => self.open(Tab::Configuration),
-            Key::Char('q') => self.quit = true,
             _ => {}
         }
     }
 
-    pub(super) fn open_health(&mut self) {
-        self.tab = Tab::Health;
-        self.message = None;
-        self.load_health();
-    }
-
-    fn load_health(&mut self) {
+    /// Reloads the health checks (Status shows them; a refresh of the
+    /// units comes with it).
+    pub(super) fn load_health(&mut self) {
         self.refresh();
-        let certificates = self.host.certificates();
-        self.database.health = checks(
-            &self.services,
-            &certificates,
-            self.host.database(Database::FeedsStatus),
-            self.host.disk(),
-            self.host.database(Database::RulesList),
-            Utc::now(),
-        );
-        self.database
-            .health
-            .extend(uncovered(&certificates, &self.host.addresses()));
-        if let Some(files) = self.host.signer() {
-            self.database.health.extend(signer_checks(&files));
-        }
-        // Readable as root only; as another user the line is left out. Only
-        // an agent reading kernel audit (its exec rule in rules.d) cares: an
-        // eBPF host's agent does not.
-        if Path::new(crate::setup::AGENT_AUDIT_RULE).exists()
-            && let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES)
-        {
-            self.database.health.extend(audit_check(&rules));
-        }
-        self.database.health.extend(tune_check(
-            Path::new("/var/lib/openvibes-llm/model.conf").exists(),
-            std::fs::read_to_string("/var/lib/openvibes-llm/tune.json").ok(),
-        ));
-        self.database.health.sort_by_key(|check| !check.problem);
+        self.database.health = health_checks(&self.host);
     }
+}
 
-    /// R reloads, Tab opens Setup, q quits.
-    pub(super) fn health_key(&mut self, key: Key) {
-        match key {
-            Key::Char('R') => {
-                self.message = None;
-                self.load_health();
-            }
-            Key::Tab => self.open(Tab::Setup),
-            Key::BackTab => self.open(Tab::Database),
-            Key::Char('q') => self.quit = true,
-            _ => {}
-        }
+/// Every health check (certificates, disk, feeds, signer, audit, tuning),
+/// problems first. The unit lines are built by Status, not here. Slow on a
+/// real host: `run` calls it on another thread.
+pub fn health_checks<H: Host>(host: &H) -> Vec<Check> {
+    let certificates = host.certificates();
+    let mut health = checks(
+        &[],
+        &certificates,
+        host.database(Database::FeedsStatus),
+        host.disk(),
+        host.database(Database::RulesList),
+        Utc::now(),
+    );
+    health.extend(uncovered(&certificates, &host.addresses()));
+    if let Some(files) = host.signer() {
+        health.extend(signer_checks(&files));
     }
+    // Readable as root only; as another user the line is left out. Only
+    // an agent reading kernel audit (its exec rule in rules.d) cares: an
+    // eBPF host's agent does not.
+    if Path::new(crate::setup::AGENT_AUDIT_RULE).exists()
+        && let Ok(rules) = std::fs::read_to_string(crate::setup::AUDIT_RULES)
+    {
+        health.extend(audit_check(&rules));
+    }
+    health.extend(tune_check(
+        Path::new("/var/lib/openvibes-llm/model.conf").exists(),
+        std::fs::read_to_string("/var/lib/openvibes-llm/tune.json").ok(),
+    ));
+    health.sort_by_key(|check| !check.problem);
+    health
 }
