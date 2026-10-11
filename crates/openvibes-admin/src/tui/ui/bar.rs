@@ -35,14 +35,14 @@ pub enum Bar {
     },
     /// A value typed in place on the screen: what is typed, a hint, its
     /// keys; Esc Cancel at the right (spec §2 "Typing a value").
-    #[allow(dead_code, reason = "used from Task 2 of the 2a plan")]
+    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
     Edit {
         label: String,
         what: String,
         keys: Vec<(String, String)>,
     },
     /// Keys alone: no Move and nothing at the right (a finished run).
-    #[allow(dead_code, reason = "used from Task 2 of the 2a plan")]
+    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
     Only {
         keys: Vec<(String, String)>,
     },
@@ -72,7 +72,7 @@ impl Bar {
         }
     }
     /// Keys without ⭡⭣ Move (nothing to move between); Esc Back and ? stay.
-    #[allow(dead_code, reason = "used from Task 2 of the 2a plan")]
+    #[allow(dead_code, reason = "first used in Task 3 of the 2a plan")]
     pub fn act(keys: &[(&str, &str)]) -> Bar {
         Bar::Keys {
             keys: owned(keys),
@@ -80,11 +80,11 @@ impl Bar {
             home: false,
         }
     }
-    #[allow(dead_code, reason = "used from Task 2 of the 2a plan")]
+    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
     pub fn only(keys: &[(&str, &str)]) -> Bar {
         Bar::Only { keys: owned(keys) }
     }
-    #[allow(dead_code, reason = "used from Task 2 of the 2a plan")]
+    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
     pub fn edit(label: &str, what: &str, keys: &[(&str, &str)]) -> Bar {
         Bar::Edit {
             label: label.to_owned(),

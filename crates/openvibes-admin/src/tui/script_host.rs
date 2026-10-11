@@ -1,0 +1,146 @@
+//! A scripted host for flow tests: each privileged call returns the next
+//! queued answer ("done\tok" once they run out), and the calls and their
+//! passwords are recorded.
+
+use std::{cell::RefCell, collections::VecDeque};
+
+use platform_host::{
+    Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
+};
+use ratatui::{Terminal, backend::TestBackend};
+
+use super::{
+    app::{App, Key},
+    render,
+};
+
+pub(super) struct SetupHost {
+    pub(super) set_up: bool,
+    /// What each privileged call returns, in order.
+    pub(super) answers: RefCell<VecDeque<Result<String, HostError>>>,
+    /// (verb, password) of each call.
+    pub(super) calls: RefCell<Vec<(String, String)>>,
+    /// `setup.toml`'s text; empty: not set up.
+    pub(super) plan: String,
+    pub(super) packages: Vec<PackageUpdate>,
+    /// Ports another process listens on.
+    pub(super) taken: Vec<u16>,
+    /// Running as root: sudo needs no password.
+    pub(super) root: bool,
+}
+
+impl Host for SetupHost {
+    fn services(&self) -> Result<Vec<ServiceStatus>, HostError> {
+        Ok(Vec::new())
+    }
+    fn service_action(&self, _: Unit, _: ServiceAction) -> Result<(), HostError> {
+        Ok(())
+    }
+    fn logs(&self, _: Unit, _: u16) -> Result<Vec<String>, HostError> {
+        Ok(Vec::new())
+    }
+    fn read_config(&self, _: Service) -> Result<String, HostError> {
+        Err(HostError::NotOperator)
+    }
+    fn write_config(&self, _: Service, _: &str) -> Result<(), HostError> {
+        Err(HostError::NotOperator)
+    }
+    fn is_set_up(&self) -> bool {
+        self.set_up
+    }
+    fn needs_password(&self) -> bool {
+        !self.root
+    }
+    fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
+        // A set-up host has its CA; a plan left by a first install that
+        // stopped before the CA step does not (#87).
+        if self.plan.is_empty() || self.plan.contains("# no ca") {
+            Vec::new()
+        } else {
+            vec![("/etc/openvibes/pki/intermediate.crt", Ok(String::new()))]
+        }
+    }
+    fn packages(&self) -> Result<Vec<PackageUpdate>, HostError> {
+        Ok(self.packages.clone())
+    }
+    fn listeners(&self, port: u16) -> Result<String, HostError> {
+        Ok(if self.taken.contains(&port) {
+            format!("LISTEN 0 511 *:{port} *:*\n")
+        } else {
+            String::new()
+        })
+    }
+    fn setup_plan(&self) -> Result<String, HostError> {
+        if self.plan.is_empty() {
+            Err(HostError::Failed("not set up".into()))
+        } else {
+            Ok(self.plan.clone())
+        }
+    }
+    fn privileged(&self, verb: Privileged<'_>, password: &Secret) -> Result<String, HostError> {
+        self.calls
+            .borrow_mut()
+            .push((verb.args().join(" "), password.expose().to_owned()));
+        self.answers
+            .borrow_mut()
+            .pop_front()
+            .unwrap_or(Ok("done\tok\n".into()))
+    }
+}
+
+pub(super) fn app(set_up: bool, answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    app_taken(set_up, answers, vec![])
+}
+
+/// A host not set up yet, as the other fresh-host tests build it.
+pub(super) fn fresh_app() -> App<SetupHost> {
+    app(false, vec![])
+}
+
+pub(super) fn app_taken(
+    set_up: bool,
+    answers: Vec<Result<String, HostError>>,
+    taken: Vec<u16>,
+) -> App<SetupHost> {
+    let mut app = App::new(SetupHost {
+        set_up,
+        answers: RefCell::new(answers.into()),
+        calls: RefCell::new(Vec::new()),
+        plan: String::new(),
+        packages: Vec::new(),
+        taken,
+        root: false,
+    });
+    app.setup.model_present = false;
+    app.setup.hostname = "platform.example.com".into();
+    app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();
+    app
+}
+
+pub(super) fn screen(app: &App<SetupHost>) -> String {
+    let mut terminal = Terminal::new(TestBackend::new(80, 24)).unwrap();
+    terminal.draw(|frame| render(frame, app)).unwrap();
+    let buffer = terminal.backend().buffer();
+    (0..buffer.area.height)
+        .map(|y| {
+            (0..buffer.area.width)
+                .map(|x| buffer[(x, y)].symbol())
+                .collect::<String>()
+                + "\n"
+        })
+        .collect()
+}
+
+pub(super) fn type_text(app: &mut App<SetupHost>, text: &str) {
+    for c in text.chars() {
+        app.key(Key::Char(c));
+    }
+}
+
+pub(super) const PLAN: &str = "components = [\"ingest\", \"console\", \"distribution\", \"vulns\", \"rules\", \"agent\"]\nhostname = \"platform.example.com\"\nsans = []\nca = \"quick\"\noperator = \"alice\"\n";
+
+pub(super) fn set_up(answers: Vec<Result<String, HostError>>) -> App<SetupHost> {
+    let mut app = app(true, answers);
+    app.host.plan = PLAN.into();
+    app
+}

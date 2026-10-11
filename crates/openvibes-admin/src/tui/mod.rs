@@ -20,6 +20,12 @@ mod nav;
 #[cfg(test)]
 mod nav_tests;
 mod password;
+mod run;
+mod run_app;
+#[cfg(test)]
+mod run_tests;
+#[cfg(test)]
+mod script_host;
 mod service;
 #[cfg(test)]
 mod service_tests;
@@ -108,6 +114,18 @@ pub fn run() -> ExitCode {
         }));
     });
     app.health = Some(health);
+    // Helper steps run on their own thread with their own host: the
+    // screen keeps drawing while dnf or a backup takes minutes.
+    app.worker = Some(Box::new(|work, from, secret| {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let host = Native {
+                runner: SystemRunner,
+            };
+            run::work_through(&host, &work, from, &secret, |p| send.send(p).is_ok());
+        });
+        receive
+    }));
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();
@@ -128,7 +146,7 @@ pub fn run() -> ExitCode {
                 }
                 let key = match key.code {
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        app.quit = true;
+                        app.interrupt();
                         continue;
                     }
                     // Ctrl+U empties a field; other control chords typed

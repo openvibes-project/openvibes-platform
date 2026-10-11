@@ -55,6 +55,8 @@ Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
 
 **Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
 
+**Work in the background**: helper steps (Update, Back up, Repair, Uninstall) run on their own thread, so the screen keeps drawing. The password is asked in the bar ("Your password (sudo)"; root is not asked), handed to that thread and dropped when the work ends. A wrong password is said in the bar with the tries left; after three, nothing more runs. Home's status line shows the running work, then its result. `q` (or Ctrl+C) while work runs asks "Quit when it is done?": Yes quits once it has finished, and a second Ctrl+C quits at once. Tests: `src/tui/run_tests.rs`.
+
 **Status** (from Home): "Needs attention" first, then "Services" (installed
 units only: name, state, ready, `since 18:40` or `since 2026-10-10`), then
 "Checks" (the health checks that are fine, one entry each, `N ok` on the

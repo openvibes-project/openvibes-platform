@@ -126,6 +126,9 @@ impl<H: Host> App<H> {
             return;
         }
         match question {
+            Question::Quit if self.run.as_ref().is_some_and(super::run::Run::running) => {
+                self.quit_when_done = true;
+            }
             Question::Quit => self.quit = true,
             Question::Service(unit, action) => {
                 // A fresh start time to compare with (not up to 5 s old).
@@ -185,7 +188,7 @@ impl<H: Host> App<H> {
 
     /// Quits, or asks first while a service action runs.
     pub(super) fn quit_or_ask(&mut self) {
-        if self.pending.is_some() {
+        if self.pending.is_some() || self.run.as_ref().is_some_and(super::run::Run::running) {
             self.question = Some((Question::Quit, true));
         } else {
             self.quit = true;
@@ -201,6 +204,10 @@ impl<H: Host> App<H> {
                     format!("{} {}?", capitalised(*action), unit.label()),
                     question_detail(*unit, *action).to_owned(),
                 ),
+                Question::Quit if self.run.as_ref().is_some_and(super::run::Run::running) => (
+                    "Quit when it is done?".to_owned(),
+                    "the work finishes first".to_owned(),
+                ),
                 Question::Quit => (
                     "Quit while it runs?".to_owned(),
                     "it keeps running".to_owned(),
@@ -210,6 +217,24 @@ impl<H: Host> App<H> {
                 question,
                 detail,
                 yes: *yes,
+            };
+        }
+        if let Some(asking) = &self.asking {
+            let failures = asking.prompt.failures;
+            return Bar::Typing {
+                note: (failures > 0)
+                    .then(|| format!("Wrong password, {} tries left.", 3 - failures)),
+                label: "Your password (sudo)".into(),
+                shown: asking.prompt.masked(),
+                done: asking.work.kind.verb().into(),
+            };
+        }
+        if self.quit_when_done
+            && let Some(run) = &self.run
+        {
+            return Bar::Busy {
+                text: format!("Quits when it is done · {}…", run.work.kind.doing()),
+                tick: self.tick_count,
             };
         }
         if let Some((_, prompt)) = &self.prompt {

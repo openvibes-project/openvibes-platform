@@ -93,6 +93,17 @@ pub struct App<H: Host> {
     pub pending: Option<Pending>,
     /// The last action's result line, until the next key.
     pub outcome: Option<(bool, String)>,
+    /// The current or last action (Update, Back up, Fix, Uninstall): Home
+    /// shows it; Quit waits for it.
+    pub run: Option<super::run::Run>,
+    /// The current or last read (Repair's check, the Database report).
+    pub load: Option<super::run::Run>,
+    /// The password for a run, typed in the bar.
+    pub asking: Option<super::run::Asking>,
+    /// Runs work on another thread (`run` sets it; tests leave it out).
+    pub worker: Option<super::run::Worker>,
+    /// Yes to "Quit when it is done?".
+    pub quit_when_done: bool,
     pub(super) tick_count: usize,
 }
 
@@ -143,6 +154,11 @@ impl<H: Host> App<H> {
             prompt: None,
             pending: None,
             outcome: None,
+            run: None,
+            load: None,
+            asking: None,
+            worker: None,
+            quit_when_done: false,
             tick_count: 0,
         };
         app.refresh();
@@ -231,6 +247,9 @@ impl<H: Host> App<H> {
         if self.question.is_some() {
             return self.question_key(key);
         }
+        if self.asking.is_some() {
+            return self.asking_key(key);
+        }
         if self.prompt.is_some() {
             return self.prompt_key(key);
         }
@@ -289,6 +308,7 @@ impl<H: Host> App<H> {
             }
         }
         self.poll(now);
+        self.poll_runs(now);
     }
 
     /// Today's screens' own keys.

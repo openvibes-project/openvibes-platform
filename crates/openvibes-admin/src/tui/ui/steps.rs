@@ -12,7 +12,7 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-#[allow(dead_code, reason = "used from Task 5 of the 2a plan")]
+#[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
 pub fn lines(
     theme: &Theme,
     titles: &[String],

@@ -8,8 +8,8 @@ use super::{
     app::{App, Key, Tab},
     database::Check,
     nav::Screen,
+    script_host::set_up,
     setup::Phase,
-    setup_tests::set_up,
     status::Item,
     tests::{FakeHost, app, screen},
 };
@@ -103,7 +103,7 @@ fn esc_while_typing_in_a_legacy_screen_cancels_the_field_not_the_screen() {
 
 #[test]
 fn a_fresh_host_opens_the_setup_form_and_esc_does_not_leave_it() {
-    let mut app = super::setup_tests::fresh_app();
+    let mut app = super::script_host::fresh_app();
     assert_eq!(
         (app.nav.screen.clone(), app.tab),
         (Screen::Legacy, Tab::Setup)
@@ -138,7 +138,7 @@ fn q_types_into_a_set_up_hosts_setup_password_and_quits_nothing_there() {
     assert_eq!(app.setup.phase, Phase::Stopped(0));
     app.key(Key::Char('q'));
     assert!(!app.quit, "q quits from Home only, not from a stopped run");
-    let text = super::setup_tests::screen(&app);
+    let text = super::script_host::screen(&app);
     let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
     assert!(
         footer.contains("Esc back") && !footer.contains('q'),
@@ -406,7 +406,7 @@ fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
         );
         assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
     }
-    let fresh = super::setup_tests::fresh_app();
-    let text = super::setup_tests::screen(&fresh);
+    let fresh = super::script_host::fresh_app();
+    let text = super::script_host::screen(&fresh);
     assert!(text.contains("q quit") && !text.contains("Tab"), "{text}");
 }

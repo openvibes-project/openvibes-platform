@@ -5,12 +5,12 @@
 use super::{
     app::{Key, Tab},
     maintain::UNINSTALL_START_ROW,
+    script_host::{screen, set_up, type_text},
     setup::Phase,
-    setup_tests::{screen, set_up, type_text},
 };
 
 /// A Repair whose first step fails: the run stops there.
-fn after_a_failed_repair() -> super::app::App<super::setup_tests::SetupHost> {
+fn after_a_failed_repair() -> super::app::App<super::script_host::SetupHost> {
     let mut app = set_up(vec![Ok("failed\tport 443 is taken\n".into())]);
     app.open(Tab::Setup);
     app.key(Key::Char('r'));

@@ -44,7 +44,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     };
     let bar = app.bar(Bar::home(&[("Enter", enter)]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
-    let mut lines = vec![app.status_line()];
+    let mut status = app.status_line();
+    if let Some(note) = app.work_note() {
+        status.spans.push(Span::raw("   "));
+        status.spans.extend(note);
+    }
+    let mut lines = vec![status];
     let mut scroll = app.nav.scroll.get();
     lines.extend(list::lines(
         &app.theme,
