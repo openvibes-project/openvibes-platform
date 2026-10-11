@@ -22,6 +22,12 @@ pub enum Typed {
 }
 
 impl PasswordPrompt {
+    /// What has been typed so far (tests).
+    #[cfg(test)]
+    pub fn typed(&self) -> &str {
+        &self.typed
+    }
+
     pub fn key(&mut self, key: Key) -> Typed {
         match key {
             Key::Char(c) if self.typed.chars().count() < MAX => {

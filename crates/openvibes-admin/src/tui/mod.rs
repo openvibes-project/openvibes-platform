@@ -3,9 +3,6 @@
 //! `platform_host::Host`.
 
 pub mod app;
-mod banner;
-#[cfg(test)]
-mod banner_tests;
 mod config_view;
 mod configuration;
 mod database;
@@ -13,19 +10,31 @@ mod database;
 mod database_tests;
 mod database_view;
 pub mod form;
+mod home;
 mod jobs;
 mod maintain;
 #[cfg(test)]
 mod maintain_tests;
 mod maintain_view;
+mod nav;
+#[cfg(test)]
+mod nav_tests;
 mod password;
-mod services;
+mod service;
+#[cfg(test)]
+mod service_tests;
+mod services_text;
 mod setup;
 #[cfg(test)]
 mod setup_tests;
 mod setup_view;
+mod status;
+#[cfg(test)]
+mod status_tests;
 #[cfg(test)]
 mod tests;
+mod ui;
+mod work;
 
 use std::{
     io::IsTerminal,
@@ -34,40 +43,24 @@ use std::{
 };
 
 use app::{App, Key, Tab};
+use nav::Screen;
 use platform_host::{Host, native::Native, runner::SystemRunner};
 use ratatui::{
     Frame,
     crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
-    layout::{Constraint, Layout},
-    widgets::Paragraph,
+    layout::Rect,
 };
 
-/// The smallest terminal the screens are laid out for (spec §5).
-pub const MIN_WIDTH: u16 = 80;
-pub const MIN_HEIGHT: u16 = 24;
-
 pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
-    let area = frame.area();
-    if area.width < MIN_WIDTH || area.height < MIN_HEIGHT {
-        let text = format!(
-            "openvibes-admin needs at least {MIN_WIDTH}×{MIN_HEIGHT} (now {}×{}); enlarge the window",
-            area.width, area.height
-        );
-        frame.render_widget(Paragraph::new(text), area);
-        return;
-    }
-    let [title, body] = Layout::vertical([
-        Constraint::Length(banner::height(area.height)),
-        Constraint::Min(0),
-    ])
-    .areas(area);
-    banner::draw(frame, title, app);
+    nav::render(frame, app);
+}
+
+/// Today's Setup, Configuration and Database screens, under the location line.
+pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
-        Tab::Setup => setup_view::draw(frame, body, app),
-        Tab::Services => services::draw(frame, body, app),
-        Tab::Configuration => config_view::draw(frame, body, app),
-        Tab::Database => database_view::draw_database(frame, body, app),
-        Tab::Health => database_view::draw_health(frame, body, app),
+        Tab::Setup => setup_view::draw(frame, area, app),
+        Tab::Configuration => config_view::draw(frame, area, app),
+        Tab::Database => database_view::draw_database(frame, area, app),
     }
 }
 
@@ -91,9 +84,30 @@ pub fn run() -> ExitCode {
         );
         return ExitCode::from(2);
     }
-    let mut app = App::new(Native {
+    let mut app = App::lazy(Native {
         runner: SystemRunner,
     });
+    // dnf refreshes its metadata: on another thread, so a slow mirror or
+    // no network never holds the first screen.
+    let (send, updates) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let packages = Native {
+            runner: SystemRunner,
+        }
+        .packages();
+        // The TUI may have quit meanwhile; nobody to tell then.
+        let _ = send.send(app::newer_admin(packages));
+    });
+    app.updates = Some(updates);
+    // The health probes run on another thread too (certificates, feeds,
+    // disk): Home's status line counts them once they arrive.
+    let (send, health) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = send.send(database::health_checks(&Native {
+            runner: SystemRunner,
+        }));
+    });
+    app.health = Some(health);
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();
@@ -131,8 +145,6 @@ pub fn run() -> ExitCode {
                     KeyCode::Enter => Key::Enter,
                     KeyCode::Esc => Key::Esc,
                     KeyCode::Backspace => Key::Backspace,
-                    KeyCode::Tab => Key::Tab,
-                    KeyCode::BackTab => Key::BackTab,
                     _ => continue,
                 };
                 pressed = Some(key);
@@ -144,9 +156,12 @@ pub fn run() -> ExitCode {
         // between steps (a step blocks while it runs, e.g. dnf), and before
         // the first step of a run the key just started.
         app.key_then_tick(pressed);
-        if app.tab == Tab::Services
-            && app.confirm.is_none()
-            && app.boot.is_none()
+        app.tick(Instant::now());
+        if matches!(
+            app.nav.screen,
+            Screen::Home | Screen::Status | Screen::Service(_)
+        ) && app.question.is_none()
+            && app.prompt.is_none()
             && refreshed.elapsed() >= REFRESH
         {
             app.refresh();

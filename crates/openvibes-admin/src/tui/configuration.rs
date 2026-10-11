@@ -29,11 +29,8 @@ pub enum Prompt {
 pub enum Then {
     /// Open this service's file (index into `Service::ALL`); the same index reloads.
     Service(usize),
-    /// The Database screen (the next tab).
-    Database,
-    /// The Services screen (the previous tab).
-    Services,
-    Quit,
+    /// Back one screen (Esc).
+    Back,
 }
 
 #[derive(Default)]
@@ -70,15 +67,15 @@ impl<H: Host> App<H> {
         };
     }
 
-    fn dirty(&self) -> bool {
+    pub(super) fn config_dirty(&self) -> bool {
         self.config
             .form
             .as_ref()
             .is_some_and(|form| !form.changes().is_empty())
     }
 
-    /// h/l service, j/k field, Enter edit, u undo, w save, R reload, Tab
-    /// Services, q quit; while editing, keys type the value.
+    /// h/l service, j/k field, Enter edit, u undo, w save, R reload; while
+    /// editing, keys type the value.
     pub(super) fn config_key(&mut self, key: Key) {
         if let Some(prompt) = self.config.prompt.take() {
             return self.answer(prompt, key == Key::Char('y'));
@@ -106,9 +103,6 @@ impl<H: Host> App<H> {
                 self.leave(Then::Service((self.config.service + count - 1) % count))
             }
             Key::Char('R') => self.leave(Then::Service(self.config.service)),
-            Key::Tab => self.leave(Then::Database),
-            Key::BackTab => self.leave(Then::Services),
-            Key::Char('q') => self.leave(Then::Quit),
             Key::Enter => {
                 if let Some(form) = &self.config.form {
                     let field = form.fields()[self.config.selected];
@@ -164,7 +158,7 @@ impl<H: Host> App<H> {
     }
 
     fn leave(&mut self, then: Then) {
-        if self.dirty() {
+        if self.config_dirty() {
             self.config.prompt = Some(Prompt::Discard(then));
         } else {
             self.go(then);
@@ -178,9 +172,7 @@ impl<H: Host> App<H> {
                 self.message = None;
                 self.load_config();
             }
-            Then::Database => self.open_database(),
-            Then::Services => self.open(super::app::Tab::Services),
-            Then::Quit => self.quit = true,
+            Then::Back => self.back(),
         }
     }
 

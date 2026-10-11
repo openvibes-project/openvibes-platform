@@ -1,0 +1,372 @@
+//! The one list every screen uses (spec §2): an empty line between
+//! entries, headings directly on their list, a highlighted entry, and
+//! scrolling one row per step with "⭡ N more" / "⭣ N more" in the gap
+//! lines above the first and below the last visible entry.
+
+use ratatui::{
+    style::{Modifier, Style},
+    text::{Line, Span},
+};
+
+use super::theme::Theme;
+
+#[derive(Clone, Debug)]
+pub enum Row {
+    Heading {
+        text: String,
+        right: String,
+    },
+    Entry {
+        name: Vec<Span<'static>>,
+        value: Vec<Span<'static>>,
+    },
+}
+
+impl Row {
+    pub fn entry(name: &str, value: &str) -> Row {
+        Row::Entry {
+            name: vec![Span::raw(name.to_owned())],
+            value: vec![Span::styled(
+                value.to_owned(),
+                Style::new().add_modifier(Modifier::DIM),
+            )],
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct Scroll {
+    /// The first laid-out line shown.
+    pub top: usize,
+}
+
+fn width(spans: &[Span]) -> usize {
+    spans.iter().map(|s| s.content.chars().count()).sum()
+}
+
+/// Cut a line to `max` columns, ending in "…" instead of running off the frame.
+fn clip(spans: Vec<Span<'static>>, max: usize) -> Vec<Span<'static>> {
+    if width(&spans) <= max {
+        return spans;
+    }
+    let mut left = max - 1;
+    let mut out = Vec::new();
+    for s in spans {
+        let n = s.content.chars().count();
+        if n <= left {
+            left -= n;
+            out.push(s);
+        } else {
+            let cut: String = s.content.chars().take(left).collect();
+            out.push(Span::styled(cut, s.style));
+            break;
+        }
+    }
+    out.push(Span::raw("…"));
+    out
+}
+
+type Laid = Vec<(Line<'static>, Option<usize>)>;
+
+/// Every row laid out: the line, and which entry it is (if one); also, per
+/// entry, the line of the heading directly above it (if any).
+fn layout(
+    theme: &Theme,
+    rows: &[Row],
+    selected: usize,
+    name_w: usize,
+) -> (Laid, Vec<Option<usize>>) {
+    let mut out: Laid = Vec::new();
+    let mut heads = Vec::new();
+    let mut heading_line = None;
+    let mut entry = 0;
+    let mut last_was_entry = false;
+    for (i, row) in rows.iter().enumerate() {
+        match row {
+            Row::Heading { text, right } => {
+                if i > 0 {
+                    out.push((Line::raw(""), None));
+                }
+                let gap = 72usize
+                    .saturating_sub(4 + text.chars().count() + right.chars().count())
+                    .max(1);
+                out.push((
+                    Line::from(vec![
+                        Span::raw("    "),
+                        Span::styled(text.clone(), theme.bold()),
+                        Span::raw(" ".repeat(gap)),
+                        Span::styled(right.clone(), theme.dim()),
+                    ]),
+                    None,
+                ));
+                last_was_entry = false;
+                heading_line = Some(out.len() - 1);
+            }
+            Row::Entry { name, value } => {
+                if last_was_entry {
+                    out.push((Line::raw(""), None));
+                }
+                let pad = " ".repeat(name_w.saturating_sub(width(name)) + 1);
+                let mut spans = Vec::new();
+                if entry == selected {
+                    let hl = theme.highlight();
+                    // The highlight's background; a mark keeps its colour.
+                    let on = |s: &Span<'static>| match s.style.fg {
+                        Some(fg) => hl.fg(fg),
+                        None => hl,
+                    };
+                    spans.push(Span::styled("  ▸ ", hl));
+                    spans.extend(name.iter().map(|s| Span::styled(s.content.clone(), on(s))));
+                    spans.push(Span::styled(pad, hl));
+                    spans.extend(value.iter().map(|s| Span::styled(s.content.clone(), on(s))));
+                    let tail =
+                        72usize.saturating_sub(4 + width(name).max(name_w) + 1 + width(value));
+                    spans.push(Span::styled(" ".repeat(tail), hl));
+                } else {
+                    spans.push(Span::raw("    "));
+                    spans.extend(name.iter().cloned());
+                    spans.push(Span::raw(pad));
+                    spans.extend(value.iter().cloned());
+                }
+                heads.push(if last_was_entry { None } else { heading_line });
+                out.push((Line::from(clip(spans, 76)), Some(entry)));
+                entry += 1;
+                last_was_entry = true;
+            }
+        }
+    }
+    (out, heads)
+}
+
+fn blank(line: &(Line<'static>, Option<usize>)) -> bool {
+    line.1.is_none() && width(&line.0.spans) == 0
+}
+
+pub fn lines(
+    theme: &Theme,
+    rows: &[Row],
+    selected: usize,
+    scroll: &mut Scroll,
+    height: u16,
+    name_w: usize,
+) -> Vec<Line<'static>> {
+    let (laid, heads) = layout(theme, rows, selected, name_w);
+    // Two lines of the height are the hint lines above and below.
+    let inner = usize::from(height).saturating_sub(2).max(1);
+    let at = laid
+        .iter()
+        .position(|(_, e)| *e == Some(selected))
+        .unwrap_or(0);
+    // Scrolling up keeps the heading directly above the entry in view.
+    let first = heads.get(selected).copied().flatten().unwrap_or(at).min(at);
+    if first < scroll.top {
+        scroll.top = first;
+    } else if at >= scroll.top + inner {
+        scroll.top = at + 1 - inner;
+    }
+    scroll.top = scroll.top.min(laid.len().saturating_sub(inner));
+    // The hint lines take the gap lines: never start or end on a blank.
+    if scroll.top < at && blank(&laid[scroll.top]) {
+        scroll.top += 1;
+    }
+    let mut end = (scroll.top + inner).min(laid.len());
+    // Nor on a heading whose entries lie below.
+    while end > scroll.top + 1
+        && end > at + 1
+        && (blank(&laid[end - 1]) || laid[end - 1].1.is_none())
+    {
+        end -= 1;
+    }
+    let window = &laid[scroll.top..end];
+    let above = laid[..scroll.top]
+        .iter()
+        .filter(|(_, e)| e.is_some())
+        .count();
+    let below = laid[(scroll.top + window.len())..]
+        .iter()
+        .filter(|(_, e)| e.is_some())
+        .count();
+    let hint = |n: usize, arrow: &str| {
+        if n == 0 {
+            Line::raw("")
+        } else {
+            Line::from(vec![
+                Span::raw("    "),
+                Span::styled(format!("{arrow} {n} more"), theme.dim()),
+            ])
+        }
+    };
+    let mut out = vec![hint(above, theme.up())];
+    out.extend(window.iter().map(|(l, _)| l.clone()));
+    out.push(hint(below, theme.down()));
+    out.resize(usize::from(height), Line::raw(""));
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::tui::ui::logo::text;
+
+    fn theme() -> Theme {
+        Theme::new(None, Some("xterm"))
+    }
+
+    fn rows(n: usize) -> Vec<Row> {
+        (0..n)
+            .map(|i| Row::entry(&format!("item{i}"), &format!("value {i}")))
+            .collect()
+    }
+
+    #[test]
+    fn the_highlight_keeps_a_marks_colour_and_only_marked_values_are_dim() {
+        let t = Theme::new(None, Some("xterm"));
+        let dim = Style::new().add_modifier(Modifier::DIM);
+        let rows = vec![
+            Row::Entry {
+                name: vec![Span::styled("● ", t.green()), Span::raw("ingest")],
+                value: vec![Span::raw("running "), Span::styled("since 18:40", dim)],
+            },
+            Row::entry("b", "v"),
+        ];
+        let mut scroll = Scroll::default();
+        let on = lines(&t, &rows, 0, &mut scroll, 13, 15);
+        let mark = &on[1].spans[1];
+        assert_eq!(mark.style.fg, t.green().fg);
+        assert_eq!(mark.style.bg, t.highlight().bg);
+        let off = lines(&t, &rows, 1, &mut scroll, 13, 15);
+        let spans = &off[1].spans;
+        assert_eq!(spans[1].style.fg, t.green().fg);
+        let running = spans.iter().find(|s| s.content == "running ").unwrap();
+        assert!(!running.style.add_modifier.contains(Modifier::DIM));
+        let since = spans.iter().find(|s| s.content == "since 18:40").unwrap();
+        assert!(since.style.add_modifier.contains(Modifier::DIM));
+    }
+
+    #[test]
+    fn a_long_entry_ends_in_an_ellipsis_inside_the_frame() {
+        let long = vec![Row::entry("x", &"y".repeat(100))];
+        let mut scroll = Scroll::default();
+        let t = text(&lines(&theme(), &long, 0, &mut scroll, 13, 15));
+        assert_eq!(t[1].chars().count(), 76, "{:?}", t[1]);
+        assert!(t[1].ends_with('…'), "{:?}", t[1]);
+    }
+
+    #[test]
+    fn one_empty_line_between_entries_and_the_highlight_at_column_two() {
+        let mut scroll = Scroll::default();
+        let t = text(&lines(&theme(), &rows(3), 1, &mut scroll, 13, 15));
+        assert_eq!(t[0], "", "the gap above the first entry");
+        assert_eq!(t[1].trim_end(), "    item0           value 0");
+        assert_eq!(t[2], "");
+        assert!(
+            t[3].starts_with("  ▸ item1           value 1"),
+            "{:?}",
+            t[3]
+        );
+        assert_eq!(t[4], "");
+        assert_eq!(t[5].trim_end(), "    item2           value 2");
+    }
+
+    #[test]
+    fn a_heading_sits_directly_on_its_list() {
+        let rows = vec![
+            Row::Heading {
+                text: "Services".into(),
+                right: "8 of 8 running".into(),
+            },
+            Row::entry("ingest", "running"),
+        ];
+        let mut scroll = Scroll::default();
+        let t = text(&lines(&theme(), &rows, 0, &mut scroll, 13, 15));
+        assert!(
+            t[1].starts_with("    Services") && t[1].trim_end().ends_with("8 of 8 running"),
+            "{:?}",
+            t[1]
+        );
+        assert!(t[2].starts_with("  ▸ ingest"));
+    }
+
+    #[test]
+    fn scrolling_moves_one_row_and_the_counts_follow() {
+        let rows = rows(8);
+        let mut scroll = Scroll::default();
+        // 11 lines: a gap/hint line, five entries with gaps (9), a hint line.
+        let t = text(&lines(&theme(), &rows, 4, &mut scroll, 11, 15));
+        assert_eq!(t[0], "");
+        assert!(t[9].starts_with("  ▸ item4"));
+        assert_eq!(t[10].trim_end(), "    ⭣ 3 more");
+        let t = text(&lines(&theme(), &rows, 5, &mut scroll, 11, 15));
+        assert_eq!(t[0].trim_end(), "    ⭡ 1 more");
+        assert!(t[9].starts_with("  ▸ item5"));
+        assert_eq!(t[10].trim_end(), "    ⭣ 2 more");
+        let t = text(&lines(&theme(), &rows, 7, &mut scroll, 11, 15));
+        assert_eq!(t[0].trim_end(), "    ⭡ 3 more");
+        assert_eq!(t[10], "");
+        let t = text(&lines(&theme(), &rows, 2, &mut scroll, 11, 15));
+        assert!(
+            t.iter().any(|l| l.starts_with("  ▸ item2")),
+            "going up scrolls back: {t:?}"
+        );
+    }
+
+    #[test]
+    fn scrolling_up_keeps_the_heading_on_its_list() {
+        let mut rows = vec![Row::Heading {
+            text: "Services".into(),
+            right: String::new(),
+        }];
+        rows.extend(self::rows(8));
+        let mut scroll = Scroll::default();
+        lines(&theme(), &rows, 7, &mut scroll, 11, 15);
+        let t = text(&lines(&theme(), &rows, 0, &mut scroll, 11, 15));
+        let i = t.iter().position(|l| l.starts_with("  ▸ item0")).unwrap();
+        assert!(t[i - 1].starts_with("    Services"), "{t:?}");
+    }
+
+    #[test]
+    fn no_window_starts_or_ends_on_an_empty_line() {
+        let mut rows = vec![Row::Heading {
+            text: "A".into(),
+            right: String::new(),
+        }];
+        rows.extend(self::rows(4));
+        rows.push(Row::Heading {
+            text: "B".into(),
+            right: String::new(),
+        });
+        rows.extend(self::rows(6));
+        let mut scroll = Scroll::default();
+        for sel in (0..10).chain((0..10).rev()) {
+            let t = text(&lines(&theme(), &rows, sel, &mut scroll, 9, 15));
+            assert!(!t[1].is_empty(), "sel {sel}: {t:?}");
+            if let Some(b) = t.iter().position(|l| l.starts_with("    ⭣")) {
+                assert!(!t[b - 1].is_empty(), "sel {sel}: {t:?}");
+            }
+            assert!(t.iter().any(|l| l.starts_with("  ▸")), "sel {sel}: {t:?}");
+        }
+    }
+
+    #[test]
+    fn no_window_ends_on_a_heading_without_its_entries() {
+        let mut rows = self::rows(4);
+        rows.push(Row::Heading {
+            text: "Head".into(),
+            right: String::new(),
+        });
+        rows.extend(self::rows(3));
+        for height in 6..14 {
+            for sel in 0..7 {
+                let mut scroll = Scroll::default();
+                let t = text(&lines(&theme(), &rows, sel, &mut scroll, height, 15));
+                if let Some(b) = t.iter().position(|l| l.starts_with("    ⭣")) {
+                    assert!(
+                        !t[b - 1].trim().starts_with("Head") && !t[b - 1].is_empty(),
+                        "height {height} sel {sel}: {t:?}"
+                    );
+                }
+                assert!(t.iter().any(|l| l.starts_with("  ▸")), "{t:?}");
+            }
+        }
+    }
+}

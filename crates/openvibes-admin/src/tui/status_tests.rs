@@ -1,0 +1,327 @@
+//! Status against the fake host (`tests::FakeHost`: ingest active and
+//! ready, distribution not installed, vulns failed, llm inactive,
+//! maintenance active).
+
+use platform_host::Unit;
+
+use super::{
+    app::{App, Key},
+    nav::Screen,
+    status::{Fix, Item, items},
+    tests::{FakeHost, app, screen},
+};
+
+#[test]
+fn a_stopped_service_is_a_problem_first_and_llm_idling_is_not() {
+    let app = app(false);
+    let items = app.status_items();
+    assert!(
+        matches!(&items[0], Item::Problem { text, fix: Some(Fix::Start(Unit::Vulns)) } if text.contains("vulns is stopped")),
+        "{:?}",
+        items[0]
+    );
+    assert!(
+        !items
+            .iter()
+            .any(|i| matches!(i, Item::Problem { text, .. } if text.contains("llm")))
+    );
+    assert!(
+        items
+            .iter()
+            .any(|i| matches!(i, Item::Service(Unit::Ingest)))
+    );
+    assert!(
+        !items
+            .iter()
+            .any(|i| matches!(i, Item::Service(Unit::Distribution))),
+        "not installed: not listed"
+    );
+}
+
+#[test]
+fn status_renders_problems_then_services_with_the_frame() {
+    let mut app = app(false);
+    app.key(Key::Enter); // Home → Status
+    assert_eq!(app.nav.screen, Screen::Status);
+    let text = screen(&app, 80, 24);
+    for want in [
+        "━━ Status",
+        "Needs attention",
+        "vulns is stopped",
+        "Start vulns",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    // At 80x24 three problems leave no room for the service rows: the
+    // hint says so (select a service to see them, see the scroll test).
+    assert!(text.contains("⭣ 7 more"), "{text}");
+    let mut app = app;
+    while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
+        app.key(Key::Down);
+    }
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.contains("Services") && text.contains("running"),
+        "a heading is shown with its entries: {text}"
+    );
+    assert!(
+        screen(&app, 80, 24)
+            .lines()
+            .any(|l| l.contains("ingest") && l.contains("running") && !l.contains(".crt")),
+        "{}",
+        screen(&app, 80, 24)
+    );
+}
+
+#[test]
+fn health_problems_are_listed_before_services() {
+    let mut app = app(false);
+    app.key(Key::Enter);
+    let items = app.status_items();
+    let first_service = items
+        .iter()
+        .position(|i| matches!(i, Item::Service(_)))
+        .unwrap();
+    assert!(
+        items[..first_service]
+            .iter()
+            .all(|i| matches!(i, Item::Problem { .. }))
+    );
+    // Fake host: the unreadable certificate is a health problem without a fix.
+    assert!(
+        items[..first_service]
+            .iter()
+            .any(|i| matches!(i, Item::Problem { text, fix: None } if text.contains("ingest.crt")))
+    );
+    assert!(
+        !items
+            .iter()
+            .any(|i| matches!(i, Item::Problem { text, .. } if text.contains("vulns: failed"))),
+        "unit lines are built in status, not in checks"
+    );
+}
+
+#[test]
+fn enter_on_a_service_opens_it() {
+    let mut app = app(false);
+    app.key(Key::Enter);
+    while !matches!(app.status_items()[app.nav.row], Item::Service(Unit::Ingest)) {
+        app.key(Key::Down);
+    }
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, Screen::Service(Unit::Ingest));
+}
+
+#[test]
+fn items_without_services_still_list_health_problems() {
+    let checks = vec![super::database::Check {
+        problem: true,
+        text: "disk 92% used".into(),
+    }];
+    let items = items(&[], &checks);
+    assert!(matches!(&items[0], Item::Problem { text, fix: None } if text.contains("disk 92%")));
+}
+
+fn marked(text: &str) -> usize {
+    text.lines()
+        .position(|l| l.contains('▸'))
+        .unwrap_or_else(|| panic!("no highlight in\n{text}"))
+}
+
+fn more(text: &str, arrow: char) -> Option<usize> {
+    text.lines().find_map(|l| {
+        let rest = l.trim().strip_prefix(arrow)?.trim().strip_suffix(" more")?;
+        rest.parse().ok()
+    })
+}
+
+#[test]
+fn status_scrolls_one_row_and_keeps_its_window_going_back_up() {
+    let mut app = app(false);
+    app.key(Key::Enter);
+    for i in 0..12 {
+        app.database.health.push(super::database::Check {
+            problem: true,
+            text: format!("extra problem {i}"),
+        });
+    }
+    let total = app.status_items().len();
+    let mut below = more(&screen(&app, 80, 24), '⭣').expect("hint below");
+    assert_eq!(more(&screen(&app, 80, 24), '⭡'), None);
+    for _ in 1..total {
+        app.key(Key::Down);
+        let text = screen(&app, 80, 24);
+        marked(&text);
+        let now = more(&text, '⭣').unwrap_or(0);
+        assert!(now <= below, "{text}");
+        below = now;
+    }
+    let bottom = screen(&app, 80, 24);
+    assert_eq!(more(&bottom, '⭣'), None, "{bottom}");
+    assert!(more(&bottom, '⭡').is_some(), "{bottom}");
+    // Up from the bottom: the highlight moves, the window stays.
+    let (line, above) = (marked(&bottom), more(&bottom, '⭡'));
+    app.key(Key::Up);
+    let up = screen(&app, 80, 24);
+    assert_eq!(marked(&up) + 2, line, "highlight moves up one entry\n{up}");
+    assert_eq!(more(&up, '⭡'), above, "window stays\n{up}");
+}
+
+#[test]
+fn the_row_is_clamped_when_the_list_shrinks() {
+    let mut app = app(false);
+    app.key(Key::Enter);
+    app.nav.row = 99;
+    app.refresh();
+    assert_eq!(app.nav.row, app.status_items().len() - 1);
+}
+
+#[test]
+fn states_read_as_running_stopped_or_as_they_are() {
+    use super::status::state_word;
+    assert_eq!(state_word("active"), "running");
+    assert_eq!(state_word("inactive"), "stopped");
+    assert_eq!(state_word("failed"), "failed");
+}
+
+#[test]
+fn since_shows_the_time_today_the_date_otherwise_and_odd_text_as_it_is() {
+    use super::status::since_on;
+    let day = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap();
+    let raw = "Sat 2026-10-10 12:56:13 CEST";
+    assert_eq!(since_on(raw, day("2026-10-10")), "12:56");
+    assert_eq!(since_on(raw, day("2026-10-11")), "2026-10-10");
+    assert_eq!(
+        since_on("yesterday-ish", day("2026-10-11")),
+        "yesterday-ish"
+    );
+    assert_eq!(since_on("", day("2026-10-11")), "");
+}
+
+fn select_service(app: &mut App<FakeHost>, unit: Unit) {
+    while !matches!(app.status_items()[app.nav.row], Item::Service(u) if u == unit) {
+        app.key(Key::Down);
+    }
+}
+
+#[test]
+fn service_rows_say_since_and_ok_checks_are_rows_under_checks() {
+    let mut app = app(false);
+    app.open_status();
+    select_service(&mut app, Unit::Ingest);
+    let want = format!(
+        "since {}",
+        super::status::since("Sat 2026-10-10 18:40:00 CEST")
+    );
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.lines()
+            .any(|l| l.contains("ingest") && l.contains(&want)),
+        "{text}"
+    );
+    // The first ok check, highlighted, scrolls Checks into view.
+    let n_ok = app.database.health.iter().filter(|c| !c.problem).count();
+    assert!(n_ok > 0, "the fake host has ok checks");
+    app.nav.row = app.status_items().len() - 1;
+    let text = screen(&app, 80, 24);
+    assert!(
+        text.contains("Checks") && text.contains(&format!("{n_ok} ok")),
+        "{text}"
+    );
+    let ok = app.database.health.iter().rfind(|c| !c.problem).unwrap();
+    assert!(!text.contains("checks ok"), "{text}");
+    assert!(
+        text.lines()
+            .any(|l| l.contains('▸') && l.contains(&ok.text[..20])),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_problem_longer_than_its_row_is_read_in_full_wrapped_under_the_list() {
+    let mut app = app(false);
+    app.open_status();
+    let long = (1..=40)
+        .map(|i| format!("w{i:03}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert_eq!(long.len(), 199);
+    app.database.health.insert(
+        0,
+        super::database::Check {
+            problem: true,
+            text: long.clone(),
+        },
+    );
+    app.nav.row = app
+        .status_items()
+        .iter()
+        .position(|i| matches!(i, Item::Problem { text, .. } if *text == long))
+        .unwrap();
+    let text = screen(&app, 80, 24);
+    let row = text.lines().find(|l| l.contains('▸')).unwrap();
+    assert!(row.trim_end().ends_with('…'), "the row is cut: {row}");
+    for word in long.split(' ') {
+        let under: Vec<&str> = text.lines().rev().skip(3).take(3).collect();
+        assert!(under.iter().any(|l| l.contains(word)), "{word}:\n{text}");
+    }
+}
+
+#[test]
+fn text_past_three_lines_ends_in_an_ellipsis() {
+    let mut app = app(false);
+    app.open_status();
+    let long = (1..=80)
+        .map(|i| format!("w{i:03}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    app.database.health.insert(
+        0,
+        super::database::Check {
+            problem: true,
+            text: long.clone(),
+        },
+    );
+    app.nav.row = 1;
+    let text = screen(&app, 80, 24);
+    let last = text.lines().rev().nth(3).unwrap();
+    assert!(
+        last.trim_end().ends_with('…') && !text.contains("w080"),
+        "{text}"
+    );
+}
+
+#[test]
+fn esc_finds_the_remembered_item_after_it_moved_or_went() {
+    let mut app = app(false);
+    app.open_status();
+    // vulns is stopped (a problem) and also the last... select its service row.
+    app.host.disabled.borrow_mut().clear();
+    select_service(&mut app, Unit::Vulns);
+    app.key(Key::Enter);
+    app.key(Key::Enter); // Start
+    app.key(Key::Char('y'));
+    // The fake: vulns now runs.
+    app.host.started.borrow_mut().push(Unit::Vulns);
+    app.poll(std::time::Instant::now() + std::time::Duration::from_secs(2));
+    app.key(Key::Esc);
+    assert_eq!(app.nav.screen, Screen::Status);
+    assert!(
+        matches!(app.status_items()[app.nav.row], Item::Service(Unit::Vulns)),
+        "{:?}",
+        app.status_items()[app.nav.row]
+    );
+}
+
+#[test]
+fn the_highlight_stays_on_its_item_when_the_list_changes_under_it() {
+    let mut app = app(false);
+    app.open_status();
+    select_service(&mut app, Unit::Ingest);
+    app.host.disabled.borrow_mut().push(Unit::Maintenance);
+    app.refresh();
+    assert!(matches!(
+        app.status_items()[app.nav.row],
+        Item::Service(Unit::Ingest)
+    ));
+}
