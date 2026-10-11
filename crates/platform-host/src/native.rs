@@ -386,6 +386,12 @@ impl<R: Runner> Host for Native<R> {
         Ok(out.stdout)
     }
 
+    fn free_space(&self, path: &str) -> Option<String> {
+        let out = self.run(Df, &["--output=avail", "-h", "--", path]).ok()?;
+        (out.status == 0)
+            .then(|| out.stdout.lines().nth(1).map(|l| l.trim().to_owned()))
+            .flatten()
+    }
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         let mut paths = vec!["/var/lib/pgsql".to_owned()];
         if let Ok(entries) = std::fs::read_dir("/var/lib") {

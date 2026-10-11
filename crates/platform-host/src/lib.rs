@@ -209,6 +209,12 @@ pub trait Host {
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         Ok(Vec::new())
     }
+    /// Space left on the file system holding `path`, as `df -h` writes it;
+    /// `None` when unknown (the backup folder's check).
+    fn free_space(&self, path: &str) -> Option<String> {
+        let _ = path;
+        None
+    }
     /// `ss -ltnpH` lines for TCP `port` on any address; empty when nobody
     /// listens there (Setup's port check).
     fn listeners(&self, port: u16) -> Result<String, HostError> {

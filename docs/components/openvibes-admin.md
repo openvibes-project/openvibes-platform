@@ -644,15 +644,22 @@ refused while one works):
 - Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
   --no-role-passwords` to `PATH.roles.sql`, both new files (never over an
   existing one), 0600, owned by the sudo user, checked with `pg_restore
-  --list` first.
+  --list` first. The helper refuses a PATH that is relative, contains
+  `..`, or whose folder does not exist. The folder of every backup written
+  is remembered in `/etc/openvibes/backup.toml` (0644: the folder and
+  `first`), and `--remember-choice` (Update and Uninstall from the TUI) also
+  records whether the run backed up first; Remove everything deletes it with
+  `/etc/openvibes`. The TUI names backups
+  `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3` when taken) and checks
+  a typed folder with a probe file and `df` (no unsafe code).
 
 Root helper verbs for the TUI, run with the user's own sudo rights and
 password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 `setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
 (`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP [--repair]`
 (`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
-[--backup PATH] [--repo-dir DIR]`, `helper remove-step STEP --components
-LIST [--backup PATH] [--confirm HOSTNAME]`, `helper unit-enable UNIT`,
+[--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP --components
+LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
 `helper unit-disable UNIT`. Arguments are checked before the root check.
 
 ## CA commands

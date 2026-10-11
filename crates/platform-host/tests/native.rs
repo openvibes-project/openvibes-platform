@@ -851,3 +851,14 @@ fn passwd_home_takes_only_the_named_users_absolute_home() {
     // A prefix of a name is not the name.
     assert_eq!(platform_host::passwd_home(passwd, "ali"), None);
 }
+
+#[test]
+fn free_space_is_dfs_avail_column() {
+    let host = fake(vec![(vec!["/usr/bin/df"], out(0, " Avail\n  1.8T\n", ""))]);
+    assert_eq!(host.free_space("/mnt/nas"), Some("1.8T".into()));
+    let calls = host.runner.calls.borrow();
+    assert_eq!(
+        calls[0],
+        ["/usr/bin/df", "--output=avail", "-h", "--", "/mnt/nas"]
+    );
+}

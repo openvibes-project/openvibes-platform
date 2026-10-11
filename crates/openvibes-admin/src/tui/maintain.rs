@@ -13,6 +13,20 @@ use crate::setup::plan::Plan;
 pub const UPDATE_START_ROW: usize = 1;
 pub const UNINSTALL_START_ROW: usize = 3;
 
+/// A backup file in `home` that does not exist yet: every name is unique
+/// (version, date, time; `-2` when taken). The folder choice replaces
+/// `home` in a later task.
+fn new_backup(home: &str) -> String {
+    use super::maint::backup::{file_stem, free_path};
+    let stem = file_stem(
+        env!("CARGO_PKG_VERSION"),
+        chrono::Local::now().naive_local(),
+    );
+    free_path(&format!("{home}/{stem}"), "dump", |p| {
+        std::path::Path::new(p).exists()
+    })
+}
+
 impl<H: Host> App<H> {
     pub(super) fn open_update(&mut self) {
         self.setup.packages = self.host.packages().unwrap_or_else(|error| {
@@ -20,7 +34,7 @@ impl<H: Host> App<H> {
             Vec::new()
         });
         let home = self.setup.home.clone().unwrap_or_default();
-        self.setup.backup = format!("{home}/openvibes-before-update.dump");
+        self.setup.backup = new_backup(&home);
         self.setup.row2 = 0;
         self.setup.editing = false;
         self.setup.phase = Phase::Update;
@@ -28,7 +42,7 @@ impl<H: Host> App<H> {
 
     pub(super) fn open_uninstall(&mut self) {
         let home = self.setup.home.clone().unwrap_or_default();
-        self.setup.backup = format!("{home}/openvibes-backup.dump");
+        self.setup.backup = new_backup(&home);
         self.setup.confirm.clear();
         self.setup.everything = false;
         self.setup.row2 = 0;

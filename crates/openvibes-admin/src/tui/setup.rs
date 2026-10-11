@@ -676,11 +676,7 @@ fn default_root_key(home: Option<&str>) -> String {
 /// everything keeps the old root key (it is the user's), so a new install
 /// must not stop on it (#87).
 fn free_root_key(home: &str, exists: impl Fn(&str) -> bool) -> String {
-    let base = format!("{home}/openvibes-root-ca");
-    std::iter::once(format!("{base}.key"))
-        .chain((2..).map(|n| format!("{base}-{n}.key")))
-        .find(|path| !exists(path))
-        .unwrap_or_default()
+    super::maint::backup::free_path(&format!("{home}/openvibes-root-ca"), "key", exists)
 }
 
 #[cfg(test)]

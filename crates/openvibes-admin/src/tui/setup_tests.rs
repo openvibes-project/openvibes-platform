@@ -298,9 +298,12 @@ fn update_lists_the_packages_then_runs_the_update_job() {
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     app.setup_tick();
-    assert_eq!(
-        app.host.calls.borrow()[0].0,
-        "update-step backup --backup /home/alice/openvibes-before-update.dump"
+    let call = app.host.calls.borrow()[0].0.clone();
+    assert!(
+        call.starts_with("update-step backup --backup /home/alice/openvibes-0.")
+            && call.ends_with(".dump")
+            && !call.contains("before-update"),
+        "{call}"
     );
 }
 
@@ -337,9 +340,11 @@ fn remove_everything_needs_this_hosts_name() {
     for _ in 0..5 {
         app.setup_tick();
     }
-    assert_eq!(
-        app.host.calls.borrow()[0].0,
-        "remove-step backup --components ingest,console,distribution,vulns,rules,agent --backup /home/alice/openvibes-backup.dump --confirm platform.example.com"
+    let call = app.host.calls.borrow()[0].0.clone();
+    assert!(
+        call.starts_with("remove-step backup --components ingest,console,distribution,vulns,rules,agent --backup /home/alice/openvibes-0.")
+            && call.ends_with(".dump --confirm platform.example.com"),
+        "{call}"
     );
     assert_eq!(app.setup.phase, Phase::Finished);
     assert!(screen(&app).contains("sudo dnf remove openvibes-admin"));

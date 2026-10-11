@@ -3,12 +3,53 @@
 //! `pg_restore --list`, then handed to the user as a new 0600 file, with the
 //! roles next to it. Nothing is ever written over an existing file.
 
-use std::{fs, os::unix::fs::DirBuilderExt, path::Path};
+use std::{
+    fs,
+    os::unix::fs::DirBuilderExt,
+    path::{Component, Path},
+};
 
 use platform_host::runner::Runner;
 use ring::rand::{SecureRandom, SystemRandom};
 
 use super::Ctx;
+
+/// The TUI's backup choices (world-readable: one folder, one flag);
+/// Remove everything deletes it with /etc/openvibes.
+pub const MEMORY: &str = "/etc/openvibes/backup.toml";
+
+/// Records the folder of a backup just written and, when given, whether
+/// the operator backs up first (Update's and Uninstall's Back up first).
+pub fn remember<R: Runner>(
+    ctx: &Ctx<R>,
+    folder: Option<&Path>,
+    first: Option<bool>,
+) -> Result<(), String> {
+    let mut doc: toml_edit::DocumentMut = ctx
+        .read(MEMORY)
+        .unwrap_or_default()
+        .parse()
+        .unwrap_or_default();
+    if let Some(folder) = folder.and_then(Path::to_str) {
+        doc["folder"] = toml_edit::value(folder);
+    }
+    if let Some(first) = first {
+        doc["first"] = toml_edit::value(first);
+    }
+    ctx.put(MEMORY, doc.to_string().as_bytes(), None, 0o644)
+}
+
+/// The trust boundary for a path the root helper writes to: absolute and
+/// free of `..` (checked when the arguments are read).
+pub fn check_path(path: &Path) -> Result<(), String> {
+    if !path.is_absolute() {
+        return Err(format!("{} is not an absolute path", path.display()));
+    }
+    if path.components().any(|c| c == Component::ParentDir) {
+        return Err(format!("{} contains ..", path.display()));
+    }
+    Ok(())
+}
 
 /// A new directory for postgres to dump into: a random name in /var/tmp
 /// (on disk, not in RAM), made with mkdir, which fails on anything already
@@ -32,7 +73,12 @@ fn staging<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
 }
 
 pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
+    check_path(out)?;
     let shown = out.display().to_string();
+    let folder = out.parent().ok_or_else(|| format!("{shown}: no folder"))?;
+    if !ctx.path(&folder.display().to_string()).is_dir() {
+        return Err(format!("{} is not a folder", folder.display()));
+    }
     let roles_file = format!("{shown}.roles.sql");
     for file in [&shown, &roles_file] {
         if ctx.exists(file) {
@@ -63,8 +109,13 @@ pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
             fs::File::open(ctx.path(dump_file)).map_err(|error| format!("{dump_file}: {error}"))?;
         let note = ctx.write_new(&shown, &mut dump)?;
         ctx.write_new(&roles_file, &mut roles.as_bytes())?;
+        // A convenience for the next time: a failure here never fails the backup.
+        let kept = match remember(ctx, Some(folder), None) {
+            Ok(()) => String::new(),
+            Err(error) => format!(" (the folder is not remembered: {error})"),
+        };
         Ok(format!(
-            "backup saved to {shown} ({size} bytes) and {roles_file}{note}"
+            "backup saved to {shown} ({size} bytes) and {roles_file}{note}{kept}"
         ))
     })();
     let _ = fs::remove_dir_all(ctx.path(&work));
@@ -180,5 +231,61 @@ mod tests {
         let dump = fake.call(&[&PG[..], &["/usr/bin/pg_dump"]].concat());
         let file = &dump[dump.iter().position(|a| a == "--file").unwrap() + 1];
         assert!(file.starts_with("/var/tmp/openvibes-backup-"), "{file}");
+    }
+
+    #[test]
+    fn a_backup_remembers_its_folder_and_the_choice_only_when_asked() {
+        let fake = Fake::new("backup-memory");
+        postgres(&fake);
+        std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+        let plan = plan(&[Ingest]);
+        super::dump(&fake.ctx(&plan), std::path::Path::new("/home/alice/b.dump")).unwrap();
+        assert_eq!(fake.text(super::MEMORY), "folder = \"/home/alice\"\n");
+        let args = crate::setup::update::UpdateArgs {
+            remember_choice: true,
+            ..Default::default()
+        };
+        let state =
+            crate::setup::update::run(&fake.ctx(&plan), platform_host::UpdateStep::Backup, &args);
+        assert!(
+            matches!(state, platform_host::StepState::Skipped(_)),
+            "{state:?}"
+        );
+        let text = fake.text(super::MEMORY);
+        assert!(
+            text.contains("folder = \"/home/alice\"") && text.contains("first = false"),
+            "{text}"
+        );
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(fake.root.join("etc/openvibes/backup.toml"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o644, "the TUI reads it as the operator");
+    }
+
+    #[test]
+    fn the_helper_refuses_relative_paths_dot_dot_and_non_folders() {
+        use std::path::Path;
+        for bad in ["b.dump", "backups/b.dump", "/home/../etc/b.dump"] {
+            assert!(super::check_path(Path::new(bad)).is_err(), "{bad}");
+        }
+        assert!(super::check_path(Path::new("/home/alice/b.dump")).is_ok());
+        let fake = Fake::new("backup-not-a-folder");
+        postgres(&fake);
+        fake.file("/home/alice", "a file, not a folder");
+        let plan = plan(&[Ingest]);
+        let error = super::dump(&fake.ctx(&plan), Path::new("/home/alice/b.dump")).unwrap_err();
+        assert!(error.contains("is not a folder"), "{error}");
+        let error = super::dump(&fake.ctx(&plan), Path::new("/home/../b.dump")).unwrap_err();
+        assert!(error.contains(".."), "{error}");
+        let error = super::dump(&fake.ctx(&plan), Path::new("/nowhere/b.dump")).unwrap_err();
+        assert!(error.contains("is not a folder"), "{error}");
+        assert!(!fake.called(&[&PG[..], &["/usr/bin/pg_dump"]].concat()));
+        let args = crate::setup::update::UpdateArgs {
+            backup: Some("/a/../b".into()),
+            ..Default::default()
+        };
+        assert!(args.check().is_err());
     }
 }

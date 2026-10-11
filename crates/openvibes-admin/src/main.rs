@@ -264,6 +264,7 @@ async fn main() -> ExitCode {
             (_, _, true, _) => setup::update_all(&setup::update::UpdateArgs {
                 backup: backup.clone(),
                 repo_dir: update_repo_dir.clone(),
+                remember_choice: false,
             }),
             _ if !keep_data && !everything => {
                 eprintln!("openvibes-admin: --uninstall needs --keep-data or --everything");

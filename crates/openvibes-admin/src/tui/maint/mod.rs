@@ -3,6 +3,7 @@
 //! until then; today's Components and ports and Settings files screens
 //! stay behind the menu until their pages replace them.
 
+pub mod backup;
 mod database;
 
 use platform_host::Host;

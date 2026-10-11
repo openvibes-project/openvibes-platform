@@ -29,14 +29,16 @@ pub struct UpdateArgs {
     /// Upgrade from this folder of package files (test builds).
     #[arg(long)]
     pub repo_dir: Option<PathBuf>,
+    /// Record in backup.toml whether this run backs up first (the TUI's
+    /// Back up first, remembered for next time).
+    #[arg(long)]
+    pub remember_choice: bool,
 }
 
 impl UpdateArgs {
     pub fn check(&self) -> Result<(), String> {
         for path in [&self.backup, &self.repo_dir].into_iter().flatten() {
-            if !path.is_absolute() {
-                return Err(format!("{} is not an absolute path", path.display()));
-            }
+            backup::check_path(path)?;
         }
         Ok(())
     }
@@ -247,10 +249,16 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> Step
         resume_agent(ctx);
     }
     let result = match step {
-        UpdateStep::Backup => match &args.backup {
-            None => Ok(StepState::Skipped("no backup chosen".into())),
-            Some(path) => backup::dump(ctx, path).map(StepState::Done),
-        },
+        UpdateStep::Backup => {
+            if args.remember_choice {
+                // ponytail: best effort; the choice only presets a checkbox.
+                let _ = backup::remember(ctx, None, Some(args.backup.is_some()));
+            }
+            match &args.backup {
+                None => Ok(StepState::Skipped("no backup chosen".into())),
+                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+            }
+        }
         UpdateStep::Stop => stop(ctx),
         UpdateStep::Upgrade => upgrade(ctx, args),
         UpdateStep::Migrate => migrate(ctx),
@@ -296,6 +304,7 @@ mod tests {
         let args = UpdateArgs {
             backup: Some("/home/alice/b.dump".into()),
             repo_dir: None,
+            remember_choice: false,
         };
         let state = run(&fake.ctx(&plan), UpdateStep::Backup, &args);
         assert!(matches!(state, StepState::Failed(_)), "{state:?}");
@@ -420,6 +429,7 @@ mod tests {
         let args = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/new".into()),
+            remember_choice: false,
         };
         assert!(matches!(
             run(&fake.ctx(&plan), UpdateStep::Upgrade, &args),
@@ -640,6 +650,7 @@ mod tests {
         let args = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/new".into()),
+            remember_choice: false,
         };
         let state = run(&fake.ctx(&plan), UpdateStep::Upgrade, &args);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
@@ -650,6 +661,7 @@ mod tests {
         let missing = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/typo".into()),
+            remember_choice: false,
         };
         assert!(matches!(
             run(&fake.ctx(&plan), UpdateStep::Upgrade, &missing),

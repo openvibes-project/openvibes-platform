@@ -14,6 +14,7 @@ fn args(components: &[Component], confirm: Option<&str>) -> RemoveArgs {
         components: components.to_vec(),
         backup: None,
         confirm: confirm.map(str::to_owned),
+        remember_choice: false,
     }
 }
 
@@ -232,6 +233,7 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     fake.file("/etc/openvibes/admin.toml", "x");
     fake.file("/etc/openvibes/setup.toml", "x");
     fake.file("/etc/openvibes/tls/server.pem", "x");
+    fake.file("/etc/openvibes/backup.toml", "folder = \"/home/a\"\n");
     fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
     fake.answer(
         &["/usr/bin/rpm", "-qc", "openvibes-admin"],
@@ -252,6 +254,10 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     assert!(fake.root.join("etc/openvibes/admin.toml").exists());
     assert!(!fake.root.join("etc/openvibes/setup.toml").exists());
     assert!(!fake.root.join("etc/openvibes/tls").exists());
+    assert!(
+        !fake.root.join("etc/openvibes/backup.toml").exists(),
+        "the remembered backup folder goes with Remove everything"
+    );
 }
 
 #[test]

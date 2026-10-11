@@ -29,6 +29,10 @@ pub struct RemoveArgs {
     /// This host's name, typed to confirm Remove everything.
     #[arg(long)]
     pub confirm: Option<String>,
+    /// Record in backup.toml whether this run backs up first (the TUI's
+    /// Back up first, remembered for next time).
+    #[arg(long)]
+    pub remember_choice: bool,
 }
 
 impl RemoveArgs {
@@ -36,10 +40,8 @@ impl RemoveArgs {
         if self.components.is_empty() {
             return Err("--components is required".into());
         }
-        if let Some(path) = &self.backup
-            && !path.is_absolute()
-        {
-            return Err(format!("{} is not an absolute path", path.display()));
+        if let Some(path) = &self.backup {
+            backup::check_path(path)?;
         }
         if let Some(name) = &self.confirm {
             check_name(name)?;
@@ -271,10 +273,16 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         return StepState::Failed(error);
     }
     let result = match step {
-        RemoveStep::Backup => match &args.backup {
-            None => Ok(StepState::Skipped("no backup chosen".into())),
-            Some(path) => backup::dump(ctx, path).map(StepState::Done),
-        },
+        RemoveStep::Backup => {
+            if args.remember_choice {
+                // ponytail: best effort; the choice only presets a checkbox.
+                let _ = backup::remember(ctx, None, Some(args.backup.is_some()));
+            }
+            match &args.backup {
+                None => Ok(StepState::Skipped("no backup chosen".into())),
+                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+            }
+        }
         RemoveStep::Stop => ctx.job_begin("uninstall").and_then(|()| stop(ctx, args)),
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
