@@ -214,6 +214,7 @@ impl<H: Host> App<H> {
         }
         if let Some((_, prompt)) = &self.prompt {
             return Bar::Typing {
+                note: None,
                 label: "Your password (sudo)".into(),
                 shown: prompt.masked(),
                 done: "Enable".into(),

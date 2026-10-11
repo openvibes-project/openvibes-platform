@@ -33,6 +33,8 @@ pub enum Key {
     Enter,
     Esc,
     Backspace,
+    /// Tab: browse for a folder (a typed folder only).
+    Tab,
     /// Ctrl+U: empty the field being edited.
     ClearLine,
 }

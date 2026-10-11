@@ -5,4 +5,5 @@ pub mod bar;
 pub mod frame;
 pub mod list;
 pub mod logo;
+pub mod steps;
 pub mod theme;

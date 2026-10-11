@@ -145,6 +145,7 @@ pub fn run() -> ExitCode {
                     KeyCode::Enter => Key::Enter,
                     KeyCode::Esc => Key::Esc,
                     KeyCode::Backspace => Key::Backspace,
+                    KeyCode::Tab => Key::Tab,
                     _ => continue,
                 };
                 pressed = Some(key);
