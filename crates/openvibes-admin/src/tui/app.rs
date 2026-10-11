@@ -241,14 +241,14 @@ impl<H: Host> App<H> {
     /// Esc goes back, q quits from Home, the rest is the screen's.
     pub fn key(&mut self, key: Key) {
         self.outcome = None;
+        if self.asking.is_some() {
+            return self.asking_key(key);
+        }
         if self.nav.screen == Screen::Legacy {
             return self.legacy_key(key);
         }
         if self.question.is_some() {
             return self.question_key(key);
-        }
-        if self.asking.is_some() {
-            return self.asking_key(key);
         }
         if self.prompt.is_some() {
             return self.prompt_key(key);

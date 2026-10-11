@@ -141,10 +141,14 @@ impl<H: Host> App<H> {
                     Err(TryRecvError::Disconnected) => {
                         run.rx = None;
                         if run.running() {
-                            let at = run.at;
-                            run.states[at].get_or_insert_with(|| {
-                                StepState::Failed("the work stopped unexpectedly".into())
-                            });
+                            let main = run.work.calls.len();
+                            let next = (0..main).find(|&i| run.states[i].is_none());
+                            if let Some(i) =
+                                next.or_else(|| run.states.iter().position(Option::is_none))
+                            {
+                                run.states[i] =
+                                    Some(StepState::Failed("the work stopped unexpectedly".into()));
+                            }
                             run.ended = Some(now);
                         }
                     }
@@ -154,7 +158,10 @@ impl<H: Host> App<H> {
                 self.ask_again(background);
             }
         }
-        if self.quit_when_done && !self.run.as_ref().is_some_and(Run::running) {
+        if self.quit_when_done
+            && self.asking.is_none()
+            && !self.run.as_ref().is_some_and(Run::running)
+        {
             self.quit = true;
         }
     }
@@ -162,7 +169,7 @@ impl<H: Host> App<H> {
     /// Ctrl+C: while work runs, as `q` (it asks); a second one quits at once.
     pub fn interrupt(&mut self) {
         let running = self.run.as_ref().is_some_and(Run::running);
-        if running && !matches!(self.question, Some((Question::Quit, _))) {
+        if running && !self.quit_when_done && !matches!(self.question, Some((Question::Quit, _))) {
             self.question = Some((Question::Quit, true));
         } else {
             self.quit = true;

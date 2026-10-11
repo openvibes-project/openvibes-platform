@@ -245,3 +245,73 @@ fn ctrl_c_while_work_runs_asks_and_a_second_ctrl_c_quits_at_once() {
     idle.interrupt();
     assert!(idle.quit, "nothing running: Ctrl+C quits");
 }
+
+fn start_by_hand(calls: usize) -> (super::app::App<SetupHost>, Sender) {
+    let mut app = set_up(vec![]);
+    let sender = by_hand(&mut app);
+    app.begin(fix(vec![Call::Repair(Step::Packages); calls]), 0);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    (app, sender)
+}
+
+#[test]
+fn a_worker_that_dies_after_step_0_fails_the_next_step() {
+    let (mut app, sender) = start_by_hand(2);
+    send(&sender, 0);
+    sender.borrow_mut().take();
+    app.tick(Instant::now());
+    let run = app.run.as_ref().unwrap();
+    assert!(!run.running());
+    assert_eq!(run.states[0], Some(StepState::Done("ok".into())));
+    assert_eq!(run.stopped_at(), Some(1));
+    assert!(
+        run.states[1]
+            .as_ref()
+            .unwrap()
+            .detail()
+            .contains("stopped unexpectedly")
+    );
+}
+
+#[test]
+fn a_worker_that_dies_at_once_fails_the_first_step() {
+    let (mut app, sender) = start_by_hand(2);
+    sender.borrow_mut().take();
+    app.tick(Instant::now());
+    let run = app.run.as_ref().unwrap();
+    assert_eq!(run.stopped_at(), Some(0));
+    assert!(!run.ok());
+}
+
+#[test]
+fn ctrl_c_after_yes_to_quit_when_done_quits_at_once() {
+    let (mut app, _sender) = start_by_hand(1);
+    app.interrupt();
+    app.key(Key::Enter);
+    assert!(app.quit_when_done && !app.quit);
+    app.interrupt();
+    assert!(app.quit);
+}
+
+#[test]
+fn quit_when_done_waits_while_a_password_is_asked_again() {
+    let mut app = set_up(vec![Err(HostError::WrongPassword)]);
+    app.begin(fix(vec![Call::Repair(Step::Packages)]), 0);
+    app.quit_when_done = true;
+    type_text(&mut app, "bad");
+    app.key(Key::Enter);
+    assert!(app.asking.is_some());
+    app.tick(Instant::now());
+    assert!(!app.quit, "the prompt is open");
+}
+
+#[test]
+fn the_password_is_typed_on_a_legacy_screen_too() {
+    let mut app = super::script_host::fresh_app();
+    assert_eq!(app.nav.screen, super::nav::Screen::Legacy);
+    app.begin(fix(vec![Call::Repair(Step::Packages)]), 0);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    assert_eq!(app.host.calls.borrow()[0].1, "pw");
+}
