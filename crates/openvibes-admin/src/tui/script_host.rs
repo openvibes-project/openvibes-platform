@@ -2,7 +2,10 @@
 //! queued answer ("done\tok" once they run out), and the calls and their
 //! passwords are recorded.
 
-use std::{cell::RefCell, collections::VecDeque};
+use std::{
+    cell::{Cell, RefCell},
+    collections::VecDeque,
+};
 
 use platform_host::{
     Host, HostError, PackageUpdate, Privileged, Secret, Service, ServiceAction, ServiceStatus, Unit,
@@ -27,6 +30,8 @@ pub(super) struct SetupHost {
     pub(super) taken: Vec<u16>,
     /// Running as root: sudo needs no password.
     pub(super) root: bool,
+    /// `df` calls made (the backup folder's check).
+    pub(super) free_calls: Cell<usize>,
 }
 
 impl Host for SetupHost {
@@ -70,6 +75,10 @@ impl Host for SetupHost {
             String::new()
         })
     }
+    fn free_space(&self, _: &str) -> Option<String> {
+        self.free_calls.set(self.free_calls.get() + 1);
+        Some("1.8T".into())
+    }
     fn setup_plan(&self) -> Result<String, HostError> {
         if self.plan.is_empty() {
             Err(HostError::Failed("not set up".into()))
@@ -110,7 +119,11 @@ pub(super) fn app_taken(
         packages: Vec::new(),
         taken,
         root: false,
+        free_calls: Cell::new(0),
     });
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    app.root = std::env::temp_dir().join(format!("ov-tui-root-{}-{n}", std::process::id()));
     app.setup.model_present = false;
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();

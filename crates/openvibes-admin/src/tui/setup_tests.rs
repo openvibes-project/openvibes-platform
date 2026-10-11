@@ -284,7 +284,7 @@ fn update_lists_the_packages_then_runs_the_update_job() {
             available: Some("0.2.0-1.fc44".into()),
         },
     ];
-    app.setup.home = Some("/home/alice".into());
+    remember_folder(&app, "/home/alice");
     app.open(Tab::Setup);
     app.key(Key::Char('u'));
     let text = screen(&app);
@@ -307,6 +307,24 @@ fn update_lists_the_packages_then_runs_the_update_job() {
     );
 }
 
+/// What the helper remembers after a backup: the folder the screens offer.
+fn remember_folder(app: &super::app::App<super::script_host::SetupHost>, folder: &str) {
+    let dir = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("backup.toml"), format!("folder = \"{folder}\"\n")).unwrap();
+}
+
+#[test]
+fn no_backup_place_is_offered_until_one_was_chosen() {
+    let mut app = set_up(vec![]);
+    app.open(Tab::Setup);
+    app.key(Key::Char('u'));
+    assert_eq!(app.setup.backup, "", "no default place");
+    app.key(Key::Esc);
+    app.key(Key::Char('x'));
+    assert_eq!(app.setup.backup, "");
+}
+
 #[test]
 fn remove_everything_needs_this_hosts_name() {
     let mut answers: Vec<Result<String, HostError>> = Vec::new();
@@ -314,7 +332,7 @@ fn remove_everything_needs_this_hosts_name() {
         answers.push(Ok("done\tok\n".into()));
     }
     let mut app = set_up(answers);
-    app.setup.home = Some("/home/alice".into());
+    remember_folder(&app, "/home/alice");
     app.open(Tab::Setup);
     app.key(Key::Char('x'));
     app.key(Key::Char(' ')); // Remove everything

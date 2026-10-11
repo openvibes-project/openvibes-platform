@@ -2,28 +2,47 @@
 //! the helper remembers; a new file name every time; Back up first off
 //! by default, then your last choice.
 
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
-use platform_host::Host;
+use platform_host::{Host, StepState, UpdateStep};
+use ratatui::{
+    Frame,
+    text::{Line, Span},
+    widgets::Paragraph,
+};
 
-use crate::setup::backup::MEMORY;
+use super::{failure, folder, human};
+use crate::{
+    setup::backup::MEMORY,
+    tui::{
+        app::{App, Key},
+        run::{Call, Kind, Run, Work},
+        ui::{
+            bar::Bar,
+            frame,
+            list::{self, Row},
+            logo::Header,
+        },
+    },
+};
 
 /// What the helper remembered (`/etc/openvibes/backup.toml`).
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-#[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
 pub struct Memory {
     pub folder: Option<String>,
     pub first: bool,
 }
 
-#[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
 impl Memory {
     pub fn parse(text: &str) -> Memory {
         let table: toml::Table = text.parse().unwrap_or_default();
         Memory {
+            // The file is the helper's, but a folder is only used if it
+            // reads as a full path without control characters.
             folder: table
                 .get("folder")
                 .and_then(toml::Value::as_str)
+                .filter(|f| f.starts_with('/') && !f.chars().any(char::is_control))
                 .map(str::to_owned),
             first: table
                 .get("first")
@@ -44,6 +63,14 @@ pub fn file_stem(version: &str, now: chrono::NaiveDateTime) -> String {
     format!("openvibes-{version}-{}", now.format("%Y-%m-%d-%H%M"))
 }
 
+/// A new backup file `base.dump`, or `base-2.dump`...: neither the dump
+/// nor its `.roles.sql` may exist, so a stray roles file moves the name on.
+pub fn free_backup(base: &str, exists: impl Fn(&str) -> bool) -> String {
+    free_path(base, "dump", |p| {
+        exists(p) || exists(&format!("{p}.roles.sql"))
+    })
+}
+
 /// `base.ext`, or `base-2.ext`, `base-3.ext`... when taken.
 pub fn free_path(base: &str, ext: &str, exists: impl Fn(&str) -> bool) -> String {
     std::iter::once(format!("{base}.{ext}"))
@@ -52,10 +79,9 @@ pub fn free_path(base: &str, ext: &str, exists: impl Fn(&str) -> bool) -> String
         .unwrap_or_default()
 }
 
-/// The folder as typed (spec §2): a full path to a folder you can write
-/// to, with its free space; or what is wrong.
-#[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
-pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
+/// What typing can afford (spec §2), on every key: a full path to an
+/// existing folder. Returns the path.
+pub fn cheap_check(text: &str) -> Result<String, String> {
     let text = text.trim();
     if text.is_empty() {
         return Err("type a folder, or Tab to browse".into());
@@ -65,14 +91,20 @@ pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
         return Err("a full path, starting with /".into());
     }
     match std::fs::metadata(path) {
-        Err(_) => return Err(format!("{text} does not exist")),
-        Ok(meta) if !meta.is_dir() => return Err(format!("{text} is not a folder")),
-        Ok(_) => {}
+        Err(_) => Err(format!("{text} does not exist")),
+        Ok(meta) if !meta.is_dir() => Err(format!("{text} is not a folder")),
+        Ok(_) => Ok(text.to_owned()),
     }
+}
+
+/// The whole check, which may block on a slow mount: the cheap one, then
+/// a probe file and the free space. Never on the UI thread.
+pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
+    let text = cheap_check(text)?;
     // ponytail: a probe file made and removed at once (access(2) needs
     // unsafe). A root-squashed NFS folder passes here though the helper,
     // as root, cannot write there: its backup step then says so.
-    let probe = path.join(format!(".openvibes-write-check-{}", std::process::id()));
+    let probe = Path::new(&text).join(format!(".openvibes-write-check-{}", std::process::id()));
     match std::fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -83,15 +115,181 @@ pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
         }
         Err(_) => return Err(format!("{text} is not writable for you")),
     }
-    Ok(match host.free_space(text) {
+    Ok(match host.free_space(&text) {
         Some(free) => format!("{text} exists and is writable · {free} free"),
         None => format!("{text} exists and is writable"),
     })
 }
 
+/// The size in the helper's "backup saved to X (N bytes) and …".
+fn saved(detail: &str) -> Option<String> {
+    let n: u64 = detail
+        .split(" (")
+        .nth(1)?
+        .split(" bytes)")
+        .next()?
+        .parse()
+        .ok()?;
+    Some(human(n))
+}
+
+fn backup_run<H: Host>(app: &App<H>) -> Option<&Run> {
+    app.run
+        .as_ref()
+        .filter(|r| matches!(r.work.kind, Kind::Backup { .. }))
+}
+
+pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
+    let t = &app.theme;
+    let run = backup_run(app);
+    let folder = &app.maint.folder;
+    let bar = match run {
+        Some(r) if r.running() => Bar::Busy {
+            text: "Backing up the database…".into(),
+            tick: app.tick_count,
+        },
+        Some(r) if r.ok() => Bar::only(&[("Enter", "Done")]),
+        Some(_) => Bar::act(&[("Enter", "Try again")]),
+        None if folder.editing() => folder::bar(),
+        None if app.nav.row == 0 => Bar::keys(&[("Enter", "Choose a folder")]),
+        None => Bar::keys(&[("Enter", "Back up now")]),
+    };
+    let area = frame::draw(frame, t, head, Some("Back up"), &app.bar(bar));
+    let mut lines = vec![
+        Line::raw(""),
+        Line::styled(
+            "    The database: findings, alarms, cases, users, settings. Certificates",
+            t.dim(),
+        ),
+        Line::styled(
+            "    and keys are not in it: they stay in /etc/openvibes/pki.",
+            t.dim(),
+        ),
+    ];
+    let rows = vec![
+        Row::Entry {
+            name: vec![Span::raw("Save in folder")],
+            value: folder::value(t, folder),
+        },
+        Row::entry("Back up now", "a new file each time"),
+    ];
+    let mut scroll = app.nav.scroll.get();
+    lines.extend(list::lines(t, &rows, app.nav.row, &mut scroll, 5, 14));
+    app.nav.scroll.set(scroll);
+    match run {
+        Some(r) if r.ok() => {
+            let Kind::Backup { file } = &r.work.kind else {
+                return;
+            };
+            let size = r.states[0]
+                .as_ref()
+                .and_then(|s| saved(s.detail()))
+                .unwrap_or_default();
+            // The size follows on a line of its own when the path leaves no room.
+            let fits = file.chars().count() + size.chars().count() + 16 <= 80;
+            let mut saved = vec![
+                Span::raw("    "),
+                Span::styled("✓", t.green()),
+                Span::raw(" Saved "),
+                Span::styled(file.clone(), t.bold()),
+            ];
+            if fits {
+                saved.push(Span::raw(format!(" ({size})")));
+            }
+            lines.push(Line::from(saved));
+            if !fits {
+                lines.push(Line::styled(format!("    {size}"), t.dim()));
+            }
+            lines.push(Line::styled(
+                "    Copy it off this host: a backup on the same disk does not survive the disk.",
+                t.dim(),
+            ));
+        }
+        Some(r) if !r.running() => {
+            let why = r.states[0].as_ref().map_or("", StepState::detail);
+            lines.extend(failure(
+                t,
+                why,
+                "Nothing was changed: the services keep running.",
+            ));
+        }
+        Some(_) => {}
+        None if app.nav.row == 0 => lines.push(folder::help(t, folder)),
+        None if folder.ok() => lines.push(Line::styled(
+            format!("    Writes {}.", app.backup_file()),
+            t.dim(),
+        )),
+        None => lines.push(Line::styled("    Choose a folder first.", t.dim())),
+    }
+    frame.render_widget(Paragraph::new(lines), area);
+}
+
+impl<H: Host> App<H> {
+    /// What the helper remembered, for Back up, Update and Uninstall.
+    pub(super) fn load_backup_choice(&mut self) {
+        self.maint.memory = Memory::load(&self.root);
+        self.maint.first = self.maint.memory.first;
+        self.maint.folder = folder::Folder::default();
+        if let Some(text) = self.maint.memory.folder.clone() {
+            self.maint.folder.set(text, Instant::now());
+        }
+    }
+
+    /// A new file in the chosen folder, for data of this version.
+    pub(in crate::tui) fn backup_file(&self) -> String {
+        let base = format!(
+            "{}/{}",
+            self.maint.folder.text.trim().trim_end_matches('/'),
+            file_stem(
+                env!("CARGO_PKG_VERSION"),
+                chrono::Local::now().naive_local()
+            )
+        );
+        free_backup(&base, |p| Path::new(p).exists())
+    }
+
+    pub(super) fn backup_key(&mut self, key: Key) {
+        if self.maint.folder.editing() {
+            return self.folder_key(key);
+        }
+        if let Some(run) = backup_run(self) {
+            if run.running() || key != Key::Enter {
+                return;
+            }
+            if run.ok() {
+                self.run = None;
+                self.back();
+            } else {
+                let work = run.work.clone();
+                self.begin(work, 0);
+            }
+            return;
+        }
+        if self.move_row(key, 2) || key != Key::Enter {
+            return;
+        }
+        if self.nav.row == 0 {
+            return self.maint.folder.edit();
+        }
+        if !self.maint.folder.ok() {
+            let why = if self.maint.folder.pending() {
+                "Wait: the folder is still being checked"
+            } else {
+                "Choose a folder first"
+            };
+            self.outcome = Some((false, why.into()));
+            self.nav.row = 0;
+            return;
+        }
+        let file = self.backup_file();
+        let call = Call::Update(UpdateStep::Backup, vec!["--backup".into(), file.clone()]);
+        self.begin(Work::new(Kind::Backup { file }, vec![call]), 0);
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{Memory, check_folder, file_stem, free_path};
+    use super::{Memory, check_folder, file_stem, free_backup, free_path};
     use crate::tui::tests::app;
 
     #[test]
@@ -126,6 +324,37 @@ mod tests {
         assert_eq!(
             Memory::load(std::path::Path::new("/nonexistent")),
             Memory::default()
+        );
+    }
+
+    #[test]
+    fn a_stray_roles_file_moves_the_name_on() {
+        let dir = std::env::temp_dir().join(format!("ov-names-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let base = format!("{}/x", dir.display());
+        let taken = |p: &str| std::path::Path::new(p).exists();
+        assert_eq!(free_backup(&base, taken), format!("{base}.dump"));
+        std::fs::write(format!("{base}.dump.roles.sql"), "x").unwrap();
+        assert_eq!(free_backup(&base, taken), format!("{base}-2.dump"));
+        std::fs::write(format!("{base}-2.dump"), "x").unwrap();
+        assert_eq!(free_backup(&base, taken), format!("{base}-3.dump"));
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn a_remembered_folder_must_be_a_full_path_without_control_characters() {
+        for bad in [
+            "folder = \"backups\"\n",
+            "folder = \"\"\n",
+            "folder = \"/mnt/a\\nb\"\n",
+            "folder = \"/mnt/\\u001b[31m\"\n",
+            "folder = 7\n",
+        ] {
+            assert_eq!(Memory::parse(bad).folder, None, "{bad}");
+        }
+        assert_eq!(
+            Memory::parse("folder = \"/mnt/my backups\"\n").folder,
+            Some("/mnt/my backups".into())
         );
     }
 

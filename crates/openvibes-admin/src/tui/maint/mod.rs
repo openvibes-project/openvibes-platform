@@ -4,7 +4,10 @@
 //! stay behind the menu until their pages replace them.
 
 pub mod backup;
+#[cfg(test)]
+mod backup_tests;
 mod database;
+pub mod folder;
 
 use platform_host::Host;
 use ratatui::{
@@ -29,19 +32,47 @@ use super::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Page {
     Database,
+    Backup,
+    /// The folder browser, reached with Tab from a typed folder.
+    Folder,
 }
 
 impl Page {
     pub fn title(self) -> &'static str {
         match self {
             Page::Database => "Database",
+            Page::Backup => "Back up",
+            Page::Folder => "Choose a folder",
         }
     }
     /// What the keys do here, for Help.
     pub fn help(self) -> &'static str {
         match self {
             Page::Database => "A report: the clean-up runs by itself every night.",
+            Page::Backup => {
+                "Enter on Save in folder types or browses a folder; Back up now writes a new file there."
+            }
+            Page::Folder => "Enter opens a folder; Use this folder picks the one shown.",
         }
+    }
+}
+
+/// The Maintenance pages' own state.
+#[derive(Debug, Default)]
+pub struct Maint {
+    /// What the helper remembered; read when Back up, Update or Uninstall opens.
+    pub memory: backup::Memory,
+    /// Back up first (Update, Uninstall): off by default, then the last choice.
+    #[allow(dead_code, reason = "first read in Task 6 of the 2a plan")]
+    pub first: bool,
+    pub folder: folder::Folder,
+    pub browse: Option<folder::Browse>,
+}
+
+impl Maint {
+    /// A value is being typed on a page: its keys are the page's.
+    pub fn editing(&self) -> bool {
+        self.folder.editing()
     }
 }
 
@@ -52,9 +83,10 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 3] = [
+const ENTRIES: [(Entry, &str); 4] = [
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
+    (Entry::Page(Page::Backup), "Back up"),
     (Entry::Legacy(Tab::Configuration), "Settings files"),
 ];
 
@@ -63,6 +95,8 @@ fn value(entry: Entry) -> &'static str {
         Entry::Legacy(Tab::Setup) => "agent, assistant, ports",
         Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection",
         Entry::Page(Page::Database) => "schema, size, automatic clean-up",
+        Entry::Page(Page::Backup) => "save the database to a folder you choose",
+        Entry::Page(Page::Folder) => "",
     }
 }
 
@@ -96,7 +130,6 @@ pub fn info(name: &str, value: Vec<Span<'static>>) -> Line<'static> {
 
 /// A failed step (spec §2 "Errors"): what failed and why in red, what to
 /// do and what was left as it was, dim.
-#[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
 pub fn failure(theme: &Theme, why: &str, todo: &str) -> Vec<Line<'static>> {
     let mut out: Vec<Line<'static>> = wrap(why, 72, 2)
         .into_iter()
@@ -126,6 +159,8 @@ pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page) {
     match page {
         Page::Database => database::draw(frame, head, app),
+        Page::Backup => backup::draw(frame, head, app),
+        Page::Folder => folder::draw(frame, head, app),
     }
 }
 
@@ -147,11 +182,17 @@ impl<H: Host> App<H> {
             Page::Database => {
                 self.read(database::work());
             }
+            Page::Backup => self.load_backup_choice(),
+            Page::Folder => {}
         }
     }
 
     pub(super) fn maint_key(&mut self, page: Page, key: Key) {
-        // Database is a report: it has no keys of its own.
-        let _ = (page, key);
+        match page {
+            // A report: it has no keys of its own.
+            Page::Database => {}
+            Page::Backup => self.backup_key(key),
+            Page::Folder => self.browse_key(key),
+        }
     }
 }

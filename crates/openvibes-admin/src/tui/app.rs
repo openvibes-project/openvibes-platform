@@ -103,6 +103,13 @@ pub struct App<H: Host> {
     pub worker: Option<super::run::Worker>,
     /// Yes to "Quit when it is done?".
     pub quit_when_done: bool,
+    /// The Maintenance pages' state.
+    pub maint: super::maint::Maint,
+    /// `/` on a host: where the TUI reads `/etc/openvibes/backup.toml` and
+    /// `/run/openvibes-admin/job`; tests point it elsewhere.
+    pub root: std::path::PathBuf,
+    /// Checks the backup folder on another thread (`run` sets it; tests leave it out).
+    pub checker: Option<super::maint::folder::Checker>,
     pub(super) tick_count: usize,
 }
 
@@ -158,6 +165,9 @@ impl<H: Host> App<H> {
             asking: None,
             worker: None,
             quit_when_done: false,
+            maint: super::maint::Maint::default(),
+            root: std::path::PathBuf::from("/"),
+            checker: None,
             tick_count: 0,
         };
         app.refresh();
@@ -245,6 +255,11 @@ impl<H: Host> App<H> {
         if self.nav.screen == Screen::Legacy {
             return self.legacy_key(key);
         }
+        if self.maint.editing()
+            && let Screen::Maint(page) = self.nav.screen.clone()
+        {
+            return self.maint_key(page, key);
+        }
         if self.question.is_some() {
             return self.question_key(key);
         }
@@ -308,6 +323,7 @@ impl<H: Host> App<H> {
         }
         self.poll(now);
         self.poll_runs(now);
+        self.poll_folder(now);
     }
 
     /// Today's screens' own keys.

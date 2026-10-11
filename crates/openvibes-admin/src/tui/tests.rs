@@ -179,7 +179,7 @@ impl Host for FakeHost {
 }
 
 pub(super) fn app(refuse: bool) -> App<FakeHost> {
-    let app = App::new(FakeHost {
+    let mut app = App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
@@ -194,6 +194,9 @@ pub(super) fn app(refuse: bool) -> App<FakeHost> {
         started: RefCell::new(Vec::new()),
         services_error: RefCell::new(None),
     });
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    app.root = std::env::temp_dir().join(format!("ov-tui-root-{}-{n}", std::process::id()));
     // The health checks at start are not what the test is about.
     app.host.database_calls.borrow_mut().clear();
     app

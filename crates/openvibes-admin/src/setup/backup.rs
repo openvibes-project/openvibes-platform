@@ -79,6 +79,22 @@ pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
     if !ctx.path(&folder.display().to_string()).is_dir() {
         return Err(format!("{} is not a folder", folder.display()));
     }
+    // The root helper writes here: a symbolic link anywhere in the path
+    // could be swapped for another target after this check, so none is
+    // accepted (the real path is always available to the caller).
+    let real = fs::canonicalize(ctx.root)
+        .map_err(|error| format!("{}: {error}", ctx.root.display()))?
+        .join(folder.strip_prefix("/").unwrap_or(folder));
+    if fs::canonicalize(ctx.path(&folder.display().to_string()))
+        .ok()
+        .as_deref()
+        != Some(&real)
+    {
+        return Err(format!(
+            "{} goes through a symbolic link: give the folder's real path",
+            folder.display()
+        ));
+    }
     let roles_file = format!("{shown}.roles.sql");
     for file in [&shown, &roles_file] {
         if ctx.exists(file) {
@@ -108,7 +124,11 @@ pub fn dump<R: Runner>(ctx: &Ctx<R>, out: &Path) -> Result<String, String> {
         let mut dump =
             fs::File::open(ctx.path(dump_file)).map_err(|error| format!("{dump_file}: {error}"))?;
         let note = ctx.write_new(&shown, &mut dump)?;
-        ctx.write_new(&roles_file, &mut roles.as_bytes())?;
+        // No orphan: a dump without its roles is not what was promised.
+        if let Err(error) = ctx.write_new(&roles_file, &mut roles.as_bytes()) {
+            let _ = fs::remove_file(ctx.path(&shown));
+            return Err(error);
+        }
         // A convenience for the next time: a failure here never fails the backup.
         let kept = match remember(ctx, Some(folder), None) {
             Ok(()) => String::new(),
@@ -262,6 +282,38 @@ mod tests {
             .permissions()
             .mode();
         assert_eq!(mode & 0o777, 0o644, "the TUI reads it as the operator");
+    }
+
+    #[test]
+    fn a_folder_reached_through_a_symbolic_link_is_refused() {
+        let fake = Fake::new("backup-symlink");
+        postgres(&fake);
+        std::fs::create_dir_all(fake.root.join("srv/real")).unwrap();
+        std::os::unix::fs::symlink("real", fake.root.join("srv/link")).unwrap();
+        let plan = plan(&[Ingest]);
+        let error =
+            super::dump(&fake.ctx(&plan), std::path::Path::new("/srv/link/b.dump")).unwrap_err();
+        assert!(error.contains("symbolic link"), "{error}");
+        assert!(!fake.root.join("srv/real/b.dump").exists());
+        assert!(!fake.called(&[&PG[..], &["/usr/bin/pg_dump"]].concat()));
+        super::dump(&fake.ctx(&plan), std::path::Path::new("/srv/real/b.dump")).unwrap();
+    }
+
+    #[test]
+    fn a_failed_roles_file_takes_the_dump_with_it() {
+        let fake = Fake::new("backup-orphan");
+        // The roles file appears while the dump runs: its write then fails.
+        fake.effect(&[&PG[..], &["/usr/bin/pg_dumpall"]].concat(), |root| {
+            std::fs::write(root.join("home/alice/b.dump.roles.sql"), "someone else's").unwrap();
+        });
+        postgres(&fake);
+        std::fs::create_dir_all(fake.root.join("home/alice")).unwrap();
+        let plan = plan(&[Ingest]);
+        let error =
+            super::dump(&fake.ctx(&plan), std::path::Path::new("/home/alice/b.dump")).unwrap_err();
+        assert!(error.contains("roles.sql"), "{error}");
+        assert!(!fake.root.join("home/alice/b.dump").exists(), "no orphan");
+        assert_eq!(fake.text("/home/alice/b.dump.roles.sql"), "someone else's");
     }
 
     #[test]

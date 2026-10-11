@@ -125,6 +125,18 @@ pub fn run() -> ExitCode {
         });
         receive
     }));
+    // The backup folder's probe file and df can hang on a dead mount: they
+    // run on their own thread, and the page gives up waiting.
+    app.checker = Some(Box::new(|text| {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let host = Native {
+                runner: SystemRunner,
+            };
+            let _ = send.send(maint::backup::check_folder(&host, &text));
+        });
+        receive
+    }));
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();

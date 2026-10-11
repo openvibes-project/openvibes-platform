@@ -20,7 +20,6 @@ pub enum Call {
     #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Status,
     Repair(Step),
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     Update(UpdateStep, Vec<String>),
     #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Remove(RemoveStep, Vec<String>),
@@ -35,15 +34,20 @@ pub enum Call {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Kind {
     #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
-    Update { to: String },
-    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
-    Backup { file: String },
+    Update {
+        to: String,
+    },
+    Backup {
+        file: String,
+    },
     #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Check,
     #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Fix,
     #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
-    Uninstall { everything: bool },
+    Uninstall {
+        everything: bool,
+    },
     /// The Database page's reads.
     Report,
 }

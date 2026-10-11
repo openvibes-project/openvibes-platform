@@ -17,7 +17,6 @@ use super::{
 impl<H: Host> App<H> {
     /// Starts `work` at `from`: the password first, unless sudo needs none
     /// (root). One action at a time; reads may run beside it.
-    #[allow(dead_code, reason = "first used in Task 5 of the 2a plan")]
     pub(super) fn begin(&mut self, work: Work, from: usize) {
         if !work.kind.background() && self.run.as_ref().is_some_and(Run::running) {
             self.outcome = Some((false, "Wait: other work is still running".into()));
