@@ -203,3 +203,4 @@
     Appliance screens approved ("LGTM finally it looks like I want it"). Scroll hints stay inside the gap (rule 15).
 44. Maintenance › Shell (user): second to last, before Uninstall; standard question, then the login password; a plain shell with one line "type exit to go back to the menu", logged; exit returns to Maintenance. On normal installs it opens the user's shell. Approved in context (SSH login → Log out).
 45. Spec approved by the user (LGTM, #271 marked ready).
+46. Uninstall and PostgreSQL (user, 2026-10-12): PostgreSQL is removed (with its data folder) when Setup installed it and nothing else uses it; it stays when it was there before OpenVIBES or holds another database, and on keep data. The uninstall screen states what will happen instead of "PostgreSQL stays installed; it may serve other programs".

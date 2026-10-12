@@ -1,4 +1,4 @@
-//! Home, the interim Maintenance menu, and Help (spec §3, §2).
+//! Home and Help (spec §3, §2).
 
 use platform_host::Host;
 use ratatui::{
@@ -8,8 +8,9 @@ use ratatui::{
 };
 
 use super::{
-    app::{App, Key, Tab},
+    app::{App, Key},
     nav::Screen,
+    status::wrap,
     ui::{
         bar::Bar,
         frame,
@@ -20,16 +21,8 @@ use super::{
 
 pub const HOME: [(&str, &str); 3] = [
     ("Status", "health, services, logs"),
-    (
-        "Maintenance",
-        "setup, settings files, database (until reworked)",
-    ),
+    ("Maintenance", "updates, repair, database, backup"),
     ("Quit", ""),
-];
-pub const MAINTENANCE: [(&str, &str); 3] = [
-    ("Setup", "repair, update, components, ports, uninstall"),
-    ("Settings files", "edit each service's configuration"),
-    ("Database", "status, migrate, maintenance"),
 ];
 
 fn rows(items: &[(&str, &str)]) -> Vec<Row> {
@@ -44,7 +37,12 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     };
     let bar = app.bar(Bar::home(&[("Enter", enter)]));
     let area = frame::draw(frame, &app.theme, head, None, &bar);
-    let mut lines = vec![app.status_line()];
+    let mut status = app.status_line();
+    if let Some(note) = app.work_note() {
+        status.spans.push(Span::raw("   "));
+        status.spans.extend(note);
+    }
+    let mut lines = vec![status];
     let mut scroll = app.nav.scroll.get();
     lines.extend(list::lines(
         &app.theme,
@@ -54,22 +52,6 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         area.height.saturating_sub(1),
         15,
     ));
-    app.nav.scroll.set(scroll);
-    frame.render_widget(Paragraph::new(lines), area);
-}
-
-pub fn draw_maintenance<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
-    let bar = app.bar(Bar::keys(&[("Enter", "Open")]));
-    let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
-    let mut scroll = app.nav.scroll.get();
-    let lines = list::lines(
-        &app.theme,
-        &rows(&MAINTENANCE),
-        app.nav.row,
-        &mut scroll,
-        area.height,
-        18,
-    );
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
@@ -93,7 +75,7 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         }
         Line::from(spans)
     };
-    let lines = vec![
+    let mut lines = vec![
         Line::raw(""),
         pair(t.up_down(), "move · lists scroll", "Esc", "back, or cancel"),
         Line::raw(""),
@@ -103,11 +85,14 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         Line::raw(""),
         pair(t.left_right(), "Yes or No in a question", "", ""),
         Line::raw(""),
-        Line::styled(
-            format!("    Here ({}): {}", name(from), here(from)),
-            t.dim(),
-        ),
     ];
+    // Wrapped, not cut at the frame's edge.
+    let here = format!("Here ({}): {}", name(from), here(from));
+    lines.extend(
+        wrap(&here, 72, 3)
+            .into_iter()
+            .map(|l| Line::styled(format!("    {l}"), t.dim())),
+    );
     frame.render_widget(Paragraph::new(lines), area);
 }
 
@@ -116,6 +101,7 @@ fn name(screen: &Screen) -> String {
     match screen {
         Screen::Home => "Home".into(),
         Screen::Maintenance => "Maintenance".into(),
+        Screen::Maint(page) => page.title().into(),
         Screen::Status => "Status".into(),
         Screen::Service(unit) => format!("Service: {}", unit.label()),
         Screen::Log(unit) => format!("Log: {}", unit.label()),
@@ -127,6 +113,7 @@ fn name(screen: &Screen) -> String {
 fn here(from: &Screen) -> &'static str {
     match from {
         Screen::Home | Screen::Maintenance => "Enter opens the highlighted entry.",
+        Screen::Maint(page) => page.help(),
         Screen::Status => "Enter opens a service, or does what a problem's line says.",
         Screen::Service(_) => "Enter does the highlighted action; Full log shows every line.",
         Screen::Log(_) => "⭡⭣ scroll the log.",
@@ -156,15 +143,6 @@ impl<H: Host> App<H> {
                 1 => self.nav.go(Screen::Maintenance),
                 _ => self.quit_or_ask(),
             }
-        }
-    }
-
-    pub(super) fn maintenance_key(&mut self, key: Key) {
-        if self.move_row(key, MAINTENANCE.len()) {
-            return;
-        }
-        if key == Key::Enter {
-            self.open([Tab::Setup, Tab::Configuration, Tab::Database][self.nav.row]);
         }
     }
 }

@@ -26,6 +26,8 @@ pub(super) struct FakeHost {
     pub(super) privileged_calls: RefCell<Vec<(String, String)>>,
     /// Database commands run.
     pub(super) database_calls: RefCell<Vec<Database>>,
+    /// Disk reads made.
+    pub(super) disk_calls: Cell<usize>,
     /// Ingest's ActiveEnterTimestamp; a restart changes it unless held.
     pub(super) since: RefCell<String>,
     /// A restart that leaves the old process running (its stamp unchanged).
@@ -146,11 +148,11 @@ impl Host for FakeHost {
         self.database_calls.borrow_mut().push(command);
         match command {
             _ if self.refuse => Err(HostError::NotOperator),
-            Database::Status => Ok("schema version 25\npartitions 2026-06-30..2026-10-05\n\
-                                    partition count 98\ndatabase size 42 MiB\n"
-                .into()),
-            Database::Migrate => Ok("schema version 25\n".into()),
-            Database::Maintenance => Ok("created 1 partitions, dropped 1\n".into()),
+            Database::Status => Ok(format!(
+                "schema version {}\npartitions 2026-06-30..2026-10-05\n\
+                                    partition count 98\ndatabase size 42 MiB\n",
+                platform_store::SCHEMA_VERSION
+            )),
             Database::RulesList => Ok("baseline v1 keys 1 expires 2028-09-27T00:00:00Z\n".into()),
             Database::FeedsStatus => {
                 Ok("osv-rocky 10 advisories checked 2026-09-28 changed never \
@@ -166,8 +168,10 @@ impl Host for FakeHost {
         )]
     }
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
+        self.disk_calls.set(self.disk_calls.get() + 1);
         Ok(vec![DiskUse {
             path: "/var/lib/pgsql".into(),
+            size: "100G".into(),
             used_percent: 40,
             available: "20G".into(),
         }])
@@ -175,7 +179,7 @@ impl Host for FakeHost {
 }
 
 pub(super) fn app(refuse: bool) -> App<FakeHost> {
-    let app = App::new(FakeHost {
+    let mut app = App::new(FakeHost {
         actions: RefCell::new(Vec::new()),
         writes: RefCell::new(Vec::new()),
         hand_edit: RefCell::new(None),
@@ -183,12 +187,16 @@ pub(super) fn app(refuse: bool) -> App<FakeHost> {
         disabled: RefCell::new(Vec::new()),
         privileged_calls: RefCell::new(Vec::new()),
         database_calls: RefCell::new(Vec::new()),
+        disk_calls: Cell::new(0),
         since: RefCell::new("Sat 2026-10-10 18:40:00 CEST".into()),
         hold_restart: Cell::new(false),
         stopped: RefCell::new(Vec::new()),
         started: RefCell::new(Vec::new()),
         services_error: RefCell::new(None),
     });
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    app.root = std::env::temp_dir().join(format!("ov-tui-root-{}-{n}", std::process::id()));
     // The health checks at start are not what the test is about.
     app.host.database_calls.borrow_mut().clear();
     app

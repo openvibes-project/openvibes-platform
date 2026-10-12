@@ -397,6 +397,7 @@ fi
 %endif
 
 %files -n openvibes-ingest
+%dir %{_licensedir}/openvibes-ingest
 %license %{_licensedir}/openvibes-ingest/LICENSE
 %license %{_licensedir}/openvibes-ingest/NOTICE
 %{_bindir}/openvibes-ingest
@@ -415,6 +416,7 @@ fi
 %dir %attr(0700, openvibes-ingest, openvibes-ingest) %{_sharedstatedir}/openvibes-ingest
 
 %files -n openvibes-distribution
+%dir %{_licensedir}/openvibes-distribution
 %license %{_licensedir}/openvibes-distribution/LICENSE
 %license %{_licensedir}/openvibes-distribution/NOTICE
 %{_bindir}/openvibes-distribution
@@ -428,6 +430,7 @@ fi
 %config(noreplace) %attr(0640, root, openvibes-distribution) %{_sysconfdir}/openvibes/distribution.toml
 
 %files -n openvibes-signer
+%dir %{_licensedir}/openvibes-signer
 %license %{_licensedir}/openvibes-signer/LICENSE
 %license %{_licensedir}/openvibes-signer/NOTICE
 %{_bindir}/openvibes-signer
@@ -439,6 +442,7 @@ fi
 %dir %attr(2750, openvibes-signer, openvibes-operators) %{_sharedstatedir}/openvibes-signer
 
 %files -n openvibes-fetch
+%dir %{_licensedir}/openvibes-fetch
 %license %{_licensedir}/openvibes-fetch/LICENSE
 %license %{_licensedir}/openvibes-fetch/NOTICE
 %{_bindir}/openvibes-fetch
@@ -450,6 +454,7 @@ fi
 %config(noreplace) %attr(0640, root, openvibes-fetch) %{_sysconfdir}/openvibes/fetch.toml
 
 %files -n openvibes-vulns
+%dir %{_licensedir}/openvibes-vulns
 %license %{_licensedir}/openvibes-vulns/LICENSE
 %license %{_licensedir}/openvibes-vulns/NOTICE
 %{_bindir}/openvibes-vulns
@@ -461,6 +466,7 @@ fi
 %config(noreplace) %attr(0640, root, openvibes-vulns) %{_sysconfdir}/openvibes/vulns.toml
 
 %files -n openvibes-admin
+%dir %{_licensedir}/openvibes-admin
 %license %{_licensedir}/openvibes-admin/LICENSE
 %license %{_licensedir}/openvibes-admin/NOTICE
 %{_bindir}/openvibes-admin
@@ -478,6 +484,7 @@ fi
 
 %if %{with llm}
 %files -n openvibes-llm
+%dir %{_licensedir}/openvibes-llm
 %license %{_licensedir}/openvibes-llm/LICENSE
 %license %{_licensedir}/openvibes-llm/NOTICE
 %license %{_licensedir}/openvibes-llm/LICENSE.llama.cpp
@@ -503,6 +510,7 @@ fi
 %ghost %attr(0600, root, root) %{_sharedstatedir}/openvibes-llm/tune.lock
 
 %files -n openvibes-llm-model -f model-files.list
+%dir %{_licensedir}/openvibes-llm-model
 %license %{_licensedir}/openvibes-llm-model/LICENSE
 %license %{_licensedir}/openvibes-llm-model/NOTICE
 %ghost %config(noreplace) %attr(0644, root, root) %{_sharedstatedir}/openvibes-llm/model.conf

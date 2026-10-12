@@ -364,20 +364,27 @@ fn stdin_text() -> Result<String, String> {
     String::from_utf8(bytes).map_err(|_| "not UTF-8".to_owned())
 }
 
+/// The journal units of `unit`: the socket and the timer say little;
+/// their services say why.
+fn journal_units(unit: Unit) -> Vec<&'static str> {
+    match unit {
+        Unit::Llm => vec![
+            unit.name(),
+            "openvibes-llm.service",
+            "openvibes-llm-proxy.service",
+        ],
+        Unit::Maintenance => vec![unit.name(), "openvibes-maintenance.service"],
+        _ => vec![unit.name()],
+    }
+}
+
 // One of the two places the platform starts a process (clippy.toml): a fixed
 // journalctl argument vector for an allow-listed unit.
 #[allow(clippy::disallowed_types)]
 fn logs(unit: Unit, lines: u16) -> ExitCode {
     let mut journalctl = std::process::Command::new("/usr/bin/journalctl");
-    journalctl.args(["-u", unit.name()]);
-    if unit == Unit::Llm {
-        // The socket says little; the model server and its proxy say why.
-        journalctl.args([
-            "-u",
-            "openvibes-llm.service",
-            "-u",
-            "openvibes-llm-proxy.service",
-        ]);
+    for name in journal_units(unit) {
+        journalctl.args(["-u", name]);
     }
     let status = journalctl
         .args(["-n", &lines.to_string()])
@@ -390,5 +397,26 @@ fn logs(unit: Unit, lines: u16) -> ExitCode {
             eprintln!("openvibes-admin helper: journalctl: {error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+#[cfg(test)]
+mod journal_tests {
+    use platform_host::Unit;
+
+    #[test]
+    fn the_timer_and_socket_logs_include_their_services() {
+        assert_eq!(
+            super::journal_units(Unit::Maintenance),
+            [
+                "openvibes-maintenance.timer",
+                "openvibes-maintenance.service"
+            ]
+        );
+        assert_eq!(
+            super::journal_units(Unit::Ingest),
+            ["openvibes-ingest.service"]
+        );
+        assert_eq!(super::journal_units(Unit::Llm).len(), 3);
     }
 }

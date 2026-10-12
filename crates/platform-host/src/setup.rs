@@ -155,15 +155,18 @@ pub enum RemoveStep {
     Firewall,
     Packages,
     Purge,
+    /// Last: the administration tool itself and its repository.
+    Admin,
 }
 
 impl RemoveStep {
-    pub const ALL: [RemoveStep; 5] = [
+    pub const ALL: [RemoveStep; 6] = [
         RemoveStep::Backup,
         RemoveStep::Stop,
         RemoveStep::Firewall,
         RemoveStep::Packages,
         RemoveStep::Purge,
+        RemoveStep::Admin,
     ];
 
     #[must_use]
@@ -174,6 +177,7 @@ impl RemoveStep {
             RemoveStep::Firewall => "firewall",
             RemoveStep::Packages => "packages",
             RemoveStep::Purge => "purge",
+            RemoveStep::Admin => "admin",
         }
     }
 
@@ -185,6 +189,7 @@ impl RemoveStep {
             RemoveStep::Firewall => "Close firewall ports",
             RemoveStep::Packages => "Remove packages",
             RemoveStep::Purge => "Remove all data",
+            RemoveStep::Admin => "Remove the administration tool",
         }
     }
 

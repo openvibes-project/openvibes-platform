@@ -584,6 +584,12 @@ fn update_and_remove_verbs_carry_their_arguments_but_journal_only_the_step() {
 }
 
 #[test]
+fn the_tool_itself_is_removed_last() {
+    assert_eq!(RemoveStep::ALL.last(), Some(&RemoveStep::Admin));
+    assert_eq!(RemoveStep::parse("admin"), Some(RemoveStep::Admin));
+}
+
+#[test]
 fn packages_lists_installed_versions_and_newer_ones() {
     let host = fake(vec![
         (
@@ -650,7 +656,7 @@ fn the_journal_records_the_state_a_step_ended_in() {
 }
 
 #[test]
-fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
+fn database_commands_run_the_cli_as_its_account() {
     let admin = [
         "/usr/bin/sudo",
         "-n",
@@ -658,30 +664,16 @@ fn database_commands_run_the_cli_as_its_account_and_changes_are_journalled() {
         "openvibes-admin",
         "/usr/bin/openvibes-admin",
     ];
-    let host = fake(vec![
-        (
-            [&admin[..], &["status"]].concat(),
-            out(0, "schema version 25\n", ""),
-        ),
-        (
-            [&admin[..], &["migrate"]].concat(),
-            out(1, "", "openvibes-admin: database unavailable\n"),
-        ),
-        (vec!["/usr/bin/logger"], out(0, "", "")),
-    ]);
+    let host = fake(vec![(
+        [&admin[..], &["status"]].concat(),
+        out(0, "schema version 25\n", ""),
+    )]);
     assert_eq!(
         host.database(Database::Status).unwrap(),
         "schema version 25\n"
     );
-    assert_eq!(
-        host.database(Database::Migrate),
-        Err(HostError::Failed(
-            "openvibes-admin: database unavailable".into()
-        ))
-    );
     let calls = host.runner.calls.borrow();
-    assert_eq!(calls.len(), 3, "status is not journalled: {calls:?}");
-    assert!(calls[2][3].ends_with(" migrate failed"), "{:?}", calls[2]);
+    assert_eq!(calls.len(), 1, "{calls:?}");
     assert_eq!(
         Database::FeedsStatus.args(),
         ["feeds", "status"],
@@ -701,7 +693,7 @@ fn a_database_command_refused_by_sudo_names_the_group() {
 
 #[test]
 fn disk_use_parses_df() {
-    let df = "File           Use% Avail\n/var/lib/pgsql  45%   20G\n/var/lib/openvibes-ingest 91% 1.2G\n";
+    let df = "File           Size Use% Avail\n/var/lib/pgsql  100G 45%   20G\n/var/lib/openvibes-ingest 12G 91% 1.2G\n";
     let host = fake(vec![(vec!["/usr/bin/df"], out(0, df, ""))]);
     let paths = [
         "/var/lib/pgsql".to_owned(),
@@ -712,11 +704,13 @@ fn disk_use_parses_df() {
         [
             DiskUse {
                 path: "/var/lib/pgsql".into(),
+                size: "100G".into(),
                 used_percent: 45,
                 available: "20G".into()
             },
             DiskUse {
                 path: "/var/lib/openvibes-ingest".into(),
+                size: "12G".into(),
                 used_percent: 91,
                 available: "1.2G".into()
             }
@@ -726,7 +720,7 @@ fn disk_use_parses_df() {
         host.runner.calls.borrow()[0],
         [
             "/usr/bin/df",
-            "--output=file,pcent,avail",
+            "--output=file,size,pcent,avail",
             "-h",
             "/var/lib/pgsql",
             "/var/lib/openvibes-ingest"
@@ -862,4 +856,15 @@ fn passwd_home_takes_only_the_named_users_absolute_home() {
     assert_eq!(platform_host::passwd_home(passwd, "carol"), None);
     // A prefix of a name is not the name.
     assert_eq!(platform_host::passwd_home(passwd, "ali"), None);
+}
+
+#[test]
+fn free_space_is_dfs_avail_column() {
+    let host = fake(vec![(vec!["/usr/bin/df"], out(0, " Avail\n  1.8T\n", ""))]);
+    assert_eq!(host.free_space("/mnt/nas"), Some("1.8T".into()));
+    let calls = host.runner.calls.borrow();
+    assert_eq!(
+        calls[0],
+        ["/usr/bin/df", "--output=avail", "-h", "--", "/mnt/nas"]
+    );
 }

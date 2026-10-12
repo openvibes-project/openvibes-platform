@@ -7,8 +7,8 @@ mod assistant;
 mod auto_agent;
 mod auto_migrate;
 mod auto_rules;
-mod backup;
-mod base;
+pub(crate) mod backup;
+pub(crate) mod base;
 #[cfg(test)]
 mod command_tests;
 mod console;
@@ -508,6 +508,7 @@ pub fn uninstall_all(
         components: plan.components.clone(),
         backup,
         confirm: if everything { confirm } else { None },
+        remember_choice: false,
     };
     if let Err(error) = args.check() {
         eprintln!("openvibes-admin: {error}");

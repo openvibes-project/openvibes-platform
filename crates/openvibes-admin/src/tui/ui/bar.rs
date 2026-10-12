@@ -8,7 +8,7 @@ use ratatui::text::{Line, Span};
 use super::theme::Theme;
 
 pub const HEIGHT: u16 = 3;
-const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+pub const SPINNER: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Bar {
@@ -27,9 +27,22 @@ pub enum Bar {
     /// A value being typed: what it is, how it shows (masked for a
     /// password), what Enter does.
     Typing {
+        /// Said first, in red ("Wrong password, 2 tries left.").
+        note: Option<String>,
         label: String,
         shown: String,
         done: String,
+    },
+    /// A value typed in place on the screen: what is typed, a hint, its
+    /// keys; Esc Cancel at the right (spec §2 "Typing a value").
+    Edit {
+        label: String,
+        what: String,
+        keys: Vec<(String, String)>,
+    },
+    /// Keys alone: no Move and nothing at the right (a finished run).
+    Only {
+        keys: Vec<(String, String)>,
     },
     Busy {
         text: String,
@@ -54,6 +67,24 @@ impl Bar {
             keys: owned(keys),
             nav: true,
             home: true,
+        }
+    }
+    /// Keys without ⭡⭣ Move (nothing to move between); Esc Back and ? stay.
+    pub fn act(keys: &[(&str, &str)]) -> Bar {
+        Bar::Keys {
+            keys: owned(keys),
+            nav: false,
+            home: false,
+        }
+    }
+    pub fn only(keys: &[(&str, &str)]) -> Bar {
+        Bar::Only { keys: owned(keys) }
+    }
+    pub fn edit(label: &str, what: &str, keys: &[(&str, &str)]) -> Bar {
+        Bar::Edit {
+            label: label.to_owned(),
+            what: what.to_owned(),
+            keys: owned(keys),
         }
     }
 
@@ -171,14 +202,40 @@ impl Bar {
                 ];
                 (left, right)
             }
-            Bar::Typing { label, shown, done } => {
-                let mut left = vec![
-                    Span::styled(format!("{label}: "), theme.bold()),
-                    Span::raw(format!("{shown}█  ")),
-                ];
+            Bar::Typing {
+                note,
+                label,
+                shown,
+                done,
+            } => {
+                let mut left = Vec::new();
+                if let Some(note) = note {
+                    left.push(Span::styled(format!("{note} "), theme.red()));
+                }
+                left.push(Span::styled(format!("{label}: "), theme.bold()));
+                left.push(Span::raw(format!("{shown}█  ")));
                 left.extend(key("Enter", done));
                 let right = vec![Span::styled(" Esc ", theme.key()), Span::raw(" Cancel")];
                 (left, right)
+            }
+            Bar::Edit { label, what, keys } => {
+                let mut left = vec![Span::styled(format!("{label}:"), theme.bold())];
+                if !what.is_empty() {
+                    left.push(Span::raw(format!(" {what}")));
+                }
+                left.push(Span::raw(" "));
+                for (k, l) in keys {
+                    left.extend(key(k, l));
+                }
+                let right = vec![Span::styled(" Esc ", theme.key()), Span::raw(" Cancel")];
+                (left, right)
+            }
+            Bar::Only { keys } => {
+                let mut left = Vec::new();
+                for (k, l) in keys {
+                    left.extend(key(k, l));
+                }
+                (left, Vec::new())
             }
             Bar::Busy { text, tick } => (
                 vec![
@@ -326,5 +383,52 @@ mod tests {
         let t = text(&bar.lines(&plain(), 80));
         assert_eq!(t[1].chars().count(), 79, "{:?}", t[1]);
         assert!(t[1].ends_with('│') && t[1].contains('…'), "{:?}", t[1]);
+    }
+
+    #[test]
+    fn a_value_typed_in_place_names_it_and_offers_cancel() {
+        let bar = Bar::edit(
+            "Folder",
+            "type, or",
+            &[("Tab", "to browse"), ("Enter", "Done")],
+        );
+        let t = text(&bar.lines(&plain(), 80));
+        assert!(
+            t[1].starts_with(" │ Folder: type, or  Tab  to browse   Enter  Done"),
+            "{:?}",
+            t[1]
+        );
+        assert!(t[1].ends_with(" Esc  Cancel │"), "{:?}", t[1]);
+        assert!(!t[1].contains("Move"), "no Move while typing: {:?}", t[1]);
+    }
+
+    #[test]
+    fn keys_alone_have_no_move_and_nothing_at_the_right() {
+        let t = text(&Bar::only(&[("Enter", "Open 0.2.9")]).lines(&plain(), 80));
+        assert!(t[1].starts_with(" │  Enter  Open 0.2.9"), "{:?}", t[1]);
+        assert!(
+            !t[1].contains("Esc") && !t[1].contains("Move"),
+            "{:?}",
+            t[1]
+        );
+        let t = text(&Bar::act(&[("Enter", "Try again")]).lines(&plain(), 80));
+        assert!(t[1].starts_with(" │  Enter  Try again"), "{:?}", t[1]);
+        assert!(t[1].ends_with("  Esc  Back    ?  │"), "{:?}", t[1]);
+    }
+
+    #[test]
+    fn a_wrong_password_is_said_before_the_prompt() {
+        let bar = Bar::Typing {
+            note: Some("Wrong password, 2 tries left.".into()),
+            label: "Your password (sudo)".into(),
+            shown: "**".into(),
+            done: "Update".into(),
+        };
+        let t = text(&bar.lines(&plain(), 80));
+        assert!(
+            t[1].contains("Wrong password, 2 tries left. Your password (sudo): **█"),
+            "{:?}",
+            t[1]
+        );
     }
 }

@@ -33,6 +33,8 @@ pub enum Key {
     Enter,
     Esc,
     Backspace,
+    /// Tab: browse for a folder (a typed folder only).
+    Tab,
     /// Ctrl+U: empty the field being edited.
     ClearLine,
 }
@@ -42,7 +44,6 @@ pub enum Key {
 pub enum Tab {
     Setup,
     Configuration,
-    Database,
 }
 
 /// The TUI's state: where the operator is (`nav`), what the host reports
@@ -71,9 +72,15 @@ pub struct App<H: Host> {
     /// A newer `openvibes-admin` version, shown on the location line.
     pub update: Option<String>,
     versions_loaded: bool,
+    /// Every package's version change (Update › What's new); `None` until looked up.
+    pub packages: Option<Result<Vec<PackageUpdate>, String>>,
+    /// The kind of job the helper left half done (`update`), from `/run`.
+    pub half_done: Option<String>,
+    /// Enter after an update: start the new version of the menu.
+    pub reopen: bool,
     /// The update notice, looked up on another thread (`run`): dnf may
     /// take long offline. Without it, `tick` asks the host itself (tests).
-    pub updates: Option<Receiver<Option<String>>>,
+    pub updates: Option<Receiver<Result<Vec<PackageUpdate>, HostError>>>,
     /// The health checks, collected on another thread (`run`): the probes
     /// take a while. Without it, `new` collects them itself (tests).
     pub health: Option<Receiver<Vec<Check>>>,
@@ -91,6 +98,24 @@ pub struct App<H: Host> {
     pub pending: Option<Pending>,
     /// The last action's result line, until the next key.
     pub outcome: Option<(bool, String)>,
+    /// The current or last action (Update, Back up, Fix, Uninstall): Home
+    /// shows it; Quit waits for it.
+    pub run: Option<super::run::Run>,
+    /// The current or last read (Repair's check, the Database report).
+    pub load: Option<super::run::Run>,
+    /// The password for a run, typed in the bar.
+    pub asking: Option<super::run::Asking>,
+    /// Runs work on another thread (`run` sets it; tests leave it out).
+    pub worker: Option<super::run::Worker>,
+    /// Yes to "Quit when it is done?".
+    pub quit_when_done: bool,
+    /// The Maintenance pages' state.
+    pub maint: super::maint::Maint,
+    /// `/` on a host: where the TUI reads `/etc/openvibes/backup.toml` and
+    /// `/run/openvibes-admin/job`; tests point it elsewhere.
+    pub root: std::path::PathBuf,
+    /// Checks the backup folder on another thread (`run` sets it; tests leave it out).
+    pub checker: Option<super::maint::folder::Checker>,
     pub(super) tick_count: usize,
 }
 
@@ -133,6 +158,9 @@ impl<H: Host> App<H> {
             hostname,
             update: None,
             versions_loaded: false,
+            packages: None,
+            half_done: None,
+            reopen: false,
             updates: None,
             health: None,
             log_room: Cell::new(0),
@@ -141,10 +169,19 @@ impl<H: Host> App<H> {
             prompt: None,
             pending: None,
             outcome: None,
+            run: None,
+            load: None,
+            asking: None,
+            worker: None,
+            quit_when_done: false,
+            maint: super::maint::Maint::default(),
+            root: std::path::PathBuf::from("/"),
+            checker: None,
             tick_count: 0,
         };
         app.refresh();
         app.load_logs();
+        app.files_changed();
         app
     }
 
@@ -152,6 +189,7 @@ impl<H: Host> App<H> {
     /// only on selection, `R`, and after an action: each read goes through
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
+        self.files_changed();
         // The highlighted Status item stays highlighted if it is still there.
         let held = (self.nav.screen == Screen::Status)
             .then(|| self.status_items().get(self.nav.row).cloned())
@@ -215,7 +253,6 @@ impl<H: Host> App<H> {
                 self.tab = Tab::Configuration;
                 self.load_config();
             }
-            Tab::Database => self.open_database(),
         }
     }
 
@@ -223,8 +260,23 @@ impl<H: Host> App<H> {
     /// Esc goes back, q quits from Home, the rest is the screen's.
     pub fn key(&mut self, key: Key) {
         self.outcome = None;
+        // The tool removed itself: Enter (or q) quits, nothing else is left.
+        if self.gone() {
+            if matches!(key, Key::Enter | Key::Char('q')) {
+                self.quit = true;
+            }
+            return;
+        }
+        if self.asking.is_some() {
+            return self.asking_key(key);
+        }
         if self.nav.screen == Screen::Legacy {
             return self.legacy_key(key);
+        }
+        if self.maint.editing()
+            && let Screen::Maint(page) = self.nav.screen.clone()
+        {
+            return self.maint_key(page, key);
         }
         if self.question.is_some() {
             return self.question_key(key);
@@ -250,7 +302,8 @@ impl<H: Host> App<H> {
             Key::Char('q') if self.nav.screen == Screen::Home => self.quit_or_ask(),
             _ => match self.nav.screen.clone() {
                 Screen::Home => self.home_key(key),
-                Screen::Maintenance => self.maintenance_key(key),
+                Screen::Maintenance => self.menu_key(key),
+                Screen::Maint(page) => self.maint_key(page, key),
                 Screen::Status => self.status_key(key),
                 Screen::Service(unit) => self.service_key(unit, key),
                 Screen::Log(_) => self.log_key(key),
@@ -273,20 +326,29 @@ impl<H: Host> App<H> {
             }
         }
         if !self.versions_loaded {
-            match self.updates.as_ref().map(Receiver::try_recv) {
-                Some(Err(TryRecvError::Empty)) => {}
-                Some(found) => {
-                    self.update = found.ok().flatten();
-                    self.versions_loaded = true;
-                    self.updates = None;
+            let found = match self.updates.as_ref().map(Receiver::try_recv) {
+                Some(Err(TryRecvError::Empty)) => None,
+                Some(Ok(found)) => Some(found),
+                Some(Err(TryRecvError::Disconnected)) => {
+                    Some(Err(HostError::Failed("the update check stopped".into())))
                 }
-                None => {
-                    self.update = newer_admin(self.host.packages());
-                    self.versions_loaded = true;
-                }
+                None => Some(self.host.packages()),
+            };
+            if let Some(found) = found {
+                self.update = found.as_ref().ok().and_then(|p| newer_admin(p));
+                self.packages = Some(found.map_err(|e| e.to_string()));
+                self.versions_loaded = true;
+                self.updates = None;
             }
         }
         self.poll(now);
+        self.poll_runs(now);
+        self.poll_folder(now);
+    }
+
+    /// Reads again what the helper writes for the TUI (the half-done mark).
+    pub(super) fn files_changed(&mut self) {
+        self.half_done = super::maint::update_half_done(&self.root);
     }
 
     /// Today's screens' own keys.
@@ -294,7 +356,6 @@ impl<H: Host> App<H> {
         match self.tab {
             Tab::Setup => self.setup_key(key),
             Tab::Configuration => self.config_key(key),
-            Tab::Database => self.database_key(key),
         }
     }
 }
@@ -310,10 +371,13 @@ fn hostname_from(paths: &[&str]) -> String {
 }
 
 /// The newer `openvibes-admin` version (without its release), if any.
-pub fn newer_admin(packages: Result<Vec<PackageUpdate>, HostError>) -> Option<String> {
-    packages.ok()?.into_iter().find_map(|p| {
-        let v = p.available.filter(|_| p.name == "openvibes-admin")?;
-        Some(v.split('-').next().unwrap_or(&v).to_owned())
+pub fn newer_admin(packages: &[PackageUpdate]) -> Option<String> {
+    packages.iter().find_map(|p| {
+        let v = p
+            .available
+            .as_ref()
+            .filter(|_| p.name == "openvibes-admin")?;
+        Some(v.split('-').next().unwrap_or(v).to_owned())
     })
 }
 

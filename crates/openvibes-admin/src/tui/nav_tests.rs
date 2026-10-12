@@ -2,14 +2,13 @@
 
 use std::sync::mpsc;
 
-use platform_host::{Database, Unit};
+use platform_host::{PackageUpdate, Unit};
 
 use super::{
     app::{App, Key, Tab},
     database::Check,
     nav::Screen,
-    setup::Phase,
-    setup_tests::set_up,
+    script_host::set_up,
     status::Item,
     tests::{FakeHost, app, screen},
 };
@@ -78,7 +77,7 @@ fn maintenance_reaches_todays_screens_and_esc_comes_back() {
     app.key(Key::Down);
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Maintenance);
-    app.key(Key::Down);
+    app.nav.row = super::maint::row_of("Settings files");
     app.key(Key::Enter);
     assert_eq!(
         (app.nav.screen.clone(), app.tab),
@@ -103,7 +102,7 @@ fn esc_while_typing_in_a_legacy_screen_cancels_the_field_not_the_screen() {
 
 #[test]
 fn a_fresh_host_opens_the_setup_form_and_esc_does_not_leave_it() {
-    let mut app = super::setup_tests::fresh_app();
+    let mut app = super::script_host::fresh_app();
     assert_eq!(
         (app.nav.screen.clone(), app.tab),
         (Screen::Legacy, Tab::Setup)
@@ -126,36 +125,12 @@ fn q_types_into_a_configuration_value() {
 }
 
 #[test]
-fn q_types_into_a_set_up_hosts_setup_password_and_quits_nothing_there() {
-    let mut app = set_up(vec![Ok("failed\tport 443 is taken\n".into())]);
-    app.open(Tab::Setup);
-    app.key(Key::Char('r'));
-    assert!(matches!(app.setup.phase, Phase::Password(_)));
-    type_text(&mut app, "aqb");
-    assert_eq!(app.setup.prompt.typed(), "aqb");
-    app.key(Key::Enter);
-    app.setup_tick();
-    assert_eq!(app.setup.phase, Phase::Stopped(0));
-    app.key(Key::Char('q'));
-    assert!(!app.quit, "q quits from Home only, not from a stopped run");
-    let text = super::setup_tests::screen(&app);
-    let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
-    assert!(
-        footer.contains("Esc back") && !footer.contains('q'),
-        "a stopped run on a set-up host: {footer}"
-    );
-}
-
-#[test]
-fn esc_answers_the_database_question_no() {
-    let mut app = app(false);
-    app.open(Tab::Database);
-    app.key(Key::Char('m'));
-    assert!(app.database.confirm.is_some());
-    app.key(Key::Esc);
-    assert_eq!(app.nav.screen, Screen::Legacy);
-    assert!(app.database.confirm.is_none());
-    assert_eq!(*app.host.database_calls.borrow(), [Database::Status]);
+fn q_types_into_the_password_in_the_bar_and_quits_nothing() {
+    let mut app = set_up(vec![]);
+    app.open_page(super::maint::Page::Repair);
+    super::script_host::type_text(&mut app, "aqb");
+    assert_eq!(app.asking.as_ref().unwrap().prompt.typed(), "aqb");
+    assert!(!app.quit);
 }
 
 #[test]
@@ -318,7 +293,7 @@ fn esc_with_unsaved_settings_asks_and_yes_goes_back_to_maintenance() {
     let mut app = app(false);
     app.key(Key::Down);
     app.key(Key::Enter);
-    app.key(Key::Down);
+    app.nav.row = super::maint::row_of("Settings files");
     app.key(Key::Enter);
     assert_eq!(app.tab, Tab::Configuration);
     editable_field(&mut app);
@@ -343,7 +318,12 @@ fn the_update_notice_arrives_from_the_background_without_blocking() {
     app.updates = Some(updates);
     app.tick(std::time::Instant::now());
     assert_eq!(app.update, None, "nothing yet: tick does not wait");
-    send.send(Some("0.3.0".to_owned())).unwrap();
+    send.send(Ok(vec![PackageUpdate {
+        name: "openvibes-admin".into(),
+        installed: "0.2.8-1.fc44".into(),
+        available: Some("0.3.0-1.fc44".into()),
+    }]))
+    .unwrap();
     app.tick(std::time::Instant::now());
     assert_eq!(app.update.as_deref(), Some("0.3.0"));
 }
@@ -394,7 +374,7 @@ fn every_screen_has_exactly_one_empty_line_under_its_title() {
 
 #[test]
 fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
-    for tab in [Tab::Setup, Tab::Configuration, Tab::Database] {
+    for tab in [Tab::Setup, Tab::Configuration] {
         let mut app = app(false);
         app.open(tab);
         let text = screen(&app, 80, 24);
@@ -406,7 +386,7 @@ fn no_legacy_screen_advertises_tab_and_q_only_on_the_fresh_install_form() {
         );
         assert!(footer.contains("Esc back"), "{tab:?}: {footer}");
     }
-    let fresh = super::setup_tests::fresh_app();
-    let text = super::setup_tests::screen(&fresh);
+    let fresh = super::script_host::fresh_app();
+    let text = super::script_host::screen(&fresh);
     assert!(text.contains("q quit") && !text.contains("Tab"), "{text}");
 }

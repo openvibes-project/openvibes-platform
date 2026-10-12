@@ -29,14 +29,16 @@ pub struct UpdateArgs {
     /// Upgrade from this folder of package files (test builds).
     #[arg(long)]
     pub repo_dir: Option<PathBuf>,
+    /// Record in backup.toml whether this run backs up first (the TUI's
+    /// Back up first, remembered for next time).
+    #[arg(long)]
+    pub remember_choice: bool,
 }
 
 impl UpdateArgs {
     pub fn check(&self) -> Result<(), String> {
         for path in [&self.backup, &self.repo_dir].into_iter().flatten() {
-            if !path.is_absolute() {
-                return Err(format!("{} is not an absolute path", path.display()));
-            }
+            backup::check_path(path)?;
         }
         Ok(())
     }
@@ -247,10 +249,16 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: UpdateStep, args: &UpdateArgs) -> Step
         resume_agent(ctx);
     }
     let result = match step {
-        UpdateStep::Backup => match &args.backup {
-            None => Ok(StepState::Skipped("no backup chosen".into())),
-            Some(path) => backup::dump(ctx, path).map(StepState::Done),
-        },
+        UpdateStep::Backup => {
+            if args.remember_choice {
+                // ponytail: best effort; the choice only presets a checkbox.
+                let _ = backup::remember(ctx, None, Some(args.backup.is_some()));
+            }
+            match &args.backup {
+                None => Ok(StepState::Skipped("no backup chosen".into())),
+                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+            }
+        }
         UpdateStep::Stop => stop(ctx),
         UpdateStep::Upgrade => upgrade(ctx, args),
         UpdateStep::Migrate => migrate(ctx),
@@ -296,6 +304,7 @@ mod tests {
         let args = UpdateArgs {
             backup: Some("/home/alice/b.dump".into()),
             repo_dir: None,
+            remember_choice: false,
         };
         let state = run(&fake.ctx(&plan), UpdateStep::Backup, &args);
         assert!(matches!(state, StepState::Failed(_)), "{state:?}");
@@ -420,6 +429,7 @@ mod tests {
         let args = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/new".into()),
+            remember_choice: false,
         };
         assert!(matches!(
             run(&fake.ctx(&plan), UpdateStep::Upgrade, &args),
@@ -640,6 +650,7 @@ mod tests {
         let args = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/new".into()),
+            remember_choice: false,
         };
         let state = run(&fake.ctx(&plan), UpdateStep::Upgrade, &args);
         assert!(matches!(state, StepState::Done(_)), "{state:?}");
@@ -650,6 +661,7 @@ mod tests {
         let missing = UpdateArgs {
             backup: None,
             repo_dir: Some("/srv/typo".into()),
+            remember_choice: false,
         };
         assert!(matches!(
             run(&fake.ctx(&plan), UpdateStep::Upgrade, &missing),
@@ -677,11 +689,77 @@ mod tests {
         ));
         let refused = crate::setup::system::job_guard(&fake.root, "setup").unwrap_err();
         assert!(refused.contains("update is half done"), "{refused}");
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(fake.root.join("run/openvibes-admin/job"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o644,
+            "the TUI reads the mark as the operator"
+        );
+        let dir_mode = std::fs::metadata(fake.root.join("run/openvibes-admin"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(dir_mode & 0o777, 0o755, "a umask cannot hide the mark");
+        assert!(
+            refused.contains("Maintenance › Update OpenVIBES"),
+            "{refused}"
+        );
         assert!(crate::setup::system::job_guard(&fake.root, "update").is_ok());
         assert!(matches!(
             run(&ctx, UpdateStep::Ready, &UpdateArgs::default()),
             StepState::Done(_)
         ));
+        assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
+    }
+
+    /// Review of Task 6: after a failed Upgrade the TUI runs Start, then
+    /// Ready; the agent is running again and the half-done mark is gone.
+    #[test]
+    fn a_rescue_of_start_then_ready_leaves_nothing_stopped_or_half_done() {
+        let fake = Fake::new("update-rescue-ready");
+        fake.answer(
+            &[
+                "/usr/bin/systemctl",
+                "is-active",
+                "--quiet",
+                "openvibes-agent.service",
+            ],
+            0,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+        fake.answer(&["/usr/bin/systemctl", "stop"], 0, "");
+        fake.answer(&["/usr/bin/systemctl", "start"], 0, "");
+        fake.answer(&["/usr/bin/curl"], 0, "");
+        let plan = plan(&[Ingest, Agent]);
+        let ctx = fake.ctx(&plan);
+        let args = UpdateArgs::default();
+        assert!(matches!(
+            run(&ctx, UpdateStep::Stop, &args),
+            StepState::Done(_)
+        ));
+        let typo = UpdateArgs {
+            repo_dir: Some("/srv/typo".into()),
+            ..UpdateArgs::default()
+        };
+        assert!(matches!(
+            run(&ctx, UpdateStep::Upgrade, &typo),
+            StepState::Failed(_)
+        ));
+        assert!(matches!(
+            run(&ctx, UpdateStep::Start, &args),
+            StepState::Done(_)
+        ));
+        assert!(!fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+        assert!(matches!(
+            run(&ctx, UpdateStep::Ready, &args),
+            StepState::Done(_)
+        ));
+        assert!(fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
         assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
     }
 

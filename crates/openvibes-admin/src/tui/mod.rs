@@ -8,18 +8,20 @@ mod configuration;
 mod database;
 #[cfg(test)]
 mod database_tests;
-mod database_view;
 pub mod form;
 mod home;
 mod jobs;
-mod maintain;
-#[cfg(test)]
-mod maintain_tests;
-mod maintain_view;
+mod maint;
 mod nav;
 #[cfg(test)]
 mod nav_tests;
 mod password;
+mod run;
+mod run_app;
+#[cfg(test)]
+mod run_tests;
+#[cfg(test)]
+mod script_host;
 mod service;
 #[cfg(test)]
 mod service_tests;
@@ -55,12 +57,11 @@ pub fn render<H: Host>(frame: &mut Frame, app: &App<H>) {
     nav::render(frame, app);
 }
 
-/// Today's Setup, Configuration and Database screens, under the location line.
+/// Today's Setup and Configuration screens, under the location line.
 pub(super) fn legacy_view<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
     match app.tab {
         Tab::Setup => setup_view::draw(frame, area, app),
         Tab::Configuration => config_view::draw(frame, area, app),
-        Tab::Database => database_view::draw_database(frame, area, app),
     }
 }
 
@@ -91,12 +92,13 @@ pub fn run() -> ExitCode {
     // no network never holds the first screen.
     let (send, updates) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let packages = Native {
-            runner: SystemRunner,
-        }
-        .packages();
         // The TUI may have quit meanwhile; nobody to tell then.
-        let _ = send.send(app::newer_admin(packages));
+        let _ = send.send(
+            Native {
+                runner: SystemRunner,
+            }
+            .packages(),
+        );
     });
     app.updates = Some(updates);
     // The health probes run on another thread too (certificates, feeds,
@@ -108,6 +110,30 @@ pub fn run() -> ExitCode {
         }));
     });
     app.health = Some(health);
+    // Helper steps run on their own thread with their own host: the
+    // screen keeps drawing while dnf or a backup takes minutes.
+    app.worker = Some(Box::new(|work, from, secret| {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let host = Native {
+                runner: SystemRunner,
+            };
+            run::work_through(&host, &work, from, &secret, |p| send.send(p).is_ok());
+        });
+        receive
+    }));
+    // The backup folder's probe file and df can hang on a dead mount: they
+    // run on their own thread, and the page gives up waiting.
+    app.checker = Some(Box::new(|text| {
+        let (send, receive) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let host = Native {
+                runner: SystemRunner,
+            };
+            let _ = send.send(maint::backup::check_folder(&host, &text));
+        });
+        receive
+    }));
     let mut terminal = ratatui::init();
     let _restore = Restore;
     let mut refreshed = Instant::now();
@@ -128,7 +154,7 @@ pub fn run() -> ExitCode {
                 }
                 let key = match key.code {
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                        app.quit = true;
+                        app.interrupt();
                         continue;
                     }
                     // Ctrl+U empties a field; other control chords typed
@@ -145,6 +171,7 @@ pub fn run() -> ExitCode {
                     KeyCode::Enter => Key::Enter,
                     KeyCode::Esc => Key::Esc,
                     KeyCode::Backspace => Key::Backspace,
+                    KeyCode::Tab => Key::Tab,
                     _ => continue,
                 };
                 pressed = Some(key);
@@ -167,6 +194,23 @@ pub fn run() -> ExitCode {
             app.refresh();
             refreshed = Instant::now();
         }
+        if app.reopen {
+            ratatui::restore();
+            let error = reopen();
+            // Only reached when exec failed.
+            terminal = ratatui::init();
+            app.reopen = false;
+            app.outcome = Some((false, format!("could not start the new version: {error}")));
+        }
     }
     ExitCode::SUCCESS
+}
+
+/// Replaces this process with the updated menu (`exec`); returns only on failure.
+// One of the places the platform starts a process (clippy.toml): a fixed
+// path, no arguments, no shell; the environment (and sudo's) is kept.
+#[allow(clippy::disallowed_types)]
+fn reopen() -> std::io::Error {
+    use std::os::unix::process::CommandExt;
+    std::process::Command::new("/usr/bin/openvibes-admin").exec()
 }

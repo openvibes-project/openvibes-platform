@@ -1,6 +1,6 @@
 //! Removing components (keep data) and Remove everything (admin TUI spec
-//! §6.5). `openvibes-admin` itself is never removed here: the TUI is
-//! running; the last line says how to remove it.
+//! §6.5). `openvibes-admin` itself is removed by the last step, `admin`:
+//! the running helper keeps its file open until it exits.
 
 use std::{fs, path::PathBuf};
 
@@ -14,6 +14,7 @@ use platform_host::{
 
 use super::{
     Ctx, backup,
+    base::{PG_MARK, PG_PACKAGES, PG_RECORD},
     plan::{Component, check_name},
     run::ports_for,
 };
@@ -29,6 +30,10 @@ pub struct RemoveArgs {
     /// This host's name, typed to confirm Remove everything.
     #[arg(long)]
     pub confirm: Option<String>,
+    /// Record in backup.toml whether this run backs up first (the TUI's
+    /// Back up first, remembered for next time).
+    #[arg(long)]
+    pub remember_choice: bool,
 }
 
 impl RemoveArgs {
@@ -36,10 +41,8 @@ impl RemoveArgs {
         if self.components.is_empty() {
             return Err("--components is required".into());
         }
-        if let Some(path) = &self.backup
-            && !path.is_absolute()
-        {
-            return Err(format!("{} is not an absolute path", path.display()));
+        if let Some(path) = &self.backup {
+            backup::check_path(path)?;
         }
         if let Some(name) = &self.confirm {
             check_name(name)?;
@@ -76,7 +79,7 @@ const ACCOUNTS: [&str; 10] = [
     "openvibes-admin",
 ];
 
-fn installed<R: Runner>(ctx: &Ctx<R>, package: &str) -> bool {
+pub(super) fn installed<R: Runner>(ctx: &Ctx<R>, package: &str) -> bool {
     ctx.succeeds(Rpm, &["-q", "--quiet", package])
 }
 
@@ -150,13 +153,74 @@ fn remove_packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSta
         argv.extend(&packages);
         ctx.ok(Dnf, &argv)?;
     }
-    let mut text = format!("removed: {}", packages.join(" "));
-    if args.components.contains(&Component::Ingest) {
-        text.push_str(
-            "; last, remove the administration tool itself: sudo dnf remove openvibes-admin",
-        );
+    Ok(StepState::Done(format!("removed: {}", packages.join(" "))))
+}
+
+fn remove_file_or_dir(path: &std::path::Path) -> Result<(), String> {
+    match if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    } {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("{}: {error}", path.display()))
+        }
+        _ => Ok(()),
     }
-    Ok(StepState::Done(text))
+}
+
+/// PostgreSQL goes only when Setup installed it (the record), the package
+/// is still installed and the cluster holds nothing but the system
+/// databases and `openvibes`. Everything that can refuse runs before the
+/// mark and before anything stops; after the mark, each part checks whether
+/// it is still to do, so a retry finishes. `/var/lib/pgsql` goes only under
+/// the mark, never on a record alone. The record goes last.
+fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+    let Ok(record) = ctx.read(PG_RECORD) else {
+        return Ok("Setup has no record of installing PostgreSQL; it stays".into());
+    };
+    if !ctx.exists(PG_MARK) {
+        if !installed(ctx, "postgresql-server") {
+            remove_file_or_dir(&ctx.path(PG_RECORD))?;
+            return Ok(
+                "the record of Setup installing PostgreSQL was stale, so PostgreSQL is not removed"
+                    .into(),
+            );
+        }
+        let others = ctx.as_postgres(&[
+            "/usr/bin/psql",
+            "-Atqc",
+            "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')",
+        ])?;
+        let count = others.lines().filter(|l| !l.trim().is_empty()).count();
+        if count > 0 {
+            return Ok(format!(
+                "PostgreSQL stays: it holds {count} other database{}",
+                if count == 1 { "" } else { "s" }
+            ));
+        }
+        let mut test = vec!["-e", "--test"];
+        test.extend(packages_to_remove(ctx, &record));
+        ctx.ok(Rpm, &test)?;
+        ctx.put(PG_MARK, b"removing\n", None, 0o644)?;
+    }
+    if installed(ctx, "postgresql-server") {
+        ctx.ok(Systemctl, &["disable", "--now", "postgresql"])?;
+        let mut argv = vec!["-e"];
+        argv.extend(packages_to_remove(ctx, &record));
+        ctx.ok(Rpm, &argv)?;
+    }
+    remove_file_or_dir(&ctx.path("/var/lib/pgsql"))?;
+    remove_file_or_dir(&ctx.path(PG_MARK))?;
+    remove_file_or_dir(&ctx.path(PG_RECORD))?;
+    Ok("PostgreSQL removed: Setup installed it and nothing else uses it".into())
+}
+
+fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a str> {
+    record
+        .lines()
+        .filter(|p| PG_PACKAGES.contains(p) && installed(ctx, p))
+        .collect()
 }
 
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
@@ -177,26 +241,40 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     {
         return Err("Remove everything applies to the whole platform: list every component".into());
     }
-    let roles = ctx.as_postgres(&[
-        "/usr/bin/psql",
-        "-Atqc",
-        "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
-    ])?;
-    ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+    // Once PostgreSQL's own removal has begun the cluster may be gone: the
+    // database work was done before the mark was written.
+    let roles = if ctx.exists(PG_MARK) {
+        String::new()
+    } else {
+        let roles = ctx.as_postgres(&[
+            "/usr/bin/psql",
+            "-Atqc",
+            "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
+        ])?;
+        ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+        roles
+    };
     for role in roles.lines().map(str::trim).filter(|r| {
         r.starts_with("openvibes-") && r.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
     }) {
         ctx.as_postgres(&["/usr/bin/dropuser", "--if-exists", role])?;
     }
-    // #82: the admin package is removed last, by hand (this tool is part
-    // of it), so its configuration file stays for rpm: deleting it here
-    // made `dnf remove` warn, and a reinstall in between left it missing.
+    // #82: the admin package is removed last (this tool is part of it), so
+    // its configuration file stays for rpm: deleting it here made `dnf
+    // remove` warn, and a reinstall in between left it missing. The last
+    // step removes what rpm kept.
     let kept = if installed(ctx, "openvibes-admin") {
         ctx.stdout(Rpm, &["-qc", "openvibes-admin"])?
     } else {
         String::new()
     };
-    let kept: Vec<&str> = kept.lines().map(str::trim).collect();
+    let mut kept: Vec<&str> = kept.lines().map(str::trim).collect();
+    // The plan stays until the last step: every step loads it, so a retry
+    // after a failure (or the `admin` step) still finds it.
+    kept.push("/etc/openvibes/setup.toml");
+    // So does the PostgreSQL record, until PostgreSQL is gone.
+    kept.push(PG_RECORD);
+    kept.push(PG_MARK);
     let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
     for dir in DATA {
         let path = ctx.path(dir);
@@ -245,6 +323,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
             let _ = ctx.ok(Groupdel, &[group]);
         }
     }
+    let postgresql = postgresql(ctx)?;
     // A reinstalled signer makes a new site key (lead, #2086).
     let site_key = if site_key {
         "; the site rule key is gone: after a reinstall, agents need the new key's lines from `agent command`"
@@ -252,7 +331,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
         ""
     };
     Ok(StepState::Done(format!(
-        "database, roles, configuration, data and service accounts removed; PostgreSQL itself stays installed{site_key}"
+        "database, roles, configuration, data and service accounts removed; {postgresql}{site_key}"
     )))
 }
 
@@ -271,17 +350,29 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         return StepState::Failed(error);
     }
     let result = match step {
-        RemoveStep::Backup => match &args.backup {
-            None => Ok(StepState::Skipped("no backup chosen".into())),
-            Some(path) => backup::dump(ctx, path).map(StepState::Done),
-        },
+        RemoveStep::Backup => {
+            if args.remember_choice {
+                // ponytail: best effort; the choice only presets a checkbox.
+                let _ = backup::remember(ctx, None, Some(args.backup.is_some()));
+            }
+            match &args.backup {
+                None => Ok(StepState::Skipped("no backup chosen".into())),
+                Some(path) => backup::dump(ctx, path).map(StepState::Done),
+            }
+        }
         RemoveStep::Stop => ctx.job_begin("uninstall").and_then(|()| stop(ctx, args)),
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
-        RemoveStep::Purge => purge(ctx, args).inspect(|_| ctx.job_end()),
+        RemoveStep::Purge => purge(ctx, args),
+        RemoveStep::Admin => {
+            admin::remove_admin(ctx, args).inspect(|state| admin::finish(ctx, state))
+        }
     };
     result.unwrap_or_else(StepState::Failed)
 }
+
+#[path = "remove_admin.rs"]
+mod admin;
 
 #[cfg(test)]
 #[path = "remove_tests.rs"]

@@ -38,22 +38,21 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance (interim, until it is
-reworked) holds today's Setup, Settings files (Configuration) and Database
-screens: they keep their own keys, and `Esc` leaves them only when nothing
-is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Components and ports (today's Setup screen, until Optional parts and Ports replace it), Database, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6) and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
 Maintenance and Help) shows the block logo ("OPEN" in white, "VIBES" in the
 brand teal `#36b9e0`), a location line (host, where you are, the version
 and any available update; a long host name is cut with `…` first), and a
-key bar; today's screens (Setup, Settings files, Database) show only the
+key bar; today's screens (Components and ports, Settings files) show only the
 location line and have no Help. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
 Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
 
-**Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
+**Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; the line "Here (page): …" says what the keys do on that page and wraps to the frame; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
+
+**Work in the background**: helper steps (Update, Back up, Repair, Uninstall) run on their own thread, so the screen keeps drawing. The password is asked in the bar ("Your password (sudo)"; root is not asked), handed to that thread and dropped when the work ends. A wrong password is said in the bar with the tries left; after three, nothing more runs. Home's status line shows the running work, then its result. `q` (or Ctrl+C) while work runs asks "Quit when it is done?": Yes quits once it has finished, and a second Ctrl+C quits at once. Tests: `src/tui/run_tests.rs`; each Maintenance page has its own in `src/tui/maint/*_tests.rs` (`update_tests.rs`, `repair_tests.rs`, `backup_tests.rs`, `uninstall_tests.rs`), and the step list they share is drawn by `ui/steps.rs`.
 
 **Status** (from Home): "Needs attention" first, then "Services" (installed
 units only: name, state, ready, `since 18:40` or `since 2026-10-10`), then
@@ -111,7 +110,7 @@ runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
 footer says keys wait, and the package step says it can take a few minutes.
 The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
-from that step, and every other action (`c`, `u`, `m`, `x`, below) still
+from that step, and every other action (`c`, `m`, `x`, below) still
 works from there; `Esc` returns to them without retrying (#73). Three
 wrong passwords close the prompt. The finished screen
 of an install is a few labelled rows (install walkthrough, 2026-10-08):
@@ -123,10 +122,7 @@ without sudo after logging in again. A detail in a wording the screen does
 not know is shown as it is. No agent install line: hosts are added from the
 console; `agent command` prints one for scripts. Repair, update and remove
 runs end on every step's outcome. On a set-up
-host, Maintenance › Setup offers `c` check every step (`helper setup-status`),
-`r` repair (every step with `--repair`: never a new CA), `u` update (the
-installed OpenVIBES packages with any newer version, a backup file, then
-the update job), `m` change components (the form filled from `setup.toml`;
+host, Maintenance › Components and ports (today's Setup screen, until 2b) offers `m` change components (the form filled from `setup.toml`;
 added components are installed, unticked ones removed keeping data, ports
 included), `p` change ports (the same form, on the port rows, #69; it says when a
 default port is held by another program ("443 is in use"; "443 is in use by
@@ -140,15 +136,11 @@ plan moves away from are recorded in `/etc/openvibes/setup-moved-from` by
 CLI's Repair does; only ports the Firewall step itself opened are closed, as
 recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
 never Setup's; installs from before the record close nothing), and one another
-program listens on, per `ss`, stays open with who uses it) and
-`x` uninstall (keep data, or remove everything with a backup and the
-typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+program listens on, per `ss`, stays open with who uses it).
 The root key file defaults to the first free name in the home directory
 (`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
 the old key; and `m` after a first install that stopped before the CA step
 offers the install again, not a Repair (#87).
-Only rows on screen take the focus: with keep data, one `j` goes from the
-choice to `[ Uninstall ]` (#74).
 As root no password is asked (#82): the TUI started with `sudo openvibes-admin` runs
 its helper directly, keeping `SUDO_USER` so Setup still names the person who
 started it (operators group, root key owner); otherwise the password prompt
@@ -190,15 +182,13 @@ file keeps its owner, group and mode, and the old one is kept as
 `NAME.toml.bak`), then offers to restart the service. Each save is written
 to the journal (`config-write SERVICE ok|failed`, never the content).
 
-**Database**: the output of `status` (schema version, agents, partitions
-oldest..newest, partition count, database size). A schema that is not
-current, a newer one, or an unreachable database shows the CLI's error
-instead. `m` migrate and `n` run maintenance now (as the daily timer does:
-90-day retention) each ask `y/n`; the result is shown under the box. The
-screen runs the CLI as `openvibes-admin` (`sudo -n -u openvibes-admin
-openvibes-admin …`, the operators' sudoers entry), so each command keeps its
-peer login, schema check and `audit_log` row; migrate and maintenance are
-also journalled. `R` reloads.
+**Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("N · up to date", or "migration pending"), the database size with its disk's size and use ("3.1 GB on a 120 GB disk (41% used)"), the data kept (90 days, set in the console), and the automatic nightly clean-up with the date of its last run ("ran today") and what it removed. The timer's time of day is not shown: no host call reads it. These are read on another thread (the disk too) from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
+
+**Update OpenVIBES** (Maintenance): the installed version and whether a newer one is available (from the package check made at start), then Back up first, Update now and What's new. Back up first is off on a first update; afterwards it is ticked or not as you chose last time (`--remember-choice`), and the help line says why. Ticked, it shows Save in folder (as in Back up; no folder until you choose one) and the backup goes there with a new name (`openvibes-<installed version>-<date>-<HHMM>.dump`: named for the version whose data it holds, which a restore needs). Update now is offered when any installed OpenVIBES package has a newer version (the version shown is the admin's, else the installed one). It asks "Update to X?" (X is the admin's new version; when only other packages are newer, "Install updates (agent 0.2.9)?", and the result reads "Updated: agent 0.2.9") and runs the six update steps on the worker (Back up, Stop services, Install packages, Update the database, Start services, Ready), each shown with ✓, the spinner or ·; a skipped backup shows as –. A stop at Stop services or Install packages starts the services again (`update-step start`, then `ready`, which starts the agent and clears the half-done mark) and says so, without claiming nothing changed (a dnf transaction may be part applied). Finishing a half-done update runs no such rescue: the services stay stopped and Try again goes on. A stop at the database step keeps them stopped and says why; Try again goes on. A failed step shows a red ✗, what failed, what to do and what was left as it was. Enter after a successful update starts the new version of the menu (`exec` of `/usr/bin/openvibes-admin`). What's new lists every package's version change and the release notes' address. A half-done update (the helper's mark `/run/openvibes-admin/job`, now 0644 so the TUI can read it) is a problem on Status ("Enter Finish it"), and the page then offers Finish the update without a backup, even when nothing newer exists. A half-done uninstall is a Status problem too ("An uninstall stopped half way"); Enter opens Uninstall to finish it.
+
+**Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
+
+**Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread gives up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem
@@ -647,21 +637,56 @@ refused while one works):
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
   `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
-  `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays;
-  `openvibes-admin` itself is removed last with `sudo dnf remove
-  openvibes-admin`, so its packaged `admin.toml` is left for rpm (#82).
+  `/var/lib/openvibes-*`, `/var/backups/openvibes` and the service accounts.
+  PostgreSQL goes too, but only when Setup installed it (Setup's Postgres
+  step records that in `/etc/openvibes/setup-installed-postgresql`, as
+  `setup-opened-ports` does for ports) and the cluster holds no database
+  besides `postgres`, `template0`, `template1` and `openvibes`: then the
+  service is disabled, `postgresql-server` (and `postgresql` and
+  `postgresql-private-libs`, whichever Setup installed too: the record lists each
+  one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
+  other databases, or without the record, it stays and the step says why;
+  `--keep-data` never removes it. Once the checks pass a mark
+  (`/etc/openvibes/postgresql-removing`) is written; a retry sees it, skips
+  every database query and finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
+  mark, then the record). A record without the `postgresql-server` package
+  and without the mark is stale: it is deleted and no data folder is touched.
+  The last step, `admin`, removes `openvibes-admin`
+  itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
+  including `admin.toml.rpmsave` and `setup.toml`, which every earlier step
+  needs and so stays until then; `/etc/sudoers.d/openvibes-operators*`) and
+  `/var/lib/openvibes-admin`, and with `--everything` systemd's
+  `stamp-openvibes-*` timer files in `/var/lib/systemd/timers`. It removes the package last (`rpm -e`, which
+  refuses when something depends on it), after every other fallible
+  operation, so a failure leaves the tool to retry with. Once no other `openvibes-*` package is left, it also
+  removes `/etc/yum.repos.d/openvibes*.repo`, `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes`,
+  dnf's `openvibes-*` caches and the OpenVIBES packages key from rpm's
+  database (`gpg-pubkey-<id>-*`, only that key: the id is `7786da36` on RPM 4, the whole fingerprint on RPM 6). The RPM 6 removal prints a deprecation warning
+  (`use rpmkeys --delete`) but removes the key (checked on Fedora 44, RPM 6.0.2). With `--keep-data` it
+  keeps `/etc/openvibes` and `/var/lib/openvibes-*` and says so. Every step
+  is safe to repeat; a failed step leaves the job marked so Try again
+  finishes it. Nothing is left for the user to remove by hand; the root key
+  file and backups in the user's folders are theirs and stay. The program's own
+  files are gone after this step, so the TUI closes after it.
 - Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
   --no-role-passwords` to `PATH.roles.sql`, both new files (never over an
   existing one), 0600, owned by the sudo user, checked with `pg_restore
-  --list` first.
+  --list` first. The helper refuses a PATH that is relative, contains
+  `..`, or whose folder does not exist. The folder of every backup written
+  is remembered in `/etc/openvibes/backup.toml` (0644: the folder and
+  `first`), and `--remember-choice` (Update and Uninstall from the TUI) also
+  records whether the run backed up first; Remove everything deletes it with
+  `/etc/openvibes`. The TUI names backups
+  `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3` when taken) and checks
+  a typed folder with a probe file and `df` (no unsafe code).
 
 Root helper verbs for the TUI, run with the user's own sudo rights and
 password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 `setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
 (`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP [--repair]`
 (`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
-[--backup PATH] [--repo-dir DIR]`, `helper remove-step STEP --components
-LIST [--backup PATH] [--confirm HOSTNAME]`, `helper unit-enable UNIT`,
+[--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP (backup, stop, firewall, packages, purge, admin) --components
+LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
 `helper unit-disable UNIT`. Arguments are checked before the root check.
 
 ## CA commands
@@ -783,3 +808,5 @@ Setup's Agent step writes) and always exits 0. Test: `setup/auto_agent.rs`
 unit tests.
 
 `assistant-tune` waits (up to 300 s, before it writes the new tuning) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.
+
+**Uninstall** (Maintenance): Keep the data (the default) or Remove everything, chosen with Space or Enter (Enter then moves to the name row, or to Uninstall); Back up first as in Update (Space or Enter toggles it); and Uninstall, which alone asks, so stray Enters never start anything ("Remove OpenVIBES?" or "Remove OpenVIBES and all its data?", Yes highlighted as in every question). Remove everything first needs this host's name (from `setup.toml`) typed exactly; a tick shows when it matches, and Uninstall on a wrong name moves to that row. The page says what happens to PostgreSQL (approved.md 46): Keep the data leaves it installed; Remove everything takes it too only when Setup recorded installing it (`/etc/openvibes/setup-installed-postgresql`, read by the TUI) and nothing else uses it. The six remove steps run on the worker; the last one removes the administration tool itself, so once it is done Enter (or `q`) quits and nothing else is offered or sent to the helper. If the run ends while you are on another screen, the page with the result is shown. A failed step shows what failed and Try again goes on from it. The result says what stayed: the data for a reinstall (Keep) or nothing but, maybe, PostgreSQL (Everything), the backup file, and the old root key file, which are the user's. Tests: `src/tui/maint/uninstall_tests.rs`.

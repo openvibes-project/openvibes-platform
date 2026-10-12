@@ -63,16 +63,12 @@ pub struct PackageUpdate {
     pub available: Option<String>,
 }
 
-/// A database command the Database and Health screens run: the admin CLI
+/// A database read the Database page and Status run: the admin CLI
 /// as `openvibes-admin`, through the operators' sudoers entry (spec §3).
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Database {
     /// `status`: schema, partitions, size.
     Status,
-    /// `migrate`.
-    Migrate,
-    /// `maintenance`, as the daily timer runs it.
-    Maintenance,
     /// `feeds status`.
     FeedsStatus,
     /// `rules list`.
@@ -85,8 +81,6 @@ impl Database {
     pub fn args(self) -> &'static [&'static str] {
         match self {
             Database::Status => &["status"],
-            Database::Migrate => &["migrate"],
-            Database::Maintenance => &["maintenance"],
             Database::FeedsStatus => &["feeds", "status"],
             Database::RulesList => &["rules", "list"],
         }
@@ -120,6 +114,8 @@ pub struct SignerFiles {
 pub struct DiskUse {
     /// The directory, e.g. `/var/lib/pgsql`.
     pub path: String,
+    /// The file system's size, as `df -h` writes it.
+    pub size: String,
     /// Percent of the file system used.
     pub used_percent: u8,
     /// Space left, as `df -h` writes it.
@@ -212,6 +208,12 @@ pub trait Host {
     /// Disk use of `/var/lib/pgsql` and each `/var/lib/openvibes-*`.
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         Ok(Vec::new())
+    }
+    /// Space left on the file system holding `path`, as `df -h` writes it;
+    /// `None` when unknown (the backup folder's check).
+    fn free_space(&self, path: &str) -> Option<String> {
+        let _ = path;
+        None
     }
     /// `ss -ltnpH` lines for TCP `port` on any address; empty when nobody
     /// listens there (Setup's port check).

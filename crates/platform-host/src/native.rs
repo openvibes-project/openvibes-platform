@@ -333,13 +333,7 @@ impl<R: Runner> Host for Native<R> {
     }
 
     fn database(&self, command: Database) -> Result<String, HostError> {
-        let result = self.as_admin(command.args());
-        // The CLI writes its own audit_log row; the journal gets the change.
-        if matches!(command, Database::Migrate | Database::Maintenance) {
-            let outcome = if result.is_ok() { "ok" } else { "failed" };
-            self.log(&format!("{} {outcome}", command.args().join(" ")));
-        }
-        result.map(|out| out.stdout)
+        self.as_admin(command.args()).map(|out| out.stdout)
     }
 
     fn certificates(&self) -> Vec<(&'static str, Result<String, HostError>)> {
@@ -392,6 +386,12 @@ impl<R: Runner> Host for Native<R> {
         Ok(out.stdout)
     }
 
+    fn free_space(&self, path: &str) -> Option<String> {
+        let out = self.run(Df, &["--output=avail", "-h", "--", path]).ok()?;
+        (out.status == 0)
+            .then(|| out.stdout.lines().nth(1).map(|l| l.trim().to_owned()))
+            .flatten()
+    }
     fn disk(&self) -> Result<Vec<DiskUse>, HostError> {
         let mut paths = vec!["/var/lib/pgsql".to_owned()];
         if let Ok(entries) = std::fs::read_dir("/var/lib") {
@@ -415,7 +415,7 @@ impl<R: Runner> Native<R> {
         if paths.is_empty() {
             return Ok(Vec::new());
         }
-        let mut args = vec!["--output=file,pcent,avail", "-h"];
+        let mut args = vec!["--output=file,size,pcent,avail", "-h"];
         args.extend(paths.iter().map(String::as_str));
         let out = self.run(Df, &args)?;
         if out.status != 0 {
@@ -429,6 +429,7 @@ impl<R: Runner> Native<R> {
                 let mut fields = line.split_whitespace();
                 Some(DiskUse {
                     path: fields.next()?.to_owned(),
+                    size: fields.next()?.to_owned(),
                     used_percent: fields.next()?.trim_end_matches('%').parse().ok()?,
                     available: fields.next()?.to_owned(),
                 })

@@ -27,6 +27,8 @@ use super::{
 pub enum Fix {
     Start(Unit),
     Enable(Unit),
+    /// Finish a half-done job on its Maintenance page.
+    Finish(super::maint::Page),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -99,6 +101,10 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
             fix: Some(Fix::Enable(unit)),
             ..
         }) => Some(format!("Fix {}", unit.label())),
+        Some(Item::Problem {
+            fix: Some(Fix::Finish(_)),
+            ..
+        }) => Some("Finish it".to_owned()),
         _ => None,
     };
     let keys: Vec<(&str, &str)> = enter.iter().map(|l| ("Enter", l.as_str())).collect();
@@ -210,7 +216,7 @@ const HELP_LINES: u16 = 3;
 
 /// `text` wrapped at word boundaries to `width` columns, at most `max`
 /// lines; what does not fit ends the last line with "…".
-fn wrap(text: &str, width: usize, max: usize) -> Vec<String> {
+pub(super) fn wrap(text: &str, width: usize, max: usize) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
     for word in text.split_whitespace() {
         let mut word = word.to_owned();
@@ -269,7 +275,11 @@ pub(super) fn since_on(raw: &str, today: chrono::NaiveDate) -> String {
 
 impl<H: Host> App<H> {
     pub(super) fn status_items(&self) -> Vec<Item> {
-        items(&self.services, &self.database.health)
+        let mut out = items(&self.services, &self.database.health);
+        if let Some(problem) = super::maint::half_done_problem(self.half_done.as_deref()) {
+            out.insert(0, problem);
+        }
+        out
     }
 
     /// Home's one-line summary: a failed refresh first, then no services,

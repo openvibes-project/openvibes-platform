@@ -7,13 +7,27 @@ use crate::setup::{
     plan::Component::{self, *},
 };
 
-const PG: [&str; 4] = ["/usr/sbin/runuser", "-u", "postgres", "--"];
+pub(super) const GPG: &str = "gpg-pubkey-7786da36-6a0f1e07\t7786da36\tOpenVIBES packages <26064407+itismelime@users.noreply.github.com> public key\n\
+                   gpg-pubkey-11111111-1\t11111111\tFedora (44) <fedora-44-primary@fedoraproject.org> public key\n";
+/// RPM 6 (Fedora 44): the whole fingerprint is the version.
+pub(super) const GPG6: &str = "gpg-pubkey-710ad8afb7afe6e864c0cdc4e134baf37786da36-6a0f1e07\t710ad8afb7afe6e864c0cdc4e134baf37786da36\tOpenVIBES packages <26064407+itismelime@users.noreply.github.com> public key\n\
+                    gpg-pubkey-c6e7f081cf80e13146676e88829b606631645531-1\tc6e7f081cf80e13146676e88829b606631645531\tFedora (44) <fedora-44-primary@fedoraproject.org> public key\n";
 
-fn args(components: &[Component], confirm: Option<&str>) -> RemoveArgs {
+pub(super) fn admin_answers(fake: &Fake, left: &str) {
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
+    fake.answer(&["/usr/bin/rpm", "-qa", "openvibes-*"], 0, left);
+    fake.answer(&["/usr/bin/rpm", "-q", "gpg-pubkey"], 0, GPG);
+    fake.answer(&["/usr/bin/rpm", "-e"], 0, "");
+}
+
+pub(super) const PG: [&str; 4] = ["/usr/sbin/runuser", "-u", "postgres", "--"];
+
+pub(super) fn args(components: &[Component], confirm: Option<&str>) -> RemoveArgs {
     RemoveArgs {
         components: components.to_vec(),
         backup: None,
         confirm: confirm.map(str::to_owned),
+        remember_choice: false,
     }
 }
 
@@ -117,10 +131,7 @@ fn the_admin_package_is_left_for_last() {
             "openvibes-agent"
         ]
     );
-    assert!(
-        state.detail().contains("sudo dnf remove openvibes-admin"),
-        "{state:?}"
-    );
+    assert!(!state.detail().contains("sudo"), "{state:?}");
 }
 
 #[test]
@@ -183,18 +194,18 @@ fn purge_drops_the_database_roles_files_and_accounts() {
         dropped,
         ["openvibes-admin", "openvibes-ingest", "openvibes-console"]
     );
-    for gone in [
-        "etc/openvibes",
-        "var/lib/openvibes-ingest",
-        "etc/openvibes-agent",
-    ] {
+    for gone in ["var/lib/openvibes-ingest", "etc/openvibes-agent"] {
         assert!(!fake.root.join(gone).exists(), "{gone}");
     }
+    // The plan stays until the last step, so a retry can still load it.
+    assert_eq!(fake.text("/etc/openvibes/setup.toml"), "x");
     assert!(fake.called(&["/usr/sbin/userdel", "openvibes-ingest"]));
     assert!(fake.called(&["/usr/sbin/userdel", "openvibes-fetch"]));
     assert!(fake.called(&["/usr/sbin/groupdel", "openvibes-operators"]));
     assert!(
-        state.detail().contains("PostgreSQL itself stays"),
+        state
+            .detail()
+            .contains("Setup has no record of installing PostgreSQL"),
         "{state:?}"
     );
 }
@@ -232,6 +243,7 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     fake.file("/etc/openvibes/admin.toml", "x");
     fake.file("/etc/openvibes/setup.toml", "x");
     fake.file("/etc/openvibes/tls/server.pem", "x");
+    fake.file("/etc/openvibes/backup.toml", "folder = \"/home/a\"\n");
     fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
     fake.answer(
         &["/usr/bin/rpm", "-qc", "openvibes-admin"],
@@ -250,8 +262,12 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     );
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     assert!(fake.root.join("etc/openvibes/admin.toml").exists());
-    assert!(!fake.root.join("etc/openvibes/setup.toml").exists());
+    assert!(fake.root.join("etc/openvibes/setup.toml").exists());
     assert!(!fake.root.join("etc/openvibes/tls").exists());
+    assert!(
+        !fake.root.join("etc/openvibes/backup.toml").exists(),
+        "the remembered backup folder goes with Remove everything"
+    );
 }
 
 #[test]
@@ -271,3 +287,6 @@ fn a_wrong_confirmation_stops_every_step() {
     }
     assert!(fake.calls.borrow().is_empty(), "nothing ran");
 }
+
+#[path = "remove_admin_tests.rs"]
+mod admin_tests;
