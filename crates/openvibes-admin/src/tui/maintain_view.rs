@@ -1,4 +1,4 @@
-//! Draws the Update and Uninstall screens.
+//! Draws the Uninstall screen.
 
 use platform_host::Host;
 use ratatui::{
@@ -6,11 +6,7 @@ use ratatui::{
     text::Line,
 };
 
-use super::{
-    app::App,
-    maintain::{UNINSTALL_START_ROW, UPDATE_START_ROW},
-    setup::Phase,
-};
+use super::{app::App, maintain::UNINSTALL_START_ROW, setup::Phase};
 
 fn row(selected: bool, text: String) -> Line<'static> {
     if selected {
@@ -18,39 +14,6 @@ fn row(selected: bool, text: String) -> Line<'static> {
     } else {
         Line::raw(text)
     }
-}
-
-pub fn update_lines<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
-    let setup = &app.setup;
-    let mut lines: Vec<Line> = setup
-        .packages
-        .iter()
-        .map(|p| {
-            Line::raw(format!(
-                "{:<26}{:<16}{}",
-                p.name,
-                p.installed,
-                p.available
-                    .as_deref()
-                    .map_or_else(|| "up to date".to_owned(), |v| format!("→ {v}"))
-            ))
-        })
-        .collect();
-    lines.push(Line::raw(""));
-    let cursor = if setup.editing && setup.row2 == 0 {
-        "_"
-    } else {
-        ""
-    };
-    lines.push(row(
-        setup.row2 == 0,
-        format!("Backup first (empty: none):  {}{cursor}", setup.backup),
-    ));
-    lines.push(row(
-        setup.row2 == UPDATE_START_ROW,
-        "[ Update ]  services stop, packages upgrade, database migrates, services start".into(),
-    ));
-    lines
 }
 
 pub fn uninstall_lines<H: Host>(app: &App<H>) -> Vec<Line<'static>> {

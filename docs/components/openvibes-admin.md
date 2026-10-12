@@ -110,7 +110,7 @@ runs (a step blocks the screen while it runs, e.g. dnf); while one runs, the
 footer says keys wait, and the package step says it can take a few minutes.
 The first step that fails or waits
 stops the run and drops the password; `r` asks for it again and continues
-from that step, and every other action (`c`, `u`, `m`, `x`, below) still
+from that step, and every other action (`c`, `m`, `x`, below) still
 works from there; `Esc` returns to them without retrying (#73). Three
 wrong passwords close the prompt. The finished screen
 of an install is a few labelled rows (install walkthrough, 2026-10-08):
@@ -123,9 +123,7 @@ not know is shown as it is. No agent install line: hosts are added from the
 console; `agent command` prints one for scripts. Repair, update and remove
 runs end on every step's outcome. On a set-up
 host, Maintenance › Setup offers `c` check every step (`helper setup-status`),
-`r` repair (every step with `--repair`: never a new CA), `u` update (the
-installed OpenVIBES packages with any newer version, a backup file, then
-the update job), `m` change components (the form filled from `setup.toml`;
+`r` repair (every step with `--repair`: never a new CA), `m` change components (the form filled from `setup.toml`;
 added components are installed, unticked ones removed keeping data, ports
 included), `p` change ports (the same form, on the port rows, #69; it says when a
 default port is held by another program ("443 is in use"; "443 is in use by
@@ -190,6 +188,8 @@ file keeps its owner, group and mode, and the old one is kept as
 to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Database** (Maintenance › Database): a report only (spec §6). It shows the schema ("N · up to date", or "migration pending"), the database size with its disk's size and use ("3.1 GB on a 120 GB disk (41% used)"), the data kept (90 days, set in the console), and the automatic nightly clean-up with the date of its last run ("ran today") and what it removed. The timer's time of day is not shown: no host call reads it. These are read on another thread (the disk too) from `status` (run as `openvibes-admin`) and from the maintenance service's journal (`helper logs` now reads `openvibes-maintenance.service` along with the timer). Migrations run in Update; the clean-up has no button.
+
+**Update OpenVIBES** (Maintenance): the installed version and whether a newer one is available (from the package check made at start), then Back up first, Update now and What's new. Back up first is off on a first update; afterwards it is ticked or not as you chose last time (`--remember-choice`), and the help line says why. Ticked, it shows Save in folder (as in Back up; no folder until you choose one) and the backup goes there with a new name (`openvibes-<new version>-<date>-<HHMM>.dump`). Update now asks "Update to X?" and runs the six update steps on the worker (Back up, Stop services, Install packages, Update the database, Start services, Ready), each shown with ✓, the spinner or ·; a skipped backup shows as –. A stop at Stop services or Install packages starts the services again (`update-step start`) and says so. A stop at the database step keeps them stopped and says why; Try again goes on. A failed step shows a red ✗, what failed, what to do and what was left as it was. Enter after a successful update starts the new version of the menu (`exec` of `/usr/bin/openvibes-admin`). What's new lists every package's version change and the release notes' address. A half-done update (the helper's mark `/run/openvibes-admin/job`, now 0644 so the TUI can read it) is a problem on Status ("Enter Finish it"), and the page then offers Finish the update without a backup, even when nothing newer exists.
 
 **Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread and give up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
 

@@ -47,8 +47,6 @@ pub enum Phase {
     Finished,
     /// A set-up host: `c` checks every step.
     Status,
-    /// What Update will upgrade, and the backup.
-    Update,
     /// Keep data or remove everything, the backup, the typed hostname.
     Uninstall,
 }
@@ -92,7 +90,6 @@ pub struct Setup {
     pub backup: String,
     pub confirm: String,
     pub everything: bool,
-    pub packages: Vec<platform_host::PackageUpdate>,
     pub row2: usize,
 }
 
@@ -134,7 +131,6 @@ impl Setup {
             backup: String::new(),
             confirm: String::new(),
             everything: false,
-            packages: Vec::new(),
             row2: 0,
         }
     }
@@ -310,7 +306,6 @@ impl<H: Host> App<H> {
             Phase::Form => self.form_key(key),
             Phase::Model => self.model_key(key),
             Phase::Running(_) => {}
-            Phase::Update => self.update_key(key),
             Phase::Uninstall => self.uninstall_key(key),
             // A stopped run keeps every other action (#73): the user's
             // "Uninstall doesn't work" was x ignored after a failed Repair.
@@ -332,7 +327,6 @@ impl<H: Host> App<H> {
             }
             Key::Char('m') => self.change_components(),
             Key::Char('p') => self.change_ports(),
-            Key::Char('u') => self.open_update(),
             Key::Char('x') => self.open_uninstall(),
             Key::Char('q') => self.quit = true,
             _ => {}

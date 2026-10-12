@@ -72,9 +72,15 @@ pub struct App<H: Host> {
     /// A newer `openvibes-admin` version, shown on the location line.
     pub update: Option<String>,
     versions_loaded: bool,
+    /// Every package's version change (Update › What's new); `None` until looked up.
+    pub packages: Option<Result<Vec<PackageUpdate>, String>>,
+    /// The kind of job the helper left half done (`update`), from `/run`.
+    pub half_done: Option<String>,
+    /// Enter after an update: start the new version of the menu.
+    pub reopen: bool,
     /// The update notice, looked up on another thread (`run`): dnf may
     /// take long offline. Without it, `tick` asks the host itself (tests).
-    pub updates: Option<Receiver<Option<String>>>,
+    pub updates: Option<Receiver<Result<Vec<PackageUpdate>, HostError>>>,
     /// The health checks, collected on another thread (`run`): the probes
     /// take a while. Without it, `new` collects them itself (tests).
     pub health: Option<Receiver<Vec<Check>>>,
@@ -152,6 +158,9 @@ impl<H: Host> App<H> {
             hostname,
             update: None,
             versions_loaded: false,
+            packages: None,
+            half_done: None,
+            reopen: false,
             updates: None,
             health: None,
             log_room: Cell::new(0),
@@ -172,6 +181,7 @@ impl<H: Host> App<H> {
         };
         app.refresh();
         app.load_logs();
+        app.files_changed();
         app
     }
 
@@ -308,22 +318,29 @@ impl<H: Host> App<H> {
             }
         }
         if !self.versions_loaded {
-            match self.updates.as_ref().map(Receiver::try_recv) {
-                Some(Err(TryRecvError::Empty)) => {}
-                Some(found) => {
-                    self.update = found.ok().flatten();
-                    self.versions_loaded = true;
-                    self.updates = None;
+            let found = match self.updates.as_ref().map(Receiver::try_recv) {
+                Some(Err(TryRecvError::Empty)) => None,
+                Some(Ok(found)) => Some(found),
+                Some(Err(TryRecvError::Disconnected)) => {
+                    Some(Err(HostError::Failed("the update check stopped".into())))
                 }
-                None => {
-                    self.update = newer_admin(self.host.packages());
-                    self.versions_loaded = true;
-                }
+                None => Some(self.host.packages()),
+            };
+            if let Some(found) = found {
+                self.update = found.as_ref().ok().and_then(|p| newer_admin(p));
+                self.packages = Some(found.map_err(|e| e.to_string()));
+                self.versions_loaded = true;
+                self.updates = None;
             }
         }
         self.poll(now);
         self.poll_runs(now);
         self.poll_folder(now);
+    }
+
+    /// Reads again what the helper writes for the TUI (the half-done mark).
+    pub(super) fn files_changed(&mut self) {
+        self.half_done = super::maint::update_half_done(&self.root);
     }
 
     /// Today's screens' own keys.
@@ -346,10 +363,13 @@ fn hostname_from(paths: &[&str]) -> String {
 }
 
 /// The newer `openvibes-admin` version (without its release), if any.
-pub fn newer_admin(packages: Result<Vec<PackageUpdate>, HostError>) -> Option<String> {
-    packages.ok()?.into_iter().find_map(|p| {
-        let v = p.available.filter(|_| p.name == "openvibes-admin")?;
-        Some(v.split('-').next().unwrap_or(&v).to_owned())
+pub fn newer_admin(packages: &[PackageUpdate]) -> Option<String> {
+    packages.iter().find_map(|p| {
+        let v = p
+            .available
+            .as_ref()
+            .filter(|_| p.name == "openvibes-admin")?;
+        Some(v.split('-').next().unwrap_or(v).to_owned())
     })
 }
 

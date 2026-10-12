@@ -96,12 +96,13 @@ pub fn run() -> ExitCode {
     // no network never holds the first screen.
     let (send, updates) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let packages = Native {
-            runner: SystemRunner,
-        }
-        .packages();
         // The TUI may have quit meanwhile; nobody to tell then.
-        let _ = send.send(app::newer_admin(packages));
+        let _ = send.send(
+            Native {
+                runner: SystemRunner,
+            }
+            .packages(),
+        );
     });
     app.updates = Some(updates);
     // The health probes run on another thread too (certificates, feeds,
@@ -197,6 +198,23 @@ pub fn run() -> ExitCode {
             app.refresh();
             refreshed = Instant::now();
         }
+        if app.reopen {
+            ratatui::restore();
+            let error = reopen();
+            // Only reached when exec failed.
+            terminal = ratatui::init();
+            app.reopen = false;
+            app.outcome = Some((false, format!("could not start the new version: {error}")));
+        }
     }
     ExitCode::SUCCESS
+}
+
+/// Replaces this process with the updated menu (`exec`); returns only on failure.
+// One of the places the platform starts a process (clippy.toml): a fixed
+// path, no arguments, no shell; the environment (and sudo's) is kept.
+#[allow(clippy::disallowed_types)]
+fn reopen() -> std::io::Error {
+    use std::os::unix::process::CommandExt;
+    std::process::Command::new("/usr/bin/openvibes-admin").exec()
 }

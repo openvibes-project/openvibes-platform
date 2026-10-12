@@ -1,5 +1,5 @@
-//! The Update (§6.5a) and Uninstall (§6.5) screens of the Setup tab: what
-//! to do and the backup, then the job runs like any other.
+//! The Uninstall screen (§6.5) of the Setup tab: what to do and the backup,
+//! then the job runs like any other.
 
 use platform_host::Host;
 
@@ -10,7 +10,6 @@ use super::{
 };
 use crate::setup::plan::Plan;
 
-pub const UPDATE_START_ROW: usize = 1;
 pub const UNINSTALL_START_ROW: usize = 3;
 
 impl<H: Host> App<H> {
@@ -31,17 +30,6 @@ impl<H: Host> App<H> {
             })
     }
 
-    pub(super) fn open_update(&mut self) {
-        self.setup.packages = self.host.packages().unwrap_or_else(|error| {
-            self.message = Some(error.to_string());
-            Vec::new()
-        });
-        self.setup.backup = self.remembered_backup();
-        self.setup.row2 = 0;
-        self.setup.editing = false;
-        self.setup.phase = Phase::Update;
-    }
-
     pub(super) fn open_uninstall(&mut self) {
         self.setup.backup = self.remembered_backup();
         self.setup.confirm.clear();
@@ -54,7 +42,6 @@ impl<H: Host> App<H> {
     /// The text field under the cursor on these screens.
     fn maintain_field(&mut self) -> Option<&mut String> {
         match (self.setup.phase, self.setup.row2) {
-            (Phase::Update, 0) => Some(&mut self.setup.backup),
             (Phase::Uninstall, 1) if self.setup.everything => Some(&mut self.setup.backup),
             (Phase::Uninstall, 2) if self.setup.everything => Some(&mut self.setup.confirm),
             _ => None,
@@ -88,25 +75,6 @@ impl<H: Host> App<H> {
             Vec::new()
         } else {
             vec!["--backup".into(), path.into()]
-        }
-    }
-
-    pub(super) fn update_key(&mut self, key: Key) {
-        if self.edit(key) {
-            return;
-        }
-        match key {
-            Key::Char('j') | Key::Down if self.setup.row2 < UPDATE_START_ROW => {
-                self.setup.row2 += 1
-            }
-            Key::Char('k') | Key::Up => self.setup.row2 = self.setup.row2.saturating_sub(1),
-            Key::Enter if self.setup.row2 == UPDATE_START_ROW => {
-                self.setup.job_args = self.backup_args();
-                self.ask_password(After::Job(Job::Update));
-            }
-            Key::Enter => self.setup.editing = self.maintain_field().is_some(),
-            Key::Esc => self.setup.phase = Phase::Status,
-            _ => {}
         }
     }
 

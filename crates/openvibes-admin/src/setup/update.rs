@@ -689,6 +689,20 @@ mod tests {
         ));
         let refused = crate::setup::system::job_guard(&fake.root, "setup").unwrap_err();
         assert!(refused.contains("update is half done"), "{refused}");
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(fake.root.join("run/openvibes-admin/job"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(
+            mode & 0o777,
+            0o644,
+            "the TUI reads the mark as the operator"
+        );
+        assert!(
+            refused.contains("Maintenance › Update OpenVIBES"),
+            "{refused}"
+        );
         assert!(crate::setup::system::job_guard(&fake.root, "update").is_ok());
         assert!(matches!(
             run(&ctx, UpdateStep::Ready, &UpdateArgs::default()),

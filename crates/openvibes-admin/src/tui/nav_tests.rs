@@ -2,7 +2,7 @@
 
 use std::sync::mpsc;
 
-use platform_host::Unit;
+use platform_host::{PackageUpdate, Unit};
 
 use super::{
     app::{App, Key, Tab},
@@ -331,7 +331,12 @@ fn the_update_notice_arrives_from_the_background_without_blocking() {
     app.updates = Some(updates);
     app.tick(std::time::Instant::now());
     assert_eq!(app.update, None, "nothing yet: tick does not wait");
-    send.send(Some("0.3.0".to_owned())).unwrap();
+    send.send(Ok(vec![PackageUpdate {
+        name: "openvibes-admin".into(),
+        installed: "0.2.8-1.fc44".into(),
+        available: Some("0.3.0-1.fc44".into()),
+    }]))
+    .unwrap();
     app.tick(std::time::Instant::now());
     assert_eq!(app.update.as_deref(), Some("0.3.0"));
 }

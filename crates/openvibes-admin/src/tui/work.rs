@@ -23,6 +23,12 @@ pub const ACTION_TIMEOUT: Duration = Duration::from_secs(30);
 pub enum Question {
     Service(Unit, ServiceAction),
     Quit,
+    /// A Maintenance question; Yes does `then`.
+    Maint {
+        text: String,
+        detail: String,
+        then: super::maint::Then,
+    },
 }
 
 /// A service action waiting for its unit to reach the asked state.
@@ -130,6 +136,7 @@ impl<H: Host> App<H> {
                 self.quit_when_done = true;
             }
             Question::Quit => self.quit = true,
+            Question::Maint { then, .. } => self.maint_yes(then),
             Question::Service(unit, action) => {
                 // A fresh start time to compare with (not up to 5 s old).
                 self.refresh();
@@ -183,6 +190,7 @@ impl<H: Host> App<H> {
                 self.question = Some((Question::Service(unit, ServiceAction::Start), true));
             }
             Fix::Enable(unit) => self.prompt = Some((unit, PasswordPrompt::default())),
+            Fix::Finish(page) => self.open_page(page),
         }
     }
 
@@ -212,6 +220,7 @@ impl<H: Host> App<H> {
                     "Quit while it runs?".to_owned(),
                     "it keeps running".to_owned(),
                 ),
+                Question::Maint { text, detail, .. } => (text.clone(), detail.clone()),
             };
             return Bar::Ask {
                 question,

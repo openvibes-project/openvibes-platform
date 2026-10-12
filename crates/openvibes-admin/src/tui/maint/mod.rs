@@ -8,6 +8,11 @@ pub mod backup;
 mod backup_tests;
 mod database;
 pub mod folder;
+mod update;
+#[cfg(test)]
+mod update_tests;
+
+pub use update::half_done as update_half_done;
 
 use platform_host::Host;
 use ratatui::{
@@ -34,6 +39,8 @@ use super::{
 pub enum Page {
     Database,
     Backup,
+    Update,
+    WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
     Folder,
 }
@@ -43,6 +50,8 @@ impl Page {
         match self {
             Page::Database => "Database",
             Page::Backup => "Back up",
+            Page::Update => "Update OpenVIBES",
+            Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
         }
     }
@@ -53,6 +62,10 @@ impl Page {
             Page::Backup => {
                 "Enter on Save in folder types or browses a folder; Back up now writes a new file there."
             }
+            Page::Update => {
+                "Space ticks Back up first; Enter on Update now updates; What's new lists the packages."
+            }
+            Page::WhatsNew => "A list: every package's version and the release notes' address.",
             Page::Folder => "Enter opens a folder; Use this folder picks the one shown.",
         }
     }
@@ -64,7 +77,6 @@ pub struct Maint {
     /// What the helper remembered; read when Back up, Update or Uninstall opens.
     pub memory: backup::Memory,
     /// Back up first (Update, Uninstall): off by default, then the last choice.
-    #[allow(dead_code, reason = "first read in Task 6 of the 2a plan")]
     pub first: bool,
     pub folder: folder::Folder,
     pub browse: Option<folder::Browse>,
@@ -77,6 +89,12 @@ impl Maint {
     }
 }
 
+/// What Yes to a Maintenance question does.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Then {
+    Update,
+}
+
 #[derive(Clone, Copy)]
 enum Entry {
     Page(Page),
@@ -84,20 +102,25 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 4] = [
+const ENTRIES: [(Entry, &str); 5] = [
+    (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
     (Entry::Legacy(Tab::Configuration), "Settings files"),
 ];
 
-fn value(entry: Entry) -> &'static str {
+fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
     match entry {
-        Entry::Legacy(Tab::Setup) => "agent, assistant, ports",
-        Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection",
-        Entry::Page(Page::Database) => "schema, size, automatic clean-up",
-        Entry::Page(Page::Backup) => "save the database to a folder you choose",
-        Entry::Page(Page::Folder) => "",
+        Entry::Legacy(Tab::Setup) => "agent, assistant, ports".into(),
+        Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection".into(),
+        Entry::Page(Page::Update) => match &app.update {
+            Some(v) => format!("{v} is available"),
+            None => "up to date".into(),
+        },
+        Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
+        Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
+        Entry::Page(Page::Folder | Page::WhatsNew) => String::new(),
     }
 }
 
@@ -149,7 +172,7 @@ pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let area = frame::draw(frame, &app.theme, head, Some("Maintenance"), &bar);
     let rows: Vec<Row> = ENTRIES
         .iter()
-        .map(|(e, name)| Row::entry(name, value(*e)))
+        .map(|(e, name)| Row::entry(name, &value(app, *e)))
         .collect();
     let mut scroll = app.nav.scroll.get();
     let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 20);
@@ -161,6 +184,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
     match page {
         Page::Database => database::draw(frame, head, app),
         Page::Backup => backup::draw(frame, head, app),
+        Page::Update => update::draw(frame, head, app),
+        Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
     }
 }
@@ -194,7 +219,18 @@ impl<H: Host> App<H> {
                 }
                 self.load_backup_choice();
             }
-            Page::Folder => {}
+            Page::Update => {
+                // A finished update's result is not news the next time.
+                if self
+                    .run
+                    .as_ref()
+                    .is_some_and(|r| !r.running() && matches!(r.work.kind, Kind::Update { .. }))
+                {
+                    self.run = None;
+                }
+                self.load_backup_choice();
+            }
+            Page::WhatsNew | Page::Folder => {}
         }
     }
 
@@ -203,7 +239,37 @@ impl<H: Host> App<H> {
             // A report: it has no keys of its own.
             Page::Database => {}
             Page::Backup => self.backup_key(key),
+            Page::Update => self.update_key(key),
+            Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
         }
     }
+}
+
+impl<H: Host> App<H> {
+    pub(super) fn maint_yes(&mut self, then: Then) {
+        match then {
+            Then::Update => self.update_yes(),
+        }
+    }
+
+    /// A run ended: the files it changes are read again.
+    pub(super) fn run_ended(&mut self) {
+        self.files_changed();
+    }
+}
+
+/// Status's problem for a half-done job (decision 17).
+pub fn half_done_problem(kind: Option<&str>) -> Option<super::status::Item> {
+    let (text, page) = match kind? {
+        "update" => (
+            "An update stopped half way: the services may be stopped",
+            Page::Update,
+        ),
+        _ => return None,
+    };
+    Some(super::status::Item::Problem {
+        text: text.into(),
+        fix: Some(super::status::Fix::Finish(page)),
+    })
 }

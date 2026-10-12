@@ -12,7 +12,6 @@ fn plural(n: usize, one: &str, many: &str) -> String {
     format!("{n} {}", if n == 1 { one } else { many })
 }
 
-#[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
 pub fn lines(
     theme: &Theme,
     titles: &[String],
@@ -124,6 +123,20 @@ mod tests {
             text(&lines(&t, &names, &failed, None, 0, 10))[2],
             "    ✗ Install packages"
         );
+    }
+
+    #[test]
+    fn a_skipped_first_step_folds_with_the_done_ones() {
+        let t = Theme::new(None, Some("xterm"));
+        let names: Vec<String> = (1..=8).map(|n| format!("Step {n}")).collect();
+        let mut states = vec![None; 8];
+        states[0] = Some(StepState::Skipped("not chosen".into()));
+        for state in states.iter_mut().take(4).skip(1) {
+            *state = Some(StepState::Done("ok".into()));
+        }
+        let out = text(&lines(&t, &names, &states, Some(4), 0, 5));
+        assert_eq!(out[0], "    ✓ 4 steps done");
+        assert_eq!(out[1], "    ⠋ Step 5");
     }
 
     #[test]

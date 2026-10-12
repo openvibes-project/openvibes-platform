@@ -33,7 +33,6 @@ pub enum Call {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Kind {
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     Update {
         to: String,
     },
@@ -218,7 +217,6 @@ pub struct Run {
     pub states: Vec<Option<StepState>>,
     /// The last main call that reported.
     pub at: usize,
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     pub started: Instant,
     pub ended: Option<Instant>,
     /// Wrong passwords so far; three stop the run.
@@ -245,7 +243,6 @@ impl Run {
     }
 
     /// The first main call that did not finish (the optional model aside).
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     pub fn stopped_at(&self) -> Option<usize> {
         (0..self.work.calls.len()).find(|&i| {
             self.states[i].as_ref().is_some_and(|s| !s.finished())
@@ -254,7 +251,6 @@ impl Run {
     }
 
     /// The main call running now; `None` once stopped (a rescue may run).
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     pub fn current(&self) -> Option<usize> {
         if !self.running() || self.stopped_at().is_some() {
             return None;
@@ -272,13 +268,11 @@ impl Run {
     }
 
     /// The `j`th rescue call's state.
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     pub fn rescued(&self, j: usize) -> Option<&StepState> {
         self.states.get(self.work.calls.len() + j)?.as_ref()
     }
 
     /// How long it took: "2 min 41 s", "12 s".
-    #[allow(dead_code, reason = "first used in Task 6 of the 2a plan")]
     pub fn took(&self) -> String {
         let s = self
             .ended

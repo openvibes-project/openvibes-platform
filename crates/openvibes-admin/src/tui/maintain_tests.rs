@@ -22,12 +22,12 @@ fn after_a_failed_repair() -> super::app::App<super::script_host::SetupHost> {
 }
 
 #[test]
-fn a_failed_step_still_offers_uninstall_check_and_update() {
+fn a_failed_step_still_offers_uninstall_and_check() {
     // Board #73: the user's "Uninstall doesn't work" was x doing nothing
     // after a failed Repair; only r, Tab and q were live.
     let mut app = after_a_failed_repair();
     let text = screen(&app);
-    for want in ["r retry", "c check", "u update", "x uninstall"] {
+    for want in ["r retry", "c check", "x uninstall"] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
     app.key(Key::Char('x'));

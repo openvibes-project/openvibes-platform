@@ -91,9 +91,13 @@ impl<H: Host> App<H> {
                 true
             }),
         }
+        let ended = !run.running();
         *slot = Some(run);
         if again {
             self.ask_again(background);
+        }
+        if ended {
+            self.run_ended();
         }
     }
 
@@ -131,6 +135,7 @@ impl<H: Host> App<H> {
                 &mut self.run
             };
             let Some(run) = slot.as_mut() else { continue };
+            let was = run.running();
             let mut again = false;
             while let Some(rx) = &run.rx {
                 match rx.try_recv() {
@@ -152,8 +157,12 @@ impl<H: Host> App<H> {
                     }
                 }
             }
+            let ended = was && !run.running();
             if again {
                 self.ask_again(background);
+            }
+            if ended {
+                self.run_ended();
             }
         }
         if self.quit_when_done

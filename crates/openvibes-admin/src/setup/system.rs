@@ -309,8 +309,13 @@ pub fn job_guard(root: &Path, kind: &str) -> Result<(), String> {
     match fs::read_to_string(root.join(JOB)) {
         Ok(text) if !text.trim().is_empty() && text.trim() != kind => {
             let other = text.trim();
+            let page = if other == "update" {
+                "Update OpenVIBES"
+            } else {
+                "Uninstall"
+            };
             Err(format!(
-                "an {other} is half done on this host: finish it first (Setup tab, or setup --{other})"
+                "an {other} is half done on this host: finish it first (Maintenance › {page}, or setup --{other})"
             ))
         }
         _ => Ok(()),
@@ -319,8 +324,9 @@ pub fn job_guard(root: &Path, kind: &str) -> Result<(), String> {
 
 impl<R: Runner> Ctx<'_, R> {
     /// Starts the half-done mark for `kind` (`update`, `uninstall`).
+    /// World-readable: the TUI shows a half-done job on Status.
     pub fn job_begin(&self, kind: &str) -> Result<(), String> {
-        self.put(&format!("/{JOB}"), kind.as_bytes(), None, 0o600)
+        self.put(&format!("/{JOB}"), kind.as_bytes(), None, 0o644)
     }
 
     /// Clears it once the job's last step is done.

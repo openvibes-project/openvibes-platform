@@ -139,15 +139,12 @@ pub fn check_folder<H: Host>(host: &H, text: &str) -> Result<String, String> {
     })
 }
 
-/// A new backup file in `folder`, for data of this version.
-pub fn next_file(folder: &str) -> String {
+/// A new backup file in `folder`, named for `version`.
+pub fn next_file(folder: &str, version: &str) -> String {
     let base = format!(
         "{}/{}",
         folder.trim().trim_end_matches('/'),
-        file_stem(
-            env!("CARGO_PKG_VERSION"),
-            chrono::Local::now().naive_local()
-        )
+        file_stem(version, chrono::Local::now().naive_local())
     );
     free_backup(&base, |p| Path::new(p).exists())
 }
@@ -268,8 +265,8 @@ impl<H: Host> App<H> {
 
     /// A new file in the chosen folder (looks at the file system: once,
     /// on the key that starts the backup, never per frame).
-    pub(in crate::tui) fn backup_file(&self) -> String {
-        next_file(&self.maint.folder.text)
+    pub(in crate::tui) fn backup_file(&self, version: &str) -> String {
+        next_file(&self.maint.folder.text, version)
     }
 
     pub(super) fn backup_key(&mut self, key: Key) {
@@ -305,7 +302,7 @@ impl<H: Host> App<H> {
             self.nav.row = 0;
             return;
         }
-        let file = self.backup_file();
+        let file = self.backup_file(env!("CARGO_PKG_VERSION"));
         let call = Call::Update(UpdateStep::Backup, vec!["--backup".into(), file.clone()]);
         self.begin(Work::new(Kind::Backup { file }, vec![call]), 0);
     }

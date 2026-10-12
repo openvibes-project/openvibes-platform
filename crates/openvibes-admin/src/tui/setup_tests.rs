@@ -1,6 +1,6 @@
 //! The Setup tab against a scripted host.
 
-use platform_host::{HostError, PackageUpdate, Step, Unit};
+use platform_host::{HostError, Step, Unit};
 use ratatui::{Terminal, backend::TestBackend};
 
 use super::{
@@ -194,7 +194,6 @@ fn a_set_up_host_offers_the_maintenance_actions() {
     for want in [
         "c check",
         "r repair",
-        "u update",
         "m components",
         "p ports",
         "x uninstall",
@@ -269,44 +268,6 @@ fn changing_components_installs_then_removes_the_unticked_ones() {
     assert_eq!(calls[1].0, "setup-step packages --repair");
 }
 
-#[test]
-fn update_lists_the_packages_then_runs_the_update_job() {
-    let mut app = set_up(vec![]);
-    app.host.packages = vec![
-        PackageUpdate {
-            name: "openvibes-agent".into(),
-            installed: "0.1.0-1.fc44".into(),
-            available: None,
-        },
-        PackageUpdate {
-            name: "openvibes-ingest".into(),
-            installed: "0.1.0-1.fc44".into(),
-            available: Some("0.2.0-1.fc44".into()),
-        },
-    ];
-    remember_folder(&app, "/home/alice");
-    app.open(Tab::Setup);
-    app.key(Key::Char('u'));
-    let text = screen(&app);
-    assert!(
-        text.contains("openvibes-ingest") && text.contains("0.2.0-1.fc44"),
-        "{text}"
-    );
-    assert!(text.contains("up to date"), "{text}");
-    app.key(Key::Down);
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    app.setup_tick();
-    let call = app.host.calls.borrow()[0].0.clone();
-    assert!(
-        call.starts_with("update-step backup --backup /home/alice/openvibes-0.")
-            && call.ends_with(".dump")
-            && !call.contains("before-update"),
-        "{call}"
-    );
-}
-
 /// What the helper remembers after a backup: the folder the screens offer.
 fn remember_folder(app: &super::app::App<super::script_host::SetupHost>, folder: &str) {
     let dir = app.root.join("etc/openvibes");
@@ -318,9 +279,6 @@ fn remember_folder(app: &super::app::App<super::script_host::SetupHost>, folder:
 fn no_backup_place_is_offered_until_one_was_chosen() {
     let mut app = set_up(vec![]);
     app.open(Tab::Setup);
-    app.key(Key::Char('u'));
-    assert_eq!(app.setup.backup, "", "no default place");
-    app.key(Key::Esc);
     app.key(Key::Char('x'));
     assert_eq!(app.setup.backup, "");
 }
