@@ -162,6 +162,7 @@ fn a_failed_last_step_can_be_run_again() {
         fake.root.join("etc/openvibes/setup.toml").exists(),
         "the plan is needed to retry"
     );
+    assert!(!fake.called(&["/usr/bin/rpm", "-e", "openvibes-admin"]));
 
     // Second run: the package and the key are already gone.
     let again = Fake::new("remove-admin-retry-2");

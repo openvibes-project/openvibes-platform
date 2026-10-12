@@ -14,7 +14,7 @@ use platform_host::{
 
 use super::{
     Ctx, backup,
-    base::PG_RECORD,
+    base::{PG_MARK, PG_RECORD},
     plan::{Component, check_name},
     run::ports_for,
 };
@@ -155,11 +155,6 @@ fn remove_packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSta
     }
     Ok(StepState::Done(format!("removed: {}", packages.join(" "))))
 }
-
-/// Set once PostgreSQL's removal has begun (the other-databases check has
-/// passed): a retry then skips the database queries (the service may be
-/// stopped or gone) and goes on removing.
-const PG_MARK: &str = "/etc/openvibes/postgresql-removing";
 
 fn remove_file_or_dir(path: &std::path::Path) -> Result<(), String> {
     match if path.is_dir() {

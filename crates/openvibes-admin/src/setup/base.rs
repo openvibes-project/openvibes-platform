@@ -153,6 +153,10 @@ fn missing_config<'n, R: Runner>(ctx: &Ctx<R>, names: &[&'n str]) -> Vec<&'n str
 /// The PostgreSQL packages Setup itself installed, one per line (absent
 /// when PostgreSQL was already there).
 pub const PG_RECORD: &str = "/etc/openvibes/setup-installed-postgresql";
+/// Set once PostgreSQL's removal has begun (the other-databases check has
+/// passed): a retry then skips the database queries (the service may be
+/// stopped or gone) and goes on removing.
+pub const PG_MARK: &str = "/etc/openvibes/postgresql-removing";
 const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
 
 pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -178,6 +182,8 @@ pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
             "postgresql-server\npostgresql\n"
         };
         ctx.put(PG_RECORD, record.as_bytes(), None, 0o644)?;
+        // A mark left by a failed removal belongs to the old cluster.
+        let _ = std::fs::remove_file(ctx.path(PG_MARK));
         ctx.ok(Dnf, &["install", "-y", "postgresql-server"])?;
     }
     if !ctx.exists(PG_VERSION) {
@@ -524,6 +530,23 @@ mod tests {
         );
         assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
     }
+    #[test]
+    fn installing_postgresql_clears_a_leftover_removal_mark() {
+        let fake = Fake::new("postgres-mark");
+        fake.file("/etc/openvibes/postgresql-removing", "removing\n");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 1, "");
+        fake.answer(&["/usr/bin/dnf", "install"], 0, "");
+        fake.answer(&["/usr/bin/postgresql-setup"], 0, "");
+        fake.answer(&["/usr/bin/systemctl", "enable"], 0, "");
+        run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
+        assert!(!fake.root.join("etc/openvibes/postgresql-removing").exists());
+        assert!(
+            fake.root
+                .join("etc/openvibes/setup-installed-postgresql")
+                .exists()
+        );
+    }
+
     #[test]
     fn an_existing_postgresql_is_not_recorded_as_ours() {
         let fake = Fake::new("postgres-existing");
