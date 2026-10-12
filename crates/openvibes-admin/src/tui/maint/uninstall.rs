@@ -13,7 +13,7 @@ use ratatui::{
 
 use super::{Then, failure, folder};
 use crate::{
-    setup::plan::Plan,
+    setup::{base::PG_RECORD, plan::Plan},
     tui::{
         app::{App, Key, Question},
         run::{Call, Kind, Run, Work},
@@ -27,9 +27,6 @@ use crate::{
         },
     },
 };
-
-/// Setup's record that it installed PostgreSQL (readable by all).
-const PG_RECORD: &str = "etc/openvibes/setup-installed-postgresql";
 
 pub fn work(plan: &Plan, everything: bool, backup: Option<&str>) -> Work {
     let components: Vec<&str> = plan.components.iter().map(|c| c.name()).collect();
@@ -199,7 +196,9 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let mut scroll = app.nav.scroll.get();
     let mut lines = list::lines(t, &rows, app.nav.row, &mut scroll, height, 26);
     app.nav.scroll.set(scroll);
-    if let Some(choice) = chosen {
+    if let Some(why) = &app.maint.plan_error {
+        lines.extend(failure(t, why, "Nothing was removed."));
+    } else if let Some(choice) = chosen {
         lines.extend(help(app, choice));
     }
     frame.render_widget(Paragraph::new(lines), area);
@@ -302,7 +301,8 @@ impl<H: Host> App<H> {
         self.maint.everything = false;
         self.maint.typed.clear();
         self.maint.typing = false;
-        self.maint.pg_recorded = self.root.join(PG_RECORD).exists();
+        self.maint.plan_error = None;
+        self.maint.pg_recorded = self.root.join(PG_RECORD.trim_start_matches('/')).exists();
         self.maint.plan = match self
             .host
             .setup_plan()
@@ -311,7 +311,7 @@ impl<H: Host> App<H> {
         {
             Ok(plan) => Some(plan),
             Err(error) => {
-                self.outcome = Some((false, format!("the plan cannot be read: {error}")));
+                self.maint.plan_error = Some(format!("The plan cannot be read: {error}"));
                 None
             }
         };
@@ -353,28 +353,41 @@ impl<H: Host> App<H> {
             }
             return;
         }
-        let choices = choices(self);
-        if self.move_row(key, choices.len()) {
+        let shown = choices(self);
+        if self.move_row(key, shown.len()) {
             return;
         }
-        match (choices.get(self.nav.row), key) {
-            (Some(Choice::Keep), Key::Char(' ')) => self.maint.everything = false,
-            (Some(Choice::Everything), Key::Char(' ')) => self.maint.everything = true,
-            (Some(Choice::First), Key::Char(' ')) => self.maint.first = !self.maint.first,
+        match (shown.get(self.nav.row), key) {
+            // Enter selects and moves on; only Uninstall asks (no stray Enters).
+            (Some(Choice::Keep), Key::Char(' ') | Key::Enter) => {
+                self.maint.everything = false;
+                if key == Key::Enter {
+                    self.nav.row = choices(self).len() - 1;
+                }
+            }
+            (Some(Choice::Everything), Key::Char(' ') | Key::Enter) => {
+                self.maint.everything = true;
+                if key == Key::Enter {
+                    self.nav.row += 2 + usize::from(self.maint.first);
+                }
+            }
+            (Some(Choice::First), Key::Char(' ') | Key::Enter) => {
+                self.maint.first = !self.maint.first;
+            }
             (Some(Choice::Folder), Key::Enter) => self.maint.folder.edit(),
             (Some(Choice::Confirm), Key::Enter) => {
                 self.maint.typed_before = self.maint.typed.clone();
                 self.maint.typing = true;
             }
-            (Some(Choice::Keep | Choice::Everything | Choice::First | Choice::Go), Key::Enter) => {
-                self.ask_uninstall();
-            }
+            (Some(Choice::Go), Key::Enter) => self.ask_uninstall(),
             _ => {}
         }
     }
 
     fn ask_uninstall(&mut self) {
         let Some(plan) = &self.maint.plan else {
+            let why = self.maint.plan_error.clone().unwrap_or_default();
+            self.outcome = Some((false, why));
             return;
         };
         let choices = choices(self);

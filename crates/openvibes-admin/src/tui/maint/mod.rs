@@ -106,6 +106,8 @@ pub struct Maint {
     pub plan: Option<crate::setup::plan::Plan>,
     /// Setup recorded installing PostgreSQL (read when Uninstall opens).
     pub pg_recorded: bool,
+    /// Why `plan` could not be read; the page says so until it reopens.
+    pub plan_error: Option<String>,
 }
 
 impl Maint {
@@ -295,6 +297,10 @@ impl<H: Host> App<H> {
     /// A run ended: the files it changes are read again.
     pub(super) fn run_ended(&mut self, background: bool) {
         self.files_changed();
+        // The tool is gone: show the result, whatever screen this was on.
+        if self.gone() && self.nav.screen != Screen::Maint(Page::Uninstall) {
+            self.nav.go(Screen::Maint(Page::Uninstall));
+        }
         if !background {
             self.repair_ended();
         }

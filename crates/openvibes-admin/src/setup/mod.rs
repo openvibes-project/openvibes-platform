@@ -8,7 +8,7 @@ mod auto_agent;
 mod auto_migrate;
 mod auto_rules;
 pub(crate) mod backup;
-mod base;
+pub(crate) mod base;
 #[cfg(test)]
 mod command_tests;
 mod console;

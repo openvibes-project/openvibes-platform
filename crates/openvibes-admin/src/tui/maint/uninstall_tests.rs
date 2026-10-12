@@ -228,3 +228,67 @@ fn the_menu_ends_with_uninstall() {
     app.key(Key::Enter);
     assert_eq!(app.nav.screen, Screen::Maint(Page::Uninstall));
 }
+
+#[test]
+fn stray_enters_on_the_choices_never_start_an_uninstall() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    app.key(Key::Enter);
+    assert_eq!(
+        app.nav.row, 3,
+        "Keep is chosen and the highlight is on Uninstall"
+    );
+    app.nav.row = 0;
+    app.key(Key::Enter);
+    assert!(app.question.is_none(), "one Enter only moves to Uninstall");
+    app.key(Key::Enter);
+    assert!(
+        app.run.is_none() && app.asking.is_none(),
+        "two Enters only ask"
+    );
+    assert!(app.host.calls.borrow().is_empty());
+    app.key(Key::Esc);
+    // Everything moves to the name row; Back up first toggles.
+    app.nav.row = 1;
+    app.key(Key::Enter);
+    assert!(app.maint.everything);
+    assert_eq!(app.nav.row, 3);
+    app.nav.row = 2;
+    app.key(Key::Enter);
+    assert!(app.maint.first);
+    assert!(app.question.is_none());
+}
+
+#[test]
+fn a_missing_plan_is_said_on_the_page() {
+    let mut app = set_up(vec![]);
+    app.host.plan = String::new();
+    app.open_page(Page::Uninstall);
+    app.nav.row = 3;
+    app.key(Key::Enter);
+    assert!(
+        screen(&app).contains("The plan cannot be read"),
+        "{}",
+        screen(&app)
+    );
+}
+
+#[test]
+fn a_run_that_ends_on_another_screen_brings_its_result_back() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    app.nav.row = 3;
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    // Tests run the calls at once; model "finished while elsewhere".
+    app.nav.go(Screen::Status);
+    app.run_ended(false);
+    assert_eq!(app.nav.screen, Screen::Maint(Page::Uninstall));
+    assert!(screen(&app).contains("OpenVIBES is removed from this host"));
+    app.key(Key::Esc);
+    assert!(!app.quit);
+    app.key(Key::Enter);
+    assert!(app.quit);
+}
