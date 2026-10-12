@@ -73,6 +73,9 @@ ok "repair restored the stopped service and the removed package"
 # 3. Uninstall keeping data, then install again: same CA, same agent.
 in_c 'openvibes-admin setup --uninstall --keep-data' > "$W/keep.out" 2>&1 || { cat "$W/keep.out"; fail "uninstall --keep-data"; }
 in_c '! rpm -q --quiet openvibes-ingest && test -e /etc/openvibes/pki/root.crt' || fail "keep-data removed data or kept packages"
+# Uninstall removes the admin tool itself too (last step): install it again.
+in_c '! rpm -q --quiet openvibes-admin' || fail "uninstall left the admin tool installed"
+in_c 'dnf -q -y install /test/old/openvibes-admin-*.rpm' >/dev/null 2>&1 || fail "install openvibes-admin again"
 in_c "$QUICK" > "$W/reinstall.out" 2>&1 || { cat "$W/reinstall.out"; fail "reinstall"; }
 [[ "$(fingerprint)" == "$ROOT_FP" ]] || fail "reinstall made a new CA"
 wait_for "the same agent reports again" 60 "runuser -u openvibes-admin -- openvibes-admin agent list | grep -q '^$AGENT  active'"
@@ -88,16 +91,15 @@ in_c 'runuser -u openvibes-admin -- openvibes-admin status' >/dev/null || fail "
 wait_for "the agent reports after the update" 60 "runuser -u openvibes-admin -- openvibes-admin agent list | grep -q '^$AGENT  active'"
 ok "update upgraded the packages, migrated, and the agent keeps reporting"
 
-# 5. Remove everything, then the admin tool itself: nothing is left.
+# 5. Remove everything, the admin tool itself included (its last step): nothing is left.
 in_c 'openvibes-admin setup --uninstall --everything --confirm localhost' > "$W/purge.out" 2>&1 ||
     { cat "$W/purge.out"; fail "uninstall --everything"; }
-in_c 'test -e /etc/openvibes/admin.toml' || fail "uninstall removed admin.toml, which rpm still owns (#82)"
-in_c 'dnf -q -y remove openvibes-admin' > "$W/remove-admin.out" 2>&1 || { cat "$W/remove-admin.out"; fail "remove openvibes-admin"; }
-! grep -q 'remove failed' "$W/remove-admin.out" || { cat "$W/remove-admin.out"; fail "dnf remove warned (#82)"; }
+! grep -q 'sudo dnf remove' "$W/purge.out" || { cat "$W/purge.out"; fail "uninstall still asks for a command"; }
 [[ -z "$(in_c "rpm -qa 'openvibes-*'")" ]] || fail "packages left"
 in_c '! ls -d /etc/openvibes /etc/openvibes-agent /var/lib/openvibes-* 2>/dev/null' || fail "files left"
 in_c '! getent passwd openvibes-ingest openvibes-admin openvibes_agent && ! getent group openvibes-operators' || fail "accounts left"
 [[ -z "$(in_c "runuser -u postgres -- psql -Atqc \"SELECT 1 FROM pg_database WHERE datname = 'openvibes'\"")" ]] || fail "database left"
 [[ -z "$(in_c "runuser -u postgres -- psql -Atqc \"SELECT 1 FROM pg_roles WHERE rolname LIKE 'openvibes-%'\"")" ]] || fail "roles left"
+in_c '! ls /etc/yum.repos.d/openvibes*.repo 2>/dev/null' || fail "repository file left"
 ok "remove everything left no packages, files, accounts, database or roles"
 echo "setup-lifecycle-e2e: all checks passed"
