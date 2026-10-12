@@ -143,7 +143,10 @@ fn a_failure_the_rescue_covers_runs_the_rescue_with_the_same_password() {
     let update = |step| Call::Update(step, Vec::new());
     app.begin(
         Work {
-            kind: Kind::Update { to: "0.2.9".into() },
+            kind: Kind::Update {
+                to: "0.2.9".into(),
+                others: None,
+            },
             calls: vec![
                 update(UpdateStep::Backup),
                 update(UpdateStep::Stop),

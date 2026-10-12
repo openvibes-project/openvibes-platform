@@ -8,6 +8,9 @@ pub mod backup;
 mod backup_tests;
 mod database;
 pub mod folder;
+mod repair;
+#[cfg(test)]
+mod repair_tests;
 mod update;
 #[cfg(test)]
 mod update_tests;
@@ -40,6 +43,7 @@ pub enum Page {
     Database,
     Backup,
     Update,
+    Repair,
     WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
     Folder,
@@ -51,6 +55,7 @@ impl Page {
             Page::Database => "Database",
             Page::Backup => "Back up",
             Page::Update => "Update OpenVIBES",
+            Page::Repair => "Repair",
             Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
         }
@@ -64,6 +69,9 @@ impl Page {
             }
             Page::Update => {
                 "Space ticks Back up first; Enter on Update now updates; What's new lists the packages."
+            }
+            Page::Repair => {
+                "It checks every step first; Fix N problems repairs, then checks again."
             }
             Page::WhatsNew => "A list: every package's version and the release notes' address.",
             Page::Folder => "Enter opens a folder; Use this folder picks the one shown.",
@@ -102,8 +110,9 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 5] = [
+const ENTRIES: [(Entry, &str); 6] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
+    (Entry::Page(Page::Repair), "Repair"),
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
@@ -119,6 +128,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
             None if update::updates_available(&app.packages) => "updates are available".into(),
             None => "up to date".into(),
         },
+        Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
         Entry::Page(Page::Folder | Page::WhatsNew) => String::new(),
@@ -186,6 +196,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Database => database::draw(frame, head, app),
         Page::Backup => backup::draw(frame, head, app),
         Page::Update => update::draw(frame, head, app),
+        Page::Repair => repair::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
     }
@@ -231,6 +242,7 @@ impl<H: Host> App<H> {
                 }
                 self.load_backup_choice();
             }
+            Page::Repair => self.open_repair(),
             Page::WhatsNew | Page::Folder => {}
         }
     }
@@ -241,6 +253,7 @@ impl<H: Host> App<H> {
             Page::Database => {}
             Page::Backup => self.backup_key(key),
             Page::Update => self.update_key(key),
+            Page::Repair => self.repair_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
         }
@@ -255,8 +268,11 @@ impl<H: Host> App<H> {
     }
 
     /// A run ended: the files it changes are read again.
-    pub(super) fn run_ended(&mut self) {
+    pub(super) fn run_ended(&mut self, background: bool) {
         self.files_changed();
+        if !background {
+            self.repair_ended();
+        }
     }
 }
 

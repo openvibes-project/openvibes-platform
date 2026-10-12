@@ -5,29 +5,25 @@
 use super::{
     app::{Key, Tab},
     maintain::UNINSTALL_START_ROW,
-    script_host::{screen, set_up, type_text},
+    script_host::{screen, set_up},
     setup::Phase,
 };
 
-/// A Repair whose first step fails: the run stops there.
+/// A run that stopped at its first step, on a set-up host.
 fn after_a_failed_repair() -> super::app::App<super::script_host::SetupHost> {
-    let mut app = set_up(vec![Ok("failed\tport 443 is taken\n".into())]);
+    let mut app = set_up(vec![]);
     app.open(Tab::Setup);
-    app.key(Key::Char('r'));
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    app.setup_tick();
-    assert_eq!(app.setup.phase, Phase::Stopped(0));
+    app.setup.phase = Phase::Stopped(0);
     app
 }
 
 #[test]
-fn a_failed_step_still_offers_uninstall_and_check() {
+fn a_failed_step_still_offers_uninstall() {
     // Board #73: the user's "Uninstall doesn't work" was x doing nothing
-    // after a failed Repair; only r, Tab and q were live.
+    // after a failed run; only r, Tab and q were live.
     let mut app = after_a_failed_repair();
     let text = screen(&app);
-    for want in ["r retry", "c check", "x uninstall"] {
+    for want in ["r retry", "x uninstall"] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
     app.key(Key::Char('x'));
@@ -35,12 +31,12 @@ fn a_failed_step_still_offers_uninstall_and_check() {
 }
 
 #[test]
-fn after_a_failed_step_c_checks_and_esc_goes_back() {
+fn after_a_failed_step_r_retries_and_esc_goes_back() {
     let mut app = after_a_failed_repair();
     app.key(Key::Esc);
     assert_eq!(app.setup.phase, Phase::Status);
     let mut app = after_a_failed_repair();
-    app.key(Key::Char('c'));
+    app.key(Key::Char('r'));
     assert!(matches!(app.setup.phase, Phase::Password(_)));
 }
 

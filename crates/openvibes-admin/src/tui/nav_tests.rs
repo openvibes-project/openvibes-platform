@@ -9,7 +9,6 @@ use super::{
     database::Check,
     nav::Screen,
     script_host::set_up,
-    setup::Phase,
     status::Item,
     tests::{FakeHost, app, screen},
 };
@@ -126,24 +125,12 @@ fn q_types_into_a_configuration_value() {
 }
 
 #[test]
-fn q_types_into_a_set_up_hosts_setup_password_and_quits_nothing_there() {
-    let mut app = set_up(vec![Ok("failed\tport 443 is taken\n".into())]);
-    app.open(Tab::Setup);
-    app.key(Key::Char('r'));
-    assert!(matches!(app.setup.phase, Phase::Password(_)));
-    type_text(&mut app, "aqb");
-    assert_eq!(app.setup.prompt.typed(), "aqb");
-    app.key(Key::Enter);
-    app.setup_tick();
-    assert_eq!(app.setup.phase, Phase::Stopped(0));
-    app.key(Key::Char('q'));
-    assert!(!app.quit, "q quits from Home only, not from a stopped run");
-    let text = super::script_host::screen(&app);
-    let footer = text.lines().rev().find(|l| !l.trim().is_empty()).unwrap();
-    assert!(
-        footer.contains("Esc back") && !footer.contains('q'),
-        "a stopped run on a set-up host: {footer}"
-    );
+fn q_types_into_the_password_in_the_bar_and_quits_nothing() {
+    let mut app = set_up(vec![]);
+    app.open_page(super::maint::Page::Repair);
+    super::script_host::type_text(&mut app, "aqb");
+    assert_eq!(app.asking.as_ref().unwrap().prompt.typed(), "aqb");
+    assert!(!app.quit);
 }
 
 #[test]

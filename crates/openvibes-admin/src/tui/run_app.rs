@@ -99,7 +99,7 @@ impl<H: Host> App<H> {
             self.ask_again(background);
         }
         if ended {
-            self.run_ended();
+            self.run_ended(background);
         }
     }
 
@@ -164,7 +164,7 @@ impl<H: Host> App<H> {
                 self.ask_again(background);
             }
             if ended {
-                self.run_ended();
+                self.run_ended(background);
             }
         }
         if self.quit_when_done

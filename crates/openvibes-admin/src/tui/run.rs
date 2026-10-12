@@ -17,7 +17,6 @@ use super::password::PasswordPrompt;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Call {
     /// `setup-status`: every step's state.
-    #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Status,
     Repair(Step),
     Update(UpdateStep, Vec<String>),
@@ -35,13 +34,14 @@ pub enum Call {
 pub enum Kind {
     Update {
         to: String,
+        /// "agent 0.2.9": the packages that are newer when the admin is
+        /// not, so the words name what changes, not the installed version.
+        others: Option<String>,
     },
     Backup {
         file: String,
     },
-    #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Check,
-    #[allow(dead_code, reason = "first used in Task 7 of the 2a plan")]
     Fix,
     #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Uninstall {
@@ -58,7 +58,10 @@ impl Kind {
     }
     pub fn doing(&self) -> String {
         match self {
-            Kind::Update { to } => format!("Updating to {to}"),
+            Kind::Update {
+                others: Some(what), ..
+            } => format!("Updating {what}"),
+            Kind::Update { to, .. } => format!("Updating to {to}"),
             Kind::Backup { .. } => "Backing up".into(),
             Kind::Check => "Checking every step".into(),
             Kind::Fix => "Repairing".into(),
@@ -68,7 +71,10 @@ impl Kind {
     }
     pub fn done(&self) -> String {
         match self {
-            Kind::Update { to } => format!("Updated to {to}"),
+            Kind::Update {
+                others: Some(what), ..
+            } => format!("Updated: {what}"),
+            Kind::Update { to, .. } => format!("Updated to {to}"),
             Kind::Backup { .. } => "Backed up".into(),
             Kind::Check => "Checked".into(),
             Kind::Fix => "Repaired".into(),

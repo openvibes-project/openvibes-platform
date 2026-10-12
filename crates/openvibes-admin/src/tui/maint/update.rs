@@ -49,7 +49,7 @@ pub fn half_done(root: &Path) -> Option<String> {
 /// while stopping or installing starts the services again, then runs
 /// Ready (it starts the agent and ends the half-done mark). Not when
 /// finishing: new packages must not be started on the old schema.
-pub fn work(to: &str, backup: Option<&str>, finish: bool) -> Work {
+pub fn work(to: &str, others: Option<String>, backup: Option<&str>, finish: bool) -> Work {
     let mut args = vec!["--remember-choice".to_owned()];
     if let Some(file) = backup {
         args.extend(["--backup".to_owned(), file.to_owned()]);
@@ -60,7 +60,10 @@ pub fn work(to: &str, backup: Option<&str>, finish: bool) -> Work {
         .map(|s| Call::Update(*s, args.clone()))
         .collect();
     Work {
-        kind: Kind::Update { to: to.to_owned() },
+        kind: Kind::Update {
+            to: to.to_owned(),
+            others,
+        },
         calls,
         rescue: (!finish).then(|| Rescue {
             from: 1,
@@ -94,6 +97,29 @@ fn target<H: Host>(app: &App<H>) -> Option<(String, bool)> {
     // admin's when it has one, else the installed one.
     (app.update.is_some() || updates_available(&app.packages))
         .then(|| (installed_or(&app.update), false))
+}
+
+/// "agent 0.2.9, rules 0.1.2": the newer packages, when the admin itself
+/// is not newer (then the question says "Update to <admin version>").
+fn others<H: Host>(app: &App<H>) -> Option<String> {
+    let Some(Ok(list)) = &app.packages else {
+        return None;
+    };
+    if app.update.is_some() || app.half_done.as_deref() == Some("update") {
+        return None;
+    }
+    let names: Vec<String> = list
+        .iter()
+        .filter(|p| p.name.starts_with("openvibes-"))
+        .filter_map(|p| {
+            let version = p.available.as_deref()?.split('-').next()?;
+            Some(format!(
+                "{} {version}",
+                p.name.trim_start_matches("openvibes-")
+            ))
+        })
+        .collect();
+    (!names.is_empty()).then(|| names.join(", "))
 }
 
 fn installed_or(newer: &Option<String>) -> String {
@@ -299,7 +325,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
 
 fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) {
     let t = &app.theme;
-    let Kind::Update { to } = &run.work.kind else {
+    let Kind::Update { to, .. } = &run.work.kind else {
         return;
     };
     let skip = UpdateStep::ALL.len() - run.work.calls.len();
@@ -317,13 +343,7 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
         None if run.ok() => Bar::only(&[("Enter", open.as_str())]),
         None => Bar::act(&[("Enter", "Try again")]),
     };
-    let area = frame::draw(
-        frame,
-        t,
-        head,
-        Some(&format!("Updating to {to}")),
-        &app.bar(bar),
-    );
+    let area = frame::draw(frame, t, head, Some(&run.work.kind.doing()), &app.bar(bar));
     let mut lines = vec![Line::raw("")];
     lines.extend(steps::lines(
         t,
@@ -337,7 +357,8 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
     if run.ok() {
         lines.push(Line::styled(
             format!(
-                "    ✓ Updated to {to} · everything is ready ({})",
+                "    ✓ {} · everything is ready ({})",
+                run.work.kind.done(),
                 run.took()
             ),
             t.green(),
@@ -430,7 +451,13 @@ impl<H: Host> App<H> {
         let (text, detail) = if finish {
             ("Finish the update?".to_owned(), "the services start again")
         } else {
-            (format!("Update to {to}?"), "services stop")
+            (
+                match others(self) {
+                    Some(what) => format!("Install updates ({what})?"),
+                    None => format!("Update to {to}?"),
+                },
+                "services stop",
+            )
         };
         self.question = Some((
             Question::Maint {
@@ -447,6 +474,6 @@ impl<H: Host> App<H> {
             return;
         };
         let file = (self.maint.first && !finish).then(|| self.backup_file());
-        self.begin(work(&to, file.as_deref(), finish), 0);
+        self.begin(work(&to, others(self), file.as_deref(), finish), 0);
     }
 }

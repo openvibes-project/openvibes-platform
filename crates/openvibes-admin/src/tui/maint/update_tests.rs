@@ -310,7 +310,13 @@ fn a_newer_agent_alone_offers_update_now() {
     );
     app.nav.row = 1;
     app.key(Key::Enter);
-    assert!(screen(&app).contains("Update to"));
+    let text = screen(&app);
+    assert!(
+        text.contains("Install updates (agent 0.2.9)?") && !text.contains("Update to"),
+        "the question names what is newer, not the installed version\n{text}"
+    );
     yes_and_password(&mut app);
-    assert!(screen(&app).contains(&format!("Open {}", env!("CARGO_PKG_VERSION"))));
+    let text = screen(&app);
+    assert!(text.contains("Updated: agent 0.2.9"), "{text}");
+    assert!(text.contains(&format!("Open {}", env!("CARGO_PKG_VERSION"))));
 }

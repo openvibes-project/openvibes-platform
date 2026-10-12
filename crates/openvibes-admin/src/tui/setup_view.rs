@@ -21,11 +21,11 @@ use crate::setup::plan::{CaMode, Component};
 const FORM_KEYS: &str = "j/k move  space toggle  Enter edit/start";
 /// After a failed step: retry it, or any other action (#73); `leave` follows.
 /// Fits 80 columns.
-const RUN_KEYS: &str = "r retry  c check  x uninstall  m components  p ports";
+const RUN_KEYS: &str = "r retry  x uninstall  m components  p ports";
 /// While a step runs, keys wait for it (the loop runs one step per turn).
 const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
 /// Fits 80 columns.
-const DONE_KEYS: &str = "c check  r repair  m components  p ports  x uninstall";
+const DONE_KEYS: &str = "m components  p ports  x uninstall";
 
 /// How to leave: `Esc` goes back on a set-up host; `q` quits the fresh-install form.
 fn leave<H: Host>(app: &App<H>) -> &'static str {

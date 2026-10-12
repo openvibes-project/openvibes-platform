@@ -191,26 +191,9 @@ fn a_set_up_host_offers_the_maintenance_actions() {
     let mut app = set_up(vec![]);
     app.open(Tab::Setup);
     let text = screen(&app);
-    for want in [
-        "c check",
-        "r repair",
-        "m components",
-        "p ports",
-        "x uninstall",
-    ] {
+    for want in ["m components", "p ports", "x uninstall"] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
-}
-
-#[test]
-fn repair_runs_every_step_in_repair_mode() {
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    app.key(Key::Char('r'));
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    app.setup_tick();
-    assert_eq!(app.host.calls.borrow()[0].0, "setup-step packages --repair");
 }
 
 /// #87: a plan from a first install that stopped before the CA step is

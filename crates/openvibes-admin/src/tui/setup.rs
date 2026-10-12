@@ -31,7 +31,6 @@ pub const START_ROW: usize = HOSTNAME_ROW + 6;
 pub enum After {
     Plan,
     Run(usize),
-    Status,
     /// Start this job at its first step.
     Job(Job),
 }
@@ -320,11 +319,6 @@ impl<H: Host> App<H> {
 
     fn setup_status_key(&mut self, key: Key) {
         match key {
-            Key::Char('c') => self.ask_password(After::Status),
-            Key::Char('r') => {
-                self.setup.job_args.clear();
-                self.ask_password(After::Job(Job::Repair));
-            }
             Key::Char('m') => self.change_components(),
             Key::Char('p') => self.change_ports(),
             Key::Char('x') => self.open_uninstall(),
@@ -507,7 +501,7 @@ impl<H: Host> App<H> {
                 self.setup.phase = match after {
                     After::Plan => Phase::Form,
                     After::Run(at) => Phase::Stopped(at),
-                    After::Status | After::Job(_) => Phase::Status,
+                    After::Job(_) => Phase::Status,
                 };
                 return;
             }
@@ -554,29 +548,6 @@ impl<H: Host> App<H> {
                     }
                 }
             }
-            After::Status => match self.host.privileged(Privileged::SetupStatus, &secret) {
-                Ok(out) => {
-                    self.setup.job = Job::Install;
-                    self.setup.states = vec![None; Step::ALL.len()];
-                    for line in out.lines() {
-                        let Some((name, rest)) = line.split_once('\t') else {
-                            continue;
-                        };
-                        if let (Some(step), Some(state)) =
-                            (Step::parse(name), StepState::parse(rest))
-                        {
-                            let index = Step::ALL.iter().position(|s| *s == step).unwrap_or(0);
-                            self.setup.states[index] = Some(state);
-                        }
-                    }
-                    self.setup.phase = Phase::Status;
-                }
-                Err(HostError::WrongPassword) => self.wrong_password(after),
-                Err(error) => {
-                    self.message = Some(error.to_string());
-                    self.setup.phase = Phase::Status;
-                }
-            },
         }
     }
 
@@ -588,7 +559,7 @@ impl<H: Host> App<H> {
             self.setup.phase = match after {
                 After::Plan => Phase::Form,
                 After::Run(at) => Phase::Stopped(at),
-                After::Status | After::Job(_) => Phase::Status,
+                After::Job(_) => Phase::Status,
             };
         } else {
             self.message = Some(HostError::WrongPassword.to_string());
