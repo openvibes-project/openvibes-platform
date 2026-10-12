@@ -27,6 +27,10 @@ fn the_last_step_removes_the_tool_what_rpm_kept_and_the_repository() {
     fake.file("/var/cache/dnf/fedora.solv", "c");
     fake.file("/run/openvibes-admin/job", "uninstall");
     fake.file("/run/openvibes-admin/setup.lock", "");
+    fake.file(
+        "/var/lib/systemd/timers/stamp-openvibes-maintenance.timer",
+        "",
+    );
     admin_answers(&fake, "openvibes-admin-0.2.8-1.fc44.x86_64\n");
     let plan = plan(&[Ingest, Agent]);
     let state = run(
@@ -46,6 +50,7 @@ fn the_last_step_removes_the_tool_what_rpm_kept_and_the_repository() {
         "var/backups/openvibes",
         "var/cache/dnf/openvibes.solv",
         "var/cache/dnf/openvibes-filenames.solvx",
+        "var/lib/systemd/timers/stamp-openvibes-maintenance.timer",
     ] {
         assert!(!fake.root.join(gone).exists(), "{gone} left behind");
     }
@@ -262,7 +267,10 @@ fn purge_pg(name: &str, recorded: bool, others: &str, everything: bool) -> (Fake
     let fake = Fake::new(name);
     fake.file("/etc/openvibes/setup.toml", "plan");
     if recorded {
-        fake.file(REC, "postgresql-server\npostgresql\n");
+        fake.file(
+            REC,
+            "postgresql-server\npostgresql\npostgresql-private-libs\n",
+        );
     }
     fake.file("/var/lib/pgsql/data/PG_VERSION", "17\n");
     fake.answer(&others_query(), 0, others);
@@ -276,6 +284,11 @@ fn purge_pg(name: &str, recorded: bool, others: &str, everything: bool) -> (Fake
         "",
     );
     fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "postgresql"], 0, "");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-private-libs"],
+        0,
+        "",
+    );
     fake.answer(&["/usr/bin/rpm", "-e"], 0, "");
     fake.answer(&["/usr/bin/systemctl", "disable"], 0, "");
     let plan = plan(&[Ingest]);
@@ -294,6 +307,11 @@ fn postgresql_setup_installed_goes_when_nothing_else_uses_it() {
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     assert!(fake.called(&["/usr/bin/systemctl", "disable", "--now", "postgresql"]));
     assert!(fake.called(&["/usr/bin/rpm", "-e", "postgresql-server"]));
+    let removed = fake.call(&["/usr/bin/rpm", "-e"]);
+    assert!(
+        removed.contains(&"postgresql-private-libs".to_owned()),
+        "{removed:?}"
+    );
     assert!(
         !fake.called(&["/usr/bin/dnf"]),
         "dependants are not removed silently"

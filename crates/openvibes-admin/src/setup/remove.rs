@@ -14,7 +14,7 @@ use platform_host::{
 
 use super::{
     Ctx, backup,
-    base::{PG_MARK, PG_RECORD},
+    base::{PG_MARK, PG_PACKAGES, PG_RECORD},
     plan::{Component, check_name},
     run::ports_for,
 };
@@ -219,7 +219,7 @@ fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
 fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a str> {
     record
         .lines()
-        .filter(|p| matches!(*p, "postgresql-server" | "postgresql") && installed(ctx, p))
+        .filter(|p| PG_PACKAGES.contains(p) && installed(ctx, p))
         .collect()
 }
 

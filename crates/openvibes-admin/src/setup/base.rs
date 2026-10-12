@@ -153,6 +153,9 @@ fn missing_config<'n, R: Runner>(ctx: &Ctx<R>, names: &[&'n str]) -> Vec<&'n str
 /// The PostgreSQL packages Setup itself installed, one per line (absent
 /// when PostgreSQL was already there).
 pub const PG_RECORD: &str = "/etc/openvibes/setup-installed-postgresql";
+/// What Setup may record in it, and Remove everything may remove, in the
+/// order rpm needs nothing of (one transaction).
+pub const PG_PACKAGES: [&str; 3] = ["postgresql-server", "postgresql", "postgresql-private-libs"];
 /// Set once PostgreSQL's removal has begun (the other-databases check has
 /// passed): a retry then skips the database queries (the service may be
 /// stopped or gone) and goes on removing.
@@ -175,12 +178,13 @@ pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         // Recorded first, like setup-opened-ports: only what Setup
         // installed is Remove everything's to remove (a program that was
         // already there stays).
-        let client = ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql"]);
-        let record = if client {
-            "postgresql-server\n"
-        } else {
-            "postgresql-server\npostgresql\n"
-        };
+        // Also the client and its private libraries, when they were not
+        // there (dnf pulls them in, and rpm -e leaves a dependency behind).
+        let record: String = PG_PACKAGES
+            .iter()
+            .filter(|p| !ctx.succeeds(Rpm, &["-q", "--quiet", p]))
+            .map(|p| format!("{p}\n"))
+            .collect();
         ctx.put(PG_RECORD, record.as_bytes(), None, 0o644)?;
         // A mark left by a failed removal belongs to the old cluster.
         let _ = std::fs::remove_file(ctx.path(PG_MARK));
@@ -513,6 +517,11 @@ mod tests {
             std::fs::write(root.join("var/lib/pgsql/data/PG_VERSION"), "17\n").unwrap();
         });
         fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "postgresql"], 1, "");
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "postgresql-private-libs"],
+            1,
+            "",
+        );
         fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
         fake.answer(
             &["/usr/bin/systemctl", "enable", "--now", "postgresql"],
@@ -522,7 +531,7 @@ mod tests {
         let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
         assert_eq!(
             fake.text("/etc/openvibes/setup-installed-postgresql"),
-            "postgresql-server\npostgresql\n"
+            "postgresql-server\npostgresql\npostgresql-private-libs\n"
         );
         assert_eq!(
             state,

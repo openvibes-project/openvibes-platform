@@ -15,6 +15,8 @@ if [[ ${OV_CHECK_BUILT:-0} == 1 ]]; then
         # A %ghost model path (the bridge) lists the name but has no bytes.
         list=$(rpm -qp --qf '[%{FILESIZES} %{FILEFLAGS:fflags} %{FILENAMES}\n]' "$f")
         [[ -z "$(awk '$3 ~ /\.(gguf|part0|part1)$/ && ($1 > 0 || $2 !~ /g/)' <<<"$list")" ]] || fail "$f contains model bytes"
+        # Its license folder is the package's own, so removing it leaves nothing.
+        rpm -qpl "$f" | grep -qx '/usr/share/licenses/[^/]*' || fail "$f does not own its license folder"
     done
     ! ls "$rpms"/openvibes-llm-model-part*.rpm >/dev/null 2>&1 || fail "a model part package was built"
     meta=$(ls "$rpms"/openvibes-llm-model-[0-9]*.rpm)

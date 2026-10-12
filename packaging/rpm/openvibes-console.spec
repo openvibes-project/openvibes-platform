@@ -48,6 +48,7 @@ install -d -m 0755 %{buildroot}%{_sysconfdir}/openvibes/tls
 %systemd_postun_with_restart openvibes-console.service
 
 %files
+%dir %{_licensedir}/openvibes-console
 %license %{_licensedir}/openvibes-console/LICENSE
 %license %{_licensedir}/openvibes-console/NOTICE
 %{_bindir}/openvibes-console

@@ -168,6 +168,10 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
             n.starts_with("openvibes-operators")
         });
         let _ = remove_path(&ctx.path("/etc/openvibes"));
+        // systemd's "last ran" stamp of the nightly clean-up timer.
+        let _ = remove_matching(ctx, "/var/lib/systemd/timers", |n| {
+            n.starts_with("stamp-openvibes-")
+        });
     }
     let text = if done.is_empty() {
         "nothing left to remove".to_owned()
