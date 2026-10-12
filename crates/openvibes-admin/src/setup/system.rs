@@ -326,6 +326,11 @@ impl<R: Runner> Ctx<'_, R> {
     /// Starts the half-done mark for `kind` (`update`, `uninstall`).
     /// World-readable: the TUI shows a half-done job on Status.
     pub fn job_begin(&self, kind: &str) -> Result<(), String> {
+        // Explicitly 0755: a umask must not hide the mark from the TUI.
+        let dir = self.root.join("run/openvibes-admin");
+        fs::create_dir_all(&dir).map_err(|error| format!("{}: {error}", dir.display()))?;
+        fs::set_permissions(&dir, std::os::unix::fs::PermissionsExt::from_mode(0o755))
+            .map_err(|error| format!("{}: {error}", dir.display()))?;
         self.put(&format!("/{JOB}"), kind.as_bytes(), None, 0o644)
     }
 

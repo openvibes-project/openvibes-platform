@@ -6,7 +6,7 @@
 
 use std::path::Path;
 
-use platform_host::{Host, StepState, UpdateStep};
+use platform_host::{Host, PackageUpdate, StepState, UpdateStep};
 use ratatui::{
     Frame,
     text::{Line, Span},
@@ -45,8 +45,10 @@ pub fn half_done(root: &Path) -> Option<String> {
     (!kind.is_empty()).then(|| kind.to_owned())
 }
 
-/// The update's calls (from Stop when finishing a half-done one); a stop
-/// while stopping or installing starts the services again.
+/// The update's calls (from Stop when finishing a half-done one). A stop
+/// while stopping or installing starts the services again, then runs
+/// Ready (it starts the agent and ends the half-done mark). Not when
+/// finishing: new packages must not be started on the old schema.
 pub fn work(to: &str, backup: Option<&str>, finish: bool) -> Work {
     let mut args = vec!["--remember-choice".to_owned()];
     if let Some(file) = backup {
@@ -60,10 +62,13 @@ pub fn work(to: &str, backup: Option<&str>, finish: bool) -> Work {
     Work {
         kind: Kind::Update { to: to.to_owned() },
         calls,
-        rescue: Some(Rescue {
-            from: 1 - skip,
-            to: 3 - skip,
-            calls: vec![Call::Update(UpdateStep::Start, args)],
+        rescue: (!finish).then(|| Rescue {
+            from: 1,
+            to: 3,
+            calls: vec![
+                Call::Update(UpdateStep::Start, args.clone()),
+                Call::Update(UpdateStep::Ready, args),
+            ],
         }),
     }
 }
@@ -85,7 +90,22 @@ fn target<H: Host>(app: &App<H>) -> Option<(String, bool)> {
             .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
         return Some((to, true));
     }
-    app.update.clone().map(|to| (to, false))
+    // Any OpenVIBES package newer, not only the admin: the version is the
+    // admin's when it has one, else the installed one.
+    (app.update.is_some() || updates_available(&app.packages))
+        .then(|| (installed_or(&app.update), false))
+}
+
+fn installed_or(newer: &Option<String>) -> String {
+    newer
+        .clone()
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned())
+}
+
+/// Whether the package check found any OpenVIBES package with a newer version.
+pub fn updates_available(packages: &Option<Result<Vec<PackageUpdate>, String>>) -> bool {
+    matches!(packages, Some(Ok(list))
+        if list.iter().any(|p| p.name.starts_with("openvibes-") && p.available.is_some()))
 }
 
 fn choices<H: Host>(app: &App<H>) -> Vec<Choice> {
@@ -180,6 +200,10 @@ fn info<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
             installed,
             Span::styled(format!("could not look for updates: {error}"), t.yellow()),
         ]),
+        (Some(Ok(_)), None) if updates_available(&app.packages) => Line::from(vec![
+            installed,
+            Span::styled("updates available", t.yellow()),
+        ]),
         (Some(Ok(_)), None) => Line::from(vec![installed, Span::raw("up to date")]),
     };
     let second = if target(app).is_some_and(|(_, finish)| finish) {
@@ -202,15 +226,22 @@ fn after(run: &Run, skip: usize) -> String {
     let at = run.stopped_at().unwrap_or(0) + skip;
     match (at, run.rescued(0)) {
         (0, _) => "The services keep running; nothing was changed.".into(),
-        (1 | 2, Some(s)) if s.finished() => {
-            "The services are started again as they were; nothing was changed.".into()
+        // Finishing: no rescue; the old schema must not meet new packages.
+        (1 | 2, _) if skip == 1 => "The services stay stopped until the update is finished: \
+                                     Try again."
+            .into(),
+        (1 | 2, _) if (0..2).all(|j| run.rescued(j).is_some_and(StepState::finished)) => {
+            "The services are started again; the packages may be partly updated: Try again.".into()
         }
-        (1 | 2, Some(s)) => format!(
-            "The services could not be started again ({}): see Status.",
-            s.detail()
-        ),
-        (1 | 2, None) if run.running() => "The services are being started again…".into(),
-        (1 | 2, None) => "Nothing more was run: see Status for the services.".into(),
+        (1 | 2, _) if (0..2).all(|j| run.rescued(j).is_some()) => {
+            let why = (0..2)
+                .filter_map(|j| run.rescued(j))
+                .find(|s| !s.finished())
+                .map_or("", StepState::detail);
+            format!("The services could not be started again ({why}): see Status.")
+        }
+        (1 | 2, _) if run.running() => "The services are being started again…".into(),
+        (1 | 2, _) => "Nothing more was run: see Status for the services.".into(),
         (3, _) => "The packages are new but the database is not yet: Try again finishes it. \
                    The services stay stopped until then."
             .into(),
@@ -219,11 +250,13 @@ fn after(run: &Run, skip: usize) -> String {
     }
 }
 
-/// Where Try again starts: from Stop when the rescue started the services again.
+/// Where Try again starts: from Stop when the rescue started the services
+/// again, else the step that stopped.
 fn retry_from(run: &Run, skip: usize) -> usize {
     match run.stopped_at().map(|at| at + skip) {
         None | Some(0) => 0,
-        Some(1 | 2) => 1 - skip,
+        // Services stopped again first, unless finishing (no rescue ran).
+        Some(1 | 2) if skip == 0 => 1,
         Some(at) => at - skip,
     }
 }
@@ -413,7 +446,7 @@ impl<H: Host> App<H> {
         let Some((to, finish)) = target(self) else {
             return;
         };
-        let file = (self.maint.first && !finish).then(|| self.backup_file(&to));
+        let file = (self.maint.first && !finish).then(|| self.backup_file());
         self.begin(work(&to, file.as_deref(), finish), 0);
     }
 }

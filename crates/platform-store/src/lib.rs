@@ -116,7 +116,8 @@ impl fmt::Display for StoreError {
             Self::NeedsBackup(version) => write!(
                 f,
                 "this upgrade changes stored data (migration {version}): run `openvibes-admin` \
-                 → Update (or `sudo openvibes-admin setup --update`), which backs up first"
+                 → Maintenance → Update OpenVIBES and tick Back up first (or `sudo openvibes-admin \
+                 setup --update --backup FILE`)"
             ),
         }
     }

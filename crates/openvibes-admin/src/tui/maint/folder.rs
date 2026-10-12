@@ -128,9 +128,7 @@ impl Folder {
     }
 
     fn finish(&mut self, result: Result<String, String>) {
-        self.file = result
-            .is_ok()
-            .then(|| next_file(&self.text, env!("CARGO_PKG_VERSION")));
+        self.file = result.is_ok().then(|| next_file(&self.text));
         self.check = Some(result);
     }
 

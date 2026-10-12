@@ -77,6 +77,8 @@ impl<H: Host> App<H> {
         };
         if !resume {
             run.wrong = 0;
+            // Try again times itself, not the first attempt.
+            run.started = now;
         }
         for state in &mut run.states[from..] {
             *state = None;

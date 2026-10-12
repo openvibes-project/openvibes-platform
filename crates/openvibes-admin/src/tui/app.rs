@@ -189,6 +189,7 @@ impl<H: Host> App<H> {
     /// only on selection, `R`, and after an action: each read goes through
     /// sudo, which writes to the auth log.
     pub fn refresh(&mut self) {
+        self.files_changed();
         // The highlighted Status item stays highlighted if it is still there.
         let held = (self.nav.screen == Screen::Status)
             .then(|| self.status_items().get(self.nav.row).cloned())

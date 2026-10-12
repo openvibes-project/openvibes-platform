@@ -116,6 +116,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         Entry::Legacy(Tab::Configuration) => "feeds, proxy, limits, database connection".into(),
         Entry::Page(Page::Update) => match &app.update {
             Some(v) => format!("{v} is available"),
+            None if update::updates_available(&app.packages) => "updates are available".into(),
             None => "up to date".into(),
         },
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),

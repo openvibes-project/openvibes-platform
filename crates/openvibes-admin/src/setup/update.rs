@@ -699,6 +699,11 @@ mod tests {
             0o644,
             "the TUI reads the mark as the operator"
         );
+        let dir_mode = std::fs::metadata(fake.root.join("run/openvibes-admin"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(dir_mode & 0o777, 0o755, "a umask cannot hide the mark");
         assert!(
             refused.contains("Maintenance › Update OpenVIBES"),
             "{refused}"
@@ -708,6 +713,53 @@ mod tests {
             run(&ctx, UpdateStep::Ready, &UpdateArgs::default()),
             StepState::Done(_)
         ));
+        assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
+    }
+
+    /// Review of Task 6: after a failed Upgrade the TUI runs Start, then
+    /// Ready; the agent is running again and the half-done mark is gone.
+    #[test]
+    fn a_rescue_of_start_then_ready_leaves_nothing_stopped_or_half_done() {
+        let fake = Fake::new("update-rescue-ready");
+        fake.answer(
+            &[
+                "/usr/bin/systemctl",
+                "is-active",
+                "--quiet",
+                "openvibes-agent.service",
+            ],
+            0,
+            "",
+        );
+        fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
+        fake.answer(&["/usr/bin/systemctl", "stop"], 0, "");
+        fake.answer(&["/usr/bin/systemctl", "start"], 0, "");
+        fake.answer(&["/usr/bin/curl"], 0, "");
+        let plan = plan(&[Ingest, Agent]);
+        let ctx = fake.ctx(&plan);
+        let args = UpdateArgs::default();
+        assert!(matches!(
+            run(&ctx, UpdateStep::Stop, &args),
+            StepState::Done(_)
+        ));
+        let typo = UpdateArgs {
+            repo_dir: Some("/srv/typo".into()),
+            ..UpdateArgs::default()
+        };
+        assert!(matches!(
+            run(&ctx, UpdateStep::Upgrade, &typo),
+            StepState::Failed(_)
+        ));
+        assert!(matches!(
+            run(&ctx, UpdateStep::Start, &args),
+            StepState::Done(_)
+        ));
+        assert!(!fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
+        assert!(matches!(
+            run(&ctx, UpdateStep::Ready, &args),
+            StepState::Done(_)
+        ));
+        assert!(fake.called(&["/usr/bin/systemctl", "start", "openvibes-agent.service"]));
         assert!(crate::setup::system::job_guard(&fake.root, "setup").is_ok());
     }
 
