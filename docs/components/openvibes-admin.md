@@ -641,15 +641,25 @@ refused while one works):
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
   `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
-  `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays (it may
-  serve other programs). The last step, `admin`, removes `openvibes-admin`
+  `/var/lib/openvibes-*`, `/var/backups/openvibes` and the service accounts.
+  PostgreSQL goes too, but only when Setup installed it (Setup's Postgres
+  step records that in `/etc/openvibes/setup-installed-postgresql`, as
+  `setup-opened-ports` does for ports) and the cluster holds no database
+  besides `postgres`, `template0`, `template1` and `openvibes`: then the
+  service is disabled, `postgresql-server` (and `postgresql`, if Setup
+  installed it too) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
+  other databases, or without the record, it stays and the step says why;
+  `--keep-data` never removes it. The record stays until PostgreSQL is gone.
+  The last step, `admin`, removes `openvibes-admin`
   itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
   including `admin.toml.rpmsave` and `setup.toml`, which every earlier step
   needs and so stays until then; `/etc/sudoers.d/openvibes-operators*`) and
-  `/var/lib/openvibes-admin`. Once no `openvibes-*` package is left, it also
+  `/var/lib/openvibes-admin`. It removes the package last (`rpm -e`, which
+  refuses when something depends on it), after every other fallible
+  operation, so a failure leaves the tool to retry with. Once no other `openvibes-*` package is left, it also
   removes `/etc/yum.repos.d/openvibes*.repo`, `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes`,
   dnf's `openvibes-*` caches and the OpenVIBES packages key from rpm's
-  database (`gpg-pubkey-7786da36-*`, only that key). With `--keep-data` it
+  database (`gpg-pubkey-<id>-*`, only that key: the id is `7786da36` on RPM 4, the whole fingerprint on RPM 6). With `--keep-data` it
   keeps `/etc/openvibes` and `/var/lib/openvibes-*` and says so. Every step
   is safe to repeat; a failed step leaves the job marked so Try again
   finishes it. Nothing is left for the user to remove by hand; the root key

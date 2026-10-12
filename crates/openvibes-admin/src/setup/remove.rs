@@ -14,6 +14,7 @@ use platform_host::{
 
 use super::{
     Ctx, backup,
+    base::PG_RECORD,
     plan::{Component, check_name},
     run::ports_for,
 };
@@ -155,6 +156,55 @@ fn remove_packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSta
     Ok(StepState::Done(format!("removed: {}", packages.join(" "))))
 }
 
+/// PostgreSQL goes only when Setup installed it (the record) and the
+/// cluster holds nothing but the system databases and `openvibes`. Order
+/// for a retry: everything that can refuse runs while the service still
+/// runs (`rpm -e --test`, the database list), the record goes last.
+fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
+    let Ok(record) = ctx.read(PG_RECORD) else {
+        return Ok("PostgreSQL was installed before OpenVIBES; it stays".into());
+    };
+    if installed(ctx, "postgresql-server") {
+        let others = ctx.as_postgres(&[
+            "/usr/bin/psql",
+            "-Atqc",
+            "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')",
+        ])?;
+        let count = others.lines().filter(|l| !l.trim().is_empty()).count();
+        if count > 0 {
+            return Ok(format!(
+                "PostgreSQL stays: it holds {count} other database{}",
+                if count == 1 { "" } else { "s" }
+            ));
+        }
+        let mut argv = vec!["-e"];
+        argv.extend(
+            record
+                .lines()
+                .filter(|p| matches!(*p, "postgresql-server" | "postgresql") && installed(ctx, p)),
+        );
+        let mut test = argv.clone();
+        test.insert(1, "--test");
+        ctx.ok(Rpm, &test)?;
+        ctx.ok(Systemctl, &["disable", "--now", "postgresql"])?;
+        ctx.ok(Rpm, &argv)?;
+    }
+    for path in ["/var/lib/pgsql", PG_RECORD] {
+        let path = ctx.path(path);
+        match if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        } {
+            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+                return Err(format!("{}: {error}", path.display()));
+            }
+            _ => {}
+        }
+    }
+    Ok("PostgreSQL removed: Setup installed it and nothing else uses it".into())
+}
+
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
     let Some(confirm) = &args.confirm else {
         return Ok(StepState::Skipped("data kept".into()));
@@ -197,6 +247,8 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     // The plan stays until the last step: every step loads it, so a retry
     // after a failure (or the `admin` step) still finds it.
     kept.push("/etc/openvibes/setup.toml");
+    // So does the PostgreSQL record, until PostgreSQL is gone.
+    kept.push(PG_RECORD);
     let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
     for dir in DATA {
         let path = ctx.path(dir);
@@ -245,6 +297,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
             let _ = ctx.ok(Groupdel, &[group]);
         }
     }
+    let postgresql = postgresql(ctx)?;
     // A reinstalled signer makes a new site key (lead, #2086).
     let site_key = if site_key {
         "; the site rule key is gone: after a reinstall, agents need the new key's lines from `agent command`"
@@ -252,7 +305,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
         ""
     };
     Ok(StepState::Done(format!(
-        "database, roles, configuration, data and service accounts removed; PostgreSQL itself stays installed{site_key}"
+        "database, roles, configuration, data and service accounts removed; {postgresql}{site_key}"
     )))
 }
 

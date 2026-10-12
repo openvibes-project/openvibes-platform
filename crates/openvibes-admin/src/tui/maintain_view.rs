@@ -52,9 +52,11 @@ pub fn uninstall_lines<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
         setup.row2 == UNINSTALL_START_ROW,
         "[ Uninstall ]".into(),
     ));
-    lines.push(Line::raw(
-        "PostgreSQL itself stays installed. openvibes-admin is removed last, by you.",
-    ));
+    lines.push(Line::raw(if setup.everything {
+        "PostgreSQL is removed too if Setup installed it and no other database uses it. This program goes last."
+    } else {
+        "PostgreSQL stays installed. This program goes last."
+    }));
     lines
 }
 

@@ -150,6 +150,9 @@ fn missing_config<'n, R: Runner>(ctx: &Ctx<R>, names: &[&'n str]) -> Vec<&'n str
         .collect()
 }
 
+/// The PostgreSQL packages Setup itself installed, one per line (absent
+/// when PostgreSQL was already there).
+pub const PG_RECORD: &str = "/etc/openvibes/setup-installed-postgresql";
 const PG_VERSION: &str = "/var/lib/pgsql/data/PG_VERSION";
 
 pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
@@ -165,6 +168,16 @@ pub fn postgres_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
 
 pub fn postgres_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     if !ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql-server"]) {
+        // Recorded first, like setup-opened-ports: only what Setup
+        // installed is Remove everything's to remove (a program that was
+        // already there stays).
+        let client = ctx.succeeds(Rpm, &["-q", "--quiet", "postgresql"]);
+        let record = if client {
+            "postgresql-server\n"
+        } else {
+            "postgresql-server\npostgresql\n"
+        };
+        ctx.put(PG_RECORD, record.as_bytes(), None, 0o644)?;
         ctx.ok(Dnf, &["install", "-y", "postgresql-server"])?;
     }
     if !ctx.exists(PG_VERSION) {
@@ -493,6 +506,7 @@ mod tests {
             std::fs::create_dir_all(root.join("var/lib/pgsql/data")).unwrap();
             std::fs::write(root.join("var/lib/pgsql/data/PG_VERSION"), "17\n").unwrap();
         });
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "postgresql"], 1, "");
         fake.answer(&["/usr/bin/systemctl", "is-active"], 3, "");
         fake.answer(
             &["/usr/bin/systemctl", "enable", "--now", "postgresql"],
@@ -501,11 +515,36 @@ mod tests {
         );
         let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
         assert_eq!(
+            fake.text("/etc/openvibes/setup-installed-postgresql"),
+            "postgresql-server\npostgresql\n"
+        );
+        assert_eq!(
             state,
             StepState::Done("PostgreSQL installed and running".into())
         );
         assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
     }
+    #[test]
+    fn an_existing_postgresql_is_not_recorded_as_ours() {
+        let fake = Fake::new("postgres-existing");
+        fake.answer(&["/usr/bin/rpm", "-q", "--quiet"], 0, "");
+        fake.file("/var/lib/pgsql/data/PG_VERSION", "17\n");
+        fake.answer(
+            &["/usr/bin/systemctl", "enable", "--now", "postgresql"],
+            0,
+            "",
+        );
+        let state = run_step(&fake.ctx(&plan(&[Ingest])), Step::Postgres);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+        assert!(
+            !fake
+                .root
+                .join("etc/openvibes/setup-installed-postgresql")
+                .exists()
+        );
+        assert!(!fake.called(&["/usr/bin/dnf"]));
+    }
+
     #[test]
     fn the_invoking_user_joins_the_operators() {
         let fake = Fake::new("operators");
