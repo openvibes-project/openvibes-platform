@@ -38,7 +38,7 @@ They start, stop and restart the OpenVIBES units through a polkit rule, and
 read logs and read and save configuration files through the root helper,
 without a password. A set-up host opens on Home (Status, Maintenance,
 Quit); `Enter` opens the highlighted entry, `Esc` goes back one screen, `?`
-shows the keys, and `q` quits from Home. Maintenance lists Components and ports (today's Setup screen, until Optional parts and Ports replace it), Database, Back up, Uninstall and Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6); later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
+shows the keys, and `q` quits from Home. Maintenance lists, in this order, Update OpenVIBES, Repair, Components and ports (today's Setup screen, until Optional parts and Ports replace it), Database, Back up, Settings files (today's Configuration screen, until the console's admin pages hold its fields, spec §12 step 6) and Uninstall; later entries are added by their pages. Today's screens keep their own keys, and `Esc` leaves them only when nothing is being typed or asked (unsaved settings ask first). A host not set up
 opens on the install form, which `Esc` does not leave. In any field being
 edited, `Ctrl+U` empties it (other Ctrl chords are ignored, never typed as
 letters). Every new screen (Home, Status, Service, the full log,
@@ -50,9 +50,9 @@ location line and have no Help. With `NO_COLOR` set there is no
 colour. The code is in `src/tui/` (`nav.rs` the screen stack, `home.rs`
 Home, Maintenance and Help, `status.rs` Status, `ui/` the shared frame).
 
-**Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
+**Help** (`?` on Home, Maintenance, Status, Service and the full log, not on today's screens): the keys, and what Enter does on the screen you came from; the line "Here (page): …" says what the keys do on that page and wraps to the frame; `Esc` closes it (its bar is `Esc Close` only) and you land on the row and scroll position you left; `Esc` from any screen does the same. On the Linux text console (`TERM=linux`) the bar and lists use the plain `↑↓←→` arrows instead of the `⭡⭣⭠⭢` glyphs; with `NO_COLOR` set the same screens render without colour. Tests: `TestBackend` renders in `src/tui/nav_tests.rs`, `status_tests.rs` and `service_tests.rs`, and unit tests in `src/tui/ui/` (`cargo test -p openvibes-admin`).
 
-**Work in the background**: helper steps (Update, Back up, Repair, Uninstall) run on their own thread, so the screen keeps drawing. The password is asked in the bar ("Your password (sudo)"; root is not asked), handed to that thread and dropped when the work ends. A wrong password is said in the bar with the tries left; after three, nothing more runs. Home's status line shows the running work, then its result. `q` (or Ctrl+C) while work runs asks "Quit when it is done?": Yes quits once it has finished, and a second Ctrl+C quits at once. Tests: `src/tui/run_tests.rs`.
+**Work in the background**: helper steps (Update, Back up, Repair, Uninstall) run on their own thread, so the screen keeps drawing. The password is asked in the bar ("Your password (sudo)"; root is not asked), handed to that thread and dropped when the work ends. A wrong password is said in the bar with the tries left; after three, nothing more runs. Home's status line shows the running work, then its result. `q` (or Ctrl+C) while work runs asks "Quit when it is done?": Yes quits once it has finished, and a second Ctrl+C quits at once. Tests: `src/tui/run_tests.rs`; each Maintenance page has its own in `src/tui/maint/*_tests.rs` (`update_tests.rs`, `repair_tests.rs`, `backup_tests.rs`, `uninstall_tests.rs`), and the step list they share is drawn by `ui/steps.rs`.
 
 **Status** (from Home): "Needs attention" first, then "Services" (installed
 units only: name, state, ready, `since 18:40` or `since 2026-10-10`), then
@@ -188,7 +188,7 @@ to the journal (`config-write SERVICE ok|failed`, never the content).
 
 **Repair** (Maintenance): it asks for the password and checks every step first (`helper setup-status`), then lists the steps that need attention with why. The ones that pass fold into one line ("✓ 11 other steps in order"), since 14 do not fit 80×24. Fix N problems runs every step with `--repair` (never a new CA) on the worker, then checks again; the bar says what is left. A step that stops is marked ✗ with its error, and Try again goes on from it. Check again re-reads. A half-done update blocks repair runs (`job_guard`), so Repair says so and offers no Fix until the update is finished in Update OpenVIBES, and a half-done uninstall the same way in Uninstall (each has its "Finish the …" entry there). Tests: `src/tui/maint/repair_tests.rs`.
 
-**Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread and give up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
+**Back up** (Maintenance › Back up): what a backup holds, Save in folder and Back up now. The folder is typed in place and checked as typed: a full path (text only, on every key), then, once the typing pauses (or on Enter), on its own thread: that it exists, is a folder, is not reached through a symbolic link (the real path is named), is writable for you (a probe file) and how much space is left (`df`). That thread gives up after 5 seconds, so a dead mount cannot freeze the screen. Tab browses folders instead (Enter opens, Use this folder picks, ? is Help; symbolic links are not listed; the listing itself still runs on the UI thread). No folder is shown or assumed until you choose one; the helper remembers it after the first backup written there (`/etc/openvibes/backup.toml`; a remembered folder that is not a full path, or holds control characters, is ignored). Every backup gets a new name, `openvibes-<version>-<date>-<HHMM>.dump` (`-2`, `-3`... within the same minute, or when a stray `.dump.roles.sql` of that name exists). It runs `helper update-step backup --backup FILE` on the worker, then shows the file and its size, and says to copy it off this host. The helper refuses a folder whose path goes through a symbolic link, and removes the dump again if its `.roles.sql` cannot be written, so no half backup is left. *Ceiling:* a root-squashed NFS folder passes the check (you can write there) but the helper, as root, cannot: the backup then fails with that error and nothing else runs.
 
 **Health**: one line per check, problems first, each marked `problem` or
 `ok`, with the problem count in the title: each installed unit (a problem
@@ -642,8 +642,9 @@ refused while one works):
   step records that in `/etc/openvibes/setup-installed-postgresql`, as
   `setup-opened-ports` does for ports) and the cluster holds no database
   besides `postgres`, `template0`, `template1` and `openvibes`: then the
-  service is disabled, `postgresql-server` (and `postgresql`, if Setup
-  installed it too) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
+  service is disabled, `postgresql-server` (and `postgresql` and
+  `postgresql-private-libs`, whichever Setup installed too: the record lists each
+  one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
   other databases, or without the record, it stays and the step says why;
   `--keep-data` never removes it. Once the checks pass a mark
   (`/etc/openvibes/postgresql-removing`) is written; a retry sees it, skips
@@ -654,12 +655,14 @@ refused while one works):
   itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
   including `admin.toml.rpmsave` and `setup.toml`, which every earlier step
   needs and so stays until then; `/etc/sudoers.d/openvibes-operators*`) and
-  `/var/lib/openvibes-admin`. It removes the package last (`rpm -e`, which
+  `/var/lib/openvibes-admin`, and with `--everything` systemd's
+  `stamp-openvibes-*` timer files in `/var/lib/systemd/timers`. It removes the package last (`rpm -e`, which
   refuses when something depends on it), after every other fallible
   operation, so a failure leaves the tool to retry with. Once no other `openvibes-*` package is left, it also
   removes `/etc/yum.repos.d/openvibes*.repo`, `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes`,
   dnf's `openvibes-*` caches and the OpenVIBES packages key from rpm's
-  database (`gpg-pubkey-<id>-*`, only that key: the id is `7786da36` on RPM 4, the whole fingerprint on RPM 6). With `--keep-data` it
+  database (`gpg-pubkey-<id>-*`, only that key: the id is `7786da36` on RPM 4, the whole fingerprint on RPM 6). The RPM 6 removal prints a deprecation warning
+  (`use rpmkeys --delete`) but removes the key (checked on Fedora 44, RPM 6.0.2). With `--keep-data` it
   keeps `/etc/openvibes` and `/var/lib/openvibes-*` and says so. Every step
   is safe to repeat; a failed step leaves the job marked so Try again
   finishes it. Nothing is left for the user to remove by hand; the root key
