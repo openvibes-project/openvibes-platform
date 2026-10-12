@@ -296,7 +296,7 @@ fn remove_everything_needs_this_hosts_name() {
     app.key(Key::Enter);
     type_text(&mut app, "pw");
     app.key(Key::Enter);
-    for _ in 0..5 {
+    for _ in 0..6 {
         app.setup_tick();
     }
     let call = app.host.calls.borrow()[0].0.clone();
@@ -306,7 +306,8 @@ fn remove_everything_needs_this_hosts_name() {
         "{call}"
     );
     assert_eq!(app.setup.phase, Phase::Finished);
-    assert!(screen(&app).contains("sudo dnf remove openvibes-admin"));
+    assert!(screen(&app).contains("Remove the administration tool"));
+    assert!(!screen(&app).contains("sudo"));
 }
 
 #[test]

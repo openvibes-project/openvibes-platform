@@ -315,9 +315,6 @@ fn finished<H: Host>(app: &App<H>) -> Vec<Line<'static>> {
                 )));
             }
         }
-        if setup.job == Job::Remove {
-            lines.push(Line::raw("Last step: sudo dnf remove openvibes-admin"));
-        }
         return lines;
     }
     install_finished(&setup.states)

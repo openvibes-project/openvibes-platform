@@ -7,6 +7,17 @@ use crate::setup::{
     plan::Component::{self, *},
 };
 
+const GPG: &str = "gpg-pubkey-7786da36-6a0f1e07\tOpenVIBES packages <26064407+itismelime@users.noreply.github.com> public key\n\
+                   gpg-pubkey-11111111-1\tFedora (44) <fedora-44-primary@fedoraproject.org> public key\n";
+
+fn admin_answers(fake: &Fake, left: &str) {
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
+    fake.answer(&["/usr/bin/dnf", "remove", "-y", "openvibes-admin"], 0, "");
+    fake.answer(&["/usr/bin/rpm", "-qa", "openvibes-*"], 0, left);
+    fake.answer(&["/usr/bin/rpm", "-q", "gpg-pubkey"], 0, GPG);
+    fake.answer(&["/usr/bin/rpm", "-e"], 0, "");
+}
+
 const PG: [&str; 4] = ["/usr/sbin/runuser", "-u", "postgres", "--"];
 
 fn args(components: &[Component], confirm: Option<&str>) -> RemoveArgs {
@@ -118,10 +129,7 @@ fn the_admin_package_is_left_for_last() {
             "openvibes-agent"
         ]
     );
-    assert!(
-        state.detail().contains("sudo dnf remove openvibes-admin"),
-        "{state:?}"
-    );
+    assert!(!state.detail().contains("sudo"), "{state:?}");
 }
 
 #[test]
@@ -184,13 +192,11 @@ fn purge_drops_the_database_roles_files_and_accounts() {
         dropped,
         ["openvibes-admin", "openvibes-ingest", "openvibes-console"]
     );
-    for gone in [
-        "etc/openvibes",
-        "var/lib/openvibes-ingest",
-        "etc/openvibes-agent",
-    ] {
+    for gone in ["var/lib/openvibes-ingest", "etc/openvibes-agent"] {
         assert!(!fake.root.join(gone).exists(), "{gone}");
     }
+    // The plan stays until the last step, so a retry can still load it.
+    assert_eq!(fake.text("/etc/openvibes/setup.toml"), "x");
     assert!(fake.called(&["/usr/sbin/userdel", "openvibes-ingest"]));
     assert!(fake.called(&["/usr/sbin/userdel", "openvibes-fetch"]));
     assert!(fake.called(&["/usr/sbin/groupdel", "openvibes-operators"]));
@@ -252,7 +258,7 @@ fn purge_leaves_the_admin_package_config_for_rpm() {
     );
     assert!(matches!(state, StepState::Done(_)), "{state:?}");
     assert!(fake.root.join("etc/openvibes/admin.toml").exists());
-    assert!(!fake.root.join("etc/openvibes/setup.toml").exists());
+    assert!(fake.root.join("etc/openvibes/setup.toml").exists());
     assert!(!fake.root.join("etc/openvibes/tls").exists());
     assert!(
         !fake.root.join("etc/openvibes/backup.toml").exists(),
@@ -276,4 +282,166 @@ fn a_wrong_confirmation_stops_every_step() {
         );
     }
     assert!(fake.calls.borrow().is_empty(), "nothing ran");
+}
+
+#[test]
+fn the_last_step_removes_the_tool_what_rpm_kept_and_the_repository() {
+    let fake = Fake::new("remove-admin-last");
+    fake.file("/etc/openvibes/setup.toml", "x");
+    fake.file("/etc/openvibes/admin.toml.rpmsave", "x");
+    fake.file("/etc/sudoers.d/openvibes-operators.rpmsave", "x");
+    fake.file("/etc/sudoers.d/wheel", "not ours");
+    fake.file("/var/lib/openvibes-admin/state", "x");
+    fake.file("/etc/yum.repos.d/openvibes.repo", "[openvibes]\n");
+    fake.file("/etc/yum.repos.d/fedora.repo", "[fedora]\n");
+    fake.file("/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes", "k");
+    fake.file("/etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44", "k");
+    fake.file("/var/cache/libdnf5/openvibes-0123456789abcdef/x", "c");
+    fake.file("/var/cache/libdnf5/fedora-cff72538bc9825a4/x", "c");
+    fake.file("/run/openvibes-admin/job", "uninstall");
+    fake.file("/run/openvibes-admin/setup.lock", "");
+    admin_answers(&fake, "");
+    let plan = plan(&[Ingest, Agent]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Admin,
+        &args(&[Ingest, Agent], Some("platform.example.com")),
+    );
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    for gone in [
+        "etc/openvibes",
+        "var/lib/openvibes-admin",
+        "etc/yum.repos.d/openvibes.repo",
+        "etc/sudoers.d/openvibes-operators.rpmsave",
+        "etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes",
+        "var/cache/libdnf5/openvibes-0123456789abcdef",
+        "run/openvibes-admin",
+    ] {
+        assert!(!fake.root.join(gone).exists(), "{gone} left behind");
+    }
+    for kept in [
+        "etc/yum.repos.d/fedora.repo",
+        "etc/sudoers.d/wheel",
+        "etc/pki/rpm-gpg/RPM-GPG-KEY-fedora-44",
+        "var/cache/libdnf5/fedora-cff72538bc9825a4",
+    ] {
+        assert!(fake.root.join(kept).exists(), "{kept} is not ours");
+    }
+    assert_eq!(
+        fake.call(&["/usr/bin/rpm", "-e"]),
+        ["/usr/bin/rpm", "-e", "gpg-pubkey-7786da36-6a0f1e07"]
+    );
+    assert!(!fake.called(&["/usr/bin/rpm", "-e", "gpg-pubkey-11111111-1"]));
+    assert!(
+        state.detail().contains("closes"),
+        "says what the user sees: {state:?}"
+    );
+}
+
+#[test]
+fn keep_data_removes_the_tool_and_keeps_the_configuration() {
+    let fake = Fake::new("remove-admin-keep");
+    fake.file("/etc/openvibes/setup.toml", "kept");
+    fake.file("/var/lib/openvibes-admin/state", "kept");
+    admin_answers(&fake, "");
+    let plan = plan(&[Ingest]);
+    let state = run(&fake.ctx(&plan), RemoveStep::Admin, &args(&[Ingest], None));
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(fake.called(&["/usr/bin/dnf", "remove", "-y", "openvibes-admin"]));
+    assert_eq!(fake.text("/etc/openvibes/setup.toml"), "kept");
+    assert_eq!(fake.text("/var/lib/openvibes-admin/state"), "kept");
+    assert!(
+        state.detail().contains("kept: /etc/openvibes"),
+        "listed: {state:?}"
+    );
+}
+
+#[test]
+fn removing_one_part_leaves_the_administration_tool() {
+    let fake = Fake::new("remove-admin-part");
+    let plan = plan(&[Ingest, Agent]);
+    let state = run(&fake.ctx(&plan), RemoveStep::Admin, &args(&[Agent], None));
+    assert!(matches!(state, StepState::Skipped(_)), "{state:?}");
+    assert!(!fake.called(&["/usr/bin/dnf"]));
+}
+
+#[test]
+fn the_repository_stays_while_another_openvibes_package_is_installed() {
+    let fake = Fake::new("remove-admin-agent-left");
+    fake.file("/etc/yum.repos.d/openvibes.repo", "[openvibes]\n");
+    admin_answers(&fake, "openvibes-agent\n");
+    let plan = plan(&[Ingest]);
+    run(&fake.ctx(&plan), RemoveStep::Admin, &args(&[Ingest], None));
+    assert!(fake.root.join("etc/yum.repos.d/openvibes.repo").exists());
+    assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
+}
+
+#[test]
+fn purge_keeps_the_plan_so_the_last_step_can_load_it() {
+    let fake = Fake::new("purge-keeps-plan");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file("/etc/openvibes/tls/server.pem", "x");
+    fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
+    fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    let plan = plan(&[Ingest]);
+    let ctx = fake.ctx(&plan);
+    let a = args(&[Ingest], Some("platform.example.com"));
+    // Running it twice is safe: the second run finds the work done.
+    for _ in 0..2 {
+        let state = run(&ctx, RemoveStep::Purge, &a);
+        assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    }
+    assert_eq!(fake.text("/etc/openvibes/setup.toml"), "plan");
+    assert!(!fake.root.join("etc/openvibes/tls").exists());
+}
+
+/// A failed key removal leaves the plan in place and the job marked, and
+/// Try again on a host where the package is already gone finishes.
+#[test]
+fn a_failed_last_step_can_be_run_again() {
+    let fake = Fake::new("remove-admin-retry");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file("/etc/yum.repos.d/openvibes.repo", "[openvibes]\n");
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
+    fake.answer(&["/usr/bin/dnf", "remove", "-y", "openvibes-admin"], 0, "");
+    fake.answer(&["/usr/bin/rpm", "-qa", "openvibes-*"], 0, "");
+    fake.answer(&["/usr/bin/rpm", "-q", "gpg-pubkey"], 0, GPG);
+    fake.fail(&["/usr/bin/rpm", "-e"], "rpmdb locked");
+    let plan = plan(&[Ingest]);
+    let a = args(&[Ingest], Some("platform.example.com"));
+    let state = run(&fake.ctx(&plan), RemoveStep::Admin, &a);
+    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    assert!(
+        fake.root.join("etc/openvibes/setup.toml").exists(),
+        "the plan is needed to retry"
+    );
+
+    // Second run: the package and the key are already gone.
+    let again = Fake::new("remove-admin-retry-2");
+    again.file("/etc/openvibes/setup.toml", "plan");
+    again.answer(&["/usr/bin/rpm", "-qa", "openvibes-*"], 0, "");
+    again.answer(
+        &["/usr/bin/rpm", "-q", "gpg-pubkey"],
+        1,
+        "package gpg-pubkey is not installed\n",
+    );
+    let state = run(&again.ctx(&plan), RemoveStep::Admin, &a);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(!again.called(&["/usr/bin/dnf"]));
+    assert!(!again.root.join("etc/openvibes").exists());
+}
+
+#[test]
+fn a_failed_last_step_keeps_the_job_marked() {
+    let fake = Fake::new("remove-admin-mark");
+    fake.file("/run/openvibes-admin/job", "uninstall");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
+    fake.fail(&["/usr/bin/dnf", "remove"], "locked");
+    let plan = plan(&[Ingest]);
+    let state = run(&fake.ctx(&plan), RemoveStep::Admin, &args(&[Ingest], None));
+    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    assert!(fake.root.join("run/openvibes-admin/job").exists());
 }

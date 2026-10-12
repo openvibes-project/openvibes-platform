@@ -138,7 +138,7 @@ recorded in `/etc/openvibes/setup-opened-ports` (one open before Setup ran is
 never Setup's; installs from before the record close nothing), and one another
 program listens on, per `ss`, stays open with who uses it) and
 `x` uninstall (keep data, or remove everything with a backup and the
-typed hostname; the last line shows `sudo dnf remove openvibes-admin`).
+typed hostname; its last step removes the tool itself).
 The root key file defaults to the first free name in the home directory
 (`openvibes-root-ca.key`, then `-2`, `-3`…), since Remove everything keeps
 the old key; and `m` after a first install that stopped before the CA step
@@ -641,9 +641,20 @@ refused while one works):
   ports, remove the packages; database, CA and configuration stay.
   `--everything --confirm HOSTNAME` also drops the database and every
   `openvibes-*` role and deletes `/etc/openvibes`, `/etc/openvibes-agent`,
-  `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays;
-  `openvibes-admin` itself is removed last with `sudo dnf remove
-  openvibes-admin`, so its packaged `admin.toml` is left for rpm (#82).
+  `/var/lib/openvibes-*` and the service accounts. PostgreSQL stays (it may
+  serve other programs). The last step, `admin`, removes `openvibes-admin`
+  itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
+  including `admin.toml.rpmsave` and `setup.toml`, which every earlier step
+  needs and so stays until then; `/etc/sudoers.d/openvibes-operators*`) and
+  `/var/lib/openvibes-admin`. Once no `openvibes-*` package is left, it also
+  removes `/etc/yum.repos.d/openvibes*.repo`, `/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes`,
+  dnf's `openvibes-*` caches and the OpenVIBES packages key from rpm's
+  database (`gpg-pubkey-7786da36-*`, only that key). With `--keep-data` it
+  keeps `/etc/openvibes` and `/var/lib/openvibes-*` and says so. Every step
+  is safe to repeat; a failed step leaves the job marked so Try again
+  finishes it. Nothing is left for the user to remove by hand; the root key
+  file and backups in the user's folders are theirs and stay. The program's own
+  files are gone after this step, so the TUI closes after it.
 - Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
   --no-role-passwords` to `PATH.roles.sql`, both new files (never over an
   existing one), 0600, owned by the sudo user, checked with `pg_restore
@@ -661,7 +672,7 @@ password (no sudoers entry): `helper setup-plan PLANARGS` (writes
 `setup.toml`; `SUDO_USER` becomes the operator), `helper setup-status`
 (`STEP<TAB>STATE<TAB>DETAIL` per step), `helper setup-step STEP [--repair]`
 (`STATE<TAB>DETAIL`, exit 0 whatever the state), `helper update-step STEP
-[--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP --components
+[--backup PATH] [--repo-dir DIR] [--remember-choice]`, `helper remove-step STEP (backup, stop, firewall, packages, purge, admin) --components
 LIST [--backup PATH] [--confirm HOSTNAME] [--remember-choice]`, `helper unit-enable UNIT`,
 `helper unit-disable UNIT`. Arguments are checked before the root check.
 

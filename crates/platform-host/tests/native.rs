@@ -584,6 +584,12 @@ fn update_and_remove_verbs_carry_their_arguments_but_journal_only_the_step() {
 }
 
 #[test]
+fn the_tool_itself_is_removed_last() {
+    assert_eq!(RemoveStep::ALL.last(), Some(&RemoveStep::Admin));
+    assert_eq!(RemoveStep::parse("admin"), Some(RemoveStep::Admin));
+}
+
+#[test]
 fn packages_lists_installed_versions_and_newer_ones() {
     let host = fake(vec![
         (
