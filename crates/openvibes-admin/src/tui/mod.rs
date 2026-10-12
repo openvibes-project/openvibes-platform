@@ -12,10 +12,6 @@ pub mod form;
 mod home;
 mod jobs;
 mod maint;
-mod maintain;
-#[cfg(test)]
-mod maintain_tests;
-mod maintain_view;
 mod nav;
 #[cfg(test)]
 mod nav_tests;

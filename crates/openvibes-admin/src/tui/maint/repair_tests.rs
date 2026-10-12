@@ -189,8 +189,19 @@ fn an_uninstall_mark_is_named_as_an_uninstall() {
     let text = screen(&app);
     assert!(text.contains("An uninstall stopped half way"), "{text}");
     assert!(
-        !text.contains("update") && !text.contains("Finish the update") && !text.contains("Fix 2"),
+        text.contains("Maintenance › Uninstall") && !text.contains("x uninstall"),
         "{text}"
+    );
+    assert!(
+        text.contains("Finish the uninstall")
+            && !text.contains("update")
+            && !text.contains("Fix 2"),
+        "{text}"
+    );
+    app.key(Key::Enter);
+    assert_eq!(
+        app.nav.screen,
+        crate::tui::nav::Screen::Maint(Page::Uninstall)
     );
 }
 

@@ -20,7 +20,6 @@ pub enum Call {
     Status,
     Repair(Step),
     Update(UpdateStep, Vec<String>),
-    #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Remove(RemoveStep, Vec<String>),
     /// A database command (no password).
     Database(Database),
@@ -43,7 +42,6 @@ pub enum Kind {
     },
     Check,
     Fix,
-    #[allow(dead_code, reason = "first used in Task 9 of the 2a plan")]
     Uninstall {
         everything: bool,
     },

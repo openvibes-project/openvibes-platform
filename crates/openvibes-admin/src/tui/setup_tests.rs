@@ -191,9 +191,13 @@ fn a_set_up_host_offers_the_maintenance_actions() {
     let mut app = set_up(vec![]);
     app.open(Tab::Setup);
     let text = screen(&app);
-    for want in ["m components", "p ports", "x uninstall"] {
+    for want in ["m components", "p ports"] {
         assert!(text.contains(want), "missing {want:?} in\n{text}");
     }
+    assert!(
+        !text.contains("x uninstall"),
+        "Uninstall moved to Maintenance"
+    );
 }
 
 /// #87: a plan from a first install that stopped before the CA step is
@@ -251,81 +255,20 @@ fn changing_components_installs_then_removes_the_unticked_ones() {
     assert_eq!(calls[1].0, "setup-step packages --repair");
 }
 
-/// What the helper remembers after a backup: the folder the screens offer.
-fn remember_folder(app: &super::app::App<super::script_host::SetupHost>, folder: &str) {
-    let dir = app.root.join("etc/openvibes");
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("backup.toml"), format!("folder = \"{folder}\"\n")).unwrap();
-}
-
 #[test]
-fn no_backup_place_is_offered_until_one_was_chosen() {
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    app.key(Key::Char('x'));
-    assert_eq!(app.setup.backup, "");
-}
-
-#[test]
-fn remove_everything_needs_this_hosts_name() {
-    let mut answers: Vec<Result<String, HostError>> = Vec::new();
-    for _ in 0..5 {
-        answers.push(Ok("done\tok\n".into()));
-    }
-    let mut app = set_up(answers);
-    remember_folder(&app, "/home/alice");
-    app.open(Tab::Setup);
-    app.key(Key::Char('x'));
-    app.key(Key::Char(' ')); // Remove everything
-    while app.setup.row2 != 3 {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    assert!(
-        app.message
-            .clone()
-            .unwrap_or_default()
-            .contains("platform.example.com")
-    );
-    assert_eq!(app.setup.phase, Phase::Uninstall);
-    app.key(Key::Up); // confirm field
-    app.key(Key::Enter);
-    type_text(&mut app, "platform.example.com");
-    app.key(Key::Enter);
-    app.key(Key::Down);
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    for _ in 0..6 {
-        app.setup_tick();
-    }
-    let call = app.host.calls.borrow()[0].0.clone();
-    assert!(
-        call.starts_with("remove-step backup --components ingest,console,distribution,vulns,rules,agent --backup /home/alice/openvibes-0.")
-            && call.ends_with(".dump --confirm platform.example.com"),
-        "{call}"
-    );
-    assert_eq!(app.setup.phase, Phase::Finished);
-    assert!(screen(&app).contains("Remove the administration tool"));
-    assert!(!screen(&app).contains("sudo"));
-}
-
-#[test]
-fn keep_data_uninstall_sends_no_confirmation() {
-    let mut app = set_up(vec![]);
-    app.open(Tab::Setup);
-    app.key(Key::Char('x'));
-    while app.setup.row2 != 3 {
-        app.key(Key::Down);
-    }
-    app.key(Key::Enter);
-    type_text(&mut app, "pw");
-    app.key(Key::Enter);
-    app.setup_tick();
-    assert_eq!(
-        app.host.calls.borrow()[0].0,
-        "remove-step backup --components ingest,console,distribution,vulns,rules,agent"
-    );
+fn after_a_failed_step_r_retries_and_esc_goes_back() {
+    let stopped = || {
+        let mut app = set_up(vec![]);
+        app.open(Tab::Setup);
+        app.setup.phase = Phase::Stopped(0);
+        app
+    };
+    let mut app = stopped();
+    app.key(Key::Esc);
+    assert_eq!(app.setup.phase, Phase::Status);
+    let mut app = stopped();
+    app.key(Key::Char('r'));
+    assert!(matches!(app.setup.phase, Phase::Password(_)));
 }
 
 #[test]

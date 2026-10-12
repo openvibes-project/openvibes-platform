@@ -13,7 +13,6 @@ use ratatui::{
 use super::{
     app::App,
     jobs::Job,
-    maintain_view,
     setup::{AGENT_PORTS_ROW, CA_ROW, HOSTNAME_ROW, KEY_ROW, PORT_ROW, Phase, SANS_ROW, START_ROW},
 };
 use crate::setup::plan::{CaMode, Component};
@@ -21,11 +20,11 @@ use crate::setup::plan::{CaMode, Component};
 const FORM_KEYS: &str = "j/k move  space toggle  Enter edit/start";
 /// After a failed step: retry it, or any other action (#73); `leave` follows.
 /// Fits 80 columns.
-const RUN_KEYS: &str = "r retry  x uninstall  m components  p ports";
+const RUN_KEYS: &str = "r retry  m components  p ports";
 /// While a step runs, keys wait for it (the loop runs one step per turn).
 const RUNNING_KEYS: &str = "Working: keys wait until this step ends";
 /// Fits 80 columns.
-const DONE_KEYS: &str = "m components  p ports  x uninstall";
+const DONE_KEYS: &str = "m components  p ports";
 
 /// How to leave: `Esc` goes back on a set-up host; `q` quits the fresh-install form.
 fn leave<H: Host>(app: &App<H>) -> &'static str {
@@ -73,10 +72,6 @@ pub fn draw<H: Host>(frame: &mut Frame, area: Rect, app: &App<H>) {
             },
         ),
         Phase::Finished => (finished(app), format!("{DONE_KEYS}  {}", leave(app))),
-        Phase::Uninstall => (
-            maintain_view::uninstall_lines(app),
-            maintain_view::keys(Phase::Uninstall).into(),
-        ),
     };
     frame.render_widget(
         Paragraph::new(lines)

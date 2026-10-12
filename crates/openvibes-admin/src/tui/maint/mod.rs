@@ -11,6 +11,9 @@ pub mod folder;
 mod repair;
 #[cfg(test)]
 mod repair_tests;
+mod uninstall;
+#[cfg(test)]
+mod uninstall_tests;
 mod update;
 #[cfg(test)]
 mod update_tests;
@@ -44,6 +47,7 @@ pub enum Page {
     Backup,
     Update,
     Repair,
+    Uninstall,
     WhatsNew,
     /// The folder browser, reached with Tab from a typed folder.
     Folder,
@@ -56,6 +60,7 @@ impl Page {
             Page::Backup => "Back up",
             Page::Update => "Update OpenVIBES",
             Page::Repair => "Repair",
+            Page::Uninstall => "Uninstall",
             Page::WhatsNew => "What's new",
             Page::Folder => "Choose a folder",
         }
@@ -73,6 +78,9 @@ impl Page {
             Page::Repair => {
                 "It checks every step first; Fix N problems repairs, then checks again."
             }
+            Page::Uninstall => {
+                "Space chooses Keep the data or Remove everything; Uninstall asks first."
+            }
             Page::WhatsNew => "A list: every package's version and the release notes' address.",
             Page::Folder => "Enter opens a folder; Use this folder picks the one shown.",
         }
@@ -88,12 +96,22 @@ pub struct Maint {
     pub first: bool,
     pub folder: folder::Folder,
     pub browse: Option<folder::Browse>,
+    /// Uninstall: Remove everything instead of Keep the data.
+    pub everything: bool,
+    /// The host name typed to confirm Remove everything, while typing, and before.
+    pub typed: String,
+    pub typing: bool,
+    pub typed_before: String,
+    /// `setup.toml`, read when Uninstall opens.
+    pub plan: Option<crate::setup::plan::Plan>,
+    /// Setup recorded installing PostgreSQL (read when Uninstall opens).
+    pub pg_recorded: bool,
 }
 
 impl Maint {
     /// A value is being typed on a page: its keys are the page's.
     pub fn editing(&self) -> bool {
-        self.folder.editing()
+        self.folder.editing() || self.typing
     }
 }
 
@@ -101,6 +119,7 @@ impl Maint {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Then {
     Update,
+    Uninstall,
 }
 
 #[derive(Clone, Copy)]
@@ -110,13 +129,14 @@ enum Entry {
 }
 
 /// The menu, in spec §3's order; later tasks add their pages.
-const ENTRIES: [(Entry, &str); 6] = [
+const ENTRIES: [(Entry, &str); 7] = [
     (Entry::Page(Page::Update), "Update OpenVIBES"),
     (Entry::Page(Page::Repair), "Repair"),
     (Entry::Legacy(Tab::Setup), "Components and ports"),
     (Entry::Page(Page::Database), "Database"),
     (Entry::Page(Page::Backup), "Back up"),
     (Entry::Legacy(Tab::Configuration), "Settings files"),
+    (Entry::Page(Page::Uninstall), "Uninstall"),
 ];
 
 fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
@@ -131,6 +151,7 @@ fn value<H: Host>(app: &App<H>, entry: Entry) -> String {
         Entry::Page(Page::Repair) => "check every step, fix what is wrong".into(),
         Entry::Page(Page::Database) => "schema, size, automatic clean-up".into(),
         Entry::Page(Page::Backup) => "save the database to a folder you choose".into(),
+        Entry::Page(Page::Uninstall) => "remove OpenVIBES from this host".into(),
         Entry::Page(Page::Folder | Page::WhatsNew) => String::new(),
     }
 }
@@ -197,6 +218,7 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, page: Page)
         Page::Backup => backup::draw(frame, head, app),
         Page::Update => update::draw(frame, head, app),
         Page::Repair => repair::draw(frame, head, app),
+        Page::Uninstall => uninstall::draw(frame, head, app),
         Page::WhatsNew => update::draw_whats_new(frame, head, app),
         Page::Folder => folder::draw(frame, head, app),
     }
@@ -243,6 +265,7 @@ impl<H: Host> App<H> {
                 self.load_backup_choice();
             }
             Page::Repair => self.open_repair(),
+            Page::Uninstall => self.open_uninstall(),
             Page::WhatsNew | Page::Folder => {}
         }
     }
@@ -254,6 +277,7 @@ impl<H: Host> App<H> {
             Page::Backup => self.backup_key(key),
             Page::Update => self.update_key(key),
             Page::Repair => self.repair_key(key),
+            Page::Uninstall => self.uninstall_key(key),
             Page::WhatsNew => {}
             Page::Folder => self.browse_key(key),
         }
@@ -264,6 +288,7 @@ impl<H: Host> App<H> {
     pub(super) fn maint_yes(&mut self, then: Then) {
         match then {
             Then::Update => self.update_yes(),
+            Then::Uninstall => self.uninstall_yes(),
         }
     }
 
@@ -283,6 +308,7 @@ pub fn half_done_problem(kind: Option<&str>) -> Option<super::status::Item> {
             "An update stopped half way: the services may be stopped",
             Page::Update,
         ),
+        "uninstall" => ("An uninstall stopped half way", Page::Uninstall),
         _ => return None,
     };
     Some(super::status::Item::Problem {

@@ -129,12 +129,8 @@ fn entries(steps: &[(Step, StepState)], half: Option<&str>) -> Vec<(Do, String, 
         .map(|(s, _)| s.title())
         .collect();
     let mut out = Vec::new();
-    if half == Some("update") {
-        out.push((
-            Do::Finish,
-            "Finish the update".into(),
-            "Update OpenVIBES".into(),
-        ));
+    if let Some((name, page)) = half.and_then(finishing) {
+        out.push((Do::Finish, name.into(), page.title().into()));
     } else if !problems.is_empty() && half.is_none() {
         let n = problems.len();
         let name = if n == 1 {
@@ -148,14 +144,24 @@ fn entries(steps: &[(Step, StepState)], half: Option<&str>) -> Vec<(Do, String, 
     out
 }
 
+/// The entry and page that finish a half-done job.
+fn finishing(kind: &str) -> Option<(&'static str, Page)> {
+    match kind {
+        "update" => Some(("Finish the update", Page::Update)),
+        "uninstall" => Some(("Finish the uninstall", Page::Uninstall)),
+        _ => None,
+    }
+}
+
 /// What a half-done job is, and what finishes it.
 fn half_note(kind: &str) -> (String, &'static str) {
     match kind {
         "update" => ("An update stopped half way:".into(), " finish it first."),
-        other => (
-            format!("An {other} stopped half way:"),
-            " finish it from Maintenance › Components and ports (x uninstall) first.",
+        "uninstall" => (
+            "An uninstall stopped half way:".into(),
+            " finish it from Maintenance › Uninstall first.",
         ),
+        other => (format!("An {other} stopped half way:"), " finish it first."),
     }
 }
 
@@ -355,7 +361,11 @@ impl<H: Host> App<H> {
                 }
                 match rows.get(self.nav.row) {
                     Some(Do::Fix) => self.begin(fix_work(), 0),
-                    Some(Do::Finish) => self.open_page(Page::Update),
+                    Some(Do::Finish) => {
+                        if let Some((_, page)) = half.as_deref().and_then(finishing) {
+                            self.open_page(page);
+                        }
+                    }
                     _ => {
                         self.nav.row = 0;
                         self.begin(check_work(), 0);

@@ -31,8 +31,6 @@ pub const START_ROW: usize = HOSTNAME_ROW + 6;
 pub enum After {
     Plan,
     Run(usize),
-    /// Start this job at its first step.
-    Job(Job),
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -46,8 +44,6 @@ pub enum Phase {
     Finished,
     /// A set-up host: `c` checks every step.
     Status,
-    /// Keep data or remove everything, the backup, the typed hostname.
-    Uninstall,
 }
 
 pub struct Setup {
@@ -84,12 +80,6 @@ pub struct Setup {
     pub previous_agent_ports: Option<String>,
     pub move_confirmed: bool,
     pub home: Option<String>,
-    /// Update and Uninstall screens: backup file, typed hostname, the
-    /// choice, the packages, and the row under the cursor.
-    pub backup: String,
-    pub confirm: String,
-    pub everything: bool,
-    pub row2: usize,
 }
 
 impl Setup {
@@ -127,10 +117,6 @@ impl Setup {
             previous_agent_ports: None,
             move_confirmed: false,
             home,
-            backup: String::new(),
-            confirm: String::new(),
-            everything: false,
-            row2: 0,
         }
     }
 
@@ -305,7 +291,6 @@ impl<H: Host> App<H> {
             Phase::Form => self.form_key(key),
             Phase::Model => self.model_key(key),
             Phase::Running(_) => {}
-            Phase::Uninstall => self.uninstall_key(key),
             // A stopped run keeps every other action (#73): the user's
             // "Uninstall doesn't work" was x ignored after a failed Repair.
             Phase::Stopped(at) => match key {
@@ -321,7 +306,6 @@ impl<H: Host> App<H> {
         match key {
             Key::Char('m') => self.change_components(),
             Key::Char('p') => self.change_ports(),
-            Key::Char('x') => self.open_uninstall(),
             Key::Char('q') => self.quit = true,
             _ => {}
         }
@@ -501,7 +485,6 @@ impl<H: Host> App<H> {
                 self.setup.phase = match after {
                     After::Plan => Phase::Form,
                     After::Run(at) => Phase::Stopped(at),
-                    After::Job(_) => Phase::Status,
                 };
                 return;
             }
@@ -512,7 +495,6 @@ impl<H: Host> App<H> {
 
     fn with_password(&mut self, after: After, secret: Secret) {
         match after {
-            After::Job(job) => self.start_job(job, secret),
             After::Run(at) => {
                 self.setup.password = Some(secret);
                 self.setup.phase = Phase::Running(at);
@@ -559,7 +541,6 @@ impl<H: Host> App<H> {
             self.setup.phase = match after {
                 After::Plan => Phase::Form,
                 After::Run(at) => Phase::Stopped(at),
-                After::Job(_) => Phase::Status,
             };
         } else {
             self.message = Some(HostError::WrongPassword.to_string());

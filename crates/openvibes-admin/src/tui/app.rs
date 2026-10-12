@@ -260,6 +260,13 @@ impl<H: Host> App<H> {
     /// Esc goes back, q quits from Home, the rest is the screen's.
     pub fn key(&mut self, key: Key) {
         self.outcome = None;
+        // The tool removed itself: Enter (or q) quits, nothing else is left.
+        if self.gone() {
+            if matches!(key, Key::Enter | Key::Char('q')) {
+                self.quit = true;
+            }
+            return;
+        }
         if self.asking.is_some() {
             return self.asking_key(key);
         }
