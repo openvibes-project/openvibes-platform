@@ -114,15 +114,16 @@ fn a_half_done_update_is_said_and_fix_is_not_offered() {
     app.key(Key::Enter);
     let text = screen(&app);
     assert!(
-        text.contains("An update stopped half way") && text.contains("Update OpenVIBES"),
+        text.contains("An update stopped half way") && text.contains("Finish the update"),
         "{text}"
     );
     assert!(
         text.contains("Check again") && !text.contains("Fix 2"),
         "{text}"
     );
+    app.key(Key::Down);
     app.key(Key::Enter);
-    assert!(app.asking.is_some(), "Enter only offers a new check");
+    assert!(app.asking.is_some(), "Check again asks for a new check");
     assert_eq!(app.host.calls.borrow().len(), 1);
 }
 
@@ -156,4 +157,67 @@ fn a_clean_check_says_everything_is_in_order() {
         text.contains("Everything is in order") && !text.contains("Fix "),
         "{text}"
     );
+}
+
+fn write_mark(app: &crate::tui::app::App<crate::tui::script_host::SetupHost>, kind: &str) {
+    let dir = app.root.join("run/openvibes-admin");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("job"), kind).unwrap();
+}
+
+#[test]
+fn finish_the_update_opens_the_update_page() {
+    let mut app = set_up(vec![Ok(TWO_PROBLEMS.to_owned())]);
+    write_mark(&app, "update");
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(text.contains("Finish the update"), "{text}");
+    assert!(!text.contains("Fix 2"), "{text}");
+    app.key(Key::Enter);
+    assert_eq!(app.nav.screen, crate::tui::nav::Screen::Maint(Page::Update));
+}
+
+#[test]
+fn an_uninstall_mark_is_named_as_an_uninstall() {
+    let mut app = set_up(vec![Ok(TWO_PROBLEMS.to_owned())]);
+    write_mark(&app, "uninstall");
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    assert!(text.contains("An uninstall stopped half way"), "{text}");
+    assert!(
+        !text.contains("update") && !text.contains("Finish the update") && !text.contains("Fix 2"),
+        "{text}"
+    );
+}
+
+fn fix_with_final(last: Result<String, HostError>) -> String {
+    let mut answers = vec![Ok(TWO_PROBLEMS.to_owned())];
+    answers.extend(Step::ALL.iter().map(|_| Ok("done\tok\n".to_owned())));
+    answers.push(last);
+    let mut app = set_up(answers);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    app.key(Key::Enter);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    screen(&app)
+}
+
+#[test]
+fn a_final_check_that_says_nothing_or_fails_is_not_repaired() {
+    for last in [
+        Ok("garbage\n".to_owned()),
+        Err(HostError::Failed("sudo broke".into())),
+    ] {
+        let text = fix_with_final(last);
+        assert!(
+            text.contains("checking again failed") && !text.contains("Repaired"),
+            "{text}"
+        );
+    }
 }

@@ -14,7 +14,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use super::failure;
+use super::{Page, failure};
 use crate::tui::{
     app::{App, Key},
     run::{Call, Kind, Run, Work},
@@ -113,25 +113,50 @@ fn ago(at: Instant) -> String {
     }
 }
 
-/// The report's actions: Fix (unless an update is half done), Check again.
-fn entries(steps: &[(Step, StepState)], half_done: bool) -> Vec<(String, String)> {
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum Do {
+    Finish,
+    Fix,
+    Again,
+}
+
+/// The report's actions. A half-done update offers Finish the update first
+/// and no Fix; another half-done job offers no Fix either.
+fn entries(steps: &[(Step, StepState)], half: Option<&str>) -> Vec<(Do, String, String)> {
     let problems: Vec<&str> = steps
         .iter()
         .filter(|(_, s)| problem(s))
         .map(|(s, _)| s.title())
         .collect();
     let mut out = Vec::new();
-    if !problems.is_empty() && !half_done {
+    if half == Some("update") {
+        out.push((
+            Do::Finish,
+            "Finish the update".into(),
+            "Update OpenVIBES".into(),
+        ));
+    } else if !problems.is_empty() && half.is_none() {
         let n = problems.len();
         let name = if n == 1 {
             "Fix 1 problem".to_owned()
         } else {
             format!("Fix {n} problems")
         };
-        out.push((name, problems.join(", ").to_lowercase()));
+        out.push((Do::Fix, name, problems.join(", ").to_lowercase()));
     }
-    out.push(("Check again".to_owned(), String::new()));
+    out.push((Do::Again, "Check again".into(), String::new()));
     out
+}
+
+/// What a half-done job is, and what finishes it.
+fn half_note(kind: &str) -> (String, &'static str) {
+    match kind {
+        "update" => ("An update stopped half way:".into(), " finish it first."),
+        other => (
+            format!("An {other} stopped half way:"),
+            " finish it from Maintenance › Components and ports (x uninstall) first.",
+        ),
+    }
 }
 
 fn titles() -> Vec<String> {
@@ -140,7 +165,7 @@ fn titles() -> Vec<String> {
 
 pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     let t = &app.theme;
-    let half_done = app.half_done.is_some();
+    let half = app.half_done.as_deref();
     let mode = mode(app);
     let bar = match &mode {
         Mode::Fixing(run) => match run.current() {
@@ -164,9 +189,9 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         },
         Mode::Stopped(..) | Mode::Failed(..) => Bar::act(&[("Enter", "Try again")]),
         Mode::Report(steps, _) => {
-            let label = entries(steps, half_done)
+            let label = entries(steps, half)
                 .get(app.nav.row)
-                .map(|(n, _)| n.clone())
+                .map(|(_, n, _)| n.clone())
                 .unwrap_or_default();
             Bar::keys(&[("Enter", label.as_str())])
         }
@@ -259,19 +284,23 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                 Span::styled("✓ ", t.green()),
                 Span::raw(format!("{fine} {others} in order")),
             ]));
-            if half_done && n > 0 {
+            if let (Some(kind), true) = (half, n > 0) {
+                let (what, todo) = half_note(kind);
                 lines.push(Line::from(vec![
                     Span::raw("    "),
-                    Span::styled("An update stopped half way:", t.yellow()),
-                    Span::raw(" finish it in Update OpenVIBES first."),
+                    Span::styled(what, t.yellow()),
+                    Span::raw(todo),
                 ]));
+            } else {
+                lines.push(Line::raw(""));
             }
-            lines.push(Line::raw(""));
-            let rows: Vec<Row> = entries(&steps, half_done)
+            let rows: Vec<Row> = entries(&steps, half)
                 .iter()
-                .map(|(n, v)| Row::entry(n, v))
+                .map(|(_, n, v)| Row::entry(n, v))
                 .collect();
-            let room = area.height.saturating_sub(lines.len() as u16);
+            let room = area
+                .height
+                .saturating_sub(u16::try_from(lines.len()).unwrap_or(u16::MAX));
             let height = u16::try_from(rows.len() * 2 + 1)
                 .unwrap_or(u16::MAX)
                 .min(room);
@@ -288,7 +317,7 @@ enum Act {
     None,
     Retry(Work, usize),
     Check,
-    Rows(usize, bool),
+    Rows(Vec<Do>),
 }
 
 impl<H: Host> App<H> {
@@ -305,28 +334,32 @@ impl<H: Host> App<H> {
     }
 
     pub(super) fn repair_key(&mut self, key: Key) {
-        let half_done = self.half_done.is_some();
+        let half = self.half_done.clone();
         let act = match mode(self) {
             Mode::Stopped(run, at) => Act::Retry(run.work.clone(), at),
             Mode::Failed(..) | Mode::Waiting => Act::Check,
             Mode::Report(steps, _) => Act::Rows(
-                entries(&steps, half_done).len(),
-                steps.iter().any(|(_, s)| problem(s)) && !half_done,
+                entries(&steps, half.as_deref())
+                    .into_iter()
+                    .map(|e| e.0)
+                    .collect(),
             ),
             Mode::Checking | Mode::Fixing(_) => Act::None,
         };
         match act {
             Act::Retry(work, at) if key == Key::Enter => self.begin(work, at),
             Act::Check if key == Key::Enter => self.begin(check_work(), 0),
-            Act::Rows(count, fix) => {
-                if self.move_row(key, count) || key != Key::Enter {
+            Act::Rows(rows) => {
+                if self.move_row(key, rows.len()) || key != Key::Enter {
                     return;
                 }
-                if fix && self.nav.row == 0 {
-                    self.begin(fix_work(), 0);
-                } else {
-                    self.nav.row = 0;
-                    self.begin(check_work(), 0);
+                match rows.get(self.nav.row) {
+                    Some(Do::Fix) => self.begin(fix_work(), 0),
+                    Some(Do::Finish) => self.open_page(Page::Update),
+                    _ => {
+                        self.nav.row = 0;
+                        self.begin(check_work(), 0);
+                    }
                 }
             }
             _ => {}
@@ -343,16 +376,24 @@ impl<H: Host> App<H> {
             return;
         };
         let last = run.work.calls.len() - 1;
-        if let Some(StepState::Done(out)) = &run.states[last] {
-            let left = parse(out).iter().filter(|(_, s)| problem(s)).count();
-            self.outcome = Some(match left {
-                0 => (
-                    true,
-                    format!("Repaired: everything is in order ({})", run.took()),
-                ),
-                1 => (false, format!("1 problem left ({})", run.took())),
-                n => (false, format!("{n} problems left ({})", run.took())),
-            });
-        }
+        let took = run.took();
+        self.outcome = match &run.states[last] {
+            Some(StepState::Done(out)) => {
+                match parse(out).iter().filter(|(_, s)| problem(s)).count() {
+                    _ if parse(out).is_empty() => Some((
+                        false,
+                        format!("The repair ran, but checking again failed ({took})"),
+                    )),
+                    0 => Some((true, format!("Repaired: everything is in order ({took})"))),
+                    1 => Some((false, format!("1 problem left ({took})"))),
+                    n => Some((false, format!("{n} problems left ({took})"))),
+                }
+            }
+            Some(_) if run.stopped_at() == Some(last) => Some((
+                false,
+                format!("The repair ran, but checking again failed ({took})"),
+            )),
+            _ => return,
+        };
     }
 }
