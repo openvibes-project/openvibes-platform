@@ -78,7 +78,7 @@ const ACCOUNTS: [&str; 10] = [
     "openvibes-admin",
 ];
 
-fn installed<R: Runner>(ctx: &Ctx<R>, package: &str) -> bool {
+pub(super) fn installed<R: Runner>(ctx: &Ctx<R>, package: &str) -> bool {
     ctx.succeeds(Rpm, &["-q", "--quiet", package])
 }
 
@@ -256,153 +256,6 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     )))
 }
 
-/// The package repository install.sh writes, and the signing key file it
-/// installs next to it (removed once no OpenVIBES package is left).
-const REPO_DIR: &str = "/etc/yum.repos.d";
-const KEY_FILE: &str = "/etc/pki/rpm-gpg/RPM-GPG-KEY-openvibes";
-/// The OpenVIBES packages key in rpm's database (`gpg-pubkey-<id>-<time>`;
-/// the id is the last eight hex digits of fingerprint 710AD8AF…7786DA36,
-/// see packaging/rpm/openvibes-packages.gpg). Never another key.
-const KEY_ID: &str = "gpg-pubkey-7786da36-";
-/// dnf's per-repository caches (`<repo id>-<16 hex digits>`).
-const CACHES: [&str; 2] = ["/var/cache/libdnf5", "/var/cache/dnf"];
-
-fn remove_path(path: &std::path::Path) -> Result<(), String> {
-    let result = if path.is_dir() {
-        fs::remove_dir_all(path)
-    } else {
-        fs::remove_file(path)
-    };
-    match result {
-        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-            Err(format!("{}: {error}", path.display()))
-        }
-        _ => Ok(()),
-    }
-}
-
-/// Removes every entry of `dir` whose name `ours` accepts; their names.
-fn remove_matching<R: Runner>(
-    ctx: &Ctx<R>,
-    dir: &str,
-    ours: impl Fn(&str) -> bool,
-) -> Result<Vec<String>, String> {
-    let Ok(entries) = fs::read_dir(ctx.path(dir)) else {
-        return Ok(Vec::new());
-    };
-    let mut gone = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name().to_string_lossy().into_owned();
-        if ours(&name) {
-            remove_path(&entry.path())?;
-            gone.push(format!("{dir}/{name}"));
-        }
-    }
-    Ok(gone)
-}
-
-/// `/etc/openvibes` last-file-last: `setup.toml` (the plan every step
-/// loads) goes after everything else, so a failure half way leaves a host
-/// the next run can still load.
-fn remove_config_dir<R: Runner>(ctx: &Ctx<R>) -> Result<(), String> {
-    let dir = ctx.path("/etc/openvibes");
-    let Ok(entries) = fs::read_dir(&dir) else {
-        return Ok(());
-    };
-    for entry in entries.flatten() {
-        if entry.file_name() != "setup.toml" {
-            remove_path(&entry.path())?;
-        }
-    }
-    remove_path(&dir)
-}
-
-/// Last: the administration tool itself (this helper is part of it; the
-/// running process keeps its file until it exits), what rpm kept of it,
-/// its state, and the package repository, its signing key and caches once
-/// no OpenVIBES package is left. Only for the whole platform: removing one
-/// part leaves the tool. With `--everything` (a confirmation) nothing may
-/// stay; without it the configuration and data are kept and listed.
-/// Safe to repeat: every part first checks whether it is still there.
-fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
-    if !ctx
-        .plan
-        .components
-        .iter()
-        .all(|c| args.components.contains(c))
-    {
-        return Ok(StepState::Skipped(
-            "the administration tool stays: other parts remain".into(),
-        ));
-    }
-    let mut done = Vec::new();
-    if installed(ctx, "openvibes-admin") {
-        ctx.ok(Dnf, &["remove", "-y", "openvibes-admin"])?;
-        done.push("openvibes-admin".to_owned());
-    }
-    if ctx.ok(Rpm, &["-qa", "openvibes-*"])?.trim().is_empty() {
-        done.extend(remove_matching(ctx, REPO_DIR, |n| {
-            n.starts_with("openvibes") && n.ends_with(".repo")
-        })?);
-        if ctx.exists(KEY_FILE) {
-            remove_path(&ctx.path(KEY_FILE))?;
-            done.push(KEY_FILE.to_owned());
-        }
-        for cache in CACHES {
-            done.extend(remove_matching(ctx, cache, |n| {
-                n.strip_prefix("openvibes-")
-                    .is_some_and(|id| id.len() == 16 && id.bytes().all(|b| b.is_ascii_hexdigit()))
-            })?);
-        }
-        // Exit 1 when no key is installed: the output is what counts.
-        let keys = ctx.stdout(
-            Rpm,
-            &[
-                "-q",
-                "gpg-pubkey",
-                "--qf",
-                "%{NAME}-%{VERSION}-%{RELEASE}\t%{SUMMARY}\n",
-            ],
-        )?;
-        for key in keys
-            .lines()
-            .filter(|l| l.contains("OpenVIBES packages"))
-            .filter_map(|l| l.split('\t').next())
-            .filter(|name| name.starts_with(KEY_ID))
-        {
-            ctx.ok(Rpm, &["-e", key])?;
-            done.push(key.to_owned());
-        }
-    }
-    let kept = if args.confirm.is_some() {
-        remove_path(&ctx.path("/var/lib/openvibes-admin"))?;
-        done.extend(remove_matching(ctx, "/etc/sudoers.d", |n| {
-            n.starts_with("openvibes-operators")
-        })?);
-        remove_config_dir(ctx)?;
-        done.push("its configuration and data".into());
-        String::new()
-    } else {
-        "; kept: /etc/openvibes and /var/lib/openvibes-* (reinstalling finds them)".into()
-    };
-    let text = if done.is_empty() {
-        "nothing left to remove".to_owned()
-    } else {
-        format!("removed {}", done.join(", "))
-    };
-    Ok(StepState::Done(format!(
-        "{text}{kept}; this program closes here: nothing of OpenVIBES remains to remove by hand"
-    )))
-}
-
-/// The job is over: the mark, and the lock file this run holds (its
-/// directory is tmpfs, but nothing of ours stays).
-fn finish<R: Runner>(ctx: &Ctx<R>) {
-    ctx.job_end();
-    let _ = fs::remove_file(ctx.path("/run/openvibes-admin/setup.lock"));
-    let _ = fs::remove_dir(ctx.path("/run/openvibes-admin"));
-}
-
 pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> StepState {
     // A mistyped name stops the first step, not only the last: the user
     // asked for nothing to happen.
@@ -432,10 +285,15 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
         RemoveStep::Purge => purge(ctx, args),
-        RemoveStep::Admin => remove_admin(ctx, args).inspect(|_| finish(ctx)),
+        RemoveStep::Admin => {
+            admin::remove_admin(ctx, args).inspect(|state| admin::finish(ctx, state))
+        }
     };
     result.unwrap_or_else(StepState::Failed)
 }
+
+#[path = "remove_admin.rs"]
+mod admin;
 
 #[cfg(test)]
 #[path = "remove_tests.rs"]
