@@ -190,16 +190,34 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
     };
     let area = frame::draw(frame, t, head, Some("Uninstall"), &app.bar(bar));
     let rows: Vec<Row> = choices.iter().map(|c| row(app, *c)).collect();
+    // The help line(s) sit directly under the list: it gets what they leave.
+    let below = match (&app.maint.plan_error, chosen) {
+        (None, Some(choice)) => help(app, choice),
+        _ => Vec::new(),
+    };
+    // One empty line stays above the bar; a plan error's text is wrapped
+    // later, so it keeps four lines.
+    let kept = if app.maint.plan_error.is_some() {
+        4
+    } else {
+        below.len() + 1
+    };
+    let room = area
+        .height
+        .saturating_sub(u16::try_from(kept).unwrap_or(u16::MAX));
     let height = u16::try_from(rows.len() * 2 + 1)
         .unwrap_or(u16::MAX)
-        .min(area.height.saturating_sub(4));
+        .min(room);
+    // Whole entries (two lines each) plus the two hint lines: an even
+    // height would leave a second empty line above the help.
+    let height = if height % 2 == 0 { height - 1 } else { height };
     let mut scroll = app.nav.scroll.get();
-    let mut lines = list::lines(t, &rows, app.nav.row, &mut scroll, height, 26);
+    let mut lines = list::lines(t, &rows, app.nav.row, &mut scroll, height, 23);
     app.nav.scroll.set(scroll);
     if let Some(why) = &app.maint.plan_error {
         lines.extend(failure(t, why, "Nothing was removed."));
-    } else if let Some(choice) = chosen {
-        lines.extend(help(app, choice));
+    } else {
+        lines.extend(below);
     }
     frame.render_widget(Paragraph::new(lines), area);
 }

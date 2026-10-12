@@ -123,7 +123,7 @@ pub(super) fn app_taken(
     });
     static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    app.root = std::env::temp_dir().join(format!("ov-tui-root-{}-{n}", std::process::id()));
+    app.root = std::env::temp_dir().join(format!("ov-tui-script-{}-{n}", std::process::id()));
     app.setup.model_present = false;
     app.setup.hostname = "platform.example.com".into();
     app.setup.root_key_out = "/home/alice/openvibes-root-ca.key".into();

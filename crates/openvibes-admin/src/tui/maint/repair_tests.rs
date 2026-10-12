@@ -159,6 +159,25 @@ fn a_clean_check_says_everything_is_in_order() {
     );
 }
 
+#[test]
+fn one_empty_line_sits_above_the_actions() {
+    let mut app = set_up(vec![Ok(TWO_PROBLEMS.to_owned())]);
+    app.open_page(Page::Repair);
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    let text = screen(&app);
+    let lines: Vec<&str> = text.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("other steps in order"))
+        .expect("the summary line");
+    assert!(lines[at + 1].trim().is_empty(), "{text}");
+    assert!(
+        !lines[at + 2].trim().is_empty(),
+        "one empty line only:\n{text}"
+    );
+}
+
 fn write_mark(app: &crate::tui::app::App<crate::tui::script_host::SetupHost>, kind: &str) {
     let dir = app.root.join("run/openvibes-admin");
     std::fs::create_dir_all(&dir).unwrap();

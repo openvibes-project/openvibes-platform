@@ -297,9 +297,8 @@ pub fn draw<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
                     Span::styled(what, t.yellow()),
                     Span::raw(todo),
                 ]));
-            } else {
-                lines.push(Line::raw(""));
             }
+            // The list's own hint line is the one empty line above the actions.
             let rows: Vec<Row> = entries(&steps, half)
                 .iter()
                 .map(|(_, n, v)| Row::entry(n, v))

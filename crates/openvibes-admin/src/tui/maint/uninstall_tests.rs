@@ -32,6 +32,67 @@ fn keep_the_data_is_the_default_and_back_up_first_is_off() {
 }
 
 #[test]
+fn every_choice_shows_in_full_at_80_by_24() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    let text = screen(&app);
+    for want in [
+        "remove the programs; data stays for a reinstall",
+        "programs, data, accounts, certificates, settings",
+        "Back up first",
+        "  Uninstall",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in\n{text}");
+    }
+    assert!(!text.contains("more") && !text.contains('…'), "{text}");
+}
+
+#[test]
+fn help_on_every_maintenance_page_is_not_cut_at_the_edge() {
+    for page in [Page::Backup, Page::Update, Page::Uninstall, Page::Repair] {
+        let mut app = set_up(vec![]);
+        app.open_page(page);
+        if page == Page::Repair {
+            app.key(Key::Esc); // the password prompt
+        }
+        app.key(Key::Char('?'));
+        let text = screen(&app);
+        let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let last = page.help().split_whitespace().last().unwrap();
+        assert!(flat.contains(last), "{page:?} help is cut:\n{text}");
+    }
+}
+
+#[test]
+fn maintenance_values_keep_clear_of_the_longest_name() {
+    let mut app = set_up(vec![]);
+    for key in [Key::Down, Key::Enter, Key::Down, Key::Down] {
+        app.key(key);
+    }
+    let text = screen(&app);
+    assert!(
+        text.contains("Components and ports   agent"),
+        "the values start clear of the longest name:\n{text}"
+    );
+}
+
+#[test]
+fn the_help_never_touches_the_bar() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    app.key(Key::Down);
+    app.key(Key::Char(' '));
+    let text = screen(&app);
+    let lines: Vec<&str> = text.lines().collect();
+    let bar = lines.iter().position(|l| l.contains('┌')).unwrap();
+    assert!(lines[bar - 1].trim().is_empty(), "{text}");
+    assert!(
+        text.contains("PostgreSQL stays: Setup did not install it"),
+        "{text}"
+    );
+}
+
+#[test]
 fn remove_everything_says_what_happens_to_postgresql() {
     let mut app = set_up(vec![]);
     app.open_page(Page::Uninstall);
@@ -291,4 +352,28 @@ fn a_run_that_ends_on_another_screen_brings_its_result_back() {
     assert!(!app.quit);
     app.key(Key::Enter);
     assert!(app.quit);
+}
+
+#[test]
+fn one_empty_line_separates_the_list_from_its_help() {
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    app.key(Key::Down);
+    app.key(Key::Char(' '));
+    for _ in 0..4 {
+        app.key(Key::Down);
+    }
+    let _ = screen(&app); // a frame drawn on Uninstall: the list scrolls to it
+    app.key(Key::Enter); // without the name: moves to the name row
+    let text = screen(&app);
+    let lines: Vec<&str> = text.lines().collect();
+    let help = lines
+        .iter()
+        .position(|l| l.contains("exactly; a tick shows"))
+        .unwrap();
+    // The list's hint line ("⭣ 1 more") or one empty line, never two.
+    assert!(
+        !(lines[help - 1].trim().is_empty() && lines[help - 2].trim().is_empty()),
+        "{text}"
+    );
 }

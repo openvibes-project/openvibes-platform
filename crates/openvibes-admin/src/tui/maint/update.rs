@@ -100,7 +100,7 @@ fn target<H: Host>(app: &App<H>) -> Option<(String, bool)> {
 }
 
 /// "agent 0.2.9, rules 0.1.2": the newer packages, when the admin itself
-/// is not newer (then the question says "Update to <admin version>").
+/// is not newer (then the question says "Update to X", X being the admin version).
 fn others<H: Host>(app: &App<H>) -> Option<String> {
     let Some(Ok(list)) = &app.packages else {
         return None;

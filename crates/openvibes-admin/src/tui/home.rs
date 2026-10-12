@@ -10,6 +10,7 @@ use ratatui::{
 use super::{
     app::{App, Key},
     nav::Screen,
+    status::wrap,
     ui::{
         bar::Bar,
         frame,
@@ -74,7 +75,7 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         }
         Line::from(spans)
     };
-    let lines = vec![
+    let mut lines = vec![
         Line::raw(""),
         pair(t.up_down(), "move · lists scroll", "Esc", "back, or cancel"),
         Line::raw(""),
@@ -84,11 +85,14 @@ pub fn draw_help<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, from: 
         Line::raw(""),
         pair(t.left_right(), "Yes or No in a question", "", ""),
         Line::raw(""),
-        Line::styled(
-            format!("    Here ({}): {}", name(from), here(from)),
-            t.dim(),
-        ),
     ];
+    // Wrapped, not cut at the frame's edge.
+    let here = format!("Here ({}): {}", name(from), here(from));
+    lines.extend(
+        wrap(&here, 72, 3)
+            .into_iter()
+            .map(|l| Line::styled(format!("    {l}"), t.dim())),
+    );
     frame.render_widget(Paragraph::new(lines), area);
 }
 

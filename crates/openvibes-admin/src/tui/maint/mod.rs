@@ -209,7 +209,7 @@ pub fn draw_menu<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>) {
         .map(|(e, name)| Row::entry(name, &value(app, *e)))
         .collect();
     let mut scroll = app.nav.scroll.get();
-    let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 20);
+    let lines = list::lines(&app.theme, &rows, app.nav.row, &mut scroll, area.height, 22);
     app.nav.scroll.set(scroll);
     frame.render_widget(Paragraph::new(lines), area);
 }
