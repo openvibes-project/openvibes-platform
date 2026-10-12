@@ -174,10 +174,12 @@ pub fn remove_admin<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSt
     } else {
         format!("removed {}", done.join(", "))
     };
-    if others.is_empty() {
+    if others.is_empty() && args.confirm.is_some() {
         notes.push(
             "this program closes here: nothing of OpenVIBES remains to remove by hand".into(),
         );
+    } else if others.is_empty() {
+        notes.push("this program closes here; the rest is removed".into());
     } else {
         notes.push("this program closes here".into());
     }

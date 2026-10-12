@@ -149,7 +149,11 @@ fn a_failed_last_step_can_be_run_again() {
     fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-admin"], 0, "");
     fake.answer(&["/usr/bin/rpm", "-qa", "openvibes-*"], 0, "");
     fake.answer(&["/usr/bin/rpm", "-q", "gpg-pubkey"], 0, GPG);
-    fake.fail(&["/usr/bin/rpm", "-e"], "rpmdb locked");
+    fake.fail(
+        &["/usr/bin/rpm", "-e", "gpg-pubkey-7786da36-6a0f1e07"],
+        "rpmdb locked",
+    );
+    fake.answer(&["/usr/bin/rpm", "-e"], 0, "");
     let plan = plan(&[Ingest]);
     let a = args(&[Ingest], Some("platform.example.com"));
     let state = run(&fake.ctx(&plan), RemoveStep::Admin, &a);
@@ -317,7 +321,7 @@ fn postgresql_stays_without_the_record() {
     assert!(
         state
             .detail()
-            .contains("PostgreSQL was installed before OpenVIBES; it stays"),
+            .contains("Setup has no record of installing PostgreSQL; it stays"),
         "{state:?}"
     );
 }
@@ -356,4 +360,120 @@ fn a_refused_postgresql_removal_keeps_the_record_and_the_service() {
     assert!(matches!(state, StepState::Failed(_)), "{state:?}");
     assert!(fake.root.join(REC.trim_start_matches('/')).exists());
     assert!(!fake.called(&["/usr/bin/systemctl", "disable"]));
+}
+
+const MARK: &str = "/etc/openvibes/postgresql-removing";
+
+/// Purge with the cluster unreachable (as after a half-done removal): any
+/// database query would fail, so the retry must not make one.
+fn resume(name: &str, server_installed: bool) -> (Fake, StepState) {
+    let fake = Fake::new(name);
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file(REC, "postgresql-server\npostgresql\n");
+    fake.file(MARK, "removing\n");
+    fake.file("/var/lib/pgsql/data/PG_VERSION", "17\n");
+    let rpm_q = if server_installed { 0 } else { 1 };
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"],
+        rpm_q,
+        "",
+    );
+    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "postgresql"], rpm_q, "");
+    fake.answer(&["/usr/bin/rpm", "-e"], 0, "");
+    fake.answer(&["/usr/bin/systemctl", "disable"], 0, "");
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    // Everything else, the database tools included, fails.
+    let plan = plan(&[Ingest]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest], Some("platform.example.com")),
+    );
+    (fake, state)
+}
+
+fn finished_pg(fake: &Fake, state: &StepState) {
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    assert!(!fake.called(&PG), "no database query on a retry");
+    for gone in [
+        "var/lib/pgsql",
+        "etc/openvibes/postgresql-removing",
+        "etc/openvibes/setup-installed-postgresql",
+    ] {
+        assert!(!fake.root.join(gone).exists(), "{gone}");
+    }
+    assert!(fake.root.join("etc/openvibes/setup.toml").exists());
+    assert!(state.detail().contains("PostgreSQL removed"), "{state:?}");
+}
+
+/// The service was disabled, then `rpm -e` failed.
+#[test]
+fn a_retry_after_the_service_stopped_but_the_package_stayed_finishes() {
+    let (fake, state) = resume("pg-resume-1", true);
+    finished_pg(&fake, &state);
+    assert!(fake.called(&["/usr/bin/rpm", "-e", "postgresql-server", "postgresql"]));
+}
+
+/// The package went, then the data folder or the record could not.
+#[test]
+fn a_retry_after_the_package_went_finishes() {
+    let (fake, state) = resume("pg-resume-2", false);
+    finished_pg(&fake, &state);
+    assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
+    assert!(!fake.called(&["/usr/bin/systemctl"]));
+}
+
+/// A first run that fails at the real removal leaves the mark for the retry.
+#[test]
+fn a_failed_package_removal_leaves_the_mark() {
+    let fake = Fake::new("pg-mark");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file(REC, "postgresql-server\n");
+    fake.answer(&[&PG[..], &["/usr/bin/psql", "-Atqc", "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')"]].concat(), 0, "");
+    fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
+    fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "postgresql-server"],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/systemctl", "disable"], 0, "");
+    fake.answer(&["/usr/bin/rpm", "-e", "--test"], 0, "");
+    fake.fail(&["/usr/bin/rpm", "-e", "postgresql-server"], "locked");
+    let plan = plan(&[Ingest]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest], Some("platform.example.com")),
+    );
+    assert!(matches!(state, StepState::Failed(_)), "{state:?}");
+    assert!(fake.root.join(MARK.trim_start_matches('/')).exists());
+    assert!(fake.root.join(REC.trim_start_matches('/')).exists());
+}
+
+/// A record without the Fedora server package (a PGDG cluster, say) never
+/// deletes a data folder.
+#[test]
+fn a_stale_record_deletes_nothing() {
+    let fake = Fake::new("pg-stale");
+    fake.file("/etc/openvibes/setup.toml", "plan");
+    fake.file(REC, "postgresql-server\n");
+    fake.file("/var/lib/pgsql/16/data/PG_VERSION", "16\n");
+    fake.answer(&[&PG[..], &["/usr/bin/psql"]].concat(), 0, "");
+    fake.answer(&[&PG[..], &["/usr/bin/dropdb"]].concat(), 0, "");
+    fake.answer(&["/usr/sbin/userdel"], 0, "");
+    fake.answer(&["/usr/sbin/groupdel"], 0, "");
+    let plan = plan(&[Ingest]);
+    let state = run(
+        &fake.ctx(&plan),
+        RemoveStep::Purge,
+        &args(&[Ingest], Some("platform.example.com")),
+    );
+    assert!(state.detail().contains("stale"), "{state:?}");
+    assert!(fake.root.join("var/lib/pgsql/16/data/PG_VERSION").exists());
+    assert!(!fake.root.join(REC.trim_start_matches('/')).exists());
+    assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
 }

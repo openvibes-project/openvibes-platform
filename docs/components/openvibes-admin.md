@@ -649,7 +649,11 @@ refused while one works):
   service is disabled, `postgresql-server` (and `postgresql`, if Setup
   installed it too) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
   other databases, or without the record, it stays and the step says why;
-  `--keep-data` never removes it. The record stays until PostgreSQL is gone.
+  `--keep-data` never removes it. Once the checks pass a mark
+  (`/etc/openvibes/postgresql-removing`) is written; a retry sees it, skips
+  every database query and finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
+  mark, then the record). A record without the `postgresql-server` package
+  and without the mark is stale: it is deleted and no data folder is touched.
   The last step, `admin`, removes `openvibes-admin`
   itself and, with `--everything`, what rpm kept of it (`/etc/openvibes`,
   including `admin.toml.rpmsave` and `setup.toml`, which every earlier step

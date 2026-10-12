@@ -156,15 +156,42 @@ fn remove_packages<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepSta
     Ok(StepState::Done(format!("removed: {}", packages.join(" "))))
 }
 
-/// PostgreSQL goes only when Setup installed it (the record) and the
-/// cluster holds nothing but the system databases and `openvibes`. Order
-/// for a retry: everything that can refuse runs while the service still
-/// runs (`rpm -e --test`, the database list), the record goes last.
+/// Set once PostgreSQL's removal has begun (the other-databases check has
+/// passed): a retry then skips the database queries (the service may be
+/// stopped or gone) and goes on removing.
+const PG_MARK: &str = "/etc/openvibes/postgresql-removing";
+
+fn remove_file_or_dir(path: &std::path::Path) -> Result<(), String> {
+    match if path.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    } {
+        Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
+            Err(format!("{}: {error}", path.display()))
+        }
+        _ => Ok(()),
+    }
+}
+
+/// PostgreSQL goes only when Setup installed it (the record), the package
+/// is still installed and the cluster holds nothing but the system
+/// databases and `openvibes`. Everything that can refuse runs before the
+/// mark and before anything stops; after the mark, each part checks whether
+/// it is still to do, so a retry finishes. `/var/lib/pgsql` goes only under
+/// the mark, never on a record alone. The record goes last.
 fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     let Ok(record) = ctx.read(PG_RECORD) else {
-        return Ok("PostgreSQL was installed before OpenVIBES; it stays".into());
+        return Ok("Setup has no record of installing PostgreSQL; it stays".into());
     };
-    if installed(ctx, "postgresql-server") {
+    if !ctx.exists(PG_MARK) {
+        if !installed(ctx, "postgresql-server") {
+            remove_file_or_dir(&ctx.path(PG_RECORD))?;
+            return Ok(
+                "the record of Setup installing PostgreSQL was stale, so PostgreSQL is not removed"
+                    .into(),
+            );
+        }
         let others = ctx.as_postgres(&[
             "/usr/bin/psql",
             "-Atqc",
@@ -177,32 +204,28 @@ fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
                 if count == 1 { "" } else { "s" }
             ));
         }
-        let mut argv = vec!["-e"];
-        argv.extend(
-            record
-                .lines()
-                .filter(|p| matches!(*p, "postgresql-server" | "postgresql") && installed(ctx, p)),
-        );
-        let mut test = argv.clone();
-        test.insert(1, "--test");
+        let mut test = vec!["-e", "--test"];
+        test.extend(packages_to_remove(ctx, &record));
         ctx.ok(Rpm, &test)?;
+        ctx.put(PG_MARK, b"removing\n", None, 0o644)?;
+    }
+    if installed(ctx, "postgresql-server") {
         ctx.ok(Systemctl, &["disable", "--now", "postgresql"])?;
+        let mut argv = vec!["-e"];
+        argv.extend(packages_to_remove(ctx, &record));
         ctx.ok(Rpm, &argv)?;
     }
-    for path in ["/var/lib/pgsql", PG_RECORD] {
-        let path = ctx.path(path);
-        match if path.is_dir() {
-            fs::remove_dir_all(&path)
-        } else {
-            fs::remove_file(&path)
-        } {
-            Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                return Err(format!("{}: {error}", path.display()));
-            }
-            _ => {}
-        }
-    }
+    remove_file_or_dir(&ctx.path("/var/lib/pgsql"))?;
+    remove_file_or_dir(&ctx.path(PG_MARK))?;
+    remove_file_or_dir(&ctx.path(PG_RECORD))?;
     Ok("PostgreSQL removed: Setup installed it and nothing else uses it".into())
+}
+
+fn packages_to_remove<'a, R: Runner>(ctx: &Ctx<R>, record: &'a str) -> Vec<&'a str> {
+    record
+        .lines()
+        .filter(|p| matches!(*p, "postgresql-server" | "postgresql") && installed(ctx, p))
+        .collect()
 }
 
 fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String> {
@@ -223,12 +246,19 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     {
         return Err("Remove everything applies to the whole platform: list every component".into());
     }
-    let roles = ctx.as_postgres(&[
-        "/usr/bin/psql",
-        "-Atqc",
-        "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
-    ])?;
-    ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+    // Once PostgreSQL's own removal has begun the cluster may be gone: the
+    // database work was done before the mark was written.
+    let roles = if ctx.exists(PG_MARK) {
+        String::new()
+    } else {
+        let roles = ctx.as_postgres(&[
+            "/usr/bin/psql",
+            "-Atqc",
+            "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
+        ])?;
+        ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+        roles
+    };
     for role in roles.lines().map(str::trim).filter(|r| {
         r.starts_with("openvibes-") && r.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
     }) {
@@ -249,6 +279,7 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     kept.push("/etc/openvibes/setup.toml");
     // So does the PostgreSQL record, until PostgreSQL is gone.
     kept.push(PG_RECORD);
+    kept.push(PG_MARK);
     let site_key = ctx.exists("/var/lib/openvibes-signer/site.key");
     for dir in DATA {
         let path = ctx.path(dir);

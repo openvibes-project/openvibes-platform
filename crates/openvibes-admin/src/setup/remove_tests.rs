@@ -203,7 +203,9 @@ fn purge_drops_the_database_roles_files_and_accounts() {
     assert!(fake.called(&["/usr/sbin/userdel", "openvibes-fetch"]));
     assert!(fake.called(&["/usr/sbin/groupdel", "openvibes-operators"]));
     assert!(
-        state.detail().contains("PostgreSQL was installed before"),
+        state
+            .detail()
+            .contains("Setup has no record of installing PostgreSQL"),
         "{state:?}"
     );
 }
