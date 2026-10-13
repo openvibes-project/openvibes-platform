@@ -5184,6 +5184,57 @@
         }
       }
     },
+    "/api/v1/netlog/devices": {
+      "get": {
+        "tags": [
+          "netlog"
+        ],
+        "summary": "Lists registered device connections.",
+        "operationId": "list_devices",
+        "responses": {
+          "200": {
+            "description": "Registered devices",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NetlogDevicePage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Authentication required",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Permission denied",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Device list unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ports": {
       "get": {
         "tags": [
@@ -11517,6 +11568,51 @@
             "format": "int64",
             "description": "The count that day.",
             "minimum": 0
+          }
+        }
+      },
+      "NetlogDevicePage": {
+        "type": "object",
+        "description": "Registered network device connections.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NetlogDeviceView"
+            },
+            "description": "Active devices."
+          }
+        }
+      },
+      "NetlogDeviceView": {
+        "type": "object",
+        "description": "One registered network device.",
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "address"
+        ],
+        "properties": {
+          "address": {
+            "type": "string",
+            "description": "IP address from which syslog arrives."
+          },
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Device identifier."
+          },
+          "kind": {
+            "type": "string",
+            "description": "Device kind, currently \"unifi\"."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
           }
         }
       },

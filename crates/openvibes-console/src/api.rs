@@ -1551,6 +1551,26 @@ pub struct FindingHistoryEntry {
     pub received_at: String,
 }
 
+/// One registered network device.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct NetlogDeviceView {
+    /// Device identifier.
+    pub id: i64,
+    /// Display name.
+    pub name: String,
+    /// Device kind, currently "unifi".
+    pub kind: String,
+    /// IP address from which syslog arrives.
+    pub address: String,
+}
+
+/// Registered network device connections.
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct NetlogDevicePage {
+    /// Active devices.
+    pub items: Vec<NetlogDeviceView>,
+}
+
 /// A page of historical observation events using the shared cursor response shape.
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub struct FindingHistoryPage {

@@ -31,6 +31,7 @@ mod fetch_client;
 #[cfg(feature = "embedded-ui")]
 mod frontend_contract;
 mod metrics;
+mod netlog;
 mod openapi;
 mod ports;
 mod presence;
@@ -62,11 +63,12 @@ pub use api::{
     FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
     FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
     FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard, LoginRequest,
-    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
-    PreauthResponse, RevokeAgentRequest, RuleBundlePage, RuleBundlePreview, RuleBundleView,
-    RuleSetPage, RuleSetView, SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage,
-    ServiceAccountView, ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse,
-    Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAssistantInternetRequest,
+    LoginResponse, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, NetlogDevicePage, NetlogDeviceView,
+    PaginationError, Permission, PermissionScope, PreauthResponse, RevokeAgentRequest,
+    RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
+    SaveAssetGroupRequest, SaveDashboardRequest, ServiceAccountPage, ServiceAccountView,
+    ServiceTokenPage, ServiceTokenView, SessionPrincipal, SessionResponse, Severity,
+    ShareDashboardRequest, SignedRuleEnvelopeRequest, UpdateAssistantInternetRequest,
     UpdateAuditRetentionRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
     VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
     VulnerabilityTopHost, VulnerabilityView,

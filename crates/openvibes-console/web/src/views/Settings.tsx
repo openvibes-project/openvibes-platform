@@ -49,6 +49,9 @@ export function Settings() {
                 if (active === "assistant-settings" && can("assistant.admin", true)) {
                     return <AssistantSettings />;
                 }
+                if (active === "netlog-settings" && can("netlog.read", true)) {
+                    return <Netlog_settings />;
+                }
                 return null;
              }}
         </Tabs>
@@ -57,5 +60,14 @@ export function Settings() {
 }
 
 export function Netlog_settings() {
-    return null;
+    return (
+        <div className="view">
+            <ViewHeader title="Netlog Settings" />
+            <div className="panel">
+                <div className="panel-content">
+                    <p>Netlog settings will be available here.</p>
+                </div>
+            </div>
+        </div>
+    )
 }

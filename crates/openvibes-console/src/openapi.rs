@@ -141,7 +141,8 @@ use crate::{
         crate::cases::add_note,
         crate::cases::add_item,
         crate::cases::remove_item,
-        crate::cases::set_item_outcome
+        crate::cases::set_item_outcome,
+        crate::netlog::list_devices,
     ),
     components(schemas(
         crate::metrics::MetricHistory,
@@ -313,7 +314,9 @@ use crate::{
         SessionResponse,
         UpdateAuditRetentionRequest,
         UpdateAuditRetentionRequest,
-        Severity
+        Severity,
+        crate::NetlogDevicePage,
+        crate::NetlogDeviceView,
     )),
     tags(
         (name = "session", description = "Current browser session"),

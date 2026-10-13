@@ -1034,6 +1034,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/netlog/devices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Lists registered device connections. */
+        get: operations["list_devices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ports": {
         parameters: {
             query?: never;
@@ -3278,6 +3295,25 @@ export interface components {
              * @description The count that day.
              */
             value: number;
+        };
+        /** @description Registered network device connections. */
+        NetlogDevicePage: {
+            /** @description Active devices. */
+            items: components["schemas"]["NetlogDeviceView"][];
+        };
+        /** @description One registered network device. */
+        NetlogDeviceView: {
+            /** @description IP address from which syslog arrives. */
+            address: string;
+            /**
+             * Format: int64
+             * @description Device identifier.
+             */
+            id: number;
+            /** @description Device kind, currently "unifi". */
+            kind: string;
+            /** @description Display name. */
+            name: string;
         };
         /**
          * @description Stable console permission identifiers.
@@ -8183,6 +8219,53 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_devices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Registered devices */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetlogDevicePage"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Device list unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
