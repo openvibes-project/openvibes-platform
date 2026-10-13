@@ -22,7 +22,7 @@ test("the bottom bar is labeled; the rest sit under More (board #85)", async ({ 
   await expect(bar.getByRole("link", { name: "Audit log" })).toBeHidden();
   await bar.getByRole("button", { name: "More" }).click();
   const menu = bar.getByRole("menu");
-  for (const name of ["Software", "Enrollment", "Rule sets", "Access", "Service accounts", "Audit log"]) {
+  for (const name of ["Software", "Settings", "Audit log"]) {
     await expect(menu.getByRole("menuitem", { name })).toBeInViewport({ ratio: 1 });
   }
   await menu.getByRole("menuitem", { name: "Audit log" }).click();

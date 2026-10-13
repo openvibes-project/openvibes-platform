@@ -91,7 +91,7 @@ for (const scheme of ["light", "dark"] as const) for (const path of ["/", "/comp
 }
 
 test("a service account is created and issues a token shown once", async ({ page }) => {
-  await page.goto("/service-accounts");
+  await page.goto("/settings?tab=service-accounts");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Backup job");
   await page.getByRole("button", { name: "Create account" }).click();
@@ -102,7 +102,7 @@ test("a service account is created and issues a token shown once", async ({ page
 });
 
 test("revoking a service token asks first (board #85)", async ({ page }) => {
-  await page.goto("/service-accounts");
+  await page.goto("/settings?tab=service-accounts");
   await page.getByRole("button", { name: "New account" }).click();
   await page.getByLabel("Name").fill("Report job");
   await page.getByRole("button", { name: "Create account" }).click();
@@ -125,7 +125,7 @@ test("audit retention changes from its panel", async ({ page }) => {
 });
 
 test("an asset group is created from the access view", async ({ page }) => {
-  await page.goto("/access");
+  await page.goto("/settings?tab=access");
   await page.getByRole("button", { name: "New group" }).click();
   await page.getByLabel("Name").fill("Web servers");
   await page.getByLabel("Selectors (one key=value per line)").fill("role=web");
@@ -152,7 +152,7 @@ test("a finding mitigated on every open host leaves the default Findings list (b
 });
 
 test("an administrator creates a user and sees the one-time password once (board #85)", async ({ page }) => {
-  await page.goto("/access");
+  await page.goto("/settings?tab=access");
   await page.getByRole("button", { name: "New user" }).click();
   await page.getByLabel("Username").fill("jdoe");
   await page.getByLabel("Display name").fill("Jane Doe");
@@ -211,7 +211,7 @@ test("the menu shows counts beside Alarms, Compliance and Vulnerabilities (#117)
 });
 
 test("Enrollment offers the install package and a CLI install command to copy (install walkthrough)", async ({ page }) => {
-  await page.goto("/enrollment");
+  await page.goto("/settings?tab=enrollment");
   const add = page.getByRole("region", { name: "Add a host" });
   await expect(add).toBeVisible();
   await expect(add.getByRole("button", { name: /Install package/ })).toBeVisible();

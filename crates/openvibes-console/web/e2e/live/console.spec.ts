@@ -41,9 +41,18 @@ test("sign-in, every view, and no CSP violations or third-party requests", async
   await expect(page.getByText("Demo data")).toHaveCount(0);
   await signIn(page, "alex");
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
-  for (const view of ["/compliance", "/vulnerabilities", "/agents", "/enrollment", "/rule-sets", "/access", "/service-accounts", "/audit"]) {
+  for (const view of [
+    "/compliance",
+    "/vulnerabilities",
+    "/agents",
+    "/settings?tab=enrollment",
+    "/settings?tab=rule-sets",
+    "/settings?tab=access",
+    "/settings?tab=service-accounts",
+    "/audit"
+  ]) {
     await page.goto(view);
-    await expect(page.locator(".view")).toBeVisible();
+    await expect(page.locator(".view").first()).toBeVisible();
     await expect(page.locator(".error-box")).toHaveCount(0);
   }
   expect(await checks.csp()).toEqual([]);
@@ -85,7 +94,7 @@ test("/login shows home once signed in, and /assistant is gone", async ({ page }
 
 test("an empty service accounts view explains the next step", async ({ page }) => {
   await signIn(page, "alex");
-  await page.goto("/service-accounts");
+  await page.goto("/settings?tab=service-accounts");
   await expect(page.getByText("No service accounts")).toBeVisible();
   await expect(page.getByText("Create one for integrations that need API access.")).toBeVisible();
 });
@@ -147,7 +156,7 @@ test("an Access filter with no matches explains the empty list", async ({ page }
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "light" });
   await signIn(page, "alex");
-  await page.goto("/access?q=no-such-person");
+  await page.goto("/settings?tab=access&q=no-such-person");
   await expect(page.getByText("Nothing matches these filters")).toBeVisible();
   await expect(page.getByText("Clear a filter to see more.")).toBeVisible();
 });
@@ -264,7 +273,7 @@ for (const scheme of ["light", "dark"] as const) {
 
 test("a new user signs in with a one-time password and must set their own first (board #85)", async ({ page, browser }, info) => {
   await signIn(page, "alex");
-  await page.goto("/access");
+  await page.goto("/settings?tab=access");
   await page.getByRole("button", { name: "New user" }).click();
   const username = `e2e-${info.project.name}-${Date.now().toString(36)}`;
   await page.getByLabel("Username").fill(username);

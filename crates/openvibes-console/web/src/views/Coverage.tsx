@@ -47,7 +47,7 @@ function MatrixColumn({ col, tactic, technique, byPhase, toggle }: Readonly<{ co
       </button>
       {col.cells.map((cell) => (
         <button key={cell.technique} type="button"
-          className={cls("coverage-cell", cell.sub && "coverage-cell--sub", technique === cell.technique && "is-on")}
+          className={cls("coverage-cell", technique === cell.technique && "is-on")}
           title={`${cell.technique} ${cell.name}`} onClick={() => toggle("technique", cell.technique)}>
           <span className="mono">{cell.technique}</span>
           <span className="coverage-cell__name">{cell.name}</span>
