@@ -190,6 +190,12 @@ pub enum Permission {
     /// Share one's own dashboards with a role (global only).
     #[serde(rename = "dashboards.share")]
     DashboardsShare,
+    /// Read registered network devices and their status.
+    #[serde(rename = "netlog.read")]
+    NetlogRead,
+    /// Add and remove registered network devices.
+    #[serde(rename = "netlog.manage")]
+    NetlogManage,
 }
 
 /// Effective object scope attached to one permission.

@@ -11551,7 +11551,9 @@
           "service_accounts.read",
           "service_accounts.manage",
           "assistant.use",
-          "dashboards.share"
+          "dashboards.share",
+          "netlog.read",
+          "netlog.manage"
         ]
       },
       "PermissionScope": {

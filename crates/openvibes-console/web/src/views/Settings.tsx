@@ -19,6 +19,7 @@ export function Settings() {
         { id: "enrollment", label: "Enrollment", allowed: can("tokens.read", true) },
         { id: "rule-sets", label: "Rule sets", allowed: can("rules.read", true) },
         { id: "assistant-settings", label: "Assistant", allowed: can("assistant.admin", true) },
+        { id: "netlog-settings", label: "Netlog", allowed: can("netlog.read", true) }, 
     ].filter((tab) => tab.allowed);
 
     const selected = tabs.find((tab) => tab.id === params.get("tab"))?.id
@@ -53,4 +54,8 @@ export function Settings() {
         </Tabs>
     </div>
   );
+}
+
+export function Netlog_settings() {
+    return null;
 }

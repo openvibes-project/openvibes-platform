@@ -192,6 +192,8 @@ const ALL_PERMISSIONS: &[Permission] = &[
     Permission::DashboardsShare,
     Permission::CasesRead,
     Permission::CasesManage,
+    Permission::NetlogRead,
+    Permission::NetlogManage,
 ];
 
 #[cfg(test)]

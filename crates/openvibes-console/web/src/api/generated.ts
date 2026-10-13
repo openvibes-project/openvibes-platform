@@ -3283,7 +3283,7 @@ export interface components {
          * @description Stable console permission identifiers.
          * @enum {string}
          */
-        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "assistant.admin" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share";
+        Permission: "agents.read" | "agents.revoke" | "compliance.read" | "vulnerabilities.read" | "compliance.triage" | "vulnerabilities.triage" | "alarms.read" | "cases.read" | "cases.manage" | "alarms.triage" | "alarms.suppress" | "tokens.read" | "tokens.create" | "tokens.revoke" | "rules.read" | "rules.upload" | "rules.write" | "audit.read" | "audit.export" | "assistant.admin" | "audit.retention.manage" | "rbac.read" | "rbac.manage" | "asset_groups.manage" | "service_accounts.read" | "service_accounts.manage" | "assistant.use" | "dashboards.share" | "netlog.read" | "netlog.manage";
         /** @description Effective object scope attached to one permission. */
         PermissionScope: {
             /** @enum {string} */
