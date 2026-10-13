@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test.beforeEach(async ({ page }) => { await page.goto("/assistant-settings"); });
+test.beforeEach(async ({ page }) => { await page.goto("/settings?tab=assistant-settings"); });
 
 test("level 1 is confirmed with its risk text, and level 2 needs level 1 and a URL", async ({ page }) => {
   const level1 = page.getByRole("switch", { name: "Look up security references" });
