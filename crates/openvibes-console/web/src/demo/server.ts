@@ -951,6 +951,8 @@ export function createDemoServer({ persona = "admin" as Persona, now = Date.now(
     return json(account);
   });
 
+  route("GET","/api/v1/netlog/devices","netlog.read",() => json({ items: [] }),);
+
   route("GET", "/api/v1/assistant/status", "assistant.use", () => json({ available: true, model: "demo (synthetic answers)", location: "in your browser" }));
   route("POST", "/api/v1/assistant/messages", "assistant.use", (_, __, body) =>
     json({ segments: assistant(String(body.question ?? "")), lookups: [{ name: "fleet", objects: data.agents.length, error: null }], internet: internetSources(String(body.question ?? "")) }));
