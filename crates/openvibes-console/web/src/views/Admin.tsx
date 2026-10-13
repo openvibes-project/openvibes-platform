@@ -1,4 +1,4 @@
-// The operate and administer lists: enrollment tokens, rule sets, access,
+// The operate and admin lists: enrollment tokens, rule sets, access,
 // service accounts and the audit log. Same table + panel pattern as the
 // investigate views.
 import { useMemo } from "react";
