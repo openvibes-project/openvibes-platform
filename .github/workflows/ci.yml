@@ -327,6 +327,9 @@ jobs:
             . -> target
             /opt/agent-src -> target
 
+      - name: Refresh platform dependencies after cache restore
+        run: cargo fetch --locked
+
       - name: Cache llama.cpp build
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
