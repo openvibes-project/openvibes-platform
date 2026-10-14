@@ -49,10 +49,9 @@ pub fn alarms_status(reported: bool, alarms: Option<&serde_json::Value>) -> Opti
     let Some(value) = alarms.filter(|value| !value.is_null()) else {
         return Some(AlarmsStatus::Off {
             reason: "not_enabled",
-            text: "process events are not enabled on this host".into(),
-            fix: "add \"process_events\" to collectors in /etc/openvibes-agent/agent.toml, \
-                  then restart the agent"
-                .into(),
+            // Only agents from before #247 (alarms always on) say nothing.
+            text: "this host's agent has threat alarms turned off".into(),
+            fix: "update the agent: newer agents have threat alarms always on".into(),
             command: None,
             fault: false,
         });
@@ -213,7 +212,9 @@ mod tests {
         for value in [None, Some(&Value::Null)] {
             let o = off(alarms_status(true, value));
             assert_eq!(o.reason, "not_enabled");
-            assert!(o.fix.contains("process_events"), "{}", o.fix);
+            // #247: no agent.toml edit; newer agents have alarms always on.
+            assert!(o.fix.contains("update the agent"), "{}", o.fix);
+            assert!(!o.fix.contains("agent.toml"), "{}", o.fix);
             assert_eq!(o.command, None, "words, not a command to paste");
             assert!(!o.fault);
         }

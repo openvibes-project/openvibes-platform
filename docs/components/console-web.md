@@ -257,7 +257,7 @@ The inspector's editors (`dashboards/settings.tsx`) use only those controls:
 - **Alarms** (`/alarms`, `g m`, `alarms.read`): newest first; severity,
   message with `parent → program`, host, count, triage, last seen. Resolved
   and suppressed alarms are hidden unless their chips are on; the empty
-  state explains the auditd / `process_events` requirement. The list loads
+  state says agents report process starts by themselves and each host's page says whether its alarms are on. The list loads
   the newest 100 with the filters sent to the API (`state=active` by
   default) and **Load 100 more**; the text filter applies to what is
   loaded. Each row has a **Quiet…** choice (with `alarms.suppress`): this

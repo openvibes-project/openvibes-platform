@@ -226,7 +226,7 @@ async fn agent_show_prints_the_report() {
         "collectors packages=permission_denied ports=ok",
         "rule set baseline version 7 expires",
         "storage errors 0",
-        "alarms off: process events are not enabled on this host; fix: add \"process_events\"",
+        "alarms off: this host's agent has threat alarms turned off; fix: update the agent",
     ] {
         assert!(shown.contains(want), "missing {want:?} in\n{shown}");
     }

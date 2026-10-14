@@ -103,7 +103,7 @@ test("with no alarm at all, the Alarms view says how to turn alarms on", async (
   await signIn(page, "alex");
   await page.goto("/alarms");
   await expect(page.getByText("No alarms")).toBeVisible();
-  await expect(page.getByText(/"process_events" is in their collectors/)).toBeVisible();
+  await expect(page.getByText(/Agents report process starts by themselves/)).toBeVisible();
 });
 
 test("Most exposed hosts ranks hosts across all kinds even before any feed imported", async ({ page }) => {
