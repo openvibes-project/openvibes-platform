@@ -288,6 +288,8 @@ fn a_wrong_confirmation_stops_every_step() {
     assert!(fake.calls.borrow().is_empty(), "nothing ran");
 }
 
+#[path = "remove_pg_tests.rs"]
+mod pg_tests;
 #[path = "remove_admin_tests.rs"]
 mod admin_tests;
 

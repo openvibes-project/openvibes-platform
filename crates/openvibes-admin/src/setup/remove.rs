@@ -195,7 +195,14 @@ fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
     let Ok(record) = ctx.read(PG_RECORD) else {
         return Ok("Setup has no record of installing PostgreSQL; it stays".into());
     };
-    if !ctx.exists(PG_MARK) {
+    let others = ctx.as_postgres(&[
+        "/usr/bin/psql",
+        "-Atqc",
+        "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')",
+    ]);
+    // The mark is trusted only while the cluster does not answer: a stale
+    // one (Setup took PostgreSQL back) must never skip the checks (review I2).
+    if !ctx.exists(PG_MARK) || others.is_ok() {
         if !installed(ctx, "postgresql-server") {
             remove_file_or_dir(&ctx.path(PG_RECORD))?;
             return Ok(
@@ -203,21 +210,24 @@ fn postgresql<R: Runner>(ctx: &Ctx<R>) -> Result<String, String> {
                     .into(),
             );
         }
-        let others = ctx.as_postgres(&[
-            "/usr/bin/psql",
-            "-Atqc",
-            "SELECT datname FROM pg_database WHERE datname NOT IN ('postgres','template0','template1','openvibes')",
-        ])?;
-        let count = others.lines().filter(|l| !l.trim().is_empty()).count();
-        if count > 0 {
-            return Ok(format!(
-                "PostgreSQL stays: it holds {count} other database{}",
-                if count == 1 { "" } else { "s" }
-            ));
-        }
+        let count = others?.lines().filter(|l| !l.trim().is_empty()).count();
         let mut test = vec!["-e", "--test"];
         test.extend(packages_to_remove(ctx, &record));
-        ctx.ok(Rpm, &test)?;
+        let stays = if count > 0 {
+            Some(format!(
+                "PostgreSQL stays: it holds {count} other database{}",
+                if count == 1 { "" } else { "s" }
+            ))
+        } else {
+            // Another package needs it (review I1): it stays, Purge finishes.
+            ctx.ok(Rpm, &test)
+                .err()
+                .map(|why| format!("PostgreSQL stays: other packages need it ({why})"))
+        };
+        if let Some(stays) = stays {
+            remove_file_or_dir(&ctx.path(PG_MARK))?;
+            return Ok(stays);
+        }
         ctx.put(PG_MARK, b"removing\n", None, 0o644)?;
     }
     if installed(ctx, "postgresql-server") {
@@ -259,16 +269,18 @@ fn purge<R: Runner>(ctx: &Ctx<R>, args: &RemoveArgs) -> Result<StepState, String
     }
     // Once PostgreSQL's own removal has begun the cluster may be gone: the
     // database work was done before the mark was written.
-    let roles = if ctx.exists(PG_MARK) {
-        String::new()
-    } else {
-        let roles = ctx.as_postgres(&[
-            "/usr/bin/psql",
-            "-Atqc",
-            "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
-        ])?;
-        ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
-        roles
+    // A stale mark with the cluster answering still drops (review I2).
+    let roles = match ctx.as_postgres(&[
+        "/usr/bin/psql",
+        "-Atqc",
+        "SELECT rolname FROM pg_roles WHERE rolname LIKE 'openvibes-%' ORDER BY oid",
+    ]) {
+        Ok(roles) => {
+            ctx.as_postgres(&["/usr/bin/dropdb", "--if-exists", "openvibes"])?;
+            roles
+        }
+        Err(_) if ctx.exists(PG_MARK) => String::new(),
+        Err(error) => return Err(error),
     };
     for role in roles.lines().map(str::trim).filter(|r| {
         r.starts_with("openvibes-") && r.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
