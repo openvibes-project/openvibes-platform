@@ -54,6 +54,11 @@ updating the agent.
   `404` means "not offered here". The agent then runs nothing for it and
   raises no health problem: an older platform, or one without the rules
   package, sees no change. Configured sets keep today's behaviour.
+  The `404` is quiet only on first use (no bundle accepted for the set):
+  once a bundle was accepted, a `404` is refused like any other `4xx` and
+  the stored bundle keeps running, so a platform cannot stop the baseline
+  by not publishing it. A `404` for a withdrawn set keeps it
+  `not_assigned`; only a `410` withdraws.
 
 ## 4. Protocol P20: "not assigned"
 
@@ -139,7 +144,7 @@ before the plan's console task.
 
 1. **Protocol P20:** the `410` answer, `not_assigned` in health, fixtures.
 2. **Agent:** the project-set table, adding sets, a quiet `404` for added
-   sets, `410` handling, health. This ships in the next agent release.
+   sets on first use, `410` handling, health. This ships in the next agent release.
 3. **Rules:** the RPM ships hardening L1, and its component page says it
    is signed.
 4. **Platform:**
