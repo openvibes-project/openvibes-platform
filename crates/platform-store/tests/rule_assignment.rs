@@ -350,9 +350,9 @@ async fn a_host_in_no_group_gets_the_default() {
 async fn on_wins_and_a_deleted_group_falls_back() {
     let (db, admin) = setup().await;
     agent(&admin, A, &[("env", "web"), ("tier", "db")]).await;
-    agent(&admin, B, &[("env", "web")]).await;
+    agent(&admin, B, &[("env", "web"), ("tier", "web")]).await;
     let web = group(&admin, "web", &[("env", "web")]).await;
-    // Needs both tags: B is not a member.
+    // Needs both tags: B has the tier key but another value, so is not a member.
     let web_db = group(&admin, "web-db", &[("env", "web"), ("tier", "db")]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
@@ -409,6 +409,13 @@ async fn the_host_view_is_scoped_and_distribution_reads_no_more_than_it_needs() 
     agent(&admin, A, &[("env", "web")]).await;
     let other = group(&admin, "other", &[("env", "db")]).await;
     let console = as_role(&db, "openvibes-console").await;
+    let web = group(&admin, "web", &[("env", "web")]).await;
+    assert!(
+        rule_assignment::for_agent(&console, &AgentScope::AssetGroups(vec![web]), A)
+            .await
+            .unwrap()
+            .is_some()
+    );
     let scoped = AgentScope::AssetGroups(vec![other]);
     assert_eq!(
         rule_assignment::for_agent(&console, &scoped, A)
@@ -427,13 +434,14 @@ async fn the_host_view_is_scoped_and_distribution_reads_no_more_than_it_needs() 
             "SELECT ARRAY[
                 has_column_privilege('openvibes-distribution', 'console_agent_tags', 'tag_value', 'SELECT'),
                 has_column_privilege('openvibes-distribution', 'console_agent_tags', 'changed_by', 'SELECT'),
-                has_table_privilege('openvibes-distribution', 'rule_set_group_assignment', 'UPDATE')]",
+                has_table_privilege('openvibes-distribution', 'rule_set_group_assignment', 'UPDATE'),
+                has_column_privilege('openvibes-distribution', 'console_asset_group_selectors', 'created_at', 'SELECT')]",
             &[],
         )
         .await
         .unwrap()
         .get(0);
-    assert_eq!(privileges, [true, false, false]);
+    assert_eq!(privileges, [true, false, false, false]);
     drop((console, admin));
     db.drop().await;
 }
