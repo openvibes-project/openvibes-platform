@@ -24,6 +24,10 @@ wins); else off if any of its groups says off; else the default. A host
 matches a group when it carries every selector tag; a group without
 selectors matches no host (as for access).
 
+**Distribution.** `POST /v1/rule-bundle` answers `410 Gone` with no body for an
+assignable set that is off on the asking host, checked after the 404 cases
+(even when the agent is current); every other answer is unchanged.
+
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, every group), `set_default` and
 `set_group` (`None` removes an override). A change writes one audit row
