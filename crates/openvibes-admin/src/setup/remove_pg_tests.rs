@@ -130,7 +130,10 @@ fn postgresql_stays_when_another_package_needs_it() {
         0,
         "",
     );
-    fake.fail(&["/usr/bin/rpm", "-e", "--test"], "needed by postgresql-upgrade");
+    fake.fail(
+        &["/usr/bin/rpm", "-e", "--test"],
+        "needed by postgresql-upgrade",
+    );
     let plan = plan(&[Ingest]);
     let state = run(
         &fake.ctx(&plan),
@@ -151,11 +154,17 @@ fn a_stale_mark_never_skips_the_other_databases_check() {
     let fake = Fake::new("pg-stale-mark");
     fake.file(MARK, "removing\n");
     let (fake, state) = purge_pg_on(fake, "wiki\n");
-    assert!(fake.called(&[&PG[..], &["/usr/bin/dropdb"]].concat()), "openvibes is dropped");
+    assert!(
+        fake.called(&[&PG[..], &["/usr/bin/dropdb"]].concat()),
+        "openvibes is dropped"
+    );
     assert!(!fake.called(&["/usr/bin/rpm", "-e"]));
     assert!(fake.root.join("var/lib/pgsql/data/PG_VERSION").exists());
     assert!(state.detail().contains("1 other database"), "{state:?}");
-    assert!(!fake.root.join(MARK.trim_start_matches('/')).exists(), "the stale mark goes");
+    assert!(
+        !fake.root.join(MARK.trim_start_matches('/')).exists(),
+        "the stale mark goes"
+    );
 }
 
 const MARK: &str = "/etc/openvibes/postgresql-removing";

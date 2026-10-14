@@ -386,10 +386,16 @@ fn the_uninstall_question_starts_on_no() {
     app.nav.row = 3; // Keep the data → Uninstall
     app.key(Key::Enter);
     assert!(screen(&app).contains("Remove OpenVIBES?"));
-    assert!(matches!(app.question, Some((_, false))), "No is highlighted");
+    assert!(
+        matches!(app.question, Some((_, false))),
+        "No is highlighted"
+    );
     app.key(Key::Enter);
     assert!(app.question.is_none() && app.run.is_none() && app.asking.is_none());
-    assert!(app.host.calls.borrow().is_empty(), "Enter on No removes nothing");
+    assert!(
+        app.host.calls.borrow().is_empty(),
+        "Enter on No removes nothing"
+    );
 }
 
 #[test]
@@ -430,4 +436,60 @@ fn a_half_done_remove_everything_reopens_as_remove_everything() {
     let text = screen(&app);
     assert!(text.contains("(•) Remove everything"), "{text}");
     assert!(text.contains("[ ] Back up first"), "{text}");
+}
+
+fn uninstall_with(everything: bool, purge: &str, admin: &str) -> String {
+    let ok = || Ok("done\tok\n".to_owned());
+    let mut app = set_up(vec![
+        ok(),
+        ok(),
+        ok(),
+        ok(),
+        Ok(format!("done\t{purge}\n")),
+        Ok(format!("done\t{admin}\n")),
+    ]);
+    app.open_page(Page::Uninstall);
+    if everything {
+        app.key(Key::Down);
+        app.key(Key::Char(' '));
+        app.maint.typed = "platform.example.com".into();
+    }
+    app.nav.row = if everything { 4 } else { 3 };
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    screen(&app)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn the_result_says_what_the_helper_reported() {
+    // Review I4: not a canned "Nothing is left behind".
+    let text = uninstall_with(
+        true,
+        "database, roles, configuration, data and service accounts removed; PostgreSQL stays: it holds 2 other databases",
+        "removed openvibes-admin; the package repository stays: openvibes-agent still uses it; this program closes here",
+    );
+    assert!(text.contains("OpenVIBES is removed"), "{text}");
+    assert!(
+        text.contains("PostgreSQL stays: it holds 2 other databases"),
+        "{text}"
+    );
+    assert!(
+        text.contains("The package repository stays: openvibes-agent still uses it"),
+        "{text}"
+    );
+    assert!(!text.contains("Nothing is left behind"), "{text}");
+    let text = uninstall_with(
+        false,
+        "data kept",
+        "removed openvibes-admin; kept: /etc/openvibes, /var/backups/openvibes; this program closes here; the rest is removed",
+    );
+    assert!(
+        text.contains("Kept: /etc/openvibes, /var/backups/openvibes"),
+        "{text}"
+    );
 }

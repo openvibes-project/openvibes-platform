@@ -288,19 +288,26 @@ fn a_wrong_confirmation_stops_every_step() {
     assert!(fake.calls.borrow().is_empty(), "nothing ran");
 }
 
-#[path = "remove_pg_tests.rs"]
-mod pg_tests;
 #[path = "remove_admin_tests.rs"]
 mod admin_tests;
+#[path = "remove_pg_tests.rs"]
+mod pg_tests;
 
 #[test]
 fn remove_everything_refuses_a_backup_into_a_folder_it_removes() {
     // Review C1: the dump was written, then deleted with the folder.
-    for folder in ["/var/backups/openvibes", "/etc/openvibes/old", "/var/lib/openvibes-vulns"] {
+    for folder in [
+        "/var/backups/openvibes",
+        "/etc/openvibes/old",
+        "/var/lib/openvibes-vulns",
+    ] {
         let mut everything = args(&[Ingest], Some("platform.example.com"));
         everything.backup = Some(folder.into());
         let error = everything.check().unwrap_err();
-        assert!(error.contains("Remove everything removes"), "{folder}: {error}");
+        assert!(
+            error.contains("Remove everything removes"),
+            "{folder}: {error}"
+        );
         let mut keep = args(&[Ingest], None);
         keep.backup = Some(folder.into());
         assert_eq!(keep.check(), Ok(()), "Keep the data keeps {folder}");
@@ -314,7 +321,11 @@ fn remove_everything_refuses_a_backup_into_a_folder_it_removes() {
 fn a_half_done_remove_everything_is_never_finished_as_keep_the_data() {
     // Review I3: the mark says which uninstall it was.
     let fake = Fake::new("remove-mode-mark");
-    fake.answer(&["/usr/bin/rpm", "-q", "--quiet", "openvibes-ingest"], 0, "");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-ingest"],
+        0,
+        "",
+    );
     fake.answer(&["/usr/bin/systemctl", "disable", "--now"], 0, "");
     let plan = plan(&[Ingest]);
     let everything = args(&[Ingest], Some("platform.example.com"));

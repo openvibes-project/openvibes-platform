@@ -384,7 +384,8 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
             .is_ok_and(|mark| mark.lines().nth(1) == Some("everything"))
     {
         return StepState::Failed(
-            "a Remove everything is half done on this host: finish it with Remove everything".into(),
+            "a Remove everything is half done on this host: finish it with Remove everything"
+                .into(),
         );
     }
     let result = match step {
