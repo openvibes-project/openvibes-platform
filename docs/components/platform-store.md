@@ -839,3 +839,10 @@ and `schema_version`. `openvibes-console` can `SELECT` the table and
   the fetch service's outbound filter.
 - Tests: `tests/assistant_internet.rs` (including the denylist and the
   console write path under their own roles).
+
+## Rule-set assignment (`rule_assignment::…`, schema 49)
+
+`rule_set_assignment` (default per assignable set) and
+`rule_set_group_assignment` (overrides per asset group, cascading with the
+group); the console role reads and writes them. Behaviour, grants and tests:
+[rule-set-assignment.md](rule-set-assignment.md).

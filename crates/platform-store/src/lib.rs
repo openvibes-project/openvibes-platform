@@ -58,6 +58,8 @@ pub mod ingest;
 pub mod inventory;
 mod maintenance;
 mod migrate;
+/// Rule-set assignment: defaults, group overrides, per-host state.
+pub mod rule_assignment;
 /// Draft rules for the site's own rule sets.
 pub mod rule_drafts;
 /// Rule sets, trust keys, and published bundles.
