@@ -57,6 +57,7 @@ jobs:
         shell: bash
         run: |
           bash scripts/test-ci-tiers.sh
+          bash scripts/test-release-wait-ci.sh
           # The rules come from the base branch, never from the pull request:
           # a PR could otherwise edit them to skip its own required checks
           # (security review). A base without them runs everything.
