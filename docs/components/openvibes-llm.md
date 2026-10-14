@@ -338,8 +338,9 @@ api_key_file = "/etc/openvibes/llm-api-key"
 root loads. Run `assistant check` and `assistant eval` as that account:
 `sudo -u openvibes-console openvibes-admin assistant check`.
 
-Replacing the model is another `model install` and
-`sudo systemctl restart openvibes-llm.socket`; the next question loads it. A model file changed after installation fails the digest check,
+Replacing the model is another `model install`; nothing needs restarting.
+The model server stops after 5 minutes without questions
+(`OPENVIBES_LLM_IDLE`), and the next question starts it with the new model. A model file changed after installation fails the digest check,
 and the service does not start.
 
 ## How to test
