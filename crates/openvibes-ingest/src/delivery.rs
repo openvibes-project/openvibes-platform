@@ -9,14 +9,25 @@ use chrono::{Duration, Utc};
 use openvibes_core::{
     ALARM_BATCH_BYTES, AlarmBatch, DeliveryAcknowledgement, Finding, FindingBatch, FindingChanges,
     HOST_SERVICES_BYTES, Heartbeat, HostServices, Identifier, InventoryChanges, InventoryReport,
-    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, SchemaVersion, Validate, hex,
-    services_digest,
+    ListenerProtocol, Owners, RejectedFinding, ResourceLimits, RuleSetState, SchemaVersion,
+    Validate, hex, services_digest,
 };
 use platform_store::{alarms, finding_changes, host_services, ingest, inventory, wire};
 
 use platform_agent_server::{ApiError, AuthenticatedAgent, parse};
 
 use crate::server::AppState;
+
+/// The rule sets the agent reports as not assigned to its host (P20).
+fn not_assigned_sets(heartbeat: &Heartbeat) -> Vec<String> {
+    heartbeat
+        .health
+        .iter()
+        .flat_map(|health| &health.rule_sets)
+        .filter(|set| set.state == Some(RuleSetState::NotAssigned))
+        .map(|set| set.id.as_str().to_owned())
+        .collect()
+}
 
 /// `POST /v1/heartbeat`: records liveness for the authenticated agent.
 pub(crate) async fn heartbeat(
@@ -56,6 +67,12 @@ pub(crate) async fn heartbeat(
         now,
     )
     .await?;
+    // P20: a set the platform switched off for this host ends its open matches
+    // here once the agent says it stopped running it.
+    let not_assigned = not_assigned_sets(&heartbeat);
+    if !not_assigned.is_empty() {
+        finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
+    }
     // P13: the heartbeat is stored; a digest that is not ours asks for the
     // whole match set.
     if let Some(digest) = match_sha256 {

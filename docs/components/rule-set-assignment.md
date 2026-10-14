@@ -28,6 +28,21 @@ selectors matches no host (as for access).
 assignable set that is off on the asking host, checked after the 404 cases
 (even when the agent is current); every other answer is unchanged.
 
+**Ingest.** A heartbeat whose health lists a rule set with
+`state: not_assigned` (P20) ends this host's still-open matches of that set,
+when the set is assignable, as when the host stops matching
+(`platform_store::finding_changes::end_unassigned`, under the agent's row
+lock). A set that is not assignable, or an entry without `state`, ends
+nothing. Each ended match gets one triage-history entry by `system` with the
+note "rule set no longer assigned to this host", state unchanged; no audit
+row, as for any match end. Repeated reports end nothing more. Triage (state,
+note, assignee, version) never changes here (user decision 2026-10-14). A
+match the agent already ended through P13 is left as it is. Switching the
+set back on: the agent's next scan starts the match again through the usual
+rules, as for any finding that comes back. Grants: `openvibes-ingest` may
+read `rule_set_assignment` (it already updates `current_findings` and writes
+triage history).
+
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, every group), `set_default` and
 `set_group` (`None` removes an override). A change writes one audit row
@@ -91,3 +106,7 @@ unaudited.
 `eval "$(scripts/test-db.sh)"; cargo test -p platform-store --test rule_assignment`.
 `cargo test -p openvibes-console --test rule_assignment_http` covers the
 console API (needs the same database).
+`cargo test -p platform-store --test end_unassigned` covers the match end
+(and pins the assignable sets to the protocol vector
+`vectors/project-rule-sets.json`); `cargo test -p openvibes-ingest --test
+assignment` covers the heartbeat path.

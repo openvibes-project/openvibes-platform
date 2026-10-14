@@ -191,6 +191,7 @@ mod tests {
                 version: Some(2),
                 expires_at_unix_ms: Some(now + 30 * 86_400_000),
                 refused: None,
+                state: None,
             }],
             storage_errors: 1,
             clock_jump_s: None,
