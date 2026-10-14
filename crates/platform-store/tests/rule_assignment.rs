@@ -12,6 +12,8 @@ use platform_store::{
 
 const L1: &str = "hardening-linux-l1";
 const L2: &str = "hardening-linux-l2";
+/// The console user who makes the changes (audited by id, shown by name).
+const ALICE: &str = "00000000-0000-4000-8000-000000000001";
 
 /// The migrated database and an admin client (kept for the whole test, so
 /// pooled connections with a role set are never handed back as admin).
@@ -19,6 +21,14 @@ async fn setup() -> (TestDb, Client) {
     let db = TestDb::create().await;
     let mut admin = db.pool.get().await.unwrap();
     platform_store::migrate(&mut admin).await.unwrap();
+    admin
+        .execute(
+            "INSERT INTO console_users (user_id, username, display_name, created_at)
+             VALUES ($1::text::uuid, 'alice', 'Alice', now())",
+            &[&ALICE],
+        )
+        .await
+        .unwrap();
     (db, admin)
 }
 
@@ -133,19 +143,19 @@ async fn a_default_change_is_audited_with_old_and_new() {
     let (db, admin) = setup().await;
     let mut console = as_role(&db, "openvibes-console").await;
     let l2 = done(
-        rule_assignment::set_default(&mut console, "alice", L2, true)
+        rule_assignment::set_default(&mut console, ALICE, L2, true)
             .await
             .unwrap(),
     );
     assert!(l2.default_enabled);
     // The same value again changes nothing and is not audited.
     done(
-        rule_assignment::set_default(&mut console, "alice", L2, true)
+        rule_assignment::set_default(&mut console, ALICE, L2, true)
             .await
             .unwrap(),
     );
     assert_eq!(
-        rule_assignment::set_default(&mut console, "alice", "baseline", false)
+        rule_assignment::set_default(&mut console, ALICE, "baseline", false)
             .await
             .unwrap(),
         Change::UnknownSet
@@ -157,15 +167,22 @@ async fn a_default_change_is_audited_with_old_and_new() {
         serde_json::json!({"rule_set_id": L2, "asset_group_id": null,
             "asset_group_name": null, "old": false, "new": true})
     );
-    let actor: String = admin
+    let actor = admin
         .query_one(
-            "SELECT actor FROM audit_log WHERE action = 'rules.assignment.change'",
+            "SELECT actor, actor_id, actor_display FROM audit_log
+             WHERE action = 'rules.assignment.change'",
             &[],
         )
         .await
-        .unwrap()
-        .get(0);
-    assert_eq!(actor, "alice");
+        .unwrap();
+    assert_eq!(
+        (
+            actor.get::<_, &str>(0),
+            actor.get::<_, &str>(1),
+            actor.get::<_, &str>(2)
+        ),
+        (ALICE, ALICE, "Alice")
+    );
     drop((console, admin));
     db.drop().await;
 }
@@ -177,7 +194,7 @@ async fn group_overrides_are_set_changed_removed_and_audited() {
     let mut console = as_role(&db, "openvibes-console").await;
     let c = &mut console;
     let l1 = done(
-        rule_assignment::set_group(c, "alice", L1, &web, Some(false))
+        rule_assignment::set_group(c, ALICE, L1, &web, Some(false))
             .await
             .unwrap(),
     );
@@ -190,20 +207,20 @@ async fn group_overrides_are_set_changed_removed_and_audited() {
         }]
     );
     let l1 = done(
-        rule_assignment::set_group(c, "alice", L1, &web, Some(true))
+        rule_assignment::set_group(c, ALICE, L1, &web, Some(true))
             .await
             .unwrap(),
     );
     assert!(l1.groups[0].enabled);
     let l1 = done(
-        rule_assignment::set_group(c, "alice", L1, &web, None)
+        rule_assignment::set_group(c, ALICE, L1, &web, None)
             .await
             .unwrap(),
     );
     assert!(l1.groups.is_empty());
     // Removing what is not there changes nothing.
     let l1 = done(
-        rule_assignment::set_group(c, "alice", L1, &web, None)
+        rule_assignment::set_group(c, ALICE, L1, &web, None)
             .await
             .unwrap(),
     );
@@ -211,7 +228,7 @@ async fn group_overrides_are_set_changed_removed_and_audited() {
     assert_eq!(
         rule_assignment::set_group(
             &mut console,
-            "alice",
+            ALICE,
             L1,
             "00000000-0000-4000-8000-000000000000",
             Some(true)
@@ -221,13 +238,13 @@ async fn group_overrides_are_set_changed_removed_and_audited() {
         Change::UnknownGroup
     );
     assert_eq!(
-        rule_assignment::set_group(&mut console, "alice", L1, "not-a-uuid", Some(true))
+        rule_assignment::set_group(&mut console, ALICE, L1, "not-a-uuid", Some(true))
             .await
             .unwrap(),
         Change::UnknownGroup
     );
     assert_eq!(
-        rule_assignment::set_group(&mut console, "alice", "baseline", &web, Some(true))
+        rule_assignment::set_group(&mut console, ALICE, "baseline", &web, Some(true))
             .await
             .unwrap(),
         Change::UnknownSet
@@ -261,7 +278,7 @@ async fn deleting_a_group_deletes_its_overrides() {
     let web = group(&admin, "web", &[("env", "web")]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
-        rule_assignment::set_group(&mut console, "alice", L1, &web, Some(false))
+        rule_assignment::set_group(&mut console, ALICE, L1, &web, Some(false))
             .await
             .unwrap(),
     );
@@ -314,7 +331,7 @@ async fn a_host_in_no_group_gets_the_default() {
     let empty = group(&admin, "empty", &[]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
-        rule_assignment::set_group(&mut console, "t", L1, &empty, Some(false))
+        rule_assignment::set_group(&mut console, ALICE, L1, &empty, Some(false))
             .await
             .unwrap(),
     );
@@ -356,17 +373,17 @@ async fn on_wins_and_a_deleted_group_falls_back() {
     let web_db = group(&admin, "web-db", &[("env", "web"), ("tier", "db")]).await;
     let mut console = as_role(&db, "openvibes-console").await;
     done(
-        rule_assignment::set_group(&mut console, "t", L2, &web, Some(false))
+        rule_assignment::set_group(&mut console, ALICE, L2, &web, Some(false))
             .await
             .unwrap(),
     );
     done(
-        rule_assignment::set_group(&mut console, "t", L2, &web_db, Some(true))
+        rule_assignment::set_group(&mut console, ALICE, L2, &web_db, Some(true))
             .await
             .unwrap(),
     );
     done(
-        rule_assignment::set_group(&mut console, "t", L1, &web, Some(false))
+        rule_assignment::set_group(&mut console, ALICE, L1, &web, Some(false))
             .await
             .unwrap(),
     );

@@ -123,11 +123,12 @@ async fn current(client: &Client, set: &str) -> Result<Change, StoreError> {
         .map_or(Change::UnknownSet, Change::Done))
 }
 
-/// One `rules.assignment.change` row: `group` is (id, name), `None` for the
-/// default; `None` as old or new means "no override".
+/// One `rules.assignment.change` row by console user `user_id` (shown by
+/// display name): `group` is (id, name), `None` for the default; `None` as
+/// old or new means "no override".
 async fn audit(
     transaction: &tokio_postgres::Transaction<'_>,
-    actor: &str,
+    user_id: &str,
     set: &str,
     group: Option<(&str, &str)>,
     old: Option<bool>,
@@ -137,12 +138,13 @@ async fn audit(
         .execute(
             "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
                  actor_display, target_kind, target_id)
-             VALUES ($1, 'rules.assignment.change', 'rule_set', 'success',
+             SELECT $1, 'rules.assignment.change', 'rule_set', 'success',
                  jsonb_build_object('rule_set_id', $2::text, 'asset_group_id', $3::text,
                      'asset_group_name', $4::text, 'old', $5::boolean, 'new', $6::boolean),
-                 'user', $1, $1, 'rule_set', $2)",
+                 'user', $1, u.display_name, 'rule_set', $2
+             FROM console_users u WHERE u.user_id::text = $1",
             &[
-                &actor,
+                &user_id,
                 &set,
                 &group.map(|g| g.0),
                 &group.map(|g| g.1),
@@ -154,10 +156,11 @@ async fn audit(
     Ok(())
 }
 
-/// Switches a set's default. Setting the value it has is a no-op (no audit).
+/// Switches a set's default for console user `user_id`. Setting the value
+/// it has is a no-op (no audit).
 pub async fn set_default(
     client: &mut Client,
-    actor: &str,
+    user_id: &str,
     set: &str,
     enabled: bool,
 ) -> Result<Change, StoreError> {
@@ -179,17 +182,18 @@ pub async fn set_default(
                 &[&set, &enabled],
             )
             .await?;
-        audit(&transaction, actor, set, None, Some(old), Some(enabled)).await?;
+        audit(&transaction, user_id, set, None, Some(old), Some(enabled)).await?;
     }
     transaction.commit().await?;
     current(client, set).await
 }
 
-/// Sets (`Some`) or removes (`None`) a group's override. `group` is compared
-/// as text, so a malformed id is simply unknown.
+/// Sets (`Some`) or removes (`None`) a group's override for console user
+/// `user_id`. `group` is compared as text, so a malformed id is simply
+/// unknown.
 pub async fn set_group(
     client: &mut Client,
-    actor: &str,
+    user_id: &str,
     set: &str,
     group: &str,
     enabled: Option<bool>,
@@ -248,7 +252,7 @@ pub async fn set_group(
         };
         audit(
             &transaction,
-            actor,
+            user_id,
             set,
             Some((&group_id, &name)),
             old,

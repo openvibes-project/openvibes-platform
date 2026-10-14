@@ -283,6 +283,7 @@ impl Default for SeededRepository {
                             version: Some(2),
                             expires_at_ms: Some(1_853_910_427_825),
                             refused: None,
+                            state: None,
                         }],
                         rule_sets_at: last_seen_at.map(str::to_owned),
                         alarms: Some(if number % 41 == 0 {

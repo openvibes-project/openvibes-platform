@@ -276,6 +276,22 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/agents/{agent_id}/rule-set-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["host_assignments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/agents/{agent_id}/services": {
         parameters: {
             query?: never;
@@ -1196,6 +1212,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/rule-set-assignments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["list_assignments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-set-assignments/{rule_set_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_default"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put: operations["set_group"];
+        post?: never;
+        delete: operations["clear_group"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/rule-sets": {
         parameters: {
             query?: never;
@@ -1794,6 +1858,11 @@ export interface components {
             /** @description Why the agent refused the last bundle it was given, when it did. */
             refused?: string | null;
             /**
+             * @description The agent's state for the set: `not_assigned` when the platform
+             *     switched it off for this host (P20); absent otherwise.
+             */
+            state?: string | null;
+            /**
              * Format: int64
              * @description Bundle version in use; absent before the agent accepted one.
              */
@@ -2048,6 +2117,13 @@ export interface components {
             key: string;
             /** @description Exact tag value. */
             value: string;
+        };
+        /** @description An asset group an override can name. */
+        AssignableGroupView: {
+            /** @description The group. */
+            asset_group_id: string;
+            /** @description Its name. */
+            name: string;
         };
         /** @description The assistant's internet-lookup setting. */
         AssistantInternet: {
@@ -3165,6 +3241,20 @@ export interface components {
             /** @description Version. */
             version: string;
         };
+        /** @description One assignable set's state on a host, as the platform decides it. */
+        HostRuleSetAssignmentView: {
+            /** @description Whether the host runs it. */
+            enabled: boolean;
+            /** @description Rule set id. */
+            rule_set_id: string;
+            /** @description `default` or `group`. */
+            source: string;
+        };
+        /** @description Every assignable set's state on one host. */
+        HostRuleSetAssignmentsView: {
+            /** @description The sets, by id. */
+            items: components["schemas"]["HostRuleSetAssignmentView"][];
+        };
         /** @description One host's open ports and running services. */
         HostServicesView: {
             /** @description Listeners, exposed first, then by port. */
@@ -3541,6 +3631,33 @@ export interface components {
             /** @description What is wrong. */
             message: string;
         };
+        /** @description One assignable rule set. */
+        RuleSetAssignmentView: {
+            /** @description On or off for hosts no override covers. */
+            default_enabled: boolean;
+            /** @description Overrides, by group name. */
+            groups: components["schemas"]["RuleSetGroupOverrideView"][];
+            /** @description False until a live bundle is published ("not available yet"). */
+            published: boolean;
+            /** @description Rule set id. */
+            rule_set_id: string;
+        };
+        /** @description Every assignable set, and the groups an override can name. */
+        RuleSetAssignmentsView: {
+            /** @description Every asset group, by name. */
+            asset_groups: components["schemas"]["AssignableGroupView"][];
+            /** @description The sets. */
+            items: components["schemas"]["RuleSetAssignmentView"][];
+        };
+        /** @description One asset group's override. */
+        RuleSetGroupOverrideView: {
+            /** @description The group. */
+            asset_group_id: string;
+            /** @description On or off for its hosts. */
+            enabled: boolean;
+            /** @description Its name. */
+            name: string;
+        };
         /** @description Published rule-set inventory. */
         RuleSetPage: {
             /** @description Rule sets sorted by identifier. */
@@ -3715,6 +3832,16 @@ export interface components {
              *     `accepted_risk`; absent or `null` clears it.
              */
             outcome?: string | null;
+        };
+        /** @description A set's new default. */
+        SetRuleSetDefaultRequest: {
+            /** @description On or off for hosts no override covers. */
+            default_enabled: boolean;
+        };
+        /** @description A group's override. */
+        SetRuleSetGroupRequest: {
+            /** @description On or off for the group's hosts. */
+            enabled: boolean;
         };
         /**
          * @description Severity attached to the latest observation for a rule.
@@ -5042,6 +5169,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    host_assignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Each assignable set's state on the host */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HostRuleSetAssignmentsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Agent not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -8655,6 +8831,243 @@ export interface operations {
             };
             /** @description The rule does not pass the agent's checks, or is an alarm rule */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    list_assignments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Assignable rule sets and asset groups */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleSetAssignmentsView"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Neither rules.read nor rules.upload, globally */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Read unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_default: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                rule_set_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRuleSetDefaultRequest"];
+            };
+        };
+        responses: {
+            /** @description The set after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleSetAssignmentView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not an assignable set */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    set_group: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                rule_set_id: string;
+                asset_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRuleSetGroupRequest"];
+            };
+        };
+        responses: {
+            /** @description The set after the change */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleSetAssignmentView"];
+                };
+            };
+            /** @description Invalid body */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not an assignable set, or no such group */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Update unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    clear_group: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Must exactly match configured origin */
+                Origin: string;
+                /** @description Session synchronizer token */
+                "X-CSRF-Token": string;
+            };
+            path: {
+                rule_set_id: string;
+                asset_group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The set without that override (also when it had none) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RuleSetAssignmentView"];
+                };
+            };
+            /** @description Origin, CSRF, or permission check failed */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Not an assignable set, or no such group */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Update unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

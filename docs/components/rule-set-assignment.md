@@ -31,7 +31,8 @@ assignable set that is off on the asking host, checked after the 404 cases
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, every group), `set_default` and
 `set_group` (`None` removes an override). A change writes one audit row
-`rules.assignment.change` (actor, `rule_set_id`, `asset_group_id`,
+`rules.assignment.change` (actor: the console user's id, shown by display
+name; `rule_set_id`, `asset_group_id`,
 `asset_group_name`, `old`, `new`; `null` for "default" or "no override");
 setting the current value writes nothing.
 
@@ -41,6 +42,38 @@ resolution (`HOST_STATE`). A set that is not assignable is always
 assigned. Grants: `openvibes-distribution` may read the two tables and only
 `console_agent_tags (agent_id, tag_key, tag_value)` and
 `console_asset_group_selectors (asset_group_id, tag_key, tag_value)`.
+
+## Console API
+
+All answers carry `Cache-Control: no-store`; errors are
+`application/problem+json`.
+
+| Method and path | Permission | Body | 200 response |
+|---|---|---|---|
+| `GET /api/v1/rule-set-assignments` | `rules.read` or `rules.upload` (global) | none | `RuleSetAssignmentsView` |
+| `PUT /api/v1/rule-set-assignments/{rule_set_id}` | `rules.upload` (global), CSRF | `{"default_enabled": bool}` | `RuleSetAssignmentView` |
+| `PUT /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload`, CSRF | `{"enabled": bool}` | `RuleSetAssignmentView` |
+| `DELETE /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload`, CSRF | none | `RuleSetAssignmentView` (idempotent) |
+| `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `agents.read` (scoped) | none | `HostRuleSetAssignmentsView` |
+
+Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
+asset_groups: [{asset_group_id, name}] }`; `RuleSetAssignmentView
+{ rule_set_id, default_enabled, published, groups: [{asset_group_id, name,
+enabled}] }`; `HostRuleSetAssignmentsView { items: [{rule_set_id, enabled,
+source: "default"|"group"}] }`. Errors: 400 `invalid_request` (bad body),
+403 `permission_denied`, 404 `rule_set_not_assignable`,
+`asset_group_not_found`, `agent_not_found`, 503.
+
+Reading needs `rules.read` (admin) or `rules.upload` (operator, admin),
+changing `rules.upload`, all global; an analyst or viewer holds neither and
+gets 403. The list carries every asset group, so an operator (without
+`rules.read` or `rbac.read`) can add an override; operators therefore see
+every group's name. Writes are absolute values (no `If-Match`):
+a repeated write changes nothing and is not audited. The audit row's actor
+is the signed-in user's id. The host detail's `rule_sets[].state` (on `GET
+/api/v1/agents/{agent_id}`) is the agent's own report (`not_assigned`, else
+`null`); the host view above is the platform's decision. A test: `cargo test
+-p openvibes-console --test rule_assignment_http`.
 
 ## Configuration
 
@@ -54,3 +87,5 @@ A database error is a 503 for the console caller; nothing is half written
 ## How to test
 
 `eval "$(scripts/test-db.sh)"; cargo test -p platform-store --test rule_assignment`.
+`cargo test -p openvibes-console --test rule_assignment_http` covers the
+console API (needs the same database).

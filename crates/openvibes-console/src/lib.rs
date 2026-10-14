@@ -37,6 +37,7 @@ mod presence;
 mod problem;
 mod rbac;
 mod router;
+mod rule_assignment;
 mod rule_drafts;
 mod rule_test;
 #[cfg(feature = "dev-seed")]

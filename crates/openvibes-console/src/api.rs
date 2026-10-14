@@ -1043,6 +1043,9 @@ pub struct AgentRuleSetView {
     pub expires_at_ms: Option<i64>,
     /// Why the agent refused the last bundle it was given, when it did.
     pub refused: Option<String>,
+    /// The agent's state for the set: `not_assigned` when the platform
+    /// switched it off for this host (P20); absent otherwise.
+    pub state: Option<String>,
 }
 
 /// Certificate metadata exposed in an agent detail response.

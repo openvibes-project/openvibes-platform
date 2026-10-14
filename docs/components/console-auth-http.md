@@ -58,6 +58,9 @@ permission-checked read models, enrollment-token management, and audit routes.
   trust keys. Publish repeats verification, binds the confirmation token to
   the exact bytes, and stores the bundle plus its audit row atomically. The
   console never manages private signing keys or trust-key changes.
+- `/api/v1/rule-set-assignments` (the per-group switches of the assignable
+  sets) reads with global `rules.read` or `rules.upload` and changes with
+  `rules.upload` plus CSRF; see [rule-set-assignment.md](rule-set-assignment.md).
 - Missing, malformed, expired, revoked, disabled, or stale-generation sessions
   receive the same generic `401` problem. Store failures return a generic `503`.
 - Session responses are `Cache-Control: no-store`. The CSRF token is derived
