@@ -261,8 +261,10 @@ async fn model_install_verifies_installs_read_only_and_selects_the_model() {
     assert!(!conf.exists());
 
     let out = stdout(&run(&ABC_SHA256.to_uppercase()));
+    // #247: no command to type; the idle server picks the model up itself.
+    assert!(!out.contains("systemctl"), "{out}");
     assert!(
-        out.contains("next: systemctl restart openvibes-llm.socket"),
+        out.contains("the assistant switches to it after 5 minutes without questions"),
         "{out}"
     );
     let installed = models.join("Tiny-Model.Q4_K_M.gguf");

@@ -47,13 +47,22 @@ updating the agent.
   OS family that `agent.toml` does not name. A `[[rule_sets]]` entry with
   the same id wins: its keys and `restricted` are used, never merged. With
   no platform, nothing is added (local-only agents keep exactly their
-  configuration).
+  configuration). Without a `distribution_url`, the agent derives one
+  for the project sets only (the `platform_url` host on port 18424; an
+  explicit setting always wins), and while that derived URL cannot be
+  reached (connect, timeout, TLS) a set never stored stays quiet as for
+  a `404` (user, 2026-10-14).
 - `restricted` for an added set follows today's default: restricted,
   except `baseline-alarms`.
 - **A set the platform does not publish is quiet.** For an added set, a
   `404` means "not offered here". The agent then runs nothing for it and
   raises no health problem: an older platform, or one without the rules
   package, sees no change. Configured sets keep today's behaviour.
+  The `404` is quiet only on first use (no bundle accepted for the set):
+  once a bundle was accepted, a `404` is refused like any other `4xx` and
+  the stored bundle keeps running, so a platform cannot stop the baseline
+  by not publishing it. A `404` for a withdrawn set keeps it
+  `not_assigned`; only a `410` withdraws.
 
 ## 4. Protocol P20: "not assigned"
 
@@ -139,7 +148,7 @@ before the plan's console task.
 
 1. **Protocol P20:** the `410` answer, `not_assigned` in health, fixtures.
 2. **Agent:** the project-set table, adding sets, a quiet `404` for added
-   sets, `410` handling, health. This ships in the next agent release.
+   sets on first use, `410` handling, health. This ships in the next agent release.
 3. **Rules:** the RPM ships hardening L1, and its component page says it
    is signed.
 4. **Platform:**
