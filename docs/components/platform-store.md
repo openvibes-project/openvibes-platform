@@ -208,7 +208,8 @@ links, never edit or delete versions (a test checks it).
 
 `current_findings` gains `ended_at` (NULL: the match is open),
 `end_approximate` and `source` (`scan` for agents that report every scan,
-`changes` for P13); `agents` gains `match_sha256`, the digest of the
+`changes` for P13), and (schema 49) `end_recorded_at`, the platform's time
+when an end was stored (NULL while open; `ended_at` is the agent's clock); `agents` gains `match_sha256`, the digest of the
 agent's open P13 matches the platform acknowledged (NULL: none, the empty
 set's digest). `finding_changes::apply(client, agent_id, changes, rows,
 now)` runs in one transaction under the agent row's lock: it answers
@@ -524,7 +525,8 @@ takes the flag and the audit `actor_kind` (`local_admin` from the CLI,
 ## Live presence (schema 40)
 
 `agent_presence(agent_id, seen_at)` is an UNLOGGED table: ingest upserts it on
-every heartbeat (a narrow row, no WAL), so "online" does not wait for the
+every heartbeat (`platform_store::presence`, also called by
+`ingest::heartbeat`; a narrow row, no WAL), so "online" does not wait for the
 throttled `agents.last_seen_at` write. A crash only empties it; readers then
 fall back to the saved time until the next heartbeat. The SQL function
 `agent_seen_at(agent_id, saved)` returns the later of the two; every read that

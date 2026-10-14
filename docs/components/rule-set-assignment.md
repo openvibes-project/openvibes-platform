@@ -35,17 +35,24 @@ called before ingest stores the report, under the agent's row lock, one
 transaction). It ends this host's still-open matches of that set, as when the
 host stops matching, and writes one triage-history entry by `system` with
 the note "rule set no longer assigned to this host", state unchanged, for
-every match of (host, set) that ended since the stored report (`health_at`)
-or here, whoever ended it. In the real flow the agent ends them itself
-through P13 in the scan that got the 410, just before the report (lab check
-2026-10-14), so its end times are kept. A match that ended earlier (the host
-was fixed) gets no note, and no match gets it twice (a retried heartbeat
-whose report was not stored). A set that is not assignable, an entry
+every match of (host, set) whose end the platform recorded since the stored
+report (`current_findings.end_recorded_at >= agents.health_at`, both on the
+platform's clock, so a skewed agent clock changes nothing) or here, whoever
+ended it. In the real flow the agent ends them itself through P13 in the
+scan that got the 410, just before the report (lab check 2026-10-14), so its
+end times are kept. A match that ended earlier (the host was fixed) gets no
+note, and no match gets it twice (a retried heartbeat whose report was not
+stored). If this fails, ingest still records the host as seen
+(`agent_presence`), answers 503 and does not store the report, so the
+agent's next heartbeat finds the transition again. A set that is not assignable, an entry
 without `state`, or a report that repeats `not_assigned` writes nothing. No
 audit row, as for any match end. Triage (state, note, assignee, version)
 never changes here (user decision 2026-10-14). Switching the set back on:
 the agent's next scan starts the match again through the usual rules, as
-for any finding that comes back. Grants: `openvibes-ingest` may read
+for any finding that comes back. Schema 49 adds `current_findings.end_recorded_at`: set to the platform's
+time wherever a match ends (P13 `ended`, replace and transient ends, and
+here), cleared when it starts again; `NULL` for matches that ended before
+schema 49. Grants: `openvibes-ingest` may read
 `rule_set_assignment` and the key, `note` and `changed_at` columns of
 `console_finding_triage_history` (it already updates `current_findings` and
 writes triage history).

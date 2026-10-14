@@ -32,3 +32,8 @@ GRANT SELECT (asset_group_id, tag_key, tag_value) ON console_asset_group_selecto
 GRANT SELECT ON rule_set_assignment TO "openvibes-ingest";
 GRANT SELECT (agent_id, rule_set_id, rule_id, note, changed_at)
     ON console_finding_triage_history TO "openvibes-ingest";
+-- When the platform recorded a match's end, on its own clock (ended_at is
+-- the agent's): the P20 note covers matches whose end was recorded since the
+-- host's previous health report, whatever the agent's clock says. NULL while
+-- the match is open, and for matches that ended before this version.
+ALTER TABLE current_findings ADD COLUMN end_recorded_at timestamptz;

@@ -131,12 +131,12 @@ async fn reported(admin: &Client, agent: &str, l1_state: Option<&str>, ago: &str
         .unwrap();
 }
 
-/// The agent ended the match itself through P13, `ago` before now.
+/// The agent ended the match itself through P13, recorded `ago` before now.
 async fn ended(admin: &Client, agent: &str, set: &str, rule: &str, ago: &str) {
     admin
         .execute(
             "UPDATE current_findings SET ended_at = now() - $4::text::interval,
-                 end_approximate = false
+                 end_recorded_at = now() - $4::text::interval, end_approximate = false
              WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3",
             &[&agent, &set, &rule, &ago],
         )

@@ -44,15 +44,20 @@ fn beat(agent_id: &str, rule_sets: serde_json::Value) -> Heartbeat {
 }
 
 async fn send(world: &World, chain: &[String], key: &str, beat: Heartbeat) {
+    assert!(try_send(world, chain, key, beat).await, "heartbeat refused");
+}
+
+/// Sends a heartbeat; `false` when the platform refused it.
+async fn try_send(world: &World, chain: &[String], key: &str, beat: Heartbeat) -> bool {
     let (transport, chain, key) = (world.transport(), chain.to_vec(), key.to_owned());
     blocking(move || {
         let identity = ClientIdentity::from_pem(&chain, &key).unwrap();
         PlatformClient::new(&transport, Some(&identity))
             .unwrap()
             .heartbeat(&beat)
-            .unwrap();
+            .is_ok()
     })
-    .await;
+    .await
 }
 
 async fn seed(world: &World, agent_id: &str) {
@@ -128,7 +133,10 @@ async fn a_match_the_agent_ended_gets_the_note_once() {
     world
         .db()
         .await
-        .execute("UPDATE current_findings SET ended_at = now()", &[])
+        .execute(
+            "UPDATE current_findings SET ended_at = now(), end_recorded_at = now()",
+            &[],
+        )
         .await
         .unwrap();
     let sets = serde_json::json!([{"id": "hardening-linux-l1", "state": "not_assigned"}]);
@@ -140,5 +148,42 @@ async fn a_match_the_agent_ended_gets_the_note_once() {
         (true, 1, 0),
         "the second report notes nothing more"
     );
+    world.stop().await;
+}
+
+/// A failing match end still records the host as seen, and the agent's next
+/// heartbeat (the report was not stored) writes the note.
+#[tokio::test]
+async fn a_failed_end_keeps_presence_and_the_retry_notes() {
+    let world = World::start().await;
+    let (agent_id, chain, key) = enrolled(&world).await;
+    let before = serde_json::json!([{"id": "hardening-linux-l1", "version": 4}]);
+    send(&world, &chain, &key, beat(&agent_id, before)).await;
+    seed(&world, &agent_id).await;
+    let db = world.db().await;
+    db.batch_execute(
+        "UPDATE current_findings SET ended_at = now(), end_recorded_at = now();
+         ALTER TABLE rule_set_assignment RENAME TO rule_set_assignment_away",
+    )
+    .await
+    .unwrap();
+    let sets = serde_json::json!([{"id": "hardening-linux-l1", "state": "not_assigned"}]);
+    let sent_at = Utc::now() - Duration::milliseconds(1);
+    assert!(!try_send(&world, &chain, &key, beat(&agent_id, sets.clone())).await);
+    let seen: chrono::DateTime<Utc> = db
+        .query_one(
+            "SELECT seen_at FROM agent_presence WHERE agent_id = $1",
+            &[&agent_id],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert!(seen >= sent_at, "the failed heartbeat still counts as seen");
+    assert_eq!(observed(&world).await, (true, 0, 0));
+    db.batch_execute("ALTER TABLE rule_set_assignment_away RENAME TO rule_set_assignment")
+        .await
+        .unwrap();
+    send(&world, &chain, &key, beat(&agent_id, sets)).await;
+    assert_eq!(observed(&world).await, (true, 1, 0));
     world.stop().await;
 }

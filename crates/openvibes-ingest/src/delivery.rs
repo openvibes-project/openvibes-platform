@@ -60,9 +60,16 @@ pub(crate) async fn heartbeat(
     // P20: a set the platform switched off for this host ends its open
     // matches and notes why, once, when the agent first says it stopped
     // running it: before the report is stored, which the check compares with.
+    // On an error the report is not stored, so the agent's next heartbeat
+    // finds the transition again; the host still counts as seen, and the
+    // error is the answer (503) as for the heartbeat's other writes.
     let not_assigned = not_assigned_sets(&heartbeat);
-    if !not_assigned.is_empty() {
-        finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
+    if !not_assigned.is_empty()
+        && let Err(error) =
+            finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await
+    {
+        platform_store::presence(&client, &agent_id, now).await?;
+        return Err(error.into());
     }
     ingest::heartbeat(
         &client,

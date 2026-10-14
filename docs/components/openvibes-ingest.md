@@ -91,12 +91,14 @@ The usual request limits apply. Test: `tests/ca.rs`.
   makes the heartbeat invalid (400).
   When the report first marks an assignable rule set `state: not_assigned`
   (P20; the stored report did not), before storing it ingest ends this
-  host's still-open matches of that set, and every match of the set that
-  ended since the stored report (usually by the agent's own P13 change in
-  the same scan) gets one triage-history entry by `system` with the note
+  host's still-open matches of that set, and every match of the set whose
+  end was recorded since the stored report, on the platform's clock
+  (usually by the agent's own P13 change in the same scan), gets one triage-history entry by `system` with the note
   "rule set no longer assigned to this host" (state unchanged). Triage is
   not touched; no audit row, as for any match end. Repeated reports write
-  nothing ([rule-set-assignment.md](rule-set-assignment.md)).
+  nothing. If that fails, the host is still recorded as seen, the answer is
+  503 and the report is not stored, so the next heartbeat retries it
+  ([rule-set-assignment.md](rule-set-assignment.md)).
   204.
 - `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
   `agent_id` must be the authenticated agent's (else 400); at most 50,000
