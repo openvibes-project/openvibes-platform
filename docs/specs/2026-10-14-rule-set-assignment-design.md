@@ -47,7 +47,11 @@ updating the agent.
   OS family that `agent.toml` does not name. A `[[rule_sets]]` entry with
   the same id wins: its keys and `restricted` are used, never merged. With
   no platform, nothing is added (local-only agents keep exactly their
-  configuration).
+  configuration). Without a `distribution_url`, the agent derives one
+  for the project sets only (the `platform_url` host on port 18424; an
+  explicit setting always wins), and while that derived URL cannot be
+  reached (connect, timeout, TLS) a set never stored stays quiet as for
+  a `404` (user, 2026-10-14).
 - `restricted` for an added set follows today's default: restricted,
   except `baseline-alarms`.
 - **A set the platform does not publish is quiet.** For an added set, a
