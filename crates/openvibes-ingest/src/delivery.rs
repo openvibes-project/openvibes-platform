@@ -63,6 +63,7 @@ pub(crate) async fn heartbeat(
     // On an error the report is not stored, so the agent's next heartbeat
     // finds the transition again; the host still counts as seen, and the
     // error is the answer (503) as for the heartbeat's other writes.
+    // ponytail: every P20 heartbeat reporting a not_assigned set runs one extra locked transaction (a no-op after the transition).
     let not_assigned = not_assigned_sets(&heartbeat);
     if !not_assigned.is_empty()
         && let Err(error) =

@@ -18,8 +18,9 @@ INSERT INTO rule_set_assignment (rule_set_id, default_enabled) VALUES
     ('hardening-linux-l1', true), ('hardening-linux-l2', false);
 REVOKE ALL ON rule_set_assignment, rule_set_group_assignment FROM PUBLIC;
 -- The console switches defaults and overrides (rules.upload).
-GRANT SELECT, UPDATE ON rule_set_assignment TO "openvibes-console";
-GRANT SELECT, INSERT, UPDATE, DELETE ON rule_set_group_assignment TO "openvibes-console";
+GRANT SELECT, UPDATE (default_enabled) ON rule_set_assignment TO "openvibes-console";
+GRANT SELECT, INSERT, DELETE, UPDATE (enabled) ON rule_set_group_assignment
+    TO "openvibes-console";
 -- Distribution answers 410 for a set that is off on the asking host: it
 -- reads the switches and only the tag and selector columns membership needs.
 GRANT SELECT ON rule_set_assignment, rule_set_group_assignment TO "openvibes-distribution";

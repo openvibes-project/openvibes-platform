@@ -47,7 +47,11 @@ stored). If this fails, ingest still records the host as seen
 agent's next heartbeat finds the transition again. A set that is not assignable, an entry
 without `state`, or a report that repeats `not_assigned` writes nothing. No
 audit row, as for any match end. Triage (state, note, assignee, version)
-never changes here (user decision 2026-10-14). Switching the set back on:
+never changes here (user decision 2026-10-14). The stored `match_sha256` is
+unchanged when the platform ends matches, so if the heartbeat arrives before
+the agent's own P13 end, the agent's next delta gets one `findings_resync`:
+expected and harmless. `end_unassigned` also ends `source='scan'` rows
+(scan-path agents; P20 agents use P13). Switching the set back on:
 the agent's next scan starts the match again through the usual rules, as
 for any finding that comes back. Schema 49 adds `current_findings.end_recorded_at`: set to the platform's
 time wherever a match ends (P13 `ended`, replace and transient ends, and
@@ -81,8 +85,8 @@ All answers carry `Cache-Control: no-store`; errors are
 |---|---|---|---|
 | `GET /api/v1/rule-set-assignments` | `rules.read` or `rules.upload` (global) | none | `RuleSetAssignmentsView` |
 | `PUT /api/v1/rule-set-assignments/{rule_set_id}` | `rules.upload` (global), CSRF | `{"default_enabled": bool}` | `RuleSetAssignmentView` |
-| `PUT /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload`, CSRF | `{"enabled": bool}` | `RuleSetAssignmentView` |
-| `DELETE /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload`, CSRF | none | `RuleSetAssignmentView` (idempotent) |
+| `PUT /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload` (global), CSRF | `{"enabled": bool}` | `RuleSetAssignmentView` |
+| `DELETE /api/v1/rule-set-assignments/{rule_set_id}/groups/{asset_group_id}` | `rules.upload` (global), CSRF | none | `RuleSetAssignmentView` (idempotent) |
 | `GET /api/v1/agents/{agent_id}/rule-set-assignments` | `agents.read` (scoped) | none | `HostRuleSetAssignmentsView` |
 
 Shapes: `RuleSetAssignmentsView { items: [RuleSetAssignmentView],
