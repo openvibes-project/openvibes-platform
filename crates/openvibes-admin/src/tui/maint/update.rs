@@ -37,12 +37,18 @@ pub const STEPS: [&str; 6] = [
 ];
 const RELEASES: &str = "github.com/openvibes-project/openvibes-platform/releases/tag/";
 
-/// The kind of a job left half done (`update`, `uninstall`): the helper's
-/// mark in /run, readable by all.
+/// The kind of a job left half done (`update`, `uninstall`): the first
+/// line of the helper's mark in /run, readable by all.
 pub fn half_done(root: &Path) -> Option<String> {
     let text = std::fs::read_to_string(root.join("run/openvibes-admin/job")).ok()?;
-    let kind = text.trim();
+    let kind = text.lines().next().unwrap_or_default().trim();
     (!kind.is_empty()).then(|| kind.to_owned())
+}
+
+/// A half-done uninstall was Remove everything (the mark's second line).
+pub fn half_done_everything(root: &Path) -> bool {
+    std::fs::read_to_string(root.join("run/openvibes-admin/job"))
+        .is_ok_and(|text| text.lines().nth(1) == Some("everything"))
 }
 
 /// The update's calls (from Stop when finishing a half-done one). A stop

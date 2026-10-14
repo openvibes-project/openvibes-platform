@@ -316,7 +316,12 @@ impl<H: Host> App<H> {
             self.run = None;
         }
         self.load_backup_choice();
-        self.maint.everything = false;
+        // A half-done Remove everything goes on as one, without a backup:
+        // its database may be gone (review I3).
+        self.maint.everything = super::update::half_done_everything(&self.root);
+        if self.maint.everything {
+            self.maint.first = false;
+        }
         self.maint.typed.clear();
         self.maint.typing = false;
         self.maint.plan_error = None;

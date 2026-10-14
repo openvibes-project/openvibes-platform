@@ -377,6 +377,16 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
     if let Err(error) = super::system::job_guard(ctx.root, "uninstall") {
         return StepState::Failed(error);
     }
+    // Its data may be gone already: never finish it as Keep the data (review I3).
+    if args.confirm.is_none()
+        && ctx
+            .read("/run/openvibes-admin/job")
+            .is_ok_and(|mark| mark.lines().nth(1) == Some("everything"))
+    {
+        return StepState::Failed(
+            "a Remove everything is half done on this host: finish it with Remove everything".into(),
+        );
+    }
     let result = match step {
         RemoveStep::Backup => {
             if args.remember_choice {
@@ -388,7 +398,12 @@ pub fn run<R: Runner>(ctx: &Ctx<R>, step: RemoveStep, args: &RemoveArgs) -> Step
                 Some(path) => backup::dump(ctx, path).map(StepState::Done),
             }
         }
-        RemoveStep::Stop => ctx.job_begin("uninstall").and_then(|()| stop(ctx, args)),
+        RemoveStep::Stop => ctx
+            .job_begin(match args.confirm {
+                Some(_) => "uninstall\neverything",
+                None => "uninstall",
+            })
+            .and_then(|()| stop(ctx, args)),
         RemoveStep::Firewall => firewall(ctx, args),
         RemoveStep::Packages => remove_packages(ctx, args),
         RemoveStep::Purge => purge(ctx, args),

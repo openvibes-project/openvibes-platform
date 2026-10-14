@@ -417,3 +417,17 @@ fn remove_everything_will_not_back_up_into_a_folder_it_removes() {
     );
     assert_eq!(app.nav.row, 3, "the folder row is highlighted");
 }
+
+#[test]
+fn a_half_done_remove_everything_reopens_as_remove_everything() {
+    // Review I3: never silently Keep the data (gone already), no backup.
+    let mut app = set_up(vec![]);
+    mark(&app, "uninstall\neverything");
+    let etc = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&etc).unwrap();
+    std::fs::write(etc.join("backup.toml"), "folder = \"/srv\"\nfirst = true\n").unwrap();
+    app.open_page(Page::Uninstall);
+    let text = screen(&app);
+    assert!(text.contains("(•) Remove everything"), "{text}");
+    assert!(text.contains("[ ] Back up first"), "{text}");
+}
