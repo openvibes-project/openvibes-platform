@@ -2,7 +2,10 @@
 //! §6.5). `openvibes-admin` itself is removed by the last step, `admin`:
 //! the running helper keeps its file open until it exits.
 
-use std::{fs, path::PathBuf};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use platform_host::{
     RemoveStep, StepState,
@@ -46,9 +49,22 @@ impl RemoveArgs {
         }
         if let Some(name) = &self.confirm {
             check_name(name)?;
+            if let Some(folder) = self.backup.as_deref().and_then(removed_by_everything) {
+                return Err(format!(
+                    "Remove everything removes {folder}, and the backup with it: choose another folder"
+                ));
+            }
         }
         Ok(())
     }
+}
+
+/// The folder of Remove everything's that holds `path`, if any: a backup
+/// there would be deleted by the same run (review C1).
+pub(crate) fn removed_by_everything(path: &Path) -> Option<&'static str> {
+    DATA.into_iter()
+        .chain([admin::BACKUPS])
+        .find(|folder| path.starts_with(folder))
 }
 
 /// Data directories Remove everything deletes (fixed; never from input).

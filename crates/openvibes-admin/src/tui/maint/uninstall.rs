@@ -422,13 +422,26 @@ impl<H: Host> App<H> {
         }
         if self.maint.first {
             self.poll_folder(std::time::Instant::now());
-            if !self.maint.folder.ok() {
-                let why = if self.maint.folder.pending() {
-                    "Wait: the folder is still being checked"
-                } else {
-                    "Choose a folder for the backup first"
-                };
-                self.outcome = Some((false, why.into()));
+            let removed = self
+                .maint
+                .everything
+                .then(|| {
+                    crate::setup::remove::removed_by_everything(std::path::Path::new(
+                        &self.maint.folder.text,
+                    ))
+                })
+                .flatten();
+            let why = if let Some(folder) = removed {
+                Some(format!("Remove everything removes {folder}: choose another folder"))
+            } else if self.maint.folder.pending() {
+                Some("Wait: the folder is still being checked".into())
+            } else if !self.maint.folder.ok() {
+                Some("Choose a folder for the backup first".into())
+            } else {
+                None
+            };
+            if let Some(why) = why {
+                self.outcome = Some((false, why));
                 self.nav.row = choices
                     .iter()
                     .position(|c| *c == Choice::Folder)

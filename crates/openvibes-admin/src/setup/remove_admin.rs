@@ -24,7 +24,7 @@ const KEY_VERSIONS: [&str; 2] = ["7786da36", "710ad8afb7afe6e864c0cdc4e134baf377
 const CACHES: [&str; 2] = ["/var/cache/libdnf5", "/var/cache/dnf"];
 const DNF4_FILES: [&str; 2] = ["openvibes.solv", "openvibes-filenames.solvx"];
 /// Automatic pre-migration dumps (auto_migrate.rs).
-const BACKUPS: &str = "/var/backups/openvibes";
+pub(super) const BACKUPS: &str = "/var/backups/openvibes";
 
 fn remove_path(path: &Path) -> Result<(), String> {
     let result = if path.is_dir() {

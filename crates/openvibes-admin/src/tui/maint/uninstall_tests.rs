@@ -391,3 +391,29 @@ fn the_uninstall_question_starts_on_no() {
     assert!(app.question.is_none() && app.run.is_none() && app.asking.is_none());
     assert!(app.host.calls.borrow().is_empty(), "Enter on No removes nothing");
 }
+
+#[test]
+fn remove_everything_will_not_back_up_into_a_folder_it_removes() {
+    // Review C1: said on the page, before the question.
+    let mut app = set_up(vec![]);
+    let etc = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&etc).unwrap();
+    std::fs::write(
+        etc.join("backup.toml"),
+        "folder = \"/var/backups/openvibes\"\nfirst = true\n",
+    )
+    .unwrap();
+    app.open_page(Page::Uninstall);
+    app.key(Key::Down);
+    app.key(Key::Char(' '));
+    app.maint.typed = "platform.example.com".into();
+    app.nav.row = 5; // Keep, Everything, Back up first, Save in folder, Type…, Uninstall
+    app.key(Key::Enter);
+    assert!(app.question.is_none(), "{}", screen(&app));
+    assert!(
+        screen(&app).contains("Remove everything removes /var/backups/openvibes"),
+        "{}",
+        screen(&app)
+    );
+    assert_eq!(app.nav.row, 3, "the folder row is highlighted");
+}
