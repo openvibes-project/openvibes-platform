@@ -577,8 +577,11 @@ password is shown once), `services` (after the port check),
 `firewall` (skipped without firewalld), `rules` (skipped until
 `openvibes-rules-baseline` exists; done while the published version is at
 least the installed package's, so Repair publishes a newer package; when
-the package also carries `alarms.json`/`alarms.key` (rules v2), the
-threat-alarm set is trusted and published the same way),
+the package also carries `alarms.json`/`alarms.key` (rules v2) or a
+hardening set (`hardening-linux-l1.*` from rules v5, `hardening-linux-l2.*`
+once signed), each is trusted and published the same way, in that order, and
+a missing one is skipped; the platform then switches the hardening sets per
+asset group ([rule-set-assignment.md](rule-set-assignment.md))),
 `agent` (the agent on this host, waits
 up to 60 s for it to report; when the alarm rules are published and the
 installed agent ships `/etc/audit/rules.d/openvibes-agent.rules` or, from
@@ -765,7 +768,7 @@ only for misuse or a non-root caller): it skips when Setup is running
 or when an Update or uninstall is half done; it publishes nothing when the
 published version is already the package's or the set is retired; a key
 Update would refuse is an error line, never trusted. It runs the sets Update
-knows (`baseline`, and `alarms` when the package carries it). `openvibes-rules-apply.service`
+knows (`baseline`, then `alarms`, `hardening-linux-l1` and `hardening-linux-l2` when the package carries them). `openvibes-rules-apply.service`
 (admin package) runs it, started by a transaction file trigger on
 `/usr/share/openvibes/rules`, which fires after the whole transaction on
 first install and on upgrade of the rules package (priority 900000, after

@@ -15,10 +15,13 @@ const AGENT: &str = "/etc/openvibes-agent";
 const AGENT_WAIT: u32 = 60;
 
 /// The rule sets the rules package may carry, as `STEM.json` and
-/// `STEM.key`: the baseline findings rules, and (from rules v2) the
-/// threat-alarm rules, which only a P14 agent can run.
+/// `STEM.key`: the baseline findings rules, always; then, when present, the
+/// threat-alarm rules (rules v2, only a P14 agent runs them) and the
+/// project's hardening sets (L1 from rules v5, L2 once signed), which the
+/// platform switches per asset group.
 const BASELINE: &str = "baseline";
 const ALARMS: &str = "alarms";
+const OPTIONAL: [&str; 3] = [ALARMS, "hardening-linux-l1", "hardening-linux-l2"];
 
 /// The exec audit rule a P14 agent package ships; agent #57 on keeps it only
 /// as a template and copies it here on audit-fallback hosts, so here it
@@ -76,12 +79,12 @@ fn baseline_key<R: Runner>(ctx: &Ctx<R>) -> Result<[String; 3], String> {
     set_key(ctx, BASELINE)
 }
 
-/// The alarm rule set's trust line when the package carries the set; an
-/// unreadable or malformed key next to `alarms.json` is an error, as for
-/// the baseline, so the rules are never silently left unpublished.
-fn alarms_key<R: Runner>(ctx: &Ctx<R>) -> Result<Option<[String; 3]>, String> {
-    if ctx.exists(&format!("{RULES}/{ALARMS}.json")) {
-        set_key(ctx, ALARMS).map(Some)
+/// The trust line of an optional set when the package carries it; an
+/// unreadable or malformed key next to `STEM.json` is an error, as for the
+/// baseline, so the rules are never silently left unpublished.
+fn optional_key<R: Runner>(ctx: &Ctx<R>, stem: &str) -> Result<Option<[String; 3]>, String> {
+    if ctx.exists(&format!("{RULES}/{stem}.json")) {
+        set_key(ctx, stem).map(Some)
     } else {
         Ok(None)
     }
@@ -133,12 +136,14 @@ pub fn rules_check<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
         return Ok(StepState::Todo);
     };
     let mut done = format!("rule set {set} v{version} published");
-    if let Some([alarms, _, _]) = alarms_key(ctx)?
-        && !retired(ctx, &alarms)?
-    {
-        match current(&alarms, ALARMS)? {
-            Some(version) => done.push_str(&format!(", {alarms} v{version}")),
-            None => return Ok(StepState::Todo),
+    for stem in OPTIONAL {
+        if let Some([set, _, _]) = optional_key(ctx, stem)?
+            && !retired(ctx, &set)?
+        {
+            match current(&set, stem)? {
+                Some(version) => done.push_str(&format!(", {set} v{version}")),
+                None => return Ok(StepState::Todo),
+            }
         }
     }
     Ok(StepState::Done(done))
@@ -166,12 +171,14 @@ pub fn rules_apply<R: Runner>(ctx: &Ctx<R>) -> Result<StepState, String> {
     ctx.as_admin(&["rules", "trust", "add", &set, &issuer, "--", &key])?;
     ctx.as_admin(&["rules", "publish", &format!("{RULES}/{BASELINE}.json")])?;
     let mut done = format!("rule set {set} published");
-    if let Some([alarms, issuer, key]) = alarms_key(ctx)?
-        && !retired(ctx, &alarms)?
-    {
-        ctx.as_admin(&["rules", "trust", "add", &alarms, &issuer, "--", &key])?;
-        ctx.as_admin(&["rules", "publish", &format!("{RULES}/{ALARMS}.json")])?;
-        done.push_str(&format!(", {alarms} published"));
+    for stem in OPTIONAL {
+        if let Some([set, issuer, key]) = optional_key(ctx, stem)?
+            && !retired(ctx, &set)?
+        {
+            ctx.as_admin(&["rules", "trust", "add", &set, &issuer, "--", &key])?;
+            ctx.as_admin(&["rules", "publish", &format!("{RULES}/{stem}.json")])?;
+            done.push_str(&format!(", {set} published"));
+        }
     }
     Ok(StepState::Done(done))
 }
@@ -204,7 +211,10 @@ pub(super) fn agent_toml<R: Runner>(ctx: &Ctx<R>) -> String {
         // Threat alarms (P14): only for an agent that knows the collector,
         // and only when the rules package carries the alarm rules.
         // (A broken alarms.key already failed the rules step.)
-        let alarms = alarms_key(ctx).ok().flatten().filter(|_| p14_agent(ctx));
+        let alarms = optional_key(ctx, ALARMS)
+            .ok()
+            .flatten()
+            .filter(|_| p14_agent(ctx));
         if alarms.is_some() {
             // An explicit list replaces the agent's default: keep services.
             let collectors = if p15_agent(ctx) {
@@ -793,6 +803,70 @@ mod tests {
             [
                 "/usr/share/openvibes/rules/baseline.json",
                 "/usr/share/openvibes/rules/alarms.json"
+            ]
+        );
+    }
+
+    const L1_KEY: &str =
+        "hardening-linux-l1 openvibes-1 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC";
+
+    /// Rules v5 carries hardening L1 (L2 later): every stem present is
+    /// trusted and published after the alarms, an absent one is skipped,
+    /// and the step stays Todo until each present set is published.
+    #[test]
+    fn the_hardening_sets_are_published_when_present() {
+        let fake = Fake::new("rules-hardening");
+        fake.answer(
+            &admin(&["rules", "list"]),
+            0,
+            "baseline v1 keys 1\nbaseline-alarms v1 keys 1\n",
+        );
+        let rules = "/usr/share/openvibes/rules";
+        for (stem, key) in [
+            ("baseline", KEY),
+            ("alarms", ALARMS_KEY),
+            ("hardening-linux-l1", L1_KEY),
+        ] {
+            fake.file(&format!("{rules}/{stem}.key"), &format!("{key}\n"));
+            fake.file(&format!("{rules}/{stem}.json"), "{\"rule_set_version\":1}");
+        }
+        let plan = plan(&[Ingest, Distribution, Rules]);
+        assert_eq!(rules_check(&fake.ctx(&plan)).unwrap(), StepState::Todo);
+        fake.answer(
+            &["/usr/bin/rpm", "-q", "--quiet", "openvibes-rules-baseline"],
+            0,
+            "",
+        );
+        fake.answer(&admin(&["rules", "trust", "add"]), 0, "trusted\n");
+        fake.answer(&admin(&["rules", "publish"]), 0, "published\n");
+        let state = run_step(&fake.ctx(&plan), Step::Rules);
+        assert!(
+            state
+                .detail()
+                .ends_with("baseline-alarms published, hardening-linux-l1 published"),
+            "{state:?}"
+        );
+        let calls = fake.calls.borrow();
+        let trusted: Vec<&str> = calls
+            .iter()
+            .filter(|call| call.get(6).is_some_and(|word| word == "trust"))
+            .map(|call| call[8].as_str())
+            .collect();
+        assert_eq!(
+            trusted,
+            ["baseline", "baseline-alarms", "hardening-linux-l1"]
+        );
+        let published: Vec<&str> = calls
+            .iter()
+            .filter(|call| call.get(6).is_some_and(|word| word == "publish"))
+            .map(|call| call[7].as_str())
+            .collect();
+        assert_eq!(
+            published,
+            [
+                "/usr/share/openvibes/rules/baseline.json",
+                "/usr/share/openvibes/rules/alarms.json",
+                "/usr/share/openvibes/rules/hardening-linux-l1.json"
             ]
         );
     }
