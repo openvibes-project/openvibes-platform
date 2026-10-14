@@ -146,6 +146,11 @@ choice into the agent configuration it serves. The host page shows
 
 ## 6. Platform
 
+How the sets reach agents and how the per-group switches work is settled
+in `2026-10-14-rule-set-assignment-design.md` (the agent knows the
+project's sets; the platform answers "not assigned" per host). It replaces
+"writes the choice into the agent configuration it serves" below and in §4.
+
 - Setup and Update trust and publish both sets; L2 is published but not
   assigned.
 - Enrollment and the agent configuration name the OS family's sets
