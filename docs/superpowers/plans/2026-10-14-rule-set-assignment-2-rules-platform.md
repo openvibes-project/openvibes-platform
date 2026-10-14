@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The project's hardening L1 set ships in the rules RPM, Setup publishes it, and the platform decides per host (default plus asset-group overrides, on wins) whether an assignable set runs: distribution answers `410` for a set that is off, ingest closes the findings once the agent reports it `not_assigned`, and the console API exposes the switches for the later screens.
+**Goal:** The project's hardening L1 set ships in the rules RPM, Setup publishes it, and the platform decides per host (default plus asset-group overrides, on wins) whether an assignable set runs: distribution answers `410` for a set that is off, ingest ends the host's open matches of the set once the agent reports it `not_assigned` (triage untouched), and the console API exposes the switches for the later screens.
 
-**Architecture:** One migration adds `rule_set_assignment` (default per assignable set) and `rule_set_group_assignment` (overrides, cascading with the group). A new store module `platform_store::rule_assignment` holds the console reads and audited writes and one SQL resolution (`HOST_STATE`) shared by distribution (`assigned`) and the console host view (`for_agent`). Ingest gets `finding_changes::close_unassigned`, called from the heartbeat handler. Setup's rules step loops over the optional stems present in `/usr/share/openvibes/rules`.
+**Architecture:** One migration adds `rule_set_assignment` (default per assignable set) and `rule_set_group_assignment` (overrides, cascading with the group). A new store module `platform_store::rule_assignment` holds the console reads and audited writes and one SQL resolution (`HOST_STATE`) shared by distribution (`assigned`) and the console host view (`for_agent`). Ingest gets `finding_changes::end_unassigned`, called from the heartbeat handler. Setup's rules step loops over the optional stems present in `/usr/share/openvibes/rules`.
 
 **Tech Stack:** Rust (axum, tokio-postgres, utoipa), PostgreSQL migrations, RPM spec (rules repo), bash (lab).
 
@@ -22,7 +22,7 @@
 - This host runs the user's production platform: never touch its `openvibes-*` services or database, no `sudo`.
 - Least privilege for database roles: table or column `SELECT` only where a query needs it; new tables `REVOKE ALL ... FROM PUBLIC`.
 - Migration number: `0049` is the next free one on `origin/main` (schema 48). The user's `feat/netlog` branch also has a `0049`; whichever merges second renumbers at rebase (`SCHEMA_VERSION`, the `MIGRATIONS` entry, the file name, the doc headings).
-- The spec's fixed strings, verbatim: audit action `rules.assignment.change`; close note `rule set no longer assigned to this host`; set ids `hardening-linux-l1` (default on), `hardening-linux-l2` (default off).
+- The spec's fixed strings, verbatim: audit action `rules.assignment.change`; history note `rule set no longer assigned to this host` (by `system`); set ids `hardening-linux-l1` (default on), `hardening-linux-l2` (default off).
 - Lab ssh, when not through `./lab ssh`: `-o IdentitiesOnly=yes -o IdentityAgent=none`.
 
 ## Review Focus
@@ -30,8 +30,8 @@
 1. **A host in no group gets the set's default**, and a group with no selectors matches no host (as for access). Test: Task 3 `a_host_in_no_group_gets_the_default`.
 2. **A host in two groups, one on and one off, runs the set** (on wins), and deleting the "on" group drops it back to the other group's off. Tests: Task 3 `on_wins_and_a_deleted_group_falls_back`, Task 4 `on_wins_across_groups`.
 3. **An unknown, retired or unpublished set still answers 404, never 410**, even when it is switched off. Test: Task 4 `unpublished_or_retired_sets_stay_not_found`.
-4. **Closing is idempotent across repeated heartbeats** and never closes another set's, another host's, or a non-assignable set's findings, nor overrides an analyst's accepted risk or false positive. Tests: Task 6 `closes_only_this_hosts_open_findings_of_the_set`, `repeated_reports_close_nothing_more`, `a_non_assignable_set_closes_nothing`, `completed_triage_is_kept`.
-5. **An agent from before P20 sees no change**: it never asks for hardening, its baseline and alarm sets answer as before with both assignable sets switched off, and a heartbeat without a per-set state closes nothing. Tests: Task 4 `other_sets_are_unchanged`, Task 6 `a_heartbeat_without_state_closes_nothing`.
+4. **Ending matches is idempotent across repeated heartbeats** and never ends another set's, another host's, or a non-assignable set's matches, and never changes triage (no state, note or version change; user decision 2026-10-14). Tests: Task 6 `ends_only_this_hosts_open_matches_of_the_set`, `repeated_reports_end_nothing_more`, `a_non_assignable_set_ends_nothing`, `triage_is_never_touched`.
+5. **An agent from before P20 sees no change**: it never asks for hardening, its baseline and alarm sets answer as before with both assignable sets switched off, and a heartbeat without a per-set state ends nothing. Tests: Task 4 `other_sets_are_unchanged`, Task 6 `a_heartbeat_without_state_ends_nothing`.
 
 ---
 
@@ -44,12 +44,12 @@
 | `migrations/0049_rule_set_assignment.sql` | Tables, defaults, grants (console, distribution, ingest) |
 | `crates/platform-store/src/migrate.rs` | `SCHEMA_VERSION = 49`, migration entry |
 | `crates/platform-store/src/rule_assignment.rs` (new) | Overview, audited writes, host resolution |
-| `crates/platform-store/src/finding_changes.rs` | `close_unassigned` |
+| `crates/platform-store/src/finding_changes.rs` | `end_unassigned` |
 | `crates/platform-store/src/console_read.rs` | `AgentRuleSet.state` |
 | `crates/openvibes-distribution/src/lib.rs` | `410` for an off set |
 | `crates/openvibes-console/src/rule_assignment.rs` (new) | `/api/v1/rule-set-assignments…`, host view |
 | `crates/openvibes-console/src/{lib,router,openapi,api}.rs` | Module, routes, OpenAPI, `AgentRuleSetView.state` |
-| `crates/openvibes-ingest/src/delivery.rs` | Heartbeat calls `close_unassigned` |
+| `crates/openvibes-ingest/src/delivery.rs` | Heartbeat calls `end_unassigned` |
 | `crates/openvibes-admin/src/setup/fleet.rs` | Optional stems loop (alarms, hardening L1, L2) |
 | `docs/components/rule-set-assignment.md` (new) + existing pages | Docs |
 
@@ -774,7 +774,8 @@ asset group in the console with no host-side step. Spec:
 Agents know the project's sets and ask for every one of their OS family
 (protocol P20). The platform answers per host: a set that is off for the host
 gets `410 Gone`, the agent stops running it and reports `not_assigned`, and
-ingest closes its findings.
+ingest ends its open matches there (triage untouched, one history entry
+saying why).
 
 ## Interfaces
 
@@ -812,7 +813,7 @@ A database error is a 503 for the console caller; nothing is half written
 In `docs/components/README.md` add after the `console-rbac` row:
 
 ```markdown
-| `rule-set-assignment` | store module, console API, distribution and ingest behaviour | per-group switches for the project's assignable rule sets (hardening L1/L2): defaults, overrides, on wins, `410` answers, findings closed when a host stops running a set (schema 49) | [rule-set-assignment.md](rule-set-assignment.md) |
+| `rule-set-assignment` | store module, console API, distribution and ingest behaviour | per-group switches for the project's assignable rule sets (hardening L1/L2): defaults, overrides, on wins, `410` answers, matches ended when a host stops running a set (schema 49) | [rule-set-assignment.md](rule-set-assignment.md) |
 ```
 
 and change the `platform-store` row's "schema 47," to "schema 49, rule-set assignment,". Append to the end of `docs/components/platform-store.md`:
@@ -2003,22 +2004,22 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-### Task 6: Ingest closes a host's findings for a set it no longer runs
+### Task 6: Ingest ends a host's matches of a set it no longer runs
 
 Blocked until plan 1's P20 work (protocol P20 and the agent's `openvibes-core` health type) is merged into agent `main` and protocol `main`.
 
 **Files:**
 - Modify: `Cargo.toml:14,36,37` (agent rev), `Cargo.lock`, `protocol` (submodule)
 - Modify: `crates/platform-store/src/health.rs:189` (test literal gains `state: None`)
-- Modify: `crates/platform-store/src/finding_changes.rs` (append `NOT_ASSIGNED_NOTE`, `close_unassigned`)
+- Modify: `crates/platform-store/src/finding_changes.rs` (append `NOT_ASSIGNED_NOTE`, `end_unassigned`)
 - Modify: `migrations/0049_rule_set_assignment.sql` (append ingest grants)
 - Modify: `crates/openvibes-ingest/src/delivery.rs:21-71` (heartbeat)
-- Test: `crates/platform-store/tests/close_unassigned.rs` (new), `crates/openvibes-ingest/tests/assignment.rs` (new)
+- Test: `crates/platform-store/tests/end_unassigned.rs` (new), `crates/openvibes-ingest/tests/assignment.rs` (new)
 - Docs: `docs/components/openvibes-ingest.md` (Heartbeats section), `docs/components/rule-set-assignment.md`
 
 **Interfaces:**
-- Consumes (plan 1, P20, fixed by the coordinator): the wire field is a new optional `state` on each heartbeat `health.rule_sets[]` entry, value `"not_assigned"` (not a `refused` code); the close trigger is exactly `rule_sets[].state == "not_assigned"`. Rust names (plan 1 Task 3): `RuleSetHealth.state: Option<RuleSetState>`, `RuleSetState { NotAssigned, Other }` (a later value reads as `Other`, which closes nothing); Step 1 checks them on the pinned rev. The assignable sets and the 404/410 cases are listed in the protocol vector `vectors/project-rule-sets.json`; Step 1b pins the migration's hard-coded sets against it. Contract also relied on: after a `410` the agent drops the set's matches from its P13 match set (sends them `ended` or leaves them out of its next digest), else the digest resync would reopen them.
-- Produces: `pub const NOT_ASSIGNED_NOTE: &str = "rule set no longer assigned to this host";` and `pub async fn close_unassigned(client: &mut Client, agent_id: &str, sets: &[String], now: DateTime<Utc>) -> Result<u64, StoreError>` in `platform_store::finding_changes`.
+- Consumes (plan 1, P20, fixed by the coordinator): the wire field is a new optional `state` on each heartbeat `health.rule_sets[]` entry, value `"not_assigned"` (not a `refused` code); the trigger is exactly `rule_sets[].state == "not_assigned"`. Rust names (plan 1 Task 3): `RuleSetHealth.state: Option<RuleSetState>`, `RuleSetState { NotAssigned, Other }` (a later value reads as `Other`, which ends nothing); Step 1 checks them on the pinned rev. The assignable sets and the 404/410 cases are listed in the protocol vector `vectors/project-rule-sets.json`; Step 1b pins the migration's hard-coded sets against it. Contract also relied on: after a `410` the agent drops the set's matches from its P13 match set (sends them `ended` or leaves them out of its next digest), else the digest resync would reopen them.
+- Produces: `pub const NOT_ASSIGNED_NOTE: &str = "rule set no longer assigned to this host";` and `pub async fn end_unassigned(client: &mut Client, agent_id: &str, sets: &[String], now: DateTime<Utc>) -> Result<u64, StoreError>` in `platform_store::finding_changes`.
 
 - [ ] **Step 1: Bump the agent and protocol pins, check the consumed names**
 
@@ -2080,22 +2081,20 @@ Run `nice -n 19 cargo test --locked -p platform-store --test rule_assignment the
 
 - [ ] **Step 2: Write the failing store tests**
 
-Create `crates/platform-store/tests/close_unassigned.rs`:
+Create `crates/platform-store/tests/end_unassigned.rs`:
 
 ```rust
-//! Findings close when the agent reports a set `not_assigned` (spec
-//! 2026-10-14 §5), run as the `openvibes-ingest` role.
+//! The agent reports a set `not_assigned` (spec 2026-10-14 §5, user decision
+//! 2026-10-14): its open matches end, triage is never touched, and a history
+//! entry says why. Run as the `openvibes-ingest` role.
 
 mod common;
 
 use chrono::{Duration, Utc};
 use common::TestDb;
-use openvibes_core::{Confidence, Finding, Identifier, SchemaVersion, Severity};
 use platform_store::{
     Client,
-    finding_changes::{NOT_ASSIGNED_NOTE, close_unassigned},
-    ingest::{self, Origin},
-    wire,
+    finding_changes::{NOT_ASSIGNED_NOTE, end_unassigned},
 };
 
 const L1: &str = "hardening-linux-l1";
@@ -2104,9 +2103,6 @@ async fn setup() -> (TestDb, Client, Client) {
     let db = TestDb::create().await;
     let mut admin = db.pool.get().await.unwrap();
     platform_store::migrate(&mut admin).await.unwrap();
-    platform_store::ensure_partitions(&admin, Utc::now().date_naive() - Duration::days(2), 4)
-        .await
-        .unwrap();
     for agent in ["agent.a", "agent.b"] {
         admin
             .execute(
@@ -2140,11 +2136,15 @@ async fn open(admin: &Client, agent: &str, set: &str, rule: &str) {
         .unwrap();
 }
 
-/// (triage state or "open", note, match ended) of one finding.
-async fn state(admin: &Client, agent: &str, set: &str, rule: &str) -> (String, Option<String>, bool) {
+/// (match ended, triage state or "none", history notes) of one finding.
+async fn state(admin: &Client, agent: &str, set: &str, rule: &str) -> (bool, String, Vec<String>) {
     let row = admin
         .query_one(
-            "SELECT COALESCE(t.state, 'open'), t.note, c.ended_at IS NOT NULL
+            "SELECT c.ended_at IS NOT NULL, COALESCE(t.state, 'none'),
+                    ARRAY(SELECT h.from_state || '>' || h.to_state || ' ' || h.changed_by || ': ' || h.note
+                          FROM console_finding_triage_history h
+                          WHERE (h.agent_id, h.rule_set_id, h.rule_id) = (c.agent_id, c.rule_set_id, c.rule_id)
+                          ORDER BY h.event_id)
              FROM current_findings c
              LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
              WHERE c.agent_id = $1 AND c.rule_set_id = $2 AND c.rule_id = $3",
@@ -2155,140 +2155,110 @@ async fn state(admin: &Client, agent: &str, set: &str, rule: &str) -> (String, O
     (row.get(0), row.get(1), row.get(2))
 }
 
-async fn count(admin: &Client, sql: &str) -> i64 {
-    admin.query_one(sql, &[]).await.unwrap().get(0)
+fn note(state: &str) -> Vec<String> {
+    vec![format!("{state}>{state} system: {NOT_ASSIGNED_NOTE}")]
 }
 
-fn closed() -> (String, Option<String>, bool) {
-    ("mitigated".into(), Some(NOT_ASSIGNED_NOTE.into()), true)
+fn untouched() -> (bool, String, Vec<String>) {
+    (false, "none".into(), Vec::new())
 }
 
 #[tokio::test]
-async fn closes_only_this_hosts_open_findings_of_the_set() {
+async fn ends_only_this_hosts_open_matches_of_the_set() {
     let (db, admin, mut ingest) = setup().await;
     open(&admin, "agent.a", L1, "harden.ssh.x").await;
     open(&admin, "agent.a", L1, "harden.ssh.y").await;
     open(&admin, "agent.a", "hardening-linux-l2", "harden.audit.z").await;
     open(&admin, "agent.a", "baseline", "base.rule").await;
     open(&admin, "agent.b", L1, "harden.ssh.x").await;
-    let n = close_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now())
+    let n = end_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now())
         .await
         .unwrap();
     assert_eq!(n, 2);
-    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await, closed());
-    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.y").await, closed());
-    let untouched = ("open".to_owned(), None, false);
-    assert_eq!(state(&admin, "agent.a", "hardening-linux-l2", "harden.audit.z").await, untouched);
-    assert_eq!(state(&admin, "agent.a", "baseline", "base.rule").await, untouched);
-    assert_eq!(state(&admin, "agent.b", L1, "harden.ssh.x").await, untouched);
-    assert_eq!(
-        count(&admin, "SELECT count(*) FROM console_finding_triage_history
-                       WHERE changed_by = 'system' AND to_state = 'mitigated'
-                         AND note = 'rule set no longer assigned to this host'").await,
-        2
-    );
-    assert_eq!(
-        count(&admin, "SELECT count(*) FROM audit_log WHERE action = 'finding.triage.closed'
-                       AND actor = 'system' AND detail->>'reason' = 'rule_set_not_assigned'").await,
-        2
-    );
+    // Ended, no triage row created, one history entry by the system.
+    for rule in ["harden.ssh.x", "harden.ssh.y"] {
+        assert_eq!(state(&admin, "agent.a", L1, rule).await, (true, "none".into(), note("open")));
+    }
+    assert_eq!(state(&admin, "agent.a", "hardening-linux-l2", "harden.audit.z").await, untouched());
+    assert_eq!(state(&admin, "agent.a", "baseline", "base.rule").await, untouched());
+    assert_eq!(state(&admin, "agent.b", L1, "harden.ssh.x").await, untouched());
+    let audits: i64 = admin
+        .query_one("SELECT count(*) FROM audit_log", &[])
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(audits, 0, "a match ending writes no audit row, as for any match end");
     drop((admin, ingest));
     db.drop().await;
 }
 
 #[tokio::test]
-async fn repeated_reports_close_nothing_more() {
+async fn repeated_reports_end_nothing_more() {
     let (db, admin, mut ingest) = setup().await;
     open(&admin, "agent.a", L1, "harden.ssh.x").await;
     let sets = [L1.to_owned()];
-    assert_eq!(close_unassigned(&mut ingest, "agent.a", &sets, Utc::now()).await.unwrap(), 1);
+    assert_eq!(end_unassigned(&mut ingest, "agent.a", &sets, Utc::now()).await.unwrap(), 1);
     for _ in 0..3 {
-        assert_eq!(close_unassigned(&mut ingest, "agent.a", &sets, Utc::now()).await.unwrap(), 0);
+        assert_eq!(end_unassigned(&mut ingest, "agent.a", &sets, Utc::now()).await.unwrap(), 0);
     }
-    assert_eq!(count(&admin, "SELECT count(*) FROM console_finding_triage_history").await, 1);
+    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await.2, note("open"));
     drop((admin, ingest));
     db.drop().await;
 }
 
 #[tokio::test]
-async fn a_finding_the_agent_already_ended_is_closed_too() {
-    // The agent's own P13 `ended` usually arrives before the health report.
+async fn a_match_the_agent_already_ended_is_left_alone() {
+    // The agent's own P13 `ended` often arrives first: nothing more to do.
     let (db, admin, mut ingest) = setup().await;
     open(&admin, "agent.a", L1, "harden.ssh.x").await;
     admin
-        .execute("UPDATE current_findings SET ended_at = now() WHERE agent_id = 'agent.a'", &[])
+        .execute("UPDATE current_findings SET ended_at = now() - interval '1 minute'", &[])
         .await
         .unwrap();
-    assert_eq!(close_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now()).await.unwrap(), 1);
-    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await, closed());
+    assert_eq!(end_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now()).await.unwrap(), 0);
+    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await, (true, "none".into(), Vec::new()));
     drop((admin, ingest));
     db.drop().await;
 }
 
 #[tokio::test]
-async fn a_non_assignable_set_closes_nothing() {
+async fn a_non_assignable_set_ends_nothing() {
     let (db, admin, mut ingest) = setup().await;
     open(&admin, "agent.a", "baseline", "base.rule").await;
     assert_eq!(
-        close_unassigned(&mut ingest, "agent.a", &["baseline".to_owned()], Utc::now()).await.unwrap(),
+        end_unassigned(&mut ingest, "agent.a", &["baseline".to_owned()], Utc::now()).await.unwrap(),
         0
     );
-    assert_eq!(state(&admin, "agent.a", "baseline", "base.rule").await, ("open".into(), None, false));
+    assert_eq!(state(&admin, "agent.a", "baseline", "base.rule").await, untouched());
     drop((admin, ingest));
     db.drop().await;
 }
 
 #[tokio::test]
-async fn completed_triage_is_kept() {
+async fn triage_is_never_touched() {
     let (db, admin, mut ingest) = setup().await;
     open(&admin, "agent.a", L1, "harden.ssh.x").await;
     admin
         .execute(
             "INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state, rule_version,
                  note, accepted_until, version, updated_at, updated_by)
-             VALUES ('agent.a', $1, 'harden.ssh.x', 'accepted_risk', 1, 'known', now() + interval '30 days',
-                 1, now(), 'analyst')",
+             VALUES ('agent.a', $1, 'harden.ssh.x', 'accepted_risk', 1, 'known',
+                 now() + interval '30 days', 3, now() - interval '1 day', 'analyst')",
             &[&L1],
         )
         .await
         .unwrap();
-    assert_eq!(close_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now()).await.unwrap(), 0);
-    assert_eq!(
-        state(&admin, "agent.a", L1, "harden.ssh.x").await,
-        ("accepted_risk".into(), Some("known".into()), true),
-        "the match ends, the analyst's decision stays"
-    );
-    drop((admin, ingest));
-    db.drop().await;
-}
-
-#[tokio::test]
-async fn switching_back_on_reopens_on_the_next_observation() {
-    let (db, admin, mut ingest) = setup().await;
-    open(&admin, "agent.a", L1, "harden.ssh.x").await;
-    let closed_at = Utc::now() - Duration::minutes(10);
-    close_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], closed_at).await.unwrap();
-    let now = Utc::now();
-    let finding = Finding {
-        detection: None,
-        schema_version: SchemaVersion::V1,
-        finding_id: Identifier::new("finding.again").unwrap(),
-        scan_id: Identifier::new("scan.2").unwrap(),
-        rule_set_id: Some(Identifier::new(L1).unwrap()),
-        rule_id: Identifier::new("harden.ssh.x").unwrap(),
-        rule_version: 1,
-        observed_at_unix_ms: now.timestamp_millis(),
-        severity: Severity::Low,
-        confidence: Confidence::new(100).unwrap(),
-        message: "again".into(),
-        evidence: Vec::new(),
-    };
-    let days = platform_store::partition_days(&ingest).await.unwrap();
-    let row = wire::finding(&finding, now - Duration::days(90), now + Duration::hours(1), &days).unwrap();
-    ingest::store_findings(&mut ingest, "agent.a", &[row], Origin::Online, now)
+    end_unassigned(&mut ingest, "agent.a", &[L1.to_owned()], Utc::now() + Duration::seconds(1))
         .await
         .unwrap();
-    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await.0, "open");
+    let row = admin
+        .query_one(
+            "SELECT state, note, version, updated_by FROM console_finding_triage", &[])
+        .await
+        .unwrap();
+    let triage: (String, String, i64, String) = (row.get(0), row.get(1), row.get(2), row.get(3));
+    assert_eq!(triage, ("accepted_risk".into(), "known".into(), 3, "analyst".into()));
+    assert_eq!(state(&admin, "agent.a", L1, "harden.ssh.x").await.2, note("accepted_risk"));
     drop((admin, ingest));
     db.drop().await;
 }
@@ -2297,136 +2267,88 @@ async fn switching_back_on_reopens_on_the_next_observation() {
 - [ ] **Step 3: Run them to verify they fail**
 
 ```bash
-nice -n 19 cargo test --locked -p platform-store --test close_unassigned
+nice -n 19 cargo test --locked -p platform-store --test end_unassigned
 ```
 
-Expected: FAIL to compile, `cannot find function close_unassigned`.
+Expected: FAIL to compile, `cannot find function end_unassigned`.
 
-- [ ] **Step 4: Implement the close**
+- [ ] **Step 4: Implement the match end**
 
 Append to `crates/platform-store/src/finding_changes.rs`:
 
 ```rust
-/// Triage note on findings closed because their set is off for the host
+/// History note when a match ends because its set is off for the host
 /// (spec 2026-10-14 §5).
 pub const NOT_ASSIGNED_NOTE: &str = "rule set no longer assigned to this host";
 
 /// The agent reported `sets` as `not_assigned` (P20). For each of them that
 /// is assignable (`rule_set_assignment`), this host's still-open matches end,
-/// and every finding whose triage is open becomes `mitigated` with
-/// [`NOT_ASSIGNED_NOTE`] by the system actor, as the test alarms' automatic
-/// close is recorded (history and audit kept). The agent's own P13 `ended`
-/// often comes first, so ended matches with open triage count too. Accepted
-/// risks, false positives and earlier mitigations are left as they are. A
-/// new observation after the set is switched back on reopens them
-/// (`console_triage::reopen_if_due`). Returns how many findings closed; a
-/// repeated report closes nothing more.
+/// as when the host stops matching (user decision 2026-10-14). Triage is
+/// never touched; each ended match gets one triage-history entry by
+/// `system` with [`NOT_ASSIGNED_NOTE`], its state unchanged (from = to), so
+/// the finding's history says why it ended. No audit row: no match end
+/// writes one. Switching the set back on, the next observation starts the
+/// match again through the usual rules. Returns how many matches ended; a
+/// repeated report ends nothing more.
 ///
-/// ponytail: runs on every heartbeat that names a `not_assigned` set (a
-/// primary-key probe that finds nothing after the first time); gate it on
+/// ponytail: runs on every heartbeat that names a `not_assigned` set (an
+/// index probe that finds nothing after the first time); gate it on
 /// `ingest::heartbeat`'s changed-rule-sets result if load tests show it.
 ///
 /// # Errors
 ///
 /// A database error.
-pub async fn close_unassigned(
+pub async fn end_unassigned(
     client: &mut Client,
     agent_id: &str,
     sets: &[String],
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
     let transaction = client.transaction().await?;
-    transaction
-        .execute(
+    let ended = transaction
+        .query(
             "UPDATE current_findings SET ended_at = $3, end_approximate = true
              WHERE agent_id = $1 AND rule_set_id = ANY($2) AND ended_at IS NULL
-               AND rule_set_id IN (SELECT rule_set_id FROM rule_set_assignment)",
+               AND rule_set_id IN (SELECT rule_set_id FROM rule_set_assignment)
+             RETURNING rule_set_id, rule_id, rule_version",
             &[&agent_id, &sets, &now],
         )
         .await?;
-    let open = transaction
-        .query(
-            "SELECT c.rule_set_id, c.rule_id, c.rule_version, COALESCE(t.version, 0)
-             FROM current_findings c
-             LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
-             WHERE c.agent_id = $1 AND c.rule_set_id = ANY($2)
-               AND c.rule_set_id IN (SELECT rule_set_id FROM rule_set_assignment)
-               AND COALESCE(t.state, 'open') = 'open'
-             FOR UPDATE OF c",
-            &[&agent_id, &sets],
-        )
-        .await?;
-    let mut closed = 0;
-    for row in &open {
-        let (set, rule, rule_version, version): (String, String, i64, i64) =
-            (row.get(0), row.get(1), row.get(2), row.get(3));
-        // The WHERE keeps an analyst's change made since the read.
-        let changed = transaction
-            .execute(
-                "INSERT INTO console_finding_triage (agent_id, rule_set_id, rule_id, state,
-                     rule_version, note, version, updated_at, updated_by, mitigated_at)
-                 VALUES ($1, $2, $3, 'mitigated', $4, $5, $6, $7, 'system', $7)
-                 ON CONFLICT (agent_id, rule_set_id, rule_id) DO UPDATE SET state = 'mitigated',
-                     rule_version = EXCLUDED.rule_version, note = EXCLUDED.note,
-                     accepted_until = NULL, version = EXCLUDED.version,
-                     updated_at = EXCLUDED.updated_at, updated_by = 'system',
-                     mitigated_at = EXCLUDED.mitigated_at
-                 WHERE console_finding_triage.state = 'open'",
-                &[
-                    &agent_id,
-                    &set,
-                    &rule,
-                    &rule_version,
-                    &NOT_ASSIGNED_NOTE,
-                    &(version + 1),
-                    &now,
-                ],
-            )
-            .await?;
-        if changed == 0 {
-            continue;
-        }
+    for row in &ended {
+        let (set, rule, rule_version): (String, String, i64) = (row.get(0), row.get(1), row.get(2));
         transaction
             .execute(
                 "INSERT INTO console_finding_triage_history (agent_id, rule_set_id, rule_id,
                      from_state, to_state, note, changed_at, changed_by, rule_version)
-                 VALUES ($1, $2, $3, 'open', 'mitigated', $4, $5, 'system', $6)",
+                 SELECT $1, $2, $3, s.state, s.state, $4, $5, 'system', $6
+                 FROM (SELECT COALESCE((SELECT state FROM console_finding_triage
+                                        WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3),
+                                       'open') AS state) s",
                 &[&agent_id, &set, &rule, &NOT_ASSIGNED_NOTE, &now, &rule_version],
             )
             .await?;
-        transaction
-            .execute(
-                "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind,
-                     actor_id, actor_display, target_kind, target_id)
-                 VALUES ('system', 'finding.triage.closed', 'finding_triage', 'success',
-                     jsonb_build_object('reason', 'rule_set_not_assigned', 'from_state', 'open'),
-                     'system', NULL, 'system', 'finding_triage', $1)",
-                &[&format!("{agent_id}:{set}:{rule}")],
-            )
-            .await?;
-        closed += 1;
     }
     transaction.commit().await?;
-    Ok(closed)
+    Ok(ended.len() as u64)
 }
 ```
 
 Append to `migrations/0049_rule_set_assignment.sql`:
 
 ```sql
--- Ingest closes a host's findings of a set the agent reports not_assigned:
--- it checks the set is assignable and may create the triage row.
+-- Ingest ends a host's matches of a set the agent reports not_assigned: it
+-- checks the set is assignable (it already updates current_findings and
+-- writes triage history).
 GRANT SELECT ON rule_set_assignment TO "openvibes-ingest";
-GRANT INSERT ON console_finding_triage TO "openvibes-ingest";
 ```
 
 - [ ] **Step 5: Run them to verify they pass**
 
 ```bash
-nice -n 19 cargo test --locked -p platform-store --test close_unassigned
+nice -n 19 cargo test --locked -p platform-store --test end_unassigned
 ```
 
-Expected: PASS (6 tests).
+Expected: PASS (5 tests).
 
 - [ ] **Step 6: Write the failing ingest test**
 
@@ -2434,7 +2356,7 @@ Create `crates/openvibes-ingest/tests/assignment.rs`:
 
 ```rust
 //! P20: a heartbeat whose health reports an assignable set `not_assigned`
-//! closes the host's findings of that set; one without a state closes none.
+//! ends the host's open matches of that set; one without a state ends none.
 
 mod support;
 
@@ -2506,44 +2428,43 @@ async fn seed(world: &World, agent_id: &str) {
         .unwrap();
 }
 
-async fn triage(world: &World) -> Option<String> {
-    world
+/// (match ended, history entries, triage rows).
+async fn observed(world: &World) -> (bool, i64, i64) {
+    let row = world
         .db()
         .await
-        .query_opt("SELECT state FROM console_finding_triage", &[])
+        .query_one(
+            "SELECT (SELECT ended_at IS NOT NULL FROM current_findings),
+                    (SELECT count(*) FROM console_finding_triage_history),
+                    (SELECT count(*) FROM console_finding_triage)",
+            &[],
+        )
         .await
-        .unwrap()
-        .map(|row| row.get(0))
+        .unwrap();
+    (row.get(0), row.get(1), row.get(2))
 }
 
 #[tokio::test]
-async fn a_heartbeat_without_state_closes_nothing() {
+async fn a_heartbeat_without_state_ends_nothing() {
     let world = World::start().await;
     let (agent_id, chain, key) = enrolled(&world).await;
     seed(&world, &agent_id).await;
     let sets = serde_json::json!([{"id": "hardening-linux-l1", "version": null}]);
     send(&world, &chain, &key, beat(&agent_id, sets)).await;
-    assert_eq!(triage(&world).await, None);
+    assert_eq!(observed(&world).await, (false, 0, 0));
     world.stop().await;
 }
 
 #[tokio::test]
-async fn a_not_assigned_report_closes_the_sets_findings() {
+async fn a_not_assigned_report_ends_the_sets_matches() {
     let world = World::start().await;
     let (agent_id, chain, key) = enrolled(&world).await;
     seed(&world, &agent_id).await;
     let sets = serde_json::json!([{"id": "hardening-linux-l1", "state": "not_assigned"}]);
     send(&world, &chain, &key, beat(&agent_id, sets.clone())).await;
-    assert_eq!(triage(&world).await.as_deref(), Some("mitigated"));
+    assert_eq!(observed(&world).await, (true, 1, 0));
     send(&world, &chain, &key, beat(&agent_id, sets)).await;
-    let history: i64 = world
-        .db()
-        .await
-        .query_one("SELECT count(*) FROM console_finding_triage_history", &[])
-        .await
-        .unwrap()
-        .get(0);
-    assert_eq!(history, 1, "the second report closes nothing more");
+    assert_eq!(observed(&world).await, (true, 1, 0), "the second report ends nothing more");
     world.stop().await;
 }
 ```
@@ -2554,7 +2475,7 @@ async fn a_not_assigned_report_closes_the_sets_findings() {
 nice -n 19 cargo test --locked -p openvibes-ingest --test assignment
 ```
 
-Expected: `a_not_assigned_report_closes_the_sets_findings` FAILS (`left: None, right: Some("mitigated")`); the other passes.
+Expected: `a_not_assigned_report_ends_the_sets_matches` FAILS (`left: (false, 0, 0), right: (true, 1, 0)`); the other passes.
 
 - [ ] **Step 8: Wire the heartbeat**
 
@@ -2576,11 +2497,11 @@ fn not_assigned_sets(heartbeat: &Heartbeat) -> Vec<String> {
 and in `heartbeat`, right after the `ingest::heartbeat(...).await?;` statement:
 
 ```rust
-    // P20: a set the platform switched off for this host closes its findings
+    // P20: a set the platform switched off for this host ends its open matches
     // here once the agent says it stopped running it.
     let not_assigned = not_assigned_sets(&heartbeat);
     if !not_assigned.is_empty() {
-        finding_changes::close_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
+        finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
     }
 ```
 
@@ -2598,15 +2519,16 @@ Expected: PASS, including `protocol_fixtures` with the bumped protocol's new fix
 In `docs/components/openvibes-ingest.md`, after "An invalid `health` makes the heartbeat invalid (400)." add:
 
 ```markdown
-  A rule set the report marks `state: not_assigned` (P20) closes this host's
-  findings of that set when it is an assignable one: open matches end, and
-  findings with open triage become `mitigated` with the note "rule set no
-  longer assigned to this host" by `system` (history and an audit row
-  `finding.triage.closed`, reason `rule_set_not_assigned`). Repeated reports
-  close nothing more ([rule-set-assignment.md](rule-set-assignment.md)).
+  A rule set the report marks `state: not_assigned` (P20) ends this host's
+  still-open matches of that set when it is an assignable one, as when the
+  host stops matching. Triage is not touched; each ended match gets one
+  triage-history entry by `system` with the note "rule set no longer
+  assigned to this host" (state unchanged). No audit row, as for any match
+  end. Repeated reports end nothing more
+  ([rule-set-assignment.md](rule-set-assignment.md)).
 ```
 
-In `docs/components/rule-set-assignment.md` add an `**Ingest.**` paragraph with the same rule plus: "Accepted risks, false positives and earlier mitigations stay. Switching the set back on: the agent's next scan finds them again and the existing reopen rule (`mitigated` before a new observation) opens them. Grants: `openvibes-ingest` may read `rule_set_assignment` and insert `console_finding_triage`." and the tests `close_unassigned.rs` (store) and `openvibes-ingest/tests/assignment.rs` under How to test.
+In `docs/components/rule-set-assignment.md` add an `**Ingest.**` paragraph with the same rule plus: "Triage (state, note, assignee, version) never changes here (user decision 2026-10-14). A match the agent already ended through P13 is left as it is. Switching the set back on: the agent's next scan starts the match again through the usual rules, as for any finding that comes back. Grants: `openvibes-ingest` may read `rule_set_assignment` (it already updates `current_findings` and writes triage history)." and the tests `end_unassigned.rs` (store) and `openvibes-ingest/tests/assignment.rs` under How to test.
 
 - [ ] **Step 11: Commit**
 
@@ -2615,7 +2537,7 @@ cargo fmt --all
 git add Cargo.toml Cargo.lock protocol crates/platform-store crates/openvibes-ingest \
   migrations/0049_rule_set_assignment.sql docs/components/openvibes-ingest.md \
   docs/components/rule-set-assignment.md
-git commit -m "Ingest: close a host's findings of a set it reports not_assigned (P20)
+git commit -m "Ingest: end a host's matches of a set it reports not_assigned (P20)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -2832,12 +2754,12 @@ Expected: both green. If it cannot run, say which step and why in the PR body an
 ```bash
 git push -u origin HEAD:feat/rule-set-assignment
 gh pr create --repo openvibes-project/openvibes-platform --base main --head feat/rule-set-assignment \
-  --title "Rule-set assignment: per-group hardening switches, 410, findings close" --body-file - <<'EOF'
+  --title "Rule-set assignment: per-group hardening switches, 410, matches end" --body-file - <<'EOF'
 Spec: docs/specs/2026-10-14-rule-set-assignment-design.md (§5, §7 step 4 without the console screens).
 
 - Migration 49: assignable sets with defaults (L1 on, L2 off) and per-group overrides (on wins).
 - Distribution answers 410 for an assignable set off on the host (P20); 404 cases unchanged.
-- Ingest closes a host's findings of a set the agent reports `not_assigned`.
+- Ingest ends a host's open matches of a set the agent reports `not_assigned` (triage untouched, one history entry).
 - Console API: /api/v1/rule-set-assignments (list, default, group override), host view, `rule_sets[].state`.
 - Setup and `helper rules-apply` publish the hardening sets the rules package carries.
 
@@ -2912,15 +2834,15 @@ api "https://platform.lab/api/v1/agents/$fid/rule-set-assignments" | jq .
 
 Expected: the set shows the `lab-no-l1` override `enabled: false`; the host view says L1 `enabled: false, source: "group"`. Debian keeps L1 on.
 
-- [ ] **Step 5: 410, `not_assigned`, findings closed**
+- [ ] **Step 5: 410, `not_assigned`, matches ended**
 
 ```bash
 ./lab ssh fedora 'sudo journalctl -u openvibes-agent --since "-15 min" | grep -i "hardening-linux-l1" | tail -5'
 api "https://platform.lab/api/v1/agents/$fid" | jq '.rule_sets'
-./lab ssh platform "sudo -u postgres psql -d openvibes -Atc \"SELECT COALESCE(t.state,'open'), t.note, count(*) FROM current_findings c LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id) WHERE c.agent_id = '$fid' AND c.rule_set_id = 'hardening-linux-l1' GROUP BY 1, 2\""
+./lab ssh platform "sudo -u postgres psql -d openvibes -Atc \"SELECT c.ended_at IS NOT NULL, COALESCE(t.state,'open'), (SELECT h.note FROM console_finding_triage_history h WHERE (h.agent_id, h.rule_set_id, h.rule_id) = (c.agent_id, c.rule_set_id, c.rule_id) ORDER BY h.event_id DESC LIMIT 1), count(*) FROM current_findings c LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id) WHERE c.agent_id = '$fid' AND c.rule_set_id = 'hardening-linux-l1' GROUP BY 1, 2, 3\""
 ```
 
-Expected, within one scan interval plus one heartbeat: the agent logged the 410 for `hardening-linux-l1`; its `rule_sets` entry has `"state": "not_assigned"`; every Fedora L1 finding is `mitigated|rule set no longer assigned to this host`; Debian's L1 findings stay open.
+Expected, within one scan interval plus one heartbeat: the agent logged the 410 for `hardening-linux-l1`; its `rule_sets` entry has `"state": "not_assigned"`; every Fedora L1 match is ended (`t`), its triage state is what it was (`open` unless an analyst changed it), and its latest history note is `rule set no longer assigned to this host`; Debian's L1 matches stay open (`f`).
 
 - [ ] **Step 6: Switching it back on brings them back**
 
@@ -2928,7 +2850,7 @@ Expected, within one scan interval plus one heartbeat: the agent logged the 410 
 api -X DELETE "https://platform.lab/api/v1/rule-set-assignments/hardening-linux-l1/groups/$gid" | jq .groups
 ```
 
-Then rerun the Step 5 queries after the next scan. Expected: the agent fetches L1 again (200), the state is gone from its health, and the findings it still matches are `open` again (reopened by the new observation).
+Then rerun the Step 5 queries after the next scan. Expected: the agent fetches L1 again (200), the state is gone from its health, and the matches it still finds are open again (`ended_at` cleared by the agent's new `started`), their triage as it was.
 
 - [ ] **Step 7: An old agent is unaffected**
 
