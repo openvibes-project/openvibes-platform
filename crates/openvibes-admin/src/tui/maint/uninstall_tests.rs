@@ -134,7 +134,7 @@ fn remove_everything_needs_the_host_name_typed_exactly() {
     app.key(Key::Down);
     app.key(Key::Enter);
     assert!(screen(&app).contains("Remove OpenVIBES and all its data?"));
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     let calls = app.host.calls.borrow().clone();
@@ -174,7 +174,7 @@ fn q_quits_once_the_program_is_gone() {
     app.open_page(Page::Uninstall);
     app.nav.row = 3;
     app.key(Key::Enter);
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     app.key(Key::Char('q'));
@@ -188,7 +188,7 @@ fn keep_the_data_sends_no_confirmation_and_says_where_the_data_is() {
     app.nav.row = 3;
     app.key(Key::Enter);
     assert!(screen(&app).contains("Remove OpenVIBES?"));
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     assert_eq!(
@@ -208,7 +208,7 @@ fn a_failed_step_offers_try_again_and_keeps_the_program() {
     app.open_page(Page::Uninstall);
     app.nav.row = 3;
     app.key(Key::Enter);
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     let text = screen(&app);
@@ -253,7 +253,7 @@ fn with_back_up_first_the_backup_goes_to_a_new_file_in_the_folder() {
     assert!(screen(&app).contains("Ticked because you backed up last time"));
     app.nav.row = 4; // Keep, Everything, Back up first, Save in folder, Uninstall
     app.key(Key::Enter);
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     let first = app.host.calls.borrow()[0].0.clone();
@@ -340,7 +340,7 @@ fn a_run_that_ends_on_another_screen_brings_its_result_back() {
     app.open_page(Page::Uninstall);
     app.nav.row = 3;
     app.key(Key::Enter);
-    app.key(Key::Enter);
+    app.key(Key::Char('y'));
     type_text(&mut app, "pw");
     app.key(Key::Enter);
     // Tests run the calls at once; model "finished while elsewhere".
@@ -374,6 +374,122 @@ fn one_empty_line_separates_the_list_from_its_help() {
     // The list's hint line ("⭣ 1 more") or one empty line, never two.
     assert!(
         !(lines[help - 1].trim().is_empty() && lines[help - 2].trim().is_empty()),
+        "{text}"
+    );
+}
+
+#[test]
+fn the_uninstall_question_starts_on_no() {
+    // User, 2026-10-12: a stray Enter on the question never removes anything.
+    let mut app = set_up(vec![]);
+    app.open_page(Page::Uninstall);
+    app.nav.row = 3; // Keep the data → Uninstall
+    app.key(Key::Enter);
+    assert!(screen(&app).contains("Remove OpenVIBES?"));
+    assert!(
+        matches!(app.question, Some((_, false))),
+        "No is highlighted"
+    );
+    app.key(Key::Enter);
+    assert!(app.question.is_none() && app.run.is_none() && app.asking.is_none());
+    assert!(
+        app.host.calls.borrow().is_empty(),
+        "Enter on No removes nothing"
+    );
+}
+
+#[test]
+fn remove_everything_will_not_back_up_into_a_folder_it_removes() {
+    // Review C1: said on the page, before the question.
+    let mut app = set_up(vec![]);
+    let etc = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&etc).unwrap();
+    std::fs::write(
+        etc.join("backup.toml"),
+        "folder = \"/var/backups/openvibes\"\nfirst = true\n",
+    )
+    .unwrap();
+    app.open_page(Page::Uninstall);
+    app.key(Key::Down);
+    app.key(Key::Char(' '));
+    app.maint.typed = "platform.example.com".into();
+    app.nav.row = 5; // Keep, Everything, Back up first, Save in folder, Type…, Uninstall
+    app.key(Key::Enter);
+    assert!(app.question.is_none(), "{}", screen(&app));
+    assert!(
+        screen(&app).contains("Remove everything removes /var/backups/openvibes"),
+        "{}",
+        screen(&app)
+    );
+    assert_eq!(app.nav.row, 3, "the folder row is highlighted");
+}
+
+#[test]
+fn a_half_done_remove_everything_reopens_as_remove_everything() {
+    // Review I3: never silently Keep the data (gone already), no backup.
+    let mut app = set_up(vec![]);
+    mark(&app, "uninstall\neverything");
+    let etc = app.root.join("etc/openvibes");
+    std::fs::create_dir_all(&etc).unwrap();
+    std::fs::write(etc.join("backup.toml"), "folder = \"/srv\"\nfirst = true\n").unwrap();
+    app.open_page(Page::Uninstall);
+    let text = screen(&app);
+    assert!(text.contains("(•) Remove everything"), "{text}");
+    assert!(text.contains("[ ] Back up first"), "{text}");
+}
+
+fn uninstall_with(everything: bool, purge: &str, admin: &str) -> String {
+    let ok = || Ok("done\tok\n".to_owned());
+    let mut app = set_up(vec![
+        ok(),
+        ok(),
+        ok(),
+        ok(),
+        Ok(format!("done\t{purge}\n")),
+        Ok(format!("done\t{admin}\n")),
+    ]);
+    app.open_page(Page::Uninstall);
+    if everything {
+        app.key(Key::Down);
+        app.key(Key::Char(' '));
+        app.maint.typed = "platform.example.com".into();
+    }
+    app.nav.row = if everything { 4 } else { 3 };
+    app.key(Key::Enter);
+    app.key(Key::Char('y'));
+    type_text(&mut app, "pw");
+    app.key(Key::Enter);
+    screen(&app)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[test]
+fn the_result_says_what_the_helper_reported() {
+    // Review I4: not a canned "Nothing is left behind".
+    let text = uninstall_with(
+        true,
+        "database, roles, configuration, data and service accounts removed; PostgreSQL stays: it holds 2 other databases",
+        "removed openvibes-admin; the package repository stays: openvibes-agent still uses it; this program closes here",
+    );
+    assert!(text.contains("OpenVIBES is removed"), "{text}");
+    assert!(
+        text.contains("PostgreSQL stays: it holds 2 other databases"),
+        "{text}"
+    );
+    assert!(
+        text.contains("The package repository stays: openvibes-agent still uses it"),
+        "{text}"
+    );
+    assert!(!text.contains("Nothing is left behind"), "{text}");
+    let text = uninstall_with(
+        false,
+        "data kept",
+        "removed openvibes-admin; kept: /etc/openvibes, /var/backups/openvibes; this program closes here; the rest is removed",
+    );
+    assert!(
+        text.contains("Kept: /etc/openvibes, /var/backups/openvibes"),
         "{text}"
     );
 }

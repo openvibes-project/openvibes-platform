@@ -255,16 +255,45 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
             format!("    ✓ OpenVIBES is removed from this host ({})", run.took()),
             t.green(),
         ));
-        let stays = if everything {
-            format!(
-                "Nothing is left behind. {}",
-                postgres(true, app.maint.pg_recorded)
-            )
-        } else {
-            "The data stays in /etc/openvibes and /var/lib/openvibes-* for a reinstall. \
-             PostgreSQL stays installed."
-                .into()
+        // What the helper reported (review I4): Purge's and the last step's
+        // notes on what stayed, never a canned outcome.
+        let said = |i: usize| {
+            run.states
+                .get(i)
+                .and_then(Option::as_ref)
+                .map_or("", StepState::detail)
         };
+        let (purge, admin) = (
+            said(run.states.len().saturating_sub(2)),
+            said(run.states.len().saturating_sub(1)),
+        );
+        let mut notes: Vec<String> = Vec::new();
+        if everything && admin.contains("nothing of OpenVIBES remains") {
+            notes.push("Nothing is left behind.".into());
+        } else if !everything {
+            notes.push("The data stays for a reinstall. PostgreSQL stays installed.".into());
+        }
+        notes.extend(
+            purge
+                .split("; ")
+                .chain(admin.split("; "))
+                .filter(|part| {
+                    [
+                        "kept:",
+                        "PostgreSQL",
+                        "the package repository stays",
+                        "the site rule key",
+                    ]
+                    .iter()
+                    .any(|start| part.starts_with(start))
+                })
+                .map(|part| {
+                    let mut chars = part.chars();
+                    chars.next().map_or_else(String::new, |first| {
+                        format!("{}{}.", first.to_uppercase(), chars.as_str())
+                    })
+                }),
+        );
         let backup = run.work.calls.first().and_then(|c| match c {
             Call::Remove(_, args) => args
                 .iter()
@@ -278,7 +307,6 @@ fn draw_run<H: Host>(frame: &mut Frame, head: &Header, app: &App<H>, run: &Run) 
             .as_ref()
             .and_then(|p| p.root_key_out.as_ref())
             .filter(|_| everything);
-        let mut notes = vec![stays];
         notes.extend(backup.map(|f| format!("Backup: {f}. Copy it off this host.")));
         notes.extend(key.map(|k| {
             format!(
@@ -316,7 +344,12 @@ impl<H: Host> App<H> {
             self.run = None;
         }
         self.load_backup_choice();
-        self.maint.everything = false;
+        // A half-done Remove everything goes on as one, without a backup:
+        // its database may be gone (review I3).
+        self.maint.everything = super::update::half_done_everything(&self.root);
+        if self.maint.everything {
+            self.maint.first = false;
+        }
         self.maint.typed.clear();
         self.maint.typing = false;
         self.maint.plan_error = None;
@@ -422,13 +455,28 @@ impl<H: Host> App<H> {
         }
         if self.maint.first {
             self.poll_folder(std::time::Instant::now());
-            if !self.maint.folder.ok() {
-                let why = if self.maint.folder.pending() {
-                    "Wait: the folder is still being checked"
-                } else {
-                    "Choose a folder for the backup first"
-                };
-                self.outcome = Some((false, why.into()));
+            let removed = self
+                .maint
+                .everything
+                .then(|| {
+                    crate::setup::remove::removed_by_everything(std::path::Path::new(
+                        &self.maint.folder.text,
+                    ))
+                })
+                .flatten();
+            let why = if let Some(folder) = removed {
+                Some(format!(
+                    "Remove everything removes {folder}: choose another folder"
+                ))
+            } else if self.maint.folder.pending() {
+                Some("Wait: the folder is still being checked".into())
+            } else if !self.maint.folder.ok() {
+                Some("Choose a folder for the backup first".into())
+            } else {
+                None
+            };
+            if let Some(why) = why {
+                self.outcome = Some((false, why));
                 self.nav.row = choices
                     .iter()
                     .position(|c| *c == Choice::Folder)
@@ -447,7 +495,7 @@ impl<H: Host> App<H> {
                 detail: detail.into(),
                 then: Then::Uninstall,
             },
-            true,
+            false, // starts on No: a stray Enter removes nothing (user, 2026-10-12)
         ));
     }
 

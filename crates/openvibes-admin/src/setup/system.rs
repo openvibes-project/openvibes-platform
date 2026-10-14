@@ -307,8 +307,14 @@ const JOB: &str = "run/openvibes-admin/job";
 /// Refuses when a job of another kind is half done.
 pub fn job_guard(root: &Path, kind: &str) -> Result<(), String> {
     match fs::read_to_string(root.join(JOB)) {
-        Ok(text) if !text.trim().is_empty() && text.trim() != kind => {
-            let other = text.trim();
+        // The first line is the kind; Remove everything adds "everything".
+        Ok(text)
+            if text
+                .lines()
+                .next()
+                .is_some_and(|k| !k.trim().is_empty() && k.trim() != kind) =>
+        {
+            let other = text.lines().next().unwrap_or_default().trim();
             let page = if other == "update" {
                 "Update OpenVIBES"
             } else {

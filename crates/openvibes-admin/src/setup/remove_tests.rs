@@ -290,3 +290,56 @@ fn a_wrong_confirmation_stops_every_step() {
 
 #[path = "remove_admin_tests.rs"]
 mod admin_tests;
+#[path = "remove_pg_tests.rs"]
+mod pg_tests;
+
+#[test]
+fn remove_everything_refuses_a_backup_into_a_folder_it_removes() {
+    // Review C1: the dump was written, then deleted with the folder.
+    for folder in [
+        "/var/backups/openvibes",
+        "/etc/openvibes/old",
+        "/var/lib/openvibes-vulns",
+    ] {
+        let mut everything = args(&[Ingest], Some("platform.example.com"));
+        everything.backup = Some(folder.into());
+        let error = everything.check().unwrap_err();
+        assert!(
+            error.contains("Remove everything removes"),
+            "{folder}: {error}"
+        );
+        let mut keep = args(&[Ingest], None);
+        keep.backup = Some(folder.into());
+        assert_eq!(keep.check(), Ok(()), "Keep the data keeps {folder}");
+    }
+    let mut elsewhere = args(&[Ingest], Some("platform.example.com"));
+    elsewhere.backup = Some("/var/backups/openvibes-old".into());
+    assert_eq!(elsewhere.check(), Ok(()));
+}
+
+#[test]
+fn a_half_done_remove_everything_is_never_finished_as_keep_the_data() {
+    // Review I3: the mark says which uninstall it was.
+    let fake = Fake::new("remove-mode-mark");
+    fake.answer(
+        &["/usr/bin/rpm", "-q", "--quiet", "openvibes-ingest"],
+        0,
+        "",
+    );
+    fake.answer(&["/usr/bin/systemctl", "disable", "--now"], 0, "");
+    let plan = plan(&[Ingest]);
+    let everything = args(&[Ingest], Some("platform.example.com"));
+    let state = run(&fake.ctx(&plan), RemoveStep::Stop, &everything);
+    assert!(matches!(state, StepState::Done(_)), "{state:?}");
+    let mark = std::fs::read_to_string(fake.root.join("run/openvibes-admin/job")).unwrap();
+    assert_eq!(mark, "uninstall\neverything");
+    let calls = fake.calls.borrow().len();
+    let keep = run(&fake.ctx(&plan), RemoveStep::Stop, &args(&[Ingest], None));
+    assert!(
+        matches!(&keep, StepState::Failed(why) if why.contains("Remove everything is half done")),
+        "{keep:?}"
+    );
+    assert_eq!(fake.calls.borrow().len(), calls, "nothing ran");
+    let again = run(&fake.ctx(&plan), RemoveStep::Stop, &everything);
+    assert!(matches!(again, StepState::Done(_)), "{again:?}");
+}
