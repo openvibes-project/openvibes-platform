@@ -53,7 +53,9 @@ database_pool_size = 16         # default, 1 to 1024
 Unknown keys, relative paths, a non-loopback `health_listen`, or
 out-of-range values stop startup with "invalid distribution configuration".
 The database role `openvibes-distribution` may only read `agents`,
-`certificates`, `rule_sets`, `rule_bundles`, and `schema_version`.
+`certificates`, `rule_sets`, `rule_bundles`, `schema_version`, the
+rule-set assignment tables, and the tag and selector columns that decide
+group membership ([rule-set-assignment.md](rule-set-assignment.md)).
 
 ## Failure behaviour
 

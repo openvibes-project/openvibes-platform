@@ -6,7 +6,8 @@ mod common;
 use common::TestDb;
 use platform_store::{
     Client,
-    rule_assignment::{self, Change, GroupOverride},
+    console_read::AgentScope,
+    rule_assignment::{self, Change, GroupOverride, HostAssignment, Source},
 };
 
 const L1: &str = "hardening-linux-l1";
@@ -273,6 +274,166 @@ async fn deleting_a_group_deletes_its_overrides() {
         .unwrap();
     let overview = rule_assignment::overview(&console).await.unwrap();
     assert!(overview.sets[0].groups.is_empty() && overview.groups.is_empty());
+    drop((console, admin));
+    db.drop().await;
+}
+
+const A: &str = "agent.00000000-0000-4000-8000-000000000001";
+const B: &str = "agent.00000000-0000-4000-8000-000000000002";
+const NOBODY: &str = "agent.00000000-0000-4000-8000-000000000099";
+
+async fn agent(admin: &Client, id: &str, tags: &[(&str, &str)]) {
+    admin
+        .execute(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ($1, 'active', now())",
+            &[&id],
+        )
+        .await
+        .unwrap();
+    for (key, value) in tags {
+        admin
+            .execute(
+                "INSERT INTO console_agent_tags (agent_id, tag_key, tag_value, changed_at, changed_by)
+                 VALUES ($1, $2, $3, now(), 'test')",
+                &[&id, key, value],
+            )
+            .await
+            .unwrap();
+    }
+}
+
+async fn assigned(dist: &Client, agent: &str, set: &str) -> bool {
+    rule_assignment::assigned(dist, agent, set).await.unwrap()
+}
+
+#[tokio::test]
+async fn a_host_in_no_group_gets_the_default() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, &[("env", "web")]).await;
+    // A group without selectors matches nobody, so its "off" does not apply.
+    let empty = group(&admin, "empty", &[]).await;
+    let mut console = as_role(&db, "openvibes-console").await;
+    done(
+        rule_assignment::set_group(&mut console, "t", L1, &empty, Some(false))
+            .await
+            .unwrap(),
+    );
+    let dist = as_role(&db, "openvibes-distribution").await;
+    assert!(assigned(&dist, A, L1).await);
+    assert!(!assigned(&dist, A, L2).await);
+    // Not assignable: always served as before.
+    assert!(assigned(&dist, A, "baseline").await);
+    let host = rule_assignment::for_agent(&console, &AgentScope::Global, A)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        host,
+        [
+            HostAssignment {
+                rule_set_id: L1.into(),
+                enabled: true,
+                source: Source::Default
+            },
+            HostAssignment {
+                rule_set_id: L2.into(),
+                enabled: false,
+                source: Source::Default
+            },
+        ]
+    );
+    drop((console, dist, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn on_wins_and_a_deleted_group_falls_back() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, &[("env", "web"), ("tier", "db")]).await;
+    agent(&admin, B, &[("env", "web")]).await;
+    let web = group(&admin, "web", &[("env", "web")]).await;
+    // Needs both tags: B is not a member.
+    let web_db = group(&admin, "web-db", &[("env", "web"), ("tier", "db")]).await;
+    let mut console = as_role(&db, "openvibes-console").await;
+    done(
+        rule_assignment::set_group(&mut console, "t", L2, &web, Some(false))
+            .await
+            .unwrap(),
+    );
+    done(
+        rule_assignment::set_group(&mut console, "t", L2, &web_db, Some(true))
+            .await
+            .unwrap(),
+    );
+    done(
+        rule_assignment::set_group(&mut console, "t", L1, &web, Some(false))
+            .await
+            .unwrap(),
+    );
+    let dist = as_role(&db, "openvibes-distribution").await;
+    assert!(assigned(&dist, A, L2).await, "one group on, one off: on");
+    assert!(!assigned(&dist, B, L2).await, "only the off group");
+    assert!(
+        !assigned(&dist, A, L1).await,
+        "an off group beats the on default"
+    );
+    let source = |host: Vec<HostAssignment>| {
+        host.into_iter()
+            .map(|h| (h.enabled, h.source))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        source(
+            rule_assignment::for_agent(&console, &AgentScope::Global, A)
+                .await
+                .unwrap()
+                .unwrap()
+        ),
+        [(false, Source::Group), (true, Source::Group)]
+    );
+    admin
+        .execute(
+            "DELETE FROM console_asset_groups WHERE asset_group_id::text = $1",
+            &[&web_db],
+        )
+        .await
+        .unwrap();
+    assert!(!assigned(&dist, A, L2).await, "back to web's off");
+    drop((console, dist, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn the_host_view_is_scoped_and_distribution_reads_no_more_than_it_needs() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, &[("env", "web")]).await;
+    let other = group(&admin, "other", &[("env", "db")]).await;
+    let console = as_role(&db, "openvibes-console").await;
+    let scoped = AgentScope::AssetGroups(vec![other]);
+    assert_eq!(
+        rule_assignment::for_agent(&console, &scoped, A)
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        rule_assignment::for_agent(&console, &AgentScope::Global, NOBODY)
+            .await
+            .unwrap(),
+        None
+    );
+    let privileges: Vec<bool> = admin
+        .query_one(
+            "SELECT ARRAY[
+                has_column_privilege('openvibes-distribution', 'console_agent_tags', 'tag_value', 'SELECT'),
+                has_column_privilege('openvibes-distribution', 'console_agent_tags', 'changed_by', 'SELECT'),
+                has_table_privilege('openvibes-distribution', 'rule_set_group_assignment', 'UPDATE')]",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(privileges, [true, false, false]);
     drop((console, admin));
     db.drop().await;
 }

@@ -20,3 +20,9 @@ REVOKE ALL ON rule_set_assignment, rule_set_group_assignment FROM PUBLIC;
 -- The console switches defaults and overrides (rules.upload).
 GRANT SELECT, UPDATE ON rule_set_assignment TO "openvibes-console";
 GRANT SELECT, INSERT, UPDATE, DELETE ON rule_set_group_assignment TO "openvibes-console";
+-- Distribution answers 410 for a set that is off on the asking host: it
+-- reads the switches and only the tag and selector columns membership needs.
+GRANT SELECT ON rule_set_assignment, rule_set_group_assignment TO "openvibes-distribution";
+GRANT SELECT (agent_id, tag_key, tag_value) ON console_agent_tags TO "openvibes-distribution";
+GRANT SELECT (asset_group_id, tag_key, tag_value) ON console_asset_group_selectors
+    TO "openvibes-distribution";

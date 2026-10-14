@@ -31,6 +31,13 @@ whether a live bundle is published, every group), `set_default` and
 `asset_group_name`, `old`, `new`; `null` for "default" or "no override");
 setting the current value writes nothing.
 
+`assigned(agent, set)` (distribution) and `for_agent(scope, agent)` (the
+console's host view, `None` outside the caller's scope) share one SQL
+resolution (`HOST_STATE`). A set that is not assignable is always
+assigned. Grants: `openvibes-distribution` may read the two tables and only
+`console_agent_tags (agent_id, tag_key, tag_value)` and
+`console_asset_group_selectors (asset_group_id, tag_key, tag_value)`.
+
 ## Configuration
 
 None: defaults come from the migration and are changed in the console.

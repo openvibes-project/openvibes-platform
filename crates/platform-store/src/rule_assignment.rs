@@ -259,3 +259,97 @@ pub async fn set_group(
     transaction.commit().await?;
     current(client, set).await
 }
+
+/// Where a host's state for a set comes from.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum Source {
+    /// No group of the host overrides the set.
+    Default,
+    /// A group of the host decided it.
+    Group,
+}
+
+/// One assignable set's state on one host.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HostAssignment {
+    /// Rule set id.
+    pub rule_set_id: String,
+    /// Whether the host runs it.
+    pub enabled: bool,
+    /// Default or a group.
+    pub source: Source,
+}
+
+/// Per assignable set for agent `$1`: (set, enabled, decided by a group).
+/// `bool_or` over the overrides of the host's groups is true when any says
+/// on, false when all say off, NULL when none applies (then the default). A
+/// group matches when it has selectors and the host carries every one, as
+/// for access (`console_read::agent_visibility`).
+const HOST_STATE: &str = "
+    SELECT a.rule_set_id, COALESCE(bool_or(o.enabled), a.default_enabled),
+           bool_or(o.enabled) IS NOT NULL
+    FROM rule_set_assignment a
+    LEFT JOIN rule_set_group_assignment o ON o.rule_set_id = a.rule_set_id
+     AND EXISTS (SELECT 1 FROM console_asset_group_selectors s
+                 WHERE s.asset_group_id = o.asset_group_id)
+     AND NOT EXISTS (
+         SELECT 1 FROM console_asset_group_selectors r
+         WHERE r.asset_group_id = o.asset_group_id
+           AND NOT EXISTS (SELECT 1 FROM console_agent_tags t
+                           WHERE t.agent_id = $1 AND t.tag_key = r.tag_key
+                             AND t.tag_value = r.tag_value))
+    GROUP BY a.rule_set_id, a.default_enabled";
+
+/// Whether `agent_id` runs `set`. A set that is not assignable is always
+/// assigned, so distribution answers it exactly as before.
+pub async fn assigned(client: &Client, agent_id: &str, set: &str) -> Result<bool, StoreError> {
+    let row = client
+        .query_opt(
+            &format!(
+                "SELECT enabled FROM ({HOST_STATE}) AS h (rule_set_id, enabled, from_group)
+                 WHERE rule_set_id = $2"
+            ),
+            &[&agent_id, &set],
+        )
+        .await?;
+    Ok(row.is_none_or(|row| row.get(0)))
+}
+
+/// Every assignable set's state on `agent_id`, or `None` when the agent is
+/// unknown or outside `scope`.
+pub async fn for_agent(
+    client: &Client,
+    scope: &crate::console_read::AgentScope,
+    agent_id: &str,
+) -> Result<Option<Vec<HostAssignment>>, StoreError> {
+    let visible = crate::console_read::agent_visibility("a.agent_id", "$2", "$3");
+    if client
+        .query_opt(
+            &format!("SELECT 1 FROM agents a WHERE a.agent_id = $1 AND {visible}"),
+            &[&agent_id, &scope.is_global(), &scope.group_ids()],
+        )
+        .await?
+        .is_none()
+    {
+        return Ok(None);
+    }
+    let rows = client
+        .query(
+            &format!("{HOST_STATE} ORDER BY a.rule_set_id"),
+            &[&agent_id],
+        )
+        .await?;
+    Ok(Some(
+        rows.iter()
+            .map(|row| HostAssignment {
+                rule_set_id: row.get(0),
+                enabled: row.get(1),
+                source: if row.get(2) {
+                    Source::Group
+                } else {
+                    Source::Default
+                },
+            })
+            .collect(),
+    ))
+}
