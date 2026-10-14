@@ -645,10 +645,14 @@ refused while one works):
   service is disabled, `postgresql-server` (and `postgresql` and
   `postgresql-private-libs`, whichever Setup installed too: the record lists each
   one that was absent before) removed with `rpm -e`, and `/var/lib/pgsql` deleted. With
-  other databases, or without the record, it stays and the step says why;
-  `--keep-data` never removes it. Once the checks pass a mark
-  (`/etc/openvibes/postgresql-removing`) is written; a retry sees it, skips
-  every database query and finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
+  other databases, when another package needs it (`rpm -e --test` refuses,
+  e.g. `postgresql-upgrade`), or without the record, it stays, the step says
+  why and Purge finishes; `--keep-data` never removes it. Once the checks pass
+  a mark (`/etc/openvibes/postgresql-removing`) is written; a retry with the
+  cluster down trusts it and finishes. While the cluster answers, the mark is
+  never trusted: the drops and the other-databases check run again (a stale
+  mark, after Setup took PostgreSQL back, must not remove another database).
+  The retry finishes (stop, `rpm -e`, `/var/lib/pgsql`, then the
   mark, then the record). A record without the `postgresql-server` package
   and without the mark is stale: it is deleted and no data folder is touched.
   The last step, `admin`, removes `openvibes-admin`
@@ -665,7 +669,12 @@ refused while one works):
   (`use rpmkeys --delete`) but removes the key (checked on Fedora 44, RPM 6.0.2). With `--keep-data` it
   keeps `/etc/openvibes` and `/var/lib/openvibes-*` and says so. Every step
   is safe to repeat; a failed step leaves the job marked so Try again
-  finishes it. Nothing is left for the user to remove by hand; the root key
+  finishes it. The mark (`/run/openvibes-admin/job`) reads `uninstall`, with a
+  second line `everything` for Remove everything: such a run is never finished
+  as `--keep-data` (refused), and the TUI reopens it as Remove everything
+  without a backup. With `--confirm`, a `--backup` in a folder Remove
+  everything deletes (`/var/backups/openvibes`, `/etc/openvibes`,
+  `/var/lib/openvibes-*`, …) is refused before anything runs. Nothing is left for the user to remove by hand; the root key
   file and backups in the user's folders are theirs and stay. The program's own
   files are gone after this step, so the TUI closes after it.
 - Backups: `pg_dump --format=custom` to PATH and `pg_dumpall --roles-only
@@ -809,4 +818,4 @@ unit tests.
 
 `assistant-tune` waits (up to 300 s, before it writes the new tuning) for systemd's jobs on `openvibes-llm.service` and its proxy before stopping the server, and tries a stop that systemd cancels ("Job for openvibes-llm.service canceled", the restart a package upgrade ends with) up to 3 times, 5 s apart. If `--auto` still fails, the old tuning is restored, `tune.lock` (only an `flock`, released at exit) blocks nothing, and the line says tuning is retried at the next upgrade or from Setup.
 
-**Uninstall** (Maintenance): Keep the data (the default) or Remove everything, chosen with Space or Enter (Enter then moves to the name row, or to Uninstall); Back up first as in Update (Space or Enter toggles it); and Uninstall, which alone asks, so stray Enters never start anything ("Remove OpenVIBES?" or "Remove OpenVIBES and all its data?", No highlighted, the one question that starts on No, approved.md 47). Remove everything first needs this host's name (from `setup.toml`) typed exactly; a tick shows when it matches, and Uninstall on a wrong name moves to that row. The page says what happens to PostgreSQL (approved.md 46): Keep the data leaves it installed; Remove everything takes it too only when Setup recorded installing it (`/etc/openvibes/setup-installed-postgresql`, read by the TUI) and nothing else uses it. The six remove steps run on the worker; the last one removes the administration tool itself, so once it is done Enter (or `q`) quits and nothing else is offered or sent to the helper. If the run ends while you are on another screen, the page with the result is shown. A failed step shows what failed and Try again goes on from it. The result says what stayed: the data for a reinstall (Keep) or nothing but, maybe, PostgreSQL (Everything), the backup file, and the old root key file, which are the user's. Tests: `src/tui/maint/uninstall_tests.rs`.
+**Uninstall** (Maintenance): Keep the data (the default) or Remove everything, chosen with Space or Enter (Enter then moves to the name row, or to Uninstall); Back up first as in Update (Space or Enter toggles it); and Uninstall, which alone asks, so stray Enters never start anything ("Remove OpenVIBES?" or "Remove OpenVIBES and all its data?", No highlighted, the one question that starts on No, approved.md 47). Remove everything first needs this host's name (from `setup.toml`) typed exactly; a tick shows when it matches, and Uninstall on a wrong name moves to that row. The page says what happens to PostgreSQL (approved.md 46): Keep the data leaves it installed; Remove everything takes it too only when Setup recorded installing it (`/etc/openvibes/setup-installed-postgresql`, read by the TUI) and nothing else uses it. The six remove steps run on the worker; the last one removes the administration tool itself, so once it is done Enter (or `q`) quits and nothing else is offered or sent to the helper. If the run ends while you are on another screen, the page with the result is shown. A failed step shows what failed and Try again goes on from it. The result shows what the helper reported staying (Keep's kept list, PostgreSQL and why, the repository when another package uses it, the site rule key note) and "Nothing is left behind" only when the helper says so; then the backup file and the old root key file, which are the user's. Remove everything refuses a backup folder it would delete, on the page before the question. A half-done Remove everything reopens as Remove everything, without a backup. Tests: `src/tui/maint/uninstall_tests.rs`.
