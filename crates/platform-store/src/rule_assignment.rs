@@ -124,7 +124,7 @@ async fn current(client: &Client, set: &str) -> Result<Change, StoreError> {
 }
 
 /// One `rules.assignment.change` row by console user `user_id` (shown by
-/// display name): `group` is (id, name), `None` for the default; `None` as
+/// display name; an id with no console user is an error): `group` is (id, name), `None` for the default; `None` as
 /// old or new means "no override".
 async fn audit(
     transaction: &tokio_postgres::Transaction<'_>,
@@ -134,7 +134,8 @@ async fn audit(
     old: Option<bool>,
     new: Option<bool>,
 ) -> Result<(), StoreError> {
-    transaction
+    // Fail closed: no console user, no audit row, so the change rolls back.
+    let rows = transaction
         .execute(
             "INSERT INTO audit_log (actor, action, target, result, detail, actor_kind, actor_id,
                  actor_display, target_kind, target_id)
@@ -142,7 +143,7 @@ async fn audit(
                  jsonb_build_object('rule_set_id', $2::text, 'asset_group_id', $3::text,
                      'asset_group_name', $4::text, 'old', $5::boolean, 'new', $6::boolean),
                  'user', $1, u.display_name, 'rule_set', $2
-             FROM console_users u WHERE u.user_id::text = $1",
+             FROM console_users u WHERE u.user_id = $1::text::uuid",
             &[
                 &user_id,
                 &set,
@@ -153,7 +154,11 @@ async fn audit(
             ],
         )
         .await?;
-    Ok(())
+    if rows == 1 {
+        Ok(())
+    } else {
+        Err(StoreError::Query)
+    }
 }
 
 /// Switches a set's default for console user `user_id`. Setting the value

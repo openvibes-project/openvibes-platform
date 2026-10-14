@@ -427,3 +427,40 @@ async fn group_overrides_and_the_host_view() {
     );
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_host_view_stays_within_the_callers_asset_groups() {
+    let (db, router) = setup().await;
+    let outside = "agent.00000000-0000-4000-8000-000000000002";
+    db.pool
+        .get()
+        .await
+        .unwrap()
+        .batch_execute(&format!(
+            "INSERT INTO agents (agent_id, status, enrolled_at) VALUES ('{outside}', 'active', now());
+             UPDATE console_role_bindings SET asset_group_id = '{WEB}'
+              WHERE user_id = '33333333-3333-4333-8333-333333333333';"
+        ))
+        .await
+        .unwrap();
+    // bob (analyst) holds agents.read for the web group only.
+    let (cookie, csrf) = login(&router, "bob").await;
+    let inside = format!("/api/v1/agents/{AGENT}/rule-set-assignments");
+    let (status, ..) = call(&router, "GET", &inside, &cookie, &csrf, None, None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body, _) = call(
+        &router,
+        "GET",
+        &format!("/api/v1/agents/{outside}/rule-set-assignments"),
+        &cookie,
+        &csrf,
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(
+        (status, body["code"].as_str()),
+        (StatusCode::NOT_FOUND, Some("agent_not_found"))
+    );
+    db.drop().await;
+}

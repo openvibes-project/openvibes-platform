@@ -139,6 +139,39 @@ async fn the_defaults_are_l1_on_and_l2_off() {
 }
 
 #[tokio::test]
+async fn a_change_by_an_unknown_user_fails_and_changes_nothing() {
+    let (db, admin) = setup().await;
+    let web = group(&admin, "web", &[("env", "web")]).await;
+    let mut console = as_role(&db, "openvibes-console").await;
+    let nobody = "00000000-0000-4000-8000-000000000099";
+    for actor in [nobody, "not-a-uuid"] {
+        assert!(
+            rule_assignment::set_default(&mut console, actor, L2, true)
+                .await
+                .is_err()
+        );
+        assert!(
+            rule_assignment::set_group(&mut console, actor, L1, &web, Some(false))
+                .await
+                .is_err()
+        );
+    }
+    let overview = rule_assignment::overview(&console).await.unwrap();
+    assert!(
+        !overview
+            .sets
+            .iter()
+            .find(|a| a.rule_set_id == L2)
+            .unwrap()
+            .default_enabled
+    );
+    assert!(overview.sets.iter().all(|a| a.groups.is_empty()));
+    assert!(audits(&admin).await.is_empty());
+    drop((console, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
 async fn a_default_change_is_audited_with_old_and_new() {
     let (db, admin) = setup().await;
     let mut console = as_role(&db, "openvibes-console").await;

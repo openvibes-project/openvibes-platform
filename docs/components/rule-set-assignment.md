@@ -82,7 +82,9 @@ None: defaults come from the migration and are changed in the console.
 ## Failure behaviour
 
 A database error is a 503 for the console caller; nothing is half written
-(each change is one transaction).
+(each change is one transaction). A change whose actor has no console user
+writes no audit row, so it fails and rolls back (503): nothing changes
+unaudited.
 
 ## How to test
 
