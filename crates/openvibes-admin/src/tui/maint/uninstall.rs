@@ -447,7 +447,7 @@ impl<H: Host> App<H> {
                 detail: detail.into(),
                 then: Then::Uninstall,
             },
-            true,
+            false, // starts on No: a stray Enter removes nothing (user, 2026-10-12)
         ));
     }
 
