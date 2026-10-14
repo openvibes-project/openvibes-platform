@@ -116,7 +116,7 @@ the reader is not working.
 
 | `reason` | When | `fix` (words) and `command` | `fault` |
 |---|---|---|---|
-| `not_enabled` | no `alarms` object (no `process_events` in `collectors`) | add it to `agent.toml`, restart; no command | no |
+| `not_enabled` | no `alarms` object (an agent from before alarms were always on, #247) | update the agent; no command | no |
 | `no_source` | `source: none` (the audit socket did not open either) | `CAP_AUDIT_READ` in the unit when `permission_denied`, else the agent's log; `sudo systemctl restart openvibes-agent` | yes |
 | `reader_failed` | `collector` other than `ok`/`not_found` (the reader stopped, or an older agent's audit socket failed) | the agent's log; the restart command | yes |
 | `audit_not_set_up` | `fallback.audit_rule_loaded` false (no keyed audit record seen yet) | auditd installed and running (and, for `capability`, how to get eBPF back); `sudo /usr/libexec/openvibes-agent/audit-fallback` | yes |
