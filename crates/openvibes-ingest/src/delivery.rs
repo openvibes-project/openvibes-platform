@@ -57,6 +57,13 @@ pub(crate) async fn heartbeat(
         .transpose()?;
     let now = Utc::now();
     let mut client = state.pool.get().await.map_err(|_| ApiError::Unavailable)?;
+    // P20: a set the platform switched off for this host ends its open
+    // matches and notes why, once, when the agent first says it stopped
+    // running it: before the report is stored, which the check compares with.
+    let not_assigned = not_assigned_sets(&heartbeat);
+    if !not_assigned.is_empty() {
+        finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
+    }
     ingest::heartbeat(
         &client,
         &agent_id,
@@ -67,12 +74,6 @@ pub(crate) async fn heartbeat(
         now,
     )
     .await?;
-    // P20: a set the platform switched off for this host ends its open matches
-    // here once the agent says it stopped running it.
-    let not_assigned = not_assigned_sets(&heartbeat);
-    if !not_assigned.is_empty() {
-        finding_changes::end_unassigned(&mut client, &agent_id, &not_assigned, now).await?;
-    }
     // P13: the heartbeat is stored; a digest that is not ours asks for the
     // whole match set.
     if let Some(digest) = match_sha256 {

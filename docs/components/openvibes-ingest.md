@@ -89,13 +89,14 @@ The usual request limits apply. Test: `tests/ca.rs`.
   throttled write, and the report before it is kept to compare totals; a
   heartbeat without one keeps the stored report. An invalid `health`
   makes the heartbeat invalid (400).
-  A rule set the report marks `state: not_assigned` (P20) ends this host's
-  still-open matches of that set when it is an assignable one, as when the
-  host stops matching. Triage is not touched; each ended match gets one
-  triage-history entry by `system` with the note "rule set no longer
-  assigned to this host" (state unchanged). No audit row, as for any match
-  end. Repeated reports end nothing more
-  ([rule-set-assignment.md](rule-set-assignment.md)).
+  When the report first marks an assignable rule set `state: not_assigned`
+  (P20; the stored report did not), before storing it ingest ends this
+  host's still-open matches of that set, and every match of the set that
+  ended since the stored report (usually by the agent's own P13 change in
+  the same scan) gets one triage-history entry by `system` with the note
+  "rule set no longer assigned to this host" (state unchanged). Triage is
+  not touched; no audit row, as for any match end. Repeated reports write
+  nothing ([rule-set-assignment.md](rule-set-assignment.md)).
   204.
 - `POST /v1/inventory` (authenticated, protocol P8): `InventoryReport`; its
   `agent_id` must be the authenticated agent's (else 400); at most 50,000

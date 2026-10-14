@@ -114,3 +114,31 @@ async fn a_not_assigned_report_ends_the_sets_matches() {
     );
     world.stop().await;
 }
+
+/// The lab's sequence (task 9): the agent ends the match itself through P13
+/// in the scan that got the 410, then reports `not_assigned`: the match gets
+/// the note once.
+#[tokio::test]
+async fn a_match_the_agent_ended_gets_the_note_once() {
+    let world = World::start().await;
+    let (agent_id, chain, key) = enrolled(&world).await;
+    let before = serde_json::json!([{"id": "hardening-linux-l1", "version": 4}]);
+    send(&world, &chain, &key, beat(&agent_id, before)).await;
+    seed(&world, &agent_id).await;
+    world
+        .db()
+        .await
+        .execute("UPDATE current_findings SET ended_at = now()", &[])
+        .await
+        .unwrap();
+    let sets = serde_json::json!([{"id": "hardening-linux-l1", "state": "not_assigned"}]);
+    send(&world, &chain, &key, beat(&agent_id, sets.clone())).await;
+    assert_eq!(observed(&world).await, (true, 1, 0));
+    send(&world, &chain, &key, beat(&agent_id, sets)).await;
+    assert_eq!(
+        observed(&world).await,
+        (true, 1, 0),
+        "the second report notes nothing more"
+    );
+    world.stop().await;
+}

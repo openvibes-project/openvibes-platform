@@ -117,9 +117,37 @@ async fn ends_only_this_hosts_open_matches_of_the_set() {
     db.drop().await;
 }
 
+/// The health report ingest stored for `agent` `ago` before now, listing
+/// L1 with `l1_state` (the previous heartbeat).
+async fn reported(admin: &Client, agent: &str, l1_state: Option<&str>, ago: &str) {
+    let health = serde_json::json!({"rule_sets": [{"id": L1, "state": l1_state}]});
+    admin
+        .execute(
+            "UPDATE agents SET health = $2, health_at = now() - $3::text::interval
+             WHERE agent_id = $1",
+            &[&agent, &health, &ago],
+        )
+        .await
+        .unwrap();
+}
+
+/// The agent ended the match itself through P13, `ago` before now.
+async fn ended(admin: &Client, agent: &str, set: &str, rule: &str, ago: &str) {
+    admin
+        .execute(
+            "UPDATE current_findings SET ended_at = now() - $4::text::interval,
+                 end_approximate = false
+             WHERE agent_id = $1 AND rule_set_id = $2 AND rule_id = $3",
+            &[&agent, &set, &rule, &ago],
+        )
+        .await
+        .unwrap();
+}
+
 #[tokio::test]
 async fn repeated_reports_end_nothing_more() {
     let (db, admin, mut ingest) = setup().await;
+    reported(&admin, A, None, "1 hour").await;
     open(&admin, A, L1, "harden.ssh.x").await;
     let sets = [L1.to_owned()];
     assert_eq!(
@@ -128,6 +156,8 @@ async fn repeated_reports_end_nothing_more() {
             .unwrap(),
         1
     );
+    // Ingest stores the report; the next heartbeats say the same.
+    reported(&admin, A, Some("not_assigned"), "0 seconds").await;
     for _ in 0..3 {
         assert_eq!(
             end_unassigned(&mut ingest, A, &sets, Utc::now())
@@ -142,27 +172,96 @@ async fn repeated_reports_end_nothing_more() {
 }
 
 #[tokio::test]
-async fn a_match_the_agent_already_ended_is_left_alone() {
-    // The agent's own P13 `ended` often arrives first: nothing more to do.
+async fn a_retried_report_notes_nothing_more() {
+    // The heartbeat failed after this ran, so the report was not stored and
+    // the agent sends it again.
     let (db, admin, mut ingest) = setup().await;
+    reported(&admin, A, None, "1 hour").await;
     open(&admin, A, L1, "harden.ssh.x").await;
-    admin
-        .execute(
-            "UPDATE current_findings SET ended_at = now() - interval '1 minute'",
-            &[],
-        )
-        .await
-        .unwrap();
+    let sets = [L1.to_owned()];
+    for want in [1, 0] {
+        let got = end_unassigned(&mut ingest, A, &sets, Utc::now())
+            .await
+            .unwrap();
+        assert_eq!(got, want);
+    }
+    assert_eq!(state(&admin, A, L1, "harden.ssh.x").await.2, note("open"));
+    drop((admin, ingest));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_set_already_reported_not_assigned_ends_nothing() {
+    let (db, admin, mut ingest) = setup().await;
+    reported(&admin, A, Some("not_assigned"), "1 minute").await;
+    open(&admin, A, L1, "harden.ssh.x").await;
     assert_eq!(
         end_unassigned(&mut ingest, A, &[L1.to_owned()], Utc::now())
             .await
             .unwrap(),
         0
     );
+    assert_eq!(state(&admin, A, L1, "harden.ssh.x").await, untouched());
+    drop((admin, ingest));
+    db.drop().await;
+}
+
+/// The lab's sequence (task 9): the agent ends the set's matches through
+/// P13 in the scan that got the 410, then reports `not_assigned`.
+#[tokio::test]
+async fn matches_the_agent_ended_since_the_last_report_get_the_note() {
+    let (db, admin, mut ingest) = setup().await;
+    reported(&admin, A, None, "1 hour").await;
+    reported(&admin, B, None, "1 hour").await;
+    for (agent, set, rule, ago) in [
+        (A, L1, "harden.ssh.x", "1 minute"),
+        (A, L1, "harden.ssh.y", "1 minute"),
+        (A, L1, "harden.ssh.fixed", "2 hours"),
+        (A, "hardening-linux-l2", "harden.audit.z", "1 minute"),
+        (B, L1, "harden.ssh.x", "1 minute"),
+    ] {
+        open(&admin, agent, set, rule).await;
+        ended(&admin, agent, set, rule, ago).await;
+    }
+    let sets = [L1.to_owned()];
     assert_eq!(
-        state(&admin, A, L1, "harden.ssh.x").await,
-        (true, "none".into(), Vec::new())
+        end_unassigned(&mut ingest, A, &sets, Utc::now())
+            .await
+            .unwrap(),
+        2
     );
+    for rule in ["harden.ssh.x", "harden.ssh.y"] {
+        assert_eq!(
+            state(&admin, A, L1, rule).await,
+            (true, "none".into(), note("open"))
+        );
+    }
+    let kept: i64 = admin
+        .query_one(
+            "SELECT count(*) FROM current_findings
+             WHERE ended_at < now() - interval '30 seconds' AND NOT end_approximate",
+            &[],
+        )
+        .await
+        .unwrap()
+        .get(0);
+    assert_eq!(kept, 5, "the agent's own end times are kept");
+    let none = (true, "none".into(), Vec::new());
+    assert_eq!(state(&admin, A, L1, "harden.ssh.fixed").await, none);
+    assert_eq!(
+        state(&admin, A, "hardening-linux-l2", "harden.audit.z").await,
+        none
+    );
+    assert_eq!(state(&admin, B, L1, "harden.ssh.x").await, none);
+    // The next heartbeat says the same: no new note.
+    reported(&admin, A, Some("not_assigned"), "0 seconds").await;
+    assert_eq!(
+        end_unassigned(&mut ingest, A, &sets, Utc::now())
+            .await
+            .unwrap(),
+        0
+    );
+    assert_eq!(state(&admin, A, L1, "harden.ssh.x").await.2, note("open"));
     drop((admin, ingest));
     db.drop().await;
 }

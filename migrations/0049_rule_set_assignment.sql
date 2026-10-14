@@ -26,7 +26,9 @@ GRANT SELECT ON rule_set_assignment, rule_set_group_assignment TO "openvibes-dis
 GRANT SELECT (agent_id, tag_key, tag_value) ON console_agent_tags TO "openvibes-distribution";
 GRANT SELECT (asset_group_id, tag_key, tag_value) ON console_asset_group_selectors
     TO "openvibes-distribution";
--- Ingest ends a host's matches of a set the agent reports not_assigned: it
--- checks the set is assignable (it already updates current_findings and
--- writes triage history).
+-- Ingest ends a host's matches of a set the agent reports not_assigned and
+-- notes why: it checks the set is assignable and that a match has no such
+-- note yet (it already updates current_findings and writes triage history).
 GRANT SELECT ON rule_set_assignment TO "openvibes-ingest";
+GRANT SELECT (agent_id, rule_set_id, rule_id, note, changed_at)
+    ON console_finding_triage_history TO "openvibes-ingest";

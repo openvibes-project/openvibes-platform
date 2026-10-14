@@ -322,20 +322,20 @@ pub async fn heartbeat(
 /// (spec 2026-10-14 §5).
 pub const NOT_ASSIGNED_NOTE: &str = "rule set no longer assigned to this host";
 
-/// The agent reported `sets` as `not_assigned` (P20). For each of them that
-/// is assignable (`rule_set_assignment`), this host's still-open matches end,
-/// as when the host stops matching (user decision 2026-10-14). Triage is
-/// never touched; each ended match gets one triage-history entry by
-/// `system` with [`NOT_ASSIGNED_NOTE`], its state unchanged (from = to), so
-/// the finding's history says why it ended. No audit row: no match end
-/// writes one. Switching the set back on, the next observation starts the
-/// match again through the usual rules. Runs under the agent's row lock,
-/// like every other change to its match set. Returns how many matches
-/// ended; a repeated report ends nothing more.
-///
-/// ponytail: runs on every heartbeat that names a `not_assigned` set (an
-/// index probe that finds nothing after the first time); gate it on
-/// `ingest::heartbeat`'s changed-rule-sets result if load tests show it.
+/// The agent reported `sets` as `not_assigned` (P20). Call it before
+/// `ingest::heartbeat` stores the report: it acts only on the transition,
+/// an assignable set (`rule_set_assignment`) the stored report did not
+/// already list as `not_assigned`. For such a set, under the agent's row
+/// lock and in one transaction, this host's still-open matches end (as when
+/// the host stops matching), and every match of the set that ended since
+/// the stored report (`health_at`; none stored: only those ended here),
+/// whoever ended it, gets one triage-history entry by `system` with
+/// [`NOT_ASSIGNED_NOTE`], its state unchanged (from = to). The agent
+/// usually ends them itself through P13 in the scan that got the 410, just
+/// before this report (lab check, task 9). Matches that ended earlier get
+/// no note; a match never gets the note twice. Triage is never touched; no
+/// audit row, as for any match end. Returns how many notes were written; a
+/// repeated report writes nothing.
 ///
 /// # Errors
 ///
@@ -347,28 +347,50 @@ pub async fn end_unassigned(
     now: DateTime<Utc>,
 ) -> Result<u64, StoreError> {
     let transaction = client.transaction().await?;
+    let Some(row) = transaction
+        .query_opt(
+            "SELECT COALESCE(a.health_at, $3),
+                 ARRAY(SELECT s FROM unnest($2::text[]) s
+                       WHERE s IN (SELECT rule_set_id FROM rule_set_assignment)
+                         AND NOT EXISTS (
+                             SELECT 1 FROM jsonb_array_elements(
+                                 COALESCE(a.health->'rule_sets', '[]')) r
+                             WHERE r->>'id' = s AND r->>'state' = 'not_assigned'))
+             FROM agents a WHERE a.agent_id = $1 FOR UPDATE",
+            &[&agent_id, &sets, &now],
+        )
+        .await?
+    else {
+        return Ok(0);
+    };
+    let (since, switched): (DateTime<Utc>, Vec<String>) = (row.get(0), row.get(1));
+    if switched.is_empty() {
+        return Ok(0);
+    }
     transaction
         .execute(
-            "SELECT 1 FROM agents WHERE agent_id = $1 FOR UPDATE",
-            &[&agent_id],
+            "UPDATE current_findings SET ended_at = $3, end_approximate = true
+             WHERE agent_id = $1 AND rule_set_id = ANY($2) AND ended_at IS NULL",
+            &[&agent_id, &switched, &now],
         )
         .await?;
-    let ended = transaction
+    let noted = transaction
         .execute(
-            "WITH ended AS (
-                 UPDATE current_findings SET ended_at = $3, end_approximate = true
-                 WHERE agent_id = $1 AND rule_set_id = ANY($2) AND ended_at IS NULL
-                   AND rule_set_id IN (SELECT rule_set_id FROM rule_set_assignment)
-                 RETURNING agent_id, rule_set_id, rule_id, rule_version)
-             INSERT INTO console_finding_triage_history (agent_id, rule_set_id, rule_id,
+            "INSERT INTO console_finding_triage_history (agent_id, rule_set_id, rule_id,
                  from_state, to_state, note, changed_at, changed_by, rule_version)
-             SELECT e.agent_id, e.rule_set_id, e.rule_id, COALESCE(t.state, 'open'),
-                 COALESCE(t.state, 'open'), $4, $3, 'system', e.rule_version
-             FROM ended e
-             LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)",
-            &[&agent_id, &sets, &now, &NOT_ASSIGNED_NOTE],
+             SELECT c.agent_id, c.rule_set_id, c.rule_id, COALESCE(t.state, 'open'),
+                 COALESCE(t.state, 'open'), $5, $3, 'system', c.rule_version
+             FROM current_findings c
+             LEFT JOIN console_finding_triage t USING (agent_id, rule_set_id, rule_id)
+             WHERE c.agent_id = $1 AND c.rule_set_id = ANY($2) AND c.ended_at >= $4
+               AND NOT EXISTS (
+                   SELECT 1 FROM console_finding_triage_history h
+                   WHERE (h.agent_id, h.rule_set_id, h.rule_id)
+                         = (c.agent_id, c.rule_set_id, c.rule_id)
+                     AND h.note = $5 AND h.changed_at >= c.ended_at)",
+            &[&agent_id, &switched, &now, &since, &NOT_ASSIGNED_NOTE],
         )
         .await?;
     transaction.commit().await?;
-    Ok(ended)
+    Ok(noted)
 }

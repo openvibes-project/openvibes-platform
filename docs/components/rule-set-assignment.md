@@ -28,20 +28,27 @@ selectors matches no host (as for access).
 assignable set that is off on the asking host, checked after the 404 cases
 (even when the agent is current); every other answer is unchanged.
 
-**Ingest.** A heartbeat whose health lists a rule set with
-`state: not_assigned` (P20) ends this host's still-open matches of that set,
-when the set is assignable, as when the host stops matching
-(`platform_store::finding_changes::end_unassigned`, under the agent's row
-lock). A set that is not assignable, or an entry without `state`, ends
-nothing. Each ended match gets one triage-history entry by `system` with the
-note "rule set no longer assigned to this host", state unchanged; no audit
-row, as for any match end. Repeated reports end nothing more. Triage (state,
-note, assignee, version) never changes here (user decision 2026-10-14). A
-match the agent already ended through P13 is left as it is. Switching the
-set back on: the agent's next scan starts the match again through the usual
-rules, as for any finding that comes back. Grants: `openvibes-ingest` may
-read `rule_set_assignment` (it already updates `current_findings` and writes
-triage history).
+**Ingest.** The note is written on the transition: a heartbeat whose
+health lists an assignable set with `state: not_assigned` (P20) when the
+agent's stored report did not (`platform_store::finding_changes::end_unassigned`,
+called before ingest stores the report, under the agent's row lock, one
+transaction). It ends this host's still-open matches of that set, as when the
+host stops matching, and writes one triage-history entry by `system` with
+the note "rule set no longer assigned to this host", state unchanged, for
+every match of (host, set) that ended since the stored report (`health_at`)
+or here, whoever ended it. In the real flow the agent ends them itself
+through P13 in the scan that got the 410, just before the report (lab check
+2026-10-14), so its end times are kept. A match that ended earlier (the host
+was fixed) gets no note, and no match gets it twice (a retried heartbeat
+whose report was not stored). A set that is not assignable, an entry
+without `state`, or a report that repeats `not_assigned` writes nothing. No
+audit row, as for any match end. Triage (state, note, assignee, version)
+never changes here (user decision 2026-10-14). Switching the set back on:
+the agent's next scan starts the match again through the usual rules, as
+for any finding that comes back. Grants: `openvibes-ingest` may read
+`rule_set_assignment` and the key, `note` and `changed_at` columns of
+`console_finding_triage_history` (it already updates `current_findings` and
+writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
 whether a live bundle is published, every group), `set_default` and
