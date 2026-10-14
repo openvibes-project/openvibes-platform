@@ -22,9 +22,10 @@ updating the agent.
    set on turns it on.
 3. **Both switchable.** Each assignable set has a default (L1 on, L2 off),
    and every group can override it either way.
-4. A set switched off for a host **closes its open findings** there, with
-   the note "rule set no longer assigned to this host" (history kept).
-   Switching it back on finds them again on the next scan.
+4. A set switched off for a host **ends its open findings' matches** there:
+   triage is untouched (nothing is marked mitigated), and the history gets
+   the note "rule set no longer assigned to this host". Switching it back
+   on finds them again on the next scan.
 
 ## 3. The agent: project sets (agent)
 
@@ -60,7 +61,11 @@ updating the agent.
   means this set is not assigned to this host.
 - On `410` for an **assignable** project set, the agent:
   - stops evaluating the set;
-  - deletes its stored bundle, so an expiry no longer keeps it alive;
+  - marks its stored bundle withdrawn: it is never used again, so an
+    expiry or an outage cannot keep it alive, but its rollback floor is
+    kept. When asked again it sends no `current_version`, and it accepts
+    only a bundle at or above the floor, so switching a set off and on
+    cannot roll it back;
   - reports it in health as `not_assigned`.
 
   It asks again on every scan, so switching the set back on takes effect
@@ -97,13 +102,13 @@ updating the agent.
 - Its database role gains `SELECT` on the assignment tables, on
   `console_agent_tags` and on `console_asset_group_selectors` (read only).
 
-**Findings close by themselves:**
+**Findings end by themselves:**
 
 - When an agent's heartbeat health reports a set as `not_assigned`, ingest
-  closes that host's open findings from the set. They resolve with the
-  note "rule set no longer assigned to this host" by the system actor, the
-  same way other automatic closes are recorded.
-- The agent's own report is the trigger, so findings close only when the
+  ends that host's still-open matches of the set, as when a host stops
+  matching. Triage is untouched, and each ended match gets a history entry
+  "rule set no longer assigned to this host" by the system actor.
+- The agent's own report is the trigger, so matches end only when the
   host has really stopped running the set.
 
 **Shipping and publishing:**
@@ -146,7 +151,7 @@ before the plan's console task.
 5. **Lab:** a Fedora and a Debian host with the new agent. Check:
    - L1 findings appear;
    - switching L1 off for the host's group gives `410`, health shows
-     `not_assigned`, and the findings close;
+     `not_assigned`, and the matches end with triage untouched;
    - switching it on brings them back;
    - an old agent is unaffected.
 
