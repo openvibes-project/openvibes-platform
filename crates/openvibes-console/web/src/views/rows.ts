@@ -74,10 +74,19 @@ function versionParts(version: string): [string, string] {
   return dash < 0 ? [plain, ""] : [plain.slice(0, dash), plain.slice(dash + 1)];
 }
 
-/** Whether an agent's `version` is older than this platform's (board #54):
+/** Whether an agent's `version` is older than `latest` (board #54):
  * one agent claiming a far newer version flags nothing. */
-export function olderThan(version: string, platform: string): boolean {
-  return versionOrder(version, platform) > 0;
+export function olderThan(version: string, latest: string): boolean {
+  return versionOrder(version, latest) > 0;
+}
+
+/** The Hosts list's agent version cell. Agent and platform are released on
+ * their own, so an agent is judged against the latest agent release, never
+ * the platform's version; unknown (update check off or offline) marks none. */
+export function agentVersionNote(version: string, latest: string | null | undefined): { older: boolean; title: string } {
+  if (!latest) return { older: false, title: "The latest agent release is not known: the update check is off or offline" };
+  if (olderThan(version, latest)) return { older: true, title: `Older than the latest agent release (${latest})` };
+  return { older: false, title: versionOrder(version, latest) === 0 ? `The latest agent release (${latest})` : `Not older than the latest agent release (${latest})` };
 }
 
 /** The Hosts list badges an online host whose threat alarms are off by a

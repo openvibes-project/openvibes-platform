@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 
 import { useAllPages, useResource } from "../api/client";
-import type { Agent, AgentSummary } from "../api/types";
+import type { AboutUpdate, Agent, AgentSummary } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { Ago, Empty, ErrorBox, Loading, SAVED_HEARTBEAT_HINT, StatusBadge } from "../ui/bits";
 import { DataTable } from "../ui/DataTable";
 import { date } from "../ui/format";
-import { alarmsOff, olderThan, selectAgents } from "./rows";
+import { agentVersionNote, alarmsOff, selectAgents } from "./rows";
 import { ViewHeader } from "../ui/ViewHeader";
 import { filterChips } from "./filters";
 
@@ -17,8 +17,8 @@ export function Agents() {
   const all = useMemo(() => agents.data ?? [], [agents.data]);
   const rows = useMemo(() => selectAgents(all, params), [all, params]);
   const top = panels[panels.length - 1];
-  // Judged against this platform, not the fleet's highest claim (board #54).
-  const platform = summary.data?.platform_version;
+  // Judged against the latest agent release, not the fleet's highest claim (board #54).
+  const latestAgent = useResource<AboutUpdate>("/api/v1/about/update").data?.latest_agent_version;
 
   return (
     <div className="view">
@@ -41,11 +41,11 @@ export function Agents() {
               ? <div className="row row--wrap"><StatusBadge status={a.status} /><span className="badge badge--warn" title={a.alarms?.text ?? undefined}>Alarms off</span></div>
               : <StatusBadge status={a.status} /> },
             { key: "seen", header: "Last heartbeat", width: "175px", hideBelow: 480, sort: (a) => a.last_seen_at, render: (a) => <span className={a.status === "stale" ? "warn-text" : "subtle"}><Ago value={a.last_seen_at} hint={SAVED_HEARTBEAT_HINT} /></span> },
-            { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => a.scanner_version
-              ? platform && olderThan(a.scanner_version, platform)
-                ? <span className="mono warn-text" title={`Older than this platform (${platform})`}>{a.scanner_version}</span>
-                : <span className="mono" title={platform ? `Not older than this platform (${platform})` : undefined}>{a.scanner_version}</span>
-              : <span className="subtle">—</span> },
+            { key: "version", header: "Agent", width: "110px", hideBelow: 700, sort: (a) => a.scanner_version, render: (a) => {
+              if (!a.scanner_version) return <span className="subtle">—</span>;
+              const note = agentVersionNote(a.scanner_version, latestAgent);
+              return <span className={note.older ? "mono warn-text" : "mono"} title={note.title}>{a.scanner_version}</span>;
+            } },
             { key: "enrolled", header: "Enrolled", width: "130px", hideBelow: 900, sort: (a) => a.enrolled_at, render: (a) => <span className="subtle">{date(a.enrolled_at)}</span> },
           ]} />
       )}

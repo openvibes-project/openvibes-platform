@@ -33,6 +33,12 @@ for 6 hours, a failure for 15 minutes. A tag must be plain `major.minor.patch`
 (optionally with a leading `v`) and the release link must point into the
 project's own repository, otherwise the result is `unavailable`.
 
+The same check reads the latest `openvibes-project/openvibes-agent` release,
+with the same limits and caching, into `latest_agent_version` (its link must
+point into the agent repository). Agent and platform are released on their
+own, so the Hosts list marks an agent older than that release, never older
+than the platform's version; when it is unknown no agent is marked.
+
 Proxy settings come from the environment (`HTTPS_PROXY`). Set
 `update_check = false` in the console configuration on hosts that must make
 no outbound connections; the page then says the check is off.

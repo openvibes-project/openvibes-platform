@@ -30,10 +30,12 @@ the authenticated router. Otherwise it serves the C0 development router,
 where `/api/v1/session` remains fail-closed. The authenticated router now
 serves permission-checked, SQL-scoped agent summary, list, detail, and
 certificate routes (the agent summary also carries `platform_version`, the
-console's own version: the Agents view marks agents older than it, since
-agent and platform release together. It is readable by every signed-in
-role, being in the packages anyway, so nothing admin-only belongs next to
-it), plus finding summary, latest, history, and grouped rule
+console's own version. It is readable by every signed-in role, being in
+the packages anyway, so nothing admin-only belongs next to it. Agent and
+platform are released on their own, so the Hosts list marks an agent
+older than `latest_agent_version` from `/api/v1/about/update`, the latest
+openvibes-agent release; with the update check off or offline it marks
+none), plus finding summary, latest, history, and grouped rule
 reads. Vulnerability summary, prioritized list, and advisory/CVE detail are
 available under the caller's `vulnerabilities.read` scope. Access
 control has a global read inventory for roles, bindings, and asset groups,
@@ -537,7 +539,7 @@ public_origin = "http://localhost:8443" # required with database_url
 ```
 
 `update_check` (default `true`) lets the About page ask GitHub for the latest
-release; set it to `false` on hosts that must make no outbound connections
+platform and agent releases; set it to `false` on hosts that must make no outbound connections
 (see [`console-about.md`](console-about.md)).
 
 `[agent_install]` (`platform`, `ingest_port` 18423, `distribution_port` 18424,

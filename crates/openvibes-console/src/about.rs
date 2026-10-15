@@ -31,6 +31,11 @@ use crate::{
 const LATEST_RELEASE_URL: &str =
     "https://api.github.com/repos/openvibes-project/openvibes-platform/releases/latest";
 const RELEASE_PAGE_PREFIX: &str = "https://github.com/openvibes-project/openvibes-platform/";
+// The agent is released on its own: a platform and an agent may both be
+// the latest of their kind at different versions.
+const AGENT_RELEASE_URL: &str =
+    "https://api.github.com/repos/openvibes-project/openvibes-agent/releases/latest";
+const AGENT_RELEASE_PAGE_PREFIX: &str = "https://github.com/openvibes-project/openvibes-agent/";
 const FETCH_TIMEOUT: Duration = Duration::from_secs(4);
 const MAX_RESPONSE_BYTES: u64 = 1024 * 1024;
 const FOUND_TTL: Duration = Duration::from_secs(6 * 60 * 60);
@@ -161,6 +166,9 @@ pub(crate) struct UpdateResponse {
     pub latest_version: Option<String>,
     /// Page of the latest release.
     pub release_url: Option<String>,
+    /// Latest published agent release, without a leading `v`; agents older
+    /// than it are behind.
+    pub latest_agent_version: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -179,31 +187,56 @@ struct ReleaseJson {
     prerelease: bool,
 }
 
-/// Looks up the latest release at most once every few hours.
+/// Looks up the latest platform and agent releases at most once every few hours.
 pub(crate) struct UpdateChecker {
-    url: String,
-    agent: ureq::Agent,
-    cache: Mutex<Option<(Instant, Option<Latest>)>>,
+    platform: ReleaseFeed,
+    agent: ReleaseFeed,
 }
 
 impl UpdateChecker {
     pub(crate) fn new() -> Self {
-        Self::with_url(LATEST_RELEASE_URL)
+        Self::with_urls(LATEST_RELEASE_URL, AGENT_RELEASE_URL)
     }
 
-    fn with_url(url: &str) -> Self {
+    fn with_urls(platform: &str, agent: &str) -> Self {
+        Self {
+            platform: ReleaseFeed::new(platform, RELEASE_PAGE_PREFIX),
+            agent: ReleaseFeed::new(agent, AGENT_RELEASE_PAGE_PREFIX),
+        }
+    }
+
+    async fn check(&self, current: &str) -> UpdateResponse {
+        let (platform, agent) = tokio::join!(self.platform.latest(), self.agent.latest());
+        UpdateResponse {
+            latest_agent_version: agent.map(|latest| latest.version),
+            ..classify(current, platform)
+        }
+    }
+}
+
+/// One repository's latest release, cached.
+struct ReleaseFeed {
+    url: String,
+    prefix: &'static str,
+    agent: ureq::Agent,
+    cache: Mutex<Option<(Instant, Option<Latest>)>>,
+}
+
+impl ReleaseFeed {
+    fn new(url: &str, prefix: &'static str) -> Self {
         let config = ureq::Agent::config_builder()
             .timeout_global(Some(FETCH_TIMEOUT))
             .max_redirects(0)
             .build();
         Self {
             url: url.to_owned(),
+            prefix,
             agent: config.into(),
             cache: Mutex::new(None),
         }
     }
 
-    async fn check(&self, current: &str) -> UpdateResponse {
+    async fn latest(&self) -> Option<Latest> {
         // Held across the fetch so concurrent page loads share one request.
         let mut cache = self.cache.lock().await;
         let fresh = cache.as_ref().is_some_and(|(at, latest)| {
@@ -217,18 +250,18 @@ impl UpdateChecker {
         if !fresh {
             let agent = self.agent.clone();
             let url = self.url.clone();
-            let latest = tokio::task::spawn_blocking(move || fetch_latest(&agent, &url))
+            let prefix = self.prefix;
+            let latest = tokio::task::spawn_blocking(move || fetch_latest(&agent, &url, prefix))
                 .await
                 .ok()
                 .flatten();
             *cache = Some((Instant::now(), latest));
         }
-        let latest = cache.as_ref().and_then(|(_, latest)| latest.clone());
-        classify(current, latest)
+        cache.as_ref().and_then(|(_, latest)| latest.clone())
     }
 }
 
-fn fetch_latest(agent: &ureq::Agent, url: &str) -> Option<Latest> {
+fn fetch_latest(agent: &ureq::Agent, url: &str, prefix: &str) -> Option<Latest> {
     let mut response = agent
         .get(url)
         .header("Accept", "application/vnd.github+json")
@@ -244,10 +277,10 @@ fn fetch_latest(agent: &ureq::Agent, url: &str) -> Option<Latest> {
         .limit(MAX_RESPONSE_BYTES)
         .read_to_vec()
         .ok()?;
-    parse_release(&bytes)
+    parse_release(&bytes, prefix)
 }
 
-fn parse_release(bytes: &[u8]) -> Option<Latest> {
+fn parse_release(bytes: &[u8], prefix: &str) -> Option<Latest> {
     let release: ReleaseJson = serde_json::from_slice(bytes).ok()?;
     if release.draft || release.prerelease {
         return None;
@@ -257,14 +290,11 @@ fn parse_release(bytes: &[u8]) -> Option<Latest> {
         .strip_prefix('v')
         .unwrap_or(&release.tag_name);
     parse_version(version)?;
-    // Only ever link into this project's own repository.
-    release
-        .html_url
-        .starts_with(RELEASE_PAGE_PREFIX)
-        .then(|| Latest {
-            version: version.to_owned(),
-            url: release.html_url,
-        })
+    // Only ever link into the expected repository.
+    release.html_url.starts_with(prefix).then(|| Latest {
+        version: version.to_owned(),
+        url: release.html_url,
+    })
 }
 
 /// `major.minor.patch` of plain numbers; anything else is not comparable.
@@ -286,6 +316,7 @@ fn classify(current: &str, latest: Option<Latest>) -> UpdateResponse {
         state: UpdateState::Unavailable,
         latest_version: None,
         release_url: None,
+        latest_agent_version: None,
     };
     let Some(latest) = latest else {
         return unavailable;
@@ -302,6 +333,7 @@ fn classify(current: &str, latest: Option<Latest>) -> UpdateResponse {
         },
         latest_version: Some(latest.version),
         release_url: Some(latest.url),
+        latest_agent_version: None,
     }
 }
 
@@ -390,109 +422,12 @@ pub(crate) async fn about_update(
             state: UpdateState::Disabled,
             latest_version: None,
             release_url: None,
+            latest_agent_version: None,
         },
     };
     no_store(Json(body))
 }
 
 #[cfg(test)]
-mod tests {
-    use std::{
-        io::{Read, Write},
-        net::TcpListener,
-    };
-
-    use super::*;
-
-    fn release(tag: &str) -> Vec<u8> {
-        format!(
-            r#"{{"tag_name":"{tag}","html_url":"{RELEASE_PAGE_PREFIX}releases/tag/{tag}","draft":false,"prerelease":false,"assets":[]}}"#
-        )
-        .into_bytes()
-    }
-
-    #[test]
-    fn newest_version_compares_numerically() {
-        let versions = ["0.2.9", "0.2.10", "junk"].map(String::from);
-        assert_eq!(
-            newest_version(versions.into_iter()).as_deref(),
-            Some("0.2.10")
-        );
-        assert_eq!(newest_version(std::iter::empty()), None);
-    }
-
-    #[test]
-    fn parses_plain_versions_only() {
-        assert_eq!(parse_version("0.2.4"), Some([0, 2, 4]));
-        for bad in ["", "1.2", "1.2.3.4", "1.2.x", "1.2.3-rc1", "v1.2.3", "1..3"] {
-            assert_eq!(parse_version(bad), None, "{bad}");
-        }
-    }
-
-    #[test]
-    fn compares_numerically() {
-        let latest = |v: &str| parse_release(&release(v)).unwrap();
-        assert_eq!(
-            classify("0.2.4", Some(latest("v0.2.10"))).state,
-            UpdateState::Available
-        );
-        assert_eq!(
-            classify("0.2.4", Some(latest("v0.2.4"))).state,
-            UpdateState::UpToDate
-        );
-        assert_eq!(
-            classify("0.3.0", Some(latest("v0.2.9"))).state,
-            UpdateState::UpToDate
-        );
-        assert_eq!(classify("0.2.4", None).state, UpdateState::Unavailable);
-    }
-
-    #[test]
-    fn ignores_prereleases_foreign_links_and_junk() {
-        let pre = br#"{"tag_name":"v9.9.9","html_url":"https://github.com/openvibes-project/openvibes-platform/x","prerelease":true}"#;
-        assert!(parse_release(pre).is_none());
-        let foreign = br#"{"tag_name":"v9.9.9","html_url":"https://evil.example/x"}"#;
-        assert!(parse_release(foreign).is_none());
-        assert!(parse_release(b"not json").is_none());
-        assert!(parse_release(br#"{"tag_name":"nightly","html_url":"https://github.com/openvibes-project/openvibes-platform/x"}"#).is_none());
-    }
-
-    fn serve_once(body: Vec<u8>) -> String {
-        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/latest", listener.local_addr().unwrap());
-        std::thread::spawn(move || {
-            if let Ok((mut stream, _)) = listener.accept() {
-                let mut request = [0u8; 2048];
-                let _ = stream.read(&mut request);
-                let head = format!(
-                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-                    body.len()
-                );
-                let _ = stream.write_all(head.as_bytes());
-                let _ = stream.write_all(&body);
-            }
-        });
-        url
-    }
-
-    #[tokio::test]
-    async fn fetches_once_then_serves_from_cache() {
-        let checker = UpdateChecker::with_url(&serve_once(release("v0.9.0")));
-        let first = checker.check("0.2.4").await;
-        assert_eq!(first.state, UpdateState::Available);
-        assert_eq!(first.latest_version.as_deref(), Some("0.9.0"));
-        // The server above answered once and is gone; this must be cached.
-        assert_eq!(checker.check("0.2.4").await.state, UpdateState::Available);
-    }
-
-    #[tokio::test]
-    async fn offline_is_unavailable_not_an_error() {
-        let unused = TcpListener::bind("127.0.0.1:0").unwrap();
-        let url = format!("http://{}/latest", unused.local_addr().unwrap());
-        drop(unused);
-        let checker = UpdateChecker::with_url(&url);
-        let result = checker.check("0.2.4").await;
-        assert_eq!(result.state, UpdateState::Unavailable);
-        assert!(result.latest_version.is_none());
-    }
-}
+#[path = "about_tests.rs"]
+mod tests;
