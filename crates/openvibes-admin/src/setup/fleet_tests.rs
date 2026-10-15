@@ -11,7 +11,8 @@ use crate::setup::{
 /// this step (and the agent package) uses, so a hand enrollment works.
 #[test]
 fn the_console_enrollment_steps_match_the_packaged_agent() {
-    let panel = include_str!("../../../openvibes-console/web/src/panels/admin/EnrollmentTokenPanel.tsx");
+    let panel =
+        include_str!("../../../openvibes-console/web/src/panels/admin/EnrollmentTokenPanel.tsx");
     for want in [
         format!("{}/agent.toml", super::AGENT),
         format!("{}/platform-ca.crt", super::AGENT),
