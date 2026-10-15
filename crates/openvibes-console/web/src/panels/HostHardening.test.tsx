@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { HardeningLine, NotAssigned } from "./HostHardening";
+import type { Agent } from "../api/types";
+import { HardeningLine, NotAssigned, hostAssignmentsPath } from "./HostHardening";
 
 const text = (html: string) => html.replace(/<[^>]+>/g, "").replaceAll("&#x27;", "'");
 
@@ -29,5 +30,14 @@ describe("the host's Hardening line", () => {
     expect(renderToStaticMarkup(<NotAssigned text="off for Production" />)).toBe('<span class="badge badge--plain" title="Switched off for Production">Not assigned</span><span class="subtle nowrap">off for Production</span>');
     expect(renderToStaticMarkup(<NotAssigned text="off by default" />)).toBe('<span class="badge badge--plain" title="Switched off by default">Not assigned</span><span class="subtle nowrap">off by default</span>');
     expect(renderToStaticMarkup(<NotAssigned text={null} />)).toBe('<span class="badge badge--plain">Not assigned</span>');
+  });
+});
+
+describe("which hosts have a Hardening line", () => {
+  const host = (status: string, os_id: string | null) => ({ id: "agent.1", status, os_id }) as unknown as Agent;
+  it("only active Linux hosts: not imported, revoked or without os-release", () => {
+    expect(hostAssignmentsPath(host("active", "fedora"))).toBe("/api/v1/agents/agent.1/rule-set-assignments");
+    for (const status of ["imported", "revoked"]) expect(hostAssignmentsPath(host(status, "fedora"))).toBeNull();
+    expect(hostAssignmentsPath(host("active", null))).toBeNull();
   });
 });

@@ -5,9 +5,9 @@ import { useResource } from "../api/client";
 import type { Agent, HostRuleSetAssignments } from "../api/types";
 import { factsNote, factsUnavailable, hardeningParts, type HardeningPart } from "./ruleAssignment";
 
-/** Linux hosts only (os-release reported), never imported ones. */
+/** Linux hosts only (os-release reported), never imported or revoked ones. */
 export const hostAssignmentsPath = (agent: Agent): string | null =>
-  agent.os_id && agent.status !== "imported" ? `/api/v1/agents/${encodeURIComponent(agent.id)}/rule-set-assignments` : null;
+  agent.os_id && agent.status !== "imported" && agent.status !== "revoked" ? `/api/v1/agents/${encodeURIComponent(agent.id)}/rule-set-assignments` : null;
 
 export function HardeningLine({ parts, facts, okAt }: { parts: HardeningPart[]; facts: string | null | undefined; okAt: string | null | undefined }) {
   return (
