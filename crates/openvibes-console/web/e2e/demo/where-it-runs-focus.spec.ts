@@ -7,7 +7,7 @@ import type { Page } from "@playwright/test";
 // the row. The demo answers at once, so `slow` delays every response body and
 // `missing` makes the next group id unknown to the store (a group deleted
 // meanwhile); `slowList` delays only the assignment list (the refetch). The full flows are in rule-set-assignment.spec.ts.
-type Hooks = { __slow?: boolean; __slowList?: boolean; __missing?: boolean };
+type Hooks = { __slow?: boolean; __slowList?: boolean; __missing?: boolean; __dropFree?: boolean };
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as Hooks;
@@ -16,6 +16,14 @@ test.beforeEach(async ({ page }) => {
       if (w.__slow) await new Promise((resolve) => setTimeout(resolve, 400));
       const body = await text.call(this);
       if (w.__slowList && body.includes('"asset_groups"')) await new Promise((resolve) => setTimeout(resolve, 1500));
+      if (w.__dropFree && body.includes('"asset_groups"')) {
+        // The group was deleted meanwhile: the refetched list no longer offers the first free one.
+        const list = JSON.parse(body) as { items: { groups: { asset_group_id: string }[] }[]; asset_groups: { asset_group_id: string }[] };
+        const used = new Set(list.items.flatMap((i) => i.groups.map((g) => g.asset_group_id)));
+        const gone = list.asset_groups.findIndex((g) => !used.has(g.asset_group_id));
+        if (gone >= 0) list.asset_groups.splice(gone, 1);
+        return JSON.stringify(list);
+      }
       return body;
     };
     const encode = window.encodeURIComponent;
@@ -87,4 +95,17 @@ test("a failed Add keeps the row, the group and the choice", async ({ page }) =>
   await expect(group).toHaveText(chosen);
   await expect(page.getByRole("radio", { name: "Off" })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("button", { name: "Add", exact: true })).toBeVisible();
+});
+
+test("a failed Add whose group was deleted meanwhile moves the row to a real group", async ({ page }) => {
+  await open(page, "hardening-linux-l2");
+  await page.getByRole("button", { name: "+ Add group" }).click();
+  const group = page.getByRole("combobox", { name: "Group" });
+  const chosen = await group.innerText();
+  await hook(page, "__missing");
+  await hook(page, "__dropFree");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Asset group not found")).toBeVisible();
+  await expect(group).not.toHaveText(chosen);
+  await expect(group).not.toHaveText(/^grp-/);
 });

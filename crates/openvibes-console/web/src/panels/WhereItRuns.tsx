@@ -32,12 +32,14 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
   const sending = useRef(false);
   const [refocus, setRefocus] = useState(0);
   const root = useRef<HTMLDivElement>(null);
-  const [adding, setAdding] = useState<{ group: string; on: boolean } | null>(null);
+  const [pending, setAdding] = useState<{ group: string; on: boolean } | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const addRow = useRef<HTMLTableRowElement>(null);
   const byId = new Map(groups.map((g) => [g.asset_group_id, g]));
   const free = groups.filter((g) => !assignment.groups.some((o) => o.asset_group_id === g.asset_group_id));
   const blocked = addGroupBlocked(groups.length, free.length);
+  // A refetch can drop the chosen group (deleted meanwhile): fall back to the first free one, or close the row.
+  const adding = pending && (free.some((g) => g.asset_group_id === pending.group) ? pending : free[0] ? { ...pending, group: free[0].asset_group_id } : null);
 
   // After Add or × (or Cancel): "+ Add group", or the default switch when every group is listed.
   useEffect(() => {
