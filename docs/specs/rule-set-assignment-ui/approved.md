@@ -21,7 +21,8 @@ brand files. Each page's caption bar says what was clicked.
    - hardening-linux-l2: "Off · 1 group on"
    - site: "Hosts that trust its key"
 
-   The form is the default (Linux, or Off) plus the number of groups that
+   (Screen 1 shows the state after screen 5. With no overrides the cell is
+   just "Off", the state of screen 3.) The form is the default (Linux, or Off) plus the number of groups that
    differ from it. An unpublished set shows "—" for version, signer and
    expiry, and its State is the plain badge **Not published**. Rule-set
    names never wrap.
