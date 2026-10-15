@@ -37,11 +37,11 @@ Show everything, without page changes for details:
   - access: roles, bindings and asset groups;
   - service accounts, with tokens issued once;
   - audit log, with ranges, CSV export and retention.
-- **Host hardening** (`panels/HostHardening.tsx`): the host panel's Hardening
+- **Host hardening** (`panels/hosts/HostHardening.tsx`): the host panel's Hardening
   row, "Hardening facts unavailable" warning and "Not assigned" badge; see
   `rule-set-assignment.md`.
-- **Triage** (triage v2, `panels/triage.ts`, `panels/bulk.ts`,
-  `panels/BulkBar.tsx`): four states (open, mitigated, accepted risk, false
+- **Triage** (triage v2, `panels/triage/triage.ts`, `panels/triage/bulk.ts`,
+  `panels/triage/BulkBar.tsx`): four states (open, mitigated, accepted risk, false
   positive), any to any other; every close needs a note, accepted risk an
   expiry (90 days by default, at most a year, to the end of that local
   day). The Alarms, Compliance and Vulnerabilities lists and a detail
@@ -59,9 +59,9 @@ Show everything, without page changes for details:
   why the rest was skipped. A selected finding or advisory row acts on its
   hosts in scope; a close leaves the hosts already closed alone, a reopen
   the ones already open. Rows in an open case show
-  its badge (`panels/CaseBadge.tsx`). Vulnerabilities count open hosts
+  its badge (`panels/cases/CaseBadge.tsx`). Vulnerabilities count open hosts
   and hide advisories triaged everywhere unless Include resolved is on.
-- **Detail template** (`panels/TriageDetail.tsx`): a finding, an advisory
+- **Detail template** (`panels/triage/TriageDetail.tsx`): a finding, an advisory
   and an alarm share one layout: the triage actions on the panel header's
   actions line (a finding or advisory: "Set state: N open", acting on its
   open hosts), a short summary, then the console's underline tabs
@@ -332,7 +332,7 @@ triage on alarms and findings stays as it is.
     case…** asks for the resolution, a note and, for accepted risk, the date
     it is accepted until (the case reopens then). It lists the alarms,
     findings and vulnerabilities that still need an outcome and stays
-    disabled until the rules are met (`panels/cases.ts`, `closeProblems`).
+    disabled until the rules are met (`panels/cases/cases.ts`, `closeProblems`).
     A closed case offers **Reopen**;
   - **Items**: each row shows its kind, title, severity and host and opens
     that object's own panel (alarm `alarm:<id>`, finding `finding:<rule
@@ -345,7 +345,7 @@ triage on alarms and findings stays as it is.
   - **Notes** (plain text) and the **Timeline**, newest first, with who did
     what.
   - Without `cases.manage` the panel is read-only.
-- **Add to case** (`panels/AddToCase.tsx`, with `cases.manage`): a button on
+- **Add to case** (`panels/cases/AddToCase.tsx`, with `cases.manage`): a button on
   the alarm panel, on each host row of a finding and of an advisory, on the
   host panel and its vulnerabilities, and on the software panel. Its dialog
   asks `/cases/for-item` first. An alarm, finding or vulnerability that is
@@ -420,7 +420,9 @@ triage on alarms and findings stays as it is.
     one file per tab) and `help/` (About). `views/lists/` holds what the
     lists share: filter catalogues (`filters.ts`), row selection and
     sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
-  - `panels/`: one file per object kind, named `<Kind>Panel.tsx`, holding
+  - `panels/`: one folder per subject (`hosts/`, `alarms/`, `findings/`,
+    `triage/`, `cases/`, `rules/`, `admin/`), one file per object kind,
+    named `<Kind>Panel.tsx`, holding
     that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
     and `NewUser`).
   - Logic without React sits beside its component in a lowercase `.ts`

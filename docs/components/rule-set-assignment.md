@@ -159,9 +159,9 @@ Settings › Rule sets shows the tab to holders of `rules.read` or
 `rules.upload` (global). The list merges published sets with the assignable
 ones, so L2 is listed before it is published ("—", **Not published**), and
 its **Runs on** column reads the default (Linux, or Off) and how many groups
-differ (`panels/ruleAssignment.ts`). Operators (`rules.upload` only) see
+differ (`panels/rules/ruleAssignment.ts`). Operators (`rules.upload` only) see
 the same list and panels as admins, and the Coverage menu entry (user,
-2026-10-15). A set's panel adds **Where it runs** (`panels/WhereItRuns.tsx`):
+2026-10-15). A set's panel adds **Where it runs** (`panels/rules/WhereItRuns.tsx`):
 the default switch, "Runs on N Linux hosts · off on M" once published, the
 group overrides (Group, Matches, Hosts, Runs: a switch and ×), "+ Add
 group" (an inline row: a group not listed yet, On | Off with the opposite of
@@ -183,7 +183,7 @@ Access." or "Every asset group is listed.".
 covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
 the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.
 
-The host panel's Details (`panels/HostHardening.tsx`, Linux hosts only) add
+The host panel's Details (`panels/hosts/HostHardening.tsx`, Linux hosts only) add
 a **Hardening** row after Threat alarms: per assignable set "L1 on" or
 "off", the deciding group in brackets, "waits until published" for an on
 set not published yet, and "pending" while the agent's latest report

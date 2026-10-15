@@ -3,7 +3,7 @@ import { useResource } from "../../../api/client";
 import type { RuleSet, RuleSetAssignments } from "../../../api/types";
 import { nav, useTopPanel } from "../../../app/nav";
 import { useSession } from "../../../app/session";
-import { ruleSetRows, runsOn } from "../../../panels/ruleAssignment";
+import { ruleSetRows, runsOn } from "../../../panels/rules/ruleAssignment";
 import { DataTable } from "../../../ui/DataTable";
 import { Icon } from "../../../ui/Icon";
 import { ViewHeader } from "../../../ui/ViewHeader";

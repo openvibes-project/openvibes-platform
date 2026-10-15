@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { nav, useLocation } from "../../../app/nav";
 import { type Access, grantsAny, useSession } from "../../../app/session";
-import { RULE_READERS } from "../../../panels/ruleAssignment";
+import { RULE_READERS } from "../../../panels/rules/ruleAssignment";
 import { Tabs } from "../../../ui/panel";
 import { ViewHeader } from "../../../ui/ViewHeader";
 import { Access as AccessTab } from "./Access";

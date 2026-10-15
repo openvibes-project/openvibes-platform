@@ -1,4 +1,4 @@
-import { splitRef } from "../../panels/cases";
+import { splitRef } from "../../panels/cases/cases";
 import { seedCases } from "../caseSeed";
 import { createCaseStore } from "../cases";
 import type { DemoContext } from "../context";

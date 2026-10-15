@@ -1,6 +1,6 @@
 // The demo server's shared context: the persona's data, permissions and
 // visibility, the helpers more than one area uses, and the route registrar.
-import { RULE_READERS } from "../panels/ruleAssignment";
+import { RULE_READERS } from "../panels/rules/ruleAssignment";
 import type { AuditEvent, Capability, FindingGroup, Permission, TriageCounts } from "../api/types";
 import { buildDemoData } from "./data";
 import { problem, severityRank } from "./http";

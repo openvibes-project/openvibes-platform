@@ -5,9 +5,9 @@ import { invalidate, request, useAllPages, useResource } from "../../api/client"
 import type { AlarmDetail, AlarmPage, AlarmSummary } from "../../api/types";
 import { nav, useLocation } from "../../app/nav";
 import { useSession } from "../../app/session";
-import { BulkBar } from "../../panels/BulkBar";
-import { CaseBadge, useCaseBadges } from "../../panels/CaseBadge";
-import { highest } from "../../panels/bulk";
+import { BulkBar } from "../../panels/triage/BulkBar";
+import { CaseBadge, useCaseBadges } from "../../panels/cases/CaseBadge";
+import { highest } from "../../panels/triage/bulk";
 import { DataTable } from "../../ui/DataTable";
 import { Select } from "../../ui/Select";
 import { ViewHeader } from "../../ui/ViewHeader";
