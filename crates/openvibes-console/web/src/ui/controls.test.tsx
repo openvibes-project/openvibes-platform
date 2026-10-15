@@ -41,4 +41,9 @@ describe("Switch", () => {
   it("disabled reaches the button", () => {
     expect(renderToStaticMarkup(<Switch label="x" checked={false} disabled onChange={noop} />)).toContain("disabled");
   });
+  it("bare: no visible label, the label is the accessible name", () => {
+    const html = renderToStaticMarkup(<Switch bare label="Runs for Lab" checked={false} onChange={noop} />);
+    expect(html).toContain('aria-label="Runs for Lab"');
+    expect(html).not.toContain("switch__label");
+  });
 });

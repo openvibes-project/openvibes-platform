@@ -93,3 +93,8 @@ export type CaseItemRef = S["CaseItemRef"];
 export type CaseEvent = S["CaseEventView"];
 export type CaseUser = S["CaseUserView"];
 export type ItemCases = S["ItemCasesView"];
+
+export type RuleSetAssignments = S["RuleSetAssignmentsView"];
+export type RuleSetAssignment = S["RuleSetAssignmentView"];
+export type AssignableGroup = S["AssignableGroupView"];
+export type HostRuleSetAssignments = S["HostRuleSetAssignmentsView"];
