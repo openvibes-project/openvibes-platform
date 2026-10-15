@@ -383,12 +383,16 @@ async fn a_host_in_no_group_gets_the_default() {
             HostAssignment {
                 rule_set_id: L1.into(),
                 enabled: true,
-                source: Source::Default
+                source: Source::Default,
+                group: None,
+                published: false,
             },
             HostAssignment {
                 rule_set_id: L2.into(),
                 enabled: false,
-                source: Source::Default
+                source: Source::Default,
+                group: None,
+                published: false,
             },
         ]
     );

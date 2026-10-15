@@ -62,7 +62,11 @@ schema 49. Grants: `openvibes-ingest` may read
 writes triage history).
 
 **Store (`platform_store::rule_assignment`).** `overview` (sets, overrides,
-whether a live bundle is published, every group), `set_default` and
+whether a live bundle is published, Linux hosts on and off per set, every
+group with its `key=value` selectors and Linux host count; a Linux host is an
+active agent, stale included, revoked and imported not, whose inventory
+reported os-release), `for_agent` (per set: state, the group that decided it,
+the first by name when several agree, and whether the set is published), `set_default` and
 `set_group` (`None` removes an override). A change writes one audit row
 `rules.assignment.change` (actor: the console user's id, shown by display
 name; `rule_set_id`, `asset_group_id`,
