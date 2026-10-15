@@ -167,8 +167,11 @@ group overrides (Group, Matches, Hosts, Runs: a switch and ×), "+ Add
 group" (an inline row: a group not listed yet, On | Off with the opposite of
 the default preselected, Add or Cancel; Esc cancels), and the explanation.
 Switches show the server's state: a change waits for the answer, a failure
-shows its error in a toast and leaves the switch as it was, and the list
-and host views are refetched either way. Without `rules.upload` the switches
+shows its error in a toast and leaves the switch as it was (a failed Add
+keeps the row and its choice), and the list and host views are refetched
+either way. Until that refetch lands the controls are `aria-disabled`, not
+disabled, so focus stays on the control used, and presses are not sent
+again; after Add or ×, focus moves to "+ Add group". Without `rules.upload` the switches
 are disabled and Add and × are hidden. The Source row's check count comes
 from `GET /api/v1/rules/coverage`.
 Toasts: "<set> is now on/off by default", "<set> is now on/off for
@@ -177,4 +180,5 @@ Toasts: "<set> is now on/off by default", "<set> is now on/off for
 group" is disabled with "No asset groups yet: create one under Settings ›
 Access." or "Every asset group is listed.".
 `npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
-covers the markup and the menu access; clicks and toasts are in the e2e.
+covers the markup and the menu access; `e2e/demo/where-it-runs-focus.spec.ts`
+the focus, single-send and failed-Add behaviour; clicks and toasts are in the e2e.

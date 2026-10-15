@@ -2,10 +2,10 @@
 // docs/specs/rule-set-assignment-ui/approved.md): the default switch, the
 // groups that override it, and the inline row that adds one. The switches show
 // the server's state: a failed change leaves them as they were.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
 
-import { ApiError, invalidate, request } from "../api/client";
+import { ApiError, invalidate, load, request } from "../api/client";
 import type { AssignableGroup, RuleSetAssignment } from "../api/types";
 import { Icon } from "../ui/Icon";
 import { Section } from "../ui/panel";
@@ -16,6 +16,7 @@ import { toast } from "../ui/toast";
 import { addGroupBlocked, shortName } from "./ruleAssignment";
 
 const EXPLAIN = "A host runs it when any of its groups has it on; otherwise when the default is on. Hosts follow on their next scan. Switching it off ends that host's findings from this set (their triage stays).";
+const LIST = "/api/v1/rule-set-assignments";
 const NOTE_BOX = { display: "block", border: "1px solid var(--line-strong)", borderRadius: 8, padding: "10px 12px" } as const;
 
 const Tags = ({ selectors }: { selectors: readonly string[] }) => (
@@ -25,7 +26,12 @@ const Tags = ({ selectors }: { selectors: readonly string[] }) => (
 export function WhereItRuns({ assignment, groups, canChange }: { assignment: RuleSetAssignment; groups: readonly AssignableGroup[]; canChange: boolean }) {
   const id = assignment.rule_set_id;
   const base = `/api/v1/rule-set-assignments/${encodeURIComponent(id)}`;
+  // A change is on its way until the refetched list lands: controls are
+  // aria-disabled (they keep focus) and further presses are ignored.
   const [busy, setBusy] = useState(false);
+  const sending = useRef(false);
+  const [refocus, setRefocus] = useState(0);
+  const root = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState<{ group: string; on: boolean } | null>(null);
   const addButton = useRef<HTMLButtonElement>(null);
   const addRow = useRef<HTMLTableRowElement>(null);
@@ -33,26 +39,48 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
   const free = groups.filter((g) => !assignment.groups.some((o) => o.asset_group_id === g.asset_group_id));
   const blocked = addGroupBlocked(groups.length, free.length);
 
-  const change = (method: "PUT" | "DELETE", path: string, body: unknown, done: string) => {
+  // After Add or × (or Cancel): "+ Add group", or the default switch when every group is listed.
+  useEffect(() => {
+    if (!refocus) return;
+    const add = addButton.current;
+    (add && !add.disabled ? add : root.current?.querySelector<HTMLElement>('[role="switch"]'))?.focus();
+  }, [refocus]);
+
+  const change = (method: "PUT" | "DELETE", path: string, body: unknown, done: string, after?: () => void) => {
+    if (sending.current) return;
+    sending.current = true;
     setBusy(true);
     request(method, path, body)
-      .then(() => toast(done), (error: unknown) => toast(
-        !(error instanceof ApiError) ? "The change failed" : error.code === "asset_group_not_found" ? "Asset group not found" : error.message, true))
-      .finally(() => { setBusy(false); invalidate("/api/v1/rule-set-assignments"); invalidate("/api/v1/agents/"); });
+      .then(() => { toast(done); return true; }, (error: unknown) => {
+        toast(!(error instanceof ApiError) ? "The change failed" : error.code === "asset_group_not_found" ? "Asset group not found" : error.message, true);
+        return false;
+      })
+      .then((ok) => {
+        invalidate(LIST);
+        invalidate("/api/v1/agents/");
+        // The refetch this panel shows; a failed one shows its own error.
+        return load(LIST).then(() => ok, () => ok);
+      })
+      .then((ok) => {
+        sending.current = false;
+        setBusy(false);
+        if (ok) after?.();
+      });
   };
-  const setGroup = (groupId: string, name: string, on: boolean) =>
-    change("PUT", `${base}/groups/${encodeURIComponent(groupId)}`, { enabled: on }, `${id} is now ${on ? "on" : "off"} for ${name}`);
+  const setGroup = (groupId: string, name: string, on: boolean, after?: () => void) =>
+    change("PUT", `${base}/groups/${encodeURIComponent(groupId)}`, { enabled: on }, `${id} is now ${on ? "on" : "off"} for ${name}`, after);
   const open = () => {
+    if (busy) return;
     const first = free[0];
     if (!first) return;
     setAdding({ group: first.asset_group_id, on: !assignment.default_enabled });
     requestAnimationFrame(() => addRow.current?.querySelector<HTMLElement>('[role="combobox"]')?.focus());
   };
-  const cancel = () => { setAdding(null); requestAnimationFrame(() => addButton.current?.focus()); };
+  const cancel = () => { setAdding(null); setRefocus((n) => n + 1); };
+  // The row closes only once the group is added; a failure keeps the choice.
   const add = () => {
     if (!adding) return;
-    setGroup(adding.group, byId.get(adding.group)?.name ?? adding.group, adding.on);
-    setAdding(null);
+    setGroup(adding.group, byId.get(adding.group)?.name ?? adding.group, adding.on, () => { setAdding(null); setRefocus((n) => n + 1); });
   };
   // Esc cancels the add row, and does not close the panel.
   const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") { event.stopPropagation(); cancel(); } };
@@ -60,11 +88,11 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
 
   return (
     <Section title="Where it runs">
-      <div className="stack" onKeyDown={adding ? onKey : undefined}>
+      <div ref={root} className="stack" onKeyDown={adding ? onKey : undefined}>
         {!assignment.published && (
           <div style={NOTE_BOX}><b>Not available yet.</b> <span className="subtle">{`This platform has no ${shortName(id)} set yet: it comes with a later rules package. Switches you set now are kept and apply when it is published.`}</span></div>
         )}
-        <Switch label="On for Linux hosts by default" checked={assignment.default_enabled} disabled={!canChange || busy}
+        <Switch label="On for Linux hosts by default" checked={assignment.default_enabled} disabled={!canChange} busy={busy}
           onChange={(on) => change("PUT", base, { default_enabled: on }, `${id} is now ${on ? "on" : "off"} by default`)} />
         {assignment.published && <p className="subtle">Runs on <b>{assignment.hosts_on}</b> Linux hosts · off on <b>{assignment.hosts_off}</b>.</p>}
         {assignment.groups.length === 0 && !adding ? <p className="subtle">No group differs from the default.</p> : (
@@ -78,10 +106,10 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
                   <td className="num subtle">{byId.get(o.asset_group_id)?.hosts ?? "—"}</td>
                   <td className="num">
                     <span className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
-                      <Switch bare label={`Runs for ${o.name}`} checked={o.enabled} disabled={!canChange || busy} onChange={(on) => setGroup(o.asset_group_id, o.name, on)} />
+                      <Switch bare label={`Runs for ${o.name}`} checked={o.enabled} disabled={!canChange} busy={busy} onChange={(on) => setGroup(o.asset_group_id, o.name, on)} />
                       {canChange && (
-                        <button type="button" className="icon-button" aria-label={`Remove ${o.name}`} title={`Remove: ${o.name} follows the default again`} disabled={busy}
-                          onClick={() => change("DELETE", `${base}/groups/${encodeURIComponent(o.asset_group_id)}`, undefined, `${o.name} follows the default again`)}>
+                        <button type="button" className="icon-button" aria-label={`Remove ${o.name}`} title={`Remove: ${o.name} follows the default again`} aria-disabled={busy || undefined}
+                          onClick={() => change("DELETE", `${base}/groups/${encodeURIComponent(o.asset_group_id)}`, undefined, `${o.name} follows the default again`, () => setRefocus((n) => n + 1))}>
                           <Icon name="close" size={14} />
                         </button>
                       )}
@@ -107,12 +135,12 @@ export function WhereItRuns({ assignment, groups, canChange }: { assignment: Rul
           <div className="row">
             {adding ? (
               <>
-                <button type="button" className="button button--small button--primary" disabled={busy} onClick={add}>Add</button>
+                <button type="button" className="button button--small button--primary" aria-disabled={busy || undefined} onClick={add}>Add</button>
                 <button type="button" className="button button--small" onClick={cancel}>Cancel</button>
               </>
             ) : (
               <>
-                <button ref={addButton} type="button" className="button button--small" disabled={blocked !== null || busy} onClick={open}>+ Add group</button>
+                <button ref={addButton} type="button" className="button button--small" disabled={blocked !== null} aria-disabled={busy || undefined} onClick={open}>+ Add group</button>
                 {blocked && <span className="subtle">{blocked}</span>}
               </>
             )}

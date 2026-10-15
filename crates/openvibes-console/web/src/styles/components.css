@@ -218,6 +218,8 @@
 .switch:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
 .switch { appearance: none; background: none; border: 0; font: inherit; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 5px 0; text-align: left; color: var(--text); }
 .switch:disabled { opacity: 0.5; cursor: not-allowed; }
+/* Busy (a change on its way): still focusable, so no dimming. */
+.switch[aria-disabled="true"], .button[aria-disabled="true"], .icon-button[aria-disabled="true"] { cursor: progress; }
 .switch__track { position: relative; flex: none; width: 30px; height: 17px; border-radius: 9px; background: var(--surface-3); transition: background var(--fast); }
 .switch__knob { position: absolute; top: 2px; left: 2px; width: 13px; height: 13px; border-radius: 50%; background: var(--text-3); transition: left var(--fast), background var(--fast); }
 .switch[aria-checked="true"] .switch__track { background: var(--accent); }
