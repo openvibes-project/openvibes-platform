@@ -4,7 +4,7 @@ Rules over `/api/v1`: rule sets and their signed bundles, which asset groups run
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The module list and the public names. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `bundles.rs` | Rule sets, bundle history, and previewing and publishing an uploaded signed bundle. |
 | `bundle_types.rs` | Request and response types of rule sets and bundles. |
 | `envelope.rs` | Verifies a signed envelope's bytes against the set's trusted keys; the digest shown to the operator. |

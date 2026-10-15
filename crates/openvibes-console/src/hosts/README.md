@@ -4,7 +4,7 @@ Hosts in the console: the agent list, summary, detail and certificates, revoking
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `agents.rs` | The agent list, summary and detail, and revoking an agent. |
 | `certificates.rs` | An agent's certificates. |
 | `enrollment.rs` | Enrollment tokens: list, read, create, revoke. |

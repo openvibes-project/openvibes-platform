@@ -6,7 +6,7 @@ The HTTP plumbing every area shares: how the routers are put together, the route
 |---|---|
 | `mod.rs` | The folder's modules and the router builders it exports. |
 | `router.rs` | Builds the public, authenticated, development and health routers; `AuthHttpState`. |
-| `routes.rs` | The route table: every API and auth path and its handler. |
+| `routes.rs` | The route table: merges every area's `routes()`, adds the About routes, the unauthenticated session route, the auth routes and the API fallbacks. |
 | `middleware.rs` | Body and concurrency limits, deadlines, logging, security headers, `Host` checks and the 421 page. |
 | `misdirected.css` | The 421 page's stylesheet. |
 | `frontend.rs` | Hashed assets, public files, the SPA entry document, and their not-found answers. |

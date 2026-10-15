@@ -4,6 +4,13 @@
 //! agents, and a case the caller cannot see reads as absent. Browser
 //! sessions only: a bearer token is refused, as for dashboards.
 
+use axum::{
+    Router,
+    routing::{delete, get, post, put},
+};
+
+use crate::http::AuthHttpState;
+
 mod answers;
 pub(crate) mod items;
 pub(crate) mod list;
@@ -20,3 +27,26 @@ pub use types::{
     CaseEventView, CaseItemRef, CaseItemView, CasePage, CaseSummaryView, CaseUserView,
     CreateCaseRequest, ItemCaseView, ItemCasesView, SetCaseItemOutcomeRequest, UpdateCaseRequest,
 };
+
+/// Cases, their notes and items, and the lookups the case views use.
+pub(crate) fn routes() -> Router<AuthHttpState> {
+    Router::new()
+        .route("/v1/cases", get(list::list_cases).post(list::create_case))
+        .route("/v1/cases/for-item", get(items::cases_for_item))
+        .route("/v1/cases/assignees", get(lookups::list_assignees))
+        .route("/v1/cases/active-items", get(lookups::active_items))
+        .route(
+            "/v1/cases/{case_id}",
+            get(list::get_case).put(list::update_case),
+        )
+        .route("/v1/cases/{case_id}/notes", post(items::add_note))
+        .route("/v1/cases/{case_id}/items", post(items::add_item))
+        .route(
+            "/v1/cases/{case_id}/items/{item_id}",
+            delete(items::remove_item),
+        )
+        .route(
+            "/v1/cases/{case_id}/items/{item_id}/outcome",
+            put(items::set_item_outcome),
+        )
+}

@@ -4,7 +4,7 @@ Alarms in the console: the alarm list, one alarm with its process tree and triag
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `alarm.rs` | Threat alarms: list, one alarm with its process tree, triage. |
 | `suppressions.rs` | Alarm suppressions: list, create, remove. |
 | `detection.rs` | A finding's or alarm's original detection inputs and rule. |

@@ -4,7 +4,7 @@ Cases in the console: where one investigation happens (design in `docs/specs/202
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `list.rs` | The case list, open, one case and update. |
 | `items.rs` | Notes, items and item outcomes of a case, and the cases holding an item. |
 | `lookups.rs` | Items in open cases (list badges) and the users a case can be assigned to. |

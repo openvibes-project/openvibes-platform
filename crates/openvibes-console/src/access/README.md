@@ -4,7 +4,7 @@ Who may do what in the console: sign-in and the session, the checks every area's
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `guard.rs` | Session and permission checks: the caller, their capabilities and scope, and the 401/403/503 answers. |
 | `auth.rs` | Session, password and CSRF primitives. |
 | `auth_tests.rs` | Tests for those primitives. |

@@ -4,7 +4,7 @@ Vulnerabilities in the console: the summary, the prioritised list and advisory d
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `summary.rs` | The vulnerability summary. |
 | `list.rs` | The vulnerability list and the views its rows are built from. |
 | `cpe.rs` | CPE findings: matches of installed software against CPE names. |

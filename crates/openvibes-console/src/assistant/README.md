@@ -4,7 +4,7 @@ The assistant: the chat endpoints, its runtime and the lookups it may run within
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The module list and the names other areas use. |
+| `mod.rs` | The module list, the names other areas use, and `routes()`: the paths this area serves. |
 | `chat.rs` | The status and message endpoints. |
 | `runtime.rs` | The runtime: backend probe, request capacity per user, and the leased chat backend. |
 | `lookups.rs` | Runs each lookup offered to the model within the user's console permissions. |

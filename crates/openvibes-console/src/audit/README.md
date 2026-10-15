@@ -4,7 +4,7 @@ The audit trail in the console: the event list, its CSV export and the retention
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `events.rs` | The audit event list, filtered and paged. |
 | `export.rs` | The filtered audit events as a CSV download. |
 | `retention.rs` | The audit retention policy: read and update. |

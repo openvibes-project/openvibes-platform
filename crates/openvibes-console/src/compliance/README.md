@@ -4,7 +4,7 @@ Compliance in the console: the latest findings and finding groups, history, tria
 
 | File | What it does |
 |---|---|
-| `mod.rs` | The folder's modules and the public names of its types. |
+| `mod.rs` | The folder's modules, the public names of its types, and `routes()`: the paths this area serves. |
 | `latest.rs` | The finding summary, the latest findings list and one finding. |
 | `groups.rs` | Findings grouped by rule, and the endpoints of one group. |
 | `group_triage.rs` | Triage of every endpoint in one finding group at once. |
