@@ -4,6 +4,7 @@
 //! (`rules.assignment.change`) with the old and new value.
 
 use crate::{Client, StoreError};
+use chrono::{DateTime, Utc};
 
 /// One asset group's override for a set.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -455,4 +456,25 @@ pub async fn for_agent(
             })
             .collect(),
     ))
+}
+
+/// The hardening collector's outcome (the root-facts helper, P19) in
+/// `agent_id`'s latest stored health report (`ok`; `not_found`: the
+/// helper's file is stale or malformed; `invalid_data`: its facts failed
+/// validation; `None`: no report, or no helper file at all, which the agent
+/// does not report), and when a stored report last had it `ok` (`None`:
+/// never since enrollment, or since schema 50). Callers check visibility
+/// first (`for_agent`); an unknown agent gives `(None, None)`.
+pub async fn hardening_facts(
+    client: &Client,
+    agent_id: &str,
+) -> Result<(Option<String>, Option<DateTime<Utc>>), StoreError> {
+    Ok(client
+        .query_opt(
+            "SELECT health -> 'last_scan' -> 'collectors' ->> 'hardening', hardening_facts_ok_at
+             FROM agents WHERE agent_id = $1",
+            &[&agent_id],
+        )
+        .await?
+        .map_or((None, None), |row| (row.get(0), row.get(1))))
 }

@@ -238,3 +238,61 @@ async fn a_host_in_an_on_and_an_off_group_counts_as_on_like_distribution_says() 
     drop((console, dist, admin));
     db.drop().await;
 }
+
+#[tokio::test]
+async fn the_hardening_facts_outcome_comes_from_the_latest_report() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, "active", true, &[]).await;
+    let console = as_role(&db, "openvibes-console").await;
+    assert_eq!(
+        rule_assignment::hardening_facts(&console, A).await.unwrap(),
+        (None, None),
+        "no report yet"
+    );
+    admin
+        .execute(
+            "UPDATE agents SET health = $2 WHERE agent_id = $1",
+            &[
+                &A,
+                &serde_json::json!({"last_scan": {"collectors": {"hardening": "not_found", "packages": "ok"}}}),
+            ],
+        )
+        .await
+        .unwrap();
+    let (outcome, ok_at) = rule_assignment::hardening_facts(&console, A).await.unwrap();
+    assert_eq!(
+        (outcome.as_deref(), ok_at),
+        (Some("not_found"), None),
+        "never ok: since enrollment"
+    );
+    drop((console, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn ingest_records_when_hardening_facts_were_last_usable() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, "active", true, &[]).await;
+    let ingest = as_role(&db, "openvibes-ingest").await;
+    let t0 = chrono::Utc::now();
+    // Ten minutes apart: past the five-minute heartbeat write throttle.
+    for (outcome, at) in [
+        ("ok", t0),
+        ("not_found", t0 + chrono::Duration::minutes(10)),
+    ] {
+        let health = serde_json::json!({"last_scan": {"collectors": {"hardening": outcome}}});
+        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], Some(&health), at)
+            .await
+            .unwrap();
+    }
+    let console = as_role(&db, "openvibes-console").await;
+    let (outcome, ok_at) = rule_assignment::hardening_facts(&console, A).await.unwrap();
+    assert_eq!(outcome.as_deref(), Some("not_found"));
+    assert_eq!(
+        ok_at.map(|t| t.timestamp_millis()),
+        Some(t0.timestamp_millis()),
+        "the last stored report with usable facts"
+    );
+    drop((ingest, console, admin));
+    db.drop().await;
+}

@@ -97,7 +97,10 @@ report and the one before it, JSONB) and `health_at`. `ingest::heartbeat`
 takes the report and writes it in its throttled UPDATE (every 5 minutes,
 or at once when hostname, capabilities or the report's `rule_sets` change,
 so an accepted bundle shows in `agent show` within a minute). The stored report moves
-to `health_previous`, and a heartbeat without one keeps it.
+to `health_previous`, and a heartbeat without one keeps it. Schema 50 adds
+`hardening_facts_ok_at`: the heartbeat write sets it to the report's time when
+`last_scan.collectors.hardening` is `ok` (backfilled from `health_at` for
+reports that were `ok` at migration).
 
 `health::health_status(last_seen_at, health_at, health, previous, now)`
 gives `Healthy`, `Degraded` (with reasons), `Offline` (no heartbeat for
@@ -848,3 +851,5 @@ and `schema_version`. `openvibes-console` can `SELECT` the table and
 `rule_set_group_assignment` (overrides per asset group, cascading with the
 group); the console role reads and writes them. Behaviour, grants and tests:
 [rule-set-assignment.md](rule-set-assignment.md).
+`hardening_facts(agent)` returns the hardening outcome of the latest report and
+`hardening_facts_ok_at`, for the host panel's facts warning.
