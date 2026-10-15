@@ -3,7 +3,9 @@ use platform_store::console_cases::{
     CaseDetail, CaseEvent, CaseItem, CaseSummary, ItemCase, UserRef,
 };
 
-use super::types::*;
+use super::types::{
+    CaseDetailView, CaseEventView, CaseItemView, CaseSummaryView, CaseUserView, ItemCaseView,
+};
 pub(super) fn time(at: DateTime<Utc>) -> String {
     at.to_rfc3339_opts(SecondsFormat::Millis, true)
 }

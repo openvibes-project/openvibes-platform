@@ -13,7 +13,7 @@ pub(crate) struct Access {
     /// rule. Without it, only rules with a finding in the agent scope.
     pub(crate) rules: bool,
     /// Internet lookups; `None` when the user may not use them.
-    pub(crate) internet: Option<crate::fetch_client::Internet>,
+    pub(crate) internet: Option<crate::assistant::fetch_client::Internet>,
 }
 
 /// Runs every lookup offered to the model (`platform_assistant::lookups::specs`)
@@ -29,7 +29,7 @@ pub(crate) struct ConsoleReadLookups {
     /// needs `vulnerabilities.read` with the agent scope.
     overview: bool,
     rules: bool,
-    internet: Option<crate::fetch_client::Internet>,
+    internet: Option<crate::assistant::fetch_client::Internet>,
     /// An internet lookup was attempted and did not succeed (not "off",
     /// not blocked).
     internet_failed: std::sync::atomic::AtomicBool,
@@ -89,7 +89,7 @@ impl ConsoleReadLookups {
     }
 
     /// The internet lookups that went out for this answer.
-    pub(crate) fn internet_sent(&self) -> Vec<crate::fetch_client::Sent> {
+    pub(crate) fn internet_sent(&self) -> Vec<crate::assistant::fetch_client::Sent> {
         self.internet.as_ref().map_or_else(Vec::new, |internet| {
             internet
                 .sent
@@ -134,7 +134,7 @@ impl LookupRunner for ConsoleReadLookups {
                 Some(internet) => {
                     let result = internet.run(&self.pool, lookup).await;
                     if match &result {
-                        Ok(output) => crate::fetch_client::is_failure(output),
+                        Ok(output) => crate::assistant::fetch_client::is_failure(output),
                         Err(_) => true,
                     } {
                         self.internet_failed
@@ -142,7 +142,7 @@ impl LookupRunner for ConsoleReadLookups {
                     }
                     result
                 }
-                None => Err(crate::fetch_client::forbidden()),
+                None => Err(crate::assistant::fetch_client::forbidden()),
             },
             Lookup::AgentSummary { agent } => {
                 let client = self.pool.get().await.map_err(|_| LookupError::Store)?;

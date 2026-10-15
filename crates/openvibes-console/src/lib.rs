@@ -18,7 +18,6 @@ mod cases;
 mod compliance;
 mod config;
 mod dashboards;
-mod fetch_client;
 mod hosts;
 mod http;
 mod rules;

@@ -222,7 +222,7 @@ pub(crate) async fn test_assistant_internet(
             Ok(_) => return forbidden(),
             Err(response) => return response,
         };
-    match crate::fetch_client::test_search(
+    match crate::assistant::fetch_client::test_search(
         &state.pool,
         &state.fetch_socket,
         &state.internet_limits,

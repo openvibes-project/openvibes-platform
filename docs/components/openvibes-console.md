@@ -64,8 +64,9 @@ hourly limit, `assistant.internet.lookup` audit row) and answers
 `{ "ok": bool, "detail": string }` (`N results`, the refusal or unreachable
 note, or `web search is off` below level 2; the fetch service re-reads the
 level). Tested with a fake fetch socket (`authenticated_router_with_fetch`).
-The assistant's `reference` and `web_search` lookups (`src/fetch_client.rs`)
-are offered per question from that level (`internet_specs(current_level)`) and
+The assistant's `reference` and `web_search` lookups
+(`src/assistant/fetch_client.rs`) are offered per question from that level
+(`internet_specs(current_level)`) and
 run through the fetch service's socket (`/run/openvibes-fetch/fetch.sock`,
 `AuthHttpState.fetch_socket`): the request JSON is written, the write side
 closed, a reply of at most 64 KiB read, within 25 s (longer than the fetch

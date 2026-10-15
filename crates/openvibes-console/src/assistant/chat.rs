@@ -201,7 +201,7 @@ pub(crate) async fn authenticated_assistant_message(
         vulnerabilities,
         rules,
         // The handler requires assistant.use (analysts, administrators).
-        internet: Some(crate::fetch_client::Internet {
+        internet: Some(crate::assistant::fetch_client::Internet {
             user: actor.clone(),
             request_id: request_id.clone(),
             socket: state.fetch_socket.clone(),

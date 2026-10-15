@@ -45,7 +45,7 @@ pub(crate) struct AuthHttpState {
     /// The fetch service's socket (assistant internet lookups).
     pub(crate) fetch_socket: Arc<std::path::Path>,
     /// Internet lookups used per user this hour.
-    pub(crate) internet_limits: Arc<crate::fetch_client::Limits>,
+    pub(crate) internet_limits: Arc<crate::assistant::fetch_client::Limits>,
 }
 
 impl Readiness {
@@ -182,7 +182,9 @@ pub(crate) fn authenticated_router_with_assistant(
             .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
             .into(),
         fetch_socket: fetch_socket
-            .unwrap_or_else(|| std::path::PathBuf::from(crate::fetch_client::DEFAULT_FETCH_SOCKET))
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(crate::assistant::fetch_client::DEFAULT_FETCH_SOCKET)
+            })
             .into(),
         internet_limits: Arc::default(),
     };

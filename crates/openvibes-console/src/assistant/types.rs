@@ -57,7 +57,7 @@ pub(crate) struct AssistantMessageResponse {
     pub(crate) internet: Vec<AssistantInternetSource>,
 }
 
-pub(crate) use crate::fetch_client::internet_sources;
+pub(crate) use crate::assistant::fetch_client::internet_sources;
 
 #[derive(Clone, Debug, Serialize, ToSchema)]
 pub(crate) struct AssistantStatusResponse {

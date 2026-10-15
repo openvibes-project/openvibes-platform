@@ -10,6 +10,7 @@ use axum::{
 use crate::http::AuthHttpState;
 
 pub(crate) mod chat;
+pub(crate) mod fetch_client;
 pub(crate) mod internet;
 mod internet_types;
 mod lookups;
