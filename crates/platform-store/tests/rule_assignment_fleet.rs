@@ -162,7 +162,9 @@ async fn the_host_view_names_the_deciding_group_and_says_whether_the_set_is_publ
     switch(&mut console, L2, &zeta, true).await;
     switch(&mut console, L2, &alpha, true).await;
     switch(&mut console, L2, &mid, false).await;
-    // L1: only an off group.
+    // L1: only off groups; the first by name decides ("mid" before "zzz").
+    let late = group(&admin, "zzz", &[("env", "web")]).await;
+    switch(&mut console, L1, &late, false).await;
     switch(&mut console, L1, &mid, false).await;
     let host = rule_assignment::for_agent(&console, &AgentScope::Global, A)
         .await
@@ -215,6 +217,24 @@ async fn the_host_view_names_the_deciding_group_and_says_whether_the_set_is_publ
     let dist = as_role(&db, "openvibes-distribution").await;
     assert!(!rule_assignment::assigned(&dist, A, L1).await.unwrap());
     assert!(rule_assignment::assigned(&dist, A, L2).await.unwrap());
+    drop((console, dist, admin));
+    db.drop().await;
+}
+
+#[tokio::test]
+async fn a_host_in_an_on_and_an_off_group_counts_as_on_like_distribution_says() {
+    let (db, admin) = setup().await;
+    agent(&admin, A, "active", true, &[("env", "web"), ("tier", "db")]).await;
+    let web = group(&admin, "web", &[("env", "web")]).await;
+    let dbs = group(&admin, "db", &[("tier", "db")]).await;
+    let mut console = as_role(&db, "openvibes-console").await;
+    switch(&mut console, L1, &web, false).await;
+    switch(&mut console, L1, &dbs, true).await;
+    let overview = rule_assignment::overview(&console).await.unwrap();
+    let l1 = overview.sets.iter().find(|s| s.rule_set_id == L1).unwrap();
+    assert_eq!((l1.hosts_on, l1.hosts_off), (1, 0));
+    let dist = as_role(&db, "openvibes-distribution").await;
+    assert!(rule_assignment::assigned(&dist, A, L1).await.unwrap());
     drop((console, dist, admin));
     db.drop().await;
 }
