@@ -20,8 +20,9 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_permission, unavailable_auth},
+    access::guard::{authenticated_permission, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
 };
 
 /// Longest name filter, in bytes.

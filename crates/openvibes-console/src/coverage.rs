@@ -17,7 +17,7 @@ use platform_store::rule_drafts::{SITE, SITE_ALARMS};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-use crate::router::{AuthHttpState, no_store, unavailable_auth};
+use crate::{access::guard::unavailable_auth, http::AuthHttpState, router::no_store};
 
 use platform_store::rules::is_test_rule;
 

@@ -16,8 +16,10 @@ use serde_json::Value;
 use crate::{
     DashboardPage, DashboardView, FieldError, HomeDashboard, Permission, PermissionScope,
     ProblemDetails, SaveDashboardRequest, ShareDashboardRequest,
-    problem::problem_response,
-    router::{AuthHttpState, parse_if_match_version, session_user, unavailable_auth},
+    access::guard::{session_user, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
+    router::parse_if_match_version,
 };
 
 pub(crate) const WIDGET_TYPES: [&str; 8] = [

@@ -20,7 +20,7 @@ use crate::{
         VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
         VulnerabilityTopHost, VulnerabilityView,
     },
-    problem::{FieldError, ProblemDetails},
+    http::problem::{FieldError, ProblemDetails},
 };
 
 #[derive(OpenApi)]

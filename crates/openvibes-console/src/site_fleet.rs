@@ -18,8 +18,9 @@ use utoipa::ToSchema;
 
 use crate::{
     Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_permission, unavailable_auth},
+    access::guard::{authenticated_permission, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
 };
 
 /// Most hosts listed with their state; counts always cover every host.

@@ -16,11 +16,11 @@ use chrono::Utc;
 use platform_store::console_auth;
 
 use crate::{
-    auth::{PresentedCredentials, presented_credentials, session_digest},
-    router::{
-        AuthHttpState, authentication_required, checked_session, password_change_required,
-        unavailable_auth,
+    access::guard::{
+        authentication_required, checked_session, password_change_required, unavailable_auth,
     },
+    auth::{PresentedCredentials, presented_credentials, session_digest},
+    http::AuthHttpState,
 };
 
 /// Routes that resolve the caller themselves: the session read (which

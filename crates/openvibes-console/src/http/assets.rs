@@ -9,7 +9,7 @@ use axum::{
 };
 use include_dir::{Dir, include_dir};
 
-use crate::frontend_contract::PUBLIC_ASSETS;
+use crate::http::frontend_contract::PUBLIC_ASSETS;
 
 static FRONTEND: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/web/dist");
 static MANIFEST_ASSETS: LazyLock<BTreeSet<String>> = LazyLock::new(|| {
@@ -131,7 +131,7 @@ fn content_type(path: &str) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use crate::frontend_contract::PUBLIC_ASSETS;
+    use crate::http::frontend_contract::PUBLIC_ASSETS;
 
     use super::{
         CachePolicy, MANIFEST_ASSETS, content_type, manifest_response, public_response, response,

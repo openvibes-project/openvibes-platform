@@ -19,8 +19,9 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     FieldError, Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_agent_scope, unavailable_auth},
+    access::guard::{authenticated_agent_scope, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
 };
 
 use Permission::{

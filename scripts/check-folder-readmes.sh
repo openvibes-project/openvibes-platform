@@ -4,7 +4,7 @@
 # is gone, so a folder's description cannot fall behind its contents.
 # Tests (*.test.*) and assets need no line.
 cd "$(dirname "$0")/.." || exit 2
-roots=(crates/openvibes-console/web/src)
+roots=(crates/openvibes-console/web/src crates/openvibes-console/src)
 failed=0
 fail() { echo "$1"; failed=1; }
 
@@ -22,8 +22,10 @@ while IFS= read -r dir; do
     while IFS= read -r named; do
         grep -qxF "$named" <<< "$entries" || fail "$readme names $named, which is not in $dir"
     done < <(grep -oE '^\| `[A-Za-z0-9_.-]+/?`' "$readme" | tr -d '|` ')
-done < <(git ls-files -- "${roots[@]}" | xargs -n1 dirname | sort -u |
-    while IFS= read -r d; do while [[ $d == "${roots[0]}"* ]]; do echo "$d"; d=$(dirname "$d"); done; done | sort -u)
+done < <(for root in "${roots[@]}"; do
+    git ls-files -- "$root" | xargs -n1 dirname | sort -u |
+        while IFS= read -r d; do while [[ $d == "$root"* ]]; do echo "$d"; d=$(dirname "$d"); done; done
+done | sort -u)
 
 [[ $failed -eq 0 ]] && echo "ok: every folder README matches its folder"
 exit $failed

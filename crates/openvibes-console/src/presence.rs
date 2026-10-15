@@ -26,7 +26,7 @@ use chrono::Utc;
 use futures_util::stream;
 use tokio::{sync::watch, time::timeout};
 
-use crate::router::{AuthHttpState, authenticated_permission};
+use crate::{access::guard::authenticated_permission, http::AuthHttpState};
 
 /// How often the shared task compares the fleet's online fingerprint.
 const CHECK_EVERY: Duration = Duration::from_secs(5);

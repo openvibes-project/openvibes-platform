@@ -25,7 +25,8 @@ use utoipa::ToSchema;
 
 use crate::{
     ProblemDetails,
-    router::{AuthHttpState, session_user, unavailable_auth},
+    access::guard::{session_user, unavailable_auth},
+    http::AuthHttpState,
 };
 
 const LATEST_RELEASE_URL: &str =

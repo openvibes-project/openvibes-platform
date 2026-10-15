@@ -10,12 +10,11 @@
 //! by the `embedded-ui` feature after their Vite output has been validated.
 
 mod about;
+mod access;
 mod agent_package;
 mod alarm_suppressions;
 mod alarms;
 mod api;
-#[cfg(feature = "embedded-ui")]
-mod assets;
 mod assistant;
 mod assistant_internet;
 mod auth;
@@ -26,15 +25,11 @@ mod config;
 mod coverage;
 mod dashboards;
 mod detection;
-mod error;
 mod fetch_client;
-#[cfg(feature = "embedded-ui")]
-mod frontend_contract;
+mod http;
 mod metrics;
-mod openapi;
 mod ports;
 mod presence;
-mod problem;
 mod rbac;
 mod router;
 mod rule_assignment;
@@ -79,16 +74,16 @@ pub use auth::{
     session_cookie, verify_password,
 };
 pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
-pub use error::ConsoleError;
-pub use openapi::{document as console_openapi, json as openapi_json};
-pub use problem::{FieldError, ProblemDetails};
-pub use rbac::{
-    BuiltInRole, RoleBinding, RoleBindingError, builtin_roles, builtin_roles_json,
-    resolve_capabilities,
-};
-pub use router::{
+pub use http::error::ConsoleError;
+pub use http::openapi::{document as console_openapi, json as openapi_json};
+pub use http::problem::{FieldError, ProblemDetails};
+pub use http::{
     Readiness, authenticated_router, authenticated_router_for_hosts,
     authenticated_router_with_agent_install, authenticated_router_with_fetch,
     authenticated_router_with_signer, development_router, health_router, public_router,
+};
+pub use rbac::{
+    BuiltInRole, RoleBinding, RoleBindingError, builtin_roles, builtin_roles_json,
+    resolve_capabilities,
 };
 pub use server::{TrustedPeer, run, serve};

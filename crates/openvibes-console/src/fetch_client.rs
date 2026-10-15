@@ -231,7 +231,7 @@ pub(crate) async fn test_search(
 ) -> Result<(bool, String), LookupError> {
     let internet = Internet {
         user,
-        request_id: crate::problem::next_request_id(),
+        request_id: crate::http::problem::next_request_id(),
         socket: socket.clone(),
         limits: limits.clone(),
         sent: Mutex::default(),

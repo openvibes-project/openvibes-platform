@@ -20,8 +20,10 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_permission, parse_if_match_version, unavailable_auth},
+    access::guard::{authenticated_permission, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
+    router::parse_if_match_version,
 };
 
 /// One alarm in the list.

@@ -13,15 +13,16 @@ use platform_store::{console_auth, console_read::AgentScope};
 use ring::rand::{SecureRandom, SystemRandom};
 
 use crate::{
+    access::guard::{
+        authenticated_permission, authentication_required, checked_session, unavailable_auth,
+    },
     auth::{
         NormalizedPassword, PresentedCredentials, hash_password, presented_credentials,
         verify_password,
     },
-    problem::{ProblemDetails, problem_response},
-    router::{
-        ACCOUNT_FAILURE_LIMIT, AuthHttpState, account_throttle_bucket, authenticated_permission,
-        authentication_required, bounded_user_agent, checked_session, unavailable_auth,
-    },
+    http::AuthHttpState,
+    http::problem::{ProblemDetails, problem_response},
+    router::{ACCOUNT_FAILURE_LIMIT, account_throttle_bucket, bounded_user_agent},
 };
 
 /// Letters and digits that cannot be mistaken for one another when read

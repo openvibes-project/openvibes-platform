@@ -24,8 +24,10 @@ use utoipa::{IntoParams, ToSchema};
 
 use crate::{
     FieldError, Permission, PermissionScope, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, parse_if_match_version, session_user, unavailable_auth},
+    access::guard::{session_user, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
+    router::parse_if_match_version,
 };
 
 /// A console user as a case shows them.

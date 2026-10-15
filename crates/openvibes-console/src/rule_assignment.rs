@@ -17,8 +17,10 @@ use utoipa::ToSchema;
 
 use crate::{
     Permission, ProblemDetails,
-    problem::problem_response,
-    router::{AuthHttpState, authenticated_permission, no_store, unavailable_auth},
+    access::guard::{authenticated_permission, unavailable_auth},
+    http::AuthHttpState,
+    http::problem::problem_response,
+    router::no_store,
 };
 
 /// One asset group's override.

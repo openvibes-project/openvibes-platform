@@ -20,7 +20,7 @@ use crate::{
     AgentDetail, AgentPage, AgentRuleSetView, AgentStatus, AgentSummary, AgentView, BuiltInRole,
     CertificateView, CursorPage, CursorPagination, FindingOrigin, FindingPage, FindingSummary,
     FindingView, Permission, RoleBinding, Severity,
-    problem::{ProblemDetails, problem_response},
+    http::problem::{ProblemDetails, problem_response},
     resolve_capabilities,
 };
 

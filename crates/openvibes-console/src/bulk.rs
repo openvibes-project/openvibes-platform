@@ -23,10 +23,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
 use crate::{
-    Permission, ProblemDetails,
-    cases::authorize,
-    problem::problem_response,
-    router::{AuthHttpState, unavailable_auth},
+    Permission, ProblemDetails, access::guard::unavailable_auth, cases::authorize,
+    http::AuthHttpState, http::problem::problem_response,
 };
 
 /// One selected row. Alarms: `id`. Compliance: `rule_set_id` and `rule_id`

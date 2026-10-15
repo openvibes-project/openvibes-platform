@@ -15,10 +15,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
 use crate::{
-    Permission, ProblemDetails,
-    cases::authorize,
-    problem::problem_response,
-    router::{AuthHttpState, unavailable_auth},
+    Permission, ProblemDetails, access::guard::unavailable_auth, cases::authorize,
+    http::AuthHttpState, http::problem::problem_response,
 };
 
 fn bad(code: &'static str, title: &'static str) -> Response {

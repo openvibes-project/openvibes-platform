@@ -649,7 +649,7 @@ pub async fn serve(
                 .flatten();
             crate::about::mark_started();
             (
-                crate::router::authenticated_router_with_assistant(
+                crate::http::authenticated_router_with_assistant(
                     pool.clone(),
                     public_origin.as_str(),
                     hosts.clone(),
