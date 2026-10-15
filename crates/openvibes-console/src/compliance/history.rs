@@ -8,7 +8,7 @@ use axum::{
 use chrono::{SecondsFormat, Utc};
 use serde::Deserialize;
 
-use super::latest::invalid_finding_query;
+use crate::http::validate::invalid_finding_query;
 use crate::{
     access::guard::{authenticated_agent_scope, unavailable_auth},
     http::{

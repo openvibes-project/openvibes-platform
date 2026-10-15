@@ -397,7 +397,7 @@ Server code is `crates/openvibes-console/src`, one folder per area:
 - `access/`: sign-in, session, permission checks, roles, users, service accounts, role bindings, asset groups, host tags.
 - `audit/`: the audit event list, CSV export, retention.
 - `hosts/`: agents, enrollment, install package, software, ports, presence, the site rule-set fleet.
-- `compliance/`: findings, finding groups, history, triage, bulk triage.
+- `compliance/`: findings, finding groups, history, triage, and the triage shared by every kind: bulk triage of findings, alarms and vulnerabilities, and the per-host triage detail.
 - `vulnerabilities/`: summary, prioritised list, advisory detail.
 - `alarms/`: alarms, suppressions, detection evidence.
 - `cases/`: cases.
@@ -405,7 +405,7 @@ Server code is `crates/openvibes-console/src`, one folder per area:
 - `assistant/`: chat endpoints, runtime, lookups, internet lookups switch.
 - `dashboards/`: dashboards and the count history.
 - `seeded/`: fixed demo data for the loopback development listener.
-- `server/`: listeners, TLS, trusted proxy, readiness, shutdown.
+- `server/`: listeners, TLS, trusted proxy, shutdown; it sets the readiness flag, which `http/router.rs` (`Readiness`, the health router) defines.
 - `about.rs`, `config.rs`, `lib.rs`, `main.rs`, and `bin/` (`export_openapi`).
 
 Each area's `mod.rs` exposes `routes()`; `http/routes.rs` merges them. Every

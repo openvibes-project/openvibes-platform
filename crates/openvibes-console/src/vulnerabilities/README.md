@@ -1,6 +1,6 @@
 # src/vulnerabilities
 
-Vulnerabilities in the console: the summary, the prioritised list and advisory detail.
+Vulnerabilities in the console: the summary, the prioritised list and advisory detail. Bulk triage (`/v1/vulnerabilities/bulk`) and one host's triage of an advisory live with the other triage code in `compliance/bulk.rs` and `compliance/triage_detail.rs`.
 
 | File | What it does |
 |---|---|

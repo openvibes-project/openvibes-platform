@@ -1,6 +1,6 @@
 # src/alarms
 
-Alarms in the console: the alarm list, one alarm with its process tree and triage, suppressions, and the detection evidence behind alarms and findings.
+Alarms in the console: the alarm list, one alarm with its process tree and triage, suppressions, and the detection evidence behind alarms and findings. Bulk triage (`/v1/alarms/bulk`) lives with the other triage code in `compliance/bulk.rs`.
 
 | File | What it does |
 |---|---|

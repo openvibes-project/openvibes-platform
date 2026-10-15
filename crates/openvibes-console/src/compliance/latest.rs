@@ -8,6 +8,7 @@ use axum::{
 use chrono::{SecondsFormat, Utc};
 use serde::Deserialize;
 
+use crate::http::validate::invalid_finding_query;
 use crate::{
     access::guard::{authenticated_agent_scope, unavailable_auth},
     http::{
@@ -204,14 +205,6 @@ pub(crate) async fn authenticated_latest_findings(
         }),
     )
         .into_response()
-}
-
-pub(crate) fn invalid_finding_query() -> Response {
-    problem_response(ProblemDetails::new(
-        StatusCode::BAD_REQUEST,
-        "invalid_query",
-        "Finding query parameters are invalid",
-    ))
 }
 
 pub(super) fn latest_finding_view(

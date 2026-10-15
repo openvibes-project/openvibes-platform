@@ -9,7 +9,7 @@ use chrono::{SecondsFormat, Utc};
 use serde::Deserialize;
 
 use super::cpe::{CPE_MAX_CONFIDENCE, CPE_PAGE, cpe_findings, cpe_view};
-use crate::compliance::latest::invalid_finding_query;
+use crate::http::validate::invalid_finding_query;
 use crate::{
     access::guard::{authenticated_agent_scope, unavailable_auth},
     http::{
