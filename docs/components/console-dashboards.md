@@ -45,11 +45,11 @@ the layout.
 
 In the web console (`web/src/dashboards`). The grid rules live in `layout.ts`
 and mirror this module's validation. The widgets are in `widgets.tsx`,
-`tiles.tsx` and `tiles2.tsx`. The editor store is `editor.ts`, and the page
+`tiles.tsx` (count tiles) and `charts.tsx` (trend, graph and note). The editor store is `editor.ts`, and the page
 is `DashboardsView.tsx`. See [console-web.md](console-web.md#dashboards) for
 behaviour. The widget editors are in `settings.tsx`: they use the console's
 Select, Segmented and Switch (`web/src/ui`) and the shared filter catalogue
-(`web/src/views/filters.ts`). A new widget is placed at the first free spot
+(`web/src/views/lists/filters.ts`). A new widget is placed at the first free spot
 in the grid (`addWidget` in `layout.ts`). An editor shows a stored value it
 does not know (a list, a rule, a number of days, an attention kind) as a
 selected extra and saves it back unchanged. The List editor offers only the

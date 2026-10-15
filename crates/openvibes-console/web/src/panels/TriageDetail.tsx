@@ -16,7 +16,7 @@ import { BulkBar } from "./BulkBar";
 import { CaseBadge } from "./CaseBadge";
 import { triageStates } from "./triage";
 
-export type Tab = { key: string; label: string; count?: number; body: ReactNode };
+type Tab = { key: string; label: string; count?: number; body: ReactNode };
 
 /** The summary stays; one tab shows below it. `tab` and `onTab` let the
  * panel switch tabs itself (a host's "View evidence"). */

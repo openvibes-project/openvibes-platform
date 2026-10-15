@@ -5,7 +5,7 @@ import { matches } from "./table";
 
 export type SelectOption = { value: string; label: string; disabled?: boolean; hint?: string | undefined; icon?: ReactNode };
 export type SelectGroup = { group: string; options: SelectOption[] };
-export type Section = { group?: string; options: SelectOption[] };
+type Section = { group?: string; options: SelectOption[] };
 
 /** Plain options become one heading-less section. */
 export function toSections(options: SelectOption[] | SelectGroup[]): Section[] {

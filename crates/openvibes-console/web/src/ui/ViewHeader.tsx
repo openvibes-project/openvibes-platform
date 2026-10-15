@@ -33,7 +33,7 @@ function writeSaved(view: string, saved: Saved[]) {
   }
 }
 
-export type Chip = { label: string; param: string; value: string; count?: number | undefined };
+type Chip = { label: string; param: string; value: string; count?: number | undefined };
 
 type Props = {
   title: string;

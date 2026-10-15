@@ -14,7 +14,7 @@ export function allowedStates(from: string[]): string[] {
   return from.every((state) => (triageStates as readonly string[]).includes(state)) ? [...triageStates] : [];
 }
 
-export type TriageForm = { state: string; assignee: string; note: string; acceptedUntil: string };
+type TriageForm = { state: string; assignee: string; note: string; acceptedUntil: string };
 
 export function triageBody(form: TriageForm) {
   const [year, month, day] = form.acceptedUntil.split("-").map(Number);

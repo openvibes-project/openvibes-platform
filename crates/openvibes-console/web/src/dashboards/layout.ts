@@ -82,7 +82,7 @@ export function overlaps(a: Widget, b: Widget): boolean {
 
 /** Keeps `fixedId` in place and moves every colliding tile straight down,
  *  top to bottom, so no two tiles overlap. Input order is preserved. */
-export function settle(widgets: readonly Widget[], fixedId: string): Widget[] {
+function settle(widgets: readonly Widget[], fixedId: string): Widget[] {
   const fixed = widgets.find((w) => w.id === fixedId);
   if (!fixed) return [...widgets];
   const placed: Widget[] = [fixed];

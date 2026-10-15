@@ -9,12 +9,12 @@ import { graphLabel, graphMetrics } from "./metrics";
 import { WIDGET_DEFAULTS } from "./defaults";
 import type { Widget, WidgetType } from "./layout";
 import { AttentionTile, BREAKDOWN_SOURCES, BREAKDOWN_TITLES, BreakdownTile, ListTile, METRIC_KEYS, METRICS, NumberTile, TopHostsTile } from "./tiles";
-import { GraphTile, NoteTile, TrendTile } from "./tiles2";
+import { GraphTile, NoteTile, TrendTile } from "./charts";
 import { AttentionSettings, BreakdownSettings, GraphSettings, ListSettings, NoteSettings, NumberSettings, TopHostsSettings, TrendSettings } from "./settings";
 
 export type WidgetProps = { widget: Widget };
 export type SettingsProps = { widget: Widget; onChange: (config: Widget["config"]) => void };
-export type WidgetDef = {
+type WidgetDef = {
   type: WidgetType; label: string; description: string; icon: IconName; size: { w: number; h: number };
   defaults: Widget["config"]; View: (props: WidgetProps) => ReactNode; Settings: (props: SettingsProps) => ReactNode;
 };

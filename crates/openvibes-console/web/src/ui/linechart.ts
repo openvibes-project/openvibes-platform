@@ -1,6 +1,6 @@
 // Geometry for the console's line charts: monotone (no overshoot) or
 // stepped paths, gaps at missing days, whole-number ticks.
-export type Pt = { x: number; y: number };
+type Pt = { x: number; y: number };
 
 // Indexed read that fails loudly on an out-of-range index (an internal invariant).
 function get<T>(arr: readonly T[], i: number): T {
@@ -78,7 +78,7 @@ export const ticks = (max: number) => [0, max / 2, max];
 
 // ---- layout and text helpers for LineChart.tsx ----
 export type Series = { label: string; points: { day: string; value: number }[] };
-export type Layout = { W: number; H: number; padL: number; padR: number; padT: number; padB: number };
+type Layout = { W: number; H: number; padL: number; padR: number; padT: number; padB: number };
 
 /** Pixel layout; `labels` leaves room on the right for end-of-line labels. */
 export function layout(variant: "spark" | "full", W: number, labels = false): Layout {
@@ -103,7 +103,7 @@ export function axisDays(series: Series[]): string[] {
   return Array.from({ length: Math.round((hi - lo) / DAY) + 1 }, (_, i) => new Date(lo + i * DAY).toISOString().slice(0, 10));
 }
 
-export const fmtDay = (day: string, year = false) => new Date(Date.parse(day)).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year && { year: "numeric" }), timeZone: "UTC" });
+const fmtDay = (day: string, year = false) => new Date(Date.parse(day)).toLocaleDateString("en-GB", { day: "numeric", month: "short", ...(year && { year: "numeric" }), timeZone: "UTC" });
 export const dayLabel = (day: string, today: string, year = false) => (day === today ? "Today" : fmtDay(day, year));
 /** True when the axis crosses a year boundary, so labels need the year. */
 export const spansYears = (days: string[]) => days.length > 1 && days[0]?.slice(0, 4) !== days.at(-1)?.slice(0, 4);

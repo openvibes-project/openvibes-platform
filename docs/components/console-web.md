@@ -217,7 +217,7 @@ used.
 
 ### Filter catalogue
 
-`views/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
+`views/lists/filters.ts` holds one catalogue per list (Compliance, Vulnerabilities,
 Hosts, Audit log): each filter is a flag (one fixed value) or a choice (a
 list of values), and each parameter holds one value. The list views build
 their chip bars from it and the List widget editor offers the same filters,
@@ -296,7 +296,7 @@ an existing agent's `agent.toml`.
   (the same cells grouped into the seven phases), Findings, Alarms, Include
   drafts. A cell or tactic filters the list; "N rules are not mapped"
   lists the unmapped. The matrix scrolls sideways inside its own box on
-  narrow screens. Logic in `views/coverage.ts` (tested).
+  narrow screens. Logic in `views/operate/coverage.ts` (tested).
 - Rule panels show a rule's ATT&CK pairs as chips that open Coverage
   filtered to them; the site-rule editor adds pairs with a searchable
   picker (one option per technique and tactic).
@@ -378,7 +378,7 @@ triage on alarms and findings stays as it is.
   **Last test** shows when the host last raised the harmless test alarm
   and test finding (`openvibes-test alarm|finding`, from `last_test` on
   the host detail), with both commands; test alarms and findings carry a
-  Test badge in the lists (`views/tests.ts`).
+  Test badge in the lists (`views/lists/testRules.ts`).
   **Threat alarms** reads "On (eBPF)" or "On (audit)", or "Off: why", "To
   fix: …", and, when there is one, the command in a wrapped code block with
   a copy button; an off host also shows
@@ -412,6 +412,36 @@ triage on alarms and findings stays as it is.
 - **`app/registry.tsx`:** declares every view (path, icon, group, required
   permissions, shortcut) and object kind (panel). A new module is one entry
   in each.
+- **Where code lives** (`web/src`):
+  - `views/`: one file per page, in a folder per menu group:
+    `investigate/` (Alarms, Compliance, Vulnerabilities, Hosts, Software,
+    Ports and Services, Cases), `operate/` (Alarm suppressions, Site rules,
+    Coverage), `admin/` (`Audit.tsx`, and `settings/`: `Settings.tsx` plus
+    one file per tab) and `help/` (About). `views/lists/` holds what the
+    lists share: filter catalogues (`filters.ts`), row selection and
+    sorting (`rows.ts`) and the test-trigger rules (`testRules.ts`).
+  - `panels/`: one file per object kind, named `<Kind>Panel.tsx`, holding
+    that kind's panel and its "new" form (`UserPanel.tsx` has `UserPanel`
+    and `NewUser`).
+  - Logic without React sits beside its component in a lowercase `.ts`
+    file with a unit test (`ruleAssignment.ts` next to `WhereItRuns.tsx`).
+  - `app/`: session, navigation and the registry; `ui/`: shared controls;
+    `dashboards/`: the dashboards feature; `demo/`: the in-browser API.
+  - An `export` means another file imports it; a helper used by one file
+    stays unexported.
+- **Adding things:**
+  - A page: its file in its menu group's folder under `views/`, one entry in `registry.tsx` (with its
+    `access`), its path in `frontend-contract.json`.
+  - A Settings tab: its file in `views/admin/settings/` and one line in the
+    `tabs` list of `Settings.tsx`, with its `access`. The Settings menu
+    entry opens to any tab's access by itself.
+  - A permission: the server side only (`api.rs` `Permission`, `rbac.rs`
+    `ALL_PERMISSIONS` and the role table, a migration for the database's
+    role tables, and the route's check). Then regenerate the API client
+    (`npm run generate:api`) and `web/src/api/roles.json`
+    (`cargo run -p openvibes-console --bin export_openapi -- --roles >
+    crates/openvibes-console/web/src/api/roles.json`); tests fail while
+    either is stale.
 - **`app/location.ts`:** URL ↔ state (view, panel stack, filters); tested.
 - **`api/client.ts`:** `request`, `load` (cached by path), `invalidate(prefix)`
   after mutations, and the `useResource`/`useAllPages` hooks. Live requests
@@ -420,7 +450,9 @@ triage on alarms and findings stays as it is.
   build`, embedded in the RPM) is always live, and the demo code is left out
   of its bundle.
 - **`demo/server.ts`:** (preview and dev builds only) an in-browser implementation of the endpoints v2 uses,
-  over deterministic synthetic data (`demo/data.ts`). It follows the wire
+  over deterministic synthetic data (`demo/data.ts`). `demo/context.ts`
+  holds the state every area shares; each area's routes are in
+  `demo/routes/` (hosts, findings, alarms, rules, cases, …). It follows the wire
   types and the permission model, with personas viewer, analyst, operator,
   scoped operator and admin. Tested. Its compliance findings use only the
   rules OpenVIBES ships (openvibes-rules `baseline/rules.json`: ids,

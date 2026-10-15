@@ -42,9 +42,9 @@ Where things live:
 | The left rail | `src/shell/Chrome.tsx` (`Rail`) and its CSS in `src/styles/` |
 | Which views and panels exist | `src/app/registry.tsx`: one entry per view, one per object kind |
 | An inspector panel | `src/panels/` |
-| A view | `src/views/` |
+| A view | `src/views/<menu group>/` (investigate, operate, admin, help) |
 | Dashboards and widgets | `src/dashboards/` |
-| Demo data | `src/demo/data.ts`, `src/demo/server.ts` |
+| Demo data | `src/demo/data.ts`, the in-browser API in `src/demo/server.ts` and `src/demo/routes/` |
 
 A quick first change: add an entry to `registry.tsx` next to "Software" and
 it appears in the rail on save. [`components/console-web.md`](components/console-web.md)

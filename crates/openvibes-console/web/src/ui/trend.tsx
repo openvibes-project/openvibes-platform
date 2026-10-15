@@ -1,5 +1,5 @@
 // A small bar chart of how many hosts reported something each day.
-export type DayCount = { day: string; hosts: number };
+type DayCount = { day: string; hosts: number };
 
 /** Distinct hosts per UTC day over the last `days` days, oldest first. */
 export function dailyHosts(entries: readonly { agent_id: string; observed_day: string }[], days: number, now = Date.now()): DayCount[] {

@@ -10,7 +10,7 @@ import {
   type SelectGroup, type SelectOption,
 } from "./select";
 
-export type { SelectGroup, SelectOption } from "./select";
+export type { SelectGroup } from "./select";
 
 // Only one Select is open at a time: opening registers its closer here.
 let closeCurrent: (() => void) | null = null;

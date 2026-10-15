@@ -2,7 +2,7 @@
 // other at /dashboards/{id}; the built-in Overview is read-only.
 import { useEffect, useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useResource } from "../api/client";
 import type { AgentSummary, Dashboard, DashboardPage, HomeDashboard } from "../api/types";
 import { nav, useLocation } from "../app/nav";
 import { useSession } from "../app/session";
@@ -17,8 +17,9 @@ import { editor, useEditor } from "./editor";
 import { Grid } from "./Grid";
 import type { Layout } from "./layout";
 import { upgradeLayout } from "./legacy";
+import { roles } from "../app/roles";
 
-const ROLES = ["viewer", "analyst", "operator", "admin"] as const;
+const ROLES = roles.map(([id]) => id);
 
 export function DashboardsView() {
   const { view } = useLocation();
@@ -126,7 +127,7 @@ function Header({ dashboard, builtin, editing }: { dashboard: Dashboard | undefi
     invalidate("/api/v1/dashboards");
     toast(roleId ? `Shared with ${roleId}` : "No longer shared");
   };
-  const fail = (error: unknown) => toast(error instanceof ApiError ? error.message : "That did not work", true);
+  const fail = (error: unknown) => toast(apiMessage(error, "That did not work"), true);
 
   return (
     <header className="view-header dashboard-header">
@@ -239,7 +240,7 @@ function DashboardSwitcher({ current }: { current: string | null }) {
             <button type="button" role="menuitemradio" aria-checked={current === null} className="menu__item" onClick={() => go(BUILTIN_ID)}>{BUILTIN_NAME}</button></div>
           {group("Mine", items.filter((d) => d.mine))}
           {group("Shared with me", items.filter((d) => !d.mine))}
-          <button type="button" role="menuitem" className="menu__item" onClick={() => void create().catch((error: unknown) => toast(error instanceof ApiError ? error.message : "Could not create", true))}>
+          <button type="button" role="menuitem" className="menu__item" onClick={() => void create().catch((error: unknown) => toast(apiMessage(error, "Could not create"), true))}>
             <Icon name="plus" size={14} /> New dashboard</button>
         </div>
       )}

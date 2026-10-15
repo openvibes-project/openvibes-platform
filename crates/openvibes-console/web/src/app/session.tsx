@@ -11,7 +11,11 @@ export function allows(session: Session | undefined, { permission, global = fals
     capability.permission === permission && (!global || capability.scope.kind === "global")) === true;
 }
 
-export type SessionState = {
+/** Whether `can` grants any of these (a view's or a tab's access list). */
+export const grantsAny = (can: SessionState["can"], access: readonly Access[]): boolean =>
+  access.some((a) => can(a.permission, a.global));
+
+type SessionState = {
   session: Session | undefined;
   demo: boolean;
   can: (permission: Permission, global?: boolean) => boolean;

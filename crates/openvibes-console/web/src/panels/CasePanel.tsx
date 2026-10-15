@@ -9,7 +9,7 @@ import type { CaseDetail, CaseItem, CaseUser } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
-import { CaseStatusBadge } from "../views/Cases";
+import { CaseStatusBadge } from "../views/investigate/Cases";
 import { Ago, ErrorBox, Loading, ObjectLink, SeverityBadge } from "../ui/bits";
 import { when } from "../ui/format";
 import { Icon } from "../ui/Icon";

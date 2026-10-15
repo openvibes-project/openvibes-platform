@@ -7,7 +7,7 @@
 // skipped (spec 2026-10-10-bulk-triage §3, §4).
 import { type FormEvent, useEffect, useRef, useState } from "react";
 
-import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { CaseSummary, CaseUser } from "../api/types";
 import { useSession } from "../app/session";
 import { SelectField } from "../ui/Field";
@@ -86,7 +86,7 @@ export function BulkBar({ kind, noun, count, items, newCase, closed = 0, reopenI
       invalidate("/api/v1/triage-history");
       if (!inline) onClear();
     } catch (error) {
-      toast(error instanceof ApiError ? error.message : "The change failed", true);
+      toast(apiMessage(error, "The change failed"), true);
     } finally {
       setBusy(false);
     }
@@ -157,7 +157,7 @@ function BulkDialog({ kind, noun, choice, items, count, newCase, onClose, onDone
       onClose();
       onDone();
     } catch (error) {
-      setProblemText(error instanceof ApiError ? error.message : "The change failed");
+      setProblemText(apiMessage(error, "The change failed"));
     } finally {
       setBusy(false);
     }

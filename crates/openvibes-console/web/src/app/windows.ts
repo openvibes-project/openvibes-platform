@@ -28,7 +28,7 @@ function set(next: Win[]) {
 }
 
 /** Keeps a window reachable: its title bar stays inside the viewport. */
-export function clamp(win: Win, width: number, height: number): Win {
+function clamp(win: Win, width: number, height: number): Win {
   const w = Math.min(Math.max(320, win.w), Math.max(320, width - 16));
   const h = Math.min(Math.max(220, win.h), Math.max(220, height - 16));
   return { ...win, w, h, x: Math.min(Math.max(8 - w + 120, win.x), width - 120), y: Math.min(Math.max(8, win.y), height - 48) };

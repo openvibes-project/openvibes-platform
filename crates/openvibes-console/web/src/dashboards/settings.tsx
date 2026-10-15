@@ -12,13 +12,13 @@ import { Icon } from "../ui/Icon";
 import { Segmented } from "../ui/Segmented";
 import { Select, type SelectGroup } from "../ui/Select";
 import { Switch } from "../ui/Switch";
-import { LIST_FILTERS, LIST_LABELS, chipsOf, dropUnsupported, queryOf, setFilter } from "../views/filters";
-import { LIST_VIEWS, type ListView } from "../views/rows";
+import { LIST_FILTERS, LIST_LABELS, chipsOf, dropUnsupported, queryOf, setFilter } from "../views/lists/filters";
+import { LIST_VIEWS, type ListView } from "../views/lists/rows";
 import { ATTENTION_KINDS } from "./attention";
 import { noteLines } from "./config";
 import { GRAPH_MAX_LINES, METRIC_GROUPS, TREND_DAYS } from "./metrics";
 import { BREAKDOWN_SOURCES } from "./tiles";
-import { GRAPH_DAYS } from "./tiles2";
+import { GRAPH_DAYS } from "./charts";
 import type { SettingsProps } from "./widgets";
 
 // The label text names the control exactly (a wrapping label alone would

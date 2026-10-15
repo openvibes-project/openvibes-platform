@@ -10,9 +10,9 @@ import { useEffect } from "react";
 import { inDemo, invalidate } from "../api/client";
 
 /** Least time between two refetches, however fast changes arrive. */
-export const MIN_REFRESH_MS = 2000;
+const MIN_REFRESH_MS = 2000;
 /** Wait before reconnecting after the stream ends or fails. */
-export const RECONNECT_MS = 3000;
+const RECONNECT_MS = 3000;
 
 /** Reads event-stream text and calls `onEvent` for each `presence` event.
  *  Returns what is left of an unfinished line, to prepend to the next chunk. */

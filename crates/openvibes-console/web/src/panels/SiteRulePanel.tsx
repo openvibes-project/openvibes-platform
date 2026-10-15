@@ -2,7 +2,7 @@
 // loader, saved as a draft. Publishing the set comes later.
 import { useEffect, useState } from "react";
 
-import { ApiError, invalidate, request, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useResource } from "../api/client";
 import type { Agent, AttackCatalog, AttackPairInput, RuleCheck, RuleDraft, RuleDraftInput, RuleTestResult } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
@@ -99,7 +99,7 @@ function RuleTest({ set, ruleId, input, enabled }: { set: string; ruleId: string
     setError(undefined);
     setResult(undefined);
     request<RuleTestResult>("POST", `/api/v1/rule-drafts/${set}/${encodeURIComponent(ruleId)}/test`, { agent_id: agent, rule: input })
-      .then(setResult, (e: unknown) => setError(e instanceof ApiError ? e.message : "Could not test the rule"))
+      .then(setResult, (e: unknown) => setError(apiMessage(e, "Could not test the rule")))
       .finally(() => setBusy(false));
   };
   if (set !== "site") {
@@ -188,7 +188,7 @@ export function SiteRulePanel({ id }: { id: string }) {
         toast(`${saved.rule_id} saved as version ${saved.version}`);
         setForm(undefined);
         if (isNew) nav.open({ kind: "site-rule", id: `${set}/${saved.rule_id}` });
-      }, (e: unknown) => setError(e instanceof ApiError ? e.message : "Could not save the rule"))
+      }, (e: unknown) => setError(apiMessage(e, "Could not save the rule")))
       .finally(() => setBusy(false));
   };
   return (

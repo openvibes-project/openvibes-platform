@@ -8,14 +8,14 @@ import { count } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { CountError, Unavailable } from "./CountError";
 import { LineChart } from "../ui/LineChart";
-import { useListRows } from "../views/rows";
+import { useListRows } from "../views/lists/rows";
 import { ATTENTION_KINDS, useAttention } from "./attention";
 import { int, list, parseListConfig, str } from "./config";
 import { useHistory } from "./history";
 import { METRICS, METRIC_KEYS, delta, deltaSince, partText, scanNotSetUp, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
-export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
+export { METRICS, METRIC_KEYS } from "./metrics";
 
 export { Unavailable };
 

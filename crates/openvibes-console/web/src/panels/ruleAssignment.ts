@@ -1,13 +1,14 @@
 // Rule-set assignment in the console (spec 2026-10-14 §6; approved screens in
 // docs/specs/rule-set-assignment-ui/approved.md): the parts without React.
 import type { Agent, HostRuleSetAssignments, Permission, RuleSet, RuleSetAssignment } from "../api/types";
+import { type Access, grantsAny } from "../app/session";
 
 /** Where the project's sets that are not assignable run. */
 const FIXED: Record<string, string> = { baseline: "All hosts", "baseline-alarms": "Linux" };
 /** The panel's Source detail per assignable set. */
 const LEVEL: Record<string, string> = { "hardening-linux-l1": "Level 1", "hardening-linux-l2": "Level 2: stricter, may affect services" };
 
-export type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
+type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
 
 /** Published sets and assignable ones: an assignable set is listed before it is published. */
 export function ruleSetRows(sets: readonly RuleSet[], assignments: readonly RuleSetAssignment[]): RuleSetRow[] {
@@ -66,8 +67,9 @@ export function factsNote(outcome: string, okAt: string | null | undefined, now 
 }
 
 /** Who reads the rule sets, their switches, history and coverage: `rules.read` or `rules.upload`, globally. */
-export const readsRules = (can: (permission: Permission, global?: boolean) => boolean): boolean =>
-  can("rules.read", true) || can("rules.upload", true);
+export const RULE_READERS: readonly Access[] = [{ permission: "rules.read", global: true }, { permission: "rules.upload", global: true }];
+
+export const readsRules = (can: (permission: Permission, global?: boolean) => boolean): boolean => grantsAny(can, RULE_READERS);
 
 /** Why "+ Add group" is disabled, or null when a group can be added. */
 export function addGroupBlocked(groups: number, free: number): string | null {

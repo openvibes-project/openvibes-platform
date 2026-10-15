@@ -1,4 +1,5 @@
-//! Emits or checks the generated console OpenAPI document.
+//! Emits or checks the generated console OpenAPI document; `--roles`
+//! emits the built-in roles for the web console (`web/src/api/roles.json`).
 
 use std::{env, fs, path::Path, process::ExitCode};
 
@@ -22,7 +23,11 @@ fn run() -> Result<(), String> {
             Ok(())
         }
         [flag, path] if flag == "--check" => check(Path::new(path), &generated),
-        _ => Err("usage: export_openapi [--check PATH]".to_owned()),
+        [flag] if flag == "--roles" => {
+            println!("{}", openvibes_console::builtin_roles_json());
+            Ok(())
+        }
+        _ => Err("usage: export_openapi [--check PATH | --roles]".to_owned()),
     }
 }
 

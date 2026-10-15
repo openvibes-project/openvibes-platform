@@ -9,7 +9,7 @@ import type { AlarmPage } from "../api/types";
 import { toast } from "../ui/toast";
 
 /** How often the console checks for a newer alarm. */
-export const POLL_MS = 5000;
+const POLL_MS = 5000;
 
 const listeners = new Set<() => void>();
 
@@ -37,7 +37,7 @@ async function recount(): Promise<void> {
 
 /** What the poll remembers: the newest alarm's identity (for "did the
  *  list change") and the latest `first_seen` so far (for "is it new"). */
-export type Seen = { key: string | null; newest: string } | undefined;
+type Seen = { key: string | null; newest: string } | undefined;
 
 /** Compares the newest-active alarm with what was seen before. `changed`:
  *  the list should refresh (anything moved, including the last alarm going

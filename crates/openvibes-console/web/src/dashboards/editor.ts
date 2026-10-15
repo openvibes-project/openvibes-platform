@@ -9,7 +9,7 @@ import { type FieldProblem, type Layout, type Widget, type WidgetType, addWidget
 import { WIDGET_DEFAULTS } from "./defaults";
 import { upgradeLayout } from "./legacy";
 
-export type EditorState = {
+type EditorState = {
   dashboard: Dashboard | null; name: string; draft: Layout | null; dirty: boolean;
   saving: boolean; conflict: boolean; problems: FieldProblem[]; selected: string | null;
   /** The last removed tile, for Undo. */

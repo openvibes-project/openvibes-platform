@@ -55,7 +55,6 @@ a.list__row:hover { background: var(--surface-2); text-decoration: none; }
 .link-button { appearance: none; background: none; border: 0; padding: 0; margin: 0; font: inherit; color: var(--text); font-weight: 500; text-align: left; cursor: pointer; white-space: nowrap; }
 .link-button:hover { text-decoration: underline; }
 .link-button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
-.gap-start { margin-inline-start: 6px; }
 .triage-bar { display: flex; height: 8px; gap: 2px; border-radius: 999px; overflow: hidden; background: var(--surface-3); min-width: 80px; }
 .triage-bar span { display: block; height: 100%; }
 .bulk-bar {

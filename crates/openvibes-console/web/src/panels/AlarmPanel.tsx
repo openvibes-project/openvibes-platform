@@ -2,7 +2,7 @@
 // header carries Set state, the assignee and the case; a closed alarm shows
 // its decision with Reopen; then "don't alarm on this again", the process
 // tree, the evidence and the triage history.
-import { ApiError, invalidate, request, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useResource } from "../api/client";
 import type { AlarmDetail, AlarmProcess } from "../api/types";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
@@ -11,7 +11,7 @@ import { date, triageLabel } from "../ui/format";
 import { Icon } from "../ui/Icon";
 import { PanelHeader } from "../ui/panel";
 import { toast } from "../ui/toast";
-import { QuietMenu } from "../views/Alarms";
+import { QuietMenu } from "../views/investigate/Alarms";
 import { AddToCase } from "./AddToCase";
 import { BulkBar } from "./BulkBar";
 import { useCaseBadges } from "./CaseBadge";
@@ -52,7 +52,7 @@ export function AlarmPanel({ id }: { id: string }) {
       invalidate("/api/v1/alarm");
       invalidate("/api/v1/triage-history");
     } catch (error) {
-      toast(error instanceof ApiError ? error.message : "Reopen failed", true);
+      toast(apiMessage(error, "Reopen failed"), true);
     }
   };
   const summary = <>

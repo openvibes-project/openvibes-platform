@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { menuCount } from "../app/menuCount";
+import { menuCount } from "./menuCount";
 
 describe("menu counts (#117)", () => {
   it("shows nothing at zero, the number up to 99, then 99+", () => {

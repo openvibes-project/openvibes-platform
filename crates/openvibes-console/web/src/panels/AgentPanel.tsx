@@ -1,14 +1,14 @@
 import { useMemo, useState } from "react";
 
-import { ApiError, invalidate, request, useAllPages, useResource } from "../api/client";
+import { apiMessage, invalidate, request, useAllPages, useResource } from "../api/client";
 import type { Agent, AlarmSummary, Certificate, LastTest, Finding, HostPackage, HostRuleSetAssignments, RuleSet, Tag, TagPreview, VulnerabilityPage } from "../api/types";
 import { nav } from "../app/nav";
 import { useSession } from "../app/session";
 import { useProvideTitle } from "../app/titles";
 import { Ago, Empty, ErrorBox, Loading, ObjectLink, SAVED_HEARTBEAT_HINT, SeverityBadge, StatusBadge } from "../ui/bits";
 import { date, severityOrder } from "../ui/format";
-import { lineage } from "../views/Alarms";
-import { packageId } from "../views/Software";
+import { lineage } from "../views/investigate/Alarms";
+import { packageId } from "../views/investigate/Software";
 import { AddToCase } from "./AddToCase";
 import { vulnerabilityRef } from "./cases";
 import { HostExport } from "./HostExport";
@@ -263,7 +263,7 @@ function TagEditor({ id }: { id: string }) {
         event.preventDefault();
         setError(undefined);
         request<TagPreview>("POST", `/api/v1/agents/${encodeURIComponent(id)}/tags/preview`, { tags: parse(draft) })
-          .then(setPreview, (e: unknown) => setError(e instanceof ApiError ? e.message : "Preview failed"));
+          .then(setPreview, (e: unknown) => setError(apiMessage(e, "Preview failed")));
       }}>
         <div className="row">
           <input className="input grow" value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="env=prod role=web" aria-label="Tags as key=value pairs" />
@@ -281,7 +281,7 @@ function TagEditor({ id }: { id: string }) {
               <button type="button" className="button button--small button--primary" onClick={() => {
                 request("PUT", `/api/v1/agents/${encodeURIComponent(id)}/tags`, { tags: preview.proposed, preview_token: preview.preview_token })
                   .then(() => { setPreview(undefined); setDraft(""); invalidate("/api/v1/agents"); toast("Tags updated"); },
-                    (e: unknown) => setError(e instanceof ApiError ? e.message : "Update failed"));
+                    (e: unknown) => setError(apiMessage(e, "Update failed")));
               }}>Apply</button>
               <button type="button" className="button button--small button--ghost" onClick={() => setPreview(undefined)}>Discard</button>
             </div>

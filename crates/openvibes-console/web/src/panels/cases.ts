@@ -24,8 +24,8 @@ export const refHint: Record<CaseKind, string> = {
   host: "Agent id, e.g. agent-00008",
   software: "manager/name, e.g. rpm/openssh",
 };
-export const statusLabel: Record<string, string> = { open: "Open", investigating: "Investigating", closed: "Closed" };
-export const statusTone: Record<string, string> = { open: "bad", investigating: "warn", closed: "ok" };
+const statusLabel: Record<string, string> = { open: "Open", investigating: "Investigating", closed: "Closed" };
+const statusTone: Record<string, string> = { open: "bad", investigating: "warn", closed: "ok" };
 export const resolutionLabel: Record<string, string> = { mitigated: "Mitigated", false_positive: "False positive", accepted_risk: "Accepted risk" };
 export const outcomeLabel: Record<string, string> = { resolved: "Resolved", false_positive: "False positive", accepted_risk: "Accepted risk" };
 export const severities = ["critical", "high", "medium", "low"] as const;
@@ -94,7 +94,7 @@ export function blockingItems(items: readonly CaseItem[]): CaseItem[] {
   return items.filter((item) => needsOutcome(item) && (item.outcome == null || (item.outcome === "resolved" && !item.evidence_gone)));
 }
 
-export type OutcomeChoice = { value: string; label: string; disabled: boolean; hint: string | undefined };
+type OutcomeChoice = { value: string; label: string; disabled: boolean; hint: string | undefined };
 
 /** The outcomes an item can take: "resolved" only while its evidence is gone. */
 export function outcomeChoices(item: Pick<CaseItem, "evidence_gone">): OutcomeChoice[] {
@@ -132,7 +132,7 @@ export function closeProblems(form: CloseForm, items: readonly CaseItem[], now =
 }
 
 export type CaseFields = { title: string; severity: string; assignee: string };
-export type Ending = { resolution: string; note: string; accepted_until: string | null };
+type Ending = { resolution: string; note: string; accepted_until: string | null };
 
 /** The PUT body: the API replaces every editable field, so all are sent. */
 export function updateBody(fields: CaseFields, status: string, ending?: Ending) {
