@@ -15,7 +15,7 @@ import { useHistory } from "./history";
 import { METRICS, METRIC_KEYS, delta, deltaSince, partText, scanNotSetUp, permitted, trendDays, type Metric } from "./metrics";
 import type { WidgetProps } from "./widgets";
 
-export { METRICS, METRIC_KEYS, type Metric } from "./metrics";
+export { METRICS, METRIC_KEYS } from "./metrics";
 
 export { Unavailable };
 

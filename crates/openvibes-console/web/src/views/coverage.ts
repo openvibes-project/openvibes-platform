@@ -6,7 +6,7 @@ export type Cell = { technique: string; name: string; rules: number; sub: boolea
 export type Column = { key: string; title: string; tactics: string[]; rules: number; cells: Cell[] };
 
 /** The kill-chain phases in order; a phase the server does not know goes last. */
-export const PHASES = ["Reconnaissance", "Weaponization", "Delivery", "Exploitation", "Installation", "Command and Control", "Actions on Objectives", "Unmapped phase"];
+const PHASES = ["Reconnaissance", "Weaponization", "Delivery", "Exploitation", "Installation", "Command and Control", "Actions on Objectives", "Unmapped phase"];
 
 export function selectRules(rules: readonly CoverageRule[], params: URLSearchParams): CoverageRule[] {
   const kind = params.get("kind");

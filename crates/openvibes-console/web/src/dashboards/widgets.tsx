@@ -14,7 +14,7 @@ import { AttentionSettings, BreakdownSettings, GraphSettings, ListSettings, Note
 
 export type WidgetProps = { widget: Widget };
 export type SettingsProps = { widget: Widget; onChange: (config: Widget["config"]) => void };
-export type WidgetDef = {
+type WidgetDef = {
   type: WidgetType; label: string; description: string; icon: IconName; size: { w: number; h: number };
   defaults: Widget["config"]; View: (props: WidgetProps) => ReactNode; Settings: (props: SettingsProps) => ReactNode;
 };

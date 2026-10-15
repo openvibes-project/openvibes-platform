@@ -30,7 +30,7 @@ export function lineage(alarm: Pick<AlarmSummary, "exe" | "parent_exe">): string
 }
 
 /** The API query for the list's filters; the text filter stays local. */
-export function alarmQuery(params: URLSearchParams): string {
+function alarmQuery(params: URLSearchParams): string {
   const query = new URLSearchParams();
   if (params.get("state") !== "all") query.set("state", "active");
   const severity = params.get("severity");
@@ -40,19 +40,19 @@ export function alarmQuery(params: URLSearchParams): string {
 }
 
 /** The loaded alarms that match the text filter. */
-export function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams): AlarmSummary[] {
+function selectAlarms(loaded: readonly AlarmSummary[], params: URLSearchParams): AlarmSummary[] {
   const q = params.get("q") ?? "";
   return loaded.filter((a) => matches([a.message, a.rule_id, a.hostname ?? a.agent_id, a.exe, a.parent_exe ?? ""], q));
 }
 
-export const quietScopes = [
+const quietScopes = [
   { scope: "host", label: "On this host", global: false },
   { scope: "program", label: "For this program, any host", global: true },
   { scope: "command", label: "For this exact command, any host", global: true },
 ] as const;
 
 /** Creates a suppression derived from one alarm ("don't alarm on this again"). */
-export async function quiet(alarmId: string, scope: string, note: string): Promise<void> {
+async function quiet(alarmId: string, scope: string, note: string): Promise<void> {
   await request("POST", "/api/v1/alarm-suppressions", { alarm_id: alarmId, scope, note });
   invalidate("/api/v1/alarm");
   toast("Quieted: new matches are closed as false positives");

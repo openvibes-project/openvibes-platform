@@ -26,7 +26,7 @@ export function TrendTile({ widget }: WidgetProps) {
 }
 
 export const GRAPH_DAYS = [7, 30, 90, 365] as const;
-export const graphDays = (config: Record<string, unknown>) => GRAPH_DAYS.find((d) => d === config.days) ?? 30;
+const graphDays = (config: Record<string, unknown>) => GRAPH_DAYS.find((d) => d === config.days) ?? 30;
 
 export function GraphTile({ widget }: WidgetProps) {
   const { can } = useSession();

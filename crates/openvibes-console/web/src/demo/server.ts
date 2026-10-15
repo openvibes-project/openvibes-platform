@@ -18,7 +18,6 @@ import type { Persona } from "./personas";
 import { splitRef } from "../panels/cases";
 import { allowedStates, noteRequired } from "../panels/triage";
 
-export { personas, type Persona } from "./personas";
 
 type Params = Record<string, string>;
 type Handler = (params: Params, query: URLSearchParams, body: Record<string, unknown>, headers: Record<string, string>) => Response | Promise<Response>;
@@ -40,7 +39,7 @@ function page<T>(items: readonly T[], query: URLSearchParams, fallback = 50) {
 }
 
 /** The real API's `MAX_PAGE_SIZE` (crates/openvibes-console/src/api.rs). */
-export const MAX_PAGE = 100;
+const MAX_PAGE = 100;
 
 const severityRank: Record<string, number> = { critical: 0, important: 1, high: 1, moderate: 2, medium: 2, low: 3, unrated: 4 };
 

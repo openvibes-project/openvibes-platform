@@ -7,7 +7,7 @@ const FIXED: Record<string, string> = { baseline: "All hosts", "baseline-alarms"
 /** The panel's Source detail per assignable set. */
 const LEVEL: Record<string, string> = { "hardening-linux-l1": "Level 1", "hardening-linux-l2": "Level 2: stricter, may affect services" };
 
-export type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
+type RuleSetRow = { rule_set_id: string; set: RuleSet | undefined; assignment: RuleSetAssignment | undefined };
 
 /** Published sets and assignable ones: an assignable set is listed before it is published. */
 export function ruleSetRows(sets: readonly RuleSet[], assignments: readonly RuleSetAssignment[]): RuleSetRow[] {

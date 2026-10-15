@@ -2,7 +2,6 @@ import { useLayoutEffect, useRef, useState } from "react";
 
 import { axisDays, clampIndex, collectingNote, dayLabel, emptyNote, indexAt, runPoints, spansYears, layout, monotonePath, niceMax, segments, spreadLabels, steppedPath, tableRows, ticks, tipLeft, xAt, yAt, ariaLabel, type Series } from "./linechart";
 
-export type { Series };
 
 type Props = { series: Series[]; variant: "spark" | "full"; smooth: boolean };
 

@@ -2,11 +2,11 @@
 // viewer's choice carries over between the two consoles.
 import { useSyncExternalStore } from "react";
 
-export type Theme = "system" | "light" | "dark";
+type Theme = "system" | "light" | "dark";
 const key = "openvibes.theme";
 const listeners = new Set<() => void>();
 
-export function currentTheme(): Theme {
+function currentTheme(): Theme {
   const value = document.documentElement.dataset.themePreference;
   return value === "light" || value === "dark" ? value : "system";
 }
@@ -27,7 +27,7 @@ export function useTheme(): Theme {
 }
 
 const densityKey = "openvibes.v2.density";
-export type Density = "comfortable" | "compact";
+type Density = "comfortable" | "compact";
 
 export function applyStoredDensity(): void {
   try {

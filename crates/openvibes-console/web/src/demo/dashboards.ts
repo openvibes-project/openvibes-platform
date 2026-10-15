@@ -1,7 +1,7 @@
 import { type Layout, validateLayout, validateName } from "../dashboards/layout";
 import { upgradeLayout } from "../dashboards/legacy";
 
-export type DemoDashboard = { dashboard_id: string; owner: string; name: string; shared_role_id: string | null; layout: Layout };
+type DemoDashboard = { dashboard_id: string; owner: string; name: string; shared_role_id: string | null; layout: Layout };
 type Stored = DemoDashboard & { version: number; created_at: string; updated_at: string };
 type Result = { status: number; body?: unknown; etag?: string };
 
@@ -9,7 +9,7 @@ const problem = (status: number, code: string, title: string, field_errors?: unk
   ({ status, body: { status, code, title, request_id: "demo", ...(field_errors ? { field_errors } : {}) } });
 
 /** Where the demo keeps dashboards between page loads (browser storage in the preview). */
-export type DashboardPersistence = { load: () => unknown; save: (state: { rows: unknown[]; homes: [string, string][] }) => void };
+type DashboardPersistence = { load: () => unknown; save: (state: { rows: unknown[]; homes: [string, string][] }) => void };
 
 export function createDashboardStore(seed: DemoDashboard[], rolesOf: (userId: string) => string[], nameOf: (userId: string) => string, persistence?: DashboardPersistence) {
   const now = () => new Date().toISOString();

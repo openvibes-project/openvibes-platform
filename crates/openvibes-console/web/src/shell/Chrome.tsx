@@ -178,7 +178,7 @@ export function TopBar({ title, onPalette, onLogout, onChangePassword, persona, 
   );
 }
 
-export const shortcuts: readonly [string, string][] = [
+const shortcuts: readonly [string, string][] = [
   ["Ctrl K", "Search and commands"],
   ["Ctrl J", "Open or close the assistant"],
   ["/", "Filter the current list"],

@@ -20,7 +20,7 @@ const roles = [["viewer", "Viewer"], ["analyst", "Analyst"], ["operator", "Opera
 
 type Secret = { token_id: string; token?: string | null; expires_at: string; secret_available: boolean };
 
-export function SecretOnce({ secret, what }: { secret: Secret; what: string }) {
+function SecretOnce({ secret, what }: { secret: Secret; what: string }) {
   if (!secret.token) {
     return <div className="callout callout--warn"><Icon name="alert" size={16} /><span>{what} {secret.token_id} was created by an earlier attempt; its secret cannot be shown again. Revoke it if nobody copied it.</span></div>;
   }

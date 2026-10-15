@@ -9,7 +9,7 @@ export function diff(a: ReadonlyMap<string, string>, b: ReadonlyMap<string, stri
 }
 
 export type Kind = "onlyA" | "onlyB" | "changed";
-export type DiffRow = { key: string; kind: Kind };
+type DiffRow = { key: string; kind: Kind };
 
 /** The differences as one list: only on A, only on B, then changed (each sorted). */
 export function rows(a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>): DiffRow[] {

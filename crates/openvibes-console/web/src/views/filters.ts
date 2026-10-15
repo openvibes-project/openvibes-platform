@@ -3,7 +3,7 @@
 // rule sets, counts) stay in the views and are not part of the catalogue.
 import type { ListView } from "./rows";
 
-export type FilterDef =
+type FilterDef =
   | { param: string; label: string; kind: "flag"; value: string }
   | { param: string; label: string; kind: "choice"; values: { value: string; label: string }[] };
 
@@ -38,7 +38,7 @@ export const LIST_LABELS: Record<ListView, string> = {
   "/compliance": "Compliance findings", "/vulnerabilities": "Vulnerabilities", "/agents": "Hosts", "/audit": "Audit log",
 };
 
-export type Chip = { param: string; value: string; label: string; known: boolean };
+type Chip = { param: string; value: string; label: string; known: boolean };
 
 /** The catalogue as the flat chips a view header shows (bare value labels), in catalogue order. */
 export function filterChips(view: ListView): { label: string; param: string; value: string }[] {

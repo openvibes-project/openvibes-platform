@@ -10,7 +10,7 @@ import { matches } from "../ui/table";
 
 export const LIST_VIEWS = ["/compliance", "/vulnerabilities", "/agents", "/audit"] as const;
 export type ListView = (typeof LIST_VIEWS)[number];
-export type ListRow = { key: string; open: PanelRef; title: string; meta: string; badge: { label: string; tone: string } };
+type ListRow = { key: string; open: PanelRef; title: string; meta: string; badge: { label: string; tone: string } };
 
 export type AdvisoryRow = {
   id: string; title: string; severity: string; cves: string[]; cvss: number | null; epss: number | null;
@@ -22,7 +22,7 @@ export type AdvisoryRow = {
 };
 
 /** Mappings below this (NVD CPE ranges, at most 75) are hidden unless "Lower confidence" is switched on. */
-export const MIN_CONFIDENCE = 80;
+const MIN_CONFIDENCE = 80;
 
 export function groupByAdvisory(items: readonly Vulnerability[]): AdvisoryRow[] {
   const rows = new Map<string, AdvisoryRow>();

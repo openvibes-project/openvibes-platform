@@ -17,7 +17,7 @@ function useTop() {
   return panels[panels.length - 1];
 }
 
-export const SITE_SETS = [
+const SITE_SETS = [
   { id: "site", title: "Compliance rules", what: "Checked on every scan; a match is a compliance finding." },
   { id: "site-alarms", title: "Alarm rules", what: "Checked on every process start of the programs a rule names; a match raises an alarm." },
 ] as const;

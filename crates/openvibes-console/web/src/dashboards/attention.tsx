@@ -12,7 +12,7 @@ import type { IconName } from "../ui/Icon";
 export const ATTENTION_KINDS = ["alarms", "exploited", "serious", "compliance", "stale"] as const;
 
 type Alarm = AlarmPage["items"][number];
-export type AttentionItem = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
+type AttentionItem = { key: string; icon: IconName; to: { kind: string; id: string }; severity: string; title: string; meta: string; rank: number };
 
 export function greeting(now = new Date()) {
   const hour = now.getHours();
@@ -21,7 +21,7 @@ export function greeting(now = new Date()) {
 
 /** What the list is built from; each part is empty when its kind is off.
  *  `seriousMore`: the server cut the serious vulnerabilities short, so host counts are lower bounds. */
-export type AttentionInput = { alarms: Alarm[]; exploited: Vulnerability[]; serious: Vulnerability[]; seriousMore?: boolean; groups: FindingGroup[]; stale: Agent[] };
+type AttentionInput = { alarms: Alarm[]; exploited: Vulnerability[]; serious: Vulnerability[]; seriousMore?: boolean; groups: FindingGroup[]; stale: Agent[] };
 
 const SERIOUS_ADVISORIES = 20;
 

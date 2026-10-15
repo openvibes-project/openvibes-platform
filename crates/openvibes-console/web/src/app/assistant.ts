@@ -6,7 +6,7 @@ import { ApiError, request } from "../api/client";
 import type { AssistantInternetSource, AssistantReply, AssistantSegment } from "../api/types";
 import type { PanelRef } from "./location";
 
-export type Turn = {
+type Turn = {
   question: string;
   context: PanelRef | null;
   segments: AssistantSegment[] | undefined;

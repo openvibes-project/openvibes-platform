@@ -35,7 +35,7 @@ import { Findings } from "../views/Findings";
 import { Vulnerabilities } from "../views/Vulnerabilities";
 import { Audit } from "../views/Admin";
 
-export type ViewDef = {
+type ViewDef = {
   path: string;
   /** Paths below this prefix belong to the view too (e.g. /dashboards/{id}). */
   prefix?: string;
@@ -70,7 +70,7 @@ export const views: readonly ViewDef[] = [
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
 
-export type PanelDef = {
+type PanelDef = {
   label: string;
   icon: IconName;
   /** A short title from the id alone, for breadcrumbs and window bars. */

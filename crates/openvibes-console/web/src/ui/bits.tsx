@@ -88,16 +88,3 @@ export function ErrorBox({ error }: { error: ApiError }) {
     </div>
   );
 }
-
-export function Stat({ label, value, tone, onClick, hint }: { label: string; value: ReactNode; tone?: string | undefined; onClick?: () => void; hint?: string }) {
-  const body = (
-    <>
-      <span className="stat__label">{label}</span>
-      <span className={`stat__value num${tone ? ` stat__value--${tone}` : ""}`}>{value}</span>
-      {hint && <span className="stat__hint">{hint}</span>}
-    </>
-  );
-  return onClick
-    ? <button type="button" className="stat stat--link" onClick={onClick}>{body}</button>
-    : <div className="stat">{body}</div>;
-}

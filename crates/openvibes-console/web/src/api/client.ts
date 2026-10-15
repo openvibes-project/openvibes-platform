@@ -107,7 +107,7 @@ export function invalidate(prefix = "/"): void {
   for (const listener of listeners) listener();
 }
 
-export type Resource<T> = { data: T | undefined; error: ApiError | undefined; loading: boolean };
+type Resource<T> = { data: T | undefined; error: ApiError | undefined; loading: boolean };
 
 type Loaded<T> = { key: string; path: string; data: T | undefined; error: ApiError | undefined };
 

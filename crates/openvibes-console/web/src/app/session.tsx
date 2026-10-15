@@ -4,14 +4,14 @@ import { createContext, useContext } from "react";
 
 import type { Permission, Session } from "../api/types";
 
-export type Access = { permission: Permission; global?: boolean };
+type Access = { permission: Permission; global?: boolean };
 
 export function allows(session: Session | undefined, { permission, global = false }: Access): boolean {
   return session?.capabilities.some((capability) =>
     capability.permission === permission && (!global || capability.scope.kind === "global")) === true;
 }
 
-export type SessionState = {
+type SessionState = {
   session: Session | undefined;
   demo: boolean;
   can: (permission: Permission, global?: boolean) => boolean;

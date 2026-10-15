@@ -17,11 +17,11 @@ import { HistoryTab, type HostRow, HostsTab, TriageDetail } from "./TriageDetail
 
 type Pkg = { name?: unknown; installed?: unknown; fixed?: unknown };
 
-export function packagesOf(item: Vulnerability): Pkg[] {
+function packagesOf(item: Vulnerability): Pkg[] {
   return Array.isArray(item.packages) ? (item.packages as unknown[]).filter((p): p is Pkg => typeof p === "object" && p !== null) : [];
 }
 
-export function fixState(item: Vulnerability): { label: string; tone: string } {
+function fixState(item: Vulnerability): { label: string; tone: string } {
   if (item.fixed_at) return { label: "Fixed", tone: "ok" };
   if (item.reboot_needed) return { label: "Reboot needed", tone: "warn" };
   const packages = packagesOf(item);

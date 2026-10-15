@@ -49,10 +49,6 @@ export const severityOrder: Record<string, number> = {
   critical: 0, high: 1, important: 1, medium: 2, moderate: 2, low: 3, unrated: 4,
 };
 
-export function shortHost(hostname: string | null | undefined, fallback: string): string {
-  return hostname ?? fallback;
-}
-
 /** True when the time has passed (kept out of render bodies for the React compiler). */
 export function isPast(value: string | number, now = Date.now()): boolean {
   return (typeof value === "number" ? value : Date.parse(value)) <= now;
@@ -69,7 +65,7 @@ export function daysAgo(days: number, now = Date.now()): string {
   return new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - days)).toISOString();
 }
 
-export const auditRanges = [1, 7, 30, 365] as const;
+const auditRanges = [1, 7, 30, 365] as const;
 
 /** The audit window chosen in the URL (`range` days, default 30). */
 export function auditSince(params: URLSearchParams): string {

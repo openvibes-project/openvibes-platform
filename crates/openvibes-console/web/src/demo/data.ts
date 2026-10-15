@@ -19,7 +19,7 @@ function prng(seed: number) {
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
 
-export type DemoRule = {
+type DemoRule = {
   ruleSetId: string;
   ruleId: string;
   severity: Severity;

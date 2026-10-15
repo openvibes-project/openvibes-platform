@@ -38,7 +38,7 @@ type StoredItem = {
 type StoredEvent = { event_id: number; case_id: string; at: string; actor_user_id: string | null; kind: string; body: string | null; detail: Body };
 // v 2: item kind `finding` became `compliance_finding`; older stores reseed.
 export type CaseState = { v: 2; next_number: number; next_event: number; cases: StoredCase[]; items: StoredItem[]; events: StoredEvent[] };
-export type CasePersistence = { load: () => unknown; save: (state: CaseState) => void };
+type CasePersistence = { load: () => unknown; save: (state: CaseState) => void };
 
 const MAX_ITEMS = 500;
 const MAX_ON_CREATE = 50;

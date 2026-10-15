@@ -9,7 +9,7 @@ import { Icon } from "./Icon";
 import { MAX_SELECTION, selectAll, selectRange } from "./selection";
 import { type Direction, type SortValue, sortRows } from "./table";
 
-export type Column<T> = {
+type Column<T> = {
   key: string;
   header: string;
   render: (row: T) => ReactNode;
