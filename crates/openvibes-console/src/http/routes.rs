@@ -11,8 +11,10 @@ use crate::access::{
     session::*, tags::*,
 };
 use crate::audit::{events::*, export::*, retention::*};
+use crate::compliance::{group_triage::*, groups::*, history::*, latest::*, triage::*};
 use crate::hosts::{agents::*, certificates::*, enrollment::*, install::*};
 use crate::router::*;
+use crate::vulnerabilities::{advisory::*, list::*, summary::*};
 
 pub(super) fn api_router() -> Router {
     Router::new()
@@ -276,23 +278,23 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/triage-history",
-            get(crate::triage_detail::triage_history),
+            get(crate::compliance::triage_detail::triage_history),
         )
         .route(
             "/v1/alarms/bulk",
-            axum::routing::post(crate::bulk::bulk_alarms),
+            axum::routing::post(crate::compliance::bulk::bulk_alarms),
         )
         .route(
             "/v1/compliance/bulk",
-            axum::routing::post(crate::bulk::bulk_compliance),
+            axum::routing::post(crate::compliance::bulk::bulk_compliance),
         )
         .route(
             "/v1/vulnerabilities/bulk",
-            axum::routing::post(crate::bulk::bulk_vulnerabilities),
+            axum::routing::post(crate::compliance::bulk::bulk_vulnerabilities),
         )
         .route(
             "/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
-            axum::routing::put(crate::triage_detail::update_vulnerability_triage),
+            axum::routing::put(crate::compliance::triage_detail::update_vulnerability_triage),
         )
         .route("/v1/rules/coverage", get(crate::coverage::rule_coverage))
         .route("/v1/attack", get(crate::coverage::attack_catalog))

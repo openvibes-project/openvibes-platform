@@ -16,7 +16,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `alarm_suppressions.rs` | Alarm suppressions: list, create, remove. |
 | `assistant.rs` | The assistant: its runtime and the lookups it may run. |
 | `assistant_internet.rs` | The administrator's switch for the assistant's internet lookups. |
-| `bulk.rs` | Bulk triage of alarms, findings or vulnerabilities. |
 | `cases.rs` | Cases: one investigation's record. |
 | `coverage.rs` | MITRE ATT&CK coverage of the published rules. |
 | `dashboards.rs` | Dashboards: layout validation and handlers. |
@@ -27,12 +26,13 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `rule_drafts.rs` | Draft rules for the site's own rule sets. |
 | `rule_test.rs` | Tests a rule against one host's facts. |
 | `seeded.rs` | Fixed demo data for the loopback development listener (`dev-seed`). |
-| `triage_detail.rs` | Triage in the detail view and the History tab. |
 | `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
 | `assistant/` | The assistant's tests against a database and a fake fetch socket. |
 | `audit/` | The audit trail: events, CSV export, retention. |
+| `compliance/` | Findings, finding groups, history, triage, bulk triage, triage detail. |
 | `bin/` | Tools built with the crate. |
 | `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
+| `vulnerabilities/` | Vulnerability summary, list and advisory detail. |
 
 More: [docs/components/openvibes-console.md](../../../docs/components/openvibes-console.md)

@@ -17,8 +17,8 @@ mod api;
 mod assistant;
 mod assistant_internet;
 mod audit;
-mod bulk;
 mod cases;
+mod compliance;
 mod config;
 mod coverage;
 mod dashboards;
@@ -34,7 +34,7 @@ mod rule_test;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
-mod triage_detail;
+mod vulnerabilities;
 
 pub use access::auth::{
     CredentialParseError, NormalizedPassword, PasswordError, PasswordHash, PasswordHashError,
@@ -57,20 +57,20 @@ pub use access::{
     ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use api::{
-    AssistantInternet, AssistantInternetTest, BulkFindingTriageChange, BulkFindingTriageRequest,
-    BulkFindingTriageResponse, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE,
-    DashboardPage, DashboardView, FindingGroupEndpointPage, FindingGroupEndpointView,
-    FindingGroupPage, FindingGroupView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin,
-    FindingPage, FindingSummary, FindingTriageCounts, FindingTriageView, FindingView,
-    HomeDashboard, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
-    RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
-    SaveDashboardRequest, Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest,
-    UpdateAssistantInternetRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
-    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
-    VulnerabilityTopHost, VulnerabilityView,
+    AssistantInternet, AssistantInternetTest, CursorPage, CursorPagination, DEFAULT_PAGE_SIZE,
+    DashboardPage, DashboardView, HomeDashboard, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError,
+    Permission, PermissionScope, RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage,
+    RuleSetView, SaveDashboardRequest, ShareDashboardRequest, SignedRuleEnvelopeRequest,
+    UpdateAssistantInternetRequest,
 };
 pub use audit::{
     AuditEventPage, AuditEventView, AuditRetentionPolicy, UpdateAuditRetentionRequest,
+};
+pub use compliance::{
+    BulkFindingTriageChange, BulkFindingTriageRequest, BulkFindingTriageResponse,
+    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
+    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
+    FindingTriageCounts, FindingTriageView, FindingView, Severity, UpdateFindingTriageRequest,
 };
 pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
 pub use hosts::{
@@ -87,3 +87,7 @@ pub use http::{
     authenticated_router_with_signer, development_router, health_router, public_router,
 };
 pub use server::{TrustedPeer, run, serve};
+pub use vulnerabilities::{
+    CveDetailView, VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,
+    VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost, VulnerabilityView,
+};

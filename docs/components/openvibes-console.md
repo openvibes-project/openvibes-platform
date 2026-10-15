@@ -477,7 +477,7 @@ matches while exact installation IDs remain addressable.
 ## Configuration
 
 
-### Bulk triage and the detail view (triage v2, `src/bulk.rs`, `src/triage_detail.rs`)
+### Bulk triage and the detail view (triage v2, `src/compliance/bulk.rs`, `src/compliance/triage_detail.rs`)
 
 Spec `docs/specs/2026-10-10-bulk-triage-design.md` (#237, #239, #240).
 

@@ -62,7 +62,7 @@ pub(crate) struct HistoryParams {
 }
 
 #[utoipa::path(get, path = "/api/v1/triage-history", tag = "triage", params(HistoryParams),
-    responses((status = 200, description = "Triage changes on hosts in scope, newest first", body = crate::triage_detail::TriageHistoryView),
+    responses((status = 200, description = "Triage changes on hosts in scope, newest first", body = crate::compliance::triage_detail::TriageHistoryView),
         (status = 400, description = "Invalid kind or subject", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Missing the kind's read permission", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn triage_history(
@@ -147,7 +147,7 @@ pub struct VulnerabilityTriageView {
 #[utoipa::path(put, path = "/api/v1/vulnerabilities/advisories/{advisory_id}/hosts/{agent_id}/triage",
     tag = "vulnerabilities", params(("advisory_id" = String, Path), ("agent_id" = String, Path)),
     request_body = crate::alarms::UpdateAlarmTriageRequest,
-    responses((status = 200, description = "Updated triage", body = crate::triage_detail::VulnerabilityTriageView),
+    responses((status = 200, description = "Updated triage", body = crate::compliance::triage_detail::VulnerabilityTriageView),
         (status = 400, description = "Invalid state, note, expiry or assignee", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "No open vulnerability in scope", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 412, description = "Stale triage version", body = crate::ProblemDetails, content_type = "application/problem+json"),

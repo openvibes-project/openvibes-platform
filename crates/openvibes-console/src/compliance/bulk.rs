@@ -119,8 +119,8 @@ fn bad(code: &'static str, title: &'static str) -> Response {
     problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
 }
 
-#[utoipa::path(post, path = "/api/v1/alarms/bulk", tag = "alarms", request_body = crate::bulk::BulkRequest,
-    responses((status = 200, description = "What the action did", body = crate::bulk::BulkResponse),
+#[utoipa::path(post, path = "/api/v1/alarms/bulk", tag = "alarms", request_body = crate::compliance::bulk::BulkRequest,
+    responses((status = 200, description = "What the action did", body = crate::compliance::bulk::BulkResponse),
         (status = 400, description = "Invalid action, items, note or expiry", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn bulk_alarms(
     State(state): State<AuthHttpState>,
@@ -130,8 +130,8 @@ pub(crate) async fn bulk_alarms(
     run(Kind::Alarms, &state, &headers, payload).await
 }
 
-#[utoipa::path(post, path = "/api/v1/compliance/bulk", tag = "compliance", request_body = crate::bulk::BulkRequest,
-    responses((status = 200, description = "What the action did", body = crate::bulk::BulkResponse),
+#[utoipa::path(post, path = "/api/v1/compliance/bulk", tag = "compliance", request_body = crate::compliance::bulk::BulkRequest,
+    responses((status = 200, description = "What the action did", body = crate::compliance::bulk::BulkResponse),
         (status = 400, description = "Invalid action, items, note or expiry", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn bulk_compliance(
     State(state): State<AuthHttpState>,
@@ -141,8 +141,8 @@ pub(crate) async fn bulk_compliance(
     run(Kind::Compliance, &state, &headers, payload).await
 }
 
-#[utoipa::path(post, path = "/api/v1/vulnerabilities/bulk", tag = "vulnerabilities", request_body = crate::bulk::BulkRequest,
-    responses((status = 200, description = "What the action did", body = crate::bulk::BulkResponse),
+#[utoipa::path(post, path = "/api/v1/vulnerabilities/bulk", tag = "vulnerabilities", request_body = crate::compliance::bulk::BulkRequest,
+    responses((status = 200, description = "What the action did", body = crate::compliance::bulk::BulkResponse),
         (status = 400, description = "Invalid action, items, note or expiry", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn bulk_vulnerabilities(
     State(state): State<AuthHttpState>,
