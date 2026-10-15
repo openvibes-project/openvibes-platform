@@ -461,7 +461,7 @@ impl ConsoleRepository for SeededRepository {
         Some(AgentDetail {
             agent: agent.view.clone(),
             certificates: agent.certificates.clone(),
-            last_test: crate::api::LastTest::default(),
+            last_test: crate::hosts::LastTest::default(),
         })
     }
 

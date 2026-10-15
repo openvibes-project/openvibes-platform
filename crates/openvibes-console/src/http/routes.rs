@@ -10,6 +10,8 @@ use crate::access::{
     asset_groups::*, bindings::*, inventory::*, login::*, service_accounts::*, service_tokens::*,
     session::*, tags::*,
 };
+use crate::audit::{events::*, export::*, retention::*};
+use crate::hosts::{agents::*, certificates::*, enrollment::*, install::*};
 use crate::router::*;
 
 pub(super) fn api_router() -> Router {
@@ -36,7 +38,10 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         .route("/v1/agent-package", get(authenticated_agent_package))
         .route("/v1/agent-command", get(authenticated_agent_command))
         .route("/v1/agents/summary", get(authenticated_agent_summary))
-        .route("/v1/agents/events", get(crate::presence::agent_events))
+        .route(
+            "/v1/agents/events",
+            get(crate::hosts::presence::agent_events),
+        )
         .route("/v1/agents", get(authenticated_agents))
         .route("/v1/agents/{agent_id}", get(authenticated_agent_detail))
         .route(
@@ -207,23 +212,26 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/agents/{agent_id}/packages",
-            get(crate::software::list_host_packages),
+            get(crate::hosts::software::list_host_packages),
         )
         .route("/v1/metrics/history", get(crate::metrics::history))
         .route("/v1/metrics/top-hosts", get(crate::metrics::top_hosts))
-        .route("/v1/software", get(crate::software::list_software))
+        .route("/v1/software", get(crate::hosts::software::list_software))
         .route(
             "/v1/software/{manager}/{name}",
-            get(crate::software::get_software),
+            get(crate::hosts::software::get_software),
         )
         .route(
             "/v1/agents/{agent_id}/services",
-            get(crate::ports::get_host_services),
+            get(crate::hosts::ports::get_host_services),
         )
-        .route("/v1/ports", get(crate::ports::list_ports))
-        .route("/v1/ports/{protocol}/{port}", get(crate::ports::get_port))
-        .route("/v1/services", get(crate::ports::list_services))
-        .route("/v1/services/{unit}", get(crate::ports::get_unit))
+        .route("/v1/ports", get(crate::hosts::ports::list_ports))
+        .route(
+            "/v1/ports/{protocol}/{port}",
+            get(crate::hosts::ports::get_port),
+        )
+        .route("/v1/services", get(crate::hosts::ports::list_services))
+        .route("/v1/services/{unit}", get(crate::hosts::ports::get_unit))
         .route(
             "/v1/cases",
             get(crate::cases::list_cases).post(crate::cases::create_case),
@@ -311,7 +319,7 @@ pub(super) fn authenticated_api_router() -> Router<AuthHttpState> {
         )
         .route(
             "/v1/site-rules/fleet",
-            axum::routing::get(crate::site_fleet::site_fleet),
+            axum::routing::get(crate::hosts::site_fleet::site_fleet),
         )
         .route(
             "/v1/rule-drafts/{rule_set_id}/{rule_id}/test",

@@ -12,7 +12,6 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `api.rs` | The API's request and response types. |
 | `about.rs` | The About page: versions and the newer-release check. |
 | `about_tests.rs` | Tests for the About page and the newer-version check. |
-| `agent_package.rs` | The agent install package and command. |
 | `alarms.rs` | Threat alarms: list, one alarm with its process tree, triage. |
 | `alarm_suppressions.rs` | Alarm suppressions: list, create, remove. |
 | `assistant.rs` | The assistant: its runtime and the lookups it may run. |
@@ -24,18 +23,16 @@ The console server: the HTTP API and auth routes, the session and permission che
 | `detection.rs` | A finding's or alarm's original detection inputs and rule. |
 | `fetch_client.rs` | The assistant's internet lookups through `openvibes-fetch`. |
 | `metrics.rs` | Count history per day for the overview. |
-| `ports.rs` | Open ports and running services, per host and fleet-wide. |
-| `presence.rs` | Live agent presence as a server-sent event stream. |
 | `rule_assignment.rs` | Which asset groups run each assignable rule set. |
 | `rule_drafts.rs` | Draft rules for the site's own rule sets. |
 | `rule_test.rs` | Tests a rule against one host's facts. |
 | `seeded.rs` | Fixed demo data for the loopback development listener (`dev-seed`). |
-| `site_fleet.rs` | Which hosts run the site's own rule sets, and how current they are. |
-| `software.rs` | Installed software, per host and fleet-wide. |
 | `triage_detail.rs` | Triage in the detail view and the History tab. |
 | `access/` | Who may do what: sign-in, roles, users, service accounts, role bindings, asset groups, host tags. |
 | `assistant/` | The assistant's tests against a database and a fake fetch socket. |
+| `audit/` | The audit trail: events, CSV export, retention. |
 | `bin/` | Tools built with the crate. |
+| `hosts/` | Hosts: agents, certificates, enrollment tokens, install package, software, ports, presence, fleet. |
 | `http/` | Router assembly, route table, middleware, web app files, problems, OpenAPI. |
 
 More: [docs/components/openvibes-console.md](../../../docs/components/openvibes-console.md)

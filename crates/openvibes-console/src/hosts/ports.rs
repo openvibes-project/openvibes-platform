@@ -127,7 +127,7 @@ fn service_view(s: store::Service) -> ServiceView {
 
 #[utoipa::path(get, path = "/api/v1/agents/{agent_id}/services", tag = "assets",
     params(("agent_id" = String, Path)),
-    responses((status = 200, description = "The host's open ports and running services", body = crate::ports::HostServicesView),
+    responses((status = 200, description = "The host's open ports and running services", body = crate::hosts::ports::HostServicesView),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "Absent or outside the caller's scope", body = crate::ProblemDetails, content_type = "application/problem+json")))]
@@ -169,7 +169,7 @@ pub(crate) async fn get_host_services(
 }
 
 #[utoipa::path(get, path = "/api/v1/ports", tag = "assets", params(PortParams),
-    responses((status = 200, description = "Ports across the caller's hosts, by port", body = Vec<crate::ports::PortView>),
+    responses((status = 200, description = "Ports across the caller's hosts, by port", body = Vec<crate::hosts::ports::PortView>),
         (status = 400, description = "Invalid query", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json")))]
@@ -211,7 +211,7 @@ pub(crate) async fn list_ports(
 }
 
 #[utoipa::path(get, path = "/api/v1/services", tag = "assets",
-    responses((status = 200, description = "Running services across the caller's hosts, by unit", body = Vec<crate::ports::UnitView>),
+    responses((status = 200, description = "Running services across the caller's hosts, by unit", body = Vec<crate::hosts::ports::UnitView>),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn list_services(
@@ -311,7 +311,7 @@ pub(crate) struct HostsParams {
     limit: Option<u16>,
 }
 
-fn invalid((code, title): crate::software::Invalid) -> Response {
+fn invalid((code, title): crate::hosts::software::Invalid) -> Response {
     problem_response(ProblemDetails::new(StatusCode::BAD_REQUEST, code, title))
 }
 
@@ -322,12 +322,12 @@ fn rfc3339(at: Option<chrono::DateTime<chrono::Utc>>) -> Option<String> {
 /// The page size and the decoded cursor, or why the query is refused.
 fn paging<T: for<'de> Deserialize<'de>>(
     params: Result<Query<HostsParams>, QueryRejection>,
-) -> Result<(i64, Option<T>), crate::software::Invalid> {
+) -> Result<(i64, Option<T>), crate::hosts::software::Invalid> {
     let Ok(Query(params)) = params else {
         return Err(("invalid_query", "Query is invalid"));
     };
-    let limit = crate::software::limit(params.limit)?;
-    let after = crate::software::decode::<T>(params.cursor.as_deref())?;
+    let limit = crate::hosts::software::limit(params.limit)?;
+    let after = crate::hosts::software::decode::<T>(params.cursor.as_deref())?;
     Ok((limit, after))
 }
 
@@ -341,7 +341,7 @@ fn page<T>(mut rows: Vec<T>, limit: i64) -> (Vec<T>, bool) {
 
 #[utoipa::path(get, path = "/api/v1/ports/{protocol}/{port}", tag = "assets",
     params(("protocol" = String, Path, description = "`tcp` or `udp`"), ("port" = u16, Path), HostsParams),
-    responses((status = 200, description = "A page of the caller's hosts listening on the port", body = crate::ports::PortDetail),
+    responses((status = 200, description = "A page of the caller's hosts listening on the port", body = crate::hosts::ports::PortDetail),
         (status = 400, description = "Invalid protocol, port, query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
@@ -385,7 +385,7 @@ pub(crate) async fn get_port(
             let next_cursor = more
                 .then(|| {
                     rows.last().map(|h| {
-                        crate::software::encode(&(
+                        crate::hosts::software::encode(&(
                             h.hostname.as_deref().unwrap_or(""),
                             &h.agent_id,
                             h.address.to_string(),
@@ -418,7 +418,7 @@ pub(crate) async fn get_port(
 
 #[utoipa::path(get, path = "/api/v1/services/{unit}", tag = "assets",
     params(("unit" = String, Path), HostsParams),
-    responses((status = 200, description = "A page of the caller's hosts running the unit", body = crate::ports::UnitDetail),
+    responses((status = 200, description = "A page of the caller's hosts running the unit", body = crate::hosts::ports::UnitDetail),
         (status = 400, description = "Invalid query or cursor", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "Authentication required", body = crate::ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "Permission denied", body = crate::ProblemDetails, content_type = "application/problem+json"),
@@ -453,7 +453,10 @@ pub(crate) async fn get_unit(
             let next_cursor = more
                 .then(|| {
                     rows.last().map(|h| {
-                        crate::software::encode(&(h.hostname.as_deref().unwrap_or(""), &h.agent_id))
+                        crate::hosts::software::encode(&(
+                            h.hostname.as_deref().unwrap_or(""),
+                            &h.agent_id,
+                        ))
                     })
                 })
                 .flatten();

@@ -146,7 +146,7 @@ pub(crate) fn summarize(
 }
 
 #[utoipa::path(get, path = "/api/v1/site-rules/fleet", tag = "rules",
-    responses((status = 200, description = "Which hosts run the site rule sets", body = crate::site_fleet::SiteFleet),
+    responses((status = 200, description = "Which hosts run the site rule sets", body = crate::hosts::site_fleet::SiteFleet),
         (status = 403, description = "Needs rules.write and global access", body = crate::ProblemDetails, content_type = "application/problem+json")))]
 pub(crate) async fn site_fleet(State(state): State<AuthHttpState>, headers: HeaderMap) -> Response {
     let (scope, _) =

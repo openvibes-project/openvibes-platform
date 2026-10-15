@@ -39,7 +39,7 @@ pub(crate) struct AuthHttpState {
     /// `None` when the agent install package is not configured.
     pub(crate) agent_install: Option<Arc<crate::config::AgentInstallConfig>>,
     /// Shared live-presence check behind the agent event stream.
-    pub(crate) presence: crate::presence::PresenceHub,
+    pub(crate) presence: crate::hosts::presence::PresenceHub,
     /// The rule signer's socket: where a site rule set is signed to publish.
     pub(crate) signer_socket: Arc<std::path::Path>,
     /// The fetch service's socket (assistant internet lookups).
@@ -177,7 +177,7 @@ pub(crate) fn authenticated_router_with_assistant(
         assistant,
         update_checker,
         agent_install: agent_install.map(Arc::new),
-        presence: crate::presence::PresenceHub::default(),
+        presence: crate::hosts::presence::PresenceHub::default(),
         signer_socket: signer_socket
             .unwrap_or_else(|| std::path::PathBuf::from(DEFAULT_SIGNER_SOCKET))
             .into(),

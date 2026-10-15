@@ -11,12 +11,12 @@
 
 mod about;
 mod access;
-mod agent_package;
 mod alarm_suppressions;
 mod alarms;
 mod api;
 mod assistant;
 mod assistant_internet;
+mod audit;
 mod bulk;
 mod cases;
 mod config;
@@ -24,10 +24,9 @@ mod coverage;
 mod dashboards;
 mod detection;
 mod fetch_client;
+mod hosts;
 mod http;
 mod metrics;
-mod ports;
-mod presence;
 mod router;
 mod rule_assignment;
 mod rule_drafts;
@@ -35,8 +34,6 @@ mod rule_test;
 #[cfg(feature = "dev-seed")]
 mod seeded;
 mod server;
-mod site_fleet;
-mod software;
 mod triage_detail;
 
 pub use access::auth::{
@@ -60,23 +57,27 @@ pub use access::{
     ServiceTokenView, SessionPrincipal, SessionResponse,
 };
 pub use api::{
-    AgentAlarmsView, AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus,
-    AgentSummary, AgentView, AssistantInternet, AssistantInternetTest, AuditEventPage,
-    AuditEventView, AuditRetentionPolicy, BulkFindingTriageChange, BulkFindingTriageRequest,
-    BulkFindingTriageResponse, CertificatePage, CertificateView, CreateEnrollmentTokenRequest,
-    CreatedEnrollmentToken, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE,
-    DashboardPage, DashboardView, EnrollmentTokenPage, EnrollmentTokenView,
-    FindingGroupEndpointPage, FindingGroupEndpointView, FindingGroupPage, FindingGroupView,
-    FindingHistoryEntry, FindingHistoryPage, FindingOrigin, FindingPage, FindingSummary,
-    FindingTriageCounts, FindingTriageView, FindingView, HomeDashboard, MAX_CURSOR_LENGTH,
-    MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope, RevokeAgentRequest,
+    AssistantInternet, AssistantInternetTest, BulkFindingTriageChange, BulkFindingTriageRequest,
+    BulkFindingTriageResponse, CursorPage, CursorPagination, CveDetailView, DEFAULT_PAGE_SIZE,
+    DashboardPage, DashboardView, FindingGroupEndpointPage, FindingGroupEndpointView,
+    FindingGroupPage, FindingGroupView, FindingHistoryEntry, FindingHistoryPage, FindingOrigin,
+    FindingPage, FindingSummary, FindingTriageCounts, FindingTriageView, FindingView,
+    HomeDashboard, MAX_CURSOR_LENGTH, MAX_PAGE_SIZE, PaginationError, Permission, PermissionScope,
     RuleBundlePage, RuleBundlePreview, RuleBundleView, RuleSetPage, RuleSetView,
     SaveDashboardRequest, Severity, ShareDashboardRequest, SignedRuleEnvelopeRequest,
-    UpdateAssistantInternetRequest, UpdateAuditRetentionRequest, UpdateFindingTriageRequest,
-    VulnerabilityAdvisoryDetail, VulnerabilityPage, VulnerabilitySeverity,
-    VulnerabilitySeverityCount, VulnerabilitySummary, VulnerabilityTopHost, VulnerabilityView,
+    UpdateAssistantInternetRequest, UpdateFindingTriageRequest, VulnerabilityAdvisoryDetail,
+    VulnerabilityPage, VulnerabilitySeverity, VulnerabilitySeverityCount, VulnerabilitySummary,
+    VulnerabilityTopHost, VulnerabilityView,
+};
+pub use audit::{
+    AuditEventPage, AuditEventView, AuditRetentionPolicy, UpdateAuditRetentionRequest,
 };
 pub use config::{AgentInstallConfig, ConsoleConfig, ConsoleTransportMode, load_config};
+pub use hosts::{
+    AgentAlarmsView, AgentCommandView, AgentDetail, AgentPage, AgentRuleSetView, AgentStatus,
+    AgentSummary, AgentView, CertificatePage, CertificateView, CreateEnrollmentTokenRequest,
+    CreatedEnrollmentToken, EnrollmentTokenPage, EnrollmentTokenView, RevokeAgentRequest,
+};
 pub use http::error::ConsoleError;
 pub use http::openapi::{document as console_openapi, json as openapi_json};
 pub use http::problem::{FieldError, ProblemDetails};
