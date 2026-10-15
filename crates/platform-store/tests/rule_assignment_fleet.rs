@@ -285,9 +285,22 @@ async fn ingest_records_when_hardening_facts_were_last_usable() {
             .await
             .unwrap();
     }
+    // A report without the hardening collector, and one without a health
+    // report at all, leave the time where it was.
+    let packages_only = serde_json::json!({"last_scan": {"collectors": {"packages": "ok"}}});
+    for (n, health) in [(20, Some(&packages_only)), (30, None)] {
+        let at = t0 + chrono::Duration::minutes(n);
+        platform_store::ingest::heartbeat(&ingest, A, "0.5.0", None, &[], health, at)
+            .await
+            .unwrap();
+    }
     let console = as_role(&db, "openvibes-console").await;
     let (outcome, ok_at) = rule_assignment::hardening_facts(&console, A).await.unwrap();
-    assert_eq!(outcome.as_deref(), Some("not_found"));
+    assert_eq!(
+        outcome.as_deref(),
+        None,
+        "the latest report has no hardening collector"
+    );
     assert_eq!(
         ok_at.map(|t| t.timestamp_millis()),
         Some(t0.timestamp_millis()),
