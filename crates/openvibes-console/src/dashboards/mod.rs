@@ -8,11 +8,11 @@ use axum::{
 
 use crate::http::AuthHttpState;
 
-mod answers;
 pub(crate) mod dashboard;
 pub(crate) mod home;
 mod layout;
 pub(crate) mod metrics;
+mod responses;
 mod types;
 
 pub use types::{

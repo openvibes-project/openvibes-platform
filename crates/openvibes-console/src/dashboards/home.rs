@@ -8,7 +8,7 @@ use axum::{
 };
 use platform_store::dashboards as store;
 
-use super::answers::{bad_request, refused};
+use super::responses::{bad_request, refused};
 use crate::{
     HomeDashboard, ProblemDetails,
     access::guard::{session_user, unavailable_auth},

@@ -3,7 +3,7 @@ use platform_store::console_read::AgentScope;
 
 use crate::{Permission, PermissionScope, access::guard::session_user, http::AuthHttpState};
 
-use super::answers::permission_denied;
+use super::responses::permission_denied;
 
 /// A signed-in browser user holding `permissions`: their scope for the
 /// first, and their id. Bearer tokens are refused. For changes, CSRF and

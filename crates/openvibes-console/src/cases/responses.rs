@@ -10,6 +10,7 @@ use crate::{FieldError, ProblemDetails, http::problem::problem_response};
 
 use super::views::detail_view;
 
+/// A JSON answer that is never cached; `version` adds the ETag.
 pub(super) fn answer(status: StatusCode, version: Option<u64>, body: impl Serialize) -> Response {
     let mut response = (status, Json(body)).into_response();
     response

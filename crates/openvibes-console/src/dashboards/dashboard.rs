@@ -9,7 +9,7 @@ use axum::{
 use chrono::Utc;
 use platform_store::dashboards::{self as store, Refusal};
 
-use super::answers::{bad_request, checked, invalid, refused, view, with_etag};
+use super::responses::{bad_request, checked, invalid, refused, view, with_etag};
 use crate::{
     DashboardPage, Permission, PermissionScope, ProblemDetails, SaveDashboardRequest,
     ShareDashboardRequest,

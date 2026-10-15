@@ -9,11 +9,11 @@ use platform_store::console_cases::{
     self as store, AssigneeFilter, CaseChange, CaseFilters, NewCase, Refusal,
 };
 
-use super::answers::{answer, bad_request, detail_answer, invalid, refused};
 use super::permissions::{manager, reader};
 use super::request::{
     blank_is_absent, decode_cursor, encode_cursor, parse_time, precondition, title,
 };
+use super::responses::{answer, bad_request, detail_answer, invalid, refused};
 use super::types::{CaseListParams, CasePage, CreateCaseRequest, UpdateCaseRequest};
 use super::views::summary_view;
 use crate::{

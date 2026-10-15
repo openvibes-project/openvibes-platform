@@ -10,7 +10,7 @@ Cases in the console: where one investigation happens (design in `docs/specs/202
 | `lookups.rs` | Items in open cases (list badges) and the users a case can be assigned to. |
 | `types.rs` | Request and response types, and the query parameters. |
 | `views.rs` | Store rows turned into response views. |
-| `answers.rs` | JSON answers, refusals and problem responses, with the messages for validation codes. |
+| `responses.rs` | JSON answers, refusals and problem responses, with the messages for validation codes. |
 | `permissions.rs` | Who may read or change cases: session, permission and agent scope. |
 | `request.rs` | Reading a request: cursors, titles, notes, times and `If-Match`. |
 
