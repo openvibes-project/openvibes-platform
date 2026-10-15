@@ -151,3 +151,30 @@ console API (needs the same database).
 (and pins the assignable sets to the protocol vector
 `vectors/project-rule-sets.json`); `cargo test -p openvibes-ingest --test
 assignment` covers the heartbeat path.
+
+## Console screens
+
+Approved 2026-10-15 (`../specs/rule-set-assignment-ui/approved.md`).
+Settings › Rule sets shows the tab to holders of `rules.read` or
+`rules.upload` (global). The list merges published sets with the assignable
+ones, so L2 is listed before it is published ("—", **Not published**), and
+its **Runs on** column reads the default (Linux, or Off) and how many groups
+differ (`panels/ruleAssignment.ts`). Operators (`rules.upload` only) see
+the same list and panels as admins, and the Coverage menu entry (user,
+2026-10-15). A set's panel adds **Where it runs** (`panels/WhereItRuns.tsx`):
+the default switch, "Runs on N Linux hosts · off on M" once published, the
+group overrides (Group, Matches, Hosts, Runs: a switch and ×), "+ Add
+group" (an inline row: a group not listed yet, On | Off with the opposite of
+the default preselected, Add or Cancel; Esc cancels), and the explanation.
+Switches show the server's state: a change waits for the answer, a failure
+shows its error in a toast and leaves the switch as it was, and the list
+and host views are refetched either way. Without `rules.upload` the switches
+are disabled and Add and × are hidden. The Source row's check count comes
+from `GET /api/v1/rules/coverage`.
+Toasts: "<set> is now on/off by default", "<set> is now on/off for
+<group>", "<group> follows the default again"; errors show the API's title
+("Asset group not found" when the group was deleted meanwhile). "+ Add
+group" is disabled with "No asset groups yet: create one under Settings ›
+Access." or "Every asset group is listed.".
+`npm test -- src/panels/WhereItRuns.test.tsx src/app/registry.test.tsx`
+covers the markup and the menu access; clicks and toasts are in the e2e.

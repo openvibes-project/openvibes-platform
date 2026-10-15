@@ -64,8 +64,8 @@ export const views: readonly ViewDef[] = [
   { path: "/cases", label: "Cases", icon: "cases", group: "Investigate", keys: "g c", access: [{ permission: "cases.read" }], render: () => <Cases /> },
   { path: "/alarm-suppressions", label: "Alarm suppressions", icon: "ban", group: "Operate", keys: "g q", access: [{ permission: "alarms.read" }], render: () => <AlarmSuppressions /> },
   { path: "/site-rules", label: "Site rules", icon: "rules", group: "Operate", keys: "g k", access: [{ permission: "rules.write", global: true }], render: () => <SiteRules /> },
-  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.read", global: true }], render: () => <Coverage /> },
-  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: [{ permission: "rbac.read", global: true }, { permission: "service_accounts.read", global: true }, { permission: "assistant.admin", global: true }, { permission: "tokens.read" , global: true }, { permission: "rules.read" , global: true }], render: () => <Settings /> },
+  { path: "/coverage", label: "Coverage", icon: "rules", group: "Operate", keys: "g t", access: [{ permission: "rules.read", global: true }, { permission: "rules.upload", global: true }], render: () => <Coverage /> },
+  { path: "/settings", label: "Settings", icon: "settings", group: "Admin", keys: "g h", access: [{ permission: "rbac.read", global: true }, { permission: "service_accounts.read", global: true }, { permission: "assistant.admin", global: true }, { permission: "tokens.read" , global: true }, { permission: "rules.read" , global: true }, { permission: "rules.upload", global: true }], render: () => <Settings /> },
   { path: "/audit", label: "Audit log", icon: "audit", group: "Admin", keys: "g l", access: [{ permission: "audit.read", global: true }], render: () => <Audit /> },
   { path: "/about", label: "About", icon: "help", group: "Help", keys: "g i", access: [], render: () => <About /> },
 ];
